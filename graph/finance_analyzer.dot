@@ -1,0 +1,42 @@
+digraph FinanceAnalyzer {
+    rankdir=TB;  // Top to bottom layout
+    node [shape=box, style=rounded, fontname=Arial, fontsize=10];
+    edge [fontname=Arial, fontsize=9];
+    graph [dpi=300, size="12,8"];  // Higher resolution
+
+    "__end__" [label="END", fillcolor="lightgray", style="rounded,filled"];
+    "__start__" [label="START", fillcolor="lightgray", style="rounded,filled"];
+    "analyze" [label="Analyze", fillcolor="#9B59B6", style="rounded,filled"];
+    "anomaly_detection" [label="Anomaly
+Detection", fillcolor="#FF6B6B", style="rounded,filled"];
+    "chat" [label="Chat Agent", fillcolor="#FFD700", style="rounded,filled"];
+    "clean_normalize" [label="Clean &
+Normalize", fillcolor="#50C878", style="rounded,filled"];
+    "data_quality" [label="Data Quality
+Agent", fillcolor="#4A90E2", style="rounded,filled"];
+    "forecasting" [label="Forecasting
+Agent", fillcolor="#FF6B6B", style="rounded,filled"];
+    "insights" [label="Generate
+Insights", fillcolor="#9B59B6", style="rounded,filled"];
+    "load_inspect" [label="Load &
+Inspect", fillcolor="#50C878", style="rounded,filled"];
+    "report_generator" [label="Report
+Generator", fillcolor="#20B2AA", style="rounded,filled"];
+    "risk_analysis" [label="Risk Analysis
+Agent", fillcolor="#FF8C00", style="rounded,filled"];
+    "visualization" [label="Visualization
+Agent", fillcolor="#FFD700", style="rounded,filled"];
+
+    "__start__" -> "data_quality" [style=dashed, label="conditional"];
+    "data_quality" -> "load_inspect";
+    "load_inspect" -> "clean_normalize";
+    "clean_normalize" -> "analyze";
+    "analyze" -> "insights";
+    "insights" -> "visualization";
+    "visualization" -> "forecasting";
+    "forecasting" -> "anomaly_detection";
+    "anomaly_detection" -> "risk_analysis";
+    "risk_analysis" -> "report_generator";
+    "report_generator" -> "chat";
+    "chat" -> "__end__";
+}

@@ -1,0 +1,21 @@
+{
+  "dependencies": [
+    "langgraph>=0.2.0",
+    "langchain-openai>=0.2.0",
+    "langchain-core>=0.3.0",
+    "python-dotenv>=1.0.0",
+    "pandas>=2.0.0",
+    "plotly>=5.18.0",
+    "kaleido>=0.2.1",
+    "numpy>=1.24.0",
+    "scipy>=1.11.0"
+  ],
+  "graphs": {
+    "finance_analyzer": {
+      "path": "graph:app",
+      "description": "Multi-Agent Financial Analysis System - Data quality validation, cleaning, analysis, visualization, forecasting, anomaly detection, risk assessment, and report generation"
+    }
+  },
+  "env": ".env"
+}
+

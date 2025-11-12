@@ -1,0 +1,101 @@
+{
+  "nodes": [
+    "__start__",
+    "supervisor",
+    "data_quality",
+    "data_processing",
+    "insights",
+    "visualization",
+    "forecasting",
+    "anomaly_detection",
+    "risk_analysis",
+    "report_generator",
+    "__end__"
+  ],
+  "edges": [
+    {
+      "source": "data_quality",
+      "target": "load_inspect"
+    },
+    {
+      "source": "load_inspect",
+      "target": "clean_normalize"
+    },
+    {
+      "source": "clean_normalize",
+      "target": "analyze"
+    },
+    {
+      "source": "analyze",
+      "target": "insights"
+    },
+    {
+      "source": "insights",
+      "target": "visualization"
+    },
+    {
+      "source": "visualization",
+      "target": "forecasting"
+    },
+    {
+      "source": "forecasting",
+      "target": "anomaly_detection"
+    },
+    {
+      "source": "anomaly_detection",
+      "target": "risk_analysis"
+    },
+    {
+      "source": "risk_analysis",
+      "target": "report_generator"
+    },
+    {
+      "source": "report_generator",
+      "target": "chat"
+    },
+    {
+      "source": "chat",
+      "target": "__end__"
+    },
+    {
+      "source": "__start__",
+      "target": "data_quality",
+      "conditional": true
+    }
+  ],
+  "node_info": {
+    "__start__": {
+      "type": "node"
+    },
+    "supervisor": {
+      "type": "node"
+    },
+    "data_quality": {
+      "type": "node"
+    },
+    "data_processing": {
+      "type": "node"
+    },
+    "insights": {
+      "type": "node"
+    },
+    "visualization": {
+      "type": "agent"
+    },
+    "forecasting": {
+      "type": "agent"
+    },
+    "anomaly_detection": {
+      "type": "agent"
+    },
+    "risk_analysis": {
+      "type": "agent"
+    },
+    "report_generator": {
+      "type": "agent"
+    },
+    "__end__": {
+      "type": "node"
+    }
+  }
+}
