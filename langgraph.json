@@ -11,11 +11,14 @@
     "scipy>=1.11.0"
   ],
   "graphs": {
-    "finance_analyzer": {
+    "coding_agent": {
       "path": "graph:app",
-      "description": "Multi-Agent Financial Analysis System - Data quality validation, cleaning, analysis, visualization, forecasting, anomaly detection, risk assessment, and report generation"
+      "description": "Autonomous Coding Agent with ReAct Architecture"
+    },
+    "deep_research": {
+      "path": "src/deep_research/graph.py:graph",
+      "description": "Deep Research Agent for Code Repositories"
     }
   },
   "env": ".env"
 }
-

@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Quick setup script for LangGraph Finance Demo
+# Quick setup script for Numezis Code
 
-echo "🧾 Setting up LangGraph Finance Demo..."
+echo "🧾 Setting up Numezis Code..."
 echo ""
 
 # Check if Python is available
@@ -42,7 +42,7 @@ echo "✅ Setup complete!"
 echo ""
 echo "Next steps:"
 echo "  1. Edit .env and add your Azure OpenAI credentials"
-echo "  2. Run: python run_demo.py"
+echo "  2. Run: python run_numezis.py"
 echo "  3. Or start LangGraph Studio: langgraph studio"
 echo ""
 

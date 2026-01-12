@@ -20,8 +20,8 @@ dist/
 *.swp
 *.swo
 
-# Demo outputs
-demo_results.json
+# Numezis Code outputs
+numezis_results.json
 *.log
 
 # LangGraph Studio
