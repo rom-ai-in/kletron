@@ -40,7 +40,7 @@ export type AgentEventKind = "system" | "user" | "assistant" | "tool";
 
 export type AgentEvent = {
   id: string;
-  phaseId: PhaseKey | "user";
+  phaseId: string;
   phaseLabel?: string;
   kind: AgentEventKind;
   role: string;
@@ -58,6 +58,7 @@ export type AgentWorkflowUpdate = {
 
 export type AgentWorkflowOptions = {
   onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
+  llmSelection?: { provider: "azure" | "lmstudio"; model?: string };
 };
 
 const LOG_CONTENT_LIMIT = 120;
@@ -309,7 +310,12 @@ export async function runAgentWorkflow(
   const phase1Result = await runPhase(
     "phase1",
     () =>
-      runPhase1MapperAgent(userRequest, [], (message) => appendPhaseEvents([message], "phase1")),
+      runPhase1MapperAgent(
+        userRequest,
+        [],
+        (message) => appendPhaseEvents([message], "phase1"),
+        options?.llmSelection
+      ),
     timeline,
     {
       flushUpdate,
@@ -330,6 +336,7 @@ export async function runAgentWorkflow(
         meta,
         suggestedAuditFiles: (phase1Result.parsed as any)?.suggested_audit_files ?? [],
         onMessage: (message) => appendPhaseEvents([message], "phase2"),
+        llmSelection: options?.llmSelection,
       }),
     timeline,
     {
@@ -353,6 +360,7 @@ export async function runAgentWorkflow(
         userRequest,
         findings: findingsSummary,
         onMessage: (message) => appendPhaseEvents([message], "phase3"),
+        llmSelection: options?.llmSelection,
       }),
     timeline,
     {
@@ -378,6 +386,7 @@ export async function runAgentWorkflow(
         findings: findingsSummary,
         tasks: tasksSummary,
         onMessage: (message) => appendPhaseEvents([message], "phase4"),
+        llmSelection: options?.llmSelection,
       }),
     timeline,
     {

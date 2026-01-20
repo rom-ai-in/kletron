@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { runAgentWorkflow } from "../../../src/agentRunner";
+import { runWorkflow } from "../../../src/workflows";
 
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({} as Record<string, unknown>));
   const message = typeof payload?.message === "string" ? payload.message.trim() : "";
+  const graph = typeof payload?.graph === "string" ? payload.graph.trim() : undefined;
 
   if (!message) {
     return NextResponse.json(
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await runAgentWorkflow(message);
+    const result = await runWorkflow(message, graph);
     return NextResponse.json(result);
   } catch (error: unknown) {
     return NextResponse.json(

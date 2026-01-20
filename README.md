@@ -6,6 +6,7 @@ This repo houses a **Node/TypeScript LangGraph multi-agent pipeline** backed by 
 
 - **4-phase pipeline** (`src/graph.ts`): Map → Audit → Plan → Report.
 - **Phase agents** (`src/agents/phases.ts`): Each phase is a single ReAct agent with a specific mission prompt and an explicit MCP tool list.
+- **Simple ReAct agent** (`src/simpleReactGraph.ts`): A one-step LangGraph ReAct agent that answers lightweight repo questions; pick the "Simple ReAct agent" graph from the UI to run it instead of the full audit pipeline.
 - **MCP Server** (`github-mcp`): The agent no longer talks directly to the filesystem. All inspection/editing actions are routed through the MCP server, so agents behave like LM Studio clients and stay contained.
 
 ### Pipeline outputs (written via MCP)
@@ -20,6 +21,7 @@ Artifacts are written into the target repo under `.numezis/`:
 
 - `/app/page.tsx` renders a staged chat UI that submits to `/api/chat`.
 - `/api/chat` reuses the same Phase 1..4 logic and returns timeline events, meta/findings/tasks, and the final report summary.
+- The graph dropdown now exposes "Simple ReAct agent" as a quick alternative; the same graph is registered in `langgraph.json` so LangGraph can run it locally or via LangSmith.
 - The sidebar exposes `/api/tools/*` metadata so you can click any MCP tool and see the raw `github-mcp/tools` implementation.
 - The UI now uses Tailwind CSS (see `tailwind.config.js`, `postcss.config.js`, `app/globals.css`) for the Cursor-style layout.
 

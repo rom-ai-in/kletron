@@ -1,7 +1,7 @@
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { BaseMessage, SystemMessage } from "@langchain/core/messages";
 
-import { getChatModel } from "../llm";
+import { getChatModel, type LlmSelection } from "../llm";
 import {
   describeStructureTool,
   gitBlameTool,
@@ -15,6 +15,11 @@ import {
   searchCodeTool,
   todoSearchTool,
 } from "../tools/mcpTools";
+import {
+  auditPhaseConfig,
+  auditPhaseOrder,
+  type AuditPhaseKey,
+} from "../shared/graphCatalog";
 
 function extractJsonObject(text: string): unknown {
   const trimmed = text.trim();
@@ -31,92 +36,21 @@ function extractJsonObject(text: string): unknown {
   }
 }
 
-export type PhaseKey = "phase1" | "phase2" | "phase3" | "phase4";
+export type PhaseKey = AuditPhaseKey;
 
-const phaseConfig: Record<
-  PhaseKey,
-  {
-    id: PhaseKey;
-    label: string;
-    summary: string;
-    description: string;
-    systemPrompt: string;
-  }
-> = {
-  phase1: {
-    id: "phase1",
-    label: "Phase 1 — Map",
-    summary: "Generate a repo map + meta data.",
-    description:
-      "Prefer repo metrics, repo structure, and targeted search to keep the survey light.",
-    systemPrompt: [
-      "You are Phase1MapperAgent.",
-      "Mission: map the target Git repository without reading everything.",
-      "Use tools to: list structure, detect languages/frameworks, and identify critical areas (auth, payments, infra, migrations, CI/CD, security).",
-      "Rules:",
-      "- Prefer repo_metrics + describe_structure + search_code + git_log.",
-      "- Do NOT read more than 5 files; only read when necessary.",
-      "- Output MUST be valid JSON only (no markdown).",
-    ].join("\n"),
-  },
-  phase2: {
-    id: "phase2",
-    label: "Phase 2 — Audit",
-    summary: "Produce focused findings within a limited scope.",
-    description:
-      "Use git diffs, search, and range reads to generate evidence tied to recent activity files.",
-    systemPrompt: [
-      "You are Phase2AuditorAgent.",
-      "Mission: produce focused findings on a limited scope (max 20 files).",
-      "Rules:",
-      "- Audit style/architecture/security/tests quickly and pragmatically.",
-      "- Use git_log/git_diff/git_blame/search_code/read_file_range/read_file/git_grep as needed.",
-      "- Do NOT audit more than 20 files; prioritize by git recency and hotspot signals.",
-      "- Output MUST be valid JSON only (no markdown).",
-    ].join("\n"),
-  },
-  phase3: {
-    id: "phase3",
-    label: "Phase 3 — Plan",
-    summary: "Turn findings into actionable tickets.",
-    description:
-      "Prioritize by impact · effort and create acceptance criteria for each task.",
-    systemPrompt: [
-      "You are Phase3PlannerAgent.",
-      "Mission: turn findings into an actionable plan (tickets).",
-      "Rules:",
-      "- No tools required; rely on the provided findings.",
-      "- Output MUST be valid JSON only (no markdown).",
-    ].join("\n"),
-  },
-  phase4: {
-    id: "phase4",
-    label: "Phase 4 — Report",
-    summary: "Craft a final markdown report.",
-    description:
-      "Combine executive summary, repo map, findings, plan, and annexes into a tidy report.",
-    systemPrompt: [
-      "You are Phase4ReporterAgent.",
-      "Mission: produce a stable final markdown report combining repo map, risks/findings, and task plan.",
-      "Rules:",
-      "- Do NOT call tools; only generate content.",
-      "- Output MUST be valid JSON only (no markdown outside the JSON string).",
-    ].join("\n"),
-  },
-};
-
-export const phaseDefinitions = phaseConfig;
-export const phaseOrder: PhaseKey[] = ["phase1", "phase2", "phase3", "phase4"];
+export const phaseDefinitions = auditPhaseConfig;
+export const phaseOrder: PhaseKey[] = auditPhaseOrder;
 
 async function runJsonReactAgent(opts: {
   name: string;
   systemPrompt: string;
   userPrompt: string;
   tools: any[];
+  llmSelection?: LlmSelection;
   extraMessages?: BaseMessage[];
   onMessage?: (message: BaseMessage) => Promise<void> | void;
 }) {
-  const model = getChatModel();
+  const model = getChatModel(opts.llmSelection);
   const agent = createReactAgent({
     llm: model,
     tools: opts.tools,
@@ -162,9 +96,10 @@ async function runJsonReactAgent(opts: {
 export async function runPhase1MapperAgent(
   userRequest: string,
   extraMessages: BaseMessage[] = [],
-  onMessage?: (message: BaseMessage) => Promise<void> | void
+  onMessage?: (message: BaseMessage) => Promise<void> | void,
+  llmSelection?: LlmSelection
 ) {
-  const systemPrompt = phaseConfig.phase1.systemPrompt;
+  const systemPrompt = auditPhaseConfig.phase1.systemPrompt;
 
   const userPrompt = [
     `User request: ${userRequest}`,
@@ -182,6 +117,7 @@ export async function runPhase1MapperAgent(
     extraMessages,
     onMessage,
     tools: [repoMetricsTool, describeStructureTool, listFilesTool, searchCodeTool, gitLogTool, todoSearchTool, readFileTool],
+    llmSelection,
   });
 
   return { parsed, messages };
@@ -193,8 +129,9 @@ export async function runPhase2AuditorAgent(input: {
   suggestedAuditFiles?: string[];
   extraMessages?: BaseMessage[];
   onMessage?: (message: BaseMessage) => Promise<void> | void;
+  llmSelection?: LlmSelection;
 }) {
-  const systemPrompt = phaseConfig.phase2.systemPrompt;
+  const systemPrompt = auditPhaseConfig.phase2.systemPrompt;
 
   const userPrompt = [
     `User request: ${input.userRequest}`,
@@ -217,6 +154,7 @@ export async function runPhase2AuditorAgent(input: {
     extraMessages: input.extraMessages ?? [],
     onMessage: input.onMessage,
     tools: [gitLogTool, gitDiffTool, gitBlameTool, gitGrepTool, searchCodeTool, readFileRangeTool, readFileTool, listFilesTool],
+    llmSelection: input.llmSelection,
   });
 
   return { parsed, messages };
@@ -227,8 +165,9 @@ export async function runPhase3PlannerAgent(input: {
   findings: unknown;
   extraMessages?: BaseMessage[];
   onMessage?: (message: BaseMessage) => Promise<void> | void;
+  llmSelection?: LlmSelection;
 }) {
-  const systemPrompt = phaseConfig.phase3.systemPrompt;
+  const systemPrompt = auditPhaseConfig.phase3.systemPrompt;
 
   const userPrompt = [
     `User request: ${input.userRequest}`,
@@ -247,6 +186,7 @@ export async function runPhase3PlannerAgent(input: {
     extraMessages: input.extraMessages ?? [],
     onMessage: input.onMessage,
     tools: [],
+    llmSelection: input.llmSelection,
   });
 
   return { parsed, messages };
@@ -259,8 +199,9 @@ export async function runPhase4ReporterAgent(input: {
   tasks: unknown;
   extraMessages?: BaseMessage[];
   onMessage?: (message: BaseMessage) => Promise<void> | void;
+  llmSelection?: LlmSelection;
 }) {
-  const systemPrompt = phaseConfig.phase4.systemPrompt;
+  const systemPrompt = auditPhaseConfig.phase4.systemPrompt;
 
   const userPrompt = [
     `User request: ${input.userRequest}`,
@@ -285,6 +226,7 @@ export async function runPhase4ReporterAgent(input: {
     extraMessages: input.extraMessages ?? [],
     onMessage: input.onMessage,
     tools: [],
+    llmSelection: input.llmSelection,
   });
 
   return { parsed, messages };

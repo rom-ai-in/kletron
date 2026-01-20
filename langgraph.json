@@ -12,6 +12,14 @@
     "numezis": {
       "path": "src/graph.ts:graph",
       "description": "4-phase ReAct pipeline (Map → Audit → Plan → Report) backed by github-mcp tools."
+    },
+    "deep_research": {
+      "path": "src/deepResearch/index.ts:deepResearchGraph",
+      "description": "Deep research supervisor + researcher graph for codebase analysis using MCP tools."
+    },
+    "simple_react": {
+      "path": "src/simpleReactGraph.ts:graph",
+      "description": "Single-phase ReAct agent for quick repository questions."
     }
   },
   "env": ".env"

@@ -9,9 +9,9 @@ export default {
         accent: "#22d3ee",
       },
       fontFamily: {
-        display: ["var(--font-sans)", "Space Grotesk", "sans-serif"],
-        body: ["var(--font-sans)", "Space Grotesk", "sans-serif"],
-        mono: ["var(--font-mono)", "JetBrains Mono", "ui-monospace", "monospace"],
+        display: ["-apple-system", "BlinkMacSystemFont", '"Segoe UI"', "sans-serif"],
+        body: ["-apple-system", "BlinkMacSystemFont", '"Segoe UI"', "sans-serif"],
+        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
       },
     },
   },

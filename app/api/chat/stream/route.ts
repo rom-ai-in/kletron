@@ -1,4 +1,6 @@
-import { AgentWorkflowResult, AgentWorkflowUpdate, runAgentWorkflow } from "../../../../src/agentRunner";
+import { AgentWorkflowResult, AgentWorkflowUpdate } from "../../../../src/agentRunner";
+import { resolveLlmSelection } from "../../../../src/llm";
+import { runWorkflow } from "../../../../src/workflows";
 
 const textEncoder = new TextEncoder();
 
@@ -10,6 +12,10 @@ type StreamChunk =
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({} as Record<string, unknown>));
   const message = typeof payload?.message === "string" ? payload.message.trim() : "";
+  const graph = typeof payload?.graph === "string" ? payload.graph.trim() : undefined;
+  const provider = typeof payload?.provider === "string" ? payload.provider.trim() : undefined;
+  const model = typeof payload?.model === "string" ? payload.model.trim() : undefined;
+  const llmSelection = resolveLlmSelection({ provider, model });
 
   if (!message) {
     return new Response(JSON.stringify({ error: "Please provide a user message in the request body." }), {
@@ -25,10 +31,11 @@ export async function POST(request: Request) {
       };
 
       try {
-        const result = await runAgentWorkflow(message, {
+        const result = await runWorkflow(message, graph, {
           onUpdate: async (update) => {
             sendChunk({ type: "update", payload: update });
           },
+          llmSelection,
         });
         sendChunk({ type: "final", payload: result });
       } catch (error: unknown) {
