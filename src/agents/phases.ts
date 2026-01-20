@@ -114,6 +114,7 @@ async function runJsonReactAgent(opts: {
   userPrompt: string;
   tools: any[];
   extraMessages?: BaseMessage[];
+  onMessage?: (message: BaseMessage) => Promise<void> | void;
 }) {
   const model = getChatModel();
   const agent = createReactAgent({
@@ -123,18 +124,46 @@ async function runJsonReactAgent(opts: {
     name: opts.name,
   });
 
-  const response = await agent.invoke({
-    messages: [...(opts.extraMessages ?? []), { role: "user", content: opts.userPrompt }],
-  });
+  const inputMessages = [...(opts.extraMessages ?? []), { role: "user", content: opts.userPrompt }];
+  const stream = await agent.stream({ messages: inputMessages }, { streamMode: "values" });
+  const seenMessageIds = new Set<string>();
+  const accumulatedMessages: BaseMessage[] = [];
+  let lastState: { messages?: BaseMessage[] } | undefined;
 
-  const last = response.messages?.at(-1);
-  const content = typeof last?.content === "string" ? last.content : JSON.stringify(last?.content ?? "");
+  for await (const state of stream) {
+    if (!state || typeof state !== "object") continue;
+    lastState = state as { messages?: BaseMessage[] };
+    if (!Array.isArray(lastState.messages)) continue;
+    for (const message of lastState.messages) {
+      const idKey =
+        typeof message.id === "string"
+          ? message.id
+          : `${message.role ?? "unknown"}-${typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "")}-${accumulatedMessages.length}`;
+      if (seenMessageIds.has(idKey)) continue;
+      seenMessageIds.add(idKey);
+      accumulatedMessages.push(message);
+      if (opts.onMessage) {
+        await opts.onMessage(message);
+      }
+    }
+  }
+
+  const finalMessages = lastState?.messages ?? accumulatedMessages;
+  const last = finalMessages.at(-1);
+  if (!last) {
+    throw new Error("Agent did not produce a final message.");
+  }
+  const content = typeof last.content === "string" ? last.content : JSON.stringify(last.content ?? "");
   const parsed = extractJsonObject(content);
 
-  return { parsed, messages: response.messages ?? [] };
+  return { parsed, messages: finalMessages };
 }
 
-export async function runPhase1MapperAgent(userRequest: string, extraMessages: BaseMessage[] = []) {
+export async function runPhase1MapperAgent(
+  userRequest: string,
+  extraMessages: BaseMessage[] = [],
+  onMessage?: (message: BaseMessage) => Promise<void> | void
+) {
   const systemPrompt = phaseConfig.phase1.systemPrompt;
 
   const userPrompt = [
@@ -151,6 +180,7 @@ export async function runPhase1MapperAgent(userRequest: string, extraMessages: B
     systemPrompt,
     userPrompt,
     extraMessages,
+    onMessage,
     tools: [repoMetricsTool, describeStructureTool, listFilesTool, searchCodeTool, gitLogTool, todoSearchTool, readFileTool],
   });
 
@@ -162,6 +192,7 @@ export async function runPhase2AuditorAgent(input: {
   meta: unknown;
   suggestedAuditFiles?: string[];
   extraMessages?: BaseMessage[];
+  onMessage?: (message: BaseMessage) => Promise<void> | void;
 }) {
   const systemPrompt = phaseConfig.phase2.systemPrompt;
 
@@ -184,6 +215,7 @@ export async function runPhase2AuditorAgent(input: {
     systemPrompt,
     userPrompt,
     extraMessages: input.extraMessages ?? [],
+    onMessage: input.onMessage,
     tools: [gitLogTool, gitDiffTool, gitBlameTool, gitGrepTool, searchCodeTool, readFileRangeTool, readFileTool, listFilesTool],
   });
 
@@ -194,6 +226,7 @@ export async function runPhase3PlannerAgent(input: {
   userRequest: string;
   findings: unknown;
   extraMessages?: BaseMessage[];
+  onMessage?: (message: BaseMessage) => Promise<void> | void;
 }) {
   const systemPrompt = phaseConfig.phase3.systemPrompt;
 
@@ -212,6 +245,7 @@ export async function runPhase3PlannerAgent(input: {
     systemPrompt,
     userPrompt,
     extraMessages: input.extraMessages ?? [],
+    onMessage: input.onMessage,
     tools: [],
   });
 
@@ -224,6 +258,7 @@ export async function runPhase4ReporterAgent(input: {
   findings: unknown;
   tasks: unknown;
   extraMessages?: BaseMessage[];
+  onMessage?: (message: BaseMessage) => Promise<void> | void;
 }) {
   const systemPrompt = phaseConfig.phase4.systemPrompt;
 
@@ -248,6 +283,7 @@ export async function runPhase4ReporterAgent(input: {
     systemPrompt,
     userPrompt,
     extraMessages: input.extraMessages ?? [],
+    onMessage: input.onMessage,
     tools: [],
   });
 

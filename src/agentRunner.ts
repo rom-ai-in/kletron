@@ -7,6 +7,7 @@ import {
   runPhase2AuditorAgent,
   runPhase3PlannerAgent,
   runPhase4ReporterAgent,
+  type PhaseKey,
 } from "./agents/phases.ts";
 
 type TimelineStatus = "pending" | "running" | "success" | "error";
@@ -32,7 +33,51 @@ export type AgentWorkflowResult = {
     tasks: unknown[];
     report: string;
   };
+  eventStream: AgentEvent[];
 };
+
+export type AgentEventKind = "system" | "user" | "assistant" | "tool";
+
+export type AgentEvent = {
+  id: string;
+  phaseId: PhaseKey | "user";
+  phaseLabel?: string;
+  kind: AgentEventKind;
+  role: string;
+  name?: string;
+  content: string;
+  toolArgs?: string;
+  timestamp: string;
+};
+
+export type AgentWorkflowUpdate = {
+  timeline: TimelineEvent[];
+  eventStream: AgentEvent[];
+  outputs?: AgentWorkflowResult["outputs"];
+};
+
+export type AgentWorkflowOptions = {
+  onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
+};
+
+const LOG_CONTENT_LIMIT = 120;
+
+const sanitizeForLog = (value: string) =>
+  value
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, LOG_CONTENT_LIMIT);
+
+function logAgentEvent(event: AgentEvent) {
+  const phase = event.phaseLabel ?? event.phaseId;
+  const snippet = sanitizeForLog(event.content);
+  const toolInfo = event.name ? ` tool=${event.name}` : "";
+  console.info(
+    `[AgentRunner] event ${event.id} kind=${event.kind} phase=${phase} role=${event.role}${toolInfo} content="${snippet}${
+      event.content.length > LOG_CONTENT_LIMIT ? "…" : ""
+    }"`
+  );
+}
 
 function formatSummary(value: unknown) {
   if (!value) return "No data available yet.";
@@ -53,6 +98,62 @@ function formatThought(message: BaseMessage) {
   return `${role}: ${content}`;
 }
 
+function guessToolName(message: BaseMessage) {
+  const functionCall = message.additional_kwargs?.function_call;
+  if (functionCall?.name) {
+    return functionCall.name;
+  }
+  const toolCalls = message.additional_kwargs?.tool_calls;
+  if (Array.isArray(toolCalls) && toolCalls.length) {
+    return toolCalls[0]?.name;
+  }
+  if (message.type === "tool" && typeof message.name === "string" && message.name) {
+    return message.name;
+  }
+  return undefined;
+}
+
+function describeMessageContent(message: BaseMessage) {
+  if (message.text && typeof message.text === "string" && message.text.trim()) {
+    return message.text;
+  }
+  if (message.content) {
+    return formatSummary(message.content);
+  }
+  return "";
+}
+
+function createAgentEvent(
+  message: BaseMessage,
+  phaseId: PhaseKey,
+  phaseLabel: string,
+  eventId: string
+): AgentEvent {
+  const role = "role" in message ? message.role ?? message.type ?? "assistant" : message.type ?? "assistant";
+  const hasToolCall =
+    message.type === "tool" ||
+    Boolean(message.additional_kwargs?.function_call) ||
+    Boolean(message.additional_kwargs?.tool_calls?.length);
+  const kind: AgentEventKind = hasToolCall
+    ? "tool"
+    : role === "system" || message.type === "system"
+    ? "system"
+    : role === "user" || role === "human" || message.type === "human"
+    ? "user"
+    : "assistant";
+  return {
+    id: eventId,
+    phaseId,
+    phaseLabel,
+    kind,
+    role,
+    name: guessToolName(message),
+    content: describeMessageContent(message),
+    toolArgs: message.additional_kwargs?.function_call?.arguments,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 function createInitialTimeline(): TimelineEvent[] {
   return phaseOrder.map((phaseId) => ({
     id: phaseId,
@@ -63,30 +164,6 @@ function createInitialTimeline(): TimelineEvent[] {
     systemPrompt: phaseDefinitions[phaseId].systemPrompt,
     thoughtLog: [],
   }));
-}
-
-async function runPhase<TReturn>(phaseId: keyof typeof phaseDefinitions, callback: () => Promise<TReturn>, timeline: TimelineEvent[]) {
-  const event = timeline.find((entry) => entry.id === phaseId);
-  if (!event) throw new Error(`Phase ${phaseId} missing from timeline`);
-
-  event.status = "running";
-  event.summary = `${phaseDefinitions[phaseId].summary} (running)`;
-  event.startedAt = new Date().toISOString();
-
-  try {
-    const result = await callback();
-    const messages = (result as { messages?: BaseMessage[] }).messages ?? [];
-    event.thoughtLog = messages.map(formatThought);
-    event.status = "success";
-    event.summary = `${phaseDefinitions[phaseId].summary} (done)`;
-    event.endedAt = new Date().toISOString();
-    return result;
-  } catch (error: unknown) {
-    event.status = "error";
-    event.summary = `Failed: ${(error as Error).message ?? "unknown error"}`;
-    event.endedAt = new Date().toISOString();
-    throw error;
-  }
 }
 
 async function describeMeta(meta: Record<string, unknown>) {
@@ -121,23 +198,135 @@ async function describeMeta(meta: Record<string, unknown>) {
   return highlights.join(" · ");
 }
 
-export async function runAgentWorkflow(userRequest: string): Promise<AgentWorkflowResult> {
-  const timeline = createInitialTimeline();
+const cloneValue = <T>(value: T): T => {
+  if (typeof (globalThis as typeof globalThis & { structuredClone?: typeof structuredClone })?.structuredClone === "function") {
+    return (globalThis as typeof globalThis & { structuredClone: typeof structuredClone }).structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value));
+};
 
-  const phase1Result = await runPhase("phase1", () => runPhase1MapperAgent(userRequest), timeline);
+async function runPhase<TReturn>(
+  phaseId: keyof typeof phaseDefinitions,
+  callback: () => Promise<TReturn>,
+  timeline: TimelineEvent[],
+  options?: {
+    onMessages?: (messages: BaseMessage[], phaseId: PhaseKey) => AgentEvent[] | Promise<AgentEvent[]>;
+    flushUpdate?: () => Promise<void>;
+  }
+) {
+  const event = timeline.find((entry) => entry.id === phaseId);
+  if (!event) throw new Error(`Phase ${phaseId} missing from timeline`);
+
+  event.status = "running";
+  event.summary = `${phaseDefinitions[phaseId].summary} (running)`;
+  event.startedAt = new Date().toISOString();
+  if (options?.flushUpdate) {
+    await options.flushUpdate();
+  }
+
+  try {
+    const result = await callback();
+    const messages = (result as { messages?: BaseMessage[] }).messages ?? [];
+    const formattedEvents = options?.onMessages
+      ? await options.onMessages(messages, phaseId as PhaseKey)
+      : [];
+    event.thoughtLog =
+      formattedEvents.length > 0
+        ? formattedEvents.map((entry) => `${entry.role}: ${entry.content}`)
+        : messages.map(formatThought);
+    event.status = "success";
+    event.summary = `${phaseDefinitions[phaseId].summary} (done)`;
+    event.endedAt = new Date().toISOString();
+    return result;
+  } catch (error: unknown) {
+    event.status = "error";
+    event.summary = `Failed: ${(error as Error).message ?? "unknown error"}`;
+    event.endedAt = new Date().toISOString();
+    if (options?.flushUpdate) {
+      await options.flushUpdate();
+    }
+    throw error;
+  }
+}
+
+export async function runAgentWorkflow(
+  userRequest: string,
+  options?: AgentWorkflowOptions
+): Promise<AgentWorkflowResult> {
+  const timeline = createInitialTimeline();
+  const eventStream: AgentEvent[] = [];
+  let eventCounter = 0;
+  const nextEventId = () => `event-${eventCounter++}`;
+
+  const flushUpdate = async (outputs?: AgentWorkflowResult["outputs"]) => {
+    if (!options?.onUpdate) return;
+    const payload: AgentWorkflowUpdate = {
+      timeline: cloneValue(timeline),
+      eventStream: cloneValue(eventStream),
+    };
+    if (outputs) {
+      payload.outputs = cloneValue(outputs);
+    }
+    await options.onUpdate(payload);
+  };
+
+  const initialEvent: AgentEvent = {
+    id: nextEventId(),
+    phaseId: "user",
+    phaseLabel: "User request",
+    kind: "user",
+    role: "user",
+    content: userRequest,
+    timestamp: new Date().toISOString(),
+  };
+  eventStream.push(initialEvent);
+  logAgentEvent(initialEvent);
+
+  await flushUpdate();
+
+  const appendPhaseEvents = async (messages: BaseMessage[], phaseId: PhaseKey) => {
+    const phaseLabel = phaseDefinitions[phaseId].label;
+    const createdEvents: AgentEvent[] = [];
+    for (const message of messages) {
+      const event = createAgentEvent(message, phaseId, phaseLabel, nextEventId());
+      eventStream.push(event);
+      logAgentEvent(event);
+      createdEvents.push(event);
+      await flushUpdate();
+    }
+    return createdEvents;
+  };
+
+  const phase1Result = await runPhase(
+    "phase1",
+    () =>
+      runPhase1MapperAgent(userRequest, [], (message) => appendPhaseEvents([message], "phase1")),
+    timeline,
+    {
+      flushUpdate,
+    }
+  );
   const meta = (phase1Result.parsed as any)?.meta ?? {};
   const phase1Entry = timeline.find((entry) => entry.id === "phase1");
   if (phase1Entry) {
     phase1Entry.details = await describeMeta(meta);
   }
+  await flushUpdate();
 
-  const phase2Result = await runPhase("phase2", () =>
-    runPhase2AuditorAgent({
-      userRequest,
-      meta,
-      suggestedAuditFiles: (phase1Result.parsed as any)?.suggested_audit_files ?? [],
-    })
-  , timeline);
+  const phase2Result = await runPhase(
+    "phase2",
+    () =>
+      runPhase2AuditorAgent({
+        userRequest,
+        meta,
+        suggestedAuditFiles: (phase1Result.parsed as any)?.suggested_audit_files ?? [],
+        onMessage: (message) => appendPhaseEvents([message], "phase2"),
+      }),
+    timeline,
+    {
+      flushUpdate,
+    }
+  );
   const findingsSummary = (phase2Result.parsed as any)?.findings ?? [];
   const phase2Entry = timeline.find((entry) => entry.id === "phase2");
   if (phase2Entry) {
@@ -146,10 +335,21 @@ export async function runAgentWorkflow(userRequest: string): Promise<AgentWorkfl
         ? `Findings captured: ${findingsSummary.length}`
         : "No findings were returned.";
   }
+  await flushUpdate();
 
-  const phase3Result = await runPhase("phase3", () =>
-    runPhase3PlannerAgent({ userRequest, findings: findingsSummary })
-  , timeline);
+  const phase3Result = await runPhase(
+    "phase3",
+    () =>
+      runPhase3PlannerAgent({
+        userRequest,
+        findings: findingsSummary,
+        onMessage: (message) => appendPhaseEvents([message], "phase3"),
+      }),
+    timeline,
+    {
+      flushUpdate,
+    }
+  );
   const tasksSummary = (phase3Result.parsed as any)?.tasks ?? [];
   const phase3Entry = timeline.find((entry) => entry.id === "phase3");
   if (phase3Entry) {
@@ -158,6 +358,7 @@ export async function runAgentWorkflow(userRequest: string): Promise<AgentWorkfl
         ? `Plan drafted with ${tasksSummary.length} tasks.`
         : "No actionable tasks were produced.";
   }
+  await flushUpdate();
 
   const phase4Result = await runPhase(
     "phase4",
@@ -167,8 +368,12 @@ export async function runAgentWorkflow(userRequest: string): Promise<AgentWorkfl
         meta,
         findings: findingsSummary,
         tasks: tasksSummary,
+        onMessage: (message) => appendPhaseEvents([message], "phase4"),
       }),
-    timeline
+    timeline,
+    {
+      flushUpdate,
+    }
   );
 
   const reportMarkdown = (phase4Result.parsed as any)?.report_markdown ?? "";
@@ -177,8 +382,9 @@ export async function runAgentWorkflow(userRequest: string): Promise<AgentWorkfl
   if (phase4Entry) {
     phase4Entry.summary = finalSummary || "Report generated.";
   }
+  await flushUpdate();
 
-  return {
+  const finalResult: AgentWorkflowResult = {
     timeline,
     conclusion: finalSummary || "Pipeline completed successfully.",
     outputs: {
@@ -187,5 +393,11 @@ export async function runAgentWorkflow(userRequest: string): Promise<AgentWorkfl
       tasks: tasksSummary,
       report: reportMarkdown,
     },
+    eventStream,
   };
+  await flushUpdate(finalResult.outputs);
+  console.info(
+    `[AgentRunner] workflow completed conclusion="${sanitizeForLog(finalResult.conclusion)}" events=${finalResult.eventStream.length}`
+  );
+  return finalResult;
 }

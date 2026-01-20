@@ -103,7 +103,6 @@ export async function waitForHttpOk(url: string, options?: { timeoutMs?: number;
   const intervalMs = options?.intervalMs ?? 250;
   const startedAt = Date.now();
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       const res = await fetch(url, { method: "GET" });

@@ -13,8 +13,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata = {
-  title: "Numezis LangGraph Studio",
-  description: "Agent dashboard with timeline + chat for the LangGraph MCP stack.",
+  title: "Numezis Coder",
+  description: "Agent dashboard with timeline and chat for the MCP stack.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
