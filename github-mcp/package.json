@@ -1,0 +1,21 @@
+{
+  "name": "github-mcp",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js --mcp",
+    "dev": "node server.js --diagnostic",
+    "mcp": "node server.js --mcp",
+    "diagnose": "node server.js --diagnostic",
+    "test": "node --test"
+  },
+  "description": "Local MCP server for GitHub file analysis",
+  "dependencies": {
+    "@ast-grep/cli": "^0.40.5",
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "dotenv": "^16.4.7",
+    "glob": "^10.3.10",
+    "minimatch": "^10.1.1",
+    "typescript": "^5.9.3"
+  }
+}
