@@ -26,4 +26,12 @@ numezis_results.json
 
 # LangGraph Studio
 .langgraph/
+.langgraph_api/
 
+.DS_Store
+
+# Legacy finance artifacts (removed from active logic)
+graph/
+
+node_modules/
+github-mcp/node_modules/

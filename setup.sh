@@ -1,48 +1,25 @@
 #!/bin/bash
 
-# Quick setup script for Numezis Code
+set -euo pipefail
 
-echo "🧾 Setting up Numezis Code..."
-echo ""
+echo "🛠️  Setting up Numezis TS LangGraph"
 
-# Check if Python is available
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 is required but not installed."
-    exit 1
-fi
-
-# Create virtual environment if it doesn't exist
-if [ ! -d "venv" ]; then
-    echo "📦 Creating virtual environment..."
-    python3 -m venv venv
-fi
-
-# Activate virtual environment
-echo "🔌 Activating virtual environment..."
-source venv/bin/activate
-
-# Install dependencies
-echo "📥 Installing dependencies..."
-pip install -r requirements.txt
-
-# Create .env file if it doesn't exist
-if [ ! -f ".env" ]; then
-    echo "⚙️  Creating .env file from template..."
-    cp env.example .env
-    echo "⚠️  Please edit .env and add your Azure OpenAI credentials:"
-    echo "     - AZURE_OPENAI_API_KEY"
-    echo "     - AZURE_OPENAI_ENDPOINT"
-    echo "     - AZURE_OPENAI_DEPLOYMENT"
+if [ ! -f "package-lock.json" ]; then
+  npm install
 else
-    echo "✅ .env file already exists"
+  npm install
 fi
 
-echo ""
-echo "✅ Setup complete!"
+if [ ! -f ".env" ]; then
+  cp env.example .env
+  echo "⚠️  Please edit .env with your Azure OpenAI credentials and optional MCP_DEFAULT_DIR."
+else
+  echo "✅ .env already configured."
+fi
+
 echo ""
 echo "Next steps:"
-echo "  1. Edit .env and add your Azure OpenAI credentials"
-echo "  2. Run: python run_numezis.py"
-echo "  3. Or start LangGraph Studio: langgraph studio"
+echo "  1. Set GITHUB_MCP_DEFAULT_DIR in .env to your target repo"
+echo "  2. Start dev services (MCP + LangGraph dev): npm run dev"
+echo "  3. Or run the interactive CLI: npm start"
 echo ""
-
