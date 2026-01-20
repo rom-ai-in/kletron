@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 
 import type { McpToolMeta } from "../src/tools/mcpToolMetadata";
@@ -82,6 +82,15 @@ const formatTimestamp = (value?: string) => {
     });
   } catch {
     return "";
+  }
+};
+
+const formatJsonString = (value?: string) => {
+  if (!value) return "";
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
   }
 };
 
@@ -236,6 +245,191 @@ function ToolExplorerPanel({ tools, usedToolNames, openToolDialog }: ToolExplore
   );
 }
 
+type EventCardProps = {
+  event: AgentEvent;
+  toolMeta?: McpToolMeta;
+  openToolDialog: (tool: McpToolMeta) => void;
+};
+
+function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
+  const isToolEvent = event.kind === "tool";
+  const formattedArgs = formatJsonString(event.toolArgs);
+  const resultText = event.content?.trim() || "Awaiting agent output...";
+  const [isExpanded, setIsExpanded] = useState(false);
+  const titleText = isToolEvent
+    ? toolMeta?.label ?? event.name ?? "Tool output"
+    : event.kind === "user"
+    ? "User request"
+    : event.kind === "assistant"
+    ? "Agent response"
+    : "System message";
+  const agentMarkdown = (() => {
+    if (event.kind !== "assistant") return null;
+    try {
+      const parsed = JSON.parse(resultText);
+      if (typeof parsed?.report_markdown === "string") return parsed.report_markdown;
+      if (typeof parsed?.repo_map_markdown === "string") return parsed.repo_map_markdown;
+    } catch {}
+    return null;
+  })();
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const handleCopyMarkdown = useCallback(() => {
+    if (!agentMarkdown) return;
+    navigator.clipboard
+      ?.writeText(agentMarkdown)
+      .then(() => {
+        setCopyStatus("copied");
+        setTimeout(() => setCopyStatus("idle"), 1500);
+      })
+      .catch(() => {
+        setCopyStatus("error");
+        setTimeout(() => setCopyStatus("idle"), 1500);
+      });
+  }, [agentMarkdown]);
+  const collapsedPreviewSource = resultText.split(/\r?\n/)[0] || resultText;
+  const collapsedPreview =
+    collapsedPreviewSource.length > 200
+      ? `${collapsedPreviewSource.slice(0, 200)}…`
+      : collapsedPreviewSource;
+  const toggleExpanded = () => setIsExpanded((prev) => !prev);
+  const badgeClass = eventBadgeStyles[event.kind];
+  const badgeLabel = eventBadgeLabel[event.kind];
+  const handleClick = (event: MouseEvent<HTMLArticleElement>) => {
+    if ((event.target as HTMLElement).closest("button")) {
+      return;
+    }
+    toggleExpanded();
+  };
+  const handleKeyDown = (event: KeyboardEvent<HTMLArticleElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      toggleExpanded();
+    }
+  };
+
+  return (
+    <article
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
+      className={`group cursor-pointer rounded-2xl border border-slate-800 bg-slate-950/60 text-slate-100 transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-400 ${
+        isToolEvent ? "shadow-emerald-800/30 hover:border-emerald-400" : "shadow-black/20 hover:border-cyan-400"
+      }`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] ${badgeClass}`}>
+              {badgeLabel}
+            </span>
+            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+              {event.phaseLabel ?? (isToolEvent ? "Tool call" : "Agent log")}
+            </p>
+          </div>
+          <p className="text-sm font-semibold text-white truncate">{titleText}</p>
+          <p className="text-xs text-slate-400 truncate">{collapsedPreview || "Awaiting agent output..."}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleExpanded();
+            }}
+            aria-expanded={isExpanded}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-800 bg-slate-950/80 text-slate-200 transition group-hover:border-white/70"
+          >
+            <span className="sr-only">{isExpanded ? "Collapse details" : "Expand details"}</span>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              className={`h-4 w-4 transform transition ${isExpanded ? "rotate-180" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 8l4 4 4-4" />
+            </svg>
+          </button>
+          <span>{formatTimestamp(event.timestamp)}</span>
+        </div>
+      </div>
+
+      {agentMarkdown && (
+        <section className="space-y-2 border-t border-slate-800 px-3 pb-3 pt-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Markdown</p>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleCopyMarkdown();
+              }}
+              className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-300 transition hover:border-slate-500"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                className="h-3 w-3"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-3" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h5M9 13h5" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 5l5 5" />
+              </svg>
+              <span>
+                {copyStatus === "copied" ? "Copied" : copyStatus === "error" ? "Error" : "Copy"}
+              </span>
+            </button>
+          </div>
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3 text-[13px] leading-relaxed text-slate-100 whitespace-pre-wrap break-words">
+            {agentMarkdown}
+          </div>
+        </section>
+      )}
+      <div className={!isExpanded ? "hidden" : "grid gap-3 border-t border-slate-800 px-3 pb-4 pt-2"} role="region">
+        {event.name && (
+          <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.3em] text-slate-400">
+            <span className="font-semibold text-white">Tool</span>
+            <span>{event.name}</span>
+            <span className="text-slate-500">{toolMeta ? "registered" : "external"}</span>
+          </div>
+        )}
+        {isToolEvent && formattedArgs && (
+          <section>
+            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Arguments</p>
+            <pre className="mt-2 max-h-40 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-[12px] leading-relaxed text-slate-200 whitespace-pre-wrap break-words">
+              {formattedArgs}
+            </pre>
+          </section>
+        )}
+        <section>
+          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+            Result{isToolEvent ? "" : " / Thought"}
+          </p>
+          <pre className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-[12px] leading-relaxed text-slate-100 whitespace-pre-wrap break-words">
+            {resultText}
+          </pre>
+        </section>
+        {isToolEvent && toolMeta && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => openToolDialog(toolMeta)}
+              className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-300 transition hover:border-cyan-400"
+            >
+              View tool details
+            </button>
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
 export default function HomePage() {
   const [message, setMessage] = useState("");
   const [eventStream, setEventStream] = useState<AgentEvent[]>(() => [createSystemEvent()]);
@@ -250,7 +444,6 @@ export default function HomePage() {
   const [isToolDialogOpen, setIsToolDialogOpen] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const eventStreamRef = useRef<HTMLDivElement | null>(null);
-  const [expandedEventArgs, setExpandedEventArgs] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     fetch("/api/tools/list")
@@ -362,7 +555,6 @@ export default function HomePage() {
     setTimeline([]);
     setSelectedEventId("phase1");
     setLoading(true);
-    setExpandedEventArgs(new Set());
     try {
       const response = await fetch("/api/chat/stream", {
         method: "POST",
@@ -507,7 +699,10 @@ export default function HomePage() {
           <div className="min-h-0">
             <main className="flex h-full min-h-0 w-full flex-col gap-4 rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900/60 to-slate-950/90 p-6 shadow-[0_25px_50px_rgba(2,6,23,0.55)] overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold">Event stream</h2>
+                <div>
+                  <h2 className="text-xl font-semibold">Activity log</h2>
+                  <p className="text-xs text-slate-400">Follow each thought, tool call, and response in order.</p>
+                </div>
                 <div className="flex flex-wrap gap-2 text-xs">
                   {outputChips.map((chip) => (
                     <div key={chip.title} className="rounded-full border border-slate-800 bg-white/5 px-3 py-1">
@@ -520,85 +715,17 @@ export default function HomePage() {
 
               <div className="flex-1 min-h-0 overflow-hidden">
                 <div ref={eventStreamRef} className="h-full min-h-0 space-y-4 overflow-y-auto pr-2">
-                  {eventStream.map((event) => {
-                    const toolMeta = event.name ? toolLookup.get(event.name) : undefined;
-                    const isToolEvent = event.kind === "tool";
-                    const isExpanded = expandedEventArgs.has(event.id);
-                    return (
-                      <article
-                        key={event.id}
-                        className={`rounded-2xl border p-4 text-sm text-slate-100 shadow-inner transition ${
-                          isToolEvent
-                            ? "border-emerald-500/40 bg-emerald-950/60 hover:border-emerald-400"
-                            : "border-slate-800 bg-slate-950/60 hover:border-cyan-400"
-                        }`}
-                      >
-                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] uppercase tracking-[0.3em] text-slate-400">
-                          <span className={`rounded-full border px-3 py-1 font-semibold ${eventBadgeStyles[event.kind]}`}>
-                            {eventBadgeLabel[event.kind]}
-                          </span>
-                          <span className="text-[10px] text-slate-500">{formatTimestamp(event.timestamp)}</span>
-                        </div>
-                        <div
-                          className={`overflow-hidden transition-all ${
-                            isExpanded ? "max-h-[480px]" : "max-h-24"
-                          }`}
-                        >
-                          <p
-                            className={`text-sm leading-6 text-slate-200 transition ${
-                              isExpanded ? "" : "line-clamp-4"
-                            }`}
-                          >
-                            {event.content}
-                          </p>
-                          {isExpanded && event.toolArgs && (
-                            <pre className="mt-3 max-h-40 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-[11px] leading-relaxed text-slate-300">
-                              {event.toolArgs}
-                            </pre>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandedEventArgs((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(event.id)) {
-                                next.delete(event.id);
-                              } else {
-                                next.add(event.id);
-                              }
-                              return next;
-                            })
-                          }
-                          aria-expanded={isExpanded}
-                          className="mt-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 transition hover:text-white"
-                        >
-                          {isExpanded ? "Collapse" : "Expand"}
-                        </button>
-                        {event.kind === "tool" && event.name && (
-                          <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
-                            <span className="font-semibold text-slate-100">Tool:</span>
-                            <span>{event.name}</span>
-                            <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
-                              {toolMeta ? "known" : "external"}
-                            </span>
-                            {toolMeta && (
-                              <button
-                                type="button"
-                                onClick={() => openToolDialog(toolMeta)}
-                                className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-300 transition hover:border-cyan-400"
-                              >
-                                View tool details
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </article>
-                    );
-                  })}
+                  {eventStream.map((event) => (
+                    <EventCard
+                      key={event.id}
+                      event={event}
+                      toolMeta={event.name ? toolLookup.get(event.name) : undefined}
+                      openToolDialog={openToolDialog}
+                    />
+                  ))}
                   {loading && (
-                    <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-400">
-                      Agent running… tracking phases and tools.
+                    <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-950/40 p-4 text-sm text-slate-400">
+                      Agent running... tracking phases and tools.
                     </div>
                   )}
                 </div>
@@ -662,7 +789,7 @@ export default function HomePage() {
             )}
             <section className="space-y-3">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">System prompt</p>
-              <pre className="max-h-48 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/50 p-3 text-[12px] leading-relaxed text-slate-100">
+              <pre className="max-h-48 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/50 p-3 text-[12px] leading-relaxed text-slate-100 whitespace-pre-wrap break-words">
                 {selectedEvent.systemPrompt ?? "Pending prompt..."}
               </pre>
             </section>
@@ -750,7 +877,7 @@ export default function HomePage() {
             )}
             <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/50 p-3 text-[12px] text-slate-300">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Source</p>
-              <pre className="max-h-64 overflow-y-auto rounded-xl bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-100">
+              <pre className="max-h-64 overflow-y-auto rounded-xl bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-100 whitespace-pre-wrap break-words">
                 {toolLoadingMap[selectedTool.name]
                   ? "Loading tool details..."
                   : toolCodeCache[selectedTool.name] || "// Source unavailable."}

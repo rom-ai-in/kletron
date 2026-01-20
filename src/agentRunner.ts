@@ -134,11 +134,20 @@ function createAgentEvent(
     message.type === "tool" ||
     Boolean(message.additional_kwargs?.function_call) ||
     Boolean(message.additional_kwargs?.tool_calls?.length);
+  const normalizedRole = typeof role === "string" ? role.toLowerCase() : "";
+  const normalizedMessageType = typeof message.type === "string" ? message.type.toLowerCase() : "";
+  const isSystemRole = normalizedRole === "system" || normalizedMessageType === "system";
+  const isUserRole =
+    normalizedRole === "user" ||
+    normalizedRole === "human" ||
+    normalizedMessageType === "user" ||
+    normalizedMessageType === "human";
+  const isPhaseUser = phaseId === "user";
   const kind: AgentEventKind = hasToolCall
     ? "tool"
-    : role === "system" || message.type === "system"
+    : isSystemRole
     ? "system"
-    : role === "user" || role === "human" || message.type === "human"
+    : isPhaseUser || isUserRole
     ? "user"
     : "assistant";
   return {
