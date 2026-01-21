@@ -52,4 +52,9 @@ export const config = {
     model: lmstudioModel,
   },
   graphRecursionLimit,
+  mongo: {
+    uri: process.env.MONGODB_URI,
+    user: process.env.MONGODB_USER,
+    pass: process.env.MONGODB_PASS,
+  },
 };

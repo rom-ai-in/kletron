@@ -41,7 +41,7 @@ export async function streamReactAgentMessages(opts: StreamReactAgentOptions) {
       const idKey =
         typeof message.id === "string"
           ? message.id
-          : `${message.role ?? "unknown"}-${typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "")}-${accumulatedMessages.length}`;
+          : `${(message as any).role ?? "unknown"}-${typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "")}-${accumulatedMessages.length}`;
       if (seenMessageIds.has(idKey)) continue;
       seenMessageIds.add(idKey);
       accumulatedMessages.push(message);

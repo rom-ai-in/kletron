@@ -215,7 +215,7 @@ async function runJsonReactAgent(opts: {
       const idKey =
         typeof message.id === "string"
           ? message.id
-          : `${message.role ?? "unknown"}-${typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "")}-${accumulatedMessages.length}`;
+          : `${(message as any).role ?? "unknown"}-${typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "")}-${accumulatedMessages.length}`;
       if (seenMessageIds.has(idKey)) continue;
       seenMessageIds.add(idKey);
       accumulatedMessages.push(message);
@@ -242,13 +242,13 @@ async function runJsonReactAgent(opts: {
     .reverse()
     .find(
       (message) =>
-        message.role === "assistant" &&
+        (message as any).role === "assistant" &&
         typeof message.content === "string" &&
         message.content.includes("{")
     );
   const lastAssistant = [...finalMessages]
     .reverse()
-    .find((message) => message.role === "assistant");
+    .find((message) => (message as any).role === "assistant");
   const last = lastAssistantWithJson ?? lastAssistant ?? finalMessages.at(-1);
   if (!last) {
     throw new Error("Agent did not produce a final message.");
@@ -322,15 +322,15 @@ const normalizeRawClaim = (
   const assumption =
     value.assumption && typeof value.assumption === "object"
       ? {
-          condition:
-            typeof value.assumption.condition === "string"
-              ? value.assumption.condition
-              : "Assumption not specified.",
-          related_symbol:
-            typeof value.assumption.related_symbol === "string"
-              ? value.assumption.related_symbol
-              : undefined,
-        }
+        condition:
+          typeof value.assumption.condition === "string"
+            ? value.assumption.condition
+            : "Assumption not specified.",
+        related_symbol:
+          typeof value.assumption.related_symbol === "string"
+            ? value.assumption.related_symbol
+            : undefined,
+      }
       : { condition: "Assumption not specified." };
   const id =
     typeof value.id === "string" && value.id.trim()
@@ -357,9 +357,9 @@ const normalizeRawClaim = (
     snippet: typeof value.snippet === "string" ? value.snippet : "",
     severity:
       value.severity === "critical" ||
-      value.severity === "high" ||
-      value.severity === "medium" ||
-      value.severity === "low"
+        value.severity === "high" ||
+        value.severity === "medium" ||
+        value.severity === "low"
         ? value.severity
         : DEFAULT_RAW_SEVERITY,
     description: typeof value.description === "string" ? value.description : "",
@@ -402,11 +402,11 @@ export async function runPhase1ReconAgent(
     validateParsed: (value) =>
       Boolean(
         value &&
-          typeof value === "object" &&
-          typeof (value as any).context === "object" &&
-          Array.isArray((value as any).context?.languages) &&
-          Array.isArray((value as any).context?.frameworks) &&
-          Array.isArray((value as any).context?.hotspots)
+        typeof value === "object" &&
+        typeof (value as any).context === "object" &&
+        Array.isArray((value as any).context?.languages) &&
+        Array.isArray((value as any).context?.frameworks) &&
+        Array.isArray((value as any).context?.hotspots)
       ),
     repairFallback: { context: { mission: "", languages: [], frameworks: [], hotspots: [] } },
   });
@@ -549,11 +549,11 @@ export async function runPhase3InvestigationAgents(input: {
         "Assigned file (with line numbers):",
         numberedContent,
         "",
-      "Return JSON with:",
-      "- raw_claims: array of objects { id, file_path, line_start, line_end, snippet, severity, description, assumption: { condition, related_symbol? } }",
-      "",
-      "If unsure, return: {\"raw_claims\":[]}",
-    ].join("\n");
+        "Return JSON with:",
+        "- raw_claims: array of objects { id, file_path, line_start, line_end, snippet, severity, description, assumption: { condition, related_symbol? } }",
+        "",
+        "If unsure, return: {\"raw_claims\":[]}",
+      ].join("\n");
 
       const result = await runJsonReactAgent({
         name: `InvestigatorAgent:${filePath}`,

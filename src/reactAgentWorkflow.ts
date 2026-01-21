@@ -127,7 +127,7 @@ const createAgentEvent = (
     additional_kwargs?: { function_call?: Record<string, unknown>; tool_calls?: Record<string, unknown>[] };
     tool_calls?: Record<string, unknown>[];
   };
-  const role = typeof message.role === "string" ? message.role : message.type ?? "assistant";
+  const role = typeof (message as any).role === "string" ? (message as any).role : message.type ?? "assistant";
   const normalizedRole = role.toLowerCase();
   const messageType = typeof message.type === "string" ? message.type.toLowerCase() : "";
   const hasToolCall =
@@ -141,10 +141,10 @@ const createAgentEvent = (
   const kind: AgentEventKind = hasToolCall
     ? "tool"
     : isSystemRole
-    ? "system"
-    : isUserRole
-    ? "user"
-    : "assistant";
+      ? "system"
+      : isUserRole
+        ? "user"
+        : "assistant";
   const toolArgs = extractToolArgs(message);
   const messageContent = describeMessageContent(message);
   const isToolResult = messageType === "tool";

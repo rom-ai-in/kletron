@@ -24,6 +24,7 @@
     "dotenv": "^16.4.7",
     "eventsource": "^4.0.0",
     "langchain": "^1.2.10",
+    "mongodb": "^7.0.0",
     "next": "^14.2.7",
     "postcss": "^8.4.40",
     "react": "^18.2.0",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@langchain/langgraph-cli": "^1.1.11",
+    "@types/mongodb": "^4.0.6",
     "@types/node": "^20.6.0",
     "@types/react": "^18.2.35",
     "@typescript-eslint/parser": "^8.53.1",

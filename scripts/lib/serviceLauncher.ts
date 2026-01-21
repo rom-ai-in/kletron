@@ -80,7 +80,7 @@ export async function freePort(port: number) {
     const code = err.code;
     const stdout = typeof err.stdout === "string" ? err.stdout.trim() : "";
     const stderr = typeof err.stderr === "string" ? err.stderr.trim() : "";
-    if (code === 1 || code === "1" || (!stdout && !stderr)) {
+    if (String(code) === "1" || (!stdout && !stderr)) {
       console.log(`✅ No process found on port ${port}.`);
       return;
     }
@@ -123,13 +123,13 @@ export function spawnService(config: ServiceLaunchConfig): ChildProcess {
   const child =
     config.stdio === "pipe"
       ? spawn(config.command, config.args, {
-          env: { ...process.env, ...config.env },
-          stdio: ["ignore", "pipe", "pipe"],
-        })
+        env: { ...process.env, ...config.env },
+        stdio: ["ignore", "pipe", "pipe"],
+      })
       : spawn(config.command, config.args, {
-          env: { ...process.env, ...config.env },
-          stdio: "inherit",
-        });
+        env: { ...process.env, ...config.env },
+        stdio: "inherit",
+      });
 
   child.on("exit", (code, signal) => {
     console.log(

@@ -524,7 +524,7 @@ export async function supervisorTools(
     const results = await Promise.all(tasks);
     for (const result of results) {
       toolMessages.push(result.toolMessage);
-      notes.push(result.toolMessage.content);
+      notes.push(typeof result.toolMessage.content === "string" ? result.toolMessage.content : JSON.stringify(result.toolMessage.content));
       rawNotes.push(...result.rawNotes);
       await maybeEmitMessage(config, result.toolMessage);
     }
@@ -599,7 +599,7 @@ export async function researcherTools(
   let researchCompleteCalled = false;
 
   for (const call of toolCalls) {
-    const toolEntry = toolMap.get(call.name);
+    const toolEntry = toolMap.get(call.name as any);
     if (!toolEntry) {
       const toolMessage = new ToolMessage({
         content: `Error: unknown tool ${call.name}.`,
@@ -616,14 +616,14 @@ export async function researcherTools(
     }
 
     const args = parseToolArgs(call.args);
-    const output = await executeToolSafely(toolEntry, args, config);
+    const output = await executeToolSafely(toolEntry as any, args, config);
     const toolMessage = new ToolMessage({
       content: typeof output === "string" ? output : JSON.stringify(output, null, 2),
       name: call.name,
       tool_call_id: call.id,
     });
     toolMessages.push(toolMessage);
-    rawNotes.push(toolMessage.content);
+    rawNotes.push(typeof toolMessage.content === "string" ? toolMessage.content : JSON.stringify(toolMessage.content));
     await maybeEmitMessage(config, toolMessage);
   }
 
@@ -799,10 +799,10 @@ export async function runDeepResearchWorkflow(
     const kind: AgentEventKind = hasToolCall
       ? "tool"
       : role === "system"
-      ? "system"
-      : role === "user" || role === "human"
-      ? "user"
-      : "assistant";
+        ? "system"
+        : role === "user" || role === "human"
+          ? "user"
+          : "assistant";
     const messageContent = formatMessageContent(message);
     const isToolResult = messageType.toLowerCase() === "tool";
     let content = messageContent;

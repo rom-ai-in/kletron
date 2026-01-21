@@ -9,13 +9,14 @@ import {
   runPhase4AdjudicatorAgent,
   runPhase5ReporterAgent,
   type PhaseKey,
-} from "./agents/phases.ts";
+} from "./agents/phases";
 import {
   formatAuditContextPrompt,
   formatAuditContextSummary,
   type AuditContext,
 } from "./shared/auditContext";
 import type { AuditState, TaskTicket } from "./graph";
+import { auditService } from "./services/auditService";
 
 type TimelineStatus = "pending" | "running" | "success" | "error";
 
@@ -88,8 +89,7 @@ function logAgentEvent(event: AgentEvent) {
   const snippet = sanitizeForLog(event.content);
   const toolInfo = event.name ? ` tool=${event.name}` : "";
   console.info(
-    `[AgentRunner] event ${event.id} kind=${event.kind} phase=${phase} role=${event.role}${toolInfo} content="${snippet}${
-      event.content.length > LOG_CONTENT_LIMIT ? "…" : ""
+    `[AgentRunner] event ${event.id} kind=${event.kind} phase=${phase} role=${event.role}${toolInfo} content="${snippet}${event.content.length > LOG_CONTENT_LIMIT ? "…" : ""
     }"`
   );
 }
@@ -216,11 +216,11 @@ function extractToolCallId(message: BaseMessage): string | undefined {
 
 function createAgentEvent(
   message: BaseMessage,
-  phaseId: PhaseKey,
+  phaseId: PhaseKey | string,
   phaseLabel: string,
   eventId: string
 ): AgentEvent {
-  const role = "role" in message ? message.role ?? message.type ?? "assistant" : message.type ?? "assistant";
+  const role = ("role" in message ? message.role ?? message.type ?? "assistant" : message.type ?? "assistant") as string;
   const hasToolCall =
     message.type === "tool" ||
     Boolean(message.additional_kwargs?.function_call) ||
@@ -234,14 +234,14 @@ function createAgentEvent(
     normalizedRole === "human" ||
     normalizedMessageType === "user" ||
     normalizedMessageType === "human";
-  const isPhaseUser = phaseId === "user";
+  const isPhaseUser = (phaseId as string) === "user";
   const kind: AgentEventKind = hasToolCall
     ? "tool"
     : isSystemRole
-    ? "system"
-    : isPhaseUser || isUserRole
-    ? "user"
-    : "assistant";
+      ? "system"
+      : isPhaseUser || isUserRole
+        ? "user"
+        : "assistant";
   const messageContent = describeMessageContent(message);
   const isToolResult = normalizedMessageType === "tool";
   let content = messageContent;
@@ -387,6 +387,10 @@ export async function runAgentWorkflow(
   const contextMessages = contextPrompt ? [new SystemMessage(contextPrompt)] : [];
   const phaseUserMessageLogged = new Set<PhaseKey>();
 
+  // 1. Create Session
+  const sessionId = await auditService.createSession(userRequest);
+  console.info(`[AgentRunner] Started MongoDB session: ${sessionId}`);
+
   const flushUpdate = async (outputs?: AgentWorkflowResult["outputs"]) => {
     if (!options?.onUpdate) return;
     const payload: AgentWorkflowUpdate = {
@@ -397,6 +401,17 @@ export async function runAgentWorkflow(
       payload.outputs = cloneValue(outputs);
     }
     await options.onUpdate(payload);
+
+    // 2. Update Session (Background)
+    if (sessionId) {
+      // We persist the current state of the workflow
+      // This includes the timeline and event stream so far
+      auditService.updateSession(sessionId, {
+        timeline: payload.timeline,
+        eventStream: payload.eventStream, // Caution: this grows large
+        outputs: payload.outputs as any // Types might be lose here, safe to cast
+      }).catch(err => console.error("Background update failed", err));
+    }
   };
 
   const initialEvent: AgentEvent = {
@@ -433,7 +448,7 @@ export async function runAgentWorkflow(
     for (const message of messages) {
       const role = "role" in message ? message.role ?? message.type ?? "" : message.type ?? "";
       const normalizedRole = typeof role === "string" ? role.toLowerCase() : "";
-      if (phaseId !== "user" && (normalizedRole === "user" || normalizedRole === "human")) {
+      if ((phaseId as string) !== "user" && (normalizedRole === "user" || normalizedRole === "human")) {
         if (phaseUserMessageLogged.has(phaseId)) continue;
         phaseUserMessageLogged.add(phaseId);
       }
@@ -446,175 +461,176 @@ export async function runAgentWorkflow(
     return createdEvents;
   };
 
-  const phase1Result = await runPhase(
-    "phase1",
-    () =>
-      runPhase1ReconAgent(
-        userRequest,
-        contextMessages,
-        (message) => appendPhaseEvents([message], "phase1"),
-        options?.llmSelection
-      ),
-    timeline,
-    {
-      flushUpdate,
-    }
-  );
-  const parsedContext = (phase1Result.parsed as any)?.context ?? {};
-  const context: AuditState["context"] = {
-    mission:
-      typeof parsedContext.mission === "string" && parsedContext.mission.trim()
-        ? parsedContext.mission
-        : userRequest,
-    languages: Array.isArray(parsedContext.languages) ? parsedContext.languages : [],
-    frameworks: Array.isArray(parsedContext.frameworks) ? parsedContext.frameworks : [],
-    hotspots: Array.isArray(parsedContext.hotspots) ? parsedContext.hotspots : [],
-  };
-  const phase1Entry = timeline.find((entry) => entry.id === "phase1");
-  if (phase1Entry) {
-    phase1Entry.details = await describeContext(context);
-  }
-  await flushUpdate();
-
-  const phase2Result = await runPhase(
-    "phase2",
-    () =>
-      runPhase2StrategyAgent({
-        userRequest,
-        context,
-        extraMessages: contextMessages,
-        onMessage: (message) => appendPhaseEvents([message], "phase2"),
-        llmSelection: options?.llmSelection,
-      }),
-    timeline,
-    {
-      flushUpdate,
-    }
-  );
-  const targetFiles = (phase2Result.parsed as any)?.target_files ?? [];
-  const phase2Entry = timeline.find((entry) => entry.id === "phase2");
-  if (phase2Entry) {
-    phase2Entry.details =
-      Array.isArray(targetFiles) && targetFiles.length
-        ? `Targets selected: ${targetFiles.length}`
-        : "No target files were selected.";
-  }
-  await flushUpdate();
-
-  const phase3Result = await runPhase(
-    "phase3",
-    () =>
-      runPhase3InvestigationAgents({
-        userRequest,
-        targetFiles,
-        extraMessages: contextMessages,
-        onMessage: (message) => appendPhaseEvents([message], "phase3"),
-        llmSelection: options?.llmSelection,
-      }),
-    timeline,
-    {
-      flushUpdate,
-    }
-  );
-  const phase3Parsed = (phase3Result.parsed as any) ?? {};
-  const rawClaims = phase3Parsed?.raw_claims ?? [];
-  const findings = phase3Parsed?.findings ?? [];
-  const phase3Entry = timeline.find((entry) => entry.id === "phase3");
-  if (phase3Entry) {
-    phase3Entry.details =
-      Array.isArray(rawClaims) && rawClaims.length
-        ? `Raw claims captured: ${rawClaims.length}`
-        : Array.isArray(findings) && findings.length
-        ? `Findings captured: ${findings.length}`
-        : "No raw claims were produced.";
-  }
-  await flushUpdate();
-
-  const phase4Result = await runPhase(
-    "phase4",
-    async () => {
-      const severityRank = (severity?: string) => {
-        switch (severity) {
-          case "critical":
-            return 3;
-          case "high":
-            return 2;
-          case "medium":
-            return 1;
-          default:
-            return 0;
-        }
-      };
-      const maxAdjudicationClaims = 12;
-      const adjudicationTargets = (rawClaims ?? [])
-        .filter((claim) => severityRank(claim?.severity) >= 2)
-        .sort((a, b) => severityRank(b?.severity) - severityRank(a?.severity))
-        .slice(0, maxAdjudicationClaims);
-      const verdicts: AuditState["verified_findings"] = [];
-      for (const claim of adjudicationTargets) {
-        if (!claim) continue;
-        const verdictResult = await runPhase4AdjudicatorAgent({
-          claim,
-          extraMessages: contextMessages,
-          onMessage: (message) => appendPhaseEvents([message], "phase4"),
-          llmSelection: options?.llmSelection,
-        });
-        const parsed = (verdictResult.parsed as any)?.verdicts ?? [];
-        const verdict = Array.isArray(parsed) ? parsed[0] : undefined;
-        if (!verdict) continue;
-        const status =
-          verdict.status === "VERIFIED" || verdict.status === "REFUTED" || verdict.status === "PLAUSIBLE"
-            ? verdict.status
-            : verdict.status === "REJECTED"
-            ? "REFUTED"
-            : "PLAUSIBLE";
-        verdicts.push({
-          claim_id: verdict.claim_id ?? claim.id,
-          status,
-          verdict_reason: verdict.reasoning ?? "",
-          final_severity: status === "REFUTED" ? "none" : claim.severity ?? "medium",
-        });
+  try {
+    const phase1Result = await runPhase(
+      "phase1",
+      () =>
+        runPhase1ReconAgent(
+          userRequest,
+          contextMessages,
+          async (message) => { await appendPhaseEvents([message], "phase1"); },
+          options?.llmSelection
+        ),
+      timeline,
+      {
+        flushUpdate,
       }
-      return { verified_findings: verdicts };
-    },
-    timeline,
-    {
-      flushUpdate,
+    );
+    const parsedContext = (phase1Result.parsed as any)?.context ?? {};
+    const context: AuditState["context"] = {
+      mission:
+        typeof parsedContext.mission === "string" && parsedContext.mission.trim()
+          ? parsedContext.mission
+          : userRequest,
+      languages: Array.isArray(parsedContext.languages) ? parsedContext.languages : [],
+      frameworks: Array.isArray(parsedContext.frameworks) ? parsedContext.frameworks : [],
+      hotspots: Array.isArray(parsedContext.hotspots) ? parsedContext.hotspots : [],
+    };
+    const phase1Entry = timeline.find((entry) => entry.id === "phase1");
+    if (phase1Entry) {
+      phase1Entry.details = await describeContext(context);
     }
-  );
-  const verdicts = (phase4Result as { verified_findings?: AuditState["verified_findings"] }).verified_findings ?? [];
-  const phase4Entry = timeline.find((entry) => entry.id === "phase4");
-  if (phase4Entry) {
-    phase4Entry.details =
-      Array.isArray(verdicts) && verdicts.length
-        ? `Verified findings: ${verdicts.length}`
-        : "No verified findings were produced.";
-  }
-  await flushUpdate();
+    await flushUpdate();
 
-  const phase5Result = await runPhase(
-    "phase5",
-    () =>
-      runPhase5ReporterAgent({
-        userRequest,
-        context,
-        verifiedFindings: verdicts,
-        rawClaims,
-        extraMessages: contextMessages,
-        onMessage: (message) => appendPhaseEvents([message], "phase5"),
-        llmSelection: options?.llmSelection,
-      }),
-    timeline,
-    {
-      flushUpdate,
+    const phase2Result = await runPhase(
+      "phase2",
+      () =>
+        runPhase2StrategyAgent({
+          userRequest,
+          context,
+          extraMessages: contextMessages,
+          onMessage: async (message) => { await appendPhaseEvents([message], "phase2"); },
+          llmSelection: options?.llmSelection,
+        }),
+      timeline,
+      {
+        flushUpdate,
+      }
+    );
+    const targetFiles = (phase2Result.parsed as any)?.target_files ?? [];
+    const phase2Entry = timeline.find((entry) => entry.id === "phase2");
+    if (phase2Entry) {
+      phase2Entry.details =
+        Array.isArray(targetFiles) && targetFiles.length
+          ? `Targets selected: ${targetFiles.length}`
+          : "No target files were selected.";
     }
-  );
+    await flushUpdate();
 
-  const reportMarkdown = (phase5Result.parsed as any)?.report_markdown ?? "";
-  const tasksSummary = (phase5Result.parsed as any)?.tasks ?? [];
-  const shouldFallbackReport = !(typeof reportMarkdown === "string" && reportMarkdown.trim());
-  const safeReportMarkdown = shouldFallbackReport
-    ? [
+    const phase3Result = await runPhase(
+      "phase3",
+      () =>
+        runPhase3InvestigationAgents({
+          userRequest,
+          targetFiles,
+          extraMessages: contextMessages,
+          onMessage: async (message) => { await appendPhaseEvents([message], "phase3"); },
+          llmSelection: options?.llmSelection,
+        }),
+      timeline,
+      {
+        flushUpdate,
+      }
+    );
+    const phase3Parsed = (phase3Result.parsed as any) ?? {};
+    const rawClaims = phase3Parsed?.raw_claims ?? [];
+    const findings = phase3Parsed?.findings ?? [];
+    const phase3Entry = timeline.find((entry) => entry.id === "phase3");
+    if (phase3Entry) {
+      phase3Entry.details =
+        Array.isArray(rawClaims) && rawClaims.length
+          ? `Raw claims captured: ${rawClaims.length}`
+          : Array.isArray(findings) && findings.length
+            ? `Findings captured: ${findings.length}`
+            : "No raw claims were produced.";
+    }
+    await flushUpdate();
+
+    const phase4Result = await runPhase(
+      "phase4",
+      async () => {
+        const severityRank = (severity?: string) => {
+          switch (severity) {
+            case "critical":
+              return 3;
+            case "high":
+              return 2;
+            case "medium":
+              return 1;
+            default:
+              return 0;
+          }
+        };
+        const maxAdjudicationClaims = 12;
+        const adjudicationTargets = (rawClaims ?? [])
+          .filter((claim: any) => severityRank(claim?.severity) >= 2)
+          .sort((a: any, b: any) => severityRank(b?.severity) - severityRank(a?.severity))
+          .slice(0, maxAdjudicationClaims);
+        const verdicts: AuditState["verified_findings"] = [];
+        for (const claim of adjudicationTargets) {
+          if (!claim) continue;
+          const verdictResult = await runPhase4AdjudicatorAgent({
+            claim,
+            extraMessages: contextMessages,
+            onMessage: async (message) => { await appendPhaseEvents([message], "phase4"); },
+            llmSelection: options?.llmSelection,
+          });
+          const parsed = (verdictResult.parsed as any)?.verdicts ?? [];
+          const verdict = Array.isArray(parsed) ? parsed[0] : undefined;
+          if (!verdict) continue;
+          const status =
+            verdict.status === "VERIFIED" || verdict.status === "REFUTED" || verdict.status === "PLAUSIBLE"
+              ? verdict.status
+              : verdict.status === "REJECTED"
+                ? "REFUTED"
+                : "PLAUSIBLE";
+          verdicts.push({
+            claim_id: verdict.claim_id ?? claim.id,
+            status,
+            verdict_reason: verdict.reasoning ?? "",
+            final_severity: status === "REFUTED" ? "none" : claim.severity ?? "medium",
+          });
+        }
+        return { verified_findings: verdicts };
+      },
+      timeline,
+      {
+        flushUpdate,
+      }
+    );
+    const verdicts = (phase4Result as { verified_findings?: AuditState["verified_findings"] }).verified_findings ?? [];
+    const phase4Entry = timeline.find((entry) => entry.id === "phase4");
+    if (phase4Entry) {
+      phase4Entry.details =
+        Array.isArray(verdicts) && verdicts.length
+          ? `Verified findings: ${verdicts.length}`
+          : "No verified findings were produced.";
+    }
+    await flushUpdate();
+
+    const phase5Result = await runPhase(
+      "phase5",
+      () =>
+        runPhase5ReporterAgent({
+          userRequest,
+          context,
+          verifiedFindings: verdicts,
+          rawClaims,
+          extraMessages: contextMessages,
+          onMessage: async (message) => { await appendPhaseEvents([message], "phase5"); },
+          llmSelection: options?.llmSelection,
+        }),
+      timeline,
+      {
+        flushUpdate,
+      }
+    );
+
+    const reportMarkdown = (phase5Result.parsed as any)?.report_markdown ?? "";
+    const tasksSummary = (phase5Result.parsed as any)?.tasks ?? [];
+    const shouldFallbackReport = !(typeof reportMarkdown === "string" && reportMarkdown.trim());
+    const safeReportMarkdown = shouldFallbackReport
+      ? [
         "# Audit report",
         "",
         "No report content was generated by the model. This is an auto-generated fallback summary.",
@@ -639,32 +655,45 @@ export async function runAgentWorkflow(
           ? "- No raw claims were produced in Phase 3."
           : "- Raw claims were produced.",
       ].join("\n")
-    : reportMarkdown;
-  const finalSummary = safeReportMarkdown.split("\n").slice(0, 4).join(" ").trim();
-  const phase5Entry = timeline.find((entry) => entry.id === "phase5");
-  if (phase5Entry) {
-    phase5Entry.summary = finalSummary || "Report generated.";
-  }
-  await flushUpdate();
+      : reportMarkdown;
+    const finalSummary = safeReportMarkdown.split("\n").slice(0, 4).join(" ").trim();
+    const phase5Entry = timeline.find((entry) => entry.id === "phase5");
+    if (phase5Entry) {
+      phase5Entry.summary = finalSummary || "Report generated.";
+    }
+    await flushUpdate();
 
-  const finalResult: AgentWorkflowResult = {
-    timeline,
-    conclusion: finalSummary || "Pipeline completed successfully.",
-    outputs: {
-      context,
-      target_files: targetFiles,
-      raw_claims: rawClaims,
-      verified_findings: verdicts,
-      findings: Array.isArray(findings) ? findings : [],
-      tasks: Array.isArray(tasksSummary) ? tasksSummary : [],
-      report: safeReportMarkdown,
-      meta: {},
-    },
-    eventStream,
-  };
-  await flushUpdate(finalResult.outputs);
-  console.info(
-    `[AgentRunner] workflow completed conclusion="${sanitizeForLog(finalResult.conclusion)}" events=${finalResult.eventStream.length}`
-  );
-  return finalResult;
+    const finalResult: AgentWorkflowResult = {
+      timeline,
+      conclusion: finalSummary || "Pipeline completed successfully.",
+      outputs: {
+        context,
+        target_files: targetFiles,
+        raw_claims: rawClaims,
+        verified_findings: verdicts,
+        findings: Array.isArray(findings) ? findings : [],
+        tasks: Array.isArray(tasksSummary) ? tasksSummary : [],
+        report: safeReportMarkdown,
+        meta: {},
+      },
+      eventStream,
+    };
+    await flushUpdate(finalResult.outputs);
+    console.info(
+      `[AgentRunner] workflow completed conclusion="${sanitizeForLog(finalResult.conclusion)}" events=${finalResult.eventStream.length}`
+    );
+
+    // 3. Complete Session
+    if (sessionId) {
+      await auditService.completeSession(sessionId, finalResult);
+    }
+
+    return finalResult;
+
+  } catch (error) {
+    if (sessionId) {
+      await auditService.completeSession(sessionId, {} as any, error as Error);
+    }
+    throw error;
+  }
 }

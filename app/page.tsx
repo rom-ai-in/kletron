@@ -17,6 +17,7 @@ import {
   normalizeAuditContext,
   type AuditContext,
 } from "../src/shared/auditContext";
+import { AuditHistoryModal } from "../src/components/AuditHistoryModal"; // Import Modal
 
 type AgentEventKind = AgentEvent["kind"];
 
@@ -129,65 +130,7 @@ const parseMultilineList = (value: string) =>
     .map((line) => line.replace(/^\s*[-*]\s*/, "").trim())
     .filter(Boolean);
 
-type ModalProps = {
-  open: boolean;
-  onClose: () => void;
-  title?: string;
-  subtitle?: string;
-  children: ReactNode;
-};
-
-function Modal({ open, onClose, title, subtitle, children }: ModalProps) {
-  const overlayRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  const handleOverlayClick = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (event.target === overlayRef.current) {
-      onClose();
-    }
-  };
-
-  return (
-    <div
-      ref={overlayRef}
-      onMouseDown={handleOverlayClick}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-[6px]"
-    >
-      <div className="relative flex h-full w-full max-w-4xl max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/95 shadow-[0_30px_60px_rgba(2,6,23,0.75)]">
-        <div className="flex flex-wrap items-start justify-between gap-3 rounded-t-[32px] bg-slate-950/90 px-6 py-5">
-          <div>
-            {title && <p className="text-[11px] text-slate-500">{title}</p>}
-            {subtitle && <h3 className="text-3xl font-semibold text-white">{subtitle}</h3>}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[11px] font-semibold text-slate-300 transition hover:border-white"
-          >
-            Close
-          </button>
-        </div>
-        <div className="flex-1 overflow-hidden px-6 pb-6 pt-4">
-          <div className="h-full min-h-0 overflow-y-auto pr-2 scrollbar-elegant space-y-6">
-            {children}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+import { Modal } from "../src/components/ui/Modal";
 
 type TimelinePanelProps = {
   timeline: TimelineEvent[];
@@ -205,24 +148,22 @@ function TimelinePanel({ timeline, selectedEventId, onPhaseSelect }: TimelinePan
             key={event.id}
             type="button"
             onClick={() => onPhaseSelect(event.id)}
-            className={`w-full rounded-xl border px-3 py-3 text-left transition ${
-              selectedEventId === event.id
-                ? "border-cyan-400 bg-slate-950/80"
-                : "border-slate-800 bg-slate-950/40"
-            }`}
+            className={`w-full rounded-xl border px-3 py-3 text-left transition ${selectedEventId === event.id
+              ? "border-cyan-400 bg-slate-950/80"
+              : "border-slate-800 bg-slate-950/40"
+              }`}
           >
             <div className="flex items-center justify-between text-sm">
               <span className="font-semibold text-slate-100">{event.label}</span>
               <span
-                className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                  event.status === "success"
-                    ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/40"
-                    : event.status === "error"
+                className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${event.status === "success"
+                  ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/40"
+                  : event.status === "error"
                     ? "bg-rose-500/10 text-rose-300 border border-rose-500/40"
                     : event.status === "pending"
-                    ? "bg-slate-600/20 text-slate-300 border border-slate-500/40"
-                    : "bg-sky-400/10 text-sky-200 border border-sky-400/30"
-                }`}
+                      ? "bg-slate-600/20 text-slate-300 border border-slate-500/40"
+                      : "bg-sky-400/10 text-sky-200 border border-sky-400/30"
+                  }`}
               >
                 {event.status}
               </span>
@@ -241,9 +182,7 @@ function TimelinePanel({ timeline, selectedEventId, onPhaseSelect }: TimelinePan
           </button>
         ))}
       </div>
-      <p className="text-xs text-slate-400">
-        Click a phase card to inspect the prompt, tool access list, and assistant log.
-      </p>
+
     </section>
   );
 }
@@ -257,24 +196,41 @@ type ToolExplorerPanelProps = {
 function ToolExplorerPanel({ tools, usedToolNames, openToolDialog }: ToolExplorerPanelProps) {
   return (
     <section className="sticky top-6 space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-3 shadow-lg h-full flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between text-xs text-slate-400">
-        <span>Tool explorer</span>
+      <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-2 mb-1">
+        <h3 className="font-semibold text-slate-300">Tools</h3>
         <span>
-          {usedToolNames.size} tool{usedToolNames.size === 1 ? "" : "s"} used
+          {usedToolNames.size} used
         </span>
       </div>
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto scrollbar-elegant">
-        {tools.map((tool) => (
-          <button
-            key={tool.name}
-            type="button"
-            onClick={() => openToolDialog(tool)}
-            className="flex flex-col rounded-2xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-left text-sm font-semibold text-white transition hover:border-cyan-400"
-          >
-            <span className="text-[13px] leading-tight">{tool.label}</span>
-            <span className="text-[10px] text-slate-500">{tool.name}</span>
-          </button>
-        ))}
+      <div className="flex-1 overflow-y-auto scrollbar-elegant">
+        <ul className="space-y-0.5">
+          {tools.map((tool) => (
+            <li key={tool.name}>
+              <button
+                type="button"
+                onClick={() => openToolDialog(tool)}
+                className="group flex w-full items-center justify-between py-1 text-left text-[13px] text-slate-400 transition hover:text-cyan-400"
+              >
+                <span className="truncate">{tool.label}</span>
+                <span className="opacity-0 transition-opacity group-hover:opacity-100">
+                  <svg
+                    className="h-3 w-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );
@@ -294,6 +250,10 @@ type HeaderControlsProps = {
   lmStudioModel: string;
   onLmStudioModelChange: (value: string) => void;
   llmError: string | null;
+  auditContextEnabled: boolean;
+  onAuditContextEnabledChange: (enabled: boolean) => void;
+  auditContextSummary: string | null;
+  onConfigureAuditContext: () => void;
 };
 
 function HeaderControls({
@@ -308,6 +268,10 @@ function HeaderControls({
   lmStudioModel,
   onLmStudioModelChange,
   llmError,
+  auditContextEnabled,
+  onAuditContextEnabledChange,
+  auditContextSummary,
+  onConfigureAuditContext,
 }: HeaderControlsProps) {
   const [isGraphMenuOpen, setIsGraphMenuOpen] = useState(false);
   const [isLlmMenuOpen, setIsLlmMenuOpen] = useState(false);
@@ -319,6 +283,7 @@ function HeaderControls({
   const llmMenuRef = useRef<HTMLDivElement | null>(null);
   const graphDetail = detailGraph ?? selectedGraph;
   const llmDetail = detailProvider ?? modelProvider;
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   useEffect(() => {
     if (!isGraphMenuOpen && !isLlmMenuOpen) return;
@@ -340,7 +305,7 @@ function HeaderControls({
       <div ref={graphMenuRef} className="relative">
         <button
           type="button"
-          className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/80 px-3 py-2 text-sm font-semibold text-white transition hover:border-cyan-400"
+          className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-sm font-semibold text-white transition hover:border-cyan-400"
           onClick={() => {
             setIsGraphMenuOpen((prev) => !prev);
             setIsLlmMenuOpen(false);
@@ -378,9 +343,8 @@ function HeaderControls({
                     onSelectGraph(graph.id);
                     setIsGraphMenuOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between rounded-xl px-2 py-2 text-left text-sm font-semibold transition ${
-                    graph.id === selectedGraphId ? "bg-cyan-500/10 text-cyan-200" : "text-slate-200 hover:bg-slate-900/60"
-                  }`}
+                  className={`flex w-full items-center justify-between rounded-xl px-2 py-2 text-left text-sm font-semibold transition ${graph.id === selectedGraphId ? "bg-cyan-500/10 text-cyan-200" : "text-slate-200 hover:bg-slate-900/60"
+                    }`}
                 >
                   <span>{graph.name}</span>
                   <span className="flex items-center gap-2">
@@ -413,7 +377,7 @@ function HeaderControls({
       <div ref={llmMenuRef} className="relative">
         <button
           type="button"
-          className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/80 px-3 py-2 text-sm font-semibold text-white transition hover:border-cyan-400"
+          className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-sm font-semibold text-white transition hover:border-cyan-400"
           onClick={() => {
             setIsLlmMenuOpen((prev) => !prev);
             setIsGraphMenuOpen(false);
@@ -451,9 +415,8 @@ function HeaderControls({
                     onSelectProvider(provider);
                     setIsLlmMenuOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between rounded-xl px-2 py-2 text-left text-sm font-semibold transition ${
-                    provider === modelProvider ? "bg-cyan-500/10 text-cyan-200" : "text-slate-200 hover:bg-slate-900/60"
-                  }`}
+                  className={`flex w-full items-center justify-between rounded-xl px-2 py-2 text-left text-sm font-semibold transition ${provider === modelProvider ? "bg-cyan-500/10 text-cyan-200" : "text-slate-200 hover:bg-slate-900/60"
+                    }`}
                 >
                   <span>{provider === "azure" ? "Azure OpenAI" : "LM Studio (local)"}</span>
                   <span className="flex items-center gap-2">
@@ -503,6 +466,61 @@ function HeaderControls({
           </div>
         )}
       </div>
+
+      <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/80 p-1 pr-3 pl-3 transition hover:border-cyan-400">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-slate-400">Context</span>
+          <button
+            type="button"
+            onClick={() => {
+              if (!auditContextEnabled && !auditContextSummary) {
+                // Force configure if empty
+                onConfigureAuditContext();
+                // We optimistically enable it, effectively saying "I want to use it, let me configure it"
+                onAuditContextEnabledChange(true);
+              } else {
+                onAuditContextEnabledChange(!auditContextEnabled);
+              }
+            }}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${auditContextEnabled ? "bg-cyan-500" : "bg-slate-700"
+              }`}
+          >
+            <span
+              className={`${auditContextEnabled ? "translate-x-4" : "translate-x-1"
+                } inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform`}
+            />
+          </button>
+        </div>
+
+        <div className="h-4 w-[1px] bg-slate-800 mx-1" />
+
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-semibold ${auditContextEnabled ? "text-cyan-200" : "text-slate-400"}`}>
+            {auditContextEnabled ? (auditContextSummary ?? "Config needed") : "Off"}
+          </span>
+          <button
+            type="button"
+            className="text-slate-400 hover:text-cyan-400 transition"
+            onClick={onConfigureAuditContext}
+            aria-label="Configure context"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setIsHistoryOpen(true)}
+        className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-sm font-semibold text-white transition hover:border-cyan-400"
+      >
+        <span className="text-[10px] text-slate-400">View</span>
+        <span>History</span>
+      </button>
+
+      <AuditHistoryModal isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
 
       <Modal
         open={isGraphInfoOpen}
@@ -586,17 +604,17 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
   const titleText = isToolEvent
     ? toolMeta?.label ?? event.name ?? "Tool output"
     : event.kind === "user"
-    ? "User request"
-    : event.kind === "assistant"
-    ? "Agent response"
-    : "System message";
+      ? "User request"
+      : event.kind === "assistant"
+        ? "Agent response"
+        : "System message";
   const agentMarkdown = (() => {
     if (event.kind !== "assistant") return null;
     try {
       const parsed = JSON.parse(resultText);
       if (typeof parsed?.report_markdown === "string") return parsed.report_markdown;
       if (typeof parsed?.repo_map_markdown === "string") return parsed.repo_map_markdown;
-    } catch {}
+    } catch { }
     return null;
   })();
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
@@ -683,9 +701,8 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
       onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
-      className={`group cursor-pointer rounded-2xl border border-slate-800 bg-slate-950/80 text-slate-100 transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-400 ${
-        isToolEvent ? "shadow-[0_4px_15px_rgba(0,0,0,0.45)] hover:border-slate-600" : "shadow-[0_2px_10px_rgba(0,0,0,0.35)] hover:border-cyan-500"
-      }`}
+      className={`group cursor-pointer rounded-2xl border border-slate-800 bg-slate-950/80 text-slate-100 transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-400 ${isToolEvent ? "shadow-[0_4px_15px_rgba(0,0,0,0.45)] hover:border-slate-600" : "shadow-[0_2px_10px_rgba(0,0,0,0.35)] hover:border-cyan-500"
+        }`}
     >
       {isToolEvent ? (
         <div>
@@ -865,8 +882,8 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
                   {copyResponseStatus === "copied"
                     ? "Copied"
                     : copyResponseStatus === "error"
-                    ? "Error"
-                    : "Copy"}
+                      ? "Error"
+                      : "Copy"}
                 </span>
               </button>
             )}
@@ -988,11 +1005,10 @@ export default function HomePage() {
       <div key={`folder-${node.path || "root"}`} className="flex flex-col gap-1">
         <button
           type="button"
-          className={`flex w-full items-center gap-2 truncate rounded-xl border px-2 py-1 text-left text-[11px] font-semibold transition ${
-            isActive
-              ? "border-cyan-400 bg-cyan-500/10 text-cyan-200"
-              : "border-transparent text-slate-200 hover:border-slate-600"
-          }`}
+          className={`flex w-full items-center gap-2 truncate rounded-xl border px-2 py-1 text-left text-[11px] font-semibold transition ${isActive
+            ? "border-cyan-400 bg-cyan-500/10 text-cyan-200"
+            : "border-transparent text-slate-200 hover:border-slate-600"
+            }`}
           style={{ paddingLeft: indentation }}
           onClick={() => toggleFolder(node.path)}
         >
@@ -1015,11 +1031,10 @@ export default function HomePage() {
                   <button
                     type="button"
                     key={`file-${file.path}`}
-                    className={`flex w-full flex-col rounded-lg border px-3 py-1 text-left text-[11px] transition ${
-                      isFileActive
-                        ? "border-cyan-400 bg-cyan-500/10 text-white"
-                        : "border-transparent text-slate-200 hover:border-slate-600"
-                    }`}
+                    className={`flex w-full flex-col rounded-lg border px-3 py-1 text-left text-[11px] transition ${isFileActive
+                      ? "border-cyan-400 bg-cyan-500/10 text-white"
+                      : "border-transparent text-slate-200 hover:border-slate-600"
+                      }`}
                     onClick={() => setSelectedPromptFile(file.path)}
                   >
                     <span className="truncate font-semibold">{file.name}</span>
@@ -1062,7 +1077,7 @@ export default function HomePage() {
   const [hasAuditStarted, setHasAuditStarted] = useState(false);
   const eventStreamRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const promptPanelHeight = 260;
+  const promptPanelHeight = 160;
 
   useEffect(() => {
     fetch("/api/tools/list")
@@ -1359,6 +1374,7 @@ export default function HomePage() {
     }
 
     setHasAuditStarted(true);
+    setIsPromptExplorerExpanded(false);
     const normalizedAuditContext = auditContextEnabled
       ? normalizeAuditContext(auditContext)
       : null;
@@ -1580,22 +1596,37 @@ export default function HomePage() {
   return (
     <div className="h-screen overflow-hidden bg-slate-950 text-slate-100">
       <div className="grid h-full grid-rows-[auto_minmax(0,1fr)] gap-4 px-6 py-6">
-        <header className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-semibold">Numezis Coder</h1>
+        <header className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3 shadow-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-semibold">Numezis Coder</h1>
               {targetPathEntry && (
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
-                  <div className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/50 px-3 py-1">
-                    <span className="text-[10px] text-slate-500">{targetPathEntry.label}</span>
-                    <span className="font-mono text-[11px] text-cyan-200">{targetPathEntry.value}</span>
-                    <button
-                      type="button"
-                      className="rounded-full border border-slate-800 bg-slate-950/70 px-2 py-0.5 text-[10px] text-slate-400 transition hover:border-cyan-400"
-                      onClick={() => handleCopyPath(targetPathEntry.value)}
+                <div className="group relative flex items-center">
+                  <button
+                    type="button"
+                    className="flex h-5 w-5 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-800 hover:text-cyan-400"
+                    onClick={() => handleCopyPath(targetPathEntry.value)}
+                    aria-label="Copy repo path"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-4 w-4"
                     >
-                      {copiedPath === targetPathEntry.value ? "Copied" : "Copy"}
-                    </button>
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                  </button>
+                  <div className="pointer-events-none absolute left-full ml-2 hidden w-max max-w-xs rounded-lg border border-slate-700 bg-slate-900/95 px-2 py-1 text-[10px] text-slate-300 shadow-xl backdrop-blur-sm group-hover:block z-50">
+                    <p className="font-mono">
+                      {copiedPath === targetPathEntry.value ? "Copied!" : targetPathEntry.value}
+                    </p>
                   </div>
                 </div>
               )}
@@ -1612,6 +1643,10 @@ export default function HomePage() {
               lmStudioModel={lmStudioModel}
               onLmStudioModelChange={setLmStudioModel}
               llmError={llmError}
+              auditContextEnabled={auditContextEnabled}
+              onAuditContextEnabledChange={setAuditContextEnabled}
+              auditContextSummary={auditContextSummary}
+              onConfigureAuditContext={() => setIsAuditContextDialogOpen(true)}
             />
           </div>
         </header>
@@ -1691,7 +1726,7 @@ export default function HomePage() {
                       </button>
                     </div>
                     {isPromptExplorerExpanded && (
-                    <div className="mt-2 max-h-[220px] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/70 p-2 text-[11px] text-slate-200 scrollbar-elegant">
+                      <div className="mt-2 max-h-[120px] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/70 p-2 text-[11px] text-slate-200 scrollbar-elegant">
                         {promptFolderLoading ? (
                           <p className="text-[11px] text-slate-500">Loading folders…</p>
                         ) : (
@@ -1706,47 +1741,11 @@ export default function HomePage() {
                         {promptLoadError || "Applying prompt content…"}
                       </p>
                     )}
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-[10px] text-slate-300">
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${
-                            auditContextEnabled
-                              ? "border-cyan-400/60 text-cyan-200"
-                              : "border-slate-700 text-slate-500"
-                          }`}
-                        >
-                          Audit context
-                        </span>
-                        <span className="truncate text-slate-400">
-                          {auditContextSummary ??
-                            "No context set — default to general audit focus."}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[10px] font-semibold text-slate-300 transition hover:border-cyan-400"
-                          onClick={() => setIsAuditContextDialogOpen(true)}
-                        >
-                          Configure
-                        </button>
-                        <button
-                          type="button"
-                          className={`rounded-full border px-3 py-1 text-[10px] font-semibold transition ${
-                            auditContextEnabled
-                              ? "border-cyan-400/60 text-cyan-200 hover:border-cyan-300"
-                              : "border-slate-700 text-slate-400 hover:border-slate-500"
-                          }`}
-                          onClick={() => setAuditContextEnabled((prev) => !prev)}
-                        >
-                          {auditContextEnabled ? "Enabled" : "Disabled"}
-                        </button>
-                      </div>
-                    </div>
+
                     <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center">
                       <textarea
                         className="w-full flex-1 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-[11px] font-medium text-white outline-none transition duration-150 focus:border-cyan-400 focus:ring-0 overflow-y-auto scrollbar-elegant"
-                        rows={3}
+                        rows={2}
                         value={messageInput}
                         onChange={(event) => setMessageInput(event.target.value)}
                         onKeyDown={handleMessageInputKeyDown}
@@ -1798,11 +1797,10 @@ export default function HomePage() {
                   return (
                     <div
                       key={nodePrompt.id}
-                      className={`rounded-2xl border p-3 ${
-                        isActive
-                          ? "border-cyan-400/60 bg-cyan-500/10"
-                          : "border-slate-800 bg-slate-950/50"
-                      }`}
+                      className={`rounded-2xl border p-3 ${isActive
+                        ? "border-cyan-400/60 bg-cyan-500/10"
+                        : "border-slate-800 bg-slate-950/50"
+                        }`}
                     >
                       <p className="text-[11px] text-slate-400">
                         {nodePrompt.label}
@@ -1834,9 +1832,8 @@ export default function HomePage() {
                     >
                       <span className="font-semibold text-white">{tool.label}</span>
                       <span
-                        className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${
-                          used ? "border-emerald-500/40 text-emerald-200" : "border-slate-600 text-slate-400"
-                        }`}
+                        className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${used ? "border-emerald-500/40 text-emerald-200" : "border-slate-600 text-slate-400"
+                          }`}
                       >
                         {used ? "used" : "avail"}
                       </span>

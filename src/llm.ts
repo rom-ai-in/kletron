@@ -23,7 +23,7 @@ export const resolveLlmSelection = (input?: {
 }): LlmSelection => {
   const provider = normalizeProvider(input?.provider) ?? config.defaultProvider;
   const model = typeof input?.model === "string" ? input.model.trim() : undefined;
-  return { provider, model: model || undefined };
+  return { provider: provider as LlmProvider, model: model || undefined };
 };
 
 export function getChatModel(selection?: Partial<LlmSelection>) {
