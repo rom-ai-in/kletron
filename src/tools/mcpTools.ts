@@ -18,19 +18,34 @@ async function callMcpTool<TArgs extends Record<string, unknown> | undefined>(
   return client.callTool(name, args ?? {});
 }
 
-export const listFilesTool = tool(
-  async ({ path }: { path?: string }) => {
-    return formatResult(await callMcpTool("list_files", path ? { path } : {}));
-  },
-  {
-    name: "list_files",
-    description:
-      "List repository files. Optional `path` to scope (defaults to configured repo root).",
-    schema: z.object({
-      path: z.string().optional(),
-    }),
-  }
-);
+const createListFilesTool = (defaultMaxDepth?: number) =>
+  tool(
+    async (input: { path?: string; maxDepth?: number }) => {
+      const args: { path?: string; maxDepth?: number } = { ...input };
+      if (
+        defaultMaxDepth !== undefined &&
+        (typeof args.maxDepth !== "number" || !Number.isFinite(args.maxDepth))
+      ) {
+        args.maxDepth = defaultMaxDepth;
+      }
+      const payload: Record<string, unknown> = {};
+      if (args.path) payload.path = args.path;
+      if (typeof args.maxDepth === "number") payload.maxDepth = Math.max(0, Math.floor(args.maxDepth));
+      return formatResult(await callMcpTool("list_files", payload));
+    },
+    {
+      name: "list_files",
+      description:
+        "List repository files. Optional `path` to scope (defaults to configured repo root). Supports `maxDepth` to limit recursion.",
+      schema: z.object({
+        path: z.string().optional(),
+        maxDepth: z.number().int().nonnegative().optional(),
+      }),
+    }
+  );
+
+export const listFilesTool = createListFilesTool();
+export { createListFilesTool };
 
 export const readFileTool = tool(
   async ({ filePath }: { filePath: string }) => {
@@ -76,7 +91,7 @@ export const searchCodeTool = tool(
       await callMcpTool("search_code", {
         query: input.query,
         path: input.path,
-        maxResults: input.maxResults ?? 20,
+        maxResults: input.maxResults ?? 50,
       })
     );
   },
@@ -439,6 +454,43 @@ export const referencesTool = tool(
   }
 );
 
+export const findReferencesTool = tool(
+  async (input: {
+    path?: string;
+    filePath: string;
+    line: number;
+    column: number;
+    maxResults?: number;
+    contextLines?: number;
+    cacheTtlMs?: number;
+  }) => {
+    return formatResult(
+      await callMcpTool("references", {
+        path: input.path,
+        filePath: input.filePath,
+        line: input.line,
+        column: input.column,
+        maxResults: input.maxResults,
+        contextLines: input.contextLines,
+        cacheTtlMs: input.cacheTtlMs,
+      })
+    );
+  },
+  {
+    name: "find_references",
+    description: "Alias of references: find references for a TS/JS identifier at a given file/line/column.",
+    schema: z.object({
+      path: z.string().optional(),
+      filePath: z.string(),
+      line: z.number().int().positive(),
+      column: z.number().int().positive(),
+      maxResults: z.number().int().positive().optional(),
+      contextLines: z.number().int().nonnegative().optional(),
+      cacheTtlMs: z.number().int().positive().optional(),
+    }),
+  }
+);
+
 export const webSearchTool = tool(
   async (input: {
     query: string;
@@ -765,6 +817,7 @@ export const allMcpTools = [
   findSymbolTool,
   goToDefinitionTool,
   referencesTool,
+  findReferencesTool,
   webSearchTool,
   fetchUrlTool,
   githubApiTool,

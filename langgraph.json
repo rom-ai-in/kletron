@@ -11,11 +11,7 @@
   "graphs": {
     "numezis": {
       "path": "src/graph.ts:graph",
-      "description": "4-phase ReAct pipeline (Map → Audit → Plan → Report) backed by github-mcp tools."
-    },
-    "deep_research": {
-      "path": "src/deepResearch/index.ts:deepResearchGraph",
-      "description": "Deep research supervisor + researcher graph for codebase analysis using MCP tools."
+      "description": "5-phase Diamond Flow (Recon → Strategy → Investigation → Adjudication → Reporting) backed by github-mcp tools."
     },
     "simple_react": {
       "path": "src/simpleReactGraph.ts:graph",

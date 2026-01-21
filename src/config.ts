@@ -25,7 +25,7 @@ const parsedGraphRecursionLimit = Number.parseInt(process.env.GRAPH_RECURSION_LI
 const graphRecursionLimit =
   Number.isFinite(parsedGraphRecursionLimit) && parsedGraphRecursionLimit > 0
     ? parsedGraphRecursionLimit
-    : 200;
+    : 50;
 
 if (!azureEndpoint || !azureApiKey || !azureDeployment) {
   console.warn(

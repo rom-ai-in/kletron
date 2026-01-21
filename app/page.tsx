@@ -242,7 +242,7 @@ function TimelinePanel({ timeline, selectedEventId, onPhaseSelect }: TimelinePan
         ))}
       </div>
       <p className="text-xs text-slate-400">
-        Click a phase card to inspect the prompt, tool access list, and thought log.
+        Click a phase card to inspect the prompt, tool access list, and assistant log.
       </p>
     </section>
   );
@@ -580,7 +580,8 @@ type EventCardProps = {
 function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
   const isToolEvent = event.kind === "tool";
   const formattedArgs = formatJsonString(event.toolArgs);
-  const resultText = event.content?.trim() || "Awaiting agent output...";
+  const resultTextRaw = event.content?.trim() ?? "";
+  const resultText = resultTextRaw || (isToolEvent ? "" : "No response yet.");
   const [isExpanded, setIsExpanded] = useState(false);
   const titleText = isToolEvent
     ? toolMeta?.label ?? event.name ?? "Tool output"
@@ -647,6 +648,17 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
     }
     return lines[0] ?? resultText;
   })();
+  const argsPreview = (() => {
+    if (!formattedArgs) return "";
+    const lines = formattedArgs.split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (/^[\{\[\]\}]+,?$/.test(trimmed)) continue;
+      return trimmed;
+    }
+    return formattedArgs.slice(0, 200);
+  })();
   const collapsedPreview =
     firstMeaningfulLine.length > 200 ? `${firstMeaningfulLine.slice(0, 200)}…` : firstMeaningfulLine;
   const toggleExpanded = () => setIsExpanded((prev) => !prev);
@@ -676,39 +688,54 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
       }`}
     >
       {isToolEvent ? (
-        <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] text-slate-400">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badgeClass}`}>
-              {badgeLabel}
-            </span>
-            <p className="text-sm font-semibold text-slate-100 truncate leading-tight">{titleText}</p>
-          </div>
-          <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
-            <span className="whitespace-nowrap text-[10px] text-slate-400">
-              {formatTimestamp(event.timestamp)}
-            </span>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                toggleExpanded();
-              }}
-              aria-expanded={isExpanded}
-              className="flex h-7 w-7 items-center justify-center rounded border border-slate-800 bg-slate-950/70 text-slate-300 transition duration-150 hover:border-slate-500 hover:text-white"
-            >
-              <span className="sr-only">{isExpanded ? "Collapse details" : "Expand details"}</span>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                className={`h-3 w-3 transform transition ${isExpanded ? "rotate-180" : ""}`}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
+        <div>
+          <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] text-slate-400">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badgeClass}`}>
+                {badgeLabel}
+              </span>
+              <p className="text-sm font-semibold text-slate-100 truncate leading-tight">{titleText}</p>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
+              <span className="whitespace-nowrap text-[10px] text-slate-400">
+                {formatTimestamp(event.timestamp)}
+              </span>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggleExpanded();
+                }}
+                aria-expanded={isExpanded}
+                className="flex h-7 w-7 items-center justify-center rounded border border-slate-800 bg-slate-950/70 text-slate-300 transition duration-150 hover:border-slate-500 hover:text-white"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 8l4 4 4-4" />
-              </svg>
-            </button>
+                <span className="sr-only">{isExpanded ? "Collapse details" : "Expand details"}</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  className={`h-3 w-3 transform transition ${isExpanded ? "rotate-180" : ""}`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 8l4 4 4-4" />
+                </svg>
+              </button>
+            </div>
           </div>
+          {!isExpanded && (
+            <div className="space-y-1 px-3 pb-3 text-[11px] text-slate-400">
+              {argsPreview && (
+                <p className="truncate">
+                  <span className="text-slate-500">Args:</span> {argsPreview}
+                </p>
+              )}
+              <p className="truncate">
+                <span className="text-slate-500">Result:</span>{" "}
+                {collapsedPreview || "No output yet"}
+              </p>
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[11px] text-slate-400">
@@ -720,7 +747,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
               <span>{event.phaseLabel ?? (isToolEvent ? "Tool call" : "Agent log")}</span>
             </div>
             <p className="text-sm font-semibold text-white truncate leading-tight">{titleText}</p>
-            <p className="text-xs text-slate-400 truncate">{collapsedPreview || "Awaiting agent output..."}</p>
+            <p className="text-xs text-slate-400 truncate">{collapsedPreview || "No response yet."}</p>
           </div>
           <div className="flex flex-col items-end gap-1 text-[10px] text-slate-500">
             <button
@@ -799,10 +826,18 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
             </pre>
           </section>
         )}
+        {isToolEvent && event.toolNote && event.toolNote.trim().length > 0 && (
+          <section>
+            <p className="text-[11px] text-slate-400">Assistant message</p>
+            <pre className="mt-2 max-h-32 overflow-y-auto rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] leading-relaxed text-amber-100 whitespace-pre-wrap break-words scrollbar-elegant">
+              {event.toolNote}
+            </pre>
+          </section>
+        )}
         <section>
           <div className="flex flex-wrap items-start justify-between gap-2">
             <p className="text-[11px] text-slate-400">
-              Result{isToolEvent ? "" : " / Thought"}
+              Result{isToolEvent ? "" : " / Assistant message"}
             </p>
             {event.kind === "assistant" && (
               <button
@@ -1026,6 +1061,7 @@ export default function HomePage() {
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [hasAuditStarted, setHasAuditStarted] = useState(false);
   const eventStreamRef = useRef<HTMLDivElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const promptPanelHeight = 260;
 
   useEffect(() => {
@@ -1340,9 +1376,12 @@ export default function HomePage() {
     setOutputs(null);
     setTimeline([]);
     setSelectedEventId(activePhaseDefinitions[0]?.id ?? null);
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setLoading(true);
     try {
       const response = await fetch("/api/chat/stream", {
+        signal: controller.signal,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1359,6 +1398,9 @@ export default function HomePage() {
       }
       await readEventStream(response);
     } catch (error) {
+      if ((error as Error).name === "AbortError") {
+        return;
+      }
       setEventStream((prev) => [
         ...prev,
         {
@@ -1373,7 +1415,14 @@ export default function HomePage() {
       ]);
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
     }
+  };
+
+  const handleStop = () => {
+    if (!loading) return;
+    abortControllerRef.current?.abort();
+    setLoading(false);
   };
 
   const handleMessageInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -1382,6 +1431,8 @@ export default function HomePage() {
       handleSendMessage();
     }
   };
+
+  const canSendMessage = Boolean(messageInput.trim());
 
   const toolLookup = useMemo(() => new Map(tools.map((tool) => [tool.name, tool])), [tools]);
   const usedToolNames = useMemo(
@@ -1393,13 +1444,82 @@ export default function HomePage() {
       ),
     [eventStream]
   );
+  const coalescedEventStream = useMemo(() => {
+    if (!eventStream.length) return eventStream;
+    const merged: AgentEvent[] = [];
+    const pendingById = new Map<string, { toolArgs?: string; name?: string; phaseId?: string; toolNote?: string }>();
+    const pendingByName = new Map<
+      string,
+      Array<{ toolArgs?: string; name?: string; phaseId?: string; toolNote?: string }>
+    >();
+    const nameKey = (event: AgentEvent) => `${event.phaseId}:${event.name ?? "tool"}`;
+
+    for (const event of eventStream) {
+      if (event.kind === "tool") {
+        const isToolStart = event.role !== "tool";
+        const hasContent = Boolean(event.content && event.content.trim());
+        if (isToolStart) {
+          if (event.toolCallId) {
+            pendingById.set(event.toolCallId, {
+              toolArgs: event.toolArgs,
+              name: event.name,
+              phaseId: event.phaseId,
+              toolNote: event.toolNote,
+            });
+          } else {
+            const key = nameKey(event);
+            const queue = pendingByName.get(key) ?? [];
+            queue.push({
+              toolArgs: event.toolArgs,
+              name: event.name,
+              phaseId: event.phaseId,
+              toolNote: event.toolNote,
+            });
+            pendingByName.set(key, queue);
+          }
+          continue;
+        }
+
+        if (hasContent) {
+          let pending = event.toolCallId ? pendingById.get(event.toolCallId) : undefined;
+          if (event.toolCallId && pending) {
+            pendingById.delete(event.toolCallId);
+          }
+          if (!pending) {
+            const key = nameKey(event);
+            const queue = pendingByName.get(key);
+            if (queue && queue.length) {
+              pending = queue.shift();
+              if (!queue.length) {
+                pendingByName.delete(key);
+              }
+            }
+          }
+          if (pending) {
+            merged.push({
+              ...event,
+              toolArgs: pending.toolArgs ?? event.toolArgs,
+              name: event.name ?? pending.name,
+              toolNote: event.toolNote ?? pending.toolNote,
+            });
+            continue;
+          }
+        }
+      }
+      if (event.kind === "tool" && (!event.content || !event.content.trim())) {
+        continue;
+      }
+      merged.push(event);
+    }
+    return merged;
+  }, [eventStream]);
   const visibleEventStream = useMemo(() => {
-    const hasNonSystemEvent = eventStream.some((event) => event.kind !== "system");
+    const hasNonSystemEvent = coalescedEventStream.some((event) => event.kind !== "system");
     if (!hasNonSystemEvent) {
       return [];
     }
-    return eventStream.filter((event) => event.kind !== "system");
-  }, [eventStream]);
+    return coalescedEventStream.filter((event) => event.kind !== "system");
+  }, [coalescedEventStream]);
   useEffect(() => {
     if (!visibleEventStream.length) return;
     let frame = 0;
@@ -1635,10 +1755,10 @@ export default function HomePage() {
                       <button
                         type="button"
                         className="inline-flex h-10 min-w-[140px] items-center justify-center rounded-xl border border-slate-700 bg-slate-900/80 px-4 text-[11px] font-semibold text-white transition duration-150 hover:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
-                        onClick={handleSendMessage}
-                        disabled={loading}
+                        onClick={loading ? handleStop : handleSendMessage}
+                        disabled={!loading && !canSendMessage}
                       >
-                        {loading ? "Sending…" : "Send"}
+                        {loading ? "Stop" : "Send"}
                       </button>
                     </div>
                   </div>
@@ -1726,7 +1846,7 @@ export default function HomePage() {
               </div>
             </section>
             <section className="space-y-2">
-              <p className="text-[11px] text-slate-500">Thought log</p>
+              <p className="text-[11px] text-slate-500">Assistant log</p>
               {selectedEvent.thoughtLog?.length ? (
                 <ul className="max-h-72 space-y-2 overflow-y-auto scrollbar-elegant">
                   {selectedEvent.thoughtLog.map((thought, index) => (
@@ -1739,7 +1859,7 @@ export default function HomePage() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-slate-400">Awaiting agent trace...</p>
+                <p className="text-xs text-slate-400">No assistant messages captured for this phase.</p>
               )}
             </section>
           </div>

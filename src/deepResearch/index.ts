@@ -794,7 +794,8 @@ export async function runDeepResearchWorkflow(
     const hasToolCall =
       messageType.toLowerCase() === "tool" ||
       Boolean((message as BaseMessage & { additional_kwargs?: { function_call?: unknown } }).additional_kwargs?.function_call) ||
-      Boolean((message as BaseMessage & { additional_kwargs?: { tool_calls?: unknown[] } }).additional_kwargs?.tool_calls?.length);
+      Boolean((message as BaseMessage & { additional_kwargs?: { tool_calls?: unknown[] } }).additional_kwargs?.tool_calls?.length) ||
+      Boolean((message as BaseMessage & { tool_calls?: unknown[] }).tool_calls?.length);
     const kind: AgentEventKind = hasToolCall
       ? "tool"
       : role === "system"
@@ -802,6 +803,16 @@ export async function runDeepResearchWorkflow(
       : role === "user" || role === "human"
       ? "user"
       : "assistant";
+    const messageContent = formatMessageContent(message);
+    const isToolResult = messageType.toLowerCase() === "tool";
+    let content = messageContent;
+    let toolNote: string | undefined;
+    if (hasToolCall && !isToolResult) {
+      toolNote = messageContent;
+      content = "";
+    } else if (!isToolResult) {
+      toolNote = undefined;
+    }
     return {
       id: nextEventId(),
       phaseId,
@@ -809,9 +820,26 @@ export async function runDeepResearchWorkflow(
       kind,
       role,
       name: (message as BaseMessage & { name?: string }).name,
-      content: formatMessageContent(message),
-      toolArgs: (message as BaseMessage & { additional_kwargs?: { function_call?: { arguments?: string } } })
-        .additional_kwargs?.function_call?.arguments,
+      content,
+      toolNote,
+      toolArgs: (() => {
+        const extra = message as BaseMessage & {
+          additional_kwargs?: {
+            function_call?: { arguments?: unknown };
+            tool_calls?: Array<{ args?: unknown; arguments?: unknown; function?: { arguments?: unknown } }>;
+          };
+          tool_calls?: Array<{ args?: unknown; arguments?: unknown; function?: { arguments?: unknown } }>;
+        };
+        const functionArgs = extra.additional_kwargs?.function_call?.arguments;
+        if (functionArgs !== undefined) {
+          return typeof functionArgs === "string" ? functionArgs : JSON.stringify(functionArgs);
+        }
+        const toolCalls = extra.tool_calls ?? extra.additional_kwargs?.tool_calls;
+        const first = Array.isArray(toolCalls) ? toolCalls[0] : undefined;
+        const args = first?.args ?? first?.arguments ?? first?.function?.arguments;
+        if (args === undefined) return undefined;
+        return typeof args === "string" ? args : JSON.stringify(args);
+      })(),
       timestamp: new Date().toISOString(),
     };
   };
@@ -827,7 +855,7 @@ export async function runDeepResearchWorkflow(
     const event = createAgentEvent(message, phaseId, phaseLabel);
     eventStream.push(event);
     const timelineEntry = timeline.find((item) => item.id === phaseId);
-    if (timelineEntry) {
+    if (timelineEntry && event.kind === "assistant") {
       timelineEntry.thoughtLog = timelineEntry.thoughtLog ?? [];
       timelineEntry.thoughtLog.push(formatThought(message));
     }
@@ -903,10 +931,14 @@ export async function runDeepResearchWorkflow(
 
   if (state.nextStep === "end") {
     const outputs: AgentWorkflowResult["outputs"] = {
-      meta: {},
-      findings: [],
+      context: { mission: state.userRequest ?? "", languages: [], frameworks: [], hotspots: [] },
+      target_files: [],
+      raw_claims: [],
+      verified_findings: [],
       tasks: [],
       report: state.finalAnswer ?? "",
+      meta: {},
+      findings: [],
     };
     await flushUpdate(outputs);
     return {
@@ -984,10 +1016,14 @@ export async function runDeepResearchWorkflow(
   const conclusion = report.split("\n").slice(0, 4).join(" ").trim() || "Report generated.";
 
   const outputs: AgentWorkflowResult["outputs"] = {
-    meta: {},
-    findings: [],
+    context: { mission: state.userRequest ?? "", languages: [], frameworks: [], hotspots: [] },
+    target_files: [],
+    raw_claims: [],
+    verified_findings: [],
     tasks: [],
     report,
+    meta: {},
+    findings: [],
   };
 
   await flushUpdate(outputs);

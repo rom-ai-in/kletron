@@ -10,7 +10,8 @@ export const mcpToolMetadata: McpToolMeta[] = [
   {
     name: "list_files",
     label: "List repository files",
-    description: "Enumerates files under the configured repo root while skipping node_modules/.git/dist/build.",
+    description:
+      "Enumerates files under the configured repo root (supports `maxDepth` to limit recursion) while skipping node_modules/.git/dist/build.",
     file: "github-mcp/tools/listFiles.js",
     categories: ["exploration", "fs"],
   },
@@ -123,6 +124,13 @@ export const mcpToolMetadata: McpToolMeta[] = [
     name: "references",
     label: "References",
     description: "Find references for a TS/JS identifier at a given file/line/column.",
+    file: "github-mcp/tools/references.js",
+    categories: ["symbols", "navigation"],
+  },
+  {
+    name: "find_references",
+    label: "Find references",
+    description: "Alias for references: find symbol references at a file/line/column.",
     file: "github-mcp/tools/references.js",
     categories: ["symbols", "navigation"],
   },

@@ -49,19 +49,71 @@ const describeMessageContent = (message: BaseMessage) => {
 const guessToolName = (message: BaseMessage) => {
   const extra = message as BaseMessage & {
     additional_kwargs?: { function_call?: Record<string, unknown>; tool_calls?: Record<string, unknown>[] };
+    tool_calls?: Record<string, unknown>[];
     name?: string;
   };
   const functionCall = extra.additional_kwargs?.function_call;
   if (functionCall?.name) {
     return String(functionCall.name);
   }
-  const toolCalls = extra.additional_kwargs?.tool_calls;
+  const toolCalls = extra.tool_calls ?? extra.additional_kwargs?.tool_calls;
   if (Array.isArray(toolCalls) && toolCalls.length) {
-    return typeof toolCalls[0]?.name === "string" ? toolCalls[0]?.name : undefined;
+    const first = toolCalls[0] as { name?: unknown; function?: { name?: unknown } };
+    if (typeof first?.name === "string") return first.name;
+    if (typeof first?.function?.name === "string") return first.function.name;
+    return undefined;
   }
   if (message.type === "tool" && typeof extra.name === "string" && extra.name) {
     return extra.name;
   }
+  return undefined;
+};
+
+const extractToolArgs = (message: BaseMessage): string | undefined => {
+  const extra = message as BaseMessage & {
+    additional_kwargs?: {
+      function_call?: { arguments?: unknown };
+      tool_calls?: Array<{ args?: unknown; arguments?: unknown; function?: { arguments?: unknown } }>;
+    };
+    tool_calls?: Array<{ args?: unknown; arguments?: unknown; function?: { arguments?: unknown } }>;
+  };
+  const functionCall = extra.additional_kwargs?.function_call;
+  if (functionCall?.arguments !== undefined) {
+    return typeof functionCall.arguments === "string"
+      ? functionCall.arguments
+      : JSON.stringify(functionCall.arguments);
+  }
+  const toolCalls = extra.tool_calls ?? extra.additional_kwargs?.tool_calls;
+  const first = Array.isArray(toolCalls) ? toolCalls[0] : undefined;
+  if (first?.args !== undefined) {
+    return typeof first.args === "string" ? first.args : JSON.stringify(first.args);
+  }
+  if (first?.arguments !== undefined) {
+    return typeof first.arguments === "string"
+      ? first.arguments
+      : JSON.stringify(first.arguments);
+  }
+  if (first?.function?.arguments !== undefined) {
+    return typeof first.function.arguments === "string"
+      ? first.function.arguments
+      : JSON.stringify(first.function.arguments);
+  }
+  return undefined;
+};
+
+const extractToolCallId = (message: BaseMessage): string | undefined => {
+  const direct = (message as BaseMessage & { tool_call_id?: string }).tool_call_id;
+  if (direct) return String(direct);
+  const extra = message as BaseMessage & {
+    additional_kwargs?: { tool_call_id?: string; tool_calls?: Array<{ id?: string }> };
+    tool_calls?: Array<{ id?: string }>;
+  };
+  if (extra.additional_kwargs?.tool_call_id) {
+    return String(extra.additional_kwargs.tool_call_id);
+  }
+  const toolCalls = extra.tool_calls ?? extra.additional_kwargs?.tool_calls;
+  const first = Array.isArray(toolCalls) ? toolCalls[0] : undefined;
+  if (first?.id) return String(first.id);
   return undefined;
 };
 
@@ -73,6 +125,7 @@ const createAgentEvent = (
 ): AgentEvent => {
   const extra = message as BaseMessage & {
     additional_kwargs?: { function_call?: Record<string, unknown>; tool_calls?: Record<string, unknown>[] };
+    tool_calls?: Record<string, unknown>[];
   };
   const role = typeof message.role === "string" ? message.role : message.type ?? "assistant";
   const normalizedRole = role.toLowerCase();
@@ -80,7 +133,8 @@ const createAgentEvent = (
   const hasToolCall =
     messageType === "tool" ||
     Boolean(extra.additional_kwargs?.function_call) ||
-    Boolean(extra.additional_kwargs?.tool_calls?.length);
+    Boolean(extra.additional_kwargs?.tool_calls?.length) ||
+    Boolean(extra.tool_calls?.length);
   const isSystemRole = normalizedRole === "system" || messageType === "system";
   const isUserRole =
     normalizedRole === "user" || normalizedRole === "human" || messageType === "user" || messageType === "human";
@@ -91,7 +145,17 @@ const createAgentEvent = (
     : isUserRole
     ? "user"
     : "assistant";
-  const toolArgs = extra.additional_kwargs?.function_call?.arguments;
+  const toolArgs = extractToolArgs(message);
+  const messageContent = describeMessageContent(message);
+  const isToolResult = messageType === "tool";
+  let content = messageContent;
+  let toolNote: string | undefined;
+  if (hasToolCall && !isToolResult) {
+    toolNote = messageContent;
+    content = "";
+  } else if (!isToolResult) {
+    toolNote = undefined;
+  }
 
   return {
     id: eventId,
@@ -100,7 +164,9 @@ const createAgentEvent = (
     kind,
     role,
     name: guessToolName(message),
-    content: describeMessageContent(message),
+    toolCallId: extractToolCallId(message),
+    content,
+    toolNote,
     toolArgs,
     timestamp: new Date().toISOString(),
   };
@@ -180,14 +246,21 @@ export async function runSimpleReactWorkflow(
   phaseEntry.status = "success";
   phaseEntry.summary = `${simpleReactPhaseSummary} (done)`;
   phaseEntry.endedAt = new Date().toISOString();
-  phaseEntry.thoughtLog = builtMessageEvents.map((event) => `${event.role}: ${event.content}`);
+  const assistantEvents = builtMessageEvents.filter((event) => event.kind === "assistant");
+  phaseEntry.thoughtLog = assistantEvents.length
+    ? assistantEvents.map((event) => `${event.role}: ${event.content}`)
+    : ["No assistant messages emitted."];
   await flushUpdate();
 
   const outputs: AgentWorkflowResult["outputs"] = {
-    meta: {},
-    findings: [],
+    context: { mission: userRequest, languages: [], frameworks: [], hotspots: [] },
+    target_files: [],
+    raw_claims: [],
+    verified_findings: [],
     tasks: [],
     report: finalContent,
+    meta: {},
+    findings: [],
   };
 
   await flushUpdate(outputs);

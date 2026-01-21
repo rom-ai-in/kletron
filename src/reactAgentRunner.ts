@@ -2,6 +2,7 @@ import { BaseMessage, SystemMessage } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 
 import { getChatModel, type LlmSelection } from "./llm";
+import { config } from "./config";
 
 export type StreamReactAgentOptions = {
   name: string;
@@ -23,7 +24,10 @@ export async function streamReactAgentMessages(opts: StreamReactAgentOptions) {
   });
 
   const inputMessages = [...(opts.extraMessages ?? []), { role: "user", content: opts.userPrompt }];
-  const stream = await agent.stream({ messages: inputMessages }, { streamMode: "values" });
+  const stream = await agent.stream(
+    { messages: inputMessages },
+    { streamMode: "values", recursionLimit: config.graphRecursionLimit }
+  );
 
   const seenMessageIds = new Set<string>();
   const accumulatedMessages: BaseMessage[] = [];

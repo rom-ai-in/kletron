@@ -1,23 +1,82 @@
-import {
-  Annotation,
-  END,
-  MessagesAnnotation,
-  SingleReducer,
-  START,
-  StateGraph,
-} from "@langchain/langgraph";
-import { AIMessage } from "@langchain/core/messages";
+import { Annotation, END, SingleReducer, START, StateGraph } from "@langchain/langgraph";
 
 import { config } from "./config";
 import { McpClient } from "./mcp/client";
 import {
-  runPhase1MapperAgent,
-  runPhase2AuditorAgent,
-  runPhase3PlannerAgent,
-  runPhase4ReporterAgent,
+  runPhase1ReconAgent,
+  runPhase2StrategyAgent,
+  runPhase3InvestigationAgents,
+  runPhase4AdjudicatorAgent,
+  runPhase5ReporterAgent,
 } from "./agents/phases";
 
 const ARTIFACTS_DIR = ".numezis";
+
+export type TaskTicket = {
+  id: string;
+  title: string;
+  priority: string;
+  impact: string;
+  effort: string;
+  steps: string[];
+  acceptance_criteria: string[];
+};
+
+// The Global Graph State
+export interface AuditState {
+  // Phase 1: Context
+  context: {
+    mission: string; // User's goal: "Find security flaws in auth"
+    languages: string[]; // e.g., ["TypeScript", "Python"]
+    frameworks: string[]; // e.g., ["Next.js", "Prisma"]
+    hotspots: string[]; // Files with high churn/complexity
+  };
+
+  // Phase 2: The Hit List
+  target_files: Array<{
+    path: string;
+    focus_area: string; // Specific instruction for the investigator
+    score: number; // Priority score (0-100)
+  }>;
+
+  // Phase 3: Raw Intelligence (Unverified)
+  raw_claims: Array<{
+    id: string;
+    file_path: string;
+    line_start: number;
+    line_end: number;
+    snippet: string;
+    severity: "critical" | "high" | "medium" | "low";
+    description: string;
+    // The critical piece for verification:
+    assumption: {
+      condition: string; // e.g., "Input 'req.body' is not sanitized upstream"
+      related_symbol?: string; // e.g., "processPayment"
+    };
+  }>;
+
+  // Phase 4: The Truth (Verified)
+  verified_findings: Array<{
+    claim_id: string;
+    status: "VERIFIED" | "REFUTED" | "PLAUSIBLE";
+    verdict_reason: string; // e.g., "Traced input to validation middleware in auth.ts"
+    final_severity: string;
+  }>;
+
+  // Phase 3 (normalized): Findings extracted from raw claims
+  findings: Array<{
+    type: "BLOQUANT" | "WARNING" | "INFO";
+    file: string;
+    description: string;
+    line_start?: number;
+    line_end?: number;
+    claim_id?: string;
+  }>;
+
+  // Phase 5: Output
+  report_markdown: string;
+  tasks: Array<TaskTicket>;
+}
 
 const lastValueReducer = <ValueType>(
   defaultValue?: () => ValueType
@@ -26,26 +85,31 @@ const lastValueReducer = <ValueType>(
   default: defaultValue,
 });
 
-const NumezisAnnotation = Annotation.Root({
-  messages: MessagesAnnotation.spec.messages,
-  userRequest: Annotation<string>(lastValueReducer<string>(() => "")),
-
-  meta: Annotation<Record<string, unknown>>(
-    lastValueReducer<Record<string, unknown>>(() => ({}))
+const AuditAnnotation = Annotation.Root({
+  context: Annotation<AuditState["context"]>(
+    lastValueReducer<AuditState["context"]>(() => ({
+      mission: "",
+      languages: [],
+      frameworks: [],
+      hotspots: [],
+    }))
   ),
-  repoMapMarkdown: Annotation<string>(lastValueReducer<string>(() => "")),
-  suggestedAuditFiles: Annotation<string[]>(
-    lastValueReducer<string[]>(() => [])
+  target_files: Annotation<AuditState["target_files"]>(
+    lastValueReducer<AuditState["target_files"]>(() => [])
   ),
-
-  findings: Annotation<unknown[]>(
-    lastValueReducer<unknown[]>(() => [])
+  raw_claims: Annotation<AuditState["raw_claims"]>(
+    lastValueReducer<AuditState["raw_claims"]>(() => [])
   ),
-  tasks: Annotation<unknown[]>(
-    lastValueReducer<unknown[]>(() => [])
+  findings: Annotation<AuditState["findings"]>(
+    lastValueReducer<AuditState["findings"]>(() => [])
   ),
-
-  reportMarkdown: Annotation<string>(lastValueReducer<string>(() => "")),
+  verified_findings: Annotation<AuditState["verified_findings"]>(
+    lastValueReducer<AuditState["verified_findings"]>(() => [])
+  ),
+  report_markdown: Annotation<string>(lastValueReducer<string>(() => "")),
+  tasks: Annotation<AuditState["tasks"]>(
+    lastValueReducer<AuditState["tasks"]>(() => [])
+  ),
   outputs: Annotation<{ metaPath: string; tasksPath: string; reportPath: string }>(
     lastValueReducer<{ metaPath: string; tasksPath: string; reportPath: string }>(() => ({
       metaPath: `${ARTIFACTS_DIR}/meta.json`,
@@ -53,101 +117,118 @@ const NumezisAnnotation = Annotation.Root({
       reportPath: `${ARTIFACTS_DIR}/report.md`,
     }))
   ),
-
   finalAnswer: Annotation<string>(lastValueReducer<string>(() => "")),
 });
 
-function getStringArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const strings = value.filter((v) => typeof v === "string");
-  return strings.length ? strings : undefined;
-}
-
-async function phase1Map(state: typeof NumezisAnnotation.State) {
-  const result = await runPhase1MapperAgent(state.userRequest, state.messages ?? []);
+async function phase1Recon(state: typeof AuditAnnotation.State) {
+  const mission = state.context?.mission ?? "";
+  const result = await runPhase1ReconAgent(mission || "Audit the repository");
   const parsed = (result.parsed ?? {}) as any;
+  const parsedContext = parsed.context ?? {};
+  const mergedContext = {
+    mission:
+      typeof parsedContext.mission === "string" && parsedContext.mission.trim()
+        ? parsedContext.mission
+        : mission || "Audit the repository",
+    languages: Array.isArray(parsedContext.languages) ? parsedContext.languages : state.context.languages ?? [],
+    frameworks: Array.isArray(parsedContext.frameworks) ? parsedContext.frameworks : state.context.frameworks ?? [],
+    hotspots: Array.isArray(parsedContext.hotspots) ? parsedContext.hotspots : state.context.hotspots ?? [],
+  };
 
   return {
-    meta: parsed.meta ?? {},
-    repoMapMarkdown: typeof parsed.repo_map_markdown === "string" ? parsed.repo_map_markdown : "",
-    suggestedAuditFiles: getStringArray(parsed.suggested_audit_files) ?? [],
-    messages: result.messages ?? [],
+    context: mergedContext,
   };
 }
 
-async function phase2Audit(state: typeof NumezisAnnotation.State) {
-  const result = await runPhase2AuditorAgent({
-    userRequest: state.userRequest,
-    meta: state.meta,
-    suggestedAuditFiles: state.suggestedAuditFiles,
-    extraMessages: state.messages ?? [],
+async function phase2Strategy(state: typeof AuditAnnotation.State) {
+  const mission = state.context?.mission ?? "";
+  const result = await runPhase2StrategyAgent({
+    userRequest: mission,
+    context: state.context,
   });
 
   return {
+    target_files: (result.parsed as any)?.target_files ?? [],
+  };
+}
+
+async function phase3Investigation(state: typeof AuditAnnotation.State) {
+  const mission = state.context?.mission ?? "";
+  const result = await runPhase3InvestigationAgents({
+    userRequest: mission,
+    targetFiles: state.target_files ?? [],
+  });
+
+  return {
+    raw_claims: (result.parsed as any)?.raw_claims ?? [],
     findings: (result.parsed as any)?.findings ?? [],
-    messages: result.messages ?? [],
   };
 }
 
-async function phase3Plan(state: typeof NumezisAnnotation.State) {
-  const result = await runPhase3PlannerAgent({
-    userRequest: state.userRequest,
-    findings: state.findings,
-    extraMessages: state.messages ?? [],
-  });
-
-  return {
-    tasks: (result.parsed as any)?.tasks ?? [],
-    messages: result.messages ?? [],
-  };
+async function phase4Adjudication(state: typeof AuditAnnotation.State) {
+  const verdicts: AuditState["verified_findings"] = [];
+  for (const claim of state.raw_claims ?? []) {
+    if (!claim || claim.severity === "low") continue;
+    const verdictResult = await runPhase4AdjudicatorAgent({ claim });
+    const parsed = (verdictResult.parsed as any)?.verdicts ?? [];
+    const verdict = Array.isArray(parsed) ? parsed[0] : undefined;
+    if (!verdict) continue;
+    const status =
+      verdict.status === "VERIFIED" || verdict.status === "REFUTED" || verdict.status === "PLAUSIBLE"
+        ? verdict.status
+        : verdict.status === "REJECTED"
+        ? "REFUTED"
+        : "PLAUSIBLE";
+    verdicts.push({
+      claim_id: verdict.claim_id ?? claim.id,
+      status,
+      verdict_reason: verdict.reasoning ?? "",
+      final_severity: status === "REFUTED" ? "none" : claim.severity ?? "medium",
+    });
+  }
+  return { verified_findings: verdicts };
 }
 
-async function phase4ReportAndWrite(state: typeof NumezisAnnotation.State) {
-  const reportResult = await runPhase4ReporterAgent({
-    userRequest: state.userRequest,
-    meta: state.meta,
-    findings: state.findings,
-    tasks: state.tasks,
-    extraMessages: state.messages ?? [],
+async function phase5ReportAndWrite(state: typeof AuditAnnotation.State) {
+  const mission = state.context?.mission ?? "";
+  const reportResult = await runPhase5ReporterAgent({
+    userRequest: mission,
+    context: state.context,
+    verifiedFindings: state.verified_findings,
+    rawClaims: state.raw_claims,
   });
 
   const reportMarkdown =
     typeof (reportResult.parsed as any)?.report_markdown === "string"
       ? (reportResult.parsed as any).report_markdown
       : "";
+  const tasks =
+    Array.isArray((reportResult.parsed as any)?.tasks) ? (reportResult.parsed as any).tasks : [];
 
   const client = await McpClient.getInstance();
   const { metaPath, tasksPath, reportPath } = state.outputs;
 
   await client.callTool("write_file", {
     filePath: metaPath,
-    content: JSON.stringify(state.meta ?? {}, null, 2),
+    content: JSON.stringify(state.context ?? {}, null, 2),
     createDirs: true,
     overwrite: true,
   });
   await client.callTool("write_file", {
     filePath: tasksPath,
-    content: JSON.stringify(state.tasks ?? [], null, 2),
+    content: JSON.stringify(tasks ?? [], null, 2),
     createDirs: true,
     overwrite: true,
   });
-
-  const repoMapSection = state.repoMapMarkdown?.trim();
-  const reportWithRepoMap = repoMapSection
-    ? reportMarkdown.includes("## Repo map")
-      ? reportMarkdown.replace("## Repo map", repoMapSection)
-      : [reportMarkdown.trim(), "", repoMapSection, ""].join("\n")
-    : reportMarkdown;
-
   await client.callTool("write_file", {
     filePath: reportPath,
-    content: reportWithRepoMap,
+    content: reportMarkdown,
     createDirs: true,
     overwrite: true,
   });
 
   const summary = [
-    "✅ Pipeline complete.",
+    "✅ Diamond Flow audit complete.",
     `Artifacts written to: ${ARTIFACTS_DIR}/`,
     `- ${metaPath}`,
     `- ${tasksPath}`,
@@ -155,22 +236,24 @@ async function phase4ReportAndWrite(state: typeof NumezisAnnotation.State) {
   ].join("\n");
 
   return {
-    reportMarkdown: reportWithRepoMap,
+    report_markdown: reportMarkdown,
+    tasks,
     finalAnswer: summary,
-    messages: [...(reportResult.messages ?? []), new AIMessage(summary)],
   };
 }
 
-const workflow = new StateGraph(NumezisAnnotation)
-  .addNode("phase1_map", phase1Map)
-  .addNode("phase2_audit", phase2Audit)
-  .addNode("phase3_plan", phase3Plan)
-  .addNode("phase4_report", phase4ReportAndWrite)
-  .addEdge(START, "phase1_map")
-  .addEdge("phase1_map", "phase2_audit")
-  .addEdge("phase2_audit", "phase3_plan")
-  .addEdge("phase3_plan", "phase4_report")
-  .addEdge("phase4_report", END);
+const workflow = new StateGraph(AuditAnnotation)
+  .addNode("phase1_recon", phase1Recon)
+  .addNode("phase2_strategy", phase2Strategy)
+  .addNode("phase3_investigation", phase3Investigation)
+  .addNode("phase4_adjudication", phase4Adjudication)
+  .addNode("phase5_report", phase5ReportAndWrite)
+  .addEdge(START, "phase1_recon")
+  .addEdge("phase1_recon", "phase2_strategy")
+  .addEdge("phase2_strategy", "phase3_investigation")
+  .addEdge("phase3_investigation", "phase4_adjudication")
+  .addEdge("phase4_adjudication", "phase5_report")
+  .addEdge("phase5_report", END);
 
 const compiledWorkflow = workflow.compile();
 export const graph = compiledWorkflow.withConfig({

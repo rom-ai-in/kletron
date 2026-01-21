@@ -26,7 +26,7 @@ export type PhaseDefinition = {
   systemPrompt: string;
 };
 
-export type AuditPhaseKey = "phase1" | "phase2" | "phase3" | "phase4";
+export type AuditPhaseKey = "phase1" | "phase2" | "phase3" | "phase4" | "phase5";
 export type DeepResearchPhaseKey =
   | "clarify"
   | "brief"
@@ -34,7 +34,7 @@ export type DeepResearchPhaseKey =
   | "research"
   | "summary"
   | "report";
-export type GraphId = "audit" | "deep_research" | typeof simpleReactGraphId;
+export type GraphId = "audit" | typeof simpleReactGraphId;
 
 export type GraphNodePrompt = {
   id: string;
@@ -42,65 +42,162 @@ export type GraphNodePrompt = {
   prompt: string;
 };
 
+const baseToolNames = [
+  "list_files",
+  "read_file",
+  "read_file_range",
+  "search_code",
+  "repo_metrics",
+  "todo_search",
+  "dependency_info",
+  "describe_structure",
+  "git_log",
+  "git_diff",
+  "git_grep",
+  "git_blame",
+  "structural_search",
+  "symbols_list",
+  "find_symbol",
+  "go_to_definition",
+  "references",
+  "find_references",
+  "web_search",
+  "fetch_url",
+  "github_api",
+  "bootstrap_context",
+  "locate_ui_feature",
+  "write_file",
+  "str_replace_editor",
+  "execute_bash",
+  "output_format",
+];
+
+const auditToolList = `Tools available: ${baseToolNames.join(", ")}.`;
+const auditToolListNone = "Tools available: none.";
+const auditToolListAdjudication =
+  "Tools available: read_file_range, go_to_definition, references, find_references.";
+
 export const auditPhaseConfig: Record<AuditPhaseKey, PhaseDefinition> = {
   phase1: {
     id: "phase1",
-    label: "Phase 1 — Map",
-    summary: "Generate a repo map + meta data.",
+    label: "Phase 1 — Reconnaissance",
+    summary: "Map the terrain: stack, structure, hotspots.",
     description:
-      "Prefer repo metrics, repo structure, and targeted search to keep the survey light.",
+      "Use lightweight tooling to understand the repo shape without deep reading.",
     systemPrompt: [
-      "You are Phase1MapperAgent.",
-      "Mission: map the target Git repository without reading everything.",
-      "Use tools to: list structure, detect languages/frameworks, and identify critical areas (auth, payments, infra, migrations, CI/CD, security).",
+      "You are ReconAgent.",
+      "Mission: map the repo using lightweight tools and return only the required metadata.",
+      auditToolList,
+      "Preferred tools: list_files, repo_metrics, git_log, dependency_info, describe_structure, read_file (README/package.json only).",
       "Rules:",
-      "- Prefer repo_metrics + describe_structure + search_code + git_log.",
-      "- Do NOT read more than 5 files; only read when necessary.",
-      "- Output MUST be valid JSON only (no markdown).",
+      "- Bootstrap from README + dependency manifests to identify languages/frameworks.",
+      "- Use list_files with maxDepth=2 to avoid huge listings; escalate depth only when explicitly requested.",
+      "- Use repo_metrics/git_log for hotspots and churn but do not read more than two files beyond README/package.json.",
+      "- Output EXACTLY this JSON object, no prose, no markdown: {\"context\":{\"mission\":\"...\",\"languages\":[],\"frameworks\":[],\"hotspots\":[]}}.",
+      "- Do not include ellipses, trailing commas, or extra keys outside the required structure.",
+      "- If you cannot populate a field, use empty strings/arrays but keep the JSON strict.",
     ].join("\n"),
   },
   phase2: {
     id: "phase2",
-    label: "Phase 2 — Audit",
-    summary: "Produce focused findings within a limited scope.",
+    label: "Phase 2 — Strategy",
+    summary: "Select the highest-value files to investigate.",
     description:
-      "Use git diffs, search, and range reads to generate evidence tied to recent activity files.",
+      "Blend hotspots, churn, and objective relevance into a target list.",
     systemPrompt: [
-      "You are Phase2AuditorAgent.",
-      "Mission: produce focused findings on a limited scope (max 20 files).",
+      "You are StrategistAgent.",
+      "Mission: select and score the exact files to audit.",
+      auditToolList,
+      "Preferred tools: search_code, repo_metrics, git_log, describe_structure.",
       "Rules:",
-      "- Audit style/architecture/security/tests quickly and pragmatically.",
-      "- Use git_log/git_diff/git_blame/search_code/read_file_range/read_file/git_grep as needed.",
-      "- Do NOT audit more than 20 files; prioritize by git recency and hotspot signals.",
+      "- Rank files by (Complexity * 0.4) + (Recency * 0.3) + (Relevance * 0.3).",
+      "- Assign a focused mission per file (e.g., JWT validation, SQLi, authz).",
+      "- Hard cap: use at most 8 tool calls, then output JSON.",
+      "- Limit to top 20 files.",
       "- Output MUST be valid JSON only (no markdown).",
+      "- Do not use ellipses (...) or trailing commas; output strict JSON.",
     ].join("\n"),
   },
   phase3: {
     id: "phase3",
-    label: "Phase 3 — Plan",
-    summary: "Turn findings into actionable tickets.",
+    label: "Phase 3 — Investigation",
+    summary: "Parallel deep dive into assigned files.",
     description:
-      "Prioritize by impact · effort and create acceptance criteria for each task.",
+      "Sub-agents read only their target file and emit raw claims.",
     systemPrompt: [
-      "You are Phase3PlannerAgent.",
-      "Mission: turn findings into an actionable plan (tickets).",
+      "You are InvestigatorAgent.",
+      "Mission: review ONLY the assigned file and emit raw claims.",
+      auditToolListNone,
       "Rules:",
-      "- Tools are available if needed for verification, but prefer using the provided findings.",
+      "- Do NOT call tools; rely only on the provided file content.",
+      "- Capture assumptions explicitly when a claim depends on other files.",
       "- Output MUST be valid JSON only (no markdown).",
+      "- Do not use ellipses (...) or trailing commas; output strict JSON.",
     ].join("\n"),
   },
   phase4: {
     id: "phase4",
-    label: "Phase 4 — Report",
-    summary: "Craft a final markdown report.",
-    description:
-      "Combine executive summary, repo map, findings, plan, and annexes into a tidy report.",
+    label: "Phase 4 — Adjudication",
+    summary: "Verify high-impact claims across the codebase.",
+    description: "Senior verifier traces assumptions with strict hop limits.",
     systemPrompt: [
-      "You are Phase4ReporterAgent.",
-      "Mission: produce a stable final markdown report combining repo map, risks/findings, and task plan.",
+      "### IDENTITY",
+      "You are the **Senior Lead Auditor**. Your purpose is NOT to find new bugs, but to **VERIFY** the claims submitted by junior investigators. You are skeptical, rigorous, and scientific.",
+      "",
+      auditToolListAdjudication,
+      "",
+      "### INPUT",
+      "You will receive a list of `RawClaims`. Each claim posits a potential vulnerability based on a local file observation.",
+      "Most claims include an `assumption` (e.g., \"Variable X is tainted\").",
+      "",
+      "### MISSION",
+      "For each High/Critical severity claim, you must determine a Verdict using the **Scientific Method**:",
+      "1.  **VERIFIED:** You have proven the assumption is TRUE. (e.g., You traced the variable to the API entry point and found NO validation).",
+      "2.  **REFUTED:** You have proven the assumption is FALSE. (e.g., You found a `sanitize()` function called on the variable in a parent file).",
+      "3.  **PLAUSIBLE:** You attempted verification but hit a dead end (e.g., dynamic interface injection) or ran out of steps. The risk remains.",
+      "4.  **REJECTED:** The claim is trivial, a false positive, or logically unsound.",
+      "",
+      "### PROTOCOL",
+      "For each claim:",
+      "1.  **Analyze the Assumption:** What *must* be true for this to be a valid bug?",
+      "2.  **Plan the Trace:** Which symbols do you need to follow? (e.g., \"I need to find usages of `processUserData` to see where the input comes from\").",
+      "3.  **Execute Tools:** Use `find_references` or `go_to_definition`.",
+      "    * *Constraint:* You have a maximum of **3 HOPS** per claim. Do not go down infinite rabbit holes.",
+      "    * *Constraint:* Do NOT re-read the original file's full content. Trust the snippet. Look OUTSIDE.",
+      "4.  **Final Verdict:** Decide based on evidence.",
+      "",
+      "### OUTPUT FORMAT",
+      "Return a JSON object:",
+      "{",
+      "  \"verdicts\": [",
+      "    {",
+      "      \"claim_id\": \"c_123\",",
+      "      \"status\": \"VERIFIED\",",
+      "      \"confidence_score\": 95,",
+      "      \"reasoning\": \"Traced `userId` parameter from `updateProfile` (line 40) back to `routes.ts` (line 15). The route uses `express.json()` but applies no Zod/Joi validation schema before passing data to the controller.\",",
+      "      \"proof_trace\": [\"routes.ts:15 (Entry)\", \"controller.ts:20 (Pass-through)\", \"service.ts:40 (Usage)\"]",
+      "    }",
+      "  ]",
+      "}",
+      "",
       "Rules:",
-      "- Tools are available if needed for verification or saving the report, but avoid new investigation.",
-      "- Output MUST be valid JSON only (no markdown outside the JSON string).",
+      "- Output MUST be valid JSON only (no markdown).",
+      "- Do not use ellipses (...) or trailing commas; output strict JSON.",
+    ].join("\n"),
+  },
+  phase5: {
+    id: "phase5",
+    label: "Phase 5 — Reporting",
+    summary: "Synthesize verified findings into an actionable report.",
+    description: "Cluster verified findings and generate remediation tasks.",
+    systemPrompt: [
+      "You are ReporterAgent.",
+      "Mission: synthesize verified findings into a final report + tasks.",
+      auditToolList,
+      "Rules:",
+      "- Discard REJECTED findings, cluster themes, prioritize by severity/confidence.",
+      "- Output MUST be valid JSON only (no markdown outside JSON string).",
+      "- Do not use ellipses (...) or trailing commas; output strict JSON.",
     ].join("\n"),
   },
 };
@@ -110,6 +207,7 @@ export const auditPhaseOrder: AuditPhaseKey[] = [
   "phase2",
   "phase3",
   "phase4",
+  "phase5",
 ];
 
 export const auditPhaseDefinitions = auditPhaseOrder.map(
@@ -194,40 +292,11 @@ export type GraphOption = {
   toolNames: string[];
 };
 
-const baseToolNames = [
-  "list_files",
-  "read_file",
-  "read_file_range",
-  "search_code",
-  "repo_metrics",
-  "todo_search",
-  "dependency_info",
-  "describe_structure",
-  "git_log",
-  "git_diff",
-  "git_grep",
-  "git_blame",
-  "structural_search",
-  "symbols_list",
-  "find_symbol",
-  "go_to_definition",
-  "references",
-  "web_search",
-  "fetch_url",
-  "github_api",
-  "bootstrap_context",
-  "locate_ui_feature",
-  "write_file",
-  "str_replace_editor",
-  "execute_bash",
-  "output_format",
-];
-
 export const graphOptions: GraphOption[] = [
   {
     id: "audit",
-    name: "4-phase audit",
-    description: "Map, audit, plan, and report using repo MCP tools.",
+    name: "Diamond flow",
+    description: "Recon, strategy, investigation, adjudication, reporting.",
     phases: auditPhaseDefinitions,
     nodePrompts: auditPhaseDefinitions.map((phase) => ({
       id: phase.id,
@@ -237,57 +306,8 @@ export const graphOptions: GraphOption[] = [
     toolNames: baseToolNames,
   },
   {
-    id: "deep_research",
-    name: "Deep research",
-    description: "Supervisor + researchers produce a cited deep report.",
-    phases: deepResearchPhaseDefinitions,
-    nodePrompts: [
-      {
-        id: "clarify_with_user",
-        label: "Clarify with user",
-        prompt: clarifyWithUserInstructions,
-      },
-      {
-        id: "write_research_brief",
-        label: "Write research brief",
-        prompt: transformMessagesIntoResearchTopicPrompt,
-      },
-      {
-        id: "plan_research",
-        label: "Plan research",
-        prompt: researchPlanningPrompt,
-      },
-      {
-        id: "research_supervisor",
-        label: "Supervisor",
-        prompt: leadResearcherPrompt,
-      },
-      {
-        id: "researcher",
-        label: "Researcher",
-        prompt: researchSystemPrompt,
-      },
-      {
-        id: "compress_research",
-        label: "Compress research",
-        prompt: compressResearchSystemPrompt,
-      },
-      {
-        id: "summarize_findings",
-        label: "Summarize findings",
-        prompt: findingsSummaryPrompt,
-      },
-      {
-        id: "final_action_report",
-        label: "Final action report",
-        prompt: actionReportPrompt,
-      },
-    ],
-    toolNames: baseToolNames,
-  },
-  {
     id: simpleReactGraphId,
-    name: "Simple ReAct agent",
+    name: "Agent (ReAct)",
     description: "Answer repository questions with one ReAct agent call.",
     phases: simpleReactPhaseDefinitions,
     nodePrompts: simpleReactPhaseDefinitions.map((phase) => ({

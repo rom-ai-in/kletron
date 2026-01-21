@@ -20,10 +20,14 @@ async function main() {
       break;
     }
 
-    console.log("\n🧠 Running 4-phase repo pipeline (Map → Audit → Plan → Report)...");
+    console.log("\n🧠 Running Diamond Flow audit (Recon → Strategy → Investigation → Adjudication → Reporting)...");
     const result = await graph.invoke({
-      messages: [],
-      userRequest,
+      context: {
+        mission: userRequest,
+        languages: [],
+        frameworks: [],
+        hotspots: [],
+      },
     });
     console.log("\n✅ Output:");
     console.log(result.finalAnswer ?? "Done.");

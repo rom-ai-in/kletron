@@ -11,6 +11,7 @@
     "build:web": "next build",
     "start:web": "next start",
     "lint": "eslint . --ext .ts",
+    "typecheck": "tsx --check src/index.ts && tsx --check src/graph.ts && tsx --check scripts/dev-all.ts && tsx --check scripts/start-all.ts && tsx --check scripts/langsmith-agent.ts && tsx --check scripts/lib/serviceLauncher.ts",
     "test": "tsx --check src/index.ts && tsx --check src/graph.ts && tsx --check scripts/dev-all.ts && tsx --check scripts/start-all.ts && tsx --check scripts/langsmith-agent.ts && tsx --check scripts/lib/serviceLauncher.ts"
   },
   "dependencies": {

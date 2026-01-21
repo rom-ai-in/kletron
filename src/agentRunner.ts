@@ -3,10 +3,11 @@ import { BaseMessage, SystemMessage } from "@langchain/core/messages";
 import {
   phaseDefinitions,
   phaseOrder,
-  runPhase1MapperAgent,
-  runPhase2AuditorAgent,
-  runPhase3PlannerAgent,
-  runPhase4ReporterAgent,
+  runPhase1ReconAgent,
+  runPhase2StrategyAgent,
+  runPhase3InvestigationAgents,
+  runPhase4AdjudicatorAgent,
+  runPhase5ReporterAgent,
   type PhaseKey,
 } from "./agents/phases.ts";
 import {
@@ -14,6 +15,7 @@ import {
   formatAuditContextSummary,
   type AuditContext,
 } from "./shared/auditContext";
+import type { AuditState, TaskTicket } from "./graph";
 
 type TimelineStatus = "pending" | "running" | "success" | "error";
 
@@ -33,10 +35,14 @@ export type AgentWorkflowResult = {
   timeline: TimelineEvent[];
   conclusion: string;
   outputs: {
-    meta: Record<string, unknown>;
-    findings: unknown[];
-    tasks: unknown[];
+    context: AuditState["context"];
+    target_files: AuditState["target_files"];
+    raw_claims: AuditState["raw_claims"];
+    verified_findings: AuditState["verified_findings"];
+    findings: AuditState["findings"];
+    tasks: TaskTicket[];
     report: string;
+    meta?: Record<string, unknown>;
   };
   eventStream: AgentEvent[];
 };
@@ -50,7 +56,9 @@ export type AgentEvent = {
   kind: AgentEventKind;
   role: string;
   name?: string;
+  toolCallId?: string;
   content: string;
+  toolNote?: string;
   toolArgs?: string;
   timestamp: string;
 };
@@ -105,17 +113,80 @@ function formatThought(message: BaseMessage) {
   return `${role}: ${content}`;
 }
 
+function summarizePhaseEvents(events: AgentEvent[]) {
+  const toolEvents = events.filter((event) => event.kind === "tool");
+  const toolCount = toolEvents.length;
+  const filesRead = toolEvents.filter(
+    (event) => event.name === "read_file" || event.name === "read_file_range"
+  ).length;
+  const searches = toolEvents.filter(
+    (event) => event.name === "search_code" || event.name === "git_grep" || event.name === "structural_search"
+  ).length;
+  const listFiles = toolEvents.filter((event) => event.name === "list_files").length;
+  const repos = toolEvents.filter((event) => event.name === "repo_metrics").length;
+  const parts = [
+    `Summary: tools=${toolCount}`,
+    `files_read=${filesRead}`,
+    `searches=${searches}`,
+    `list_files=${listFiles}`,
+    `repo_metrics=${repos}`,
+  ];
+  return parts.join(" · ");
+}
+
+function hasMeaningfulThoughts(thoughts: string[]) {
+  return thoughts.some((entry) => entry.trim().length > 0);
+}
+
 function guessToolName(message: BaseMessage) {
   const functionCall = message.additional_kwargs?.function_call;
   if (functionCall?.name) {
     return functionCall.name;
   }
-  const toolCalls = message.additional_kwargs?.tool_calls;
+  const toolCalls =
+    (message as BaseMessage & { tool_calls?: unknown[] }).tool_calls ??
+    message.additional_kwargs?.tool_calls;
   if (Array.isArray(toolCalls) && toolCalls.length) {
-    return toolCalls[0]?.name;
+    const first = toolCalls[0] as { name?: unknown; function?: { name?: unknown } };
+    if (typeof first?.name === "string") return first.name;
+    if (typeof first?.function?.name === "string") return first.function.name;
+    return undefined;
   }
   if (message.type === "tool" && typeof message.name === "string" && message.name) {
     return message.name;
+  }
+  return undefined;
+}
+
+function extractToolArgs(message: BaseMessage): string | undefined {
+  const functionCall = message.additional_kwargs?.function_call as
+    | { arguments?: unknown }
+    | undefined;
+  if (functionCall?.arguments !== undefined) {
+    return typeof functionCall.arguments === "string"
+      ? functionCall.arguments
+      : JSON.stringify(functionCall.arguments);
+  }
+  const toolCalls =
+    (message as BaseMessage & {
+      tool_calls?: Array<{ args?: unknown; arguments?: unknown; function?: { arguments?: unknown } }>;
+    }).tool_calls ??
+    (message.additional_kwargs?.tool_calls as
+      | Array<{ args?: unknown; arguments?: unknown; function?: { arguments?: unknown } }>
+      | undefined);
+  const first = Array.isArray(toolCalls) ? toolCalls[0] : undefined;
+  if (first?.args !== undefined) {
+    return typeof first.args === "string" ? first.args : JSON.stringify(first.args);
+  }
+  if (first?.arguments !== undefined) {
+    return typeof first.arguments === "string"
+      ? first.arguments
+      : JSON.stringify(first.arguments);
+  }
+  if (first?.function?.arguments !== undefined) {
+    return typeof first.function.arguments === "string"
+      ? first.function.arguments
+      : JSON.stringify(first.function.arguments);
   }
   return undefined;
 }
@@ -130,6 +201,19 @@ function describeMessageContent(message: BaseMessage) {
   return "";
 }
 
+function extractToolCallId(message: BaseMessage): string | undefined {
+  const direct = (message as BaseMessage & { tool_call_id?: string }).tool_call_id;
+  if (direct) return String(direct);
+  const extra = message.additional_kwargs as { tool_call_id?: string } | undefined;
+  if (extra?.tool_call_id) return String(extra.tool_call_id);
+  const toolCalls =
+    (message as BaseMessage & { tool_calls?: Array<{ id?: string }> }).tool_calls ??
+    (message.additional_kwargs?.tool_calls as Array<{ id?: string }> | undefined);
+  const first = Array.isArray(toolCalls) ? toolCalls[0] : undefined;
+  if (first?.id) return String(first.id);
+  return undefined;
+}
+
 function createAgentEvent(
   message: BaseMessage,
   phaseId: PhaseKey,
@@ -140,7 +224,8 @@ function createAgentEvent(
   const hasToolCall =
     message.type === "tool" ||
     Boolean(message.additional_kwargs?.function_call) ||
-    Boolean(message.additional_kwargs?.tool_calls?.length);
+    Boolean(message.additional_kwargs?.tool_calls?.length) ||
+    Boolean((message as BaseMessage & { tool_calls?: unknown[] }).tool_calls?.length);
   const normalizedRole = typeof role === "string" ? role.toLowerCase() : "";
   const normalizedMessageType = typeof message.type === "string" ? message.type.toLowerCase() : "";
   const isSystemRole = normalizedRole === "system" || normalizedMessageType === "system";
@@ -157,6 +242,16 @@ function createAgentEvent(
     : isPhaseUser || isUserRole
     ? "user"
     : "assistant";
+  const messageContent = describeMessageContent(message);
+  const isToolResult = normalizedMessageType === "tool";
+  let content = messageContent;
+  let toolNote: string | undefined;
+  if (hasToolCall && !isToolResult) {
+    toolNote = messageContent;
+    content = "";
+  } else if (!isToolResult) {
+    toolNote = undefined;
+  }
   return {
     id: eventId,
     phaseId,
@@ -164,8 +259,10 @@ function createAgentEvent(
     kind,
     role,
     name: guessToolName(message),
-    content: describeMessageContent(message),
-    toolArgs: message.additional_kwargs?.function_call?.arguments,
+    toolCallId: extractToolCallId(message),
+    content,
+    toolNote,
+    toolArgs: extractToolArgs(message),
     timestamp: new Date().toISOString(),
   };
 }
@@ -188,34 +285,19 @@ function createInitialTimeline(auditContext?: AuditContext | null): TimelineEven
   }));
 }
 
-async function describeMeta(meta: Record<string, unknown>) {
+async function describeContext(context: AuditState["context"]) {
   const highlights: string[] = [];
-  if (meta.languages) {
-    highlights.push(
-      `Languages: ${
-        Array.isArray(meta.languages) ? (meta.languages as string[]).join(", ") : meta.languages
-      }`
-    );
+  if (context.languages?.length) {
+    highlights.push(`Languages: ${context.languages.join(", ")}`);
   }
-  if (meta.frameworks) {
-    highlights.push(
-      `Frameworks: ${
-        Array.isArray(meta.frameworks) ? (meta.frameworks as string[]).join(", ") : meta.frameworks
-      }`
-    );
+  if (context.frameworks?.length) {
+    highlights.push(`Frameworks: ${context.frameworks.join(", ")}`);
   }
-  if (meta.entrypoints) {
-    highlights.push(
-      `Entrypoints: ${
-        Array.isArray(meta.entrypoints) ? (meta.entrypoints as string[]).join(", ") : meta.entrypoints
-      }`
-    );
-  }
-  if (meta.critical_areas) {
-    highlights.push(`Critical areas: ${formatSummary(meta.critical_areas)}`);
+  if (context.hotspots?.length) {
+    highlights.push(`Hotspots: ${context.hotspots.slice(0, 4).join(", ")}${context.hotspots.length > 4 ? "…" : ""}`);
   }
   if (!highlights.length) {
-    highlights.push("Meta information was generated but no highlights were detected.");
+    highlights.push("Context captured with no highlights.");
   }
   return highlights.join(" · ");
 }
@@ -252,10 +334,31 @@ async function runPhase<TReturn>(
     const formattedEvents = options?.onMessages
       ? await options.onMessages(messages, phaseId as PhaseKey)
       : [];
-    event.thoughtLog =
-      formattedEvents.length > 0
-        ? formattedEvents.map((entry) => `${entry.role}: ${entry.content}`)
-        : messages.map(formatThought);
+    if (formattedEvents.length > 0) {
+      const assistantEntries = formattedEvents.filter((entry) => entry.kind === "assistant");
+      if (assistantEntries.length) {
+        event.thoughtLog = assistantEntries.map((entry) => `${entry.role}: ${entry.content}`);
+      } else {
+        event.thoughtLog = ["No assistant messages emitted."];
+      }
+    } else if (messages.length > 0) {
+      const assistantMessages = messages.filter((message) => {
+        const role = "role" in message ? message.role : message.type ?? "assistant";
+        const normalizedRole = typeof role === "string" ? role.toLowerCase() : "";
+        const messageType = typeof message.type === "string" ? message.type.toLowerCase() : "";
+        if (messageType === "tool" || messageType === "system") return false;
+        if (normalizedRole === "user" || normalizedRole === "human") return false;
+        return true;
+      });
+      event.thoughtLog = assistantMessages.length
+        ? assistantMessages.map(formatThought)
+        : ["No assistant messages emitted."];
+    } else {
+      event.thoughtLog = ["No assistant messages emitted."];
+    }
+    if (!hasMeaningfulThoughts(event.thoughtLog)) {
+      event.thoughtLog = ["No assistant messages emitted."];
+    }
     event.status = "success";
     event.summary = `${phaseDefinitions[phaseId].summary} (done)`;
     event.endedAt = new Date().toISOString();
@@ -282,6 +385,7 @@ export async function runAgentWorkflow(
   const contextSummary = formatAuditContextSummary(options?.auditContext);
   const contextPrompt = formatAuditContextPrompt(options?.auditContext);
   const contextMessages = contextPrompt ? [new SystemMessage(contextPrompt)] : [];
+  const phaseUserMessageLogged = new Set<PhaseKey>();
 
   const flushUpdate = async (outputs?: AgentWorkflowResult["outputs"]) => {
     if (!options?.onUpdate) return;
@@ -327,6 +431,12 @@ export async function runAgentWorkflow(
     const phaseLabel = phaseDefinitions[phaseId].label;
     const createdEvents: AgentEvent[] = [];
     for (const message of messages) {
+      const role = "role" in message ? message.role ?? message.type ?? "" : message.type ?? "";
+      const normalizedRole = typeof role === "string" ? role.toLowerCase() : "";
+      if (phaseId !== "user" && (normalizedRole === "user" || normalizedRole === "human")) {
+        if (phaseUserMessageLogged.has(phaseId)) continue;
+        phaseUserMessageLogged.add(phaseId);
+      }
       const event = createAgentEvent(message, phaseId, phaseLabel, nextEventId());
       eventStream.push(event);
       logAgentEvent(event);
@@ -339,7 +449,7 @@ export async function runAgentWorkflow(
   const phase1Result = await runPhase(
     "phase1",
     () =>
-      runPhase1MapperAgent(
+      runPhase1ReconAgent(
         userRequest,
         contextMessages,
         (message) => appendPhaseEvents([message], "phase1"),
@@ -350,20 +460,28 @@ export async function runAgentWorkflow(
       flushUpdate,
     }
   );
-  const meta = (phase1Result.parsed as any)?.meta ?? {};
+  const parsedContext = (phase1Result.parsed as any)?.context ?? {};
+  const context: AuditState["context"] = {
+    mission:
+      typeof parsedContext.mission === "string" && parsedContext.mission.trim()
+        ? parsedContext.mission
+        : userRequest,
+    languages: Array.isArray(parsedContext.languages) ? parsedContext.languages : [],
+    frameworks: Array.isArray(parsedContext.frameworks) ? parsedContext.frameworks : [],
+    hotspots: Array.isArray(parsedContext.hotspots) ? parsedContext.hotspots : [],
+  };
   const phase1Entry = timeline.find((entry) => entry.id === "phase1");
   if (phase1Entry) {
-    phase1Entry.details = await describeMeta(meta);
+    phase1Entry.details = await describeContext(context);
   }
   await flushUpdate();
 
   const phase2Result = await runPhase(
     "phase2",
     () =>
-      runPhase2AuditorAgent({
+      runPhase2StrategyAgent({
         userRequest,
-        meta,
-        suggestedAuditFiles: (phase1Result.parsed as any)?.suggested_audit_files ?? [],
+        context,
         extraMessages: contextMessages,
         onMessage: (message) => appendPhaseEvents([message], "phase2"),
         llmSelection: options?.llmSelection,
@@ -373,22 +491,22 @@ export async function runAgentWorkflow(
       flushUpdate,
     }
   );
-  const findingsSummary = (phase2Result.parsed as any)?.findings ?? [];
+  const targetFiles = (phase2Result.parsed as any)?.target_files ?? [];
   const phase2Entry = timeline.find((entry) => entry.id === "phase2");
   if (phase2Entry) {
     phase2Entry.details =
-      Array.isArray(findingsSummary) && findingsSummary.length
-        ? `Findings captured: ${findingsSummary.length}`
-        : "No findings were returned.";
+      Array.isArray(targetFiles) && targetFiles.length
+        ? `Targets selected: ${targetFiles.length}`
+        : "No target files were selected.";
   }
   await flushUpdate();
 
   const phase3Result = await runPhase(
     "phase3",
     () =>
-      runPhase3PlannerAgent({
+      runPhase3InvestigationAgents({
         userRequest,
-        findings: findingsSummary,
+        targetFiles,
         extraMessages: contextMessages,
         onMessage: (message) => appendPhaseEvents([message], "phase3"),
         llmSelection: options?.llmSelection,
@@ -398,26 +516,92 @@ export async function runAgentWorkflow(
       flushUpdate,
     }
   );
-  const tasksSummary = (phase3Result.parsed as any)?.tasks ?? [];
+  const phase3Parsed = (phase3Result.parsed as any) ?? {};
+  const rawClaims = phase3Parsed?.raw_claims ?? [];
+  const findings = phase3Parsed?.findings ?? [];
   const phase3Entry = timeline.find((entry) => entry.id === "phase3");
   if (phase3Entry) {
     phase3Entry.details =
-      Array.isArray(tasksSummary) && tasksSummary.length
-        ? `Plan drafted with ${tasksSummary.length} tasks.`
-        : "No actionable tasks were produced.";
+      Array.isArray(rawClaims) && rawClaims.length
+        ? `Raw claims captured: ${rawClaims.length}`
+        : Array.isArray(findings) && findings.length
+        ? `Findings captured: ${findings.length}`
+        : "No raw claims were produced.";
   }
   await flushUpdate();
 
   const phase4Result = await runPhase(
     "phase4",
+    async () => {
+      const severityRank = (severity?: string) => {
+        switch (severity) {
+          case "critical":
+            return 3;
+          case "high":
+            return 2;
+          case "medium":
+            return 1;
+          default:
+            return 0;
+        }
+      };
+      const maxAdjudicationClaims = 12;
+      const adjudicationTargets = (rawClaims ?? [])
+        .filter((claim) => severityRank(claim?.severity) >= 2)
+        .sort((a, b) => severityRank(b?.severity) - severityRank(a?.severity))
+        .slice(0, maxAdjudicationClaims);
+      const verdicts: AuditState["verified_findings"] = [];
+      for (const claim of adjudicationTargets) {
+        if (!claim) continue;
+        const verdictResult = await runPhase4AdjudicatorAgent({
+          claim,
+          extraMessages: contextMessages,
+          onMessage: (message) => appendPhaseEvents([message], "phase4"),
+          llmSelection: options?.llmSelection,
+        });
+        const parsed = (verdictResult.parsed as any)?.verdicts ?? [];
+        const verdict = Array.isArray(parsed) ? parsed[0] : undefined;
+        if (!verdict) continue;
+        const status =
+          verdict.status === "VERIFIED" || verdict.status === "REFUTED" || verdict.status === "PLAUSIBLE"
+            ? verdict.status
+            : verdict.status === "REJECTED"
+            ? "REFUTED"
+            : "PLAUSIBLE";
+        verdicts.push({
+          claim_id: verdict.claim_id ?? claim.id,
+          status,
+          verdict_reason: verdict.reasoning ?? "",
+          final_severity: status === "REFUTED" ? "none" : claim.severity ?? "medium",
+        });
+      }
+      return { verified_findings: verdicts };
+    },
+    timeline,
+    {
+      flushUpdate,
+    }
+  );
+  const verdicts = (phase4Result as { verified_findings?: AuditState["verified_findings"] }).verified_findings ?? [];
+  const phase4Entry = timeline.find((entry) => entry.id === "phase4");
+  if (phase4Entry) {
+    phase4Entry.details =
+      Array.isArray(verdicts) && verdicts.length
+        ? `Verified findings: ${verdicts.length}`
+        : "No verified findings were produced.";
+  }
+  await flushUpdate();
+
+  const phase5Result = await runPhase(
+    "phase5",
     () =>
-      runPhase4ReporterAgent({
+      runPhase5ReporterAgent({
         userRequest,
-        meta,
-        findings: findingsSummary,
-        tasks: tasksSummary,
+        context,
+        verifiedFindings: verdicts,
+        rawClaims,
         extraMessages: contextMessages,
-        onMessage: (message) => appendPhaseEvents([message], "phase4"),
+        onMessage: (message) => appendPhaseEvents([message], "phase5"),
         llmSelection: options?.llmSelection,
       }),
     timeline,
@@ -426,11 +610,40 @@ export async function runAgentWorkflow(
     }
   );
 
-  const reportMarkdown = (phase4Result.parsed as any)?.report_markdown ?? "";
-  const finalSummary = reportMarkdown.split("\n").slice(0, 4).join(" ").trim();
-  const phase4Entry = timeline.find((entry) => entry.id === "phase4");
-  if (phase4Entry) {
-    phase4Entry.summary = finalSummary || "Report generated.";
+  const reportMarkdown = (phase5Result.parsed as any)?.report_markdown ?? "";
+  const tasksSummary = (phase5Result.parsed as any)?.tasks ?? [];
+  const shouldFallbackReport = !(typeof reportMarkdown === "string" && reportMarkdown.trim());
+  const safeReportMarkdown = shouldFallbackReport
+    ? [
+        "# Audit report",
+        "",
+        "No report content was generated by the model. This is an auto-generated fallback summary.",
+        "",
+        "## Status",
+        "- Phase 1: completed",
+        "- Phase 2: completed",
+        "- Phase 3: completed",
+        "- Phase 4: completed",
+        "- Phase 5: completed (empty output)",
+        "",
+        "## Summary",
+        `- Target files: ${Array.isArray(targetFiles) ? targetFiles.length : 0}`,
+        `- Raw claims: ${Array.isArray(rawClaims) ? rawClaims.length : 0}`,
+        `- Verified findings: ${Array.isArray(verdicts) ? verdicts.length : 0}`,
+        "",
+        "## Notes",
+        Array.isArray(targetFiles) && targetFiles.length === 0
+          ? "- No target files were selected in Phase 2."
+          : "- Target files were selected.",
+        Array.isArray(rawClaims) && rawClaims.length === 0
+          ? "- No raw claims were produced in Phase 3."
+          : "- Raw claims were produced.",
+      ].join("\n")
+    : reportMarkdown;
+  const finalSummary = safeReportMarkdown.split("\n").slice(0, 4).join(" ").trim();
+  const phase5Entry = timeline.find((entry) => entry.id === "phase5");
+  if (phase5Entry) {
+    phase5Entry.summary = finalSummary || "Report generated.";
   }
   await flushUpdate();
 
@@ -438,10 +651,14 @@ export async function runAgentWorkflow(
     timeline,
     conclusion: finalSummary || "Pipeline completed successfully.",
     outputs: {
-      meta,
-      findings: findingsSummary,
-      tasks: tasksSummary,
-      report: reportMarkdown,
+      context,
+      target_files: targetFiles,
+      raw_claims: rawClaims,
+      verified_findings: verdicts,
+      findings: Array.isArray(findings) ? findings : [],
+      tasks: Array.isArray(tasksSummary) ? tasksSummary : [],
+      report: safeReportMarkdown,
+      meta: {},
     },
     eventStream,
   };
