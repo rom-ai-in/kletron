@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 
 import type { McpToolMeta } from "../src/tools/mcpToolMetadata";
 import type {
@@ -11,6 +11,12 @@ import type {
   TimelineEvent,
 } from "../src/agentRunner";
 import { graphOptions } from "../src/shared/graphCatalog";
+import type { GraphId } from "../src/shared/graphCatalog";
+import {
+  formatAuditContextSummary,
+  normalizeAuditContext,
+  type AuditContext,
+} from "../src/shared/auditContext";
 
 type AgentEventKind = AgentEvent["kind"];
 
@@ -36,6 +42,32 @@ const eventBadgeLabel: Record<AgentEventKind, string> = {
   user: "User",
   assistant: "Agent",
   tool: "Tool",
+};
+
+const startupPhaseOptions = [
+  "Discovery / Prototype",
+  "MVP build",
+  "MVP launch",
+  "Early traction",
+  "Scale-up",
+];
+
+const mvpLaunchPreset: AuditContext = {
+  startupPhase: "MVP launch",
+  mission: "Launch a viable product as soon as possible.",
+  primaryGoal: "Ship core user flows quickly with minimal blockers.",
+  keyObjectives: [
+    "Unblock critical user journeys",
+    "Stabilize build/deploy and core APIs",
+    "Reduce reliability bugs that block launch",
+  ],
+  nonGoals: [
+    "Scalability optimizations beyond launch needs",
+    "Large refactors or architecture rewrites",
+    "Performance tuning without user-visible impact",
+  ],
+  timeHorizon: "Next 4-6 weeks",
+  riskTolerance: "medium",
 };
 type StreamChunk =
   | { type: "update"; payload: AgentWorkflowUpdate }
@@ -69,12 +101,6 @@ type PromptFolderNode = {
   children: PromptFolderNode[];
 };
 
-type PromptFolderNode = {
-  name: string;
-  path: string;
-  children: PromptFolderNode[];
-};
-
 const formatTimestamp = (value?: string) => {
   if (!value) return "";
   try {
@@ -96,6 +122,12 @@ const formatJsonString = (value?: string) => {
     return value;
   }
 };
+
+const parseMultilineList = (value: string) =>
+  value
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*[-*]\s*/, "").trim())
+    .filter(Boolean);
 
 type ModalProps = {
   open: boolean;
@@ -121,7 +153,7 @@ function Modal({ open, onClose, title, subtitle, children }: ModalProps) {
 
   if (!open) return null;
 
-  const handleOverlayClick = (event: MouseEvent<HTMLDivElement>) => {
+  const handleOverlayClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (event.target === overlayRef.current) {
       onClose();
     }
@@ -251,9 +283,9 @@ function ToolExplorerPanel({ tools, usedToolNames, openToolDialog }: ToolExplore
 type GraphOption = (typeof graphOptions)[number];
 
 type HeaderControlsProps = {
-  selectedGraphId: string;
+  selectedGraphId: GraphId;
   selectedGraph: GraphOption;
-  onSelectGraph: (graphId: string) => void;
+  onSelectGraph: (graphId: GraphId) => void;
   modelProvider: "azure" | "lmstudio";
   onSelectProvider: (provider: "azure" | "lmstudio") => void;
   azureConfigured: boolean;
@@ -620,13 +652,13 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
   const toggleExpanded = () => setIsExpanded((prev) => !prev);
   const badgeClass = eventBadgeStyles[event.kind];
   const badgeLabel = eventBadgeLabel[event.kind];
-  const handleClick = (event: MouseEvent<HTMLArticleElement>) => {
+  const handleClick = (event: ReactMouseEvent<HTMLElement>) => {
     if ((event.target as HTMLElement).closest("button")) {
       return;
     }
     toggleExpanded();
   };
-  const handleKeyDown = (event: KeyboardEvent<HTMLArticleElement>) => {
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       toggleExpanded();
@@ -978,6 +1010,9 @@ export default function HomePage() {
   const [outputs, setOutputs] = useState<AgentWorkflowResult["outputs"] | null>(null);
   const [loading, setLoading] = useState(false);
   const [messageInput, setMessageInput] = useState("");
+  const [auditContext, setAuditContext] = useState<AuditContext>({});
+  const [auditContextEnabled, setAuditContextEnabled] = useState(true);
+  const [isAuditContextDialogOpen, setIsAuditContextDialogOpen] = useState(false);
   const [llmInfo, setLlmInfo] = useState<LlmEnvInfo | null>(null);
   const [modelProvider, setModelProvider] = useState<"azure" | "lmstudio">("azure");
   const [lmStudioModel, setLmStudioModel] = useState("");
@@ -1076,6 +1111,25 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
+    const stored = window.localStorage.getItem("numezis-audit-context");
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored) as {
+        enabled?: boolean;
+        context?: AuditContext;
+      };
+      if (typeof parsed.enabled === "boolean") {
+        setAuditContextEnabled(parsed.enabled);
+      }
+      if (parsed.context && typeof parsed.context === "object") {
+        setAuditContext(parsed.context);
+      }
+    } catch {
+      // Ignore malformed cache entries.
+    }
+  }, []);
+
+  useEffect(() => {
     fetch("/api/env")
       .then((res) => res.json())
       .then((data: { targetDir?: string | null; llm?: LlmEnvInfo }) => {
@@ -1103,6 +1157,14 @@ export default function HomePage() {
   }, [modelProvider, lmStudioModel, llmPrefsLoaded]);
 
   useEffect(() => {
+    const payload = {
+      enabled: auditContextEnabled,
+      context: auditContext,
+    };
+    window.localStorage.setItem("numezis-audit-context", JSON.stringify(payload));
+  }, [auditContext, auditContextEnabled]);
+
+  useEffect(() => {
     setLlmError(null);
   }, [modelProvider, lmStudioModel]);
 
@@ -1113,6 +1175,11 @@ export default function HomePage() {
       setTimeout(() => setCopiedPath(null), 1500);
     });
   }, []);
+
+  const auditContextSummary = useMemo(
+    () => formatAuditContextSummary(auditContext),
+    [auditContext]
+  );
 
   const targetPathEntry = useMemo(() => {
     if (targetDir) {
@@ -1216,6 +1283,24 @@ export default function HomePage() {
     return selectedGraph.phases;
   }, [timeline, selectedGraph]);
 
+  const nodePromptOverrides = useMemo(() => {
+    if (!timeline.length) return new Map<string, string>();
+    return new Map(
+      timeline
+        .filter((entry) => typeof entry.systemPrompt === "string")
+        .map((entry) => [entry.id, entry.systemPrompt ?? ""])
+    );
+  }, [timeline]);
+
+  const displayNodePrompts = useMemo(
+    () =>
+      selectedGraph.nodePrompts.map((nodePrompt) => ({
+        ...nodePrompt,
+        prompt: nodePromptOverrides.get(nodePrompt.id) ?? nodePrompt.prompt,
+      })),
+    [selectedGraph.nodePrompts, nodePromptOverrides]
+  );
+
   const graphTools = useMemo(() => {
     if (!graphToolNames.length) return tools;
     return tools.filter((tool) => graphToolNames.includes(tool.name));
@@ -1238,6 +1323,9 @@ export default function HomePage() {
     }
 
     setHasAuditStarted(true);
+    const normalizedAuditContext = auditContextEnabled
+      ? normalizeAuditContext(auditContext)
+      : null;
     const userEvent: AgentEvent = {
       id: `user-${Date.now()}`,
       phaseId: "user",
@@ -1262,6 +1350,7 @@ export default function HomePage() {
           graph: selectedGraphId,
           provider: modelProvider,
           model: modelProvider === "lmstudio" ? lmStudioModel.trim() : undefined,
+          auditContext: normalizedAuditContext ?? undefined,
         }),
       });
       if (!response.ok) {
@@ -1287,7 +1376,7 @@ export default function HomePage() {
     }
   };
 
-  const handleMessageInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleMessageInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleSendMessage();
@@ -1497,6 +1586,43 @@ export default function HomePage() {
                         {promptLoadError || "Applying prompt content…"}
                       </p>
                     )}
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-[10px] text-slate-300">
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${
+                            auditContextEnabled
+                              ? "border-cyan-400/60 text-cyan-200"
+                              : "border-slate-700 text-slate-500"
+                          }`}
+                        >
+                          Audit context
+                        </span>
+                        <span className="truncate text-slate-400">
+                          {auditContextSummary ??
+                            "No context set — default to general audit focus."}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[10px] font-semibold text-slate-300 transition hover:border-cyan-400"
+                          onClick={() => setIsAuditContextDialogOpen(true)}
+                        >
+                          Configure
+                        </button>
+                        <button
+                          type="button"
+                          className={`rounded-full border px-3 py-1 text-[10px] font-semibold transition ${
+                            auditContextEnabled
+                              ? "border-cyan-400/60 text-cyan-200 hover:border-cyan-300"
+                              : "border-slate-700 text-slate-400 hover:border-slate-500"
+                          }`}
+                          onClick={() => setAuditContextEnabled((prev) => !prev)}
+                        >
+                          {auditContextEnabled ? "Enabled" : "Disabled"}
+                        </button>
+                      </div>
+                    </div>
                     <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center">
                       <textarea
                         className="w-full flex-1 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-[11px] font-medium text-white outline-none transition duration-150 focus:border-cyan-400 focus:ring-0 overflow-y-auto scrollbar-elegant"
@@ -1545,7 +1671,7 @@ export default function HomePage() {
             <section className="space-y-3">
               <p className="text-[11px] text-slate-500">Graph prompts</p>
               <div className="max-h-72 space-y-3 overflow-y-auto pr-2 scrollbar-elegant">
-                {selectedGraph.nodePrompts.map((nodePrompt) => {
+                {displayNodePrompts.map((nodePrompt) => {
                   const isActive =
                     nodePrompt.id === selectedEvent.id ||
                     nodePrompt.id.startsWith(`${selectedEvent.id}_`);
@@ -1618,6 +1744,177 @@ export default function HomePage() {
             </section>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        open={isAuditContextDialogOpen}
+        onClose={() => setIsAuditContextDialogOpen(false)}
+        title="Audit context"
+        subtitle="Focus and goals"
+      >
+        <div className="space-y-4 text-sm text-slate-300">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+            <button
+              type="button"
+              className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[10px] font-semibold text-slate-300 transition hover:border-cyan-400"
+              onClick={() => setAuditContext(mvpLaunchPreset)}
+            >
+              Use MVP launch preset
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-slate-800 bg-slate-950/70 px-3 py-1 text-[10px] font-semibold text-slate-400 transition hover:border-slate-500"
+              onClick={() => setAuditContext({})}
+            >
+              Clear
+            </button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-[11px] text-slate-500">Startup phase</label>
+              <select
+                className="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                value={auditContext.startupPhase ?? ""}
+                onChange={(event) =>
+                  setAuditContext((prev) => ({
+                    ...prev,
+                    startupPhase: event.target.value || undefined,
+                  }))
+                }
+              >
+                <option value="">Select phase</option>
+                {startupPhaseOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] text-slate-500">Time horizon</label>
+              <input
+                type="text"
+                className="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                placeholder="e.g. Next 4-6 weeks"
+                value={auditContext.timeHorizon ?? ""}
+                onChange={(event) =>
+                  setAuditContext((prev) => ({
+                    ...prev,
+                    timeHorizon: event.target.value || undefined,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-[11px] text-slate-500">Mission</label>
+              <input
+                type="text"
+                className="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                placeholder="Describe the mission succinctly"
+                value={auditContext.mission ?? ""}
+                onChange={(event) =>
+                  setAuditContext((prev) => ({
+                    ...prev,
+                    mission: event.target.value || undefined,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-[11px] text-slate-500">Primary goal</label>
+              <input
+                type="text"
+                className="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                placeholder="The main objective this audit should optimize for"
+                value={auditContext.primaryGoal ?? ""}
+                onChange={(event) =>
+                  setAuditContext((prev) => ({
+                    ...prev,
+                    primaryGoal: event.target.value || undefined,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] text-slate-500">Risk tolerance</label>
+              <select
+                className="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                value={auditContext.riskTolerance ?? ""}
+                onChange={(event) =>
+                  setAuditContext((prev) => ({
+                    ...prev,
+                    riskTolerance: (event.target.value || undefined) as AuditContext["riskTolerance"],
+                  }))
+                }
+              >
+                <option value="">Select tolerance</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] text-slate-500">Target users</label>
+              <input
+                type="text"
+                className="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                placeholder="e.g. Beta customers, internal team"
+                value={auditContext.targetUsers ?? ""}
+                onChange={(event) =>
+                  setAuditContext((prev) => ({
+                    ...prev,
+                    targetUsers: event.target.value || undefined,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-[11px] text-slate-500">Key objectives (one per line)</label>
+              <textarea
+                className="min-h-[80px] w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                placeholder="List the objectives this audit must prioritize"
+                value={(auditContext.keyObjectives ?? []).join("\n")}
+                onChange={(event) =>
+                  setAuditContext((prev) => ({
+                    ...prev,
+                    keyObjectives: parseMultilineList(event.target.value),
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-[11px] text-slate-500">De-prioritize (one per line)</label>
+              <textarea
+                className="min-h-[70px] w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                placeholder="Out-of-scope or later items"
+                value={(auditContext.nonGoals ?? []).join("\n")}
+                onChange={(event) =>
+                  setAuditContext((prev) => ({
+                    ...prev,
+                    nonGoals: parseMultilineList(event.target.value),
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-[11px] text-slate-500">Constraints (one per line)</label>
+              <textarea
+                className="min-h-[60px] w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                placeholder="Hard constraints or invariants"
+                value={(auditContext.constraints ?? []).join("\n")}
+                onChange={(event) =>
+                  setAuditContext((prev) => ({
+                    ...prev,
+                    constraints: parseMultilineList(event.target.value),
+                  }))
+                }
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            This context is appended to every audit phase prompt and logged in the activity stream.
+          </p>
+        </div>
       </Modal>
 
       <Modal

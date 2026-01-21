@@ -21,6 +21,12 @@ const defaultProvider =
   (isDefaultProviderValid ? defaultProviderRaw : undefined) ??
   (azureEndpoint && azureApiKey && azureDeployment ? "azure" : "lmstudio");
 
+const parsedGraphRecursionLimit = Number.parseInt(process.env.GRAPH_RECURSION_LIMIT ?? "", 10);
+const graphRecursionLimit =
+  Number.isFinite(parsedGraphRecursionLimit) && parsedGraphRecursionLimit > 0
+    ? parsedGraphRecursionLimit
+    : 200;
+
 if (!azureEndpoint || !azureApiKey || !azureDeployment) {
   console.warn(
     "⚠️  Azure OpenAI variables (AZURE_OPENAI_ENDPOINT/AZURE_OPENAI_API_KEY/AZURE_OPENAI_DEPLOYMENT) are not set."
@@ -45,4 +51,5 @@ export const config = {
     apiKey: lmstudioApiKey,
     model: lmstudioModel,
   },
+  graphRecursionLimit,
 };

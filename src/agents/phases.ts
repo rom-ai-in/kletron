@@ -2,19 +2,7 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { BaseMessage, SystemMessage } from "@langchain/core/messages";
 
 import { getChatModel, type LlmSelection } from "../llm";
-import {
-  describeStructureTool,
-  gitBlameTool,
-  gitDiffTool,
-  gitGrepTool,
-  gitLogTool,
-  listFilesTool,
-  readFileRangeTool,
-  readFileTool,
-  repoMetricsTool,
-  searchCodeTool,
-  todoSearchTool,
-} from "../tools/mcpTools";
+import { allMcpTools } from "../tools/mcpTools";
 import {
   auditPhaseConfig,
   auditPhaseOrder,
@@ -116,7 +104,7 @@ export async function runPhase1MapperAgent(
     userPrompt,
     extraMessages,
     onMessage,
-    tools: [repoMetricsTool, describeStructureTool, listFilesTool, searchCodeTool, gitLogTool, todoSearchTool, readFileTool],
+    tools: allMcpTools,
     llmSelection,
   });
 
@@ -153,7 +141,7 @@ export async function runPhase2AuditorAgent(input: {
     userPrompt,
     extraMessages: input.extraMessages ?? [],
     onMessage: input.onMessage,
-    tools: [gitLogTool, gitDiffTool, gitBlameTool, gitGrepTool, searchCodeTool, readFileRangeTool, readFileTool, listFilesTool],
+    tools: allMcpTools,
     llmSelection: input.llmSelection,
   });
 
@@ -185,7 +173,7 @@ export async function runPhase3PlannerAgent(input: {
     userPrompt,
     extraMessages: input.extraMessages ?? [],
     onMessage: input.onMessage,
-    tools: [],
+    tools: allMcpTools,
     llmSelection: input.llmSelection,
   });
 
@@ -225,7 +213,7 @@ export async function runPhase4ReporterAgent(input: {
     userPrompt,
     extraMessages: input.extraMessages ?? [],
     onMessage: input.onMessage,
-    tools: [],
+    tools: allMcpTools,
     llmSelection: input.llmSelection,
   });
 

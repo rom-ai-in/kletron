@@ -1,4 +1,4 @@
-import { BaseMessage } from "@langchain/core/messages";
+import { BaseMessage, SystemMessage } from "@langchain/core/messages";
 
 import {
   phaseDefinitions,
@@ -9,6 +9,11 @@ import {
   runPhase4ReporterAgent,
   type PhaseKey,
 } from "./agents/phases.ts";
+import {
+  formatAuditContextPrompt,
+  formatAuditContextSummary,
+  type AuditContext,
+} from "./shared/auditContext";
 
 type TimelineStatus = "pending" | "running" | "success" | "error";
 
@@ -59,6 +64,7 @@ export type AgentWorkflowUpdate = {
 export type AgentWorkflowOptions = {
   onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
   llmSelection?: { provider: "azure" | "lmstudio"; model?: string };
+  auditContext?: AuditContext | null;
 };
 
 const LOG_CONTENT_LIMIT = 120;
@@ -164,14 +170,20 @@ function createAgentEvent(
   };
 }
 
-function createInitialTimeline(): TimelineEvent[] {
+function createInitialTimeline(auditContext?: AuditContext | null): TimelineEvent[] {
+  const contextPrompt = formatAuditContextPrompt(auditContext);
+  const contextSummary = formatAuditContextSummary(auditContext);
   return phaseOrder.map((phaseId) => ({
     id: phaseId,
     label: phaseDefinitions[phaseId].label,
     status: "pending",
     summary: phaseDefinitions[phaseId].summary,
-    details: phaseDefinitions[phaseId].description,
-    systemPrompt: phaseDefinitions[phaseId].systemPrompt,
+    details: contextSummary
+      ? `${phaseDefinitions[phaseId].description}\n\nAudit context: ${contextSummary}`
+      : phaseDefinitions[phaseId].description,
+    systemPrompt: contextPrompt
+      ? `${phaseDefinitions[phaseId].systemPrompt}\n\n${contextPrompt}`
+      : phaseDefinitions[phaseId].systemPrompt,
     thoughtLog: [],
   }));
 }
@@ -263,10 +275,13 @@ export async function runAgentWorkflow(
   userRequest: string,
   options?: AgentWorkflowOptions
 ): Promise<AgentWorkflowResult> {
-  const timeline = createInitialTimeline();
+  const timeline = createInitialTimeline(options?.auditContext);
   const eventStream: AgentEvent[] = [];
   let eventCounter = 0;
   const nextEventId = () => `event-${eventCounter++}`;
+  const contextSummary = formatAuditContextSummary(options?.auditContext);
+  const contextPrompt = formatAuditContextPrompt(options?.auditContext);
+  const contextMessages = contextPrompt ? [new SystemMessage(contextPrompt)] : [];
 
   const flushUpdate = async (outputs?: AgentWorkflowResult["outputs"]) => {
     if (!options?.onUpdate) return;
@@ -292,6 +307,20 @@ export async function runAgentWorkflow(
   eventStream.push(initialEvent);
   logAgentEvent(initialEvent);
 
+  if (contextSummary) {
+    const contextEvent: AgentEvent = {
+      id: nextEventId(),
+      phaseId: "user",
+      phaseLabel: "Audit context",
+      kind: "system",
+      role: "system",
+      content: contextSummary,
+      timestamp: new Date().toISOString(),
+    };
+    eventStream.push(contextEvent);
+    logAgentEvent(contextEvent);
+  }
+
   await flushUpdate();
 
   const appendPhaseEvents = async (messages: BaseMessage[], phaseId: PhaseKey) => {
@@ -312,7 +341,7 @@ export async function runAgentWorkflow(
     () =>
       runPhase1MapperAgent(
         userRequest,
-        [],
+        contextMessages,
         (message) => appendPhaseEvents([message], "phase1"),
         options?.llmSelection
       ),
@@ -335,6 +364,7 @@ export async function runAgentWorkflow(
         userRequest,
         meta,
         suggestedAuditFiles: (phase1Result.parsed as any)?.suggested_audit_files ?? [],
+        extraMessages: contextMessages,
         onMessage: (message) => appendPhaseEvents([message], "phase2"),
         llmSelection: options?.llmSelection,
       }),
@@ -359,6 +389,7 @@ export async function runAgentWorkflow(
       runPhase3PlannerAgent({
         userRequest,
         findings: findingsSummary,
+        extraMessages: contextMessages,
         onMessage: (message) => appendPhaseEvents([message], "phase3"),
         llmSelection: options?.llmSelection,
       }),
@@ -385,6 +416,7 @@ export async function runAgentWorkflow(
         meta,
         findings: findingsSummary,
         tasks: tasksSummary,
+        extraMessages: contextMessages,
         onMessage: (message) => appendPhaseEvents([message], "phase4"),
         llmSelection: options?.llmSelection,
       }),

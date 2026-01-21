@@ -8,6 +8,7 @@ import {
 } from "@langchain/langgraph";
 import { AIMessage } from "@langchain/core/messages";
 
+import { config } from "./config";
 import { McpClient } from "./mcp/client";
 import {
   runPhase1MapperAgent,
@@ -171,4 +172,7 @@ const workflow = new StateGraph(NumezisAnnotation)
   .addEdge("phase3_plan", "phase4_report")
   .addEdge("phase4_report", END);
 
-export const graph = workflow.compile();
+const compiledWorkflow = workflow.compile();
+export const graph = compiledWorkflow.withConfig({
+  recursionLimit: config.graphRecursionLimit,
+});

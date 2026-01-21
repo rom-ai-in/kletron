@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 
 import { runWorkflow } from "../../../src/workflows";
+import { normalizeAuditContext, type AuditContext } from "../../../src/shared/auditContext";
 
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({} as Record<string, unknown>));
   const message = typeof payload?.message === "string" ? payload.message.trim() : "";
   const graph = typeof payload?.graph === "string" ? payload.graph.trim() : undefined;
+  const auditContext = normalizeAuditContext(
+    (payload as { auditContext?: AuditContext }).auditContext
+  );
 
   if (!message) {
     return NextResponse.json(
@@ -15,7 +19,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await runWorkflow(message, graph);
+    const result = await runWorkflow(message, graph, { auditContext });
     return NextResponse.json(result);
   } catch (error: unknown) {
     return NextResponse.json(

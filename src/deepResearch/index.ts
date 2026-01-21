@@ -18,19 +18,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
 import { getChatModel, type LlmSelection } from "../llm";
-import {
-  describeStructureTool,
-  gitBlameTool,
-  gitDiffTool,
-  gitGrepTool,
-  gitLogTool,
-  listFilesTool,
-  readFileRangeTool,
-  readFileTool,
-  repoMetricsTool,
-  searchCodeTool,
-  todoSearchTool,
-} from "../tools/mcpTools";
+import { allMcpTools } from "../tools/mcpTools";
 import {
   actionReportPrompt,
   clarifyWithUserInstructions,
@@ -277,19 +265,7 @@ const parseToolArgs = (args: ToolCall["args"]) => {
   return args;
 };
 
-const getToolList = () => [
-  repoMetricsTool,
-  describeStructureTool,
-  listFilesTool,
-  searchCodeTool,
-  gitGrepTool,
-  gitLogTool,
-  gitDiffTool,
-  gitBlameTool,
-  readFileRangeTool,
-  readFileTool,
-  todoSearchTool,
-];
+const getToolList = () => allMcpTools;
 
 const getResearcherTools = () => [
   ...getToolList(),

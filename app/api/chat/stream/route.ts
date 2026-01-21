@@ -1,6 +1,7 @@
 import { AgentWorkflowResult, AgentWorkflowUpdate } from "../../../../src/agentRunner";
 import { resolveLlmSelection } from "../../../../src/llm";
 import { runWorkflow } from "../../../../src/workflows";
+import { normalizeAuditContext, type AuditContext } from "../../../../src/shared/auditContext";
 
 const textEncoder = new TextEncoder();
 
@@ -15,6 +16,9 @@ export async function POST(request: Request) {
   const graph = typeof payload?.graph === "string" ? payload.graph.trim() : undefined;
   const provider = typeof payload?.provider === "string" ? payload.provider.trim() : undefined;
   const model = typeof payload?.model === "string" ? payload.model.trim() : undefined;
+  const auditContext = normalizeAuditContext(
+    (payload as { auditContext?: AuditContext }).auditContext
+  );
   const llmSelection = resolveLlmSelection({ provider, model });
 
   if (!message) {
@@ -36,6 +40,7 @@ export async function POST(request: Request) {
             sendChunk({ type: "update", payload: update });
           },
           llmSelection,
+          auditContext,
         });
         sendChunk({ type: "final", payload: result });
       } catch (error: unknown) {

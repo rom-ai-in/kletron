@@ -15,15 +15,9 @@ import {
   simpleReactPhaseSummary,
   simpleReactSystemPrompt,
 } from "./shared/reactAgentConfig";
-import {
-  gitDiffTool,
-  gitLogTool,
-  listFilesTool,
-  readFileTool,
-  searchCodeTool,
-} from "./tools/mcpTools";
+import { allMcpTools } from "./tools/mcpTools";
 
-const simpleReactTools = [listFilesTool, readFileTool, searchCodeTool, gitLogTool, gitDiffTool];
+const simpleReactTools = allMcpTools;
 
 const cloneValue = <T>(value: T): T => {
   if (
