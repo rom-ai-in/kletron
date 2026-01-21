@@ -10,7 +10,6 @@ import type {
   AgentWorkflowUpdate,
   TimelineEvent,
 } from "../src/agentRunner";
-import { auditPrompts } from "../src/shared/auditPrompts";
 import { graphOptions } from "../src/shared/graphCatalog";
 
 type AgentEventKind = AgentEvent["kind"];
@@ -57,6 +56,23 @@ type LlmEnvInfo = {
     baseUrl?: string | null;
     model?: string | null;
   };
+};
+
+type PromptFileEntry = {
+  name: string;
+  path: string;
+};
+
+type PromptFolderNode = {
+  name: string;
+  path: string;
+  children: PromptFolderNode[];
+};
+
+type PromptFolderNode = {
+  name: string;
+  path: string;
+  children: PromptFolderNode[];
 };
 
 const formatTimestamp = (value?: string) => {
@@ -117,25 +133,25 @@ function Modal({ open, onClose, title, subtitle, children }: ModalProps) {
       onMouseDown={handleOverlayClick}
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-[6px]"
     >
-      <div className="relative w-full max-w-4xl overflow-y-auto rounded-[32px] border border-white/10 bg-slate-950/95 p-6 shadow-[0_30px_60px_rgba(2,6,23,0.75)]">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="relative flex h-full w-full max-w-4xl max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/95 shadow-[0_30px_60px_rgba(2,6,23,0.75)]">
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-t-[32px] bg-slate-950/90 px-6 py-5">
           <div>
-            {title && (
-              <p className="text-[11px] uppercase tracking-[0.4em] text-slate-500">
-                {title}
-              </p>
-            )}
+            {title && <p className="text-[11px] text-slate-500">{title}</p>}
             {subtitle && <h3 className="text-3xl font-semibold text-white">{subtitle}</h3>}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-white"
+            className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[11px] font-semibold text-slate-300 transition hover:border-white"
           >
             Close
           </button>
         </div>
-        <div className="mt-6 space-y-6">{children}</div>
+        <div className="flex-1 overflow-hidden px-6 pb-6 pt-4">
+          <div className="h-full min-h-0 overflow-y-auto pr-2 scrollbar-elegant space-y-6">
+            {children}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -151,7 +167,7 @@ function TimelinePanel({ timeline, selectedEventId, onPhaseSelect }: TimelinePan
   return (
     <section className="sticky top-6 space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-lg h-full flex flex-col overflow-hidden">
       <h2 className="text-lg font-semibold">Phases</h2>
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+      <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-elegant">
         {timeline.map((event) => (
           <button
             key={event.id}
@@ -209,13 +225,13 @@ type ToolExplorerPanelProps = {
 function ToolExplorerPanel({ tools, usedToolNames, openToolDialog }: ToolExplorerPanelProps) {
   return (
     <section className="sticky top-6 space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-3 shadow-lg h-full flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-400">
+      <div className="flex items-center justify-between text-xs text-slate-400">
         <span>Tool explorer</span>
         <span>
           {usedToolNames.size} tool{usedToolNames.size === 1 ? "" : "s"} used
         </span>
       </div>
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
+      <div className="flex flex-1 flex-col gap-2 overflow-y-auto scrollbar-elegant">
         {tools.map((tool) => (
           <button
             key={tool.name}
@@ -224,7 +240,7 @@ function ToolExplorerPanel({ tools, usedToolNames, openToolDialog }: ToolExplore
             className="flex flex-col rounded-2xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-left text-sm font-semibold text-white transition hover:border-cyan-400"
           >
             <span className="text-[13px] leading-tight">{tool.label}</span>
-            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500">{tool.name}</span>
+            <span className="text-[10px] text-slate-500">{tool.name}</span>
           </button>
         ))}
       </div>
@@ -298,7 +314,7 @@ function HeaderControls({
             setIsLlmMenuOpen(false);
           }}
         >
-          <span className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Graph</span>
+          <span className="text-[10px] text-slate-400">Graph</span>
           <span>{selectedGraph.name}</span>
           <svg
             className="h-3 w-3 text-slate-400"
@@ -312,7 +328,7 @@ function HeaderControls({
         </button>
         {isGraphMenuOpen && (
           <div className="absolute right-0 z-20 mt-2 w-60 rounded-2xl border border-slate-800 bg-slate-950/95 p-2 shadow-xl">
-            <p className="px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">Choose graph</p>
+            <p className="px-2 py-1 text-[10px] text-slate-500">Choose graph</p>
             <div className="mt-1 space-y-1">
               {graphOptions.map((graph) => (
                 <div
@@ -371,7 +387,7 @@ function HeaderControls({
             setIsGraphMenuOpen(false);
           }}
         >
-          <span className="text-[10px] uppercase tracking-[0.3em] text-slate-400">LLM</span>
+          <span className="text-[10px] text-slate-400">LLM</span>
           <span>{modelProvider === "azure" ? "Azure" : "LM Studio"}</span>
           <svg
             className="h-3 w-3 text-slate-400"
@@ -385,7 +401,7 @@ function HeaderControls({
         </button>
         {isLlmMenuOpen && (
           <div className="absolute right-0 z-20 mt-2 w-56 rounded-2xl border border-slate-800 bg-slate-950/95 p-2 shadow-xl">
-            <p className="px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">Select provider</p>
+            <p className="px-2 py-1 text-[10px] text-slate-500">Select provider</p>
             <div className="mt-1 space-y-1">
               {(["azure", "lmstudio"] as const).map((provider) => (
                 <div
@@ -437,7 +453,7 @@ function HeaderControls({
                 setIsLlmInfoOpen(true);
                 setIsLlmMenuOpen(false);
               }}
-              className="mt-2 flex w-full items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-2 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-cyan-400"
+              className="mt-2 flex w-full items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-2 py-2 text-xs font-semibold text-slate-300 transition hover:border-cyan-400"
             >
               <svg
                 className="h-3 w-3"
@@ -468,7 +484,7 @@ function HeaderControls({
         <div className="space-y-4 text-sm text-slate-300">
           <p>{graphDetail.description}</p>
           <div className="space-y-2">
-            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Phases</p>
+            <p className="text-[11px] text-slate-500">Phases</p>
             <ul className="space-y-2">
               {graphDetail.phases.map((phase) => (
                 <li key={phase.id} className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-[12px]">
@@ -493,7 +509,7 @@ function HeaderControls({
         {llmDetail === "azure" ? (
           <div className="space-y-4 text-sm text-slate-300">
             <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Azure OpenAI</p>
+              <p className="text-[11px] text-slate-500">Azure OpenAI</p>
               <p className="mt-2 text-white">{azureConfigured ? "Configured" : "Missing credentials"}</p>
               <p className="mt-1 text-xs text-slate-400">Endpoint: {llmInfo?.azure?.endpoint ?? "Not set"}</p>
               <p className="mt-1 text-xs text-slate-400">Deployment: {llmInfo?.azure?.deployment ?? "Not set"}</p>
@@ -505,9 +521,9 @@ function HeaderControls({
         ) : (
           <div className="space-y-4 text-sm text-slate-300">
             <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">LM Studio</p>
+              <p className="text-[11px] text-slate-500">LM Studio</p>
               <p className="mt-2 text-white">Base URL: {lmStudioBaseUrl}</p>
-              <label className="mt-3 block text-[11px] uppercase tracking-[0.3em] text-slate-500">Model ID</label>
+              <label className="mt-3 block text-[11px] text-slate-500">Model ID</label>
               <input
                 type="text"
                 className="mt-1 w-full rounded-full border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
@@ -551,6 +567,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
     return null;
   })();
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [copyResponseStatus, setCopyResponseStatus] = useState<"idle" | "copied" | "error">("idle");
   const handleCopyMarkdown = useCallback(() => {
     if (!agentMarkdown) return;
     navigator.clipboard
@@ -564,6 +581,19 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
         setTimeout(() => setCopyStatus("idle"), 1500);
       });
   }, [agentMarkdown]);
+  const handleCopyResponse = useCallback(() => {
+    if (!resultText) return;
+    navigator.clipboard
+      ?.writeText(resultText)
+      .then(() => {
+        setCopyResponseStatus("copied");
+        setTimeout(() => setCopyResponseStatus("idle"), 1500);
+      })
+      .catch(() => {
+        setCopyResponseStatus("error");
+        setTimeout(() => setCopyResponseStatus("idle"), 1500);
+      });
+  }, [resultText]);
   const firstMeaningfulLine = (() => {
     const lines = resultText.split(/\r?\n/);
     const generalSkips = [
@@ -609,60 +639,95 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
       onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
-      className={`group cursor-pointer rounded-2xl border border-slate-800 bg-slate-950/60 text-slate-100 transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-400 ${
-        isToolEvent ? "shadow-emerald-800/30 hover:border-emerald-400" : "shadow-black/20 hover:border-cyan-400"
+      className={`group cursor-pointer rounded-2xl border border-slate-800 bg-slate-950/80 text-slate-100 transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-400 ${
+        isToolEvent ? "shadow-[0_4px_15px_rgba(0,0,0,0.45)] hover:border-slate-600" : "shadow-[0_2px_10px_rgba(0,0,0,0.35)] hover:border-cyan-500"
       }`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] ${badgeClass}`}>
+      {isToolEvent ? (
+        <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] text-slate-400">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badgeClass}`}>
               {badgeLabel}
             </span>
-            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-              {event.phaseLabel ?? (isToolEvent ? "Tool call" : "Agent log")}
-            </p>
+            <p className="text-sm font-semibold text-slate-100 truncate leading-tight">{titleText}</p>
           </div>
-          <p className="text-sm font-semibold text-white truncate">{titleText}</p>
-          <p className="text-xs text-slate-400 truncate">{collapsedPreview || "Awaiting agent output..."}</p>
-        </div>
-        <div className="flex flex-col items-end gap-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              toggleExpanded();
-            }}
-            aria-expanded={isExpanded}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-800 bg-slate-950/80 text-slate-200 transition group-hover:border-white/70"
-          >
-            <span className="sr-only">{isExpanded ? "Collapse details" : "Expand details"}</span>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              className={`h-4 w-4 transform transition ${isExpanded ? "rotate-180" : ""}`}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
+          <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
+            <span className="whitespace-nowrap text-[10px] text-slate-400">
+              {formatTimestamp(event.timestamp)}
+            </span>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleExpanded();
+              }}
+              aria-expanded={isExpanded}
+              className="flex h-7 w-7 items-center justify-center rounded border border-slate-800 bg-slate-950/70 text-slate-300 transition duration-150 hover:border-slate-500 hover:text-white"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 8l4 4 4-4" />
-            </svg>
-          </button>
-          <span>{formatTimestamp(event.timestamp)}</span>
+              <span className="sr-only">{isExpanded ? "Collapse details" : "Expand details"}</span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                className={`h-3 w-3 transform transition ${isExpanded ? "rotate-180" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 8l4 4 4-4" />
+              </svg>
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[11px] text-slate-400">
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badgeClass}`}>
+                {badgeLabel}
+              </span>
+              <span>{event.phaseLabel ?? (isToolEvent ? "Tool call" : "Agent log")}</span>
+            </div>
+            <p className="text-sm font-semibold text-white truncate leading-tight">{titleText}</p>
+            <p className="text-xs text-slate-400 truncate">{collapsedPreview || "Awaiting agent output..."}</p>
+          </div>
+          <div className="flex flex-col items-end gap-1 text-[10px] text-slate-500">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleExpanded();
+              }}
+              aria-expanded={isExpanded}
+              className="flex h-7 w-7 items-center justify-center rounded border border-slate-800 bg-slate-950/70 text-slate-300 transition duration-150 hover:border-cyan-400 hover:text-white"
+            >
+              <span className="sr-only">{isExpanded ? "Collapse details" : "Expand details"}</span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                className={`h-3 w-3 transform transition ${isExpanded ? "rotate-180" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 8l4 4 4-4" />
+              </svg>
+            </button>
+            <span>{formatTimestamp(event.timestamp)}</span>
+          </div>
+        </div>
+      )}
 
       {agentMarkdown && (
         <section className="space-y-2 border-t border-slate-800 px-3 pb-3 pt-2">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Markdown</p>
+            <p className="text-[11px] text-slate-400">Markdown</p>
             <button
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
                 handleCopyMarkdown();
               }}
-              className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-300 transition hover:border-slate-500"
+              className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-[10px] text-slate-300 transition hover:border-slate-500"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -688,7 +753,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
       )}
       <div className={!isExpanded ? "hidden" : "grid gap-3 border-t border-slate-800 px-3 pb-4 pt-2"} role="region">
         {event.name && (
-          <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.3em] text-slate-400">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
             <span className="font-semibold text-white">Tool</span>
             <span>{event.name}</span>
             <span className="text-slate-500">{toolMeta ? "registered" : "external"}</span>
@@ -696,17 +761,50 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
         )}
         {isToolEvent && formattedArgs && (
           <section>
-            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Arguments</p>
-            <pre className="mt-2 max-h-40 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-[12px] leading-relaxed text-slate-200 whitespace-pre-wrap break-words">
+            <p className="text-[11px] text-slate-400">Arguments</p>
+            <pre className="mt-2 max-h-40 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-[12px] leading-relaxed text-slate-200 whitespace-pre-wrap break-words scrollbar-elegant">
               {formattedArgs}
             </pre>
           </section>
         )}
         <section>
-          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-            Result{isToolEvent ? "" : " / Thought"}
-          </p>
-          <pre className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-[12px] leading-relaxed text-slate-100 whitespace-pre-wrap break-words">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <p className="text-[11px] text-slate-400">
+              Result{isToolEvent ? "" : " / Thought"}
+            </p>
+            {event.kind === "assistant" && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleCopyResponse();
+                }}
+                className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1 text-[10px] text-slate-300 transition hover:border-slate-500"
+                aria-label="Copy agent response"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  className="h-3 w-3"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5h6a2 2 0 0 1 2 2v6" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V5H5" />
+                </svg>
+                <span className="whitespace-nowrap">
+                  {copyResponseStatus === "copied"
+                    ? "Copied"
+                    : copyResponseStatus === "error"
+                    ? "Error"
+                    : "Copy"}
+                </span>
+              </button>
+            )}
+          </div>
+          <pre className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-[12px] leading-relaxed text-slate-100 whitespace-pre-wrap break-words scrollbar-elegant">
             {resultText}
           </pre>
         </section>
@@ -715,7 +813,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
             <button
               type="button"
               onClick={() => openToolDialog(toolMeta)}
-              className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-300 transition hover:border-cyan-400"
+              className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[10px] text-slate-300 transition hover:border-cyan-400"
             >
               View tool details
             </button>
@@ -727,7 +825,150 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
 }
 
 export default function HomePage() {
-  const [selectedPromptId, setSelectedPromptId] = useState(auditPrompts[0].id);
+  const [promptFolders, setPromptFolders] = useState<string[]>([]);
+  const [selectedPromptFolder, setSelectedPromptFolder] = useState<string>("");
+  const [selectedPromptFile, setSelectedPromptFile] = useState<string | null>(null);
+  const [promptLoadError, setPromptLoadError] = useState<string | null>(null);
+  const [promptFolderLoading, setPromptFolderLoading] = useState(false);
+  const [promptContentLoading, setPromptContentLoading] = useState(false);
+  const [folderFileMap, setFolderFileMap] = useState<Record<string, PromptFileEntry[]>>({});
+  const [folderFileLoading, setFolderFileLoading] = useState<Record<string, boolean>>({});
+  const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set([""]));
+  const [isPromptExplorerExpanded, setIsPromptExplorerExpanded] = useState(true);
+  const activeFolderPath = selectedPromptFolder;
+  const applyDefaultSelectionFor = useCallback(
+    (folderPath: string, files: PromptFileEntry[]) => {
+      if (selectedPromptFile) {
+        return;
+      }
+      if (!files.length) {
+        return;
+      }
+      setSelectedPromptFile((current) => current ?? files[0].path);
+    },
+    [selectedPromptFile]
+  );
+  const loadFolderFiles = useCallback(async (folderPath: string) => {
+    setPromptLoadError(null);
+    setFolderFileLoading((prev) => ({ ...prev, [folderPath]: true }));
+    try {
+      const query = folderPath ? `?dir=${encodeURIComponent(folderPath)}` : "";
+      const response = await fetch(`/api/prompts/files${query}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || response.statusText);
+      }
+      const data = (await response.json()) as { files?: PromptFileEntry[] };
+      const files = Array.isArray(data?.files) ? data.files : [];
+      setFolderFileMap((prev) => ({ ...prev, [folderPath]: files }));
+      applyDefaultSelectionFor(folderPath, files);
+    } catch (error) {
+      setPromptLoadError((error as Error).message || "Unable to load prompt files.");
+    } finally {
+      setFolderFileLoading((prev) => ({ ...prev, [folderPath]: false }));
+    }
+  }, [applyDefaultSelectionFor]);
+  const toggleFolder = useCallback(
+    (folderPath: string) => {
+      setOpenFolders((prev) => {
+        const next = new Set(prev);
+        if (next.has(folderPath)) {
+          next.delete(folderPath);
+        } else {
+          next.add(folderPath);
+        }
+        return next;
+      });
+      setSelectedPromptFolder(folderPath);
+      if (!folderFileMap[folderPath] && !folderFileLoading[folderPath]) {
+        loadFolderFiles(folderPath);
+      }
+    },
+    [folderFileMap, folderFileLoading, loadFolderFiles]
+  );
+  const promptFolderTree = useMemo<PromptFolderNode[]>(() => {
+    const root: PromptFolderNode = { name: "prompts", path: "", children: [] };
+    const nodes = new Map<string, PromptFolderNode>([["", root]]);
+    for (const dir of promptFolders) {
+      if (!dir) continue;
+      const segments = dir.split("/").filter(Boolean);
+      let parent = root;
+      let currentPath = "";
+      for (const segment of segments) {
+        currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+        if (!nodes.has(currentPath)) {
+          const node: PromptFolderNode = {
+            name: segment,
+            path: currentPath,
+            children: [],
+          };
+          nodes.set(currentPath, node);
+          parent.children.push(node);
+        }
+        parent = nodes.get(currentPath)!;
+      }
+    }
+    return [root];
+  }, [promptFolders]);
+  const renderFolderNode = (node: PromptFolderNode, depth = 0): JSX.Element => {
+    const isActive = activeFolderPath === node.path;
+    const isOpen = openFolders.has(node.path);
+    const files = folderFileMap[node.path] ?? [];
+    const isLoadingFiles = Boolean(folderFileLoading[node.path]);
+    const label = node.path ? node.name : "prompts/";
+    const indentation = 6 + depth * 12;
+    return (
+      <div key={`folder-${node.path || "root"}`} className="flex flex-col gap-1">
+        <button
+          type="button"
+          className={`flex w-full items-center gap-2 truncate rounded-xl border px-2 py-1 text-left text-[11px] font-semibold transition ${
+            isActive
+              ? "border-cyan-400 bg-cyan-500/10 text-cyan-200"
+              : "border-transparent text-slate-200 hover:border-slate-600"
+          }`}
+          style={{ paddingLeft: indentation }}
+          onClick={() => toggleFolder(node.path)}
+        >
+          <span className="text-[10px] text-slate-400">{isOpen ? "▾" : "▸"}</span>
+          <span className="truncate">{label}</span>
+          {node.children.length > 0 && (
+            <span className="ml-auto text-[10px] text-slate-500">
+              {node.children.length}
+            </span>
+          )}
+        </button>
+        {isOpen && (
+          <div className="space-y-1 pl-3">
+            {isLoadingFiles ? (
+              <p className="text-[11px] text-slate-500">Loading files…</p>
+            ) : files.length ? (
+              files.map((file) => {
+                const isFileActive = file.path === selectedPromptFile;
+                return (
+                  <button
+                    type="button"
+                    key={`file-${file.path}`}
+                    className={`flex w-full flex-col rounded-lg border px-3 py-1 text-left text-[11px] transition ${
+                      isFileActive
+                        ? "border-cyan-400 bg-cyan-500/10 text-white"
+                        : "border-transparent text-slate-200 hover:border-slate-600"
+                    }`}
+                    onClick={() => setSelectedPromptFile(file.path)}
+                  >
+                    <span className="truncate font-semibold">{file.name}</span>
+                    <span className="text-[10px] text-slate-500">{`prompts/${file.path}`}</span>
+                  </button>
+                );
+              })
+            ) : (
+              <p className="text-[11px] text-slate-500">No files.</p>
+            )}
+            {node.children.map((child) => renderFolderNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
   const [selectedGraphId, setSelectedGraphId] = useState(graphOptions[0].id);
   const [targetDir, setTargetDir] = useState<string | null>(null);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
@@ -762,6 +1003,59 @@ export default function HomePage() {
       })
       .catch(() => setTools([]));
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    setPromptFolderLoading(true);
+    setPromptLoadError(null);
+    fetch("/api/prompts/dirs")
+      .then((res) => res.json())
+      .then((data: { dirs?: string[] }) => {
+        if (!isMounted) return;
+        const dirs = Array.isArray(data?.dirs) ? data.dirs : [];
+        setPromptFolders(dirs);
+        const initialFolder = dirs[0] ?? "";
+        setSelectedPromptFolder(initialFolder);
+        setOpenFolders((prev) => {
+          const next = new Set(prev);
+          next.add(initialFolder);
+          return next;
+        });
+        loadFolderFiles(initialFolder);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setPromptFolders([]);
+        setSelectedPromptFolder("");
+        setOpenFolders(new Set([""]));
+        setSelectedPromptFile(null);
+        setFolderFileMap({});
+        setFolderFileLoading({});
+        setPromptLoadError("Unable to load prompt folders.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setPromptFolderLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [loadFolderFiles]);
+
+  useEffect(() => {
+    if (!selectedPromptFile) return;
+    setPromptContentLoading(true);
+    setPromptLoadError(null);
+    fetch(`/api/prompts/file?path=${encodeURIComponent(selectedPromptFile)}`)
+      .then((res) => res.json())
+      .then((data: { content?: string }) => {
+        if (typeof data?.content === "string") {
+          setMessageInput(data.content);
+        }
+      })
+      .catch(() => setPromptLoadError("Unable to load prompt content."))
+      .finally(() => setPromptContentLoading(false));
+  }, [selectedPromptFile]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("numezis-llm-selection");
@@ -906,16 +1200,9 @@ export default function HomePage() {
     }
   };
 
-  const selectedAuditPrompt =
-    auditPrompts.find((prompt) => prompt.id === selectedPromptId) ?? auditPrompts[0];
   const selectedGraph =
     graphOptions.find((graph) => graph.id === selectedGraphId) ?? graphOptions[0];
   const graphToolNames = selectedGraph.toolNames ?? [];
-  useEffect(() => {
-    if (selectedGraph.id === "audit") {
-      setMessageInput(selectedAuditPrompt.prompt);
-    }
-  }, [selectedAuditPrompt, selectedGraph.id]);
   const activePhaseDefinitions = useMemo(() => {
     if (timeline.length) {
       return timeline.map((event) => ({
@@ -997,6 +1284,13 @@ export default function HomePage() {
       ]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleMessageInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      handleSendMessage();
     }
   };
 
@@ -1084,11 +1378,11 @@ export default function HomePage() {
               {targetPathEntry && (
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
                   <div className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/50 px-3 py-1">
-                    <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500">{targetPathEntry.label}</span>
+                    <span className="text-[10px] text-slate-500">{targetPathEntry.label}</span>
                     <span className="font-mono text-[11px] text-cyan-200">{targetPathEntry.value}</span>
                     <button
                       type="button"
-                      className="rounded-full border border-slate-800 bg-slate-950/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-400 transition hover:border-cyan-400"
+                      className="rounded-full border border-slate-800 bg-slate-950/70 px-2 py-0.5 text-[10px] text-slate-400 transition hover:border-cyan-400"
                       onClick={() => handleCopyPath(targetPathEntry.value)}
                     >
                       {copiedPath === targetPathEntry.value ? "Copied" : "Copy"}
@@ -1123,18 +1417,18 @@ export default function HomePage() {
           </div>
 
           <div className="min-h-0">
-            <main className="flex h-full min-h-0 w-full flex-col gap-4 rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900/60 to-slate-950/90 p-6 shadow-[0_25px_50px_rgba(2,6,23,0.55)] overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-semibold">Activity log</h2>
-                </div>
+            <main className="flex h-full min-h-0 w-full flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-950/80 p-3 shadow-[0_16px_30px_rgba(0,0,0,0.4)] overflow-hidden">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-medium text-slate-300">
+                  Activity log
+                </h2>
               </div>
 
-              <div className="relative flex flex-1 flex-col gap-4 overflow-hidden">
+              <div className="relative flex flex-1 flex-col gap-3 overflow-hidden">
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <div
                     ref={eventStreamRef}
-                    className="h-full max-h-full min-h-0 space-y-4 overflow-y-auto pr-2"
+                    className="h-full max-h-full min-h-0 space-y-3 overflow-y-auto pr-2 scrollbar-elegant"
                     style={{ paddingBottom: promptPanelHeight }}
                   >
                     {visibleEventStream.map((event) => (
@@ -1150,11 +1444,11 @@ export default function HomePage() {
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-2">
                             <span className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.9)] animate-pulse" />
-                            <p className="text-[13px] font-semibold uppercase tracking-[0.3em] text-cyan-300">
+                            <p className="text-[13px] font-semibold text-cyan-300">
                               Agent running...
                             </p>
                           </div>
-                          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-300">
+                          <p className="text-[11px] text-slate-300">
                             Tracking phases and tools · final summary incoming
                           </p>
                           <div className="h-[6px] w-full overflow-hidden rounded-full bg-slate-900">
@@ -1166,46 +1460,59 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="absolute inset-x-0 bottom-4 z-10 px-0">
-                  <div className="rounded-3xl border border-slate-800 bg-slate-950/90 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.65)] backdrop-blur relative">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                      <div className="flex-1">
-                        <label
-                          htmlFor="prompt-select"
-                          className="text-[11px] uppercase tracking-[0.3em] text-slate-500"
-                        >
-                          Select a prompt
-                        </label>
-                        <select
-                          id="prompt-select"
-                          className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
-                          value={selectedPromptId}
-                          onChange={(event) => setSelectedPromptId(event.target.value)}
-                        >
-                          {auditPrompts.map((prompt) => (
-                            <option key={prompt.id} value={prompt.id}>
-                              {prompt.name}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="mt-2 text-xs text-slate-400">{selectedAuditPrompt.description}</p>
+                <div className="absolute inset-x-4 bottom-4 z-10 px-0">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-3 shadow-[0_6px_20px_rgba(0,0,0,0.4)] backdrop-blur-sm">
+                    <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-slate-400">
+                      <div className="flex items-center gap-2">
+                        <span>Prompt explorer</span>
+                        <span className="text-[10px] text-slate-500">
+                          {promptFolders.length} folder{promptFolders.length === 1 ? "" : "s"}
+                        </span>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsPromptExplorerExpanded((prev) => !prev)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-800 bg-slate-950/70 text-[11px] text-slate-400 transition hover:border-cyan-400"
+                        aria-pressed={isPromptExplorerExpanded}
+                        aria-label={
+                          isPromptExplorerExpanded ? "Collapse prompt explorer" : "Expand prompt explorer"
+                        }
+                      >
+                        {isPromptExplorerExpanded ? "▾" : "▸"}
+                      </button>
                     </div>
-                    <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center">
+                    {isPromptExplorerExpanded && (
+                    <div className="mt-2 max-h-[220px] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/70 p-2 text-[11px] text-slate-200 scrollbar-elegant">
+                        {promptFolderLoading ? (
+                          <p className="text-[11px] text-slate-500">Loading folders…</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {promptFolderTree.map((node) => renderFolderNode(node, 0))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {(promptLoadError || promptContentLoading) && (
+                      <p className="mt-2 text-[11px] text-rose-400">
+                        {promptLoadError || "Applying prompt content…"}
+                      </p>
+                    )}
+                    <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center">
                       <textarea
-                        className="w-full flex-1 rounded-2xl border border-slate-800 bg-slate-950/70 px-4 py-3 text-sm font-medium text-white outline-none transition focus:border-cyan-400 focus:ring-0"
+                        className="w-full flex-1 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-[11px] font-medium text-white outline-none transition duration-150 focus:border-cyan-400 focus:ring-0 overflow-y-auto scrollbar-elegant"
                         rows={3}
                         value={messageInput}
                         onChange={(event) => setMessageInput(event.target.value)}
+                        onKeyDown={handleMessageInputKeyDown}
                         placeholder="Tell the agent what you want to investigate..."
                       />
                       <button
                         type="button"
-                        className="inline-flex h-11 min-w-[160px] items-center justify-center rounded-2xl border border-cyan-500/60 bg-gradient-to-r from-cyan-500/30 to-slate-900/40 px-5 text-sm font-semibold text-white transition hover:border-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex h-10 min-w-[140px] items-center justify-center rounded-xl border border-slate-700 bg-slate-900/80 px-4 text-[11px] font-semibold text-white transition duration-150 hover:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
                         onClick={handleSendMessage}
                         disabled={loading}
                       >
-                        {loading ? "Sending…" : "Send message"}
+                        {loading ? "Sending…" : "Send"}
                       </button>
                     </div>
                   </div>
@@ -1236,8 +1543,8 @@ export default function HomePage() {
               <p className="text-xs text-slate-400">{selectedEvent.details}</p>
             )}
             <section className="space-y-3">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Graph prompts</p>
-              <div className="max-h-72 space-y-3 overflow-y-auto pr-2">
+              <p className="text-[11px] text-slate-500">Graph prompts</p>
+              <div className="max-h-72 space-y-3 overflow-y-auto pr-2 scrollbar-elegant">
                 {selectedGraph.nodePrompts.map((nodePrompt) => {
                   const isActive =
                     nodePrompt.id === selectedEvent.id ||
@@ -1251,7 +1558,7 @@ export default function HomePage() {
                           : "border-slate-800 bg-slate-950/50"
                       }`}
                     >
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                      <p className="text-[11px] text-slate-400">
                         {nodePrompt.label}
                       </p>
                       <pre className="mt-2 text-[12px] leading-relaxed text-slate-100 whitespace-pre-wrap break-words">
@@ -1264,8 +1571,8 @@ export default function HomePage() {
             </section>
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Tool access</p>
-                <span className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                <p className="text-[11px] text-slate-500">Tool access</p>
+                <span className="text-[11px] text-slate-400">
                   {selectedEvent.status}
                 </span>
               </div>
@@ -1281,7 +1588,7 @@ export default function HomePage() {
                     >
                       <span className="font-semibold text-white">{tool.label}</span>
                       <span
-                        className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.3em] ${
+                        className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${
                           used ? "border-emerald-500/40 text-emerald-200" : "border-slate-600 text-slate-400"
                         }`}
                       >
@@ -1293,9 +1600,9 @@ export default function HomePage() {
               </div>
             </section>
             <section className="space-y-2">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Thought log</p>
+              <p className="text-[11px] text-slate-500">Thought log</p>
               {selectedEvent.thoughtLog?.length ? (
-                <ul className="max-h-72 space-y-2 overflow-y-auto">
+                <ul className="max-h-72 space-y-2 overflow-y-auto scrollbar-elegant">
                   {selectedEvent.thoughtLog.map((thought, index) => (
                     <li
                       key={index}
@@ -1326,7 +1633,7 @@ export default function HomePage() {
           <div className="space-y-4">
             <p className="text-sm text-slate-300">{selectedTool.description}</p>
             {selectedTool.categories.length > 0 && (
-              <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.2em] text-slate-400">
+              <div className="flex flex-wrap gap-2 text-[11px] text-slate-400">
                 {selectedTool.categories.map((category) => (
                   <span key={category} className="rounded-full border border-slate-800 px-3 py-1">
                     {category}
@@ -1335,8 +1642,8 @@ export default function HomePage() {
               </div>
             )}
             <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/50 p-3 text-[12px] text-slate-300">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Source</p>
-              <pre className="max-h-64 overflow-y-auto rounded-xl bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-100 whitespace-pre-wrap break-words">
+              <p className="text-[11px] text-slate-500">Source</p>
+              <pre className="max-h-64 overflow-y-auto rounded-xl bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-100 whitespace-pre-wrap break-words scrollbar-elegant">
                 {toolLoadingMap[selectedTool.name]
                   ? "Loading tool details..."
                   : toolCodeCache[selectedTool.name] || "// Source unavailable."}

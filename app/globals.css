@@ -21,6 +21,37 @@ code,
 }
 
 @layer utilities {
+  .scrollbar-elegant {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.45) rgba(15, 23, 42, 0.35);
+  }
+
+  .scrollbar-elegant::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-elegant::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.35);
+    border-radius: 999px;
+  }
+
+  .scrollbar-elegant::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(148, 163, 184, 0.55), rgba(100, 116, 139, 0.45));
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .scrollbar-elegant::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(148, 163, 184, 0.75), rgba(100, 116, 139, 0.6));
+    background-clip: padding-box;
+  }
+
+  .scrollbar-elegant::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
   @keyframes progressBar {
     0% {
       transform: translateX(-100%);
