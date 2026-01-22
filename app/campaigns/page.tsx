@@ -29,7 +29,7 @@ export default function ChainsPage() {
         setLoading(true);
         setError("");
         try {
-            const res = await fetch("/api/chains");
+            const res = await fetch("/api/campaigns");
             if (!res.ok) throw new Error("Failed to load chains");
             const data = await res.json();
             setChains(data.chains || []);
@@ -68,12 +68,27 @@ export default function ChainsPage() {
         if (editChainId) {
             void fetchChains(); // Refresh list if edited
         } else {
-            router.push(`/chains/${chainId}`);
+            router.push(`/campaigns/${chainId}`);
         }
     };
 
     const handleViewChain = (chainId: string) => {
-        router.push(`/chains/${chainId}`);
+        router.push(`/campaigns/${chainId}`);
+    };
+
+    const handleDeleteChain = async (chainId: string) => {
+        try {
+            const res = await fetch(`/api/campaigns/${chainId}`, {
+                method: "DELETE",
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "Failed to delete campaign");
+            }
+            void fetchChains();
+        } catch (err: any) {
+            alert(err.message);
+        }
     };
 
     return (
@@ -144,8 +159,9 @@ export default function ChainsPage() {
                             <ChainCard
                                 key={chain._id?.toString()}
                                 chain={chain}
-                                onView={() => handleViewChain(chain._id!.toString())}
-                                onEdit={() => handleEditChain(chain._id!.toString())}
+                                onView={() => void handleViewChain(chain._id!.toString())}
+                                onEdit={() => void handleEditChain(chain._id!.toString())}
+                                onDelete={() => void handleDeleteChain(chain._id!.toString())}
                             />
                         ))}
                         {filteredChains.length === 0 && (

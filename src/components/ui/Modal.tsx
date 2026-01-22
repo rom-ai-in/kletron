@@ -42,10 +42,10 @@ export function Modal({ open, onClose, title, subtitle, children, footer, fullHe
         >
             <div className="relative flex h-full w-full max-w-4xl max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-xl border border-border-subtle bg-bg-elevated shadow-xl">
                 {/* Header */}
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle bg-bg-elevated px-6 py-4">
-                    <div>
-                        {title && <p className="text-[11px] font-mono text-text-muted">{title}</p>}
-                        {subtitle && <h3 className="text-lg font-semibold text-text-primary">{subtitle}</h3>}
+                <div className="flex items-center justify-between gap-3 border-b border-border-subtle bg-bg-elevated px-6 py-4">
+                    <div className="min-w-0 flex-1 mr-4">
+                        {title && <p className="text-[11px] font-mono text-text-muted truncate">{title}</p>}
+                        {subtitle && <h3 className="text-lg font-semibold text-text-primary truncate" title={subtitle}>{subtitle}</h3>}
                     </div>
                     <button
                         type="button"

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { chainExecutor } from "@/src/services/chainExecutor";
 
 /**
- * POST /api/chains/[id]/pause
+ * POST /api/campaigns/[id]/pause
  * Pause a running campaign
  */
 export async function POST(
@@ -29,7 +29,7 @@ export async function POST(
 
         return NextResponse.json({ status: "PAUSED" }, { status: 200 });
     } catch (error) {
-        console.error(`[API /api/chains/${params.id}/pause POST] Error:`, error);
+        console.error(`[API /api/campaigns/${params.id}/pause POST] Error:`, error);
         return NextResponse.json(
             { error: "Failed to pause campaign" },
             { status: 500 }

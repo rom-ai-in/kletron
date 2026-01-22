@@ -9,6 +9,7 @@ import { HotspotHeatmap } from "@/src/components/HotspotHeatmap";
 import { LLMComparisonTable } from "@/src/components/LLMComparisonTable";
 import { ChainBuilderModal } from "@/src/components/ChainBuilderModal";
 import type { AuditRun } from "@/src/services/chainTypes";
+import { StageDetailModal } from "@/src/components/StageDetailModal";
 
 interface ChainDetailPageProps {
     params: { id: string };
@@ -21,6 +22,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [isEditing, setIsEditing] = useState(false);
+    const [selectedStage, setSelectedStage] = useState<{ id: string; name: string; sessionId: string; status: string } | null>(null);
 
     useEffect(() => {
         void fetchChain();
@@ -30,7 +32,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
     useEffect(() => {
         if (!chain || chain.status !== "RUNNING") return;
 
-        const eventSource = new EventSource(`/api/chains/${params.id}/stream`);
+        const eventSource = new EventSource(`/api/campaigns/${params.id}/stream`);
 
         eventSource.onmessage = (event) => {
             const update = JSON.parse(event.data);
@@ -62,8 +64,8 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
         setError("");
         try {
             const [chainRes, runsRes] = await Promise.all([
-                fetch(`/api/chains/${params.id}`),
-                fetch(`/api/chains/${params.id}/runs`)
+                fetch(`/api/campaigns/${params.id}`),
+                fetch(`/api/campaigns/${params.id}/runs`)
             ]);
 
             if (!chainRes.ok) throw new Error("Failed to load campaign");
@@ -83,7 +85,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
 
     const handleExecute = async () => {
         try {
-            const res = await fetch(`/api/chains/${params.id}/execute`, {
+            const res = await fetch(`/api/campaigns/${params.id}/execute`, {
                 method: "PUT",
             });
             if (!res.ok) throw new Error("Failed to start execution");
@@ -95,7 +97,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
 
     const handlePause = async () => {
         try {
-            const res = await fetch(`/api/chains/${params.id}/pause`, {
+            const res = await fetch(`/api/campaigns/${params.id}/pause`, {
                 method: "POST",
             });
             if (!res.ok) throw new Error("Failed to pause");
@@ -118,7 +120,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
     const handleExportJSON = async () => {
         if (!chain) return;
         try {
-            const res = await fetch(`/api/chains/${params.id}/report`);
+            const res = await fetch(`/api/campaigns/${params.id}/report`);
             const data = await res.json();
             downloadFile(`chain-audit-${params.id}.json`, JSON.stringify(data, null, 2), "application/json");
         } catch (err) {
@@ -129,7 +131,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
     const handleExportMarkdown = async () => {
         if (!chain) return;
         try {
-            const res = await fetch(`/api/chains/${params.id}/report`);
+            const res = await fetch(`/api/campaigns/${params.id}/report`);
             const data = await res.json();
             downloadFile(`chain-audit-${params.id}.md`, data.report || "# Audit Report", "text/markdown");
         } catch (err) {
@@ -149,7 +151,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
         return (
             <div className="flex h-full flex-col items-center justify-center gap-4">
                 <p className="text-sm text-rose-400">Error: {error || "Chain not found"}</p>
-                <Button onClick={() => router.push("/chains")}>Back to Campaigns</Button>
+                <Button onClick={() => router.push("/campaigns")}>Back to Campaigns</Button>
             </div>
         );
     }
@@ -174,7 +176,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
             <div className="border-b border-border-subtle bg-bg-surface px-6 py-4">
                 <div className="mb-4 flex items-center gap-2 text-xs font-medium">
                     <button
-                        onClick={() => router.push("/chains")}
+                        onClick={() => router.push("/campaigns")}
                         className="text-text-muted transition hover:text-text-primary"
                     >
                         Audit Campaigns
@@ -261,28 +263,61 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                                             ? "🔄"
                                             : "⏸";
 
+                                    const sessionId = chain.sessionIds?.[index];
+
                                     return (
-                                        <div
+                                        <button
                                             key={stage.id}
-                                            className={`rounded-lg border p-3 ${isActive
+                                            onClick={() => {
+                                                if (sessionId) {
+                                                    setSelectedStage({
+                                                        id: stage.id,
+                                                        name: stage.name,
+                                                        sessionId,
+                                                        status: isCompleted ? "Completed" : isActive ? "Running" : "Pending"
+                                                    });
+                                                }
+                                            }}
+                                            disabled={!sessionId}
+                                            className={`w-full text-left rounded-lg border p-3 transition ${isActive
                                                 ? "border-sky-500/40 bg-sky-500/5"
-                                                : "border-border-subtle bg-bg-surface"
-                                                } ${isCompleted ? "opacity-60" : ""}`}
+                                                : "border-border-subtle bg-bg-surface hover:border-border-strong hover:bg-state-hover"
+                                                } ${isCompleted ? "opacity-60" : ""} ${!sessionId ? "cursor-default opacity-50" : "cursor-pointer"}`}
                                         >
                                             <div className="flex items-center gap-2">
                                                 <span className="text-lg">{statusIcon}</span>
-                                                <span className="text-sm font-medium text-text-primary">
-                                                    {stage.name}
-                                                </span>
-                                                <span className="text-xs text-text-muted">
-                                                    Graph: {stage.graphId} | Prompt: {stage.promptPath.split('/').pop()?.replace('.md', '')}
-                                                </span>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-sm font-medium text-text-primary truncate">
+                                                            {stage.name}
+                                                        </span>
+                                                        {sessionId && (
+                                                            <span className="text-[10px] text-text-muted bg-bg-elevated px-1.5 py-0.5 rounded border border-border-subtle">
+                                                                Details
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-xs text-text-muted block truncate">
+                                                        Graph: {stage.graphId} | Prompt: {stage.promptPath.split('/').pop()?.replace('.md', '')}
+                                                    </span>
+                                                </div>
                                             </div>
-                                        </div>
+                                        </button>
                                     );
                                 })}
                             </div>
                         </Panel>
+
+                        {selectedStage && (
+                            <StageDetailModal
+                                isOpen={!!selectedStage}
+                                onClose={() => setSelectedStage(null)}
+                                stageId={selectedStage.id}
+                                stageName={selectedStage.name}
+                                sessionId={selectedStage.sessionId}
+                                status={selectedStage.status}
+                            />
+                        )}
 
                         {/* Advanced Visualizations (Completed or with findings) */}
                         {chain.aggregatedFindings.length > 0 && (

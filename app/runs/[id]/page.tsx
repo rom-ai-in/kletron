@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Panel } from "@/src/components/ui/Panel";
 import { Button } from "@/src/components/ui/Button";
 import type { AuditChain, AuditRun, ChainStatus } from "@/src/services/chainTypes";
+import { StageDetailModal } from "@/src/components/StageDetailModal";
 
 interface RunDetailPageProps {
     params: { id: string };
@@ -16,6 +17,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
     const [chain, setChain] = useState<AuditChain | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [selectedStage, setSelectedStage] = useState<{ id: string; name: string; sessionId: string; status: string } | null>(null);
 
     useEffect(() => {
         void fetchRun();
@@ -83,7 +85,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                     <div className="flex gap-2">
                         <Button
                             variant="secondary"
-                            onClick={() => router.push(`/chains/${run.chainId}`)}
+                            onClick={() => router.push(`/campaigns/${run.chainId}`)}
                         >
                             View Campaign Config
                         </Button>
@@ -115,25 +117,57 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                 {chain.stages.map((stage, index) => {
                                     const isCompleted = index < run.currentStageIndex;
                                     const isCurrent = index === run.currentStageIndex;
+                                    const sessionId = run.sessionIds?.[index];
 
                                     return (
-                                        <div
+                                        <button
                                             key={stage.id}
-                                            className={`flex items-center gap-3 rounded-md border p-3 ${isCurrent && run.status === "RUNNING" ? "border-sky-500/50 bg-sky-500/5" : "border-border-subtle"
-                                                }`}
+                                            onClick={() => {
+                                                if (sessionId) {
+                                                    setSelectedStage({
+                                                        id: stage.id,
+                                                        name: stage.name,
+                                                        sessionId,
+                                                        status: isCompleted ? "Completed" : isCurrent ? "Running" : "Pending"
+                                                    });
+                                                }
+                                            }}
+                                            disabled={!sessionId}
+                                            className={`w-full text-left flex items-center gap-3 rounded-md border p-3 transition ${isCurrent && run.status === "RUNNING"
+                                                ? "border-sky-500/50 bg-sky-500/5"
+                                                : "border-border-subtle hover:bg-state-hover"
+                                                } ${!sessionId ? "cursor-default opacity-50" : "cursor-pointer"}`}
                                         >
                                             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-elevated text-[10px] font-bold">
-                                                {isCompleted ? "✅" : index + 1}
+                                                {isCompleted || (run.status === "COMPLETED" && isCurrent) ? "✅" : index + 1}
                                             </div>
                                             <div className="flex-1">
-                                                <div className="text-sm font-medium">{stage.name}</div>
+                                                <div className="flex items-center justify-between">
+                                                    <div className="text-sm font-medium">{stage.name}</div>
+                                                    {sessionId && (
+                                                        <span className="text-[10px] text-text-muted bg-bg-elevated px-1.5 py-0.5 rounded border border-border-subtle">
+                                                            View Logs
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="text-[10px] text-text-muted font-mono">{stage.graphId} · {stage.promptPath}</div>
                                             </div>
-                                        </div>
+                                        </button>
                                     );
                                 })}
                             </div>
                         </Panel>
+
+                        {selectedStage && (
+                            <StageDetailModal
+                                isOpen={!!selectedStage}
+                                onClose={() => setSelectedStage(null)}
+                                stageId={selectedStage.id}
+                                stageName={selectedStage.name}
+                                sessionId={selectedStage.sessionId}
+                                status={selectedStage.status}
+                            />
+                        )}
 
                         {/* Final Report */}
                         {run.finalReport && (

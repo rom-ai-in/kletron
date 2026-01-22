@@ -39,7 +39,7 @@ const CreateChainSchema = z.object({
 });
 
 /**
- * GET /api/chains
+ * GET /api/campaigns
  * List all campaigns with optional filtering
  */
 export async function GET(req: NextRequest) {
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({ chains }, { status: 200 });
     } catch (error) {
-        console.error("[API /api/chains GET] Error:", error);
+        console.error("[API /api/campaigns GET] Error:", error);
         return NextResponse.json(
             { error: "Failed to list campaigns" },
             { status: 500 }
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/chains
+ * POST /api/campaigns
  * Create a new campaign
  */
 export async function POST(req: NextRequest) {
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ chainId }, { status: 201 });
     } catch (error) {
-        console.error("[API /api/chains POST] Error:", error);
+        console.error("[API /api/campaigns POST] Error:", error);
         return NextResponse.json(
             { error: "Failed to create campaign" },
             { status: 500 }

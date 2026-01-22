@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { chainExecutor } from "@/src/services/chainExecutor";
 
 /**
- * GET /api/chains/[id]/report
+ * GET /api/campaigns/[id]/report
  * Get aggregated report for a completed chain
  */
 export async function GET(
@@ -35,7 +35,7 @@ export async function GET(
             { status: 200 }
         );
     } catch (error) {
-        console.error(`[API /api/chains/${params.id}/report GET] Error:`, error);
+        console.error(`[API /api/campaigns/${params.id}/report GET] Error:`, error);
         return NextResponse.json(
             { error: "Failed to get report" },
             { status: 500 }

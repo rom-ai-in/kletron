@@ -155,7 +155,7 @@ export default function RunsPage() {
                                             variant="secondary"
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                router.push(`/chains/${run.chainId}`);
+                                                router.push(`/campaigns/${run.chainId}`);
                                             }}
                                         >
                                             View Campaign

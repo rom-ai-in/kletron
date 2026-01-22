@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { chainExecutor } from "@/src/services/chainExecutor";
 
 /**
- * PUT /api/chains/[id]/execute
+ * PUT /api/campaigns/[id]/execute
  * Start campaign execution (non-blocking)
  */
 export async function PUT(
@@ -32,7 +32,7 @@ export async function PUT(
 
         return NextResponse.json({ status: "STARTED" }, { status: 200 });
     } catch (error) {
-        console.error(`[API /api/chains/${params.id}/execute PUT] Error:`, error);
+        console.error(`[API /api/campaigns/${params.id}/execute PUT] Error:`, error);
         return NextResponse.json(
             { error: "Failed to start campaign execution" },
             { status: 500 }

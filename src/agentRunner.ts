@@ -33,6 +33,35 @@ export type TimelineEvent = {
   endedAt?: string;
 };
 
+// Metric that will be sent back to the UI and persisted in MongoDB
+export type StageMetric = {
+  stageId: string;               // e.g. "phase1", "phase2", …
+  stageLabel: string;            // human readable label from phaseDefinitions
+  findings: number;              // length of outputs.findings (if any)
+  claims: number;                // length of outputs.raw_claims (if any)
+  verified: number;              // length of outputs.verified_findings (if any)
+};
+
+// Helper that extracts the three counters from a phase result and pushes them
+function addStageMetric(
+  metrics: StageMetric[],
+  phaseId: string,
+  phaseLabel: string,
+  result: any
+) {
+  const findings = Array.isArray(result?.parsed?.findings)
+    ? result.parsed.findings.length
+    : 0;
+  const claims = Array.isArray(result?.parsed?.raw_claims)
+    ? result.parsed.raw_claims.length
+    : 0;
+  const verified = Array.isArray(result?.parsed?.verified_findings)
+    ? result.parsed.verified_findings.length
+    : 0;
+
+  metrics.push({ stageId: phaseId, stageLabel: phaseLabel, findings, claims, verified });
+}
+
 export type AgentWorkflowResult = {
   sessionId: string;
   timeline: TimelineEvent[];
@@ -46,6 +75,7 @@ export type AgentWorkflowResult = {
     tasks: TaskTicket[];
     report: string;
     meta?: Record<string, unknown>;
+    stageMetrics?: StageMetric[];
   };
   eventStream: AgentEvent[];
 };
@@ -391,6 +421,10 @@ export async function runAgentWorkflow(
 
   // 1. Create Session
   const sessionId = await auditService.createSession(userRequest);
+
+  // ***** NEW: collect per-stage metrics *****
+  const stageMetrics: StageMetric[] = [];
+
   console.info(`[AgentRunner] Started MongoDB session: ${sessionId}`);
 
   const flushUpdate = async (outputs?: AgentWorkflowResult["outputs"]) => {
@@ -411,7 +445,7 @@ export async function runAgentWorkflow(
       auditService.updateSession(sessionId, {
         timeline: payload.timeline,
         eventStream: payload.eventStream, // Caution: this grows large
-        outputs: payload.outputs as any // Types might be lose here, safe to cast
+        outputs: { ...(payload.outputs || {} as any), stageMetrics } as any
       }).catch(err => console.error("Background update failed", err));
     }
   };
@@ -478,6 +512,8 @@ export async function runAgentWorkflow(
         flushUpdate,
       }
     );
+    addStageMetric(stageMetrics, "phase1", phaseDefinitions["phase1"].label, phase1Result);
+
     const parsedContext = (phase1Result.parsed as any)?.context ?? {};
     const context: AuditState["context"] = {
       mission:
@@ -509,6 +545,8 @@ export async function runAgentWorkflow(
         flushUpdate,
       }
     );
+    addStageMetric(stageMetrics, "phase2", phaseDefinitions["phase2"].label, phase2Result);
+
     const initialTargets = (phase2Result.parsed as any)?.target_files ?? [];
     const { validTargets, droppedTargets } = await normalizeAndValidateTargetFiles(
       Array.isArray(initialTargets) ? initialTargets : []
@@ -543,6 +581,8 @@ export async function runAgentWorkflow(
         flushUpdate,
       }
     );
+    addStageMetric(stageMetrics, "phase3", phaseDefinitions["phase3"].label, phase3Result);
+
     const phase3Parsed = (phase3Result.parsed as any) ?? {};
     const rawClaims = phase3Parsed?.raw_claims ?? [];
     const findings = phase3Parsed?.findings ?? [];
@@ -609,6 +649,8 @@ export async function runAgentWorkflow(
         flushUpdate,
       }
     );
+    addStageMetric(stageMetrics, "phase4", phaseDefinitions["phase4"].label, phase4Result);
+
     const verdicts = (phase4Result as { verified_findings?: AuditState["verified_findings"] }).verified_findings ?? [];
     const phase4Entry = timeline.find((entry) => entry.id === "phase4");
     if (phase4Entry) {
@@ -636,6 +678,8 @@ export async function runAgentWorkflow(
         flushUpdate,
       }
     );
+    addStageMetric(stageMetrics, "phase5", phaseDefinitions["phase5"].label, phase5Result);
+
 
     const reportMarkdown = (phase5Result.parsed as any)?.report_markdown ?? "";
     const tasksSummary = (phase5Result.parsed as any)?.tasks ?? [];
@@ -687,6 +731,7 @@ export async function runAgentWorkflow(
         tasks: Array.isArray(tasksSummary) ? tasksSummary : [],
         report: safeReportMarkdown,
         meta: {},
+        stageMetrics,
       },
       eventStream,
     };

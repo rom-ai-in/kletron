@@ -799,6 +799,34 @@ export const outputFormatTool = tool(
   }
 );
 
+import { semanticSearch } from "../services/vectorService";
+
+export const semanticCodeSearchTool = tool(
+  async (input: {
+    query: string;
+    path?: string;
+    language?: string;
+    maxResults?: number;
+  }) => {
+    const results = await semanticSearch(input.query, {
+      path: input.path,
+      language: input.language,
+      maxResults: input.maxResults ?? 10,
+    });
+    return formatResult(results);
+  },
+  {
+    name: "semantic_code_search",
+    description: "Find code semantically similar to a natural language query. Use for conceptual searches like 'authentication handling', 'error retry logic', or 'validation patterns'. For exact text or regex matches, use git_grep instead.",
+    schema: z.object({
+      query: z.string().describe("Natural language query describing what you are looking for"),
+      path: z.string().optional().describe("Limit search to files under this relative path"),
+      language: z.string().optional().describe("Filter by programming language (e.g., typescript, python)"),
+      maxResults: z.number().int().positive().optional().default(10).describe("Maximum number of snippets to return"),
+    }),
+  }
+);
+
 export const allMcpTools = [
   listFilesTool,
   readFileTool,
@@ -827,4 +855,5 @@ export const allMcpTools = [
   strReplaceEditorTool,
   executeBashTool,
   outputFormatTool,
+  semanticCodeSearchTool,
 ];

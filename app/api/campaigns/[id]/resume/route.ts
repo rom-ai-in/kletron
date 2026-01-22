@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { chainExecutor } from "@/src/services/chainExecutor";
 
 /**
- * POST /api/chains/[id]/resume
+ * POST /api/campaigns/[id]/resume
  * Resume a paused campaign
  */
 export async function POST(
@@ -32,7 +32,7 @@ export async function POST(
 
         return NextResponse.json({ status: "RUNNING" }, { status: 200 });
     } catch (error) {
-        console.error(`[API /api/chains/${params.id}/resume POST] Error:`, error);
+        console.error(`[API /api/campaigns/${params.id}/resume POST] Error:`, error);
         return NextResponse.json(
             { error: "Failed to resume campaign" },
             { status: 500 }

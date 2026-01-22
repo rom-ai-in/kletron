@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 
 import type { McpToolMeta } from "../src/tools/mcpToolMetadata";
 import type {
@@ -19,6 +18,7 @@ import {
   type AuditContext,
 } from "../src/shared/auditContext";
 import { AzureConfigForm, LMStudioConfigForm } from "../src/components/LlmConfigForms";
+import { Loader2 } from "lucide-react";
 import { PromptSelectorModal } from "../src/components/PromptSelectorModal";
 
 type AgentEventKind = AgentEvent["kind"];
@@ -293,7 +293,6 @@ function HeaderControls({
   detailProvider,
   onSetDetailProvider,
 }: HeaderControlsProps) {
-  const router = useRouter();
   const [isGraphMenuOpen, setIsGraphMenuOpen] = useState(false);
   const [isLlmMenuOpen, setIsLlmMenuOpen] = useState(false);
   const graphMenuRef = useRef<HTMLDivElement | null>(null);
@@ -302,6 +301,39 @@ function HeaderControls({
   const llmDetail = detailProvider ?? modelProvider;
   const [isEditingLlm, setIsEditingLlm] = useState(false);
   const [llmConfigFromDb, setLlmConfigFromDb] = useState<any>(null);
+  const [isTesting, setIsTesting] = useState<"azure" | "lmstudio" | null>(null);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string; latency?: number } | null>(null);
+
+  const handleTestConnection = async (provider: "azure" | "lmstudio") => {
+    setIsTesting(provider);
+    setTestResult(null);
+    try {
+      // Use config from DB/env if available
+      const configToTest = provider === 'azure'
+        ? (llmConfigFromDb?.azure ?? llmInfo?.azure)
+        : (llmConfigFromDb?.lmstudio ?? llmInfo?.lmstudio ?? { baseUrl: lmStudioBaseUrl, model: lmStudioModel });
+
+      if (!configToTest) throw new Error("No configuration found");
+
+      const res = await fetch("/api/llm-config/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          config: configToTest,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Connection refused");
+
+      setTestResult({ success: true, message: `Success! Latency: ${data.latency}ms`, latency: data.latency });
+    } catch (err) {
+      setTestResult({ success: false, message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setIsTesting(null);
+    }
+  };
 
   // Fetch LLM config from database on mount
   const fetchLlmConfig = useCallback(async () => {
@@ -339,7 +371,14 @@ function HeaderControls({
       setIsEditingLlm(false);
     } else {
       const error = await response.json();
-      throw new Error(error.error || 'Failed to save configuration');
+      let errorMessage = error.error || 'Failed to save configuration';
+      if (error.details && Array.isArray(error.details)) {
+        const details = error.details
+          .map((d: any) => `${d.path.join('.')}: ${d.message}`)
+          .join(', ');
+        errorMessage += ` (${details})`;
+      }
+      throw new Error(errorMessage);
     }
   }, [fetchLlmConfig]);
 
@@ -359,7 +398,14 @@ function HeaderControls({
       setIsEditingLlm(false);
     } else {
       const error = await response.json();
-      throw new Error(error.error || 'Failed to save configuration');
+      let errorMessage = error.error || 'Failed to save configuration';
+      if (error.details && Array.isArray(error.details)) {
+        const details = error.details
+          .map((d: any) => `${d.path.join('.')}: ${d.message}`)
+          .join(', ');
+        errorMessage += ` (${details})`;
+      }
+      throw new Error(errorMessage);
     }
   }, [fetchLlmConfig]);
 
@@ -639,6 +685,7 @@ function HeaderControls({
           onSetLlmInfoOpen(false);
           onSetDetailProvider(null);
           setIsEditingLlm(false);
+          setTestResult(null);
         }}
         title="LLM details"
         subtitle={llmDetail === "azure" ? "Azure OpenAI" : "LM Studio (local)"}
@@ -654,6 +701,9 @@ function HeaderControls({
                 <p className="mt-1 text-xs text-text-muted">Deployment: {llmConfigFromDb?.azure?.deployment ?? llmInfo?.azure?.deployment ?? "Not set"}</p>
                 <p className="mt-1 text-xs text-text-muted">Model: {llmConfigFromDb?.azure?.model ?? llmInfo?.azure?.model ?? "Not set"}</p>
                 <p className="mt-1 text-xs text-text-muted">API version: {llmConfigFromDb?.azure?.apiVersion ?? llmInfo?.azure?.apiVersion ?? "Not set"}</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="text-xs text-text-muted">API Key: <span className="font-mono">••••••••</span></p>
+                </div>
               </div>
               {llmError && <p className="text-xs text-rose-400">{llmError}</p>}
               <div className="flex gap-2 pt-2">
@@ -669,7 +719,31 @@ function HeaderControls({
                 >
                   Reset to Environment
                 </button>
+                <button
+                  onClick={() => void handleTestConnection('azure')}
+                  className="px-4 py-2 rounded-md bg-bg-surface border border-border-subtle text-text-primary hover:bg-state-hover transition text-xs font-medium flex items-center gap-2"
+                >
+                  {isTesting === 'azure' ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                  Test Connection
+                </button>
               </div>
+              {testResult && (
+                <div className={`mt-3 rounded-md border p-3 text-xs ${testResult.success ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400' : 'border-rose-500/20 bg-rose-500/5 text-rose-400'}`}>
+                  <p className="font-semibold flex items-center gap-2">
+                    {testResult.success ? (
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    )}
+                    {testResult.success ? "Connection Verified" : "Connection Failed"}
+                  </p>
+                  <p className="mt-1 ml-5 opacity-90">{testResult.message}</p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-4 text-sm text-text-secondary">
@@ -699,10 +773,33 @@ function HeaderControls({
                 >
                   Reset to Environment
                 </button>
+                <button
+                  onClick={() => void handleTestConnection('lmstudio')}
+                  className="px-4 py-2 rounded-md bg-bg-surface border border-border-subtle text-text-primary hover:bg-state-hover transition text-xs font-medium flex items-center gap-2"
+                >
+                  {isTesting === 'lmstudio' ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                  Test Connection
+                </button>
               </div>
+              {testResult && (
+                <div className={`mt-3 rounded-md border p-3 text-xs ${testResult.success ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400' : 'border-rose-500/20 bg-rose-500/5 text-rose-400'}`}>
+                  <p className="font-semibold flex items-center gap-2">
+                    {testResult.success ? (
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    )}
+                    {testResult.success ? "Connection Verified" : "Connection Failed"}
+                  </p>
+                  <p className="mt-1 ml-5 opacity-90">{testResult.message}</p>
+                </div>
+              )}
             </div>
-          )
-        ) : (
+          )) : (
           // Edit mode
           llmDetail === "azure" ? (
             <AzureConfigForm
@@ -711,6 +808,7 @@ function HeaderControls({
                 deployment: llmConfigFromDb?.azure?.deployment ?? llmInfo?.azure?.deployment ?? "",
                 model: llmConfigFromDb?.azure?.model ?? llmInfo?.azure?.model ?? "",
                 apiVersion: llmConfigFromDb?.azure?.apiVersion ?? llmInfo?.azure?.apiVersion ?? "",
+                apiKey: llmConfigFromDb?.azure?.apiKey ?? (llmInfo?.azure?.configured ? "••••••••" : ""),
               }}
               onSave={handleSaveAzure}
               onCancel={() => setIsEditingLlm(false)}
@@ -720,13 +818,15 @@ function HeaderControls({
               initialConfig={{
                 baseUrl: llmConfigFromDb?.lmstudio?.baseUrl ?? lmStudioBaseUrl,
                 model: llmConfigFromDb?.lmstudio?.model ?? lmStudioModel,
+                apiKey: llmConfigFromDb?.lmstudio?.apiKey ?? (llmInfo?.lmstudio?.configured ? "lm-studio" : ""),
               }}
               onSave={handleSaveLMStudio}
               onCancel={() => setIsEditingLlm(false)}
             />
           )
-        )}
-      </Modal>
+        )
+        }
+      </Modal >
     </div >
   );
 }

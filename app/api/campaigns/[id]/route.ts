@@ -4,7 +4,7 @@ import { chainExecutor } from "@/src/services/chainExecutor";
 import { ChainConfigBuilder } from "@/src/services/chainConfigBuilder";
 
 /**
- * Zod schema for updating a chain
+ * Zod schema for updating a campaign
  */
 const UpdateChainSchema = z.object({
     config: z.object({
@@ -36,7 +36,7 @@ const UpdateChainSchema = z.object({
 });
 
 /**
- * GET /api/chains/[id]
+ * GET /api/campaigns/[id]
  * Get campaign details by ID
  */
 export async function GET(
@@ -72,7 +72,7 @@ export async function GET(
 
         return NextResponse.json({ chain, latestRun }, { status: 200 });
     } catch (error) {
-        console.error(`[API /api/chains/${params.id} GET] Error:`, error);
+        console.error(`[API /api/campaigns/${params.id} GET] Error:`, error);
         return NextResponse.json(
             { error: "Failed to get campaign" },
             { status: 500 }
@@ -81,7 +81,7 @@ export async function GET(
 }
 
 /**
- * DELETE /api/chains/[id]
+ * DELETE /api/campaigns/[id]
  * Delete a campaign
  */
 export async function DELETE(
@@ -109,7 +109,7 @@ export async function DELETE(
 
         return NextResponse.json({ deleted: true }, { status: 200 });
     } catch (error) {
-        console.error(`[API /api/chains/${params.id} DELETE] Error:`, error);
+        console.error(`[API /api/campaigns/${params.id} DELETE] Error:`, error);
         return NextResponse.json(
             { error: "Failed to delete campaign" },
             { status: 500 }
@@ -118,7 +118,7 @@ export async function DELETE(
 }
 
 /**
- * PUT /api/chains/[id]
+ * PUT /api/campaigns/[id]
  * Update a campaign
  */
 export async function PUT(
@@ -167,7 +167,7 @@ export async function PUT(
 
         return NextResponse.json({ updated: true }, { status: 200 });
     } catch (error) {
-        console.error(`[API /api/chains/${params.id} PUT] Error:`, error);
+        console.error(`[API /api/campaigns/${params.id} PUT] Error:`, error);
         return NextResponse.json(
             { error: "Failed to update campaign" },
             { status: 500 }

@@ -47,7 +47,7 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
             if (!editChainId) return;
             setLoading(true);
             try {
-                const res = await fetch(`/api/chains/${editChainId}`);
+                const res = await fetch(`/api/campaigns/${editChainId}`);
                 if (res.ok) {
                     const data = await res.json();
                     setChainData(data.chain);
@@ -115,7 +115,7 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
         setLoading(true);
         setError("");
         try {
-            const url = editChainId ? `/api/chains/${editChainId}` : "/api/chains";
+            const url = editChainId ? `/api/campaigns/${editChainId}` : "/api/campaigns";
             const method = editChainId ? "PUT" : "POST";
 
             const res = await fetch(url, {
@@ -125,7 +125,23 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
             });
             if (!res.ok) {
                 const data = await res.json();
-                throw new Error(data.message || data.error || `Failed to ${editChainId ? "update" : "create"} campaign`);
+                let errorMessage = data.message || data.error || `Failed to ${editChainId ? "update" : "create"} campaign`;
+
+                if (data.details && Array.isArray(data.details)) {
+                    // improve formatting of validation errors
+                    const details = data.details
+                        .map((d: any) => {
+                            if (typeof d === 'string') return d;
+                            if (d.path && Array.isArray(d.path)) {
+                                return `${d.path.join('.')}: ${d.message}`;
+                            }
+                            return d.message;
+                        })
+                        .join(', ');
+                    errorMessage += ` (${details})`;
+                }
+
+                throw new Error(errorMessage);
             }
             const data = await res.json();
             onCreated(editChainId || data.chainId);

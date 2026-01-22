@@ -13,7 +13,8 @@ import {
     Terminal,
     History,
     Copy,
-    Check
+    Check,
+    Database
 } from "lucide-react";
 
 const navItems = [
@@ -25,12 +26,17 @@ const navItems = [
     {
         label: "Campaigns",
         icon: Layers,
-        href: "/chains",
+        href: "/campaigns",
     },
     {
         label: "Execution Runs",
         icon: PlayCircle,
         href: "/runs",
+    },
+    {
+        label: "Vector Index",
+        icon: Database,
+        href: "/vectors",
     },
     {
         label: "History",

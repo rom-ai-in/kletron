@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { chainExecutor } from "@/src/services/chainExecutor";
 
 /**
- * GET /api/chains/[id]/stream
+ * GET /api/campaigns/[id]/stream
  * Server-Sent Events stream for real-time chain execution updates
  */
 export async function GET(

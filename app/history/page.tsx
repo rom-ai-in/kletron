@@ -13,8 +13,10 @@ import {
     AlertCircle,
     CheckCircle2,
     PlayCircle,
-    Search
+    Search,
+    MoreHorizontal
 } from "lucide-react";
+import { StageDetailModal } from "@/src/components/StageDetailModal";
 
 type ActivityItem = {
     id: string;
@@ -42,6 +44,7 @@ export default function HistoryPage() {
     const [error, setError] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [filter, setFilter] = useState<FilterType>("all");
+    const [selectedSession, setSelectedSession] = useState<{ id: string; title: string, status: string } | null>(null);
 
     useEffect(() => {
         void fetchActivity();
@@ -147,56 +150,80 @@ export default function HistoryPage() {
                         <Panel
                             key={`${item.type}-${item.id}`}
                             className="group relative cursor-pointer overflow-hidden p-0 transition hover:border-border-strong hover:bg-state-hover"
-                            onClick={() => router.push(item.link)}
+                            onClick={() => {
+                                if (item.type === "WORKBENCH") {
+                                    setSelectedSession({
+                                        id: item.id,
+                                        title: item.title,
+                                        status: item.status
+                                    });
+                                } else {
+                                    router.push(item.link);
+                                }
+                            }}
                         >
                             <div className="flex items-stretch text-left">
                                 {/* Type indicator */}
                                 <div className={`flex w-1 items-stretch ${item.type === "WORKBENCH" ? "bg-sky-500/40" : "bg-emerald-500/40"
                                     }`} />
 
-                                <div className="flex flex-1 items-center justify-between gap-4 p-4">
-                                    <div className="flex min-w-0 flex-1 items-start gap-4">
-                                        <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${item.type === "WORKBENCH" ? "bg-sky-500/10 text-sky-400" : "bg-emerald-500/10 text-emerald-400"
-                                            }`}>
-                                            {item.type === "WORKBENCH" ? <Terminal className="h-4 w-4" /> : <Layers className="h-4 w-4" />}
-                                        </div>
-
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-3">
-                                                <h3 className="truncate text-sm font-semibold text-text-primary group-hover:text-text-primary">
-                                                    {item.title}
-                                                </h3>
-                                                <StatusBadge status={item.status} />
-                                            </div>
-
-                                            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-text-muted">
-                                                <span className="flex items-center gap-1">
-                                                    <Clock className="h-3 w-3" />
-                                                    {new Date(item.startedAt).toLocaleString(undefined, {
-                                                        dateStyle: "medium",
-                                                        timeStyle: "short"
-                                                    })}
-                                                </span>
-                                                <span className="font-mono opacity-60">
-                                                    {item.type === "WORKBENCH" ? "Workbench Run" : "Campaign Execution"}
-                                                </span>
-                                                {item.metadata?.totalFindings !== undefined && (
-                                                    <span className="flex items-center gap-1 text-text-secondary">
-                                                        {item.metadata.totalFindings} findings
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            {item.conclusion && (
-                                                <p className="mt-2 line-clamp-1 text-xs text-text-secondary italic">
-                                                    "{item.conclusion}"
-                                                </p>
-                                            )}
-                                        </div>
+                                <div className="flex flex-1 gap-4 p-4">
+                                    {/* Column 1: Icon */}
+                                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${item.type === "WORKBENCH" ? "bg-sky-500/10 text-sky-400" : "bg-emerald-500/10 text-emerald-400"
+                                        }`}>
+                                        {item.type === "WORKBENCH" ? <Terminal className="h-4 w-4" /> : <Layers className="h-4 w-4" />}
                                     </div>
 
-                                    <div className="flex shrink-0 items-center gap-4">
-                                        <ChevronRight className="h-4 w-4 text-text-muted opacity-0 transition group-hover:opacity-100" />
+                                    {/* Column 2: Main Content (Flex-1 to consume space + Min-W-0 to force truncate) */}
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="truncate text-sm font-semibold text-text-primary group-hover:text-text-primary">
+                                                {item.title}
+                                            </h3>
+                                        </div>
+
+                                        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-text-muted">
+                                            <span className="flex items-center gap-1">
+                                                <Clock className="h-3 w-3" />
+                                                {new Date(item.startedAt).toLocaleString(undefined, {
+                                                    dateStyle: "medium",
+                                                    timeStyle: "short"
+                                                })}
+                                            </span>
+                                            <span className="font-mono opacity-60">
+                                                {item.type === "WORKBENCH" ? "Workbench Run" : "Campaign Execution"}
+                                            </span>
+                                            {item.metadata?.totalFindings !== undefined && (
+                                                <span className="flex items-center gap-1 text-text-secondary">
+                                                    {item.metadata.totalFindings} findings
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {item.conclusion && (
+                                            <p className="mt-2 line-clamp-1 text-xs text-text-secondary italic">
+                                                "{item.conclusion}"
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Column 3: Status & Actions (Right aligned, fixed width behavior) */}
+                                    <div className="flex shrink-0 flex-col items-end justify-between gap-2 pl-2">
+                                        <StatusBadge status={item.status} />
+
+                                        <div className="flex items-center gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-7 w-7 text-text-muted transition hover:text-text-primary"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                }}
+                                            >
+                                                <MoreHorizontal className="h-4 w-4" />
+                                            </Button>
+                                            <ChevronRight className="h-4 w-4 text-text-muted opacity-0 transition group-hover:opacity-100" />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -204,7 +231,18 @@ export default function HistoryPage() {
                     ))}
                 </div>
             </div>
-        </div>
+
+            {selectedSession && (
+                <StageDetailModal
+                    isOpen={!!selectedSession}
+                    onClose={() => setSelectedSession(null)}
+                    stageId={selectedSession.id}
+                    stageName={selectedSession.title}
+                    sessionId={selectedSession.id}
+                    status={selectedSession.status}
+                />
+            )}
+        </div >
     );
 }
 

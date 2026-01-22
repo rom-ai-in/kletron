@@ -11,6 +11,7 @@ import {
   goToDefinitionTool,
   readFileRangeTool,
   referencesTool,
+  semanticCodeSearchTool,
 } from "../tools/mcpTools";
 import {
   auditPhaseConfig,
@@ -243,6 +244,7 @@ export async function runPhase1ReconAgent(
   const reconTools = [
     ...allMcpTools.filter((tool) => tool.name !== "list_files"),
     createListFilesTool(2),
+    semanticCodeSearchTool,
   ];
 
   return runSchemaReactAgent({
@@ -439,6 +441,7 @@ export async function runPhase4AdjudicatorAgent(input: {
     findReferencesTool,
     referencesTool,
     readFileRangeTool,
+    semanticCodeSearchTool,
   ];
 
   return runSchemaReactAgent({

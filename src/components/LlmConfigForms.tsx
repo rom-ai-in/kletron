@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Check, AlertCircle, Loader2 } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
 type AzureConfigFormProps = {
     initialConfig?: {
@@ -23,9 +25,47 @@ export function AzureConfigForm({ initialConfig, onSave, onCancel }: AzureConfig
     const [deployment, setDeployment] = useState(initialConfig?.deployment ?? "");
     const [model, setModel] = useState(initialConfig?.model ?? "");
     const [apiVersion, setApiVersion] = useState(initialConfig?.apiVersion ?? "");
-    const [apiKey, setApiKey] = useState("");
+    const [apiKey, setApiKey] = useState(initialConfig?.apiKey ?? "");
+    const [showApiKey, setShowApiKey] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [testStatus, setTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
+    const [testMessage, setTestMessage] = useState<string>("");
+
+    const handleTestConnection = async () => {
+        setTestStatus("testing");
+        setTestMessage("");
+        setError(null);
+
+        try {
+            const res = await fetch("/api/llm-config/test", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    provider: "azure",
+                    config: {
+                        endpoint,
+                        deployment,
+                        model,
+                        apiVersion,
+                        apiKey,
+                    },
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Connection refused");
+            }
+
+            setTestStatus("success");
+            setTestMessage(`Success! Latency: ${data.latency}ms`);
+        } catch (err) {
+            setTestStatus("error");
+            setTestMessage(err instanceof Error ? err.message : "Connection failed");
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -38,7 +78,7 @@ export function AzureConfigForm({ initialConfig, onSave, onCancel }: AzureConfig
                 deployment,
                 model,
                 apiVersion,
-                apiKey,
+                apiKey: apiKey === "••••••••" ? (initialConfig?.apiKey && initialConfig.apiKey !== "••••••••" ? initialConfig.apiKey : "") : apiKey,
             });
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save configuration");
@@ -111,17 +151,26 @@ export function AzureConfigForm({ initialConfig, onSave, onCancel }: AzureConfig
 
             <div>
                 <label htmlFor="azure-api-key" className="block text-[11px] text-text-muted mb-1">
-                    API Key {initialConfig?.apiKey && <span className="text-text-muted">(leave empty to keep current)</span>}
+                    API Key
                 </label>
-                <input
-                    id="azure-api-key"
-                    type="password"
-                    required={!initialConfig?.apiKey}
-                    className="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none transition focus:border-border-strong"
-                    placeholder={initialConfig?.apiKey ? "••••••••" : "Enter API key"}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                />
+                <div className="relative">
+                    <input
+                        id="azure-api-key"
+                        type={showApiKey ? "text" : "password"}
+                        required={!initialConfig?.apiKey}
+                        className="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none transition focus:border-border-strong pr-10"
+                        placeholder="Enter API key"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+                    >
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                </div>
             </div>
 
             {error && (
@@ -137,6 +186,26 @@ export function AzureConfigForm({ initialConfig, onSave, onCancel }: AzureConfig
                 >
                     Cancel
                 </button>
+                <button
+                    type="button"
+                    onClick={() => void handleTestConnection()}
+                    disabled={isSaving || testStatus === "testing"}
+                    className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-state-hover disabled:opacity-50"
+                >
+                    {testStatus === "testing" ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-text-muted" />
+                    ) : testStatus === "success" ? (
+                        <Check className="h-4 w-4 text-emerald-500" />
+                    ) : testStatus === "error" ? (
+                        <AlertCircle className="h-4 w-4 text-rose-500" />
+                    ) : null}
+                    {testStatus === "testing" ? "Testing..." : "Test Connection"}
+                </button>
+                {testMessage && testStatus !== "idle" && (
+                    <span className={`text-xs my-auto ${testStatus === "success" ? "text-emerald-500" : "text-rose-500"}`}>
+                        {testMessage}
+                    </span>
+                )}
                 <button
                     type="submit"
                     disabled={isSaving}
@@ -167,8 +236,44 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
     const [baseUrl, setBaseUrl] = useState(initialConfig?.baseUrl ?? "http://127.0.0.1:1234/v1");
     const [model, setModel] = useState(initialConfig?.model ?? "");
     const [apiKey, setApiKey] = useState(initialConfig?.apiKey ?? "");
+    const [showApiKey, setShowApiKey] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [testStatus, setTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
+    const [testMessage, setTestMessage] = useState<string>("");
+
+    const handleTestConnection = async () => {
+        setTestStatus("testing");
+        setTestMessage("");
+        setError(null);
+
+        try {
+            const res = await fetch("/api/llm-config/test", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    provider: "lmstudio",
+                    config: {
+                        baseUrl,
+                        model,
+                        apiKey: apiKey || undefined,
+                    },
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Connection refused");
+            }
+
+            setTestStatus("success");
+            setTestMessage(`Success! Latency: ${data.latency}ms`);
+        } catch (err) {
+            setTestStatus("error");
+            setTestMessage(err instanceof Error ? err.message : "Connection failed");
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -179,7 +284,7 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
             await onSave({
                 baseUrl,
                 model,
-                apiKey: apiKey || undefined,
+                apiKey: (apiKey === "••••••••" ? "" : apiKey) || undefined,
             });
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save configuration");
@@ -224,14 +329,23 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
                 <label htmlFor="lmstudio-api-key" className="block text-[11px] text-text-muted mb-1">
                     API Key <span className="text-text-muted">(optional)</span>
                 </label>
-                <input
-                    id="lmstudio-api-key"
-                    type="password"
-                    className="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none transition focus:border-border-strong"
-                    placeholder="lm-studio"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                />
+                <div className="relative">
+                    <input
+                        id="lmstudio-api-key"
+                        type={showApiKey ? "text" : "password"}
+                        className="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none transition focus:border-border-strong pr-10"
+                        placeholder="lm-studio"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+                    >
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                </div>
             </div>
 
             {error && (
@@ -247,6 +361,26 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
                 >
                     Cancel
                 </button>
+                <button
+                    type="button"
+                    onClick={() => void handleTestConnection()}
+                    disabled={isSaving || testStatus === "testing"}
+                    className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-state-hover disabled:opacity-50"
+                >
+                    {testStatus === "testing" ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-text-muted" />
+                    ) : testStatus === "success" ? (
+                        <Check className="h-4 w-4 text-emerald-500" />
+                    ) : testStatus === "error" ? (
+                        <AlertCircle className="h-4 w-4 text-rose-500" />
+                    ) : null}
+                    {testStatus === "testing" ? "Testing..." : "Test Connection"}
+                </button>
+                {testMessage && testStatus !== "idle" && (
+                    <span className={`text-xs my-auto ${testStatus === "success" ? "text-emerald-500" : "text-rose-500"}`}>
+                        {testMessage}
+                    </span>
+                )}
                 <button
                     type="submit"
                     disabled={isSaving}

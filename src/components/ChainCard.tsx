@@ -10,9 +10,10 @@ interface ChainCardProps {
     onEdit?: () => void;
     onPause?: () => void;
     onStop?: () => void;
+    onDelete?: () => void;
 }
 
-export function ChainCard({ chain, onView, onEdit, onPause, onStop }: ChainCardProps) {
+export function ChainCard({ chain, onView, onEdit, onPause, onStop, onDelete }: ChainCardProps) {
     const progress =
         chain.stages.length > 0
             ? ((chain.currentStageIndex / chain.stages.length) * 100).toFixed(0)
@@ -77,6 +78,16 @@ export function ChainCard({ chain, onView, onEdit, onPause, onStop }: ChainCardP
                     {chain.status === "RUNNING" && onStop && (
                         <Button size="sm" variant="danger" onClick={onStop}>
                             Stop
+                        </Button>
+                    )}
+                    {chain.status !== "RUNNING" && onDelete && (
+                        <Button size="sm" variant="danger" onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm("Are you sure you want to delete this campaign?")) {
+                                onDelete();
+                            }
+                        }}>
+                            Delete
                         </Button>
                     )}
                 </div>

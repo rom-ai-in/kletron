@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 import { getDb } from "../lib/db";
-import type { AgentWorkflowResult } from "../agentRunner";
+import type { AgentWorkflowResult, TimelineEvent, AgentEvent } from "../agentRunner";
 
 export type AuditSessionStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
 
@@ -10,7 +10,13 @@ export interface AuditSession {
     status: AuditSessionStatus;
     startedAt: Date;
     endedAt?: Date;
+    // Hoisted fields for direct access
+    timeline?: TimelineEvent[];
+    eventStream?: AgentEvent[];
+    outputs?: AgentWorkflowResult["outputs"];
+    // Kept for backward compatibility or full result object
     workflowResult?: Partial<AgentWorkflowResult>;
+    error?: string;
     lastUpdated: Date;
 }
 
@@ -37,19 +43,26 @@ export const auditService = {
         }
     },
 
-    async updateSession(id: string, workflowResult: Partial<AgentWorkflowResult>) {
+    async updateSession(id: string, updates: Partial<AgentWorkflowResult>) {
         if (!id) return;
         try {
             const db = await getDb();
+
+            // Extract fields to hoist to root level
+            const { timeline, eventStream, outputs, ...rest } = updates;
+
+            const updateDoc: any = {
+                status: "RUNNING",
+                lastUpdated: new Date()
+            };
+
+            if (timeline) updateDoc.timeline = timeline;
+            if (eventStream) updateDoc.eventStream = eventStream;
+            if (outputs) updateDoc.outputs = outputs;
+
             await db.collection(COLLECTION_NAME).updateOne(
                 { _id: new ObjectId(id) },
-                {
-                    $set: {
-                        workflowResult,
-                        status: "RUNNING",
-                        lastUpdated: new Date()
-                    }
-                }
+                { $set: updateDoc }
             );
         } catch (error) {
             console.error(`Failed to update session ${id}:`, error);
@@ -62,17 +75,27 @@ export const auditService = {
             const db = await getDb();
             const status: AuditSessionStatus = error ? "FAILED" : "COMPLETED";
 
+            const { timeline, eventStream, outputs } = finalResult || {};
+
+            const updateDoc: any = {
+                status,
+                endedAt: new Date(),
+                lastUpdated: new Date(),
+                ...(error ? { error: error.message } : {})
+            };
+
+            // Hoist fields if available
+            if (timeline) updateDoc.timeline = timeline;
+            if (eventStream) updateDoc.eventStream = eventStream;
+            if (outputs) updateDoc.outputs = outputs;
+
+            // Also store the full result in workflowResult for completeness if needed, 
+            // but hoisting is preferred for frontend access.
+            if (finalResult) updateDoc.workflowResult = finalResult;
+
             await db.collection(COLLECTION_NAME).updateOne(
                 { _id: new ObjectId(id) },
-                {
-                    $set: {
-                        workflowResult: finalResult,
-                        status,
-                        endedAt: new Date(),
-                        lastUpdated: new Date(),
-                        ...(error ? { error: error.message } : {})
-                    }
-                }
+                { $set: updateDoc }
             );
         } catch (dbError) {
             console.error(`Failed to complete session ${id}:`, dbError);

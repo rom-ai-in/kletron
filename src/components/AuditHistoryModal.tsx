@@ -11,6 +11,15 @@ type AuditSessionSummary = {
     endedAt?: string;
     workflowResult?: {
         conclusion?: string;
+        outputs?: {
+            stageMetrics?: Array<{
+                stageId: string;
+                stageLabel: string;
+                findings: number;
+                claims: number;
+                verified: number;
+            }>;
+        }
     };
 };
 
@@ -92,6 +101,33 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
                                 </p>
                             </div>
                         </div>
+
+                        {/* ---------- NEW: Stage Summary ---------- */}
+                        {session.workflowResult?.outputs?.stageMetrics && session.workflowResult.outputs.stageMetrics.length > 0 && (
+                            <div className="mt-3 border-t border-border-subtle pt-2">
+                                <h4 className="text-xs font-medium text-text-muted mb-1">Stage Summary</h4>
+                                <table className="w-full text-xs text-text-muted">
+                                    <thead className="border-b border-border-subtle">
+                                        <tr>
+                                            <th className="text-left py-1 font-medium text-text-secondary">Stage</th>
+                                            <th className="text-right py-1 font-medium text-text-secondary">Findings</th>
+                                            <th className="text-right py-1 font-medium text-text-secondary">Claims</th>
+                                            <th className="text-right py-1 font-medium text-text-secondary">Verified</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {session.workflowResult.outputs.stageMetrics.map((m) => (
+                                            <tr key={m.stageId} className="border-b border-border-subtle last:border-0 hover:bg-bg-elevated transition-colors">
+                                                <td className="py-1">{m.stageLabel}</td>
+                                                <td className="text-right py-1 font-mono">{m.findings}</td>
+                                                <td className="text-right py-1 font-mono">{m.claims}</td>
+                                                <td className="text-right py-1 font-mono">{m.verified}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
 
                         {session.workflowResult?.conclusion && (
                             <div className="mt-3 border-t border-border-subtle pt-2">

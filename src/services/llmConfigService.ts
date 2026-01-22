@@ -5,6 +5,8 @@ import {
     AzureOpenAIConfig,
     LMStudioConfig,
     validateLlmConfig,
+    AzureOpenAIConfigSchema,
+    LMStudioConfigSchema,
 } from "../schemas/llmConfig.schema";
 import { config } from "../config";
 
@@ -69,30 +71,48 @@ export async function updateAzureConfig(
     const collection = await getCollection();
     const currentConfig = await getLlmConfig();
 
+    // If API key is empty or masked, try to preserve the existing one
+    let configToSave = { ...azureConfig };
+    if (!configToSave.apiKey || configToSave.apiKey.trim() === "" || configToSave.apiKey.includes("•")) {
+        if (currentConfig.azure?.apiKey && !currentConfig.azure.apiKey.includes("•")) {
+            configToSave.apiKey = currentConfig.azure.apiKey;
+        } else {
+            // If we can't recover the key, and it's masked or empty, this is invalid state if we're trying to save.
+            // However, allowing empty might be valid if they want to clear it?
+            // But allowing "••••••••" is definitely wrong.
+            if (configToSave.apiKey?.includes("•")) {
+                throw new Error("Cannot save masked API key. Please enter the actual API key.");
+            }
+        }
+    }
+
     const updatedConfig: LlmConfig = {
         ...currentConfig,
-        azure: azureConfig,
+        azure: configToSave,
         updatedAt: new Date(),
     };
 
-    const validatedConfig = validateLlmConfig(updatedConfig);
+    // We only validate the Azure config here, as we don't want to fail
+    // if the existing LM Studio config is invalid/incomplete
+    const validatedAzure = AzureOpenAIConfigSchema.parse(configToSave);
+    updatedConfig.azure = validatedAzure;
 
     if (currentConfig._id) {
         await collection.updateOne(
             { _id: new ObjectId(currentConfig._id) } as any,
             {
-                $set: validatedConfig,
+                $set: updatedConfig,
             }
         );
     } else {
         const result = await collection.insertOne({
-            ...validatedConfig,
+            ...updatedConfig,
             createdAt: new Date(),
         });
-        validatedConfig._id = result.insertedId.toString();
+        updatedConfig._id = result.insertedId.toString();
     }
 
-    return validatedConfig;
+    return updatedConfig;
 }
 
 /**
@@ -104,30 +124,46 @@ export async function updateLMStudioConfig(
     const collection = await getCollection();
     const currentConfig = await getLlmConfig();
 
+    // If API key is empty or masked, try to preserve the existing one
+    let configToSave = { ...lmstudioConfig };
+    if (!configToSave.apiKey || configToSave.apiKey.trim() === "" || configToSave.apiKey.includes("•") || configToSave.apiKey === "lm-studio") {
+        // Note: LM Studio default might be "lm-studio", but if user explicitly clears it or it's masked...
+        if (currentConfig.lmstudio?.apiKey && !currentConfig.lmstudio.apiKey.includes("•")) {
+            configToSave.apiKey = currentConfig.lmstudio.apiKey;
+        } else {
+            if (configToSave.apiKey?.includes("•")) {
+                throw new Error("Cannot save masked API key. Please enter the actual API key.");
+            }
+        }
+    }
+
     const updatedConfig: LlmConfig = {
         ...currentConfig,
-        lmstudio: lmstudioConfig,
+        lmstudio: configToSave,
         updatedAt: new Date(),
     };
 
-    const validatedConfig = validateLlmConfig(updatedConfig);
+    // We only validate the LM Studio config here, as we don't want to fail
+    // if the existing Azure config is invalid/incomplete
+    const validatedLMStudio = LMStudioConfigSchema.parse(configToSave);
+    updatedConfig.lmstudio = validatedLMStudio;
 
     if (currentConfig._id) {
         await collection.updateOne(
             { _id: new ObjectId(currentConfig._id) } as any,
             {
-                $set: validatedConfig,
+                $set: updatedConfig,
             }
         );
     } else {
         const result = await collection.insertOne({
-            ...validatedConfig,
+            ...updatedConfig,
             createdAt: new Date(),
         });
-        validatedConfig._id = result.insertedId.toString();
+        updatedConfig._id = result.insertedId.toString();
     }
 
-    return validatedConfig;
+    return updatedConfig;
 }
 
 /**
