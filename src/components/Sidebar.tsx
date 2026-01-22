@@ -42,6 +42,11 @@ const navItems = [
         label: "History",
         icon: History,
         href: "/history",
+    },
+    {
+        label: "Context Config",
+        icon: Settings,
+        href: "/context",
     }
 ];
 

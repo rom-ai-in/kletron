@@ -31,6 +31,9 @@ type IndexStatus = {
     errors: string[];
     autoIndexEnabled?: boolean;
     lastAutoIndex?: string;
+    nextAutoIndex?: string;
+    schedulerStatus?: 'idle' | 'running' | 'pending';
+    schedulerInterval?: number;
     dimensions?: number;
 };
 
@@ -51,6 +54,12 @@ export default function VectorIndexPage() {
     const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [isActionLoading, setIsActionLoading] = useState(false);
+    const [searchError, setSearchError] = useState<string | null>(null);
+    const [confirmDialog, setConfirmDialog] = useState<{
+        title: string;
+        message: string;
+        action: () => void;
+    } | null>(null);
 
     // Fetch initial data
     const fetchData = useCallback(async () => {
@@ -79,42 +88,80 @@ export default function VectorIndexPage() {
         if (res.ok) setStatus(await res.json());
     };
 
-    const handleStartIndexing = async (force = false) => {
-        setIsActionLoading(true);
-        try {
-            const endpoint = force ? "/api/vectors/reindex" : "/api/vectors/index";
-            await fetch(endpoint, { method: "POST" });
-            void fetchStatus();
-        } finally {
-            setIsActionLoading(false);
+    const handleStartIndexing = (force = false) => {
+        if (force) {
+            setConfirmDialog({
+                title: "Full Reindex",
+                message: "Are you sure you want to perform a full reindex? This will delete all existing vector data and re-process the entire repository. This operation may take a significant amount of time.",
+                action: async () => {
+                    setIsActionLoading(true);
+                    try {
+                        await fetch("/api/vectors/reindex", { method: "POST" });
+                        void fetchStatus();
+                    } finally {
+                        setIsActionLoading(false);
+                        setConfirmDialog(null);
+                    }
+                }
+            });
+            return;
         }
+
+        // For initial indexing, we can also add a confirmation if we want, 
+        // but it's less "destructive" than a full reindex on an existing index.
+        // Let's keep it simple for now as requested for "Full Reindex".
+        void (async () => {
+            setIsActionLoading(true);
+            try {
+                await fetch("/api/vectors/index", { method: "POST" });
+                void fetchStatus();
+            } finally {
+                setIsActionLoading(false);
+            }
+        })();
     };
 
-    const handleClearIndex = async () => {
-        if (!confirm("Are you sure you want to clear all vectors? This cannot be undone.")) return;
-        setIsActionLoading(true);
-        try {
-            await fetch("/api/vectors/clear", { method: "DELETE" });
-            void fetchStatus();
-        } finally {
-            setIsActionLoading(false);
-        }
+    const handleClearIndex = () => {
+        setConfirmDialog({
+            title: "Clear Vectors",
+            message: "Are you sure you want to clear all vectors? This cannot be undone.",
+            action: async () => {
+                setIsActionLoading(true);
+                try {
+                    await fetch("/api/vectors/clear", { method: "DELETE" });
+                    void fetchStatus();
+                } finally {
+                    setIsActionLoading(false);
+                    setConfirmDialog(null);
+                }
+            }
+        });
     };
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!searchQuery.trim()) return;
         setIsSearching(true);
+        setSearchError(null);
         try {
             const res = await fetch("/api/vectors/search", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ query: searchQuery }),
             });
+            const data = await res.json();
             if (res.ok) {
-                const data = await res.json();
                 setSearchResults(data.results || []);
+                if (data.results?.length === 0) {
+                    setSearchError("No results found for this query.");
+                }
+            } else {
+                setSearchError(data.error || "Search failed");
+                setSearchResults([]);
             }
+        } catch (error) {
+            setSearchError("Failed to connect to search API.");
+            setSearchResults([]);
         } finally {
             setIsSearching(false);
         }
@@ -180,10 +227,21 @@ export default function VectorIndexPage() {
                     />
                     <StatusCard
                         title="Auto-Indexing"
-                        value={status?.autoIndexEnabled !== false ? "Enabled" : "Disabled"}
+                        value={
+                            status?.schedulerStatus === 'running' ? "Running..." :
+                                status?.autoIndexEnabled !== false ?
+                                    `Enabled (${Math.round((status?.schedulerInterval || 600000) / 60000)}m)` :
+                                    "Disabled"
+                        }
                         icon={Clock}
-                        subtitle={status?.lastAutoIndex ? `Last run: ${new Date(status.lastAutoIndex).toLocaleTimeString()}` : "Waiting for schedule"}
-                        color="sky"
+                        subtitle={
+                            status?.schedulerStatus === 'running' ? "Indexing in progress..." :
+                                status?.nextAutoIndex ? `Next run: ${new Date(status.nextAutoIndex).toLocaleTimeString()}` :
+                                    status?.lastAutoIndex ? `Last: ${new Date(status.lastAutoIndex).toLocaleTimeString()}` :
+                                        "Waiting for schedule"
+                        }
+                        color={status?.schedulerStatus === 'running' ? "emerald" : "sky"}
+                        isAnimated={status?.schedulerStatus === 'running'}
                     />
                     <StatusCard
                         title="Indexed Files"
@@ -262,11 +320,16 @@ export default function VectorIndexPage() {
                 </Panel>
 
                 {/* Search Preview */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <Panel className="p-0 flex flex-col h-[500px]">
-                        <div className="p-4 border-b border-border-subtle bg-bg-surface flex items-center gap-2">
-                            <Search className="h-4 w-4 text-text-muted" />
-                            <h2 className="text-sm font-semibold text-text-primary">Semantic Search Preview</h2>
+                <div className="flex flex-col gap-6 pb-6">
+                    <Panel className="p-0 flex flex-col h-[600px]">
+                        <div className="p-4 border-b border-border-subtle bg-bg-surface flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Search className="h-4 w-4 text-text-muted" />
+                                <h2 className="text-sm font-semibold text-text-primary">Semantic Search Preview</h2>
+                            </div>
+                            {searchResults.length > 0 && (
+                                <span className="text-[10px] text-text-muted">{searchResults.length} results found</span>
+                            )}
                         </div>
                         <div className="p-4 bg-bg-surface border-b border-border-subtle">
                             <form onSubmit={(e) => void handleSearch(e)} className="flex gap-2">
@@ -282,23 +345,40 @@ export default function VectorIndexPage() {
                                 </Button>
                             </form>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-elegant">
-                            {searchResults.length === 0 && !isSearching && (
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-elegant bg-bg-app/20">
+                            {searchError && (
+                                <div className="p-4 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-start gap-3">
+                                    <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                                    <div className="text-xs">
+                                        <p className="font-semibold mb-1">Search Error</p>
+                                        <p>{searchError}</p>
+                                    </div>
+                                </div>
+                            )}
+                            {searchResults.length === 0 && !isSearching && !searchError && (
                                 <div className="h-full flex flex-col items-center justify-center text-text-muted opacity-50">
                                     <Search className="h-10 w-10 mb-2" />
                                     <p className="text-xs italic">Enter a query to test the vector search</p>
                                 </div>
                             )}
                             {searchResults.map((result, idx) => (
-                                <div key={idx} className="group rounded-lg border border-border-subtle bg-bg-elevated/30 p-3 hover:border-emerald-500/30 transition">
-                                    <div className="flex justify-between items-start mb-2">
+                                <div key={idx} className="group rounded-lg border border-border-subtle bg-bg-elevated/40 p-4 hover:border-emerald-500/30 transition shadow-sm">
+                                    <div className="flex justify-between items-start mb-3">
                                         <div className="flex items-center gap-2">
-                                            <FileCode className="h-3.5 w-3.5 text-sky-400" />
-                                            <span className="text-[11px] font-mono text-text-primary truncate">{result.filePath}:{result.startLine}</span>
+                                            <FileCode className="h-4 w-4 text-sky-400" />
+                                            <span className="text-xs font-mono text-text-primary truncate">{result.filePath}:{result.startLine}</span>
                                         </div>
-                                        <span className="text-[10px] font-bold text-emerald-400">{(result.score * 100).toFixed(1)}%</span>
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-1.5 w-24 bg-bg-app rounded-full overflow-hidden mr-1">
+                                                <div
+                                                    className="h-full bg-emerald-500"
+                                                    style={{ width: `${result.score * 100}%` }}
+                                                />
+                                            </div>
+                                            <span className="text-xs font-bold text-emerald-400">{(result.score * 100).toFixed(1)}%</span>
+                                        </div>
                                     </div>
-                                    <pre className="text-[10px] leading-relaxed text-text-secondary bg-bg-app p-2 rounded border border-border-subtle overflow-x-auto whitespace-pre-wrap line-clamp-4">
+                                    <pre className="text-xs leading-relaxed text-text-secondary bg-bg-app p-3 rounded border border-border-subtle overflow-x-auto whitespace-pre font-mono">
                                         {result.content}
                                     </pre>
                                 </div>
@@ -307,17 +387,17 @@ export default function VectorIndexPage() {
                     </Panel>
 
                     {/* Errors / Logs */}
-                    <Panel className="p-0 flex flex-col h-[500px]">
+                    <Panel className="p-0 flex flex-col h-[300px]">
                         <div className="p-4 border-b border-border-subtle bg-bg-surface flex items-center gap-2">
                             <AlertCircle className="h-4 w-4 text-text-muted" />
                             <h2 className="text-sm font-semibold text-text-primary">Indexing Logs</h2>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-2 font-mono scrollbar-elegant bg-bg-app">
+                        <div className="flex-1 overflow-y-auto p-2 font-mono scrollbar-elegant bg-bg-app/40">
                             {!status?.errors?.length && (
                                 <div className="p-4 text-xs text-text-muted italic">No errors reported</div>
                             )}
                             {status?.errors.map((error, idx) => (
-                                <div key={idx} className="p-2 border-b border-border-subtle last:border-0">
+                                <div key={idx} className="p-2 border-b border-border-subtle last:border-0 hover:bg-white/5 transition">
                                     <p className="text-xs text-rose-400 leading-normal">{error}</p>
                                 </div>
                             ))}
@@ -368,6 +448,32 @@ export default function VectorIndexPage() {
                             <Loader2 className="h-6 w-6 animate-spin text-text-muted" />
                         </div>
                     )}
+                </div>
+            </Modal>
+
+            {/* Confirmation Modal */}
+            <Modal
+                open={!!confirmDialog}
+                onClose={() => setConfirmDialog(null)}
+                title={confirmDialog?.title}
+                subtitle="Action required"
+                footer={
+                    <div className="flex justify-end gap-3">
+                        <Button variant="secondary" onClick={() => setConfirmDialog(null)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="primary"
+                            className={confirmDialog?.title === "Clear Vectors" ? "bg-rose-600 hover:bg-rose-500" : ""}
+                            onClick={() => confirmDialog?.action()}
+                        >
+                            Confirm
+                        </Button>
+                    </div>
+                }
+            >
+                <div className="py-4">
+                    <p className="text-sm text-text-secondary">{confirmDialog?.message}</p>
                 </div>
             </Modal>
         </div>

@@ -197,4 +197,11 @@ export const mcpToolMetadata: McpToolMeta[] = [
     file: "github-mcp/tools/outputFormat.js",
     categories: ["compat"],
   },
+  {
+    name: "semantic_code_search",
+    label: "Semantic code search",
+    description: "Find code semantically similar to a natural language query using vector embeddings.",
+    file: "src/services/vectorService.ts",
+    categories: ["search", "analysis"],
+  },
 ];

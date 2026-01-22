@@ -82,7 +82,7 @@ You must output a plan with clearly labeled sections. For each section, use mark
 1. **Scope & Goals**—restate the objectives that this research must answer and highlight any architecture or domain focus that must be included.
 2. **Target Files & Domains**—enumerate every file, folder, or code area that must be inspected. For each entry explain why it matters (e.g., fires an architecture boundary, handles data flows, manages integration).
 3. **Architecture Study**—describe the system-level components, critical flows, platforms, or risks (authentication, i18n, payments, data integrity) that should be studied and monitored for this research.
-4. **MCP Tool Strategy**—map specific MCP tools (repo_metrics, describe_structure, search_code, git_log, read_file, etc.) to the sub-steps where they will be used (structure, code search, diffs, deep reads).
+4. **MCP Tool Strategy**—map specific MCP tools (repo_metrics, describe_structure, semantic_code_search, search_code, git_log, read_file, etc.) to the sub-steps where they will be used (structure, conceptual discovery, code search, diffs, deep reads).
 5. **Deliverables & Outputs**—spell out which intermediate writeups (checklists, log entries, summarized findings) will be produced before the final report.
 
 Be explicit, detailed, and stay in the same language as the brief.
@@ -161,7 +161,7 @@ CRITICAL: Use think_tool after each search to reflect on results and plan next s
 Think like a human researcher with limited time. Follow these steps:
 
 1. Read the question carefully - What specific information does the user need?
-2. Start with broader searches - Use repo metrics, structure, and code search to find where the answer lives
+2. Start with broader or conceptual searches - Use repo metrics, structure, and semantic_code_search to find where the architecture or conceptual logic lives.
 3. After each search, pause and assess - Do I have enough to answer? What is still missing?
 4. Execute narrower searches as you gather information - Fill in the gaps with focused file reads
 5. Stop when you can answer confidently - Do not keep searching for perfection

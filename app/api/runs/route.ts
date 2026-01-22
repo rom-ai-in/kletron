@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { chainExecutor } from "@/src/services/chainExecutor";
 import { getDb } from "@/src/lib/db";

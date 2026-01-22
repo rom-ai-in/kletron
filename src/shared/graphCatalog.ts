@@ -24,6 +24,7 @@ export type PhaseDefinition = {
   summary: string;
   description: string;
   systemPrompt: string;
+  toolNames: string[];
 };
 
 export type AuditPhaseKey = "phase1" | "phase2" | "phase3" | "phase4" | "phase5";
@@ -70,12 +71,13 @@ const baseToolNames = [
   "str_replace_editor",
   "execute_bash",
   "output_format",
+  "semantic_code_search",
 ];
 
 const auditToolList = `Tools available: ${baseToolNames.join(", ")}.`;
 const auditToolListNone = "Tools available: none.";
-const auditToolListAdjudication =
-  "Tools available: read_file_range, go_to_definition, references, find_references.";
+const auditAdjudicationToolNames = ["read_file_range", "go_to_definition", "references", "find_references", "semantic_code_search"];
+const auditToolListAdjudication = `Tools available: ${auditAdjudicationToolNames.join(", ")}.`;
 
 export const auditPhaseConfig: Record<AuditPhaseKey, PhaseDefinition> = {
   phase1: {
@@ -86,10 +88,10 @@ export const auditPhaseConfig: Record<AuditPhaseKey, PhaseDefinition> = {
       "Use lightweight tooling to understand the repo shape without deep reading.",
     systemPrompt: [
       "You are ReconAgent.",
-      "Mission: map the repo using lightweight tools and return only the required metadata.",
       auditToolList,
-      "Preferred tools: list_files, repo_metrics, git_log, dependency_info, describe_structure, read_file (README/package.json only).",
+      "Preferred tools: list_files, repo_metrics, git_log, dependency_info, describe_structure, read_file (README/package.json only), semantic_code_search.",
       "Rules:",
+      "- Use semantic_code_search early to find conceptual entry points (e.g., 'auth', 'database', 'routing').",
       "- Bootstrap from README + dependency manifests to identify languages/frameworks.",
       "- Use list_files with maxDepth=2 to avoid huge listings; escalate depth only when explicitly requested.",
       "- Use repo_metrics/git_log for hotspots and churn but do not read more than two files beyond README/package.json.",
@@ -97,6 +99,7 @@ export const auditPhaseConfig: Record<AuditPhaseKey, PhaseDefinition> = {
       "- Do not include ellipses, trailing commas, or extra keys outside the required structure.",
       "- If you cannot populate a field, use empty strings/arrays but keep the JSON strict.",
     ].join("\n"),
+    toolNames: baseToolNames,
   },
   phase2: {
     id: "phase2",
@@ -108,8 +111,9 @@ export const auditPhaseConfig: Record<AuditPhaseKey, PhaseDefinition> = {
       "You are StrategistAgent.",
       "Mission: select and score the exact files to audit.",
       auditToolList,
-      "Preferred tools: search_code, repo_metrics, git_log, describe_structure.",
+      "Preferred tools: search_code, repo_metrics, git_log, describe_structure, semantic_code_search.",
       "Rules:",
+      "- Use semantic_code_search to find files related to high-level logic or patterns.",
       "- Rank files by (Complexity * 0.4) + (Recency * 0.3) + (Relevance * 0.3).",
       "- Assign a focused mission per file (e.g., JWT validation, SQLi, authz).",
       "- Hard cap: use at most 8 tool calls, then output JSON.",
@@ -118,6 +122,7 @@ export const auditPhaseConfig: Record<AuditPhaseKey, PhaseDefinition> = {
       "- Output MUST be valid JSON only (no markdown).",
       "- Do not use ellipses (...) or trailing commas; output strict JSON.",
     ].join("\n"),
+    toolNames: baseToolNames,
   },
   phase3: {
     id: "phase3",
@@ -128,13 +133,14 @@ export const auditPhaseConfig: Record<AuditPhaseKey, PhaseDefinition> = {
     systemPrompt: [
       "You are InvestigatorAgent.",
       "Mission: review ONLY the assigned file and emit raw claims.",
-      auditToolListNone,
+      "Tools available: semantic_code_search.",
       "Rules:",
-      "- Do NOT call tools; rely only on the provided file content.",
+      "- You may use semantic_code_search to find related conceptual patterns, but your primary focus is the assigned file content.",
       "- Capture assumptions explicitly when a claim depends on other files.",
       "- Output MUST be valid JSON only (no markdown).",
       "- Do not use ellipses (...) or trailing commas; output strict JSON.",
     ].join("\n"),
+    toolNames: ["semantic_code_search"],
   },
   phase4: {
     id: "phase4",
@@ -185,6 +191,7 @@ export const auditPhaseConfig: Record<AuditPhaseKey, PhaseDefinition> = {
       "- Output MUST be valid JSON only (no markdown).",
       "- Do not use ellipses (...) or trailing commas; output strict JSON.",
     ].join("\n"),
+    toolNames: auditAdjudicationToolNames,
   },
   phase5: {
     id: "phase5",
@@ -200,6 +207,7 @@ export const auditPhaseConfig: Record<AuditPhaseKey, PhaseDefinition> = {
       "- Output MUST be valid JSON only (no markdown outside JSON string).",
       "- Do not use ellipses (...) or trailing commas; output strict JSON.",
     ].join("\n"),
+    toolNames: baseToolNames,
   },
 };
 
@@ -222,6 +230,7 @@ export const deepResearchPhaseConfig: Record<DeepResearchPhaseKey, PhaseDefiniti
     summary: "Confirm scope and goals for the code research.",
     description: "Analyze the request and ask clarifying questions if needed.",
     systemPrompt: clarifyWithUserInstructions,
+    toolNames: ["semantic_code_search"],
   },
   brief: {
     id: "brief",
@@ -229,6 +238,7 @@ export const deepResearchPhaseConfig: Record<DeepResearchPhaseKey, PhaseDefiniti
     summary: "Create a structured research brief from the request.",
     description: "Translate the request into a precise research question for the repo.",
     systemPrompt: transformMessagesIntoResearchTopicPrompt,
+    toolNames: ["semantic_code_search"],
   },
   plan: {
     id: "plan",
@@ -237,6 +247,7 @@ export const deepResearchPhaseConfig: Record<DeepResearchPhaseKey, PhaseDefiniti
     description:
       "Convert the research brief into a detailed plan that lists target files, architecture hotspots, and the MCP tools that will be used to inspect them.",
     systemPrompt: researchPlanningPrompt,
+    toolNames: ["semantic_code_search"],
   },
   research: {
     id: "research",
@@ -244,6 +255,7 @@ export const deepResearchPhaseConfig: Record<DeepResearchPhaseKey, PhaseDefiniti
     summary: "Supervisor delegates research and gathers evidence.",
     description: "Use MCP tools to collect findings and citations.",
     systemPrompt: leadResearcherPrompt,
+    toolNames: baseToolNames,
   },
   summary: {
     id: "summary",
@@ -251,6 +263,7 @@ export const deepResearchPhaseConfig: Record<DeepResearchPhaseKey, PhaseDefiniti
     summary: "Summarize findings, issues, and inputs before taking action.",
     description: "Translate raw notes into structured findings, risks, and dependencies that feed the action report.",
     systemPrompt: findingsSummaryPrompt,
+    toolNames: ["semantic_code_search"],
   },
   report: {
     id: "report",
@@ -258,6 +271,7 @@ export const deepResearchPhaseConfig: Record<DeepResearchPhaseKey, PhaseDefiniti
     summary: "Produce an activable report with concrete tasks.",
     description: "Document findings with prioritized action items, monitoring, and references for the final deliverable.",
     systemPrompt: actionReportPrompt,
+    toolNames: ["semantic_code_search"],
   },
 };
 
@@ -281,6 +295,7 @@ const simpleReactPhaseDefinitions: PhaseDefinition[] = [
     summary: simpleReactPhaseSummary,
     description: simpleReactPhaseDescription,
     systemPrompt: simpleReactSystemPrompt,
+    toolNames: simpleReactToolNames,
   },
 ];
 

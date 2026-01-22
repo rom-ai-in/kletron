@@ -147,41 +147,40 @@ function TimelinePanel({ timeline, selectedEventId, onPhaseSelect, className }: 
       <div className="border-b border-border-subtle px-3 py-2">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Phases</h2>
       </div>
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-elegant">
+      <div className="flex-1 overflow-y-auto space-y-1 p-2 scrollbar-elegant">
         {timeline.map((event) => (
           <button
             key={event.id}
             type="button"
             onClick={() => onPhaseSelect(event.id)}
-            className={`w-full rounded-md border px-3 py-2 text-left transition ${selectedEventId === event.id
+            className={`w-full rounded-md border px-2 py-1.5 text-left transition group ${selectedEventId === event.id
               ? "border-border-strong bg-state-selected"
-              : "border-transparent hover:bg-state-hover"
+              : "border-transparent hover:bg-state-hover border-b border-border-subtle last:border-0"
               }`}
           >
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-semibold text-text-primary">{event.label}</span>
-              <span
-                className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wider ${event.status === "success"
-                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                  : event.status === "error"
-                    ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                    : event.status === "pending"
-                      ? "bg-bg-elevated text-text-muted border border-border-subtle"
-                      : "bg-bg-elevated text-text-primary border border-border-strong"
-                  }`}
-              >
-                {event.status}
+            <div className="flex items-center justify-between mb-0.5">
+              <span className={`text-[11px] font-medium leading-tight ${selectedEventId === event.id ? "text-text-primary" : "text-text-secondary group-hover:text-text-primary"}`}>
+                {event.label}
               </span>
+              {event.status !== "pending" && (
+                <div className={`h-1.5 w-1.5 rounded-full ${event.status === "success"
+                  ? "bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.4)]"
+                  : event.status === "error"
+                    ? "bg-rose-400"
+                    : "bg-amber-400 animate-pulse"
+                  }`} />
+              )}
             </div>
-            <p className="text-xs text-text-muted mt-1.5 line-clamp-1">{event.summary}</p>
-            {event.systemPrompt && (
-              <p className="text-[10px] font-mono text-text-muted/60 mt-1 line-clamp-1">
-                {event.systemPrompt.split("\n")[0]}
+
+            {event.summary && (
+              <p className="text-[10px] text-text-muted truncate leading-relaxed opacity-80">
+                {event.summary}
               </p>
             )}
+
             {event.status === "running" && (
-              <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-bg-elevated">
-                <div className="h-full w-full bg-text-muted animate-progress-loader opacity-50" />
+              <div className="mt-1.5 h-0.5 w-full overflow-hidden rounded-full bg-bg-elevated/50">
+                <div className="h-full w-full bg-emerald-500/50 animate-progress-loader origin-left" />
               </div>
             )}
           </button>
@@ -200,17 +199,48 @@ type ToolExplorerPanelProps = {
 };
 
 function ToolExplorerPanel({ tools, usedToolNames, openToolDialog, className }: ToolExplorerPanelProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredTools = useMemo(() => {
+    return tools
+      .filter(t => t.label.toLowerCase().includes(searchQuery.toLowerCase()) || t.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [tools, searchQuery]);
+
   return (
     <section className={`sticky top-6 space-y-0 rounded-lg border border-border-subtle bg-bg-surface shadow-sm h-full flex flex-col overflow-hidden ${className}`}>
-      <div className="flex items-center justify-between border-b border-border-subtle px-3 py-2 bg-bg-surface">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Tools</h3>
-        <span className="text-[10px] text-text-muted">
-          {usedToolNames.size} used
-        </span>
+      <div className="flex flex-col border-b border-border-subtle bg-bg-surface">
+        <div className="flex items-center justify-between px-3 py-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Tools</h3>
+          <span className="text-[10px] text-text-muted">
+            {usedToolNames.size} used
+          </span>
+        </div>
+        <div className="px-2 pb-2">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search tools..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-[11px] text-text-primary placeholder:text-text-muted focus:border-border-strong focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-1.5 top-1.5 text-text-muted hover:text-text-primary"
+              >
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto scrollbar-elegant p-1">
         <ul className="space-y-0.5">
-          {tools.map((tool) => (
+          {filteredTools.map((tool) => (
             <li key={tool.name}>
               <button
                 type="button"
@@ -236,6 +266,11 @@ function ToolExplorerPanel({ tools, usedToolNames, openToolDialog, className }: 
               </button>
             </li>
           ))}
+          {filteredTools.length === 0 && (
+            <li className="px-2 py-4 text-center text-[11px] text-text-muted italic">
+              No tools found
+            </li>
+          )}
         </ul>
       </div>
     </section>
@@ -612,51 +647,12 @@ function HeaderControls({
               </svg>
               View details
             </button>
+
           </div>
         )}
       </div>
 
-      <div className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface p-1 pr-3 pl-3 transition hover:border-border-strong">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase tracking-wider text-text-muted">Context</span>
-          <button
-            type="button"
-            onClick={() => {
-              if (!auditContextEnabled && !auditContextSummary) {
-                onConfigureAuditContext();
-                onAuditContextEnabledChange(true);
-              } else {
-                onAuditContextEnabledChange(!auditContextEnabled);
-              }
-            }}
-            className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${auditContextEnabled ? "bg-text-secondary" : "bg-bg-elevated border border-border-subtle"
-              }`}
-          >
-            <span
-              className={`${auditContextEnabled ? "translate-x-3.5" : "translate-x-0.5"
-                } inline-block h-3 w-3 transform rounded-full bg-text-primary transition-transform`}
-            />
-          </button>
-        </div>
 
-        <div className="h-4 w-[1px] bg-border-subtle mx-1" />
-
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium ${auditContextEnabled ? "text-text-primary" : "text-text-muted"}`}>
-            {auditContextEnabled ? (auditContextSummary ?? "Config needed") : "Off"}
-          </span>
-          <button
-            type="button"
-            className="text-text-muted hover:text-text-primary transition"
-            onClick={onConfigureAuditContext}
-            aria-label="Configure context"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </svg>
-          </button>
-        </div>
-      </div>
 
       <div className="h-4 w-[1px] bg-border-subtle mx-1" />
 
@@ -699,8 +695,24 @@ function HeaderControls({
             <ul className="space-y-2">
               {graphDetail.phases.map((phase) => (
                 <li key={phase.id} className="rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-[12px]">
-                  <p className="font-semibold text-text-primary">{phase.label}</p>
-                  <p className="text-text-muted">{phase.summary}</p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="font-semibold text-text-primary">{phase.label}</p>
+                    <span className="text-[10px] text-text-muted">
+                      {phase.toolNames.length} {phase.toolNames.length === 1 ? 'tool' : 'tools'}
+                    </span>
+                  </div>
+                  <p className="text-text-muted mb-2">{phase.summary}</p>
+                  {phase.toolNames.length > 0 ? (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {phase.toolNames.map(tool => (
+                        <span key={tool} className="px-1.5 py-0.5 rounded bg-bg-elevated border border-border-subtle text-[10px] font-mono text-text-muted">
+                          {tool}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] italic text-text-muted italic">No tools available</p>
+                  )}
                 </li>
               ))}
             </ul>
@@ -1209,8 +1221,72 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
           subtitle={titleText}
           fullHeight
         >
-          <div className="h-full w-full overflow-auto p-6 bg-bg-surface text-sm font-mono leading-relaxed text-text-primary whitespace-pre-wrap">
-            {resultText}
+          <div className="h-full w-full overflow-auto p-8 bg-bg-surface text-text-secondary">
+            <div className="max-w-4xl mx-auto prose prose-invert">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  code({ node, inline, className, children, ...props }: any) {
+                    return !inline ? (
+                      <div className="bg-bg-elevated border border-border-subtle rounded-md my-6 overflow-hidden not-prose">
+                        <div className="bg-bg-app px-3 py-1.5 border-b border-border-subtle flex items-center gap-2">
+                          <div className="flex gap-1.5">
+                            <div className="w-2.5 h-2.5 rounded-full bg-rose-500/20 border border-rose-500/50"></div>
+                            <div className="w-2.5 h-2.5 rounded-full bg-amber-500/20 border border-amber-500/50"></div>
+                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/20 border border-emerald-500/50"></div>
+                          </div>
+                        </div>
+                        <pre className="p-4 overflow-x-auto text-sm font-mono !bg-transparent !m-0">
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
+                        </pre>
+                      </div>
+                    ) : (
+                      <code className="bg-bg-elevated px-1.5 py-0.5 rounded text-sky-300 font-mono text-[90%]" {...props}>
+                        {children}
+                      </code>
+                    )
+                  },
+                  table({ children }) {
+                    return (
+                      <div className="overflow-x-auto my-8 rounded-lg border border-border-subtle shadow-sm not-prose">
+                        <table className="min-w-full divide-y divide-border-subtle text-sm text-left">
+                          {children}
+                        </table>
+                      </div>
+                    )
+                  },
+                  thead({ children }) {
+                    return <thead className="bg-bg-elevated/50 font-semibold text-text-primary">{children}</thead>
+                  },
+                  th({ children }) {
+                    return <th className="px-6 py-3 whitespace-nowrap tracking-wider uppercase text-xs font-bold text-text-muted">{children}</th>
+                  },
+                  tr({ children }) {
+                    return <tr className="hover:bg-white/5 transition-colors border-b border-border-subtle/50 last:border-0">{children}</tr>
+                  },
+                  td({ children }) {
+                    return <td className="px-6 py-4">{children}</td>
+                  },
+                  a({ children, href }) {
+                    return <a href={href} className="text-emerald-400 hover:text-emerald-300 hover:underline transition-colors no-underline font-medium" target="_blank" rel="noopener noreferrer">{children}</a>
+                  },
+                  blockquote({ children }) {
+                    return <blockquote className="border-l-4 border-emerald-500/30 pl-6 py-2 italic text-text-muted my-8 bg-emerald-500/5 rounded-r-lg not-prose">{children}</blockquote>
+                  },
+                  h1({ children }) { return <h1 className="text-3xl font-bold text-text-primary mt-12 mb-6 pb-4 border-b border-border-subtle">{children}</h1> },
+                  h2({ children }) { return <h2 className="text-2xl font-bold text-text-primary mt-10 mb-4 flex items-center gap-3"><span className="text-emerald-500">#</span> {children}</h2> },
+                  h3({ children }) { return <h3 className="text-xl font-bold text-text-primary mt-8 mb-3">{children}</h3> },
+                  hr() { return <hr className="border-border-subtle my-10" /> },
+                  ul({ children }) { return <ul className="list-disc pl-6 space-y-2 my-4 marker:text-emerald-500/60">{children}</ul> },
+                  ol({ children }) { return <ol className="list-decimal pl-6 space-y-2 my-4 marker:text-emerald-500/60">{children}</ol> },
+                  p({ children }) { return <p className="leading-7 my-4 text-text-secondary text-[15px]">{children}</p> }
+                }}
+              >
+                {resultText}
+              </ReactMarkdown>
+            </div>
           </div>
         </Modal>
       </div>

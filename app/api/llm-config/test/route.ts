@@ -32,9 +32,16 @@ export async function POST(req: NextRequest) {
         }
 
         // Check if we still have a masked key after fallback
-        if (!effectiveApiKey || effectiveApiKey.includes("•")) {
+        if (effectiveApiKey?.includes("•")) {
             return NextResponse.json(
-                { error: "API Key is missing or invalid. Please ensure a valid API key is saved in the configuration." },
+                { error: "Cannot use a masked API key for testing. Please re-enter your API key." },
+                { status: 400 }
+            );
+        }
+
+        if (provider === "azure" && !effectiveApiKey) {
+            return NextResponse.json(
+                { error: "API Key is missing for Azure OpenAI. Please ensure a valid API key is saved in the configuration." },
                 { status: 400 }
             );
         }

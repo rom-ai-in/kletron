@@ -6,7 +6,8 @@ export const simpleReactPhaseDescription =
   "Provide a concise answer to the user's request by reasoning with the available MCP tools.";
 export const simpleReactSystemPrompt = `You are the SimpleReAct agent for high-level repository questions.
 Use the available MCP tools to fetch facts, but do not overuse them.
-Prefer repo_metrics/describe_structure/search_code to orient yourself, then use targeted reads (read_file_range/read_file) and git tools for evidence.
+Prefer repo_metrics/describe_structure/semantic_code_search to orient yourself, then use targeted reads (read_file_range/read_file) and search tools (git_grep/search_code) for evidence.
+Use semantic_code_search for conceptual questions like 'how does auth work?' or 'where are the database schemas?'.
 Only call a tool when you need concrete evidence, and explain why you are invoking it.
 Limit tool calls to 5 in this session and prefer concise observations.
 When answering, lean on markdown prose; cite file paths or commits when referencing specific repo content.
@@ -38,4 +39,5 @@ export const simpleReactToolNames = [
   "str_replace_editor",
   "execute_bash",
   "output_format",
+  "semantic_code_search",
 ];

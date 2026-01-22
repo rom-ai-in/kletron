@@ -43,14 +43,31 @@ const currentStatus: IndexStatus = (globalThis as any)[statusKey];
  * Get current indexing status
  */
 export function getIndexStatus(): IndexStatus {
-    // Attempt to discover dimensions from DB if not set
-    if (!currentStatus.dimensions && !currentStatus.isIndexing) {
+    // Attempt to discover dimensions and counts from DB if not set
+    if (!currentStatus.isIndexing) {
         import("./mongoClient").then(async m => {
             try {
                 const db = await m.getDatabase();
-                const doc = await db.collection("code_vectors").findOne({});
-                if (doc && (doc as any).embedding) {
-                    currentStatus.dimensions = (doc as any).embedding.length;
+                const col = db.collection("code_vectors");
+
+                // Fetch dimension if missing
+                if (!currentStatus.dimensions) {
+                    const doc = await col.findOne({});
+                    if (doc && (doc as any).embedding) {
+                        currentStatus.dimensions = (doc as any).embedding.length;
+                    }
+                }
+
+                // Fetch total chunks if they are 0
+                if (currentStatus.totalChunks === 0) {
+                    currentStatus.totalChunks = await col.countDocuments();
+                }
+
+                // If we have chunks but totalFiles is 0, we can estimate/fetch it
+                if (currentStatus.totalChunks > 0 && currentStatus.totalFiles === 0) {
+                    const uniqueFiles = await col.distinct("filePath");
+                    currentStatus.totalFiles = uniqueFiles.length;
+                    currentStatus.indexedFiles = uniqueFiles.length; // Assume they are all indexed
                 }
             } catch (e) {
                 // Silently ignore if DB not ready or other error
@@ -156,7 +173,7 @@ export async function startIndexing(repoPath: string, force = false, explicitFil
                     try {
                         await fs.access(filePath);
                     } catch {
-                        await deleteFileVectors(filePath);
+                        await deleteFileVectors(relativePath);
                         currentStatus.indexedFiles++;
                         return;
                     }
@@ -166,7 +183,7 @@ export async function startIndexing(repoPath: string, force = false, explicitFil
 
                     // Hash check: skip if unchanged
                     if (!force) {
-                        const storedHash = await getFileHash(filePath);
+                        const storedHash = await getFileHash(relativePath);
                         if (storedHash === contentHash) {
                             currentStatus.indexedFiles++;
                             return;
@@ -174,7 +191,7 @@ export async function startIndexing(repoPath: string, force = false, explicitFil
                     }
 
                     // Content changed or new: re-index
-                    await deleteFileVectors(filePath);
+                    await deleteFileVectors(relativePath);
 
                     const chunks = chunkCode(content, relativePath);
                     const fileChunksWithEmbeddings: CodeVector[] = [];

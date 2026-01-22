@@ -6,7 +6,19 @@ let pendingRun = false;
 const LOCK_NAME = "auto-indexer";
 
 // Run every 10 minutes
-const INTERVAL_MS = 10 * 60 * 1000;
+export const INTERVAL_MS = 10 * 60 * 1000;
+
+let lastRun: Date | null = null;
+let isRunning = false;
+
+export function getSchedulerStatus() {
+    return {
+        intervalMs: INTERVAL_MS,
+        lastRun,
+        isRunning,
+        pendingRun
+    };
+}
 
 export function startAutoIndexScheduler(repoPath: string) {
     // Initial delay to let server start up
@@ -38,14 +50,17 @@ export async function runAutoIndex(repoPath: string) {
         return;
     }
 
+    isRunning = true;
     try {
         console.log(`[AutoIndex] Starting incremental index for ${dirty.length} files...`);
         // We pass the dirty list to startIndexing for incremental mode
         await startIndexing(repoPath, false, dirty);
+        lastRun = new Date();
         console.log(`[AutoIndex] Completed incremental index.`);
     } catch (e) {
         console.error("[AutoIndex] Error during scheduled run:", e);
     } finally {
+        isRunning = false;
         await releaseLock(LOCK_NAME);
 
         // If pending run flag was set while we were working, trigger another run immediately
