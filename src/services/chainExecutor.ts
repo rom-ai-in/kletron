@@ -12,9 +12,11 @@ import type {
     Finding,
     Insight,
     AuditStageConfig,
+    AuditRun,
 } from "./chainTypes";
 
 const COLLECTION_NAME = "audit_chains";
+const RUNS_COLLECTION = "audit_runs";
 
 /**
  * ChainExecutor - Orchestrates multi-stage audit workflows
@@ -133,16 +135,36 @@ export class ChainExecutor {
     }
 
     /**
-     * Update chain progress during execution
+     * Update run status
      */
-    async updateChainProgress(
-        chainId: string,
+    async updateRunStatus(
+        runId: string,
+        status: ChainStatus,
+        updates?: Partial<AuditRun>
+    ): Promise<void> {
+        const db = await getDb();
+        await db.collection(RUNS_COLLECTION).updateOne(
+            { _id: new ObjectId(runId) },
+            {
+                $set: {
+                    status,
+                    ...updates,
+                },
+            }
+        );
+    }
+
+    /**
+     * Update run progress during execution
+     */
+    async updateRunProgress(
+        runId: string,
         stageIndex: number,
         sessionId: string
     ): Promise<void> {
         const db = await getDb();
-        await db.collection<AuditChain>(COLLECTION_NAME).updateOne(
-            { _id: new ObjectId(chainId) },
+        await db.collection<AuditRun>(RUNS_COLLECTION).updateOne(
+            { _id: new ObjectId(runId) },
             {
                 $set: {
                     currentStageIndex: stageIndex,
@@ -155,30 +177,118 @@ export class ChainExecutor {
     }
 
     /**
-     * Execute a complete chain
+     * Get run by ID
+     */
+    async getRun(runId: string): Promise<AuditRun | null> {
+        const db = await getDb();
+        const run = await db
+            .collection(RUNS_COLLECTION)
+            .findOne({ _id: new ObjectId(runId) });
+
+        return run as AuditRun | null;
+    }
+
+    /**
+     * Get latest run for a chain
+     */
+    async getLatestRun(chainId: string): Promise<AuditRun | null> {
+        const db = await getDb();
+        const runs = await db
+            .collection(RUNS_COLLECTION)
+            .find({ chainId: new ObjectId(chainId) })
+            .sort({ startedAt: -1 })
+            .limit(1)
+            .toArray();
+
+        return (runs[0] as AuditRun) || null;
+    }
+
+    /**
+     * List runs for a chain
+     */
+    async listRuns(chainId: string): Promise<AuditRun[]> {
+        const db = await getDb();
+        const runs = await db
+            .collection(RUNS_COLLECTION)
+            .find({ chainId: new ObjectId(chainId) })
+            .sort({ startedAt: -1 })
+            .toArray();
+
+        return runs as AuditRun[];
+    }
+
+    /**
+     * Start a new execution run for a campaign
+     */
+    async startNewRun(chainId: string): Promise<string> {
+        const db = await getDb();
+        const chain = await this.getChain(chainId);
+        if (!chain) throw new Error(`Campaign ${chainId} not found`);
+
+        const run: AuditRun = {
+            chainId: new ObjectId(chainId),
+            status: "PENDING",
+            startedAt: new Date(),
+            currentStageIndex: 0,
+            sessionIds: [],
+            aggregatedFindings: [],
+            crossStageInsights: [],
+        };
+
+        const result = await db.collection(RUNS_COLLECTION).insertOne(run);
+        return result.insertedId.toString();
+    }
+
+    /**
+     * Execute a complete chain by starting a new run
      */
     async executeChain(
         chainId: string,
         onProgress?: (update: ChainProgress) => void
     ): Promise<ChainResult> {
-        const chain = await this.getChain(chainId);
+        const runId = await this.startNewRun(chainId);
+        return this.executeRun(runId, onProgress);
+    }
 
-        if (!chain) {
-            throw new Error(`Chain ${chainId} not found`);
-        }
+    /**
+     * Execute a specific run
+     */
+    async executeRun(
+        runId: string,
+        onProgress?: (update: ChainProgress) => void
+    ): Promise<ChainResult> {
+        let run = await this.getRun(runId);
+        if (!run) throw new Error(`Run ${runId} not found`);
 
-        await this.updateChainStatus(chainId, "RUNNING", { startedAt: new Date() });
+        const chain = await this.getChain(run.chainId.toString());
+        if (!chain) throw new Error(`Campaign ${run.chainId} not found`);
+
+        await this.updateRunStatus(runId, "RUNNING");
+        // Also update parent chain status
+        await this.updateChainStatus(run.chainId.toString(), "RUNNING");
 
         const results: StageResult[] = [];
         const startTime = Date.now();
 
         // Execute each stage sequentially
-        for (let i = chain.currentStageIndex; i < chain.stages.length; i++) {
+        for (let i = run.currentStageIndex; i < chain.stages.length; i++) {
+            // Check if run was paused
+            const currentRun = await this.getRun(runId);
+            if (currentRun?.status === "PAUSED") {
+                console.info(`[ChainExecutor] Run ${runId} is paused. Stopping execution loop.`);
+                return {
+                    chainId: chain._id!.toString(),
+                    success: false,
+                    stages: results,
+                    aggregation: { findings: [], insights: [], report: "", stats: { totalStages: 0, totalFindings: 0, criticalCount: 0, warningCount: 0 } }
+                };
+            }
+
             const stage = chain.stages[i];
 
             // Notify progress
             onProgress?.({
-                chainId,
+                chainId: chain._id!.toString(),
                 stageIndex: i,
                 status: "RUNNING",
             });
@@ -187,7 +297,7 @@ export class ChainExecutor {
             if (stage.skipIf && this.evaluateSkipCondition(stage.skipIf, results)) {
                 console.info(`[ChainExecutor] Skipping stage ${stage.id}: condition met`);
                 onProgress?.({
-                    chainId,
+                    chainId: chain._id!.toString(),
                     stageIndex: i,
                     status: "SKIPPED",
                 });
@@ -195,15 +305,15 @@ export class ChainExecutor {
             }
 
             // Execute stage
-            const stageResult = await this.executeStage(chainId, stage, results);
+            const stageResult = await this.executeStage(chain._id!.toString(), stage, results);
             results.push(stageResult);
 
-            // Update chain progress
-            await this.updateChainProgress(chainId, i + 1, stageResult.sessionId);
+            // Update run progress
+            await this.updateRunProgress(runId, i + 1, stageResult.sessionId);
 
             // Notify progress
             onProgress?.({
-                chainId,
+                chainId: chain._id!.toString(),
                 stageIndex: i,
                 status: stageResult.success ? "COMPLETED" : "FAILED",
                 findings: stageResult.findings,
@@ -220,8 +330,8 @@ export class ChainExecutor {
                     i--;
                     results[results.length - 1].retries = (stageResult.retries || 0) + 1;
                 } else {
-                    // Fail entire chain
-                    await this.updateChainStatus(chainId, "FAILED", {
+                    // Fail entire run
+                    await this.updateRunStatus(runId, "FAILED", {
                         endedAt: new Date(),
                     });
                     throw new Error(`Stage ${stage.id} failed: ${stageResult.error}`);
@@ -230,12 +340,12 @@ export class ChainExecutor {
         }
 
         // Aggregate results
-        const aggregation = await this.aggregateResults(chainId, results);
+        const aggregation = await this.aggregateResults(chain._id!.toString(), results);
 
         const totalDuration = Date.now() - startTime;
 
-        // Update final chain state
-        await this.updateChainStatus(chainId, "COMPLETED", {
+        // Update final run state
+        await this.updateRunStatus(runId, "COMPLETED", {
             endedAt: new Date(),
             aggregatedFindings: aggregation.findings,
             crossStageInsights: aggregation.insights,
@@ -258,8 +368,11 @@ export class ChainExecutor {
             },
         });
 
+        // Also update parent chain status
+        await this.updateChainStatus(chain._id!.toString(), "COMPLETED");
+
         return {
-            chainId,
+            chainId: chain._id!.toString(),
             success: results.every((r) => r.success),
             stages: results,
             aggregation,
@@ -568,6 +681,10 @@ export class ChainExecutor {
      * Pause a running chain
      */
     async pauseChain(chainId: string): Promise<void> {
+        const latestRun = await this.getLatestRun(chainId);
+        if (latestRun && latestRun.status === "RUNNING") {
+            await this.updateRunStatus(latestRun._id!.toString(), "PAUSED");
+        }
         await this.updateChainStatus(chainId, "PAUSED");
     }
 
@@ -580,10 +697,15 @@ export class ChainExecutor {
             throw new Error(`Chain ${chainId} not found`);
         }
 
+        const latestRun = await this.getLatestRun(chainId);
+        if (!latestRun) {
+            throw new Error(`No run found for chain ${chainId} to resume`);
+        }
+
         await this.updateChainStatus(chainId, "RUNNING");
 
-        // Continue execution from current stage
-        await this.executeChain(chainId);
+        // Continue execution of the latest run
+        await this.executeRun(latestRun._id!.toString());
     }
 
     /**

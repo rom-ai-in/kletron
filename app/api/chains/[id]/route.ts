@@ -52,7 +52,25 @@ export async function GET(
             return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
         }
 
-        return NextResponse.json({ chain }, { status: 200 });
+        const latestRun = await chainExecutor.getLatestRun(chainId);
+
+        if (latestRun) {
+            // Merge latest run stats/results into the chain object for UI compatibility
+            Object.assign(chain, {
+                status: latestRun.status,
+                startedAt: latestRun.startedAt,
+                endedAt: latestRun.endedAt,
+                currentStageIndex: latestRun.currentStageIndex,
+                sessionIds: latestRun.sessionIds,
+                aggregatedFindings: latestRun.aggregatedFindings,
+                crossStageInsights: latestRun.crossStageInsights,
+                finalReport: latestRun.finalReport,
+                metadata: latestRun.metadata,
+                latestRunId: latestRun._id?.toString()
+            });
+        }
+
+        return NextResponse.json({ chain, latestRun }, { status: 200 });
     } catch (error) {
         console.error(`[API /api/chains/${params.id} GET] Error:`, error);
         return NextResponse.json(

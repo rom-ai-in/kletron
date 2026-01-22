@@ -156,6 +156,39 @@ export interface AuditChain {
 }
 
 /**
+ * A specific execution run of an audit campaign
+ */
+export interface AuditRun {
+    /** MongoDB ObjectId */
+    _id?: ObjectId;
+    /** Reference to the campaign setup */
+    chainId: ObjectId;
+    /** Execution status */
+    status: ChainStatus;
+    /** When run started */
+    startedAt: Date;
+    /** When run ended */
+    endedAt?: Date;
+    /** Current stage index (0-based) */
+    currentStageIndex: number;
+    /** Array of session IDs (one per stage) */
+    sessionIds: string[];
+    /** Aggregated findings across stages */
+    aggregatedFindings: Finding[];
+    /** Detected cross-stage insights */
+    crossStageInsights: Insight[];
+    /** Final aggregated report */
+    finalReport?: string;
+    /** Execution metadata */
+    metadata?: {
+        totalDuration: number;
+        totalClaims: number;
+        totalVerified: number;
+        totalRejected: number;
+    };
+}
+
+/**
  * Result of a single stage execution
  */
 export interface StageResult {

@@ -8,9 +8,11 @@ export type ModalProps = {
     title?: string;
     subtitle?: string;
     children: ReactNode;
+    footer?: ReactNode;
+    fullHeight?: boolean;
 };
 
-export function Modal({ open, onClose, title, subtitle, children }: ModalProps) {
+export function Modal({ open, onClose, title, subtitle, children, footer, fullHeight }: ModalProps) {
     const overlayRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
@@ -39,6 +41,7 @@ export function Modal({ open, onClose, title, subtitle, children }: ModalProps) 
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
         >
             <div className="relative flex h-full w-full max-w-4xl max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-xl border border-border-subtle bg-bg-elevated shadow-xl">
+                {/* Header */}
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle bg-bg-elevated px-6 py-4">
                     <div>
                         {title && <p className="text-[11px] font-mono text-text-muted">{title}</p>}
@@ -52,11 +55,26 @@ export function Modal({ open, onClose, title, subtitle, children }: ModalProps) 
                         Close
                     </button>
                 </div>
-                <div className="flex-1 overflow-hidden px-6 pb-6 pt-4 bg-bg-surface">
-                    <div className="h-full min-h-0 overflow-y-auto pr-2 scrollbar-elegant space-y-6">
-                        {children}
-                    </div>
+
+                {/* Body */}
+                <div className={`flex-1 min-h-0 bg-bg-surface ${fullHeight ? "" : "overflow-hidden px-6 pt-4"}`}>
+                    {fullHeight ? (
+                        children
+                    ) : (
+                        <div className="h-full overflow-y-auto pr-2 scrollbar-elegant">
+                            <div className="pb-6">
+                                {children}
+                            </div>
+                        </div>
+                    )}
                 </div>
+
+                {/* Footer (Fixed) */}
+                {footer && (
+                    <div className="border-t border-border-subtle bg-bg-elevated px-6 py-4">
+                        {footer}
+                    </div>
+                )}
             </div>
         </div>
     );

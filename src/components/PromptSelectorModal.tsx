@@ -104,13 +104,34 @@ export function PromptSelectorModal({
         }
     };
 
-    // Filter folders based on search
+    // Helper to check if a folder or its children match the search query
+    const matchesSearch = (folder: PromptFolder, query: string): boolean => {
+        if (folder.name.toLowerCase().includes(query) || folder.path.toLowerCase().includes(query)) {
+            return true;
+        }
+        return folder.children.some(child => matchesSearch(child, query));
+    };
+
+    // Filter and sort folders based on search
     const filteredFolders = useMemo(() => {
-        if (!searchQuery) return promptFolders;
-        const query = searchQuery.toLowerCase();
-        return promptFolders.filter((folder) =>
-            folder.path.toLowerCase().includes(query) || folder.name.toLowerCase().includes(query)
-        );
+        const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+        let folders = promptFolders;
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            folders = folders.filter((folder) => matchesSearch(folder, query));
+
+            // Automatically expand folders when searching
+            const allPaths = new Set<string>();
+            const addPaths = (f: PromptFolder) => {
+                allPaths.add(f.path);
+                f.children.forEach(addPaths);
+            };
+            folders.forEach(addPaths);
+            setExpandedFolders(allPaths);
+        }
+
+        return [...folders].sort((a, b) => collator.compare(a.name, b.name));
     }, [promptFolders, searchQuery]);
 
     // Keyboard navigation
@@ -131,8 +152,25 @@ export function PromptSelectorModal({
     }, [isOpen, selectedPath, onClose]);
 
     return (
-        <Modal open={isOpen} onClose={onClose} title="Prompt Templates" subtitle="Select a prompt">
-            <div className="flex h-full min-h-[500px] gap-4">
+        <Modal
+            open={isOpen}
+            onClose={onClose}
+            title="Prompt Templates"
+            subtitle="Select a prompt"
+            fullHeight={true}
+            footer={
+                <div className="flex justify-end">
+                    <button
+                        onClick={() => void handleUsePrompt()}
+                        disabled={!selectedPath}
+                        className="rounded-md bg-state-selected px-6 py-2 text-sm font-medium text-text-primary transition hover:bg-state-active disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Use Prompt
+                    </button>
+                </div>
+            }
+        >
+            <div className="flex h-full min-h-[600px] gap-4 p-6 overflow-hidden">
                 {/* Left panel: Folder tree */}
                 <div className="flex w-1/2 flex-col gap-3">
                     {/* Search input */}
@@ -146,7 +184,7 @@ export function PromptSelectorModal({
                     />
 
                     {/* Folder tree */}
-                    <div className="flex-1 overflow-y-auto scrollbar-elegant">
+                    <div className="flex-1 overflow-y-auto scrollbar-elegant pr-2">
                         <div className="space-y-1">
                             {filteredFolders.map((folder) => (
                                 <FolderNode
@@ -168,31 +206,24 @@ export function PromptSelectorModal({
                 </div>
 
                 {/* Right panel: Preview */}
-                <div className="flex w-1/2 flex-col gap-3 border-l border-border-subtle pl-4">
+                <div className="flex w-1/2 flex-col gap-3 border-l border-border-subtle pl-6">
                     <div className="flex items-center justify-between">
                         <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Preview</h3>
                         {selectedPath && (
                             <span className="text-[10px] font-mono text-text-muted">{selectedPath}</span>
                         )}
                     </div>
-                    <div className="flex-1 overflow-y-auto rounded-lg border border-border-subtle bg-bg-surface p-3">
+                    <div className="flex-1 overflow-y-auto rounded-lg border border-border-subtle bg-bg-surface p-4 scrollbar-elegant">
                         {loadingPreview ? (
                             <p className="text-sm text-text-muted">Loading preview...</p>
                         ) : previewContent ? (
-                            <pre className="text-xs leading-relaxed text-text-primary whitespace-pre-wrap break-words">
+                            <pre className="text-xs leading-relaxed text-text-primary whitespace-pre-wrap break-words font-mono">
                                 {previewContent}
                             </pre>
                         ) : (
-                            <p className="text-sm text-text-muted">Select a prompt to preview</p>
+                            <p className="text-sm text-text-muted text-center mt-10">Select a prompt to preview</p>
                         )}
                     </div>
-                    <button
-                        onClick={() => void handleUsePrompt()}
-                        disabled={!selectedPath}
-                        className="rounded-md bg-state-selected px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-state-active disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        Use Prompt
-                    </button>
                 </div>
             </div>
         </Modal>
@@ -248,37 +279,41 @@ function FolderNode({
                     {isLoadingFiles ? (
                         <p className="px-2 py-1 text-xs text-text-muted">Loading files...</p>
                     ) : files && files.length > 0 ? (
-                        files.map((file) => (
-                            <button
-                                key={file.path}
-                                onClick={() => onSelectFile(file.path)}
-                                className={`flex w-full flex-col rounded-md px-2 py-1.5 text-left text-xs transition ${selectedPath === file.path
-                                    ? "bg-state-selected border border-border-strong"
-                                    : "hover:bg-state-hover"
-                                    }`}
-                            >
-                                <span className="font-medium text-text-primary">{file.name}</span>
-                                <span className="text-[10px] text-text-muted">{file.path}</span>
-                            </button>
-                        ))
+                        [...files]
+                            .sort((a, b) => new Intl.Collator(undefined, { numeric: true }).compare(a.name, b.name))
+                            .map((file) => (
+                                <button
+                                    key={file.path}
+                                    onClick={() => onSelectFile(file.path)}
+                                    className={`flex w-full flex-col rounded-md px-2 py-1.5 text-left text-xs transition ${selectedPath === file.path
+                                        ? "bg-state-selected border border-border-strong"
+                                        : "hover:bg-state-hover"
+                                        }`}
+                                >
+                                    <span className="font-medium text-text-primary">{file.name}</span>
+                                    <span className="text-[10px] text-text-muted">{file.path}</span>
+                                </button>
+                            ))
                     ) : (
                         <p className="px-2 py-1 text-xs text-text-muted">No files</p>
                     )}
-                    {folder.children.map((child) => (
-                        <FolderNode
-                            key={child.path}
-                            folder={child}
-                            isExpanded={expandedFolders.has(child.path)}
-                            files={folderFiles.get(child.path)}
-                            isLoadingFiles={loadingFiles.has(child.path)}
-                            selectedPath={selectedPath}
-                            onToggle={onToggle}
-                            onSelectFile={onSelectFile}
-                            folderFiles={folderFiles}
-                            loadingFiles={loadingFiles}
-                            expandedFolders={expandedFolders}
-                        />
-                    ))}
+                    {[...folder.children]
+                        .sort((a, b) => new Intl.Collator(undefined, { numeric: true }).compare(a.name, b.name))
+                        .map((child) => (
+                            <FolderNode
+                                key={child.path}
+                                folder={child}
+                                isExpanded={expandedFolders.has(child.path)}
+                                files={folderFiles.get(child.path)}
+                                isLoadingFiles={loadingFiles.has(child.path)}
+                                selectedPath={selectedPath}
+                                onToggle={onToggle}
+                                onSelectFile={onSelectFile}
+                                folderFiles={folderFiles}
+                                loadingFiles={loadingFiles}
+                                expandedFolders={expandedFolders}
+                            />
+                        ))}
                 </div>
             )}
         </div>

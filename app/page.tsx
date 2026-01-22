@@ -18,7 +18,6 @@ import {
   normalizeAuditContext,
   type AuditContext,
 } from "../src/shared/auditContext";
-import { AuditHistoryModal } from "../src/components/AuditHistoryModal";
 import { AzureConfigForm, LMStudioConfigForm } from "../src/components/LlmConfigForms";
 import { PromptSelectorModal } from "../src/components/PromptSelectorModal";
 
@@ -301,7 +300,6 @@ function HeaderControls({
   const llmMenuRef = useRef<HTMLDivElement | null>(null);
   const graphDetail = detailGraph ?? selectedGraph;
   const llmDetail = detailProvider ?? modelProvider;
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isEditingLlm, setIsEditingLlm] = useState(false);
   const [llmConfigFromDb, setLlmConfigFromDb] = useState<any>(null);
 
@@ -423,7 +421,7 @@ function HeaderControls({
           </svg>
         </button>
         {isGraphMenuOpen && (
-          <div className="absolute right-0 z-20 mt-2 w-60 rounded-xl border border-border-subtle bg-bg-elevated p-1 shadow-xl">
+          <div className="absolute left-0 z-20 mt-2 w-60 rounded-xl border border-border-subtle bg-bg-elevated p-1 shadow-xl">
             <p className="px-2 py-1.5 text-[10px] font-medium text-text-muted">Choose graph</p>
             <div className="space-y-0.5">
               {graphOptions.map((graph) => (
@@ -495,7 +493,7 @@ function HeaderControls({
           </svg>
         </button>
         {isLlmMenuOpen && (
-          <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-border-subtle bg-bg-elevated p-1 shadow-xl">
+          <div className="absolute left-0 z-20 mt-2 w-56 rounded-xl border border-border-subtle bg-bg-elevated p-1 shadow-xl">
             <p className="px-2 py-1.5 text-[10px] font-medium text-text-muted">Select provider</p>
             <div className="space-y-0.5">
               {(["azure", "lmstudio"] as const).map((provider) => (
@@ -608,25 +606,7 @@ function HeaderControls({
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => router.push("/chains")}
-        className="flex items-center gap-2 rounded-md border border-sky-500/30 bg-sky-500/5 px-3 py-1.5 text-xs font-medium text-sky-400 transition hover:bg-sky-500/10 focus-visible:ring-2 focus-visible:ring-sky-500/40"
-      >
-        <span className="text-[10px] uppercase tracking-wider text-sky-500/60">Manage</span>
-        <span>Campaigns</span>
-      </button>
 
-      <button
-        type="button"
-        onClick={() => setIsHistoryOpen(true)}
-        className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-focus-ring"
-      >
-        <span className="text-[10px] uppercase tracking-wider text-text-muted">View</span>
-        <span>History</span>
-      </button>
-
-      <AuditHistoryModal isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
 
       <Modal
         open={isGraphInfoOpen}
@@ -747,7 +727,7 @@ function HeaderControls({
           )
         )}
       </Modal>
-    </div>
+    </div >
   );
 }
 type EventCardProps = {
@@ -1746,43 +1726,10 @@ export default function HomePage() {
   }, [activeTimeline]);
 
   return (
-    <div className="h-screen overflow-hidden bg-bg-app text-text-primary font-sans antialiased selection:bg-state-selected selection:text-text-primary">
+    <div className="h-full overflow-hidden bg-bg-app text-text-primary font-sans antialiased selection:bg-state-selected selection:text-text-primary">
       <div className="grid h-full grid-rows-[auto_minmax(0,1fr)] gap-4 px-4 py-4">
         <header className="rounded-lg border border-border-subtle bg-bg-surface p-2 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <h1 className="text-sm font-semibold tracking-tight px-2 text-text-primary">Numezis Coder</h1>
-              {targetPathEntry && (
-                <div className="group relative flex items-center">
-                  <button
-                    type="button"
-                    className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-                    onClick={() => handleCopyPath(targetPathEntry.value)}
-                    aria-label="Copy repo path"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="h-3.5 w-3.5"
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="16" x2="12" y2="12" />
-                      <line x1="12" y1="8" x2="12.01" y2="8" />
-                    </svg>
-                  </button>
-                  <div className="pointer-events-none absolute left-full ml-2 hidden w-max max-w-xs rounded-md border border-border-strong bg-bg-elevated px-2 py-1 text-[10px] text-text-primary shadow-xl backdrop-blur-sm group-hover:block z-50">
-                    <p className="font-mono">
-                      {copiedPath === targetPathEntry.value ? "Copied!" : targetPathEntry.value}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
+          <div className="flex flex-wrap items-center gap-3">
             <HeaderControls
               selectedGraphId={selectedGraphId}
               selectedGraph={selectedGraph}

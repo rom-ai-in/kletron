@@ -333,13 +333,8 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
                         step === 3 ? "General Settings" :
                             "Review & Create"
             }
-        >
-            <div className="flex flex-col h-full">
-                <div className="flex-1 min-h-[300px]">
-                    {renderStep()}
-                </div>
-
-                <div className="mt-8 flex items-center justify-between border-t border-border-subtle pt-6">
+            footer={
+                <div className="flex items-center justify-between">
                     <Button
                         variant="secondary"
                         onClick={() => step > 1 ? setStep((step - 1) as WizardStep) : onClose()}
@@ -364,7 +359,9 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
                         )}
                     </div>
                 </div>
-            </div>
+            }
+        >
+            {renderStep()}
         </Modal>
     );
 }

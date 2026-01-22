@@ -25,6 +25,7 @@
     "dotenv": "^16.4.7",
     "eventsource": "^4.0.0",
     "langchain": "^1.2.10",
+    "lucide-react": "^0.562.0",
     "mongodb": "^7.0.0",
     "next": "^14.2.7",
     "postcss": "^8.4.40",
