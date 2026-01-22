@@ -10,9 +10,10 @@
     "dev:web": "next dev",
     "build:web": "next build",
     "start:web": "next start",
-    "lint": "eslint . --ext .ts",
-    "typecheck": "tsx --check src/index.ts && tsx --check src/graph.ts && tsx --check scripts/dev-all.ts && tsx --check scripts/start-all.ts && tsx --check scripts/langsmith-agent.ts && tsx --check scripts/lib/serviceLauncher.ts",
-    "test": "tsx --check src/index.ts && tsx --check src/graph.ts && tsx --check scripts/dev-all.ts && tsx --check scripts/start-all.ts && tsx --check scripts/langsmith-agent.ts && tsx --check scripts/lib/serviceLauncher.ts"
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest",
+    "test": "npm run typecheck && npm run test:unit"
   },
   "dependencies": {
     "@langchain/core": "^1.0.1",
@@ -37,9 +38,12 @@
     "@types/mongodb": "^4.0.6",
     "@types/node": "^20.6.0",
     "@types/react": "^18.2.35",
+    "@typescript-eslint/eslint-plugin": "^8.53.1",
     "@typescript-eslint/parser": "^8.53.1",
+    "@vitest/coverage-v8": "^4.0.17",
     "eslint": "^9.3.0",
     "tsx": "^4.19.3",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^4.0.17"
   }
 }

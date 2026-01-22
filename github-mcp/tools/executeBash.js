@@ -7,6 +7,8 @@ import { readFile } from "./readFile.js";
 import { searchCode } from "./searchCode.js";
 import { ensurePathInside, resolveRepoPath } from "./pathUtils.js";
 
+const MAX_TOTAL_RESULTS = 200; // Hard cap defensive
+
 function stripQuotes(text) {
   const t = text.trim();
   if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
@@ -39,7 +41,8 @@ function parseGrep(command) {
   const tokens = command.split(/\s+/).filter(Boolean);
   const queryToken = tokens.find((t) => t.startsWith('"') || t.startsWith("'")) || tokens[2];
   const query = stripQuotes(queryToken || "");
-  const dir = tokens[tokens.length - 1] && !tokens[tokens.length - 1].startsWith("-") ? tokens[tokens.length - 1] : ".";
+  const lastToken = tokens[tokens.length - 1];
+  const dir = lastToken && !lastToken.startsWith("-") && lastToken !== queryToken ? stripQuotes(lastToken) : ".";
   return { query, dir };
 }
 
@@ -71,7 +74,7 @@ function resolveEmulatedPath({ root, provided }) {
 
 export const executeBash = {
   description:
-    "Compatibility shim for agents that call `execute_bash`. This MCP server does NOT execute arbitrary shell. It emulates a small safe subset (find/grep/rg/ls/cat) using existing tools.",
+    "Compatibility shim for agents that call `execute_bash`. This MCP server does NOT execute arbitrary shell. It emulates a small safe subset (find/grep/rg/ls/cat) using existing tools. Enforces strict path safety.",
   inputSchema: {
     type: "object",
     properties: {
@@ -86,12 +89,15 @@ export const executeBash = {
     const raw = command.trim();
     const { left, right } = splitPipe(raw);
     const headLimit = parseHead(right);
-    const effectiveMaxResults = Number.isFinite(headLimit) ? Math.max(1, Math.trunc(headLimit)) : maxResults;
+    const effectiveMaxResults = Math.min(
+      MAX_TOTAL_RESULTS,
+      Number.isFinite(headLimit) ? Math.max(1, Math.trunc(headLimit)) : maxResults
+    );
     const cmd = left;
 
     if (cmd.startsWith("find ")) {
       const { dir, namePattern, maxDepth } = parseFind(cmd);
-      const files = await listFiles.run({ path: root });
+      const files = await listFiles.run({ path: root }); // This lists ALL files recursively properly scoped
       let filtered = files;
 
       const { relativePrefix } = resolveEmulatedPath({ root, provided: dir });
@@ -122,13 +128,10 @@ export const executeBash = {
 
     if (cmd.startsWith("grep ")) {
       const { query, dir } = parseGrep(cmd);
-      const searchPath =
-        dir && dir !== "."
-          ? path.isAbsolute(dir)
-            ? dir
-            : path.join(root, dir)
-          : root;
-      return await searchCode.run({ path: searchPath, query, maxResults: effectiveMaxResults });
+      // Ensure dir is inside root
+      const { absolute } = resolveEmulatedPath({ root, provided: dir });
+
+      return await searchCode.run({ path: absolute, query, maxResults: effectiveMaxResults });
     }
 
     if (cmd.startsWith("rg ")) {
@@ -136,13 +139,10 @@ export const executeBash = {
       const match = cmd.match(/rg\s+(?:-n\s+)?(["'])(.+?)\1\s*(.*)$/);
       const query = match ? match[2] : "";
       const dir = match ? match[3].trim() : ".";
-      const searchPath =
-        dir && dir !== "."
-          ? path.isAbsolute(dir)
-            ? dir
-            : path.join(root, dir)
-          : root;
-      return await searchCode.run({ path: searchPath, query, maxResults: effectiveMaxResults });
+
+      const { absolute } = resolveEmulatedPath({ root, provided: dir });
+
+      return await searchCode.run({ path: absolute, query, maxResults: effectiveMaxResults });
     }
 
     if (cmd.startsWith("ls")) {
@@ -167,6 +167,8 @@ export const executeBash = {
 
     if (cmd.startsWith("cat ")) {
       const { filePath } = parseCat(cmd);
+      // Ensure filePath is inside root via readFile tool (which calls resolveRepoPath/ensurePathInside theoretically? No, it calls readFile.run)
+      // readFile.run handles it.
       return await readFile.run({ repoPath: root, filePath });
     }
 

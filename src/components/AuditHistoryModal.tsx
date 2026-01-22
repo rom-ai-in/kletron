@@ -55,18 +55,18 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
             <div className="space-y-4">
                 {loading && (
                     <div className="flex items-center justify-center py-12">
-                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-700 border-t-cyan-400" />
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-border-subtle border-t-text-muted" />
                     </div>
                 )}
 
                 {error && (
-                    <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-center text-sm text-rose-300">
+                    <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-4 text-center text-sm text-rose-300">
                         Error: {error}
                     </div>
                 )}
 
                 {!loading && !error && sessions.length === 0 && (
-                    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-8 text-center text-sm text-slate-500">
+                    <div className="rounded-lg border border-border-subtle bg-bg-surface p-8 text-center text-sm text-text-muted">
                         No history entries found.
                     </div>
                 )}
@@ -74,29 +74,29 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
                 {!loading && !error && sessions.map((session) => (
                     <div
                         key={session._id}
-                        className="group relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/60 p-5 transition hover:border-cyan-500/50 hover:bg-slate-950/80"
+                        className="group relative overflow-hidden rounded-lg border border-border-subtle bg-bg-surface p-4 transition hover:border-border-strong hover:bg-state-hover"
                     >
                         <div className="flex items-start justify-between gap-4">
                             <div className="space-y-1">
                                 <div className="flex items-center gap-3">
                                     <StatusBadge status={session.status} />
-                                    <span className="font-mono text-[10px] text-slate-500">
+                                    <span className="font-mono text-[10px] text-text-muted">
                                         {new Date(session.startedAt).toLocaleString(undefined, {
                                             dateStyle: 'medium',
                                             timeStyle: 'short'
                                         })}
                                     </span>
                                 </div>
-                                <p className="text-sm font-medium text-slate-200 group-hover:text-white transition-colors line-clamp-2">
+                                <p className="text-sm font-medium text-text-secondary group-hover:text-text-primary transition-colors line-clamp-2">
                                     {session.prompt}
                                 </p>
                             </div>
                         </div>
 
                         {session.workflowResult?.conclusion && (
-                            <div className="mt-4 border-t border-slate-800/50 pt-3">
-                                <p className="text-[11px] text-slate-400">
-                                    <span className="mr-2 inline-block rounded font-mono text-[9px] uppercase tracking-wider text-slate-600">
+                            <div className="mt-3 border-t border-border-subtle pt-2">
+                                <p className="text-[11px] text-text-muted">
+                                    <span className="mr-2 inline-block rounded font-mono text-[9px] uppercase tracking-wider text-text-secondary">
                                         Conclusion
                                     </span>
                                     {session.workflowResult.conclusion}
@@ -112,16 +112,16 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
 
 function StatusBadge({ status }: { status: string }) {
     const styles = {
-        COMPLETED: "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
-        FAILED: "bg-rose-500/10 text-rose-300 border-rose-500/30",
-        RUNNING: "bg-cyan-500/10 text-cyan-300 border-cyan-500/30",
-        PENDING: "bg-slate-500/10 text-slate-400 border-slate-500/30",
+        COMPLETED: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+        FAILED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+        RUNNING: "bg-bg-elevated text-text-primary border-border-strong",
+        PENDING: "bg-bg-elevated text-text-muted border-border-subtle",
     };
 
-    const className = styles[status as keyof typeof styles] || "bg-slate-800 text-slate-400 border-slate-700";
+    const className = styles[status as keyof typeof styles] || "bg-bg-elevated text-text-muted border-border-subtle";
 
     return (
-        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${className}`}>
+        <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${className}`}>
             {status === "RUNNING" && (
                 <span className="mr-1.5 h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
             )}

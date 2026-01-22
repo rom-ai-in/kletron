@@ -10,6 +10,7 @@ import {
   runPhase5ReporterAgent,
   type PhaseKey,
 } from "./agents/phases";
+import { normalizeAndValidateTargetFiles } from "./lib/repoPath";
 import {
   formatAuditContextPrompt,
   formatAuditContextSummary,
@@ -507,13 +508,22 @@ export async function runAgentWorkflow(
         flushUpdate,
       }
     );
-    const targetFiles = (phase2Result.parsed as any)?.target_files ?? [];
+    const initialTargets = (phase2Result.parsed as any)?.target_files ?? [];
+    const { validTargets, droppedTargets } = await normalizeAndValidateTargetFiles(
+      Array.isArray(initialTargets) ? initialTargets : []
+    );
+    const targetFiles = validTargets;
+
     const phase2Entry = timeline.find((entry) => entry.id === "phase2");
     if (phase2Entry) {
+      if (droppedTargets.length > 0) {
+        console.warn(`[Phase2] Dropped targets: ${JSON.stringify(droppedTargets)}`);
+      }
+      const droppedNote = droppedTargets.length ? ` (Dropped ${droppedTargets.length} invalid)` : "";
       phase2Entry.details =
         Array.isArray(targetFiles) && targetFiles.length
-          ? `Targets selected: ${targetFiles.length}`
-          : "No target files were selected.";
+          ? `Targets selected: ${targetFiles.length}${droppedNote}`
+          : "No valid target files were selected.";
     }
     await flushUpdate();
 

@@ -36,23 +36,23 @@ export function Modal({ open, onClose, title, subtitle, children }: ModalProps) 
         <div
             ref={overlayRef}
             onMouseDown={handleOverlayClick}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-[6px]"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
         >
-            <div className="relative flex h-full w-full max-w-4xl max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/95 shadow-[0_30px_60px_rgba(2,6,23,0.75)]">
-                <div className="flex flex-wrap items-start justify-between gap-3 rounded-t-[32px] bg-slate-950/90 px-6 py-5">
+            <div className="relative flex h-full w-full max-w-4xl max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-xl border border-border-subtle bg-bg-elevated shadow-xl">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle bg-bg-elevated px-6 py-4">
                     <div>
-                        {title && <p className="text-[11px] text-slate-500">{title}</p>}
-                        {subtitle && <h3 className="text-3xl font-semibold text-white">{subtitle}</h3>}
+                        {title && <p className="text-[11px] font-mono text-text-muted">{title}</p>}
+                        {subtitle && <h3 className="text-lg font-semibold text-text-primary">{subtitle}</h3>}
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[11px] font-semibold text-slate-300 transition hover:border-white"
+                        className="rounded-md border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
                     >
                         Close
                     </button>
                 </div>
-                <div className="flex-1 overflow-hidden px-6 pb-6 pt-4">
+                <div className="flex-1 overflow-hidden px-6 pb-6 pt-4 bg-bg-surface">
                     <div className="h-full min-h-0 overflow-y-auto pr-2 scrollbar-elegant space-y-6">
                         {children}
                     </div>

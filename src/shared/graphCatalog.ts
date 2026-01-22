@@ -114,6 +114,7 @@ export const auditPhaseConfig: Record<AuditPhaseKey, PhaseDefinition> = {
       "- Assign a focused mission per file (e.g., JWT validation, SQLi, authz).",
       "- Hard cap: use at most 8 tool calls, then output JSON.",
       "- Limit to top 20 files.",
+      "- Only output paths that exist in list_files; paths must be repo-relative.",
       "- Output MUST be valid JSON only (no markdown).",
       "- Do not use ellipses (...) or trailing commas; output strict JSON.",
     ].join("\n"),

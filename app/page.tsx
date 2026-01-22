@@ -17,7 +17,9 @@ import {
   normalizeAuditContext,
   type AuditContext,
 } from "../src/shared/auditContext";
-import { AuditHistoryModal } from "../src/components/AuditHistoryModal"; // Import Modal
+import { AuditHistoryModal } from "../src/components/AuditHistoryModal";
+import { AzureConfigForm, LMStudioConfigForm } from "../src/components/LlmConfigForms";
+import { PromptSelectorModal } from "../src/components/PromptSelectorModal";
 
 type AgentEventKind = AgentEvent["kind"];
 
@@ -32,10 +34,10 @@ const createSystemEvent = (): AgentEvent => ({
 });
 
 const eventBadgeStyles: Record<AgentEventKind, string> = {
-  system: "border-slate-700 bg-slate-900/80 text-slate-300",
-  user: "border-cyan-500/60 bg-cyan-500/10 text-cyan-200",
-  assistant: "border-slate-600 bg-slate-900/60 text-slate-100",
-  tool: "border-emerald-500/60 bg-emerald-500/10 text-emerald-200",
+  system: "border-border-subtle bg-bg-elevated text-text-muted",
+  user: "border-border-strong bg-bg-surface text-text-primary",
+  assistant: "border-border-subtle bg-bg-surface text-text-secondary",
+  tool: "border-border-subtle bg-bg-elevated text-text-muted font-mono",
 };
 
 const eventBadgeLabel: Record<AgentEventKind, string> = {
@@ -140,43 +142,45 @@ type TimelinePanelProps = {
 
 function TimelinePanel({ timeline, selectedEventId, onPhaseSelect }: TimelinePanelProps) {
   return (
-    <section className="sticky top-6 space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-lg h-full flex flex-col overflow-hidden">
-      <h2 className="text-lg font-semibold">Phases</h2>
+    <section className="sticky top-6 space-y-4 rounded-lg border border-border-subtle bg-bg-surface p-0 shadow-sm h-full flex flex-col overflow-hidden">
+      <div className="border-b border-border-subtle px-3 py-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Phases</h2>
+      </div>
       <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-elegant">
         {timeline.map((event) => (
           <button
             key={event.id}
             type="button"
             onClick={() => onPhaseSelect(event.id)}
-            className={`w-full rounded-xl border px-3 py-3 text-left transition ${selectedEventId === event.id
-              ? "border-cyan-400 bg-slate-950/80"
-              : "border-slate-800 bg-slate-950/40"
+            className={`w-full rounded-md border px-3 py-2 text-left transition ${selectedEventId === event.id
+              ? "border-border-strong bg-state-selected"
+              : "border-transparent hover:bg-state-hover"
               }`}
           >
             <div className="flex items-center justify-between text-sm">
-              <span className="font-semibold text-slate-100">{event.label}</span>
+              <span className="font-semibold text-text-primary">{event.label}</span>
               <span
-                className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${event.status === "success"
-                  ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/40"
+                className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wider ${event.status === "success"
+                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                   : event.status === "error"
-                    ? "bg-rose-500/10 text-rose-300 border border-rose-500/40"
+                    ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
                     : event.status === "pending"
-                      ? "bg-slate-600/20 text-slate-300 border border-slate-500/40"
-                      : "bg-sky-400/10 text-sky-200 border border-sky-400/30"
+                      ? "bg-bg-elevated text-text-muted border border-border-subtle"
+                      : "bg-bg-elevated text-text-primary border border-border-strong"
                   }`}
               >
                 {event.status}
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-2">{event.summary}</p>
+            <p className="text-xs text-text-muted mt-1.5 line-clamp-1">{event.summary}</p>
             {event.systemPrompt && (
-              <p className="text-[11px] text-slate-500 mt-2 line-clamp-2">
-                Preview: {event.systemPrompt.split("\n")[0]}
+              <p className="text-[10px] font-mono text-text-muted/60 mt-1 line-clamp-1">
+                {event.systemPrompt.split("\n")[0]}
               </p>
             )}
             {event.status === "running" && (
-              <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-slate-900">
-                <div className="h-full w-full bg-gradient-to-r from-cyan-400 via-slate-600 to-transparent animate-progress-loader" />
+              <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-bg-elevated">
+                <div className="h-full w-full bg-text-muted animate-progress-loader opacity-50" />
               </div>
             )}
           </button>
@@ -195,21 +199,21 @@ type ToolExplorerPanelProps = {
 
 function ToolExplorerPanel({ tools, usedToolNames, openToolDialog }: ToolExplorerPanelProps) {
   return (
-    <section className="sticky top-6 space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-3 shadow-lg h-full flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-2 mb-1">
-        <h3 className="font-semibold text-slate-300">Tools</h3>
-        <span>
+    <section className="sticky top-6 space-y-0 rounded-lg border border-border-subtle bg-bg-surface shadow-sm h-full flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border-subtle px-3 py-2 bg-bg-surface">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Tools</h3>
+        <span className="text-[10px] text-text-muted">
           {usedToolNames.size} used
         </span>
       </div>
-      <div className="flex-1 overflow-y-auto scrollbar-elegant">
+      <div className="flex-1 overflow-y-auto scrollbar-elegant p-1">
         <ul className="space-y-0.5">
           {tools.map((tool) => (
             <li key={tool.name}>
               <button
                 type="button"
                 onClick={() => openToolDialog(tool)}
-                className="group flex w-full items-center justify-between py-1 text-left text-[13px] text-slate-400 transition hover:text-cyan-400"
+                className="group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[12px] text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
               >
                 <span className="truncate">{tool.label}</span>
                 <span className="opacity-0 transition-opacity group-hover:opacity-100">
@@ -284,6 +288,87 @@ function HeaderControls({
   const graphDetail = detailGraph ?? selectedGraph;
   const llmDetail = detailProvider ?? modelProvider;
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isEditingLlm, setIsEditingLlm] = useState(false);
+  const [llmConfigFromDb, setLlmConfigFromDb] = useState<any>(null);
+
+  // Fetch LLM config from database on mount
+  const fetchLlmConfig = useCallback(async () => {
+    try {
+      const response = await fetch('/api/llm-config');
+      if (response.ok) {
+        const data = await response.json();
+        setLlmConfigFromDb(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch LLM config:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLlmConfig();
+  }, [fetchLlmConfig]);
+
+  // Save handlers
+  const handleSaveAzure = useCallback(async (config: {
+    endpoint: string;
+    deployment: string;
+    model: string;
+    apiVersion: string;
+    apiKey: string;
+  }) => {
+    const response = await fetch('/api/llm-config/azure', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+
+    if (response.ok) {
+      await fetchLlmConfig();
+      setIsEditingLlm(false);
+    } else {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to save configuration');
+    }
+  }, [fetchLlmConfig]);
+
+  const handleSaveLMStudio = useCallback(async (config: {
+    baseUrl: string;
+    model: string;
+    apiKey?: string;
+  }) => {
+    const response = await fetch('/api/llm-config/lmstudio', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+
+    if (response.ok) {
+      await fetchLlmConfig();
+      setIsEditingLlm(false);
+    } else {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to save configuration');
+    }
+  }, [fetchLlmConfig]);
+
+  const handleResetConfig = useCallback(async () => {
+    if (!confirm('Reset to environment variable configuration? This will delete the database configuration.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/llm-config', {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchLlmConfig();
+        setIsEditingLlm(false);
+      }
+    } catch (error) {
+      console.error('Failed to reset configuration:', error);
+    }
+  }, [fetchLlmConfig]);
 
   useEffect(() => {
     if (!isGraphMenuOpen && !isLlmMenuOpen) return;
@@ -305,16 +390,16 @@ function HeaderControls({
       <div ref={graphMenuRef} className="relative">
         <button
           type="button"
-          className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-sm font-semibold text-white transition hover:border-cyan-400"
+          className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-focus-ring"
           onClick={() => {
             setIsGraphMenuOpen((prev) => !prev);
             setIsLlmMenuOpen(false);
           }}
         >
-          <span className="text-[10px] text-slate-400">Graph</span>
+          <span className="text-[10px] uppercase tracking-wider text-text-muted">Graph</span>
           <span>{selectedGraph.name}</span>
           <svg
-            className="h-3 w-3 text-slate-400"
+            className="h-3 w-3 text-text-muted"
             viewBox="0 0 12 12"
             fill="none"
             stroke="currentColor"
@@ -324,9 +409,9 @@ function HeaderControls({
           </svg>
         </button>
         {isGraphMenuOpen && (
-          <div className="absolute right-0 z-20 mt-2 w-60 rounded-2xl border border-slate-800 bg-slate-950/95 p-2 shadow-xl">
-            <p className="px-2 py-1 text-[10px] text-slate-500">Choose graph</p>
-            <div className="mt-1 space-y-1">
+          <div className="absolute right-0 z-20 mt-2 w-60 rounded-xl border border-border-subtle bg-bg-elevated p-1 shadow-xl">
+            <p className="px-2 py-1.5 text-[10px] font-medium text-text-muted">Choose graph</p>
+            <div className="space-y-0.5">
               {graphOptions.map((graph) => (
                 <div
                   key={graph.id}
@@ -343,15 +428,15 @@ function HeaderControls({
                     onSelectGraph(graph.id);
                     setIsGraphMenuOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between rounded-xl px-2 py-2 text-left text-sm font-semibold transition ${graph.id === selectedGraphId ? "bg-cyan-500/10 text-cyan-200" : "text-slate-200 hover:bg-slate-900/60"
+                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs font-medium transition ${graph.id === selectedGraphId ? "bg-state-selected text-text-primary" : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
                     }`}
                 >
                   <span>{graph.name}</span>
                   <span className="flex items-center gap-2">
-                    {graph.id === selectedGraphId && <span className="text-xs text-cyan-300">active</span>}
+                    {graph.id === selectedGraphId && <span className="text-[10px] text-text-muted">active</span>}
                     <button
                       type="button"
-                      className="text-slate-400 transition hover:text-cyan-400"
+                      className="text-text-muted transition hover:text-text-primary"
                       onClick={(event) => {
                         event.stopPropagation();
                         setDetailGraph(graph);
@@ -377,16 +462,16 @@ function HeaderControls({
       <div ref={llmMenuRef} className="relative">
         <button
           type="button"
-          className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-sm font-semibold text-white transition hover:border-cyan-400"
+          className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-focus-ring"
           onClick={() => {
             setIsLlmMenuOpen((prev) => !prev);
             setIsGraphMenuOpen(false);
           }}
         >
-          <span className="text-[10px] text-slate-400">LLM</span>
+          <span className="text-[10px] uppercase tracking-wider text-text-muted">LLM</span>
           <span>{modelProvider === "azure" ? "Azure" : "LM Studio"}</span>
           <svg
-            className="h-3 w-3 text-slate-400"
+            className="h-3 w-3 text-text-muted"
             viewBox="0 0 12 12"
             fill="none"
             stroke="currentColor"
@@ -396,9 +481,9 @@ function HeaderControls({
           </svg>
         </button>
         {isLlmMenuOpen && (
-          <div className="absolute right-0 z-20 mt-2 w-56 rounded-2xl border border-slate-800 bg-slate-950/95 p-2 shadow-xl">
-            <p className="px-2 py-1 text-[10px] text-slate-500">Select provider</p>
-            <div className="mt-1 space-y-1">
+          <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-border-subtle bg-bg-elevated p-1 shadow-xl">
+            <p className="px-2 py-1.5 text-[10px] font-medium text-text-muted">Select provider</p>
+            <div className="space-y-0.5">
               {(["azure", "lmstudio"] as const).map((provider) => (
                 <div
                   key={provider}
@@ -415,15 +500,15 @@ function HeaderControls({
                     onSelectProvider(provider);
                     setIsLlmMenuOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between rounded-xl px-2 py-2 text-left text-sm font-semibold transition ${provider === modelProvider ? "bg-cyan-500/10 text-cyan-200" : "text-slate-200 hover:bg-slate-900/60"
+                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs font-medium transition ${provider === modelProvider ? "bg-state-selected text-text-primary" : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
                     }`}
                 >
                   <span>{provider === "azure" ? "Azure OpenAI" : "LM Studio (local)"}</span>
                   <span className="flex items-center gap-2">
-                    {provider === modelProvider && <span className="text-xs text-cyan-300">active</span>}
+                    {provider === modelProvider && <span className="text-[10px] text-text-muted">active</span>}
                     <button
                       type="button"
-                      className="text-slate-400 transition hover:text-cyan-400"
+                      className="text-text-muted transition hover:text-text-primary"
                       onClick={(event) => {
                         event.stopPropagation();
                         setDetailProvider(provider);
@@ -448,7 +533,7 @@ function HeaderControls({
                 setIsLlmInfoOpen(true);
                 setIsLlmMenuOpen(false);
               }}
-              className="mt-2 flex w-full items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-2 py-2 text-xs font-semibold text-slate-300 transition hover:border-cyan-400"
+              className="mt-2 flex w-full items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-2 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
             >
               <svg
                 className="h-3 w-3"
@@ -467,40 +552,38 @@ function HeaderControls({
         )}
       </div>
 
-      <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/80 p-1 pr-3 pl-3 transition hover:border-cyan-400">
+      <div className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface p-1 pr-3 pl-3 transition hover:border-border-strong">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-slate-400">Context</span>
+          <span className="text-[10px] uppercase tracking-wider text-text-muted">Context</span>
           <button
             type="button"
             onClick={() => {
               if (!auditContextEnabled && !auditContextSummary) {
-                // Force configure if empty
                 onConfigureAuditContext();
-                // We optimistically enable it, effectively saying "I want to use it, let me configure it"
                 onAuditContextEnabledChange(true);
               } else {
                 onAuditContextEnabledChange(!auditContextEnabled);
               }
             }}
-            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${auditContextEnabled ? "bg-cyan-500" : "bg-slate-700"
+            className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${auditContextEnabled ? "bg-text-secondary" : "bg-bg-elevated border border-border-subtle"
               }`}
           >
             <span
-              className={`${auditContextEnabled ? "translate-x-4" : "translate-x-1"
-                } inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform`}
+              className={`${auditContextEnabled ? "translate-x-3.5" : "translate-x-0.5"
+                } inline-block h-3 w-3 transform rounded-full bg-text-primary transition-transform`}
             />
           </button>
         </div>
 
-        <div className="h-4 w-[1px] bg-slate-800 mx-1" />
+        <div className="h-4 w-[1px] bg-border-subtle mx-1" />
 
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-semibold ${auditContextEnabled ? "text-cyan-200" : "text-slate-400"}`}>
+          <span className={`text-xs font-medium ${auditContextEnabled ? "text-text-primary" : "text-text-muted"}`}>
             {auditContextEnabled ? (auditContextSummary ?? "Config needed") : "Off"}
           </span>
           <button
             type="button"
-            className="text-slate-400 hover:text-cyan-400 transition"
+            className="text-text-muted hover:text-text-primary transition"
             onClick={onConfigureAuditContext}
             aria-label="Configure context"
           >
@@ -514,9 +597,9 @@ function HeaderControls({
       <button
         type="button"
         onClick={() => setIsHistoryOpen(true)}
-        className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-sm font-semibold text-white transition hover:border-cyan-400"
+        className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-focus-ring"
       >
-        <span className="text-[10px] text-slate-400">View</span>
+        <span className="text-[10px] uppercase tracking-wider text-text-muted">View</span>
         <span>History</span>
       </button>
 
@@ -531,15 +614,15 @@ function HeaderControls({
         title="Graph details"
         subtitle={(detailGraph ?? selectedGraph).name}
       >
-        <div className="space-y-4 text-sm text-slate-300">
+        <div className="space-y-4 text-sm text-text-secondary">
           <p>{graphDetail.description}</p>
           <div className="space-y-2">
-            <p className="text-[11px] text-slate-500">Phases</p>
+            <p className="text-[11px] text-text-muted">Phases</p>
             <ul className="space-y-2">
               {graphDetail.phases.map((phase) => (
-                <li key={phase.id} className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-[12px]">
-                  <p className="font-semibold text-white">{phase.label}</p>
-                  <p className="text-slate-400">{phase.summary}</p>
+                <li key={phase.id} className="rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-[12px]">
+                  <p className="font-semibold text-text-primary">{phase.label}</p>
+                  <p className="text-text-muted">{phase.summary}</p>
                 </li>
               ))}
             </ul>
@@ -552,38 +635,93 @@ function HeaderControls({
         onClose={() => {
           setIsLlmInfoOpen(false);
           setDetailProvider(null);
+          setIsEditingLlm(false);
         }}
         title="LLM details"
         subtitle={llmDetail === "azure" ? "Azure OpenAI" : "LM Studio (local)"}
       >
-        {llmDetail === "azure" ? (
-          <div className="space-y-4 text-sm text-slate-300">
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
-              <p className="text-[11px] text-slate-500">Azure OpenAI</p>
-              <p className="mt-2 text-white">{azureConfigured ? "Configured" : "Missing credentials"}</p>
-              <p className="mt-1 text-xs text-slate-400">Endpoint: {llmInfo?.azure?.endpoint ?? "Not set"}</p>
-              <p className="mt-1 text-xs text-slate-400">Deployment: {llmInfo?.azure?.deployment ?? "Not set"}</p>
-              <p className="mt-1 text-xs text-slate-400">Model: {llmInfo?.azure?.model ?? "Not set"}</p>
-              <p className="mt-1 text-xs text-slate-400">API version: {llmInfo?.azure?.apiVersion ?? "Not set"}</p>
+        {!isEditingLlm ? (
+          // Read-only view
+          llmDetail === "azure" ? (
+            <div className="space-y-4 text-sm text-text-secondary">
+              <div className="rounded-lg border border-border-subtle bg-bg-surface p-3">
+                <p className="text-[11px] text-text-muted">Azure OpenAI</p>
+                <p className="mt-2 text-text-primary">{azureConfigured ? "Configured" : "Missing credentials"}</p>
+                <p className="mt-1 text-xs text-text-muted">Endpoint: {llmConfigFromDb?.azure?.endpoint ?? llmInfo?.azure?.endpoint ?? "Not set"}</p>
+                <p className="mt-1 text-xs text-text-muted">Deployment: {llmConfigFromDb?.azure?.deployment ?? llmInfo?.azure?.deployment ?? "Not set"}</p>
+                <p className="mt-1 text-xs text-text-muted">Model: {llmConfigFromDb?.azure?.model ?? llmInfo?.azure?.model ?? "Not set"}</p>
+                <p className="mt-1 text-xs text-text-muted">API version: {llmConfigFromDb?.azure?.apiVersion ?? llmInfo?.azure?.apiVersion ?? "Not set"}</p>
+              </div>
+              {llmError && <p className="text-xs text-rose-400">{llmError}</p>}
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setIsEditingLlm(true)}
+                  className="px-4 py-2 rounded-md bg-bg-surface border border-border-strong text-text-primary hover:bg-state-hover transition text-xs font-medium"
+                >
+                  Edit Configuration
+                </button>
+                <button
+                  onClick={handleResetConfig}
+                  className="px-4 py-2 rounded-md bg-bg-surface border border-border-subtle text-text-secondary hover:bg-state-hover transition text-xs font-medium"
+                >
+                  Reset to Environment
+                </button>
+              </div>
             </div>
-            {llmError && <p className="text-xs text-rose-300">{llmError}</p>}
-          </div>
+          ) : (
+            <div className="space-y-4 text-sm text-text-secondary">
+              <div className="rounded-lg border border-border-subtle bg-bg-surface p-3">
+                <p className="text-[11px] text-text-muted">LM Studio</p>
+                <p className="mt-2 text-text-primary">Base URL: {llmConfigFromDb?.lmstudio?.baseUrl ?? lmStudioBaseUrl}</p>
+                <label className="mt-3 block text-[11px] text-text-muted">Model ID</label>
+                <input
+                  type="text"
+                  className="mt-1 w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
+                  placeholder="LM Studio model ID"
+                  value={lmStudioModel}
+                  onChange={(event) => onLmStudioModelChange(event.target.value)}
+                />
+              </div>
+              {llmError && <p className="text-xs text-rose-400">{llmError}</p>}
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setIsEditingLlm(true)}
+                  className="px-4 py-2 rounded-md bg-bg-surface border border-border-strong text-text-primary hover:bg-state-hover transition text-xs font-medium"
+                >
+                  Edit Configuration
+                </button>
+                <button
+                  onClick={handleResetConfig}
+                  className="px-4 py-2 rounded-md bg-bg-surface border border-border-subtle text-text-secondary hover:bg-state-hover transition text-xs font-medium"
+                >
+                  Reset to Environment
+                </button>
+              </div>
+            </div>
+          )
         ) : (
-          <div className="space-y-4 text-sm text-slate-300">
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
-              <p className="text-[11px] text-slate-500">LM Studio</p>
-              <p className="mt-2 text-white">Base URL: {lmStudioBaseUrl}</p>
-              <label className="mt-3 block text-[11px] text-slate-500">Model ID</label>
-              <input
-                type="text"
-                className="mt-1 w-full rounded-full border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
-                placeholder="LM Studio model ID"
-                value={lmStudioModel}
-                onChange={(event) => onLmStudioModelChange(event.target.value)}
-              />
-            </div>
-            {llmError && <p className="text-xs text-rose-300">{llmError}</p>}
-          </div>
+          // Edit mode
+          llmDetail === "azure" ? (
+            <AzureConfigForm
+              initialConfig={{
+                endpoint: llmConfigFromDb?.azure?.endpoint ?? llmInfo?.azure?.endpoint ?? "",
+                deployment: llmConfigFromDb?.azure?.deployment ?? llmInfo?.azure?.deployment ?? "",
+                model: llmConfigFromDb?.azure?.model ?? llmInfo?.azure?.model ?? "",
+                apiVersion: llmConfigFromDb?.azure?.apiVersion ?? llmInfo?.azure?.apiVersion ?? "",
+              }}
+              onSave={handleSaveAzure}
+              onCancel={() => setIsEditingLlm(false)}
+            />
+          ) : (
+            <LMStudioConfigForm
+              initialConfig={{
+                baseUrl: llmConfigFromDb?.lmstudio?.baseUrl ?? lmStudioBaseUrl,
+                model: llmConfigFromDb?.lmstudio?.model ?? lmStudioModel,
+              }}
+              onSave={handleSaveLMStudio}
+              onCancel={() => setIsEditingLlm(false)}
+            />
+          )
         )}
       </Modal>
     </div>
@@ -701,20 +839,20 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
       onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
-      className={`group cursor-pointer rounded-2xl border border-slate-800 bg-slate-950/80 text-slate-100 transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-400 ${isToolEvent ? "shadow-[0_4px_15px_rgba(0,0,0,0.45)] hover:border-slate-600" : "shadow-[0_2px_10px_rgba(0,0,0,0.35)] hover:border-cyan-500"
+      className={`group cursor-pointer rounded-lg border border-border-subtle bg-bg-surface text-text-primary transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus-ring ${isToolEvent ? "hover:border-border-strong border-l-2 border-l-text-muted" : "hover:border-border-strong shadow-sm"
         }`}
     >
       {isToolEvent ? (
         <div>
-          <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] text-slate-400">
+          <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] text-text-muted">
             <div className="flex min-w-0 items-center gap-2">
-              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badgeClass}`}>
+              <span className={`rounded-sm border px-1.5 py-0.5 text-[10px] font-medium ${badgeClass}`}>
                 {badgeLabel}
               </span>
-              <p className="text-sm font-semibold text-slate-100 truncate leading-tight">{titleText}</p>
+              <p className="text-xs font-medium text-text-primary truncate leading-tight font-mono">{titleText}</p>
             </div>
-            <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
-              <span className="whitespace-nowrap text-[10px] text-slate-400">
+            <div className="flex items-center gap-2 text-[10px] font-mono text-text-muted">
+              <span className="whitespace-nowrap text-[10px] text-text-muted">
                 {formatTimestamp(event.timestamp)}
               </span>
               <button
@@ -724,7 +862,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
                   toggleExpanded();
                 }}
                 aria-expanded={isExpanded}
-                className="flex h-7 w-7 items-center justify-center rounded border border-slate-800 bg-slate-950/70 text-slate-300 transition duration-150 hover:border-slate-500 hover:text-white"
+                className="flex h-6 w-6 items-center justify-center rounded border border-border-subtle bg-bg-elevated text-text-muted transition duration-150 hover:bg-state-hover hover:text-text-primary"
               >
                 <span className="sr-only">{isExpanded ? "Collapse details" : "Expand details"}</span>
                 <svg
@@ -741,32 +879,32 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
             </div>
           </div>
           {!isExpanded && (
-            <div className="space-y-1 px-3 pb-3 text-[11px] text-slate-400">
+            <div className="space-y-1 px-3 pb-3 text-[11px] text-text-muted font-mono">
               {argsPreview && (
                 <p className="truncate">
-                  <span className="text-slate-500">Args:</span> {argsPreview}
+                  <span className="text-text-muted/60">Args:</span> {argsPreview}
                 </p>
               )}
               <p className="truncate">
-                <span className="text-slate-500">Result:</span>{" "}
+                <span className="text-text-muted/60">Result:</span>{" "}
                 {collapsedPreview || "No output yet"}
               </p>
             </div>
           )}
         </div>
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[11px] text-slate-400">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[11px] text-text-muted">
           <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
-              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badgeClass}`}>
+            <div className="flex flex-wrap items-center gap-2 text-[10px] text-text-muted">
+              <span className={`rounded-sm border px-1.5 py-0.5 text-[10px] font-medium ${badgeClass}`}>
                 {badgeLabel}
               </span>
               <span>{event.phaseLabel ?? (isToolEvent ? "Tool call" : "Agent log")}</span>
             </div>
-            <p className="text-sm font-semibold text-white truncate leading-tight">{titleText}</p>
-            <p className="text-xs text-slate-400 truncate">{collapsedPreview || "No response yet."}</p>
+            <p className="text-xs font-medium text-text-primary truncate leading-tight mt-1">{titleText}</p>
+            <p className="text-[11px] text-text-secondary truncate mt-0.5">{collapsedPreview || "No response yet."}</p>
           </div>
-          <div className="flex flex-col items-end gap-1 text-[10px] text-slate-500">
+          <div className="flex flex-col items-end gap-1 text-[10px] text-text-muted">
             <button
               type="button"
               onClick={(event) => {
@@ -774,7 +912,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
                 toggleExpanded();
               }}
               aria-expanded={isExpanded}
-              className="flex h-7 w-7 items-center justify-center rounded border border-slate-800 bg-slate-950/70 text-slate-300 transition duration-150 hover:border-cyan-400 hover:text-white"
+              className="flex h-6 w-6 items-center justify-center rounded border border-border-subtle bg-bg-elevated text-text-muted transition duration-150 hover:bg-state-hover hover:text-text-primary"
             >
               <span className="sr-only">{isExpanded ? "Collapse details" : "Expand details"}</span>
               <svg
@@ -788,22 +926,22 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 8l4 4 4-4" />
               </svg>
             </button>
-            <span>{formatTimestamp(event.timestamp)}</span>
+            <span className="font-mono">{formatTimestamp(event.timestamp)}</span>
           </div>
         </div>
       )}
 
       {agentMarkdown && (
-        <section className="space-y-2 border-t border-slate-800 px-3 pb-3 pt-2">
+        <section className="space-y-2 border-t border-border-subtle px-3 pb-3 pt-2">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] text-slate-400">Markdown</p>
+            <p className="text-[11px] text-text-muted">Markdown</p>
             <button
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
                 handleCopyMarkdown();
               }}
-              className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-[10px] text-slate-300 transition hover:border-slate-500"
+              className="flex items-center gap-1 rounded-md border border-border-subtle bg-bg-surface px-3 py-1 text-[10px] text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -822,38 +960,38 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
               </span>
             </button>
           </div>
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3 text-[13px] leading-relaxed text-slate-100 whitespace-pre-wrap break-words">
+          <div className="rounded-lg border border-border-subtle bg-bg-surface p-3 text-[13px] leading-relaxed text-text-primary whitespace-pre-wrap break-words">
             {agentMarkdown}
           </div>
         </section>
       )}
-      <div className={!isExpanded ? "hidden" : "grid gap-3 border-t border-slate-800 px-3 pb-4 pt-2"} role="region">
+      <div className={!isExpanded ? "hidden" : "grid gap-3 border-t border-border-subtle px-3 pb-4 pt-2"} role="region">
         {event.name && (
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-            <span className="font-semibold text-white">Tool</span>
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+            <span className="font-semibold text-text-primary">Tool</span>
             <span>{event.name}</span>
-            <span className="text-slate-500">{toolMeta ? "registered" : "external"}</span>
+            <span className="text-text-muted/70">{toolMeta ? "registered" : "external"}</span>
           </div>
         )}
         {isToolEvent && formattedArgs && (
           <section>
-            <p className="text-[11px] text-slate-400">Arguments</p>
-            <pre className="mt-2 max-h-40 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-[12px] leading-relaxed text-slate-200 whitespace-pre-wrap break-words scrollbar-elegant">
+            <p className="text-[11px] text-text-muted">Arguments</p>
+            <pre className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-border-subtle bg-bg-surface p-3 text-[12px] leading-relaxed text-text-secondary whitespace-pre-wrap break-words scrollbar-elegant">
               {formattedArgs}
             </pre>
           </section>
         )}
         {isToolEvent && event.toolNote && event.toolNote.trim().length > 0 && (
           <section>
-            <p className="text-[11px] text-slate-400">Assistant message</p>
-            <pre className="mt-2 max-h-32 overflow-y-auto rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] leading-relaxed text-amber-100 whitespace-pre-wrap break-words scrollbar-elegant">
+            <p className="text-[11px] text-text-muted">Assistant message</p>
+            <pre className="mt-2 max-h-32 overflow-y-auto rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] leading-relaxed text-amber-100 whitespace-pre-wrap break-words scrollbar-elegant">
               {event.toolNote}
             </pre>
           </section>
         )}
         <section>
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-text-muted">
               Result{isToolEvent ? "" : " / Assistant message"}
             </p>
             {event.kind === "assistant" && (
@@ -863,7 +1001,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
                   event.stopPropagation();
                   handleCopyResponse();
                 }}
-                className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1 text-[10px] text-slate-300 transition hover:border-slate-500"
+                className="flex items-center gap-1 rounded-md border border-border-subtle bg-bg-surface px-3 py-1 text-[10px] text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
                 aria-label="Copy agent response"
               >
                 <svg
@@ -888,7 +1026,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
               </button>
             )}
           </div>
-          <pre className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-[12px] leading-relaxed text-slate-100 whitespace-pre-wrap break-words scrollbar-elegant">
+          <pre className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-border-subtle bg-bg-surface p-3 text-[12px] leading-relaxed text-text-primary whitespace-pre-wrap break-words scrollbar-elegant">
             {resultText}
           </pre>
         </section>
@@ -897,7 +1035,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
             <button
               type="button"
               onClick={() => openToolDialog(toolMeta)}
-              className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[10px] text-slate-300 transition hover:border-cyan-400"
+              className="rounded-md border border-border-subtle bg-bg-surface px-3 py-1 text-[10px] text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
             >
               View tool details
             </button>
@@ -918,7 +1056,8 @@ export default function HomePage() {
   const [folderFileMap, setFolderFileMap] = useState<Record<string, PromptFileEntry[]>>({});
   const [folderFileLoading, setFolderFileLoading] = useState<Record<string, boolean>>({});
   const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set([""]));
-  const [isPromptExplorerExpanded, setIsPromptExplorerExpanded] = useState(true);
+  const [isPromptSelectorOpen, setIsPromptSelectorOpen] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const activeFolderPath = selectedPromptFolder;
   const applyDefaultSelectionFor = useCallback(
     (folderPath: string, files: PromptFileEntry[]) => {
@@ -994,63 +1133,7 @@ export default function HomePage() {
     }
     return [root];
   }, [promptFolders]);
-  const renderFolderNode = (node: PromptFolderNode, depth = 0): JSX.Element => {
-    const isActive = activeFolderPath === node.path;
-    const isOpen = openFolders.has(node.path);
-    const files = folderFileMap[node.path] ?? [];
-    const isLoadingFiles = Boolean(folderFileLoading[node.path]);
-    const label = node.path ? node.name : "prompts/";
-    const indentation = 6 + depth * 12;
-    return (
-      <div key={`folder-${node.path || "root"}`} className="flex flex-col gap-1">
-        <button
-          type="button"
-          className={`flex w-full items-center gap-2 truncate rounded-xl border px-2 py-1 text-left text-[11px] font-semibold transition ${isActive
-            ? "border-cyan-400 bg-cyan-500/10 text-cyan-200"
-            : "border-transparent text-slate-200 hover:border-slate-600"
-            }`}
-          style={{ paddingLeft: indentation }}
-          onClick={() => toggleFolder(node.path)}
-        >
-          <span className="text-[10px] text-slate-400">{isOpen ? "▾" : "▸"}</span>
-          <span className="truncate">{label}</span>
-          {node.children.length > 0 && (
-            <span className="ml-auto text-[10px] text-slate-500">
-              {node.children.length}
-            </span>
-          )}
-        </button>
-        {isOpen && (
-          <div className="space-y-1 pl-3">
-            {isLoadingFiles ? (
-              <p className="text-[11px] text-slate-500">Loading files…</p>
-            ) : files.length ? (
-              files.map((file) => {
-                const isFileActive = file.path === selectedPromptFile;
-                return (
-                  <button
-                    type="button"
-                    key={`file-${file.path}`}
-                    className={`flex w-full flex-col rounded-lg border px-3 py-1 text-left text-[11px] transition ${isFileActive
-                      ? "border-cyan-400 bg-cyan-500/10 text-white"
-                      : "border-transparent text-slate-200 hover:border-slate-600"
-                      }`}
-                    onClick={() => setSelectedPromptFile(file.path)}
-                  >
-                    <span className="truncate font-semibold">{file.name}</span>
-                    <span className="text-[10px] text-slate-500">{`prompts/${file.path}`}</span>
-                  </button>
-                );
-              })
-            ) : (
-              <p className="text-[11px] text-slate-500">No files.</p>
-            )}
-            {node.children.map((child) => renderFolderNode(child, depth + 1))}
-          </div>
-        )}
-      </div>
-    );
-  };
+
   const [selectedGraphId, setSelectedGraphId] = useState(graphOptions[0].id);
   const [targetDir, setTargetDir] = useState<string | null>(null);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
@@ -1374,7 +1457,6 @@ export default function HomePage() {
     }
 
     setHasAuditStarted(true);
-    setIsPromptExplorerExpanded(false);
     const normalizedAuditContext = auditContextEnabled
       ? normalizeAuditContext(auditContext)
       : null;
@@ -1442,9 +1524,51 @@ export default function HomePage() {
   };
 
   const handleMessageInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter to send (without Shift)
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      handleSendMessage();
+      if (canSendMessage && !loading) {
+        handleSendMessage();
+      }
+    }
+    // Shift+Enter for new line (default behavior)
+  };
+
+  // Global keyboard shortcut for opening prompt selector (Cmd+K / Ctrl+K)
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsPromptSelectorOpen(true);
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
+  // Auto-expand textarea based on content
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+    }
+  }, [messageInput]);
+
+  // Handle prompt selection from modal
+  const handleSelectPrompt = async (path: string) => {
+    setPromptContentLoading(true);
+    setPromptLoadError("");
+    try {
+      const res = await fetch(`/api/prompts/file?path=${encodeURIComponent(path)}`);
+      if (!res.ok) {
+        throw new Error(`Failed to load prompt: ${res.statusText}`);
+      }
+      const data = await res.json();
+      setMessageInput(data.content || "");
+    } catch (err) {
+      setPromptLoadError(err instanceof Error ? err.message : "Failed to load prompt");
+    } finally {
+      setPromptContentLoading(false);
     }
   };
 
@@ -1594,17 +1718,17 @@ export default function HomePage() {
   }, [activeTimeline]);
 
   return (
-    <div className="h-screen overflow-hidden bg-slate-950 text-slate-100">
-      <div className="grid h-full grid-rows-[auto_minmax(0,1fr)] gap-4 px-6 py-6">
-        <header className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3 shadow-xl">
+    <div className="h-screen overflow-hidden bg-bg-app text-text-primary font-sans antialiased selection:bg-state-selected selection:text-text-primary">
+      <div className="grid h-full grid-rows-[auto_minmax(0,1fr)] gap-4 px-4 py-4">
+        <header className="rounded-lg border border-border-subtle bg-bg-surface p-2 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold">Numezis Coder</h1>
+              <h1 className="text-sm font-semibold tracking-tight px-2 text-text-primary">Numezis Coder</h1>
               {targetPathEntry && (
                 <div className="group relative flex items-center">
                   <button
                     type="button"
-                    className="flex h-5 w-5 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-800 hover:text-cyan-400"
+                    className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted transition hover:bg-state-hover hover:text-text-primary"
                     onClick={() => handleCopyPath(targetPathEntry.value)}
                     aria-label="Copy repo path"
                   >
@@ -1616,14 +1740,14 @@ export default function HomePage() {
                       strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      className="h-4 w-4"
+                      className="h-3.5 w-3.5"
                     >
                       <circle cx="12" cy="12" r="10" />
                       <line x1="12" y1="16" x2="12" y2="12" />
                       <line x1="12" y1="8" x2="12.01" y2="8" />
                     </svg>
                   </button>
-                  <div className="pointer-events-none absolute left-full ml-2 hidden w-max max-w-xs rounded-lg border border-slate-700 bg-slate-900/95 px-2 py-1 text-[10px] text-slate-300 shadow-xl backdrop-blur-sm group-hover:block z-50">
+                  <div className="pointer-events-none absolute left-full ml-2 hidden w-max max-w-xs rounded-md border border-border-strong bg-bg-elevated px-2 py-1 text-[10px] text-text-primary shadow-xl backdrop-blur-sm group-hover:block z-50">
                     <p className="font-mono">
                       {copiedPath === targetPathEntry.value ? "Copied!" : targetPathEntry.value}
                     </p>
@@ -1661,14 +1785,14 @@ export default function HomePage() {
           </div>
 
           <div className="min-h-0">
-            <main className="flex h-full min-h-0 w-full flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-950/80 p-3 shadow-[0_16px_30px_rgba(0,0,0,0.4)] overflow-hidden">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-medium text-slate-300">
+            <main className="flex h-full min-h-0 w-full flex-col gap-3 rounded-lg border border-border-subtle bg-bg-surface p-0 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
                   Activity log
                 </h2>
               </div>
 
-              <div className="relative flex flex-1 flex-col gap-3 overflow-hidden">
+              <div className="relative flex flex-1 flex-col gap-3 overflow-hidden p-3 pt-2">
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <div
                     ref={eventStreamRef}
@@ -1684,19 +1808,19 @@ export default function HomePage() {
                       />
                     ))}
                     {loading && (
-                      <div className="rounded-3xl border border-dashed border-slate-700 bg-gradient-to-r from-slate-900/60 via-slate-800/70 to-slate-900/40 p-4 text-sm text-slate-400 shadow-[0_0_40px_rgba(14,116,144,0.4)]">
+                      <div className="rounded-xl border border-dashed border-border-strong bg-bg-elevated/50 p-4 text-sm text-text-muted">
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-2">
-                            <span className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.9)] animate-pulse" />
-                            <p className="text-[13px] font-semibold text-cyan-300">
+                            <span className="h-2 w-2 rounded-full bg-text-secondary animate-pulse" />
+                            <p className="text-[13px] font-medium text-text-primary">
                               Agent running...
                             </p>
                           </div>
-                          <p className="text-[11px] text-slate-300">
+                          <p className="text-[11px] text-text-muted">
                             Tracking phases and tools · final summary incoming
                           </p>
-                          <div className="h-[6px] w-full overflow-hidden rounded-full bg-slate-900">
-                            <div className="h-full w-full bg-gradient-to-r from-cyan-500 to-slate-900 animate-light-pulse" />
+                          <div className="h-[4px] w-full overflow-hidden rounded-full bg-bg-elevated mt-1">
+                            <div className="h-full w-full bg-text-muted animate-progress-loader opacity-30" />
                           </div>
                         </div>
                       </div>
@@ -1704,63 +1828,78 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="absolute inset-x-4 bottom-4 z-10 px-0">
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-3 shadow-[0_6px_20px_rgba(0,0,0,0.4)] backdrop-blur-sm">
-                    <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-slate-400">
-                      <div className="flex items-center gap-2">
-                        <span>Prompt explorer</span>
-                        <span className="text-[10px] text-slate-500">
-                          {promptFolders.length} folder{promptFolders.length === 1 ? "" : "s"}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsPromptExplorerExpanded((prev) => !prev)}
-                        className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-800 bg-slate-950/70 text-[11px] text-slate-400 transition hover:border-cyan-400"
-                        aria-pressed={isPromptExplorerExpanded}
-                        aria-label={
-                          isPromptExplorerExpanded ? "Collapse prompt explorer" : "Expand prompt explorer"
-                        }
+                {/* Compact input area - VS Code style */}
+                <div className="sticky bottom-0 border-t border-border-subtle bg-bg-elevated px-4 py-3">
+                  <div className="flex items-end gap-2">
+                    {/* Prompt selector button */}
+                    <button
+                      type="button"
+                      onClick={() => setIsPromptSelectorOpen(true)}
+                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-border-subtle bg-bg-surface text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+                      title="Select prompt (⌘K)"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        className="h-4 w-4"
                       >
-                        {isPromptExplorerExpanded ? "▾" : "▸"}
-                      </button>
-                    </div>
-                    {isPromptExplorerExpanded && (
-                      <div className="mt-2 max-h-[120px] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/70 p-2 text-[11px] text-slate-200 scrollbar-elegant">
-                        {promptFolderLoading ? (
-                          <p className="text-[11px] text-slate-500">Loading folders…</p>
-                        ) : (
-                          <div className="space-y-1">
-                            {promptFolderTree.map((node) => renderFolderNode(node, 0))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {(promptLoadError || promptContentLoading) && (
-                      <p className="mt-2 text-[11px] text-rose-400">
-                        {promptLoadError || "Applying prompt content…"}
-                      </p>
-                    )}
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </button>
 
-                    <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center">
-                      <textarea
-                        className="w-full flex-1 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-[11px] font-medium text-white outline-none transition duration-150 focus:border-cyan-400 focus:ring-0 overflow-y-auto scrollbar-elegant"
-                        rows={2}
-                        value={messageInput}
-                        onChange={(event) => setMessageInput(event.target.value)}
-                        onKeyDown={handleMessageInputKeyDown}
-                        placeholder="Tell the agent what you want to investigate..."
-                      />
-                      <button
-                        type="button"
-                        className="inline-flex h-10 min-w-[140px] items-center justify-center rounded-xl border border-slate-700 bg-slate-900/80 px-4 text-[11px] font-semibold text-white transition duration-150 hover:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
-                        onClick={loading ? handleStop : handleSendMessage}
-                        disabled={!loading && !canSendMessage}
-                      >
-                        {loading ? "Stop" : "Send"}
-                      </button>
-                    </div>
+                    {/* Auto-expanding textarea */}
+                    <textarea
+                      ref={textareaRef}
+                      value={messageInput}
+                      onChange={(event) => setMessageInput(event.target.value)}
+                      onKeyDown={handleMessageInputKeyDown}
+                      placeholder="Type your message..."
+                      rows={1}
+                      className="flex-1 resize-none rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong scrollbar-elegant"
+                      style={{
+                        minHeight: '36px',
+                        maxHeight: '120px',
+                        height: 'auto'
+                      }}
+                    />
+
+                    {/* Inline send button */}
+                    <button
+                      type="button"
+                      onClick={loading ? handleStop : handleSendMessage}
+                      disabled={!loading && !canSendMessage}
+                      className="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-md bg-state-selected px-4 text-sm font-medium text-text-primary transition hover:bg-state-active disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {loading ? (
+                        <>
+                          <span className="h-3 w-3 animate-spin rounded-full border-2 border-text-primary border-t-transparent" />
+                          <span>Stop</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            className="h-4 w-4"
+                          >
+                            <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                          </svg>
+                          <span>Send</span>
+                        </>
+                      )}
+                    </button>
                   </div>
+
+                  {/* Error message */}
+                  {(promptLoadError || promptContentLoading) && (
+                    <p className="mt-2 text-xs text-rose-400">
+                      {promptLoadError || "Applying prompt content…"}
+                    </p>
+                  )}
                 </div>
               </div>
             </main>
@@ -1785,10 +1924,10 @@ export default function HomePage() {
         {selectedEvent && (
           <div className="space-y-6">
             {selectedEvent.details && (
-              <p className="text-xs text-slate-400">{selectedEvent.details}</p>
+              <p className="text-xs text-text-muted">{selectedEvent.details}</p>
             )}
             <section className="space-y-3">
-              <p className="text-[11px] text-slate-500">Graph prompts</p>
+              <p className="text-[11px] text-text-muted">Graph prompts</p>
               <div className="max-h-72 space-y-3 overflow-y-auto pr-2 scrollbar-elegant">
                 {displayNodePrompts.map((nodePrompt) => {
                   const isActive =
@@ -1797,15 +1936,15 @@ export default function HomePage() {
                   return (
                     <div
                       key={nodePrompt.id}
-                      className={`rounded-2xl border p-3 ${isActive
-                        ? "border-cyan-400/60 bg-cyan-500/10"
-                        : "border-slate-800 bg-slate-950/50"
+                      className={`rounded-lg border p-3 ${isActive
+                        ? "border-border-strong bg-state-selected"
+                        : "border-border-subtle bg-bg-surface"
                         }`}
                     >
-                      <p className="text-[11px] text-slate-400">
+                      <p className="text-[11px] text-text-muted">
                         {nodePrompt.label}
                       </p>
-                      <pre className="mt-2 text-[12px] leading-relaxed text-slate-100 whitespace-pre-wrap break-words">
+                      <pre className="mt-2 text-[12px] leading-relaxed text-text-primary whitespace-pre-wrap break-words">
                         {nodePrompt.prompt || "Pending prompt..."}
                       </pre>
                     </div>
@@ -1815,8 +1954,8 @@ export default function HomePage() {
             </section>
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[11px] text-slate-500">Tool access</p>
-                <span className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-text-muted">Tool access</p>
+                <span className="text-[11px] text-text-muted">
                   {selectedEvent.status}
                 </span>
               </div>
@@ -1828,11 +1967,11 @@ export default function HomePage() {
                       key={tool.name}
                       type="button"
                       onClick={() => openToolDialog(tool)}
-                      className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-left text-[12px] text-slate-200 transition hover:border-cyan-400"
+                      className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-left text-[12px] text-text-secondary transition hover:bg-state-hover hover:border-border-strong"
                     >
-                      <span className="font-semibold text-white">{tool.label}</span>
+                      <span className="font-semibold text-text-primary">{tool.label}</span>
                       <span
-                        className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${used ? "border-emerald-500/40 text-emerald-200" : "border-slate-600 text-slate-400"
+                        className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-medium ${used ? "border-emerald-500/40 text-emerald-400" : "border-border-subtle text-text-muted"
                           }`}
                       >
                         {used ? "used" : "avail"}
@@ -1843,20 +1982,20 @@ export default function HomePage() {
               </div>
             </section>
             <section className="space-y-2">
-              <p className="text-[11px] text-slate-500">Assistant log</p>
+              <p className="text-[11px] text-text-muted">Assistant log</p>
               {selectedEvent.thoughtLog?.length ? (
                 <ul className="max-h-72 space-y-2 overflow-y-auto scrollbar-elegant">
                   {selectedEvent.thoughtLog.map((thought, index) => (
                     <li
                       key={index}
-                      className="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px] leading-5 text-slate-200"
+                      className="rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-[11px] leading-5 text-text-secondary"
                     >
                       {thought}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-slate-400">No assistant messages captured for this phase.</p>
+                <p className="text-xs text-text-muted">No assistant messages captured for this phase.</p>
               )}
             </section>
           </div>
@@ -1869,18 +2008,18 @@ export default function HomePage() {
         title="Audit context"
         subtitle="Focus and goals"
       >
-        <div className="space-y-4 text-sm text-slate-300">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+        <div className="space-y-4 text-sm text-text-secondary">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
             <button
               type="button"
-              className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[10px] font-semibold text-slate-300 transition hover:border-cyan-400"
+              className="rounded-md border border-border-subtle bg-bg-surface px-3 py-1 text-[10px] font-medium text-text-primary transition hover:bg-state-hover"
               onClick={() => setAuditContext(mvpLaunchPreset)}
             >
               Use MVP launch preset
             </button>
             <button
               type="button"
-              className="rounded-full border border-slate-800 bg-slate-950/70 px-3 py-1 text-[10px] font-semibold text-slate-400 transition hover:border-slate-500"
+              className="rounded-md border border-border-subtle bg-bg-surface px-3 py-1 text-[10px] font-medium text-text-muted transition hover:bg-state-hover hover:text-text-primary"
               onClick={() => setAuditContext({})}
             >
               Clear
@@ -1888,9 +2027,9 @@ export default function HomePage() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
-              <label className="text-[11px] text-slate-500">Startup phase</label>
+              <label className="text-[11px] text-text-muted">Startup phase</label>
               <select
-                className="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
                 value={auditContext.startupPhase ?? ""}
                 onChange={(event) =>
                   setAuditContext((prev) => ({
@@ -1908,10 +2047,10 @@ export default function HomePage() {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] text-slate-500">Time horizon</label>
+              <label className="text-[11px] text-text-muted">Time horizon</label>
               <input
                 type="text"
-                className="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
                 placeholder="e.g. Next 4-6 weeks"
                 value={auditContext.timeHorizon ?? ""}
                 onChange={(event) =>
@@ -1923,10 +2062,10 @@ export default function HomePage() {
               />
             </div>
             <div className="space-y-1 sm:col-span-2">
-              <label className="text-[11px] text-slate-500">Mission</label>
+              <label className="text-[11px] text-text-muted">Mission</label>
               <input
                 type="text"
-                className="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
                 placeholder="Describe the mission succinctly"
                 value={auditContext.mission ?? ""}
                 onChange={(event) =>
@@ -1938,10 +2077,10 @@ export default function HomePage() {
               />
             </div>
             <div className="space-y-1 sm:col-span-2">
-              <label className="text-[11px] text-slate-500">Primary goal</label>
+              <label className="text-[11px] text-text-muted">Primary goal</label>
               <input
                 type="text"
-                className="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
                 placeholder="The main objective this audit should optimize for"
                 value={auditContext.primaryGoal ?? ""}
                 onChange={(event) =>
@@ -1953,9 +2092,9 @@ export default function HomePage() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] text-slate-500">Risk tolerance</label>
+              <label className="text-[11px] text-text-muted">Risk tolerance</label>
               <select
-                className="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
                 value={auditContext.riskTolerance ?? ""}
                 onChange={(event) =>
                   setAuditContext((prev) => ({
@@ -1971,10 +2110,10 @@ export default function HomePage() {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] text-slate-500">Target users</label>
+              <label className="text-[11px] text-text-muted">Target users</label>
               <input
                 type="text"
-                className="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
                 placeholder="e.g. Beta customers, internal team"
                 value={auditContext.targetUsers ?? ""}
                 onChange={(event) =>
@@ -1986,9 +2125,9 @@ export default function HomePage() {
               />
             </div>
             <div className="space-y-1 sm:col-span-2">
-              <label className="text-[11px] text-slate-500">Key objectives (one per line)</label>
+              <label className="text-[11px] text-text-muted">Key objectives (one per line)</label>
               <textarea
-                className="min-h-[80px] w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                className="min-h-[80px] w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
                 placeholder="List the objectives this audit must prioritize"
                 value={(auditContext.keyObjectives ?? []).join("\n")}
                 onChange={(event) =>
@@ -2000,9 +2139,9 @@ export default function HomePage() {
               />
             </div>
             <div className="space-y-1 sm:col-span-2">
-              <label className="text-[11px] text-slate-500">De-prioritize (one per line)</label>
+              <label className="text-[11px] text-text-muted">De-prioritize (one per line)</label>
               <textarea
-                className="min-h-[70px] w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                className="min-h-[70px] w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
                 placeholder="Out-of-scope or later items"
                 value={(auditContext.nonGoals ?? []).join("\n")}
                 onChange={(event) =>
@@ -2014,9 +2153,9 @@ export default function HomePage() {
               />
             </div>
             <div className="space-y-1 sm:col-span-2">
-              <label className="text-[11px] text-slate-500">Constraints (one per line)</label>
+              <label className="text-[11px] text-text-muted">Constraints (one per line)</label>
               <textarea
-                className="min-h-[60px] w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-cyan-400"
+                className="min-h-[60px] w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
                 placeholder="Hard constraints or invariants"
                 value={(auditContext.constraints ?? []).join("\n")}
                 onChange={(event) =>
@@ -2028,7 +2167,7 @@ export default function HomePage() {
               />
             </div>
           </div>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-text-muted">
             This context is appended to every audit phase prompt and logged in the activity stream.
           </p>
         </div>
@@ -2045,19 +2184,19 @@ export default function HomePage() {
       >
         {selectedTool && (
           <div className="space-y-4">
-            <p className="text-sm text-slate-300">{selectedTool.description}</p>
+            <p className="text-sm text-text-secondary">{selectedTool.description}</p>
             {selectedTool.categories.length > 0 && (
-              <div className="flex flex-wrap gap-2 text-[11px] text-slate-400">
+              <div className="flex flex-wrap gap-2 text-[11px] text-text-muted">
                 {selectedTool.categories.map((category) => (
-                  <span key={category} className="rounded-full border border-slate-800 px-3 py-1">
+                  <span key={category} className="rounded-md border border-border-subtle px-3 py-1">
                     {category}
                   </span>
                 ))}
               </div>
             )}
-            <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/50 p-3 text-[12px] text-slate-300">
-              <p className="text-[11px] text-slate-500">Source</p>
-              <pre className="max-h-64 overflow-y-auto rounded-xl bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-100 whitespace-pre-wrap break-words scrollbar-elegant">
+            <div className="space-y-2 rounded-lg border border-border-subtle bg-bg-surface p-3 text-[12px] text-text-secondary">
+              <p className="text-[11px] text-text-muted">Source</p>
+              <pre className="max-h-64 overflow-y-auto rounded-lg bg-bg-elevated p-3 text-[11px] leading-relaxed text-text-primary whitespace-pre-wrap break-words scrollbar-elegant">
                 {toolLoadingMap[selectedTool.name]
                   ? "Loading tool details..."
                   : toolCodeCache[selectedTool.name] || "// Source unavailable."}
@@ -2066,6 +2205,13 @@ export default function HomePage() {
           </div>
         )}
       </Modal>
+
+      <PromptSelectorModal
+        isOpen={isPromptSelectorOpen}
+        onClose={() => setIsPromptSelectorOpen(false)}
+        promptFolders={promptFolderTree}
+        onSelectPrompt={handleSelectPrompt}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { AzureChatOpenAI, ChatOpenAI } from "@langchain/openai";
 
-import { config } from "./config";
+import { config } from "./config.js";
+import { getLlmConfig } from "./services/llmConfigService.js";
 
 export type LlmProvider = "azure" | "lmstudio";
 
@@ -26,11 +27,39 @@ export const resolveLlmSelection = (input?: {
   return { provider: provider as LlmProvider, model: model || undefined };
 };
 
-export function getChatModel(selection?: Partial<LlmSelection>) {
-  const provider = selection?.provider ?? config.defaultProvider;
+/**
+ * Get chat model with runtime configuration from MongoDB (falls back to env vars)
+ * Now async to support dynamic configuration loading
+ */
+export async function getChatModel(selection?: Partial<LlmSelection>) {
+  // Fetch current configuration from MongoDB (or env fallback)
+  let runtimeConfig;
+  try {
+    runtimeConfig = await getLlmConfig();
+  } catch (error) {
+    console.warn("Failed to fetch LLM config, using environment variables:", error);
+    runtimeConfig = {
+      provider: config.defaultProvider as "azure" | "lmstudio",
+      azure: config.azure.endpoint ? {
+        endpoint: config.azure.endpoint,
+        apiKey: config.azure.apiKey ?? "",
+        deployment: config.azure.deployment ?? "",
+        model: config.azure.model,
+        apiVersion: config.azure.apiVersion,
+      } : undefined,
+      lmstudio: {
+        baseUrl: config.lmstudio.baseUrl,
+        apiKey: config.lmstudio.apiKey,
+        model: config.lmstudio.model,
+      },
+      defaultProvider: config.defaultProvider as "azure" | "lmstudio",
+    };
+  }
+
+  const provider = selection?.provider ?? runtimeConfig.defaultProvider;
 
   if (provider === "lmstudio") {
-    const model = selection?.model ?? config.lmstudio.model;
+    const model = selection?.model ?? runtimeConfig.lmstudio?.model;
     if (!model) {
       throw new Error(
         "LM Studio model name is required. Set LMSTUDIO_MODEL or provide a model in the request."
@@ -38,29 +67,31 @@ export function getChatModel(selection?: Partial<LlmSelection>) {
     }
     return new ChatOpenAI({
       model,
-      apiKey: config.lmstudio.apiKey ?? "lm-studio",
+      apiKey: runtimeConfig.lmstudio?.apiKey ?? "lm-studio",
       configuration: {
-        baseURL: config.lmstudio.baseUrl,
+        baseURL: runtimeConfig.lmstudio?.baseUrl ?? config.lmstudio.baseUrl,
       },
       temperature: 1,
     });
   }
 
-  if (!config.azure.endpoint || !config.azure.apiKey || !config.azure.deployment) {
+  // Azure OpenAI
+  const azureConfig = runtimeConfig.azure;
+  if (!azureConfig?.endpoint || !azureConfig?.apiKey || !azureConfig?.deployment) {
     throw new Error(
-      "Azure OpenAI is not configured. Set AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, and AZURE_OPENAI_DEPLOYMENT."
+      "Azure OpenAI is not configured. Set AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, and AZURE_OPENAI_DEPLOYMENT or configure via the UI."
     );
   }
 
   return new AzureChatOpenAI({
-    azureOpenAIApiKey: config.azure.apiKey,
-    azureOpenAIApiDeploymentName: config.azure.deployment,
-    azureOpenAIApiVersion: config.azure.apiVersion,
-    azureOpenAIApiInstanceName: config.azure.endpoint
-      ? new URL(config.azure.endpoint).hostname.split(".")[0]
+    azureOpenAIApiKey: azureConfig.apiKey,
+    azureOpenAIApiDeploymentName: azureConfig.deployment,
+    azureOpenAIApiVersion: azureConfig.apiVersion,
+    azureOpenAIApiInstanceName: azureConfig.endpoint
+      ? new URL(azureConfig.endpoint).hostname.split(".")[0]
       : undefined,
-    azureOpenAIEndpoint: config.azure.endpoint,
-    model: selection?.model ?? config.azure.model,
+    azureOpenAIEndpoint: azureConfig.endpoint,
+    model: selection?.model ?? azureConfig.model,
     temperature: 1,
   });
 }

@@ -23,18 +23,28 @@
       {
         "name": "next"
       }
-    ]
+    ],
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    }
   },
   "include": [
-    "src",
-    "scripts",
-    "app",
     "next-env.d.ts",
-    ".next/types/**/*.ts"
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "vitest.config.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "**/__tests__"
+    "**/__tests__",
+    "src/__tests__"
   ]
 }

@@ -1,0 +1,137 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { chainExecutor } from "@/src/services/chainExecutor";
+import { ChainConfigBuilder } from "@/src/services/chainConfigBuilder";
+
+/**
+ * Zod schema for creating a chain
+ */
+const CreateChainSchema = z.object({
+    preset: z.string().optional(),
+    config: z
+        .object({
+            name: z.string().min(1).max(200),
+            description: z.string().max(1000).optional(),
+            stages: z.array(
+                z.object({
+                    id: z.string().min(1),
+                    name: z.string().min(1),
+                    auditMode: z.enum([
+                        "A1",
+                        "A2",
+                        "A3",
+                        "A4",
+                        "A5",
+                        "A6",
+                        "A7",
+                        "A8",
+                        "A9",
+                        "A10",
+                        "A11",
+                        "A12",
+                        "A13",
+                        "A14",
+                        "A15",
+                        "A16",
+                    ]),
+                    llmProvider: z.enum(["azure", "lmstudio"]),
+                    llmModel: z.string().optional(),
+                    userPromptTemplate: z.string().min(1),
+                    contextFromPreviousStages: z.array(z.string()).optional(),
+                    skipIf: z.string().optional(),
+                    retryOnFailure: z.boolean().optional(),
+                    maxRetries: z.number().int().min(1).max(10).optional(),
+                })
+            ),
+            schedule: z
+                .object({
+                    enabled: z.boolean(),
+                    cron: z.string(),
+                    timezone: z.string(),
+                    maxRuns: z.number().int().positive().optional(),
+                })
+                .optional(),
+        })
+        .optional(),
+});
+
+/**
+ * GET /api/chains
+ * List all chains with optional filtering
+ */
+export async function GET(req: NextRequest) {
+    try {
+        const searchParams = req.nextUrl.searchParams;
+        const status = searchParams.get("status");
+        const search = searchParams.get("search");
+        const scheduledOnly = searchParams.get("scheduledOnly") === "true";
+
+        const chains = await chainExecutor.listChains({
+            status: status as any,
+            search: search || undefined,
+            scheduledOnly,
+        });
+
+        return NextResponse.json({ chains }, { status: 200 });
+    } catch (error) {
+        console.error("[API /api/chains GET] Error:", error);
+        return NextResponse.json(
+            { error: "Failed to list chains" },
+            { status: 500 }
+        );
+    }
+}
+
+/**
+ * POST /api/chains
+ * Create a new chain
+ */
+export async function POST(req: NextRequest) {
+    try {
+        const body = await req.json();
+
+        // Validate input
+        const validation = CreateChainSchema.safeParse(body);
+        if (!validation.success) {
+            return NextResponse.json(
+                { error: "Invalid input", details: validation.error.errors },
+                { status: 400 }
+            );
+        }
+
+        const { preset, config } = validation.data;
+
+        // Build chain from preset or custom config
+        let chainConfig;
+        if (preset) {
+            chainConfig = ChainConfigBuilder.buildChain(preset);
+        } else if (config) {
+            chainConfig = config;
+        } else {
+            return NextResponse.json(
+                { error: "Either 'preset' or 'config' must be provided" },
+                { status: 400 }
+            );
+        }
+
+        // Validate chain configuration
+        const chainValidation = ChainConfigBuilder.validateChainConfig(chainConfig);
+        if (!chainValidation.valid) {
+            return NextResponse.json(
+                { error: "Invalid chain configuration", details: chainValidation.errors },
+                { status: 400 }
+            );
+        }
+
+        // Create chain
+        const chainId = await chainExecutor.createChain(chainConfig as any);
+
+        return NextResponse.json({ chainId }, { status: 201 });
+    } catch (error) {
+        console.error("[API /api/chains POST] Error:", error);
+        return NextResponse.json(
+            { error: "Failed to create chain" },
+            { status: 500 }
+        );
+    }
+}

@@ -1,5 +1,6 @@
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { z } from "zod";
 
 import { getChatModel, type LlmSelection } from "../llm";
 import { config } from "../config";
@@ -17,177 +18,60 @@ import {
   type AuditPhaseKey,
 } from "../shared/graphCatalog";
 import { McpClient } from "../mcp/client";
+import { extractJsonObject } from "../lib/jsonExtract";
+import {
+  Phase1OutputSchema,
+  Phase2OutputSchema,
+  Phase3OutputSchema,
+  Phase4OutputSchema,
+  Phase5OutputSchema,
+  type TargetFile,
+} from "../shared/agentSchemas";
 
-function stripEllipsisOutsideStrings(input: string): string {
-  let out = "";
-  let inString = false;
-  let escaped = false;
-  for (let i = 0; i < input.length; i += 1) {
-    const ch = input[i];
-    if (inString) {
-      out += ch;
-      if (escaped) {
-        escaped = false;
-      } else if (ch === "\\") {
-        escaped = true;
-      } else if (ch === "\"") {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (ch === "\"") {
-      inString = true;
-      out += ch;
-      continue;
-    }
-
-    if (ch === "." && input.slice(i, i + 3) === "...") {
-      i += 2;
-      continue;
-    }
-
-    out += ch;
-  }
-
-  return out;
-}
-
-function removeTrailingCommasOutsideStrings(input: string): string {
-  let out = "";
-  let inString = false;
-  let escaped = false;
-  for (let i = 0; i < input.length; i += 1) {
-    const ch = input[i];
-    if (inString) {
-      out += ch;
-      if (escaped) {
-        escaped = false;
-      } else if (ch === "\\") {
-        escaped = true;
-      } else if (ch === "\"") {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (ch === "\"") {
-      inString = true;
-      out += ch;
-      continue;
-    }
-
-    if (ch === ",") {
-      let j = i + 1;
-      while (j < input.length && /\s/.test(input[j])) j += 1;
-      if (input[j] === "}" || input[j] === "]") {
-        continue;
-      }
-    }
-
-    out += ch;
-  }
-
-  return out;
-}
-
-function sanitizeJsonCandidate(input: string): string {
-  const withoutEllipsis = stripEllipsisOutsideStrings(input);
-  return removeTrailingCommasOutsideStrings(withoutEllipsis);
-}
-
-function stripCodeFences(input: string): string {
-  const fenceMatch = input.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenceMatch && fenceMatch[1]) {
-    return fenceMatch[1].trim();
-  }
-  return input;
-}
-
-function findFirstJsonObject(input: string): string | null {
-  let inString = false;
-  let escaped = false;
-  let depth = 0;
-  let start = -1;
-  for (let i = 0; i < input.length; i += 1) {
-    const ch = input[i];
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (ch === "\\") {
-        escaped = true;
-      } else if (ch === "\"") {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (ch === "\"") {
-      inString = true;
-      continue;
-    }
-
-    if (ch === "{") {
-      if (depth === 0) start = i;
-      depth += 1;
-      continue;
-    }
-
-    if (ch === "}") {
-      if (depth > 0) depth -= 1;
-      if (depth === 0 && start >= 0) {
-        return input.slice(start, i + 1);
-      }
-    }
-  }
-  return null;
-}
-
-function extractJsonObject(text: string): unknown {
-  const trimmed = stripCodeFences(text.trim());
-  const attempts: string[] = [trimmed];
-  const first = trimmed.indexOf("{");
-  const last = trimmed.lastIndexOf("}");
-  if (first >= 0 && last > first) {
-    attempts.push(trimmed.slice(first, last + 1));
-  }
-  const balanced = findFirstJsonObject(trimmed);
-  if (balanced) attempts.push(balanced);
-
-  for (const attempt of attempts) {
-    try {
-      return JSON.parse(attempt);
-    } catch {
-      try {
-        const sanitized = sanitizeJsonCandidate(attempt);
-        return JSON.parse(sanitized);
-      } catch {
-        // Keep trying other candidates.
-      }
-    }
-  }
-
-  throw new Error("Could not parse JSON output from agent.");
-}
+// --- Types & Config ---
 
 export type PhaseKey = AuditPhaseKey;
-
 export const phaseDefinitions = auditPhaseConfig;
 export const phaseOrder: PhaseKey[] = auditPhaseOrder;
 
-async function runJsonReactAgent(opts: {
+/**
+ * Default fallback values for each phase to ensure the graph can continue
+ * even if the agent fails completely.
+ */
+const FALLBACKS = {
+  phase1: {
+    context: { mission: "", languages: [], frameworks: [], hotspots: [] },
+  },
+  phase2: {
+    target_files: [],
+  },
+  phase3: {
+    raw_claims: [],
+  },
+  phase4: {
+    verdicts: [],
+  },
+  phase5: {
+    report_markdown:
+      "# Audit report\n\nThe reporting agent failed to produce a valid report.\n\n## Status\n- Phase 5 returned an invalid or empty payload.",
+    tasks: [],
+  },
+};
+
+// --- Schema-Guided Agent Wrapper ---
+
+async function runSchemaReactAgent<T extends z.ZodTypeAny>(opts: {
   name: string;
   systemPrompt: string;
   userPrompt: string;
   tools: any[];
+  schema: T;
+  fallback: z.infer<T>;
   llmSelection?: LlmSelection;
   extraMessages?: BaseMessage[];
   onMessage?: (message: BaseMessage) => Promise<void> | void;
   maxToolCalls?: number;
-  repairInstructions?: string;
-  validateParsed?: (value: unknown) => boolean;
-  repairFallback?: unknown;
-}) {
+}): Promise<{ parsed: z.infer<T>; messages: BaseMessage[] }> {
   const model = getChatModel(opts.llmSelection);
   const agent = createReactAgent({
     llm: model,
@@ -196,36 +80,50 @@ async function runJsonReactAgent(opts: {
     name: opts.name,
   });
 
-  const inputMessages = [...(opts.extraMessages ?? []), { role: "user", content: opts.userPrompt }];
+  const inputMessages = [
+    ...(opts.extraMessages ?? []),
+    { role: "user", content: opts.userPrompt },
+  ];
+
   const stream = await agent.stream(
     { messages: inputMessages },
     { streamMode: "values", recursionLimit: config.graphRecursionLimit }
   );
+
   const seenMessageIds = new Set<string>();
   const accumulatedMessages: BaseMessage[] = [];
   let lastState: { messages?: BaseMessage[] } | undefined;
   let toolCallCount = 0;
   let toolLimitReached = false;
 
+  // 1. Run the agent loop
   for await (const state of stream) {
     if (!state || typeof state !== "object") continue;
     lastState = state as { messages?: BaseMessage[] };
     if (!Array.isArray(lastState.messages)) continue;
+
     for (const message of lastState.messages) {
       const idKey =
         typeof message.id === "string"
           ? message.id
-          : `${(message as any).role ?? "unknown"}-${typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "")}-${accumulatedMessages.length}`;
+          : `${(message as any).role ?? "unknown"}-${typeof message.content === "string"
+            ? message.content
+            : JSON.stringify(message.content ?? "")
+          }-${accumulatedMessages.length}`;
+
       if (seenMessageIds.has(idKey)) continue;
       seenMessageIds.add(idKey);
       accumulatedMessages.push(message);
+
       if (opts.onMessage) {
         await opts.onMessage(message);
       }
+
       const hasToolCall =
         message.type === "tool" ||
         Boolean(message.additional_kwargs?.function_call) ||
         Boolean(message.additional_kwargs?.tool_calls?.length);
+
       if (hasToolCall) {
         toolCallCount += 1;
         if (opts.maxToolCalls && toolCallCount >= opts.maxToolCalls) {
@@ -238,6 +136,8 @@ async function runJsonReactAgent(opts: {
   }
 
   const finalMessages = lastState?.messages ?? accumulatedMessages;
+
+  // 2. Extract potential JSON from the last assistant message
   const lastAssistantWithJson = [...finalMessages]
     .reverse()
     .find(
@@ -246,126 +146,83 @@ async function runJsonReactAgent(opts: {
         typeof message.content === "string" &&
         message.content.includes("{")
     );
+
   const lastAssistant = [...finalMessages]
     .reverse()
     .find((message) => (message as any).role === "assistant");
+
   const last = lastAssistantWithJson ?? lastAssistant ?? finalMessages.at(-1);
+
   if (!last) {
-    throw new Error("Agent did not produce a final message.");
+    console.warn(`[${opts.name}] Agent produced no messages. Using fallback.`);
+    return { parsed: opts.fallback, messages: finalMessages };
   }
-  const content = typeof last.content === "string" ? last.content : JSON.stringify(last.content ?? "");
-  let parsed: unknown;
-  const runRepair = async (input: string) => {
-    const requirement = opts.repairInstructions
-      ? `\n\nRequired JSON shape:\n${opts.repairInstructions}`
-      : "";
+
+  const content =
+    typeof last.content === "string"
+      ? last.content
+      : JSON.stringify(last.content ?? "");
+
+  // 3. Helper to attempt parsing + validating
+  const tryParseAndValidate = (text: string): { success: boolean; data?: any; error?: string } => {
+    try {
+      const json = extractJsonObject(text);
+      const result = opts.schema.safeParse(json);
+      if (result.success) {
+        return { success: true, data: result.data };
+      }
+      return { success: false, error: result.error.toString() };
+    } catch (e) {
+      return { success: false, error: String(e) };
+    }
+  };
+
+  // 4. Initial attempt
+  let attempt = tryParseAndValidate(content);
+  if (attempt.success) {
+    return { parsed: attempt.data, messages: finalMessages };
+  }
+
+  // 5. Repair Loop (1 Attempt)
+  // If parsing or validation failed, ask the model to fix it using the error message
+  console.warn(`[${opts.name}] JSON invalid or schema mismatch. Attempting repair... Error: ${attempt.error}`);
+
+  try {
     const repairPrompt = [
       "You are a JSON repair tool.",
-      "Task: Return ONLY strict JSON. No prose, no markdown, no code fences.",
-      "If the input contains no JSON, synthesize the minimal valid JSON required by the request.",
-      requirement,
+      "The previous output was invalid JSON or did not match the required schema.",
+      `Error details: ${attempt.error}`,
       "",
-      "Input:",
-      input,
+      "Task: Return ONLY strict JSON that matches the schema. No prose, no markdown.",
+      "Input to repair:",
+      content,
     ].join("\n");
-    const repair = await model.invoke([
+
+    const repairResponse = await model.invoke([
       new SystemMessage("Return only strict JSON. Do not include any other text."),
       new HumanMessage(repairPrompt),
     ]);
+
     const repairedContent =
-      typeof repair.content === "string" ? repair.content : JSON.stringify(repair.content ?? "");
-    return extractJsonObject(repairedContent);
-  };
+      typeof repairResponse.content === "string"
+        ? repairResponse.content
+        : JSON.stringify(repairResponse.content ?? "");
 
-  try {
-    parsed = extractJsonObject(content);
-  } catch {
-    try {
-      parsed = await runRepair(content);
-    } catch {
-      if (opts.repairFallback !== undefined) {
-        parsed = opts.repairFallback;
-      } else {
-        throw new Error("Could not parse JSON output from agent.");
-      }
+    attempt = tryParseAndValidate(repairedContent);
+    if (attempt.success) {
+      console.log(`[${opts.name}] Repair successful.`);
+      return { parsed: attempt.data, messages: finalMessages };
     }
+  } catch (error) {
+    console.error(`[${opts.name}] Repair failed completely:`, error);
   }
 
-  if (toolLimitReached || (opts.validateParsed && !opts.validateParsed(parsed))) {
-    try {
-      parsed = await runRepair(content);
-    } catch {
-      if (opts.repairFallback !== undefined) {
-        parsed = opts.repairFallback;
-      }
-    }
-  } else if (opts.validateParsed && !opts.validateParsed(parsed) && opts.repairFallback !== undefined) {
-    parsed = opts.repairFallback;
-  }
-
-  return { parsed, messages: finalMessages };
+  // 6. Final Fallback
+  console.warn(`[${opts.name}] Using fallback value.`);
+  return { parsed: opts.fallback, messages: finalMessages };
 }
 
-const DEFAULT_RAW_SEVERITY = "medium";
-
-const addLineNumbers = (content: string, startLine = 1) =>
-  content
-    .split("\n")
-    .map((line, idx) => `${String(startLine + idx).padStart(4, " ")} | ${line}`)
-    .join("\n");
-
-const normalizeRawClaim = (
-  value: any,
-  fallback: { filePath: string; index: number }
-) => {
-  if (!value || typeof value !== "object") return null;
-  const assumption =
-    value.assumption && typeof value.assumption === "object"
-      ? {
-        condition:
-          typeof value.assumption.condition === "string"
-            ? value.assumption.condition
-            : "Assumption not specified.",
-        related_symbol:
-          typeof value.assumption.related_symbol === "string"
-            ? value.assumption.related_symbol
-            : undefined,
-      }
-      : { condition: "Assumption not specified." };
-  const id =
-    typeof value.id === "string" && value.id.trim()
-      ? value.id.trim()
-      : `${fallback.filePath.replace(/[^\w]+/g, "_")}_${fallback.index}`;
-
-  const lineStart =
-    typeof value.line_start === "number" && Number.isFinite(value.line_start)
-      ? Math.max(1, Math.floor(value.line_start))
-      : 1;
-  const lineEnd =
-    typeof value.line_end === "number" && Number.isFinite(value.line_end)
-      ? Math.max(1, Math.floor(value.line_end))
-      : lineStart;
-
-  return {
-    id,
-    file_path:
-      typeof value.file_path === "string" && value.file_path.trim()
-        ? value.file_path
-        : fallback.filePath,
-    line_start: lineStart,
-    line_end: Math.max(lineStart, lineEnd),
-    snippet: typeof value.snippet === "string" ? value.snippet : "",
-    severity:
-      value.severity === "critical" ||
-        value.severity === "high" ||
-        value.severity === "medium" ||
-        value.severity === "low"
-        ? value.severity
-        : DEFAULT_RAW_SEVERITY,
-    description: typeof value.description === "string" ? value.description : "",
-    assumption,
-  };
-};
+// --- Phase Runners ---
 
 export async function runPhase1ReconAgent(
   userRequest: string,
@@ -377,10 +234,10 @@ export async function runPhase1ReconAgent(
   const userPrompt = [
     `User request: ${userRequest}`,
     "",
-    "Return JSON with:",
+    "Return JSON matching this schema:",
     "- context: { mission: string, languages: string[], frameworks: string[], hotspots: string[] }",
     "",
-    "If unsure, return: {\"context\":{\"mission\":\"\",\"languages\":[],\"frameworks\":[],\"hotspots\":[]}}",
+    "If unsure, return empty arrays.",
   ].join("\n");
 
   const reconTools = [
@@ -388,27 +245,17 @@ export async function runPhase1ReconAgent(
     createListFilesTool(2),
   ];
 
-  return runJsonReactAgent({
+  return runSchemaReactAgent({
     name: "ReconAgent",
     systemPrompt,
     userPrompt,
+    tools: reconTools,
+    schema: Phase1OutputSchema,
+    fallback: FALLBACKS.phase1 as z.infer<typeof Phase1OutputSchema>,
+    llmSelection,
     extraMessages,
     onMessage,
-    tools: reconTools,
-    llmSelection,
     maxToolCalls: 6,
-    repairInstructions:
-      "{\"context\":{\"mission\":\"...\",\"languages\":[],\"frameworks\":[],\"hotspots\":[]}}",
-    validateParsed: (value) =>
-      Boolean(
-        value &&
-        typeof value === "object" &&
-        typeof (value as any).context === "object" &&
-        Array.isArray((value as any).context?.languages) &&
-        Array.isArray((value as any).context?.frameworks) &&
-        Array.isArray((value as any).context?.hotspots)
-      ),
-    repairFallback: { context: { mission: "", languages: [], frameworks: [], hotspots: [] } },
   });
 }
 
@@ -426,31 +273,30 @@ export async function runPhase2StrategyAgent(input: {
     "Context (from Phase 1):",
     JSON.stringify(input.context ?? {}, null, 2),
     "",
-    "Return JSON with:",
-    "- target_files: array of { path, focus_area, score } (<= 20 items, score 0-100)",
+    "Return JSON matching this schema:",
+    "- target_files: array of { path: string, focus_area: string, score: number (0-100) }",
+    "IMPORTANT: output max 20 files.",
     "",
-    "If unsure, return: {\"target_files\":[]}",
+    "If unsure, return empty target_files array.",
   ].join("\n");
 
-  return runJsonReactAgent({
+  return runSchemaReactAgent({
     name: "StrategistAgent",
     systemPrompt,
     userPrompt,
-    extraMessages: input.extraMessages ?? [],
-    onMessage: input.onMessage,
     tools: allMcpTools,
+    schema: Phase2OutputSchema,
+    fallback: FALLBACKS.phase2 as z.infer<typeof Phase2OutputSchema>,
     llmSelection: input.llmSelection,
+    extraMessages: input.extraMessages,
+    onMessage: input.onMessage,
     maxToolCalls: 8,
-    repairInstructions:
-      "{\"target_files\":[{\"path\":\"...\",\"focus_area\":\"...\",\"score\":0}]}",
-    validateParsed: (value) => Boolean(value && Array.isArray((value as any).target_files)),
-    repairFallback: { target_files: [] },
   });
 }
 
 export async function runPhase3InvestigationAgents(input: {
   userRequest: string;
-  targetFiles: Array<{ path: string; focus_area: string; score: number }>;
+  targetFiles: TargetFile[];
   extraMessages?: BaseMessage[];
   onMessage?: (message: BaseMessage) => Promise<void> | void;
   llmSelection?: LlmSelection;
@@ -462,142 +308,105 @@ export async function runPhase3InvestigationAgents(input: {
   const allMessages: BaseMessage[] = [];
   const targets = Array.isArray(input.targetFiles) ? input.targetFiles : [];
 
-  const isMissingFileError = (value: unknown) =>
-    typeof value === "string" &&
-    (value.includes("ENOENT") || value.toLowerCase().includes("no such file"));
-
-  const resolveFilePath = async (filePath: string) => {
-    const bases = [
-      "apps/api/src/routes/portals",
-      "apps/api/src/routes/portals/company",
-      "apps/api/src/routes/portals/tenant",
-      "apps/api/src/routes/portals/partner",
-      "apps/api/src/routes/portals/superadmin",
-      "apps/api/src/services",
-      "apps/api/src/middleware",
-      "apps/api/src/routes",
-      "apps/api/src",
-      "apps/web",
-      "packages",
-      "docs",
-      "scripts",
-    ];
-    const normalized = filePath.replace(/^\.\//, "");
-    const candidates = new Set<string>();
-    candidates.add(normalized);
-    const hasPathSep = normalized.includes("/");
-    const hasKnownRoot = /^(apps|packages|docs|scripts|tests|public)\//.test(normalized);
-    if (!hasPathSep || !hasKnownRoot) {
-      for (const base of bases) {
-        candidates.add(`${base}/${normalized}`);
-      }
-    }
-    for (const candidate of candidates) {
-      try {
-        const content = await client.callTool("read_file", { filePath: candidate });
-        if (isMissingFileError(content)) {
-          continue;
-        }
-        if (content && typeof content === "object" && "error" in (content as any)) {
-          continue;
-        }
-        return { filePath: candidate, content };
-      } catch {
-        // Try next candidate
-      }
-    }
-    return null;
-  };
-
   const severityToFindingType = (severity?: string) => {
     switch (severity) {
       case "critical":
       case "high":
         return "BLOQUANT";
       case "medium":
+      case "low":
         return "WARNING";
       default:
         return "INFO";
     }
   };
 
-  const tasks = targets.map(async (target, index) => {
+  const addLineNumbers = (content: string, startLine = 1) =>
+    content
+      .split("\n")
+      .map((line, idx) => `${String(startLine + idx).padStart(4, " ")} | ${line}`)
+      .join("\n");
+
+  const tasks = targets.map(async (target) => {
     if (!target?.path) return;
-    const filePath = String(target.path);
-    const focusArea =
-      typeof target.focus_area === "string" && target.focus_area.trim()
-        ? target.focus_area
-        : "General audit";
+    const filePath = target.path;
+    const focusArea = target.focus_area || "General audit";
+
     try {
-      const resolved = await resolveFilePath(filePath);
-      if (!resolved) {
-        console.warn(`[InvestigatorAgent] Skipping missing file: ${filePath}`);
+      // Direct read - no guessing. Trusting Phase 2 (and its validation step).
+      const contentResult = await client.callTool("read_file", { filePath });
+      let content = "";
+
+      if (typeof contentResult === "string") {
+        content = contentResult;
+        // Basic check for error strings returned as success
+        const lower = content.toLowerCase();
+        if (lower.includes("no such file") || lower.includes("enoent")) {
+          console.warn(`[InvestigatorAgent] File not found (content check): ${filePath}`);
+          return;
+        }
+      } else if (contentResult && typeof contentResult === "object" && "error" in (contentResult as any)) {
+        console.warn(`[InvestigatorAgent] File not found (error object): ${filePath}`);
         return;
+      } else {
+        content = JSON.stringify(contentResult ?? "", null, 2);
       }
-      const resolvedPath = resolved.filePath;
-      const content =
-        typeof resolved.content === "string"
-          ? resolved.content
-          : JSON.stringify(resolved.content ?? "", null, 2);
+
       const numberedContent = addLineNumbers(content);
 
       const userPrompt = [
         `User request: ${input.userRequest}`,
-        `Target file: ${resolvedPath}`,
+        `Target file: ${filePath}`,
         `Focus area: ${focusArea}`,
         "",
         "Assigned file (with line numbers):",
         numberedContent,
         "",
-        "Return JSON with:",
-        "- raw_claims: array of objects { id, file_path, line_start, line_end, snippet, severity, description, assumption: { condition, related_symbol? } }",
+        "Return JSON matching this schema:",
+        "- raw_claims: array of { id, file_path, line_start, line_end, snippet, severity, description, assumption }",
+        "severity must be one of: critical, high, medium, low",
         "",
-        "If unsure, return: {\"raw_claims\":[]}",
+        "If no issues found, return empty raw_claims array.",
       ].join("\n");
 
-      const result = await runJsonReactAgent({
+      const result = await runSchemaReactAgent({
         name: `InvestigatorAgent:${filePath}`,
         systemPrompt,
         userPrompt,
-        extraMessages: input.extraMessages ?? [],
-        onMessage: input.onMessage,
         tools: [],
+        schema: Phase3OutputSchema,
+        fallback: FALLBACKS.phase3 as z.infer<typeof Phase3OutputSchema>,
         llmSelection: input.llmSelection,
-        repairInstructions:
-          "{\"raw_claims\":[{\"id\":\"...\",\"file_path\":\"...\",\"line_start\":1,\"line_end\":1,\"snippet\":\"\",\"severity\":\"medium\",\"description\":\"\",\"assumption\":{\"condition\":\"...\",\"related_symbol\":\"\"}}]}",
-        validateParsed: (value) => Boolean(value && Array.isArray((value as any).raw_claims)),
-        repairFallback: { raw_claims: [] },
+        extraMessages: input.extraMessages,
+        onMessage: input.onMessage,
+        maxToolCalls: 0, // Should be 0 since we provide the file content
       });
 
-      const claims = Array.isArray((result.parsed as any)?.raw_claims)
-        ? (result.parsed as any).raw_claims
-        : [];
-      if (Array.isArray(claims)) {
-        claims.forEach((claim, claimIndex) => {
-          const normalized = normalizeRawClaim(claim, { filePath: resolvedPath, index: claimIndex });
-          if (normalized) {
-            rawClaims.push(normalized);
-            findings.push({
-              type: severityToFindingType(normalized.severity),
-              file: resolvedPath,
-              description: normalized.description,
-              line_start: normalized.line_start,
-              line_end: normalized.line_end,
-              claim_id: normalized.id,
-            });
-          }
+      const claims = result.parsed.raw_claims;
+      claims.forEach((claim) => {
+        // Enforce file path consistency
+        const finalClaim = {
+          ...claim,
+          file_path: claim.file_path || filePath,
+        };
+
+        rawClaims.push(finalClaim);
+        findings.push({
+          type: severityToFindingType(finalClaim.severity),
+          file: finalClaim.file_path,
+          description: finalClaim.description,
+          line_start: finalClaim.line_start,
+          line_end: finalClaim.line_end,
+          claim_id: finalClaim.id,
         });
-      }
+      });
 
       if (Array.isArray(result.messages)) {
         allMessages.push(...result.messages);
       }
+
     } catch (error) {
-      console.warn(
-        `[InvestigatorAgent] Failed to load or analyze file ${filePath}: ${String(
-          (error as Error)?.message ?? error
-        )}`
-      );
+      console.warn(`[InvestigatorAgent] Error processing ${filePath}:`, error);
     }
   });
 
@@ -613,15 +422,15 @@ export async function runPhase4AdjudicatorAgent(input: {
   llmSelection?: LlmSelection;
 }) {
   const systemPrompt = auditPhaseConfig.phase4.systemPrompt;
-
   const userPrompt = [
     "Claim to adjudicate:",
     JSON.stringify(input.claim ?? {}, null, 2),
     "",
-    "Return JSON with:",
-    "- verdicts: array of one object { claim_id, status, confidence_score, reasoning, proof_trace }",
+    "Return JSON matching this schema:",
+    "- verdicts: array of { claim_id, status, confidence_score, reasoning, proof_trace }",
+    "status must be one of: VERIFIED, REFUTED, PLAUSIBLE, REJECTED",
     "",
-    "If unsure, return: {\"verdicts\":[]}",
+    "If unsure, return empty verdicts array.",
   ].join("\n");
 
   const adjudicatorTools = [
@@ -631,19 +440,17 @@ export async function runPhase4AdjudicatorAgent(input: {
     readFileRangeTool,
   ];
 
-  return runJsonReactAgent({
+  return runSchemaReactAgent({
     name: "AdjudicatorAgent",
     systemPrompt,
     userPrompt,
-    extraMessages: input.extraMessages ?? [],
-    onMessage: input.onMessage,
     tools: adjudicatorTools,
+    schema: Phase4OutputSchema,
+    fallback: FALLBACKS.phase4 as z.infer<typeof Phase4OutputSchema>,
     llmSelection: input.llmSelection,
+    extraMessages: input.extraMessages,
+    onMessage: input.onMessage,
     maxToolCalls: 10,
-    repairInstructions:
-      "{\"verdicts\":[{\"claim_id\":\"...\",\"status\":\"VERIFIED\",\"confidence_score\":90,\"reasoning\":\"...\",\"proof_trace\":[\"file.ts:1\"]}]}",
-    validateParsed: (value) => Boolean(value && Array.isArray((value as any).verdicts)),
-    repairFallback: { verdicts: [] },
   });
 }
 
@@ -669,40 +476,23 @@ export async function runPhase5ReporterAgent(input: {
     "Raw claims (for traceability):",
     JSON.stringify(input.rawClaims ?? {}, null, 2),
     "",
-    "Return JSON with:",
-    "- report_markdown: string (include sections: Executive summary, Key findings, Evidence vault, Remediation plan)",
-    "- tasks: array of objects { id, title, priority, impact, effort, steps, acceptance_criteria }",
+    "Return JSON matching this schema:",
+    "- report_markdown: string",
+    "- tasks: array of { id, title, priority, impact, effort, steps, acceptance_criteria }",
     "",
-    "If unsure, return: {\"report_markdown\":\"\",\"tasks\":[]}",
+    "If unsure, return basic error report.",
   ].join("\n");
 
-  return runJsonReactAgent({
+  return runSchemaReactAgent({
     name: "ReporterAgent",
     systemPrompt,
     userPrompt,
-    extraMessages: input.extraMessages ?? [],
-    onMessage: input.onMessage,
     tools: [],
+    schema: Phase5OutputSchema,
+    fallback: FALLBACKS.phase5 as z.infer<typeof Phase5OutputSchema>,
     llmSelection: input.llmSelection,
+    extraMessages: input.extraMessages,
+    onMessage: input.onMessage,
     maxToolCalls: 0,
-    repairInstructions:
-      "{\"report_markdown\":\"...\",\"tasks\":[{\"id\":\"...\",\"title\":\"...\",\"priority\":\"...\",\"impact\":\"...\",\"effort\":\"...\",\"steps\":[],\"acceptance_criteria\":[]}]}",
-    validateParsed: (value) =>
-      Boolean(
-        value &&
-        typeof (value as any).report_markdown === "string" &&
-        Array.isArray((value as any).tasks)
-      ),
-    repairFallback: {
-      report_markdown: [
-        "# Audit report",
-        "",
-        "The reporting agent failed to produce a valid report.",
-        "",
-        "## Status",
-        "- Phase 5 returned an invalid or empty payload.",
-      ].join("\n"),
-      tasks: [],
-    },
   });
 }
