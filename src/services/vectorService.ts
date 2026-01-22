@@ -23,7 +23,13 @@ const COLLECTION_NAME = "code_vectors";
 
 async function getCollection(): Promise<Collection<CodeVector>> {
     const db = await getDatabase();
-    return db.collection<CodeVector>(COLLECTION_NAME);
+    const collection = db.collection<CodeVector>(COLLECTION_NAME);
+
+    // Ensure index on filePath for fast lookup during reconciliation
+    // We do this asynchronously to not block the first call too much
+    void collection.createIndex({ filePath: 1 });
+
+    return collection;
 }
 
 /**
@@ -51,6 +57,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
                 input: text,
                 model: azure.model ?? "text-embedding-ada-002",
             }),
+            signal: AbortSignal.timeout(30000), // 30s timeout
         });
 
         if (!response.ok) {
@@ -78,6 +85,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
                 input: text,
                 model: lms.model,
             }),
+            signal: AbortSignal.timeout(30000), // 30s timeout
         });
 
         if (!response.ok) {
@@ -135,18 +143,22 @@ export function chunkCode(content: string, filePath: string, options = { chunkSi
 }
 
 /**
- * Upsert chunks with embeddings to MongoDB
+ * Upsert chunks with embeddings to MongoDB using Bulk operations
  */
 export async function upsertChunks(chunks: CodeVector[]): Promise<void> {
+    if (chunks.length === 0) return;
+
     const collection = await getCollection();
 
-    for (const chunk of chunks) {
-        await collection.updateOne(
-            { filePath: chunk.filePath, startLine: chunk.startLine, endLine: chunk.endLine },
-            { $set: chunk },
-            { upsert: true }
-        );
-    }
+    const operations = chunks.map(chunk => ({
+        updateOne: {
+            filter: { filePath: chunk.filePath, startLine: chunk.startLine, endLine: chunk.endLine },
+            update: { $set: chunk },
+            upsert: true
+        }
+    }));
+
+    await collection.bulkWrite(operations);
 }
 
 /**
@@ -207,6 +219,7 @@ export async function semanticSearch(query: string, options: {
     return results;
 }
 
+
 /**
  * Clear vectors for a specific repository path
  */
@@ -217,4 +230,35 @@ export async function clearVectors(repoPath?: string): Promise<void> {
     } else {
         await collection.deleteMany({});
     }
+}
+
+/**
+ * Get the stored hash for a specific file
+ */
+export async function getFileHash(filePath: string): Promise<string | null> {
+    const collection = await getCollection();
+    // We only need one chunk to check the contentHash since all chunks
+    // for a file share the same contentHash
+    const chunk = await collection.findOne(
+        { filePath },
+        { projection: { contentHash: 1 } }
+    );
+    return chunk?.contentHash || null;
+}
+
+/**
+ * Delete all vectors for a specific file
+ */
+export async function deleteFileVectors(filePath: string): Promise<void> {
+    const collection = await getCollection();
+    await collection.deleteMany({ filePath });
+}
+
+/**
+ * Get a list of all currently indexed file paths
+ */
+export async function getAllIndexedFilePaths(): Promise<string[]> {
+    const collection = await getCollection();
+    const result = await collection.distinct("filePath");
+    return result;
 }

@@ -60,6 +60,21 @@ export class McpClient {
     );
 
     await client.connect(transport);
+
+    // Initialize Automated Vector Indexing
+    if (!process.env.DISABLE_AUTO_INDEX) {
+      try {
+        const { startWatcher } = await import("../services/autoIndexer");
+        const { startAutoIndexScheduler } = await import("../services/autoIndexScheduler");
+
+        console.log("[AutoIndex] Initializing services...");
+        startWatcher(config.repoRoot);
+        startAutoIndexScheduler(config.repoRoot);
+      } catch (error) {
+        console.error("[AutoIndex] Failed to initialize:", error);
+      }
+    }
+
     McpClient.instance = new McpClient(client);
     return McpClient.instance;
   }

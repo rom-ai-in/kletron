@@ -138,11 +138,12 @@ type TimelinePanelProps = {
   timeline: TimelineEvent[];
   selectedEventId: string | null;
   onPhaseSelect: (eventId: string) => void;
+  className?: string;
 };
 
-function TimelinePanel({ timeline, selectedEventId, onPhaseSelect }: TimelinePanelProps) {
+function TimelinePanel({ timeline, selectedEventId, onPhaseSelect, className }: TimelinePanelProps) {
   return (
-    <section className="sticky top-6 space-y-4 rounded-lg border border-border-subtle bg-bg-surface p-0 shadow-sm h-full flex flex-col overflow-hidden">
+    <section className={`sticky top-6 space-y-4 rounded-lg border border-border-subtle bg-bg-surface p-0 shadow-sm h-full flex flex-col overflow-hidden ${className}`}>
       <div className="border-b border-border-subtle px-3 py-2">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Phases</h2>
       </div>
@@ -195,11 +196,12 @@ type ToolExplorerPanelProps = {
   tools: McpToolMeta[];
   usedToolNames: Set<string>;
   openToolDialog: (toolName: McpToolMeta) => void;
+  className?: string;
 };
 
-function ToolExplorerPanel({ tools, usedToolNames, openToolDialog }: ToolExplorerPanelProps) {
+function ToolExplorerPanel({ tools, usedToolNames, openToolDialog, className }: ToolExplorerPanelProps) {
   return (
-    <section className="sticky top-6 space-y-0 rounded-lg border border-border-subtle bg-bg-surface shadow-sm h-full flex flex-col overflow-hidden">
+    <section className={`sticky top-6 space-y-0 rounded-lg border border-border-subtle bg-bg-surface shadow-sm h-full flex flex-col overflow-hidden ${className}`}>
       <div className="flex items-center justify-between border-b border-border-subtle px-3 py-2 bg-bg-surface">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Tools</h3>
         <span className="text-[10px] text-text-muted">
@@ -266,6 +268,8 @@ type HeaderControlsProps = {
   onSetDetailGraph: (graph: GraphOption | null) => void;
   detailProvider: "azure" | "lmstudio" | null;
   onSetDetailProvider: (provider: "azure" | "lmstudio" | null) => void;
+  isSidebarOpen: boolean;
+  onToggleSidebar: () => void;
 };
 
 function HeaderControls({
@@ -292,6 +296,8 @@ function HeaderControls({
   onSetDetailGraph,
   detailProvider,
   onSetDetailProvider,
+  isSidebarOpen,
+  onToggleSidebar,
 }: HeaderControlsProps) {
   const [isGraphMenuOpen, setIsGraphMenuOpen] = useState(false);
   const [isLlmMenuOpen, setIsLlmMenuOpen] = useState(false);
@@ -652,6 +658,29 @@ function HeaderControls({
         </div>
       </div>
 
+      <div className="h-4 w-[1px] bg-border-subtle mx-1" />
+
+      <button
+        type="button"
+        onClick={onToggleSidebar}
+        className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-focus-ring ${isSidebarOpen
+          ? "border-border-strong bg-state-selected text-text-primary"
+          : "border-border-subtle bg-bg-surface text-text-secondary hover:bg-state-hover hover:text-text-primary"
+          }`}
+        aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+      >
+        <svg
+          className="h-3.5 w-3.5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={1.5}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+        </svg>
+        <span className="hidden sm:inline">{isSidebarOpen ? "Close Details" : "Open Details"}</span>
+      </button>
+
 
 
       <Modal
@@ -842,6 +871,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
   const resultTextRaw = event.content?.trim() ?? "";
   const resultText = resultTextRaw || (isToolEvent ? "" : "No response yet.");
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
   const titleText = isToolEvent
     ? toolMeta?.label ?? event.name ?? "Tool output"
     : event.kind === "user"
@@ -1098,35 +1128,60 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
               Result{isToolEvent ? "" : " / Assistant message"}
             </p>
             {event.kind === "assistant" && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleCopyResponse();
-                }}
-                className="flex items-center gap-1 rounded-md border border-border-subtle bg-bg-surface px-3 py-1 text-[10px] text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
-                aria-label="Copy agent response"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 20 20"
-                  className="h-3 w-3"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
+              <>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleCopyResponse();
+                  }}
+                  className="flex items-center gap-1 rounded-md border border-border-subtle bg-bg-surface px-3 py-1 text-[10px] text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
+                  aria-label="Copy agent response"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5h6a2 2 0 0 1 2 2v6" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V5H5" />
-                </svg>
-                <span className="whitespace-nowrap">
-                  {copyResponseStatus === "copied"
-                    ? "Copied"
-                    : copyResponseStatus === "error"
-                      ? "Error"
-                      : "Copy"}
-                </span>
-              </button>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    className="h-3 w-3"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5h6a2 2 0 0 1 2 2v6" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V5H5" />
+                  </svg>
+                  <span className="whitespace-nowrap">
+                    {copyResponseStatus === "copied"
+                      ? "Copied"
+                      : copyResponseStatus === "error"
+                        ? "Error"
+                        : "Copy"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setIsFullScreen(true);
+                  }}
+                  className="flex items-center gap-1 rounded-md border border-border-subtle bg-bg-surface px-3 py-1 text-[10px] text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
+                  aria-label="View full screen"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    className="h-3 w-3"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                  </svg>
+                  <span className="whitespace-nowrap">Full screen</span>
+                </button>
+              </>
             )}
           </div>
           <pre className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-border-subtle bg-bg-surface p-3 text-[12px] leading-relaxed text-text-primary whitespace-pre-wrap break-words scrollbar-elegant">
@@ -1144,6 +1199,20 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
             </button>
           </div>
         )}
+      </div>
+
+      <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+        <Modal
+          open={isFullScreen}
+          onClose={() => setIsFullScreen(false)}
+          title="Agent Response"
+          subtitle={titleText}
+          fullHeight
+        >
+          <div className="h-full w-full overflow-auto p-6 bg-bg-surface text-sm font-mono leading-relaxed text-text-primary whitespace-pre-wrap">
+            {resultText}
+          </div>
+        </Modal>
       </div>
     </article>
   );
@@ -1265,6 +1334,7 @@ export default function HomePage() {
   const [isLlmInfoOpen, setIsLlmInfoOpen] = useState(false);
   const [detailGraph, setDetailGraph] = useState<GraphOption | null>(null);
   const [detailProvider, setDetailProvider] = useState<"azure" | "lmstudio" | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const eventStreamRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -1854,20 +1924,14 @@ export default function HomePage() {
               onSetDetailGraph={setDetailGraph}
               detailProvider={detailProvider}
               onSetDetailProvider={setDetailProvider}
+              isSidebarOpen={isSidebarOpen}
+              onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
             />
           </div>
         </header>
 
-        <div className="grid grid-cols-[300px_minmax(0,1fr)_360px] gap-4 min-h-0">
-          <div className="min-h-0">
-            <TimelinePanel
-              timeline={activeTimeline}
-              selectedEventId={selectedEventId}
-              onPhaseSelect={handlePhaseClick}
-            />
-          </div>
-
-          <div className="min-h-0">
+        <div className="flex h-full min-h-0 gap-4">
+          <div className="flex-1 min-h-0 flex flex-col">
             <main className="flex h-full min-h-0 w-full flex-col gap-3 rounded-lg border border-border-subtle bg-bg-surface p-0 shadow-sm overflow-hidden">
               <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -2001,13 +2065,24 @@ export default function HomePage() {
             </main>
           </div>
 
-          <div className="min-h-0">
-            <ToolExplorerPanel
-              tools={graphTools}
-              usedToolNames={usedToolNames}
-              openToolDialog={openToolDialog}
-            />
-          </div>
+          <aside className={`transition-all duration-300 ease-in-out ${isSidebarOpen ? "w-[360px] opacity-100" : "w-0 opacity-0 overflow-hidden"}`}>
+            <div className="flex h-full flex-col gap-4 min-w-[360px]">
+              <div className="flex-1 min-h-0 h-1/2">
+                <TimelinePanel
+                  timeline={activeTimeline}
+                  selectedEventId={selectedEventId}
+                  onPhaseSelect={handlePhaseClick}
+                />
+              </div>
+              <div className="flex-1 min-h-0 h-1/2">
+                <ToolExplorerPanel
+                  tools={graphTools}
+                  usedToolNames={usedToolNames}
+                  openToolDialog={openToolDialog}
+                />
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
 

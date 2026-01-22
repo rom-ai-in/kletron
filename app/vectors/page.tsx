@@ -29,6 +29,8 @@ type IndexStatus = {
     lastIndexedAt?: string;
     currentFile?: string;
     errors: string[];
+    autoIndexEnabled?: boolean;
+    lastAutoIndex?: string;
 };
 
 type SearchResult = {
@@ -174,6 +176,13 @@ export default function VectorIndexPage() {
                         subtitle={status?.isIndexing ? `Processing...` : status?.lastIndexedAt ? `Last update: ${new Date(status.lastIndexedAt).toLocaleTimeString()}` : "Ready to index"}
                         color={status?.isIndexing ? "sky" : status?.totalChunks ? "emerald" : "zinc"}
                         isAnimated={status?.isIndexing}
+                    />
+                    <StatusCard
+                        title="Auto-Indexing"
+                        value={status?.autoIndexEnabled !== false ? "Enabled" : "Disabled"}
+                        icon={Clock}
+                        subtitle={status?.lastAutoIndex ? `Last run: ${new Date(status.lastAutoIndex).toLocaleTimeString()}` : "Waiting for schedule"}
+                        color="sky"
                     />
                     <StatusCard
                         title="Indexed Files"
