@@ -8,23 +8,10 @@ export type ChainStatus = "PENDING" | "RUNNING" | "PAUSED" | "COMPLETED" | "FAIL
 /**
  * Available audit modes (corresponds to prompts/A-audit/ suites)
  */
-export type AuditMode =
-    | "A1"  // API
-    | "A2"  // General
-    | "A3"  // I18n
-    | "A4"  // Portals
-    | "A5"  // Tests
-    | "A6"  // Security
-    | "A7"  // UX/UI
-    | "A8"  // Scripts/Quality
-    | "A9"  // Infrastructure
-    | "A10" // Navigation
-    | "A11" // Modules
-    | "A12" // Error Logic
-    | "A13" // Alert/Snackbar
-    | "A14" // File Organization
-    | "A15" // Workers
-    | "A16"; // Performance
+/**
+ * Available graph IDs
+ */
+export type GraphId = "audit" | "simple_react";
 
 /**
  * Configuration for a single stage in a chain
@@ -34,14 +21,14 @@ export interface AuditStageConfig {
     id: string;
     /** Human-readable name */
     name: string;
-    /** Which audit suite to run */
-    auditMode: AuditMode;
+    /** Which graph to run */
+    graphId: GraphId;
+    /** Path to the prompt file (repo-relative) */
+    promptPath: string;
     /** LLM provider to use */
     llmProvider: "azure" | "lmstudio";
     /** Optional model override (defaults to env config) */
     llmModel?: string;
-    /** Prompt template for this stage (can include variables) */
-    userPromptTemplate: string;
     /** Context from previous stages to include (e.g., ["stage-1.findings"]) */
     contextFromPreviousStages?: string[];
     /** JavaScript expression to evaluate; skip stage if true */

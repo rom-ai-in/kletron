@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
-import { getDb } from "../lib/db.js";
-import { runAgentWorkflow } from "../agentRunner.js";
+import { getDb } from "../lib/db";
+import { runWorkflow } from "../workflows";
+import { readPromptFile } from "@/app/api/prompts/utils";
 import type {
     AuditChain,
     ChainStatus,
@@ -11,7 +12,7 @@ import type {
     Finding,
     Insight,
     AuditStageConfig,
-} from "./chainTypes.js";
+} from "./chainTypes";
 
 const COLLECTION_NAME = "audit_chains";
 
@@ -115,6 +116,23 @@ export class ChainExecutor {
     }
 
     /**
+     * Update chain configuration
+     */
+    async updateChain(
+        chainId: string,
+        updates: Partial<AuditChain>
+    ): Promise<void> {
+        const db = await getDb();
+        // Remove _id from updates if it exists to avoid MongoDB error
+        const { _id, ...updateData } = updates as any;
+
+        await db.collection(COLLECTION_NAME).updateOne(
+            { _id: new ObjectId(chainId) },
+            { $set: updateData }
+        );
+    }
+
+    /**
      * Update chain progress during execution
      */
     async updateChainProgress(
@@ -123,7 +141,7 @@ export class ChainExecutor {
         sessionId: string
     ): Promise<void> {
         const db = await getDb();
-        await db.collection(COLLECTION_NAME).updateOne(
+        await db.collection<AuditChain>(COLLECTION_NAME).updateOne(
             { _id: new ObjectId(chainId) },
             {
                 $set: {
@@ -131,7 +149,7 @@ export class ChainExecutor {
                 },
                 $push: {
                     sessionIds: sessionId,
-                },
+                } as any,
             }
         );
     }
@@ -167,7 +185,7 @@ export class ChainExecutor {
 
             // Check skip condition
             if (stage.skipIf && this.evaluateSkipCondition(stage.skipIf, results)) {
-                console.log(`[ChainExecutor] Skipping stage ${stage.id}: condition met`);
+                console.info(`[ChainExecutor] Skipping stage ${stage.id}: condition met`);
                 onProgress?.({
                     chainId,
                     stageIndex: i,
@@ -198,7 +216,7 @@ export class ChainExecutor {
                     (stageResult.retries || 0) < (stage.maxRetries || 3)
                 ) {
                     // Retry same stage
-                    console.log(`[ChainExecutor] Retrying stage ${stage.id}...`);
+                    console.info(`[ChainExecutor] Retrying stage ${stage.id}...`);
                     i--;
                     results[results.length - 1].retries = (stageResult.retries || 0) + 1;
                 } else {
@@ -262,14 +280,17 @@ export class ChainExecutor {
             // Build context from previous stages
             const context = this.buildStageContext(stage, previousResults);
 
+            // Load prompt from filesystem
+            const promptTemplate = await readPromptFile(stage.promptPath);
+
             // Build user prompt with context
-            const userPrompt = this.buildUserPrompt(stage, context);
+            const userPrompt = this.buildUserPrompt(promptTemplate, context);
 
-            console.log(`[ChainExecutor] Executing stage: ${stage.name}`);
-            console.log(`[ChainExecutor] Prompt: ${userPrompt.substring(0, 100)}...`);
+            console.info(`[ChainExecutor] Executing stage: ${stage.name} (Graph: ${stage.graphId})`);
+            console.info(`[ChainExecutor] Prompt: ${userPrompt.substring(0, 100)}...`);
 
-            // Execute the 5-phase workflow
-            const workflowResult = await runAgentWorkflow(userPrompt, {
+            // Execute the selected graph workflow
+            const workflowResult = await runWorkflow(userPrompt, stage.graphId, {
                 llmSelection: {
                     provider: stage.llmProvider,
                     model: stage.llmModel,
@@ -282,7 +303,7 @@ export class ChainExecutor {
                 (f: any) => ({
                     chainId,
                     stageId: stage.id,
-                    sessionId: workflowResult.sessionId || "",
+                    sessionId: workflowResult.sessionId,
                     type: f.type,
                     file: f.file,
                     description: f.description,
@@ -296,7 +317,7 @@ export class ChainExecutor {
             return {
                 stageId: stage.id,
                 stageName: stage.name,
-                sessionId: workflowResult.sessionId || "",
+                sessionId: workflowResult.sessionId,
                 success: true,
                 findings,
                 claims: workflowResult.outputs?.raw_claims || [],
@@ -347,8 +368,8 @@ export class ChainExecutor {
     /**
      * Build user prompt with context
      */
-    private buildUserPrompt(stage: AuditStageConfig, context: any): string {
-        let prompt = stage.userPromptTemplate;
+    private buildUserPrompt(template: string, context: any): string {
+        let prompt = template;
 
         // If context exists, append it to the prompt
         if (context) {

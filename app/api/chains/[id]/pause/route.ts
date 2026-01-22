@@ -3,7 +3,7 @@ import { chainExecutor } from "@/src/services/chainExecutor";
 
 /**
  * POST /api/chains/[id]/pause
- * Pause a running chain
+ * Pause a running campaign
  */
 export async function POST(
     req: NextRequest,
@@ -15,12 +15,12 @@ export async function POST(
         const chain = await chainExecutor.getChain(chainId);
 
         if (!chain) {
-            return NextResponse.json({ error: "Chain not found" }, { status: 404 });
+            return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
         }
 
         if (chain.status !== "RUNNING") {
             return NextResponse.json(
-                { error: "Chain is not running" },
+                { error: "Campaign is not running" },
                 { status: 400 }
             );
         }
@@ -31,7 +31,7 @@ export async function POST(
     } catch (error) {
         console.error(`[API /api/chains/${params.id}/pause POST] Error:`, error);
         return NextResponse.json(
-            { error: "Failed to pause chain" },
+            { error: "Failed to pause campaign" },
             { status: 500 }
         );
     }

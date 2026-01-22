@@ -7,11 +7,12 @@ import { Button } from "./ui/Button";
 interface ChainCardProps {
     chain: AuditChain;
     onView?: () => void;
+    onEdit?: () => void;
     onPause?: () => void;
     onStop?: () => void;
 }
 
-export function ChainCard({ chain, onView, onPause, onStop }: ChainCardProps) {
+export function ChainCard({ chain, onView, onEdit, onPause, onStop }: ChainCardProps) {
     const progress =
         chain.stages.length > 0
             ? ((chain.currentStageIndex / chain.stages.length) * 100).toFixed(0)
@@ -43,7 +44,7 @@ export function ChainCard({ chain, onView, onPause, onStop }: ChainCardProps) {
                     )}
 
                     <div className="flex items-center gap-4 text-xs text-text-muted">
-                        <span>{chain.stages.length} stages</span>
+                        <span>{chain.stages.length} audit stages</span>
                         {duration && <span>{duration}m</span>}
                         {chain.metadata?.totalClaims && (
                             <span>
@@ -63,6 +64,11 @@ export function ChainCard({ chain, onView, onPause, onStop }: ChainCardProps) {
                     <Button size="sm" variant="secondary" onClick={onView}>
                         View
                     </Button>
+                    {chain.status !== "RUNNING" && onEdit && (
+                        <Button size="sm" variant="secondary" onClick={onEdit}>
+                            Edit
+                        </Button>
+                    )}
                     {chain.status === "RUNNING" && onPause && (
                         <Button size="sm" variant="secondary" onClick={onPause}>
                             Pause

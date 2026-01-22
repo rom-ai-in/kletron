@@ -26,7 +26,7 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
 
     useEffect(() => {
         if (isOpen) {
-            fetchSessions();
+            void fetchSessions();
         }
     }, [isOpen]);
 

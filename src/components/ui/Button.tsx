@@ -3,10 +3,11 @@ import React from "react";
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: "primary" | "secondary" | "ghost" | "danger";
     size?: "xs" | "sm" | "md" | "lg" | "icon";
+    loading?: boolean;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-    ({ className = "", variant = "secondary", size = "md", children, ...props }, ref) => {
+    ({ className = "", variant = "secondary", size = "md", loading, children, ...props }, ref) => {
         const baseStyles = "inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:pointer-events-none disabled:opacity-50";
 
         const variants = {
@@ -27,9 +28,13 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         return (
             <button
                 ref={ref}
+                disabled={props.disabled || loading}
                 className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
                 {...props}
             >
+                {loading && (
+                    <div className="mr-2 h-3 w-3 animate-spin rounded-full border-2 border-border-subtle border-t-text-muted" />
+                )}
                 {children}
             </button>
         );

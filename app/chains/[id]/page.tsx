@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import type { AuditChain } from "@/src/services/chainTypes";
 import { Panel } from "@/src/components/ui/Panel";
 import { Button } from "@/src/components/ui/Button";
+import { HotspotHeatmap } from "@/src/components/HotspotHeatmap";
+import { LLMComparisonTable } from "@/src/components/LLMComparisonTable";
+import { ChainBuilderModal } from "@/src/components/ChainBuilderModal";
 
 interface ChainDetailPageProps {
     params: { id: string };
@@ -15,6 +18,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
     const [chain, setChain] = useState<AuditChain | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [isEditing, setIsEditing] = useState(false);
 
     useEffect(() => {
         void fetchChain();
@@ -90,6 +94,38 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
         }
     };
 
+    const downloadFile = (filename: string, content: string, contentType: string) => {
+        const blob = new Blob([content], { type: contentType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleExportJSON = async () => {
+        if (!chain) return;
+        try {
+            const res = await fetch(`/api/chains/${params.id}/report`);
+            const data = await res.json();
+            downloadFile(`chain-audit-${params.id}.json`, JSON.stringify(data, null, 2), "application/json");
+        } catch (err) {
+            console.error("Export error:", err);
+        }
+    };
+
+    const handleExportMarkdown = async () => {
+        if (!chain) return;
+        try {
+            const res = await fetch(`/api/chains/${params.id}/report`);
+            const data = await res.json();
+            downloadFile(`chain-audit-${params.id}.md`, data.report || "# Audit Report", "text/markdown");
+        } catch (err) {
+            console.error("Export error:", err);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex h-full items-center justify-center">
@@ -102,7 +138,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
         return (
             <div className="flex h-full flex-col items-center justify-center gap-4">
                 <p className="text-sm text-rose-400">Error: {error || "Chain not found"}</p>
-                <Button onClick={() => router.push("/chains")}>Back to Chains</Button>
+                <Button onClick={() => router.push("/chains")}>Back to Campaigns</Button>
             </div>
         );
     }
@@ -114,25 +150,66 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
 
     return (
         <div className="flex h-full flex-col">
-            {/* Header */}
+            <ChainBuilderModal
+                open={isEditing}
+                onClose={() => setIsEditing(false)}
+                onCreated={() => {
+                    setIsEditing(false);
+                    void fetchChain();
+                }}
+                editChainId={params.id}
+            />
+            {/* Header with Breadcrumbs */}
             <div className="border-b border-border-subtle bg-bg-surface px-6 py-4">
+                <div className="mb-4 flex items-center gap-2 text-xs font-medium">
+                    <button
+                        onClick={() => router.push("/")}
+                        className="text-text-muted transition hover:text-text-primary"
+                    >
+                        Home
+                    </button>
+                    <span className="text-border-strong">/</span>
+                    <button
+                        onClick={() => router.push("/chains")}
+                        className="text-text-muted transition hover:text-text-primary"
+                    >
+                        Audit Campaigns
+                    </button>
+                    <span className="text-border-strong">/</span>
+                    <span className="text-text-primary">{chain.name}</span>
+                </div>
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-lg font-semibold text-text-primary">{chain.name}</h1>
                         <p className="text-sm text-text-muted">{chain.description}</p>
                     </div>
                     <div className="flex gap-2">
+                        {chain.status !== "RUNNING" && (
+                            <Button onClick={() => setIsEditing(true)} variant="secondary">
+                                Edit Campaign
+                            </Button>
+                        )}
                         {chain.status === "PENDING" && (
-                            <Button onClick={() => void handleExecute()}>Start Execution</Button>
+                            <Button onClick={() => void handleExecute()}>Start Campaign</Button>
                         )}
                         {chain.status === "RUNNING" && (
                             <Button onClick={() => void handlePause()} variant="secondary">
                                 Pause
                             </Button>
                         )}
-                        <Button onClick={() => router.push("/chains")} variant="secondary">
-                            Back
-                        </Button>
+                        {chain.status === "COMPLETED" && (
+                            <>
+                                <Button onClick={() => void handleExportJSON()} variant="secondary" size="sm">
+                                    Export JSON
+                                </Button>
+                                <Button onClick={() => void handleExportMarkdown()} variant="secondary" size="sm">
+                                    Export MD
+                                </Button>
+                                <Button onClick={() => window.print()} variant="primary" size="sm">
+                                    Print Report
+                                </Button>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
@@ -187,13 +264,28 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                                             <span className="text-sm font-medium text-text-primary">
                                                 {stage.name}
                                             </span>
-                                            <span className="text-xs text-text-muted">({stage.auditMode})</span>
+                                            <span className="text-xs text-text-muted">
+                                                Graph: {stage.graphId} | Prompt: {stage.promptPath.split('/').pop()?.replace('.md', '')}
+                                            </span>
                                         </div>
                                     </div>
                                 );
                             })}
                         </div>
                     </Panel>
+
+                    {/* Advanced Visualizations (Completed or with findings) */}
+                    {chain.aggregatedFindings.length > 0 && (
+                        <>
+                            <HotspotHeatmap findings={chain.aggregatedFindings} />
+                            {chain.stages.length > 1 && (
+                                <LLMComparisonTable
+                                    stages={chain.stages}
+                                    findings={chain.aggregatedFindings}
+                                />
+                            )}
+                        </>
+                    )}
 
                     {/* Findings */}
                     {chain.aggregatedFindings.length > 0 && (

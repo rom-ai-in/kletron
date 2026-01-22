@@ -1,11 +1,11 @@
-import type { AuditChain, AuditStageConfig, AuditMode } from "./chainTypes.js";
+import type { AuditChain, AuditStageConfig, GraphId } from "./chainTypes";
 
 /**
- * ChainConfigBuilder - Pre-configured chain templates and validation utilities
+ * ChainConfigBuilder - Pre-configured campaign templates and validation utilities
  */
 export class ChainConfigBuilder {
     /**
-     * Pre-configured chain presets
+     * Pre-configured campaign presets
      */
     static readonly PRESETS: Record<string, Partial<AuditChain>> = {
         /**
@@ -19,114 +19,114 @@ export class ChainConfigBuilder {
                 {
                     id: "a1-api",
                     name: "API Audit",
-                    auditMode: "A1",
+                    graphId: "audit",
+                    promptPath: "A-audit/A1-api/general-api-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Audit API routes, endpoints, and request handling logic",
                 },
                 {
                     id: "a2-general",
                     name: "General Code Quality",
-                    auditMode: "A2",
+                    graphId: "audit",
+                    promptPath: "A-audit/A2-general/daily-repository-check.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "General code quality, patterns, and best practices audit",
                 },
                 {
                     id: "a3-i18n",
                     name: "I18n Compliance",
-                    auditMode: "A3",
+                    graphId: "audit",
+                    promptPath: "A-audit/A3-i18n/i18n-master-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Check i18n structure, completeness, and usage patterns",
                 },
                 {
                     id: "a4-portals",
                     name: "Portal Architecture",
-                    auditMode: "A4",
+                    graphId: "audit",
+                    promptPath: "A-audit/A4-portals/portal-architecture-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Audit portal isolation, routing, and access control",
                 },
                 {
                     id: "a5-tests",
                     name: "Test Coverage",
-                    auditMode: "A5",
+                    graphId: "audit",
+                    promptPath: "A-audit/A5-tests/tests-completeness.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Audit test coverage, quality, and patterns",
                 },
                 {
                     id: "a6-security",
                     name: "Security Audit",
-                    auditMode: "A6",
+                    graphId: "audit",
+                    promptPath: "A-audit/A6-security/permission-access-control.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Security vulnerabilities, authentication, and authorization audit",
                 },
                 {
                     id: "a7-ux",
                     name: "UX/UI Audit",
-                    auditMode: "A7",
+                    graphId: "audit",
+                    promptPath: "A-audit/A7-ux-ui/portal-ux.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "UI/UX consistency, accessibility, and user experience audit",
                 },
                 {
                     id: "a8-quality",
                     name: "Scripts & Quality",
-                    auditMode: "A8",
+                    graphId: "audit",
+                    promptPath: "A-audit/A8-scripts-quality/quality-scripts-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Quality scripts, linting, and automation audit",
                 },
                 {
                     id: "a9-infra",
                     name: "Infrastructure",
-                    auditMode: "A9",
+                    graphId: "audit",
+                    promptPath: "A-audit/A9-infrastructure/infrastructure-production-readiness.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Infrastructure, deployment, and DevOps audit",
                 },
                 {
                     id: "a10-nav",
                     name: "Navigation",
-                    auditMode: "A10",
+                    graphId: "audit",
+                    promptPath: "A-audit/A10-navigation/navigation-permissions-registry-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Navigation structure and routing audit",
                 },
                 {
                     id: "a11-modules",
                     name: "Modules",
-                    auditMode: "A11",
+                    graphId: "audit",
+                    promptPath: "A-audit/A11-modules/inter-module-consistency.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Module organization and dependencies audit",
                 },
                 {
                     id: "a12-errors",
                     name: "Error Handling",
-                    auditMode: "A12",
+                    graphId: "audit",
+                    promptPath: "A-audit/A12-error-logic/error-logic-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Error handling and logging patterns audit",
                 },
                 {
                     id: "a13-alerts",
                     name: "Alerts & Feedback",
-                    auditMode: "A13",
+                    graphId: "audit",
+                    promptPath: "A-audit/A13-alert-snackbar-feedback-audit/alert-snackbar-feedback-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "User feedback, alerts, and notification audit",
                 },
                 {
                     id: "a14-files",
                     name: "File Organization",
-                    auditMode: "A14",
+                    graphId: "audit",
+                    promptPath: "A-audit/A14-file-organization/file-hygiene-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "File structure and organization audit",
                 },
                 {
                     id: "a15-workers",
                     name: "Workers",
-                    auditMode: "A15",
+                    graphId: "audit",
+                    promptPath: "A-audit/A15-workers/worker-architecture-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Background workers and job processing audit",
                 },
                 {
                     id: "a16-perf",
                     name: "Performance",
-                    auditMode: "A16",
+                    graphId: "audit",
+                    promptPath: "A-audit/A16-performance/full-stack-performance-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Performance optimization opportunities audit",
                 },
             ],
         },
@@ -143,27 +143,24 @@ export class ChainConfigBuilder {
                 {
                     id: "security-azure",
                     name: "Security Audit (Azure)",
-                    auditMode: "A6",
+                    graphId: "audit",
+                    promptPath: "A-audit/A6-security/permission-access-control.md",
                     llmProvider: "azure",
-                    userPromptTemplate:
-                        "Focus on authentication, authorization, and input validation vulnerabilities",
                 },
                 {
                     id: "security-lmstudio",
                     name: "Security Audit (LM Studio)",
-                    auditMode: "A6",
+                    graphId: "audit",
+                    promptPath: "A-audit/A6-security/permission-access-control.md",
                     llmProvider: "lmstudio",
-                    userPromptTemplate:
-                        "Cross-check with different LLM: focus on injection attacks, CSRF, XSS, and data exposure",
                     contextFromPreviousStages: ["security-azure.findings"],
                 },
                 {
                     id: "security-consolidation",
                     name: "Security Consolidation",
-                    auditMode: "A6",
+                    graphId: "audit",
+                    promptPath: "A-audit/A6-security/permission-access-control.md",
                     llmProvider: "azure",
-                    userPromptTemplate:
-                        "Consolidate findings from both passes, identify consensus, and prioritize remediation",
                     contextFromPreviousStages: [
                         "security-azure.findings",
                         "security-lmstudio.findings",
@@ -173,37 +170,34 @@ export class ChainConfigBuilder {
         },
 
         /**
-         * I18n quality chain - Progressive validation
+         * I18n quality campaign - Progressive validation
          * Duration: ~2 hours
          */
-        I18N_QUALITY_CHAIN: {
+        I18N_QUALITY_CAMPAIGN: {
             name: "I18n Quality Assurance",
             description: "Comprehensive i18n audit with progressive validation stages",
             stages: [
                 {
                     id: "i18n-structure",
                     name: "I18n Structure Analysis",
-                    auditMode: "A3",
+                    graphId: "audit",
+                    promptPath: "A-audit/A3-i18n/i18n-master-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate:
-                        "Analyze i18n file structure, naming conventions, and organization",
                 },
                 {
                     id: "i18n-completeness",
                     name: "I18n Completeness Check",
-                    auditMode: "A3",
+                    graphId: "audit",
+                    promptPath: "A-audit/A3-i18n/i18n-master-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate:
-                        "Check for missing keys, locale parity, and translation completeness",
                     contextFromPreviousStages: ["i18n-structure.findings"],
                 },
                 {
                     id: "i18n-usage",
                     name: "I18n Usage Verification",
-                    auditMode: "A3",
+                    graphId: "audit",
+                    promptPath: "A-audit/A3-i18n/i18n-master-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate:
-                        "Verify proper usage in components, routes, and ensure no hardcoded strings",
                     contextFromPreviousStages: ["i18n-structure.findings"],
                     skipIf: "i18n-completeness.findings.filter(f => f.type === 'BLOQUANT').length > 10",
                 },
@@ -221,24 +215,24 @@ export class ChainConfigBuilder {
                 {
                     id: "api-audit",
                     name: "API Audit",
-                    auditMode: "A1",
+                    graphId: "audit",
+                    promptPath: "A-audit/A1-api/general-api-audit.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Quick API audit focusing on recent changes",
                 },
                 {
                     id: "security-check",
                     name: "Security Check",
-                    auditMode: "A6",
+                    graphId: "audit",
+                    promptPath: "A-audit/A6-security/permission-access-control.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Security audit for API endpoints",
                     contextFromPreviousStages: ["api-audit.findings"],
                 },
                 {
                     id: "test-verification",
                     name: "Test Verification",
-                    auditMode: "A5",
+                    graphId: "audit",
+                    promptPath: "A-audit/A5-tests/tests-completeness.md",
                     llmProvider: "azure",
-                    userPromptTemplate: "Verify tests exist for flagged files",
                     contextFromPreviousStages: ["api-audit.findings", "security-check.findings"],
                     skipIf: "api-audit.findings.length === 0 && security-check.findings.length === 0",
                 },
@@ -279,35 +273,18 @@ export class ChainConfigBuilder {
             errors.push("Stage name is required");
         }
 
-        const validAuditModes: AuditMode[] = [
-            "A1",
-            "A2",
-            "A3",
-            "A4",
-            "A5",
-            "A6",
-            "A7",
-            "A8",
-            "A9",
-            "A10",
-            "A11",
-            "A12",
-            "A13",
-            "A14",
-            "A15",
-            "A16",
-        ];
+        const validGraphIds: GraphId[] = ["audit", "simple_react"];
 
-        if (!validAuditModes.includes(stage.auditMode)) {
-            errors.push(`Invalid audit mode: ${stage.auditMode}`);
+        if (!validGraphIds.includes(stage.graphId)) {
+            errors.push(`Invalid graph ID: ${stage.graphId}`);
+        }
+
+        if (!stage.promptPath || stage.promptPath.trim() === "") {
+            errors.push("Prompt path is required");
         }
 
         if (!["azure", "lmstudio"].includes(stage.llmProvider)) {
             errors.push(`Invalid LLM provider: ${stage.llmProvider}`);
-        }
-
-        if (!stage.userPromptTemplate || stage.userPromptTemplate.trim() === "") {
-            errors.push("User prompt template is required");
         }
 
         return {

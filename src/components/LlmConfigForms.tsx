@@ -48,7 +48,7 @@ export function AzureConfigForm({ initialConfig, onSave, onCancel }: AzureConfig
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <div>
                 <label htmlFor="azure-endpoint" className="block text-[11px] text-text-muted mb-1">
                     Endpoint URL
@@ -189,7 +189,7 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <div>
                 <label htmlFor="lmstudio-base-url" className="block text-[11px] text-text-muted mb-1">
                     Base URL

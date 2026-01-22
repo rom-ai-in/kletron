@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChainCard } from "@/src/components/ChainCard";
 import { Button } from "@/src/components/ui/Button";
 import { Panel } from "@/src/components/ui/Panel";
+import { ChainBuilderModal } from "@/src/components/ChainBuilderModal";
 import type { AuditChain } from "@/src/services/chainTypes";
 
 type FilterStatus = "all" | "running" | "completed";
@@ -16,6 +17,8 @@ export default function ChainsPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+    const [editChainId, setEditChainId] = useState<string | undefined>(undefined);
 
     useEffect(() => {
         void fetchChains();
@@ -50,7 +53,22 @@ export default function ChainsPage() {
     });
 
     const handleCreateChain = () => {
-        router.push("/chains/new");
+        setEditChainId(undefined);
+        setIsBuilderOpen(true);
+    };
+
+    const handleEditChain = (chainId: string) => {
+        setEditChainId(chainId);
+        setIsBuilderOpen(true);
+    };
+
+    const handleChainCreated = (chainId: string) => {
+        setIsBuilderOpen(false);
+        if (editChainId) {
+            void fetchChains(); // Refresh list if edited
+        } else {
+            router.push(`/chains/${chainId}`);
+        }
     };
 
     const handleViewChain = (chainId: string) => {
@@ -59,20 +77,38 @@ export default function ChainsPage() {
 
     return (
         <div className="flex h-full flex-col">
+            <ChainBuilderModal
+                open={isBuilderOpen}
+                onClose={() => setIsBuilderOpen(false)}
+                onCreated={handleChainCreated}
+                editChainId={editChainId}
+            />
+
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
-                <div>
-                    <h1 className="text-lg font-semibold text-text-primary">Chains Dashboard</h1>
-                    <p className="text-sm text-text-muted">Manage multi-stage audit workflows</p>
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => router.push("/")}
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-border-subtle bg-bg-surface text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+                        aria-label="Back to home"
+                    >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                    </button>
+                    <div>
+                        <h1 className="text-lg font-semibold text-text-primary">Audit Campaigns</h1>
+                        <p className="text-sm text-text-muted">Orchestrate and monitor multi-stage audit pipelines</p>
+                    </div>
                 </div>
-                <Button onClick={handleCreateChain}>+ New Chain</Button>
+                <Button onClick={handleCreateChain}>+ New Campaign</Button>
             </div>
 
             {/* Filters */}
             <div className="flex items-center gap-4 border-b border-border-subtle bg-bg-surface px-6 py-3">
                 <input
                     type="text"
-                    placeholder="🔍 Search chains..."
+                    placeholder="🔍 Search campaigns..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="flex-1 rounded-md border border-border-subtle bg-bg-elevated px-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-focus-ring"
@@ -111,11 +147,12 @@ export default function ChainsPage() {
                                 key={chain._id?.toString()}
                                 chain={chain}
                                 onView={() => handleViewChain(chain._id!.toString())}
+                                onEdit={() => handleEditChain(chain._id!.toString())}
                             />
                         ))}
                         {filteredChains.length === 0 && (
                             <EmptyState
-                                message={searchQuery ? "No chains match your search" : "No chains found"}
+                                message={searchQuery ? "No campaigns match your search" : "No campaigns found"}
                             />
                         )}
                     </div>
@@ -153,7 +190,7 @@ function EmptyState({ message }: { message: string }) {
             <div className="text-center">
                 <p className="text-sm text-text-muted">{message}</p>
                 <p className="mt-2 text-xs text-text-muted">
-                    Try adjusting your filters or create a new chain
+                    Try adjusting your filters or create a new audit campaign
                 </p>
             </div>
         </Panel>

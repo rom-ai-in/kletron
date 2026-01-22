@@ -16,27 +16,10 @@ const CreateChainSchema = z.object({
                 z.object({
                     id: z.string().min(1),
                     name: z.string().min(1),
-                    auditMode: z.enum([
-                        "A1",
-                        "A2",
-                        "A3",
-                        "A4",
-                        "A5",
-                        "A6",
-                        "A7",
-                        "A8",
-                        "A9",
-                        "A10",
-                        "A11",
-                        "A12",
-                        "A13",
-                        "A14",
-                        "A15",
-                        "A16",
-                    ]),
+                    graphId: z.enum(["audit", "simple_react"]),
+                    promptPath: z.string().min(1),
                     llmProvider: z.enum(["azure", "lmstudio"]),
                     llmModel: z.string().optional(),
-                    userPromptTemplate: z.string().min(1),
                     contextFromPreviousStages: z.array(z.string()).optional(),
                     skipIf: z.string().optional(),
                     retryOnFailure: z.boolean().optional(),
@@ -57,7 +40,7 @@ const CreateChainSchema = z.object({
 
 /**
  * GET /api/chains
- * List all chains with optional filtering
+ * List all campaigns with optional filtering
  */
 export async function GET(req: NextRequest) {
     try {
@@ -76,7 +59,7 @@ export async function GET(req: NextRequest) {
     } catch (error) {
         console.error("[API /api/chains GET] Error:", error);
         return NextResponse.json(
-            { error: "Failed to list chains" },
+            { error: "Failed to list campaigns" },
             { status: 500 }
         );
     }
@@ -84,7 +67,7 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/chains
- * Create a new chain
+ * Create a new campaign
  */
 export async function POST(req: NextRequest) {
     try {
@@ -130,7 +113,7 @@ export async function POST(req: NextRequest) {
     } catch (error) {
         console.error("[API /api/chains POST] Error:", error);
         return NextResponse.json(
-            { error: "Failed to create chain" },
+            { error: "Failed to create campaign" },
             { status: 500 }
         );
     }

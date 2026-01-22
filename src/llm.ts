@@ -1,7 +1,7 @@
 import { AzureChatOpenAI, ChatOpenAI } from "@langchain/openai";
 
-import { config } from "./config.js";
-import { getLlmConfig } from "./services/llmConfigService.js";
+import { config } from "./config";
+import { getLlmConfig } from "./services/llmConfigService";
 
 export type LlmProvider = "azure" | "lmstudio";
 

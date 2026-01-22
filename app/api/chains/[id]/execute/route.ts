@@ -3,7 +3,7 @@ import { chainExecutor } from "@/src/services/chainExecutor";
 
 /**
  * PUT /api/chains/[id]/execute
- * Start chain execution (non-blocking)
+ * Start campaign execution (non-blocking)
  */
 export async function PUT(
     req: NextRequest,
@@ -15,12 +15,12 @@ export async function PUT(
         const chain = await chainExecutor.getChain(chainId);
 
         if (!chain) {
-            return NextResponse.json({ error: "Chain not found" }, { status: 404 });
+            return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
         }
 
         if (chain.status === "RUNNING") {
             return NextResponse.json(
-                { error: "Chain is already running" },
+                { error: "Campaign is already running" },
                 { status: 400 }
             );
         }
@@ -34,7 +34,7 @@ export async function PUT(
     } catch (error) {
         console.error(`[API /api/chains/${params.id}/execute PUT] Error:`, error);
         return NextResponse.json(
-            { error: "Failed to start chain execution" },
+            { error: "Failed to start campaign execution" },
             { status: 500 }
         );
     }

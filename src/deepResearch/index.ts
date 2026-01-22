@@ -43,6 +43,7 @@ import {
   deepResearchPhaseOrder,
   type DeepResearchPhaseKey,
 } from "../shared/graphCatalog";
+import { auditService } from "../services/auditService.js";
 
 const defaultDeepResearchConfig = {
   allowClarification: true,
@@ -286,6 +287,21 @@ const maybeEmitMessage = async (config: RunnableConfig | undefined, message: Bas
   }
 };
 
+const sanitizeForLog = (value: string) =>
+  value
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+
+function logAgentEvent(event: AgentEvent) {
+  const phase = event.phaseLabel ?? event.phaseId;
+  const snippet = sanitizeForLog(event.content);
+  const toolInfo = event.name ? ` tool=${event.name}` : "";
+  console.info(
+    `[DeepResearch] event ${event.id} kind=${event.kind} phase=${phase} role=${event.role}${toolInfo} content="${snippet}${event.content.length > 120 ? "…" : ""}"`
+  );
+}
+
 const getLlmSelectionFromConfig = (config?: RunnableConfig) =>
   (config?.configurable as { llmSelection?: LlmSelection } | undefined)?.llmSelection;
 
@@ -323,7 +339,7 @@ export async function clarifyWithUser(
     messages: formatMessagesForPrompt(messages),
     date: formatDate(),
   });
-  const model = getConfiguredChatModel(config)
+  const model = (await getConfiguredChatModel(config))
     .withStructuredOutput(ClarifySchema)
     .withRetry({ stopAfterAttempt: settings.maxStructuredOutputRetries });
   const response = await model.invoke([new HumanMessage(prompt)]);
@@ -349,7 +365,7 @@ export async function writeResearchBrief(
     date: formatDate(),
   });
 
-  const model = getConfiguredChatModel(config)
+  const model = (await getConfiguredChatModel(config))
     .withStructuredOutput(ResearchBriefSchema)
     .withRetry({ stopAfterAttempt: settings.maxStructuredOutputRetries });
   const response = await model.invoke([new HumanMessage(prompt)]);
@@ -383,7 +399,7 @@ export async function planResearch(
     research_brief: state.researchBrief ?? "",
     date: formatDate(),
   });
-  const model = getConfiguredChatModel(config).withRetry({
+  const model = (await getConfiguredChatModel(config)).withRetry({
     stopAfterAttempt: getConfig().maxStructuredOutputRetries,
   });
   const response = await model.invoke([new HumanMessage(prompt)]);
@@ -405,7 +421,7 @@ export async function supervisor(
   config?: RunnableConfig
 ) {
   const settings = getConfig();
-  const model = getConfiguredChatModel(config)
+  const model = (await getConfiguredChatModel(config))
     .bindTools([conductResearchTool, researchCompleteTool, thinkTool])
     .withRetry({ stopAfterAttempt: settings.maxStructuredOutputRetries });
 
@@ -562,7 +578,7 @@ export async function researcher(
     date: formatDate(),
     tool_list: summarizeToolList(tools),
   });
-  const model = getConfiguredChatModel(config)
+  const model = (await getConfiguredChatModel(config))
     .bindTools(tools)
     .withRetry({ stopAfterAttempt: settings.maxStructuredOutputRetries });
   const messages = [new SystemMessage(prompt), ...(state.researcherMessages ?? [])];
@@ -650,7 +666,7 @@ export async function compressResearch(
   const prompt = fillPrompt(compressResearchSystemPrompt, {
     date: formatDate(),
   });
-  const model = getConfiguredChatModel(config).withRetry({
+  const model = (await getConfiguredChatModel(config)).withRetry({
     stopAfterAttempt: settings.maxStructuredOutputRetries,
   });
   const researcherMessages = [...(state.researcherMessages ?? [])];
@@ -686,7 +702,7 @@ export async function summarizeFindings(
     raw_notes: (state.rawNotes ?? []).join("\n"),
     date: formatDate(),
   });
-  const model = getConfiguredChatModel(config).withRetry({
+  const model = (await getConfiguredChatModel(config)).withRetry({
     stopAfterAttempt: getConfig().maxStructuredOutputRetries,
   });
   const response = await model.invoke([new HumanMessage(prompt)]);
@@ -714,7 +730,7 @@ export async function generateActionReport(
     findings_summary: state.findingsSummary ?? "",
     date: formatDate(),
   });
-  const model = getConfiguredChatModel(config).withRetry({
+  const model = (await getConfiguredChatModel(config)).withRetry({
     stopAfterAttempt: settings.maxStructuredOutputRetries,
   });
   const response = await model.invoke([new HumanMessage(prompt)]);
@@ -774,6 +790,10 @@ export async function runDeepResearchWorkflow(
 
   const nextEventId = () => `event-${eventCounter++}`;
 
+  // 1. Create Session
+  const sessionId = await auditService.createSession(userRequest);
+  console.info(`[DeepResearch] Started MongoDB session: ${sessionId}`);
+
   const flushUpdate = async (outputs?: AgentWorkflowResult["outputs"]) => {
     if (!options?.onUpdate) return;
     const payload: AgentWorkflowUpdate = {
@@ -782,6 +802,17 @@ export async function runDeepResearchWorkflow(
     };
     if (outputs) payload.outputs = JSON.parse(JSON.stringify(outputs));
     await options.onUpdate(payload);
+
+    // 2. Update Session (Background)
+    if (sessionId) {
+      auditService
+        .updateSession(sessionId, {
+          timeline: payload.timeline,
+          eventStream: payload.eventStream,
+          outputs: payload.outputs as any,
+        })
+        .catch((err: any) => console.error("Background update failed", err));
+    }
   };
 
   const createAgentEvent = (
@@ -793,8 +824,8 @@ export async function runDeepResearchWorkflow(
     const messageType = (message as BaseMessage & { type?: string }).type ?? "";
     const hasToolCall =
       messageType.toLowerCase() === "tool" ||
-      Boolean((message as BaseMessage & { additional_kwargs?: { function_call?: unknown } }).additional_kwargs?.function_call) ||
-      Boolean((message as BaseMessage & { additional_kwargs?: { tool_calls?: unknown[] } }).additional_kwargs?.tool_calls?.length) ||
+      Boolean((message as any).additional_kwargs?.function_call) ||
+      Boolean((message as any).additional_kwargs?.tool_calls?.length) ||
       Boolean((message as BaseMessage & { tool_calls?: unknown[] }).tool_calls?.length);
     const kind: AgentEventKind = hasToolCall
       ? "tool"
@@ -823,13 +854,7 @@ export async function runDeepResearchWorkflow(
       content,
       toolNote,
       toolArgs: (() => {
-        const extra = message as BaseMessage & {
-          additional_kwargs?: {
-            function_call?: { arguments?: unknown };
-            tool_calls?: Array<{ args?: unknown; arguments?: unknown; function?: { arguments?: unknown } }>;
-          };
-          tool_calls?: Array<{ args?: unknown; arguments?: unknown; function?: { arguments?: unknown } }>;
-        };
+        const extra = message as any;
         const functionArgs = extra.additional_kwargs?.function_call?.arguments;
         if (functionArgs !== undefined) {
           return typeof functionArgs === "string" ? functionArgs : JSON.stringify(functionArgs);
@@ -859,10 +884,14 @@ export async function runDeepResearchWorkflow(
       timelineEntry.thoughtLog = timelineEntry.thoughtLog ?? [];
       timelineEntry.thoughtLog.push(formatThought(message));
     }
+    logAgentEvent(event);
     await flushUpdate();
   };
 
-  eventStream.push({
+  const onMessage = (phaseId: DeepResearchPhaseKey) => async (message: BaseMessage) =>
+    appendMessage(message, phaseId);
+
+  const initialEvent: AgentEvent = {
     id: nextEventId(),
     phaseId: "user",
     phaseLabel: "User request",
@@ -870,7 +899,8 @@ export async function runDeepResearchWorkflow(
     role: "user",
     content: userRequest,
     timestamp: new Date().toISOString(),
-  });
+  };
+  eventStream.push(initialEvent);
   await flushUpdate();
 
   let state: typeof DeepResearchAnnotation.State = {
@@ -893,9 +923,7 @@ export async function runDeepResearchWorkflow(
     callback: () => Promise<T>
   ) => {
     const entry = timeline.find((item) => item.id === phaseId);
-    if (!entry) {
-      throw new Error(`Missing timeline entry for ${phaseId}`);
-    }
+    if (!entry) throw new Error(`Missing timeline entry for ${phaseId}`);
     entry.status = "running";
     entry.summary = `${deepResearchPhaseConfig[phaseId].summary} (running)`;
     entry.startedAt = new Date().toISOString();
@@ -917,124 +945,116 @@ export async function runDeepResearchWorkflow(
     }
   };
 
-  const onMessage = (phaseId: DeepResearchPhaseKey) => async (message: BaseMessage) =>
-    appendMessage(message, phaseId);
   const llmSelection = options?.llmSelection;
 
-  await runPhase("clarify", async () => {
-    const update = await clarifyWithUser(state, {
-      configurable: { onMessage: onMessage("clarify"), llmSelection },
+  try {
+    await runPhase("clarify", async () => {
+      const update = await clarifyWithUser(state, {
+        configurable: { onMessage: onMessage("clarify"), llmSelection },
+      });
+      state = applyUpdate(state, update);
+      return update;
     });
-    state = applyUpdate(state, update);
-    return update;
-  });
 
-  if (state.nextStep === "end") {
+    if (state.nextStep === "end") {
+      const outputs: AgentWorkflowResult["outputs"] = {
+        context: { mission: state.userRequest ?? "", languages: [], frameworks: [], hotspots: [] },
+        target_files: [],
+        raw_claims: [],
+        verified_findings: [],
+        tasks: [],
+        report: state.finalAnswer ?? "",
+        meta: {},
+        findings: [],
+      };
+      const finalResult: AgentWorkflowResult = {
+        sessionId,
+        timeline,
+        conclusion: state.finalAnswer ?? "Clarification requested.",
+        outputs,
+        eventStream,
+      };
+      await flushUpdate(outputs);
+      if (sessionId) await auditService.completeSession(sessionId, finalResult);
+      return finalResult;
+    }
+
+    await runPhase("brief", async () => {
+      const update = await writeResearchBrief(state, {
+        configurable: { onMessage: onMessage("brief"), llmSelection },
+      });
+      state = applyUpdate(state, update);
+      return update;
+    });
+
+    await runPhase("plan", async () => {
+      const update = await planResearch(state, {
+        configurable: { onMessage: onMessage("plan"), llmSelection },
+      });
+      state = applyUpdate(state, update);
+      return update;
+    });
+
+    await runPhase("research", async () => {
+      const update = await supervisorGraph.invoke(state, {
+        configurable: { onMessage: onMessage("research"), llmSelection },
+      });
+      // Supervisor subgraph returns a partial state
+      state = applyUpdate(state, update as any);
+      return update;
+    });
+
+    await runPhase("summary", async () => {
+      const update = await summarizeFindings(state, {
+        configurable: { onMessage: onMessage("summary"), llmSelection },
+      });
+      state = applyUpdate(state, update);
+      return update;
+    });
+
+    await runPhase("report", async () => {
+      const update = await generateActionReport(state, {
+        configurable: { onMessage: onMessage("report"), llmSelection },
+      });
+      state = applyUpdate(state, update);
+      return update;
+    });
+
+    const report = state.finalReport ?? "";
+    const conclusion = report.split("\n").slice(0, 4).join(" ").trim() || "Report generated.";
+
     const outputs: AgentWorkflowResult["outputs"] = {
       context: { mission: state.userRequest ?? "", languages: [], frameworks: [], hotspots: [] },
       target_files: [],
       raw_claims: [],
       verified_findings: [],
       tasks: [],
-      report: state.finalAnswer ?? "",
+      report,
       meta: {},
       findings: [],
     };
-    await flushUpdate(outputs);
-    return {
+
+    const finalResult: AgentWorkflowResult = {
+      sessionId,
       timeline,
-      conclusion: state.finalAnswer ?? "Clarification requested.",
+      conclusion,
       outputs,
       eventStream,
     };
-  }
+    await flushUpdate(outputs);
 
-  await runPhase("brief", async () => {
-    const update = await writeResearchBrief(state, {
-      configurable: { onMessage: onMessage("brief"), llmSelection },
-    });
-    state = applyUpdate(state, update);
-    return update;
-  });
-
-  await runPhase("plan", async () => {
-    const update = await planResearch(state, {
-      configurable: { onMessage: onMessage("plan"), llmSelection },
-    });
-    state = applyUpdate(state, update);
-    return update;
-  });
-
-  await runPhase("research", async () => {
-    state.nextStep = "supervisor";
-    while (state.nextStep !== "end") {
-      const supervisorUpdate = await supervisor(
-        {
-          supervisorMessages: state.supervisorMessages,
-          researchBrief: state.researchBrief,
-          researchIterations: state.researchIterations,
-          notes: state.notes,
-          rawNotes: state.rawNotes,
-          nextStep: state.nextStep,
-        },
-        { configurable: { onMessage: onMessage("research"), llmSelection } }
-      );
-      state = applyUpdate(state, supervisorUpdate);
-
-      const toolsUpdate = await supervisorTools(
-        {
-          supervisorMessages: state.supervisorMessages,
-          researchBrief: state.researchBrief,
-          researchIterations: state.researchIterations,
-          notes: state.notes,
-          rawNotes: state.rawNotes,
-          nextStep: state.nextStep,
-        },
-        { configurable: { onMessage: onMessage("research"), llmSelection } }
-      );
-      state = applyUpdate(state, toolsUpdate);
+    if (sessionId) {
+      await auditService.completeSession(sessionId, finalResult);
     }
-  });
-
-  await runPhase("summary", async () => {
-    const update = await summarizeFindings(state, {
-      configurable: { onMessage: onMessage("summary"), llmSelection },
-    });
-    state = applyUpdate(state, update);
-    return update;
-  });
-
-  await runPhase("report", async () => {
-    const update = await generateActionReport(state, {
-      configurable: { onMessage: onMessage("report"), llmSelection },
-    });
-    state = applyUpdate(state, update);
-    return update;
-  });
-
-  const report = state.finalReport ?? "";
-  const conclusion = report.split("\n").slice(0, 4).join(" ").trim() || "Report generated.";
-
-  const outputs: AgentWorkflowResult["outputs"] = {
-    context: { mission: state.userRequest ?? "", languages: [], frameworks: [], hotspots: [] },
-    target_files: [],
-    raw_claims: [],
-    verified_findings: [],
-    tasks: [],
-    report,
-    meta: {},
-    findings: [],
-  };
-
-  await flushUpdate(outputs);
-
-  return {
-    timeline,
-    conclusion,
-    outputs,
-    eventStream,
-  };
+    return finalResult;
+  } catch (error) {
+    if (sessionId) {
+      await auditService.completeSession(sessionId, {} as any, error as Error);
+    }
+    throw error;
+  }
 }
+
 
 const supervisorBuilder = new StateGraph(SupervisorAnnotation)
   .addNode("supervisor", supervisor)

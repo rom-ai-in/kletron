@@ -31,24 +31,24 @@ export class McpClient {
     const mcpUrl = process.env.MCP_URL ?? process.env.GITHUB_MCP_URL;
     const transport = mcpUrl
       ? (() => {
-          // SSEClientTransport requires an EventSource implementation in Node.
-          (globalThis as any).EventSource = EventSource as any;
-          return new SSEClientTransport(new URL(mcpUrl));
-        })()
+        // SSEClientTransport requires an EventSource implementation in Node.
+        (globalThis as any).EventSource = EventSource as any;
+        return new SSEClientTransport(new URL(mcpUrl));
+      })()
       : (() => {
-          const serverScript = path.resolve("github-mcp", "server.js");
-          return new StdioClientTransport({
-            command: process.execPath,
-            args: [serverScript, "--mcp"],
-            env: {
-              ...process.env,
-              MCP_DEFAULT_DIR: config.repoRoot,
-              GITHUB_MCP_DEFAULT_DIR: config.repoRoot,
-              MCP_TRANSPORT: "stdio",
-              GITHUB_MCP_TRANSPORT: "stdio",
-            },
-          });
-        })();
+        const serverScript = path.resolve("github-mcp", "server.js");
+        return new StdioClientTransport({
+          command: process.execPath,
+          args: [serverScript, "--mcp"],
+          env: {
+            ...process.env,
+            MCP_DEFAULT_DIR: config.repoRoot,
+            GITHUB_MCP_DEFAULT_DIR: config.repoRoot,
+            MCP_TRANSPORT: "stdio",
+            GITHUB_MCP_TRANSPORT: "stdio",
+          },
+        });
+      })();
 
     const client = new Client(
       { name: "numezis-mcp-client", version: "1.0.0" },

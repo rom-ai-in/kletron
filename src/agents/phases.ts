@@ -72,7 +72,7 @@ async function runSchemaReactAgent<T extends z.ZodTypeAny>(opts: {
   onMessage?: (message: BaseMessage) => Promise<void> | void;
   maxToolCalls?: number;
 }): Promise<{ parsed: z.infer<T>; messages: BaseMessage[] }> {
-  const model = getChatModel(opts.llmSelection);
+  const model = await getChatModel(opts.llmSelection);
   const agent = createReactAgent({
     llm: model,
     tools: opts.tools,
@@ -198,7 +198,7 @@ async function runSchemaReactAgent<T extends z.ZodTypeAny>(opts: {
       content,
     ].join("\n");
 
-    const repairResponse = await model.invoke([
+    const repairResponse = await (await model).invoke([
       new SystemMessage("Return only strict JSON. Do not include any other text."),
       new HumanMessage(repairPrompt),
     ]);
@@ -301,6 +301,7 @@ export async function runPhase3InvestigationAgents(input: {
   onMessage?: (message: BaseMessage) => Promise<void> | void;
   llmSelection?: LlmSelection;
 }) {
+  const model = await getChatModel(input.llmSelection);
   const systemPrompt = auditPhaseConfig.phase3.systemPrompt;
   const client = await McpClient.getInstance();
   const rawClaims: any[] = [];

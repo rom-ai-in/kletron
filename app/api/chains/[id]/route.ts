@@ -3,7 +3,7 @@ import { chainExecutor } from "@/src/services/chainExecutor";
 
 /**
  * GET /api/chains/[id]
- * Get chain details by ID
+ * Get campaign details by ID
  */
 export async function GET(
     req: NextRequest,
@@ -15,14 +15,14 @@ export async function GET(
         const chain = await chainExecutor.getChain(chainId);
 
         if (!chain) {
-            return NextResponse.json({ error: "Chain not found" }, { status: 404 });
+            return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
         }
 
         return NextResponse.json({ chain }, { status: 200 });
     } catch (error) {
         console.error(`[API /api/chains/${params.id} GET] Error:`, error);
         return NextResponse.json(
-            { error: "Failed to get chain" },
+            { error: "Failed to get campaign" },
             { status: 500 }
         );
     }
@@ -30,7 +30,7 @@ export async function GET(
 
 /**
  * DELETE /api/chains/[id]
- * Delete a chain
+ * Delete a campaign
  */
 export async function DELETE(
     req: NextRequest,
@@ -42,13 +42,13 @@ export async function DELETE(
         const chain = await chainExecutor.getChain(chainId);
 
         if (!chain) {
-            return NextResponse.json({ error: "Chain not found" }, { status: 404 });
+            return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
         }
 
         // Don't allow deleting running chains
         if (chain.status === "RUNNING") {
             return NextResponse.json(
-                { error: "Cannot delete a running chain. Pause it first." },
+                { error: "Cannot delete a running campaign. Pause it first." },
                 { status: 400 }
             );
         }
@@ -59,7 +59,50 @@ export async function DELETE(
     } catch (error) {
         console.error(`[API /api/chains/${params.id} DELETE] Error:`, error);
         return NextResponse.json(
-            { error: "Failed to delete chain" },
+            { error: "Failed to delete campaign" },
+            { status: 500 }
+        );
+    }
+}
+
+/**
+ * PUT /api/chains/[id]
+ * Update a campaign
+ */
+export async function PUT(
+    req: NextRequest,
+    { params }: { params: { id: string } }
+) {
+    try {
+        const chainId = params.id;
+        const body = await req.json();
+        const { config } = body;
+
+        if (!config) {
+            return NextResponse.json({ error: "Missing config in request body" }, { status: 400 });
+        }
+
+        const chain = await chainExecutor.getChain(chainId);
+
+        if (!chain) {
+            return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+        }
+
+        // Don't allow editing running chains
+        if (chain.status === "RUNNING") {
+            return NextResponse.json(
+                { error: "Cannot edit a running campaign. Pause it first." },
+                { status: 400 }
+            );
+        }
+
+        await chainExecutor.updateChain(chainId, config);
+
+        return NextResponse.json({ updated: true }, { status: 200 });
+    } catch (error) {
+        console.error(`[API /api/chains/${params.id} PUT] Error:`, error);
+        return NextResponse.json(
+            { error: "Failed to update campaign" },
             { status: 500 }
         );
     }

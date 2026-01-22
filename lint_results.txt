@@ -1,0 +1,105 @@
+
+> numezis-coder@1.0.0 lint
+> eslint .
+
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/.numezis/CHAIN_UI_COMPONENTS_REFERENCE.tsx
+  0:0  error  Parsing error: "parserOptions.project" has been provided for @typescript-eslint/parser.
+The file was not found in any of the provided project(s): .numezis/CHAIN_UI_COMPONENTS_REFERENCE.tsx
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/.numezis/LLM_CONFIG_UI_INTEGRATION_EXAMPLE.tsx
+  0:0  error  Parsing error: "parserOptions.project" has been provided for @typescript-eslint/parser.
+The file was not found in any of the provided project(s): .numezis/LLM_CONFIG_UI_INTEGRATION_EXAMPLE.tsx
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/app/api/audits/route.ts
+  16:9  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/app/api/llm-config/route.ts
+  1:10  warning  'NextRequest' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/app/page.tsx
+     5:83  warning  'ReactNode' is defined but never used                                                                                                                               @typescript-eslint/no-unused-vars
+   322:5   error    Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+   687:27  error    Promise-returning function provided to attribute where a void return was expected                                                                                   @typescript-eslint/no-misused-promises
+   717:27  error    Promise-returning function provided to attribute where a void return was expected                                                                                   @typescript-eslint/no-misused-promises
+  1077:10  warning  'promptFolderLoading' is assigned a value but never used                                                                                                            @typescript-eslint/no-unused-vars
+  1081:10  warning  'openFolders' is assigned a value but never used                                                                                                                    @typescript-eslint/no-unused-vars
+  1084:9   warning  'activeFolderPath' is assigned a value but never used                                                                                                               @typescript-eslint/no-unused-vars
+  1117:9   warning  'toggleFolder' is assigned a value but never used                                                                                                                   @typescript-eslint/no-unused-vars
+  1130:9   error    Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+  1166:10  warning  'outputs' is assigned a value but never used                                                                                                                        @typescript-eslint/no-unused-vars
+  1221:9   error    Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+  1335:5   error    Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+  1559:9   error    Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/eslint.config.js
+  5:7  warning  'rootPath' is assigned a value but never used  no-unused-vars
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/github-mcp/server.js
+    9:8   warning  'path' is defined but never used  no-unused-vars
+  361:16  warning  'err' is defined but never used   no-unused-vars
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/github-mcp/tests/safety.test.js
+  2:8  warning  'path' is defined but never used  no-unused-vars
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/github-mcp/tools/listFiles.js
+  2:8  warning  'path' is defined but never used  no-unused-vars
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/github-mcp/tools/writeFile.js
+  40:11  warning  'relativePath' is assigned a value but never used  no-unused-vars
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/src/agentRunner.ts
+  118:10  warning  'summarizePhaseEvents' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/src/agents/phases.ts
+  213:7  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  304:9  warning  'model' is assigned a value but never used                                               @typescript-eslint/no-unused-vars
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/src/components/AuditHistoryModal.tsx
+  29:13  error  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/src/components/ChainBuilderModal.tsx
+   43:9   error  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+  321:41  error  Promise-returning function provided to attribute where a void return was expected                                                                                   @typescript-eslint/no-misused-promises
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/src/components/LlmConfigForms.tsx
+   51:24  error  Promise-returning function provided to attribute where a void return was expected  @typescript-eslint/no-misused-promises
+  192:24  error  Promise-returning function provided to attribute where a void return was expected  @typescript-eslint/no-misused-promises
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/src/components/PromptSelectorModal.tsx
+  125:17  error  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+  159:46  error  Promise-returning function provided to attribute where a void return was expected                                                                                   @typescript-eslint/no-misused-promises
+  160:50  error  Promise-returning function provided to attribute where a void return was expected                                                                                   @typescript-eslint/no-misused-promises
+  190:33  error  Promise-returning function provided to attribute where a void return was expected                                                                                   @typescript-eslint/no-misused-promises
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/src/deepResearch/index.ts
+  442:9  warning  'settings' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/src/index.ts
+   6:3  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  23:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  32:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  33:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/src/mcp/client.ts
+  13:6  warning  'ToolResultContent' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/src/reactAgentWorkflow.ts
+  253:11  warning  'messages' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/src/services/chainExecutor.ts
+  171:17  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  202:21  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  272:13  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  273:13  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/src/services/mongoClient.ts
+  28:5  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  47:9  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+
+/Users/romainmagnin/Desktop/numezis-coder-mcp/src/shared/graphCatalog.ts
+  4:3  warning  'compressResearchSystemPrompt' is defined but never used  @typescript-eslint/no-unused-vars
+  8:3  warning  'researchSystemPrompt' is defined but never used          @typescript-eslint/no-unused-vars
+
+✖ 50 problems (18 errors, 32 warnings)
+

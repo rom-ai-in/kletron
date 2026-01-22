@@ -8,6 +8,7 @@ import type {
   TimelineEvent,
 } from "./agentRunner";
 import { streamReactAgentMessages } from "./reactAgentRunner";
+import { auditService } from "./services/auditService";
 import {
   simpleReactPhaseDescription,
   simpleReactPhaseId,
@@ -191,16 +192,35 @@ export async function runSimpleReactWorkflow(
   let eventCounter = 0;
   const nextEventId = () => `event-${eventCounter++}`;
 
+  // 1. Create Session
+  const sessionId = await auditService.createSession(userRequest);
+  console.info(`[SimpleReact] Started MongoDB session: ${sessionId}`);
+
   const flushUpdate = async (outputs?: AgentWorkflowResult["outputs"]) => {
     if (!options?.onUpdate) return;
     const payload = {
       timeline: cloneValue(timeline),
       eventStream: cloneValue(eventStream),
-    } as { timeline: TimelineEvent[]; eventStream: AgentEvent[]; outputs?: AgentWorkflowResult["outputs"] };
+    } as {
+      timeline: TimelineEvent[];
+      eventStream: AgentEvent[];
+      outputs?: AgentWorkflowResult["outputs"];
+    };
     if (outputs) {
       payload.outputs = cloneValue(outputs);
     }
     await options.onUpdate(payload);
+
+    // 2. Update Session (Background)
+    if (sessionId) {
+      auditService
+        .updateSession(sessionId, {
+          timeline: payload.timeline,
+          eventStream: payload.eventStream,
+          outputs: payload.outputs as any,
+        })
+        .catch((err: any) => console.error("Background update failed", err));
+    }
   };
 
   const userEvent: AgentEvent = {
@@ -229,46 +249,57 @@ export async function runSimpleReactWorkflow(
     await flushUpdate();
   };
 
-  const messages = await streamReactAgentMessages({
-    name: "SimpleReAct",
-    systemPrompt: simpleReactSystemPrompt,
-    userPrompt: userRequest,
-    tools: simpleReactTools,
-    onMessage: handleStreamingMessage,
-    llmSelection: options?.llmSelection,
-  });
+  try {
+    const messages = await streamReactAgentMessages({
+      name: "SimpleReAct",
+      systemPrompt: simpleReactSystemPrompt,
+      userPrompt: userRequest,
+      tools: simpleReactTools,
+      onMessage: handleStreamingMessage,
+      llmSelection: options?.llmSelection,
+    });
 
-  const finalAgentEvent =
-    builtMessageEvents.slice().reverse().find((event) => event.kind === "assistant") ??
-    builtMessageEvents.at(-1);
-  const finalContent = finalAgentEvent?.content ?? "";
+    const finalAgentEvent =
+      builtMessageEvents.slice().reverse().find((event) => event.kind === "assistant") ??
+      builtMessageEvents.at(-1);
+    const finalContent = finalAgentEvent?.content ?? "";
 
-  phaseEntry.status = "success";
-  phaseEntry.summary = `${simpleReactPhaseSummary} (done)`;
-  phaseEntry.endedAt = new Date().toISOString();
-  const assistantEvents = builtMessageEvents.filter((event) => event.kind === "assistant");
-  phaseEntry.thoughtLog = assistantEvents.length
-    ? assistantEvents.map((event) => `${event.role}: ${event.content}`)
-    : ["No assistant messages emitted."];
-  await flushUpdate();
+    phaseEntry.status = "success";
+    phaseEntry.summary = `${simpleReactPhaseSummary} (done)`;
+    phaseEntry.endedAt = new Date().toISOString();
+    const assistantEvents = builtMessageEvents.filter((event) => event.kind === "assistant");
+    phaseEntry.thoughtLog = assistantEvents.length
+      ? assistantEvents.map((event) => `${event.role}: ${event.content}`)
+      : ["No assistant messages emitted."];
 
-  const outputs: AgentWorkflowResult["outputs"] = {
-    context: { mission: userRequest, languages: [], frameworks: [], hotspots: [] },
-    target_files: [],
-    raw_claims: [],
-    verified_findings: [],
-    tasks: [],
-    report: finalContent,
-    meta: {},
-    findings: [],
-  };
+    const outputs: AgentWorkflowResult["outputs"] = {
+      context: { mission: userRequest, languages: [], frameworks: [], hotspots: [] },
+      target_files: [],
+      raw_claims: [],
+      verified_findings: [],
+      tasks: [],
+      report: finalContent,
+      meta: {},
+      findings: [],
+    };
 
-  await flushUpdate(outputs);
+    const finalResult: AgentWorkflowResult = {
+      sessionId,
+      timeline,
+      conclusion: finalContent || "Agent completed without a response.",
+      outputs,
+      eventStream,
+    };
+    await flushUpdate(outputs);
 
-  return {
-    timeline,
-    conclusion: finalContent || "Agent completed without a response.",
-    outputs,
-    eventStream,
-  };
+    if (sessionId) {
+      await auditService.completeSession(sessionId, finalResult);
+    }
+    return finalResult;
+  } catch (error) {
+    if (sessionId) {
+      await auditService.completeSession(sessionId, {} as any, error as Error);
+    }
+    throw error;
+  }
 }

@@ -15,7 +15,7 @@ export type StreamReactAgentOptions = {
 };
 
 export async function streamReactAgentMessages(opts: StreamReactAgentOptions) {
-  const model = getChatModel(opts.llmSelection);
+  const model = await getChatModel(opts.llmSelection);
   const agent = createReactAgent({
     llm: model,
     tools: opts.tools,

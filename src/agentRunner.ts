@@ -34,6 +34,7 @@ export type TimelineEvent = {
 };
 
 export type AgentWorkflowResult = {
+  sessionId: string;
   timeline: TimelineEvent[];
   conclusion: string;
   outputs: {
@@ -674,6 +675,7 @@ export async function runAgentWorkflow(
     await flushUpdate();
 
     const finalResult: AgentWorkflowResult = {
+      sessionId,
       timeline,
       conclusion: finalSummary || "Pipeline completed successfully.",
       outputs: {

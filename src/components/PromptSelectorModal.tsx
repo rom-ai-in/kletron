@@ -61,9 +61,10 @@ export function PromptSelectorModal({
     const loadFolderFiles = async (folderPath: string) => {
         setLoadingFiles((prev) => new Set(prev).add(folderPath));
         try {
-            const res = await fetch(`/api/prompts/files?folder=${encodeURIComponent(folderPath)}`);
+            const res = await fetch(`/api/prompts/files?dir=${encodeURIComponent(folderPath)}`);
             if (res.ok) {
-                const files = await res.json();
+                const data = await res.json();
+                const files = Array.isArray(data.files) ? data.files : [];
                 setFolderFiles((prev) => new Map(prev).set(folderPath, files));
             }
         } finally {
@@ -121,7 +122,7 @@ export function PromptSelectorModal({
                 onClose();
             } else if (e.key === "Enter" && selectedPath) {
                 e.preventDefault();
-                handleUsePrompt();
+                void handleUsePrompt();
             }
         }
 
@@ -131,7 +132,7 @@ export function PromptSelectorModal({
 
     return (
         <Modal open={isOpen} onClose={onClose} title="Prompt Templates" subtitle="Select a prompt">
-            <div className="flex h-[500px] gap-4">
+            <div className="flex h-full min-h-[500px] gap-4">
                 {/* Left panel: Folder tree */}
                 <div className="flex w-1/2 flex-col gap-3">
                     {/* Search input */}
@@ -155,8 +156,11 @@ export function PromptSelectorModal({
                                     files={folderFiles.get(folder.path)}
                                     isLoadingFiles={loadingFiles.has(folder.path)}
                                     selectedPath={selectedPath}
-                                    onToggle={toggleFolder}
-                                    onSelectFile={handleSelectFile}
+                                    onToggle={(path) => void toggleFolder(path)}
+                                    onSelectFile={(path) => void handleSelectFile(path)}
+                                    folderFiles={folderFiles}
+                                    loadingFiles={loadingFiles}
+                                    expandedFolders={expandedFolders}
                                 />
                             ))}
                         </div>
@@ -183,7 +187,7 @@ export function PromptSelectorModal({
                         )}
                     </div>
                     <button
-                        onClick={handleUsePrompt}
+                        onClick={() => void handleUsePrompt()}
                         disabled={!selectedPath}
                         className="rounded-md bg-state-selected px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-state-active disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -201,6 +205,9 @@ interface FolderNodeProps {
     files?: PromptFile[];
     isLoadingFiles: boolean;
     selectedPath: string | null;
+    folderFiles: Map<string, PromptFile[]>;
+    loadingFiles: Set<string>;
+    expandedFolders: Set<string>;
     onToggle: (path: string) => void;
     onSelectFile: (path: string) => void;
 }
@@ -211,6 +218,9 @@ function FolderNode({
     files,
     isLoadingFiles,
     selectedPath,
+    folderFiles,
+    loadingFiles,
+    expandedFolders,
     onToggle,
     onSelectFile,
 }: FolderNodeProps) {
@@ -218,12 +228,18 @@ function FolderNode({
         <div>
             <button
                 onClick={() => onToggle(folder.path)}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-state-hover"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-state-hover group"
             >
-                <span className="text-text-muted">{isExpanded ? "▾" : "▸"}</span>
-                <span className="font-medium text-text-primary">📁 {folder.name}</span>
+                <span className={`transition-transform duration-200 ${isExpanded ? "rotate-90" : ""} text-text-muted group-hover:text-text-primary`}>
+                    ▸
+                </span>
+                <span className="font-medium text-text-primary">
+                    {isExpanded ? "📂" : "📁"} {folder.name}
+                </span>
                 {folder.children.length > 0 && (
-                    <span className="ml-auto text-xs text-text-muted">{folder.children.length}</span>
+                    <span className="ml-auto text-[10px] bg-bg-surface border border-border-subtle rounded-full px-1.5 py-0.5 text-text-muted">
+                        {folder.children.length}
+                    </span>
                 )}
             </button>
 
@@ -237,8 +253,8 @@ function FolderNode({
                                 key={file.path}
                                 onClick={() => onSelectFile(file.path)}
                                 className={`flex w-full flex-col rounded-md px-2 py-1.5 text-left text-xs transition ${selectedPath === file.path
-                                        ? "bg-state-selected border border-border-strong"
-                                        : "hover:bg-state-hover"
+                                    ? "bg-state-selected border border-border-strong"
+                                    : "hover:bg-state-hover"
                                     }`}
                             >
                                 <span className="font-medium text-text-primary">{file.name}</span>
@@ -252,12 +268,15 @@ function FolderNode({
                         <FolderNode
                             key={child.path}
                             folder={child}
-                            isExpanded={isExpanded}
-                            files={files}
-                            isLoadingFiles={isLoadingFiles}
+                            isExpanded={expandedFolders.has(child.path)}
+                            files={folderFiles.get(child.path)}
+                            isLoadingFiles={loadingFiles.has(child.path)}
                             selectedPath={selectedPath}
                             onToggle={onToggle}
                             onSelectFile={onSelectFile}
+                            folderFiles={folderFiles}
+                            loadingFiles={loadingFiles}
+                            expandedFolders={expandedFolders}
                         />
                     ))}
                 </div>

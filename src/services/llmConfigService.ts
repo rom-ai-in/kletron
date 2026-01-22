@@ -1,12 +1,12 @@
 import { Collection, ObjectId } from "mongodb";
-import { getDatabase } from "./mongoClient.js";
+import { getDatabase } from "./mongoClient";
 import {
     LlmConfig,
     AzureOpenAIConfig,
     LMStudioConfig,
     validateLlmConfig,
-} from "../schemas/llmConfig.schema.js";
-import { config } from "../config.js";
+} from "../schemas/llmConfig.schema";
+import { config } from "../config";
 
 const COLLECTION_NAME = "llm_configs";
 

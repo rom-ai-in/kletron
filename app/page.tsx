@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 
 import type { McpToolMeta } from "../src/tools/mcpToolMetadata";
@@ -258,6 +259,14 @@ type HeaderControlsProps = {
   onAuditContextEnabledChange: (enabled: boolean) => void;
   auditContextSummary: string | null;
   onConfigureAuditContext: () => void;
+  isGraphInfoOpen: boolean;
+  onSetGraphInfoOpen: (open: boolean) => void;
+  isLlmInfoOpen: boolean;
+  onSetLlmInfoOpen: (open: boolean) => void;
+  detailGraph: GraphOption | null;
+  onSetDetailGraph: (graph: GraphOption | null) => void;
+  detailProvider: "azure" | "lmstudio" | null;
+  onSetDetailProvider: (provider: "azure" | "lmstudio" | null) => void;
 };
 
 function HeaderControls({
@@ -276,13 +285,18 @@ function HeaderControls({
   onAuditContextEnabledChange,
   auditContextSummary,
   onConfigureAuditContext,
+  isGraphInfoOpen,
+  onSetGraphInfoOpen,
+  isLlmInfoOpen,
+  onSetLlmInfoOpen,
+  detailGraph,
+  onSetDetailGraph,
+  detailProvider,
+  onSetDetailProvider,
 }: HeaderControlsProps) {
+  const router = useRouter();
   const [isGraphMenuOpen, setIsGraphMenuOpen] = useState(false);
   const [isLlmMenuOpen, setIsLlmMenuOpen] = useState(false);
-  const [isGraphInfoOpen, setIsGraphInfoOpen] = useState(false);
-  const [isLlmInfoOpen, setIsLlmInfoOpen] = useState(false);
-  const [detailGraph, setDetailGraph] = useState<GraphOption | null>(null);
-  const [detailProvider, setDetailProvider] = useState<"azure" | "lmstudio" | null>(null);
   const graphMenuRef = useRef<HTMLDivElement | null>(null);
   const llmMenuRef = useRef<HTMLDivElement | null>(null);
   const graphDetail = detailGraph ?? selectedGraph;
@@ -305,7 +319,7 @@ function HeaderControls({
   }, []);
 
   useEffect(() => {
-    fetchLlmConfig();
+    void fetchLlmConfig();
   }, [fetchLlmConfig]);
 
   // Save handlers
@@ -439,8 +453,8 @@ function HeaderControls({
                       className="text-text-muted transition hover:text-text-primary"
                       onClick={(event) => {
                         event.stopPropagation();
-                        setDetailGraph(graph);
-                        setIsGraphInfoOpen(true);
+                        onSetDetailGraph(graph);
+                        onSetGraphInfoOpen(true);
                         setIsGraphMenuOpen(false);
                       }}
                       aria-label={`View details for ${graph.name}`}
@@ -511,8 +525,8 @@ function HeaderControls({
                       className="text-text-muted transition hover:text-text-primary"
                       onClick={(event) => {
                         event.stopPropagation();
-                        setDetailProvider(provider);
-                        setIsLlmInfoOpen(true);
+                        onSetDetailProvider(provider);
+                        onSetLlmInfoOpen(true);
                         setIsLlmMenuOpen(false);
                       }}
                       aria-label={`View details for ${provider === "azure" ? "Azure OpenAI" : "LM Studio"}`}
@@ -530,7 +544,7 @@ function HeaderControls({
             <button
               type="button"
               onClick={() => {
-                setIsLlmInfoOpen(true);
+                onSetLlmInfoOpen(true);
                 setIsLlmMenuOpen(false);
               }}
               className="mt-2 flex w-full items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-2 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
@@ -596,6 +610,15 @@ function HeaderControls({
 
       <button
         type="button"
+        onClick={() => router.push("/chains")}
+        className="flex items-center gap-2 rounded-md border border-sky-500/30 bg-sky-500/5 px-3 py-1.5 text-xs font-medium text-sky-400 transition hover:bg-sky-500/10 focus-visible:ring-2 focus-visible:ring-sky-500/40"
+      >
+        <span className="text-[10px] uppercase tracking-wider text-sky-500/60">Manage</span>
+        <span>Campaigns</span>
+      </button>
+
+      <button
+        type="button"
         onClick={() => setIsHistoryOpen(true)}
         className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-focus-ring"
       >
@@ -608,8 +631,8 @@ function HeaderControls({
       <Modal
         open={isGraphInfoOpen}
         onClose={() => {
-          setIsGraphInfoOpen(false);
-          setDetailGraph(null);
+          onSetGraphInfoOpen(false);
+          onSetDetailGraph(null);
         }}
         title="Graph details"
         subtitle={(detailGraph ?? selectedGraph).name}
@@ -633,8 +656,8 @@ function HeaderControls({
       <Modal
         open={isLlmInfoOpen}
         onClose={() => {
-          setIsLlmInfoOpen(false);
-          setDetailProvider(null);
+          onSetLlmInfoOpen(false);
+          onSetDetailProvider(null);
           setIsEditingLlm(false);
         }}
         title="LLM details"
@@ -661,7 +684,7 @@ function HeaderControls({
                   Edit Configuration
                 </button>
                 <button
-                  onClick={handleResetConfig}
+                  onClick={() => void handleResetConfig()}
                   className="px-4 py-2 rounded-md bg-bg-surface border border-border-subtle text-text-secondary hover:bg-state-hover transition text-xs font-medium"
                 >
                   Reset to Environment
@@ -691,7 +714,7 @@ function HeaderControls({
                   Edit Configuration
                 </button>
                 <button
-                  onClick={handleResetConfig}
+                  onClick={() => void handleResetConfig()}
                   className="px-4 py-2 rounded-md bg-bg-surface border border-border-subtle text-text-secondary hover:bg-state-hover transition text-xs font-medium"
                 >
                   Reset to Environment
@@ -1104,7 +1127,7 @@ export default function HomePage() {
       });
       setSelectedPromptFolder(folderPath);
       if (!folderFileMap[folderPath] && !folderFileLoading[folderPath]) {
-        loadFolderFiles(folderPath);
+        void loadFolderFiles(folderPath);
       }
     },
     [folderFileMap, folderFileLoading, loadFolderFiles]
@@ -1158,6 +1181,11 @@ export default function HomePage() {
   const [isToolDialogOpen, setIsToolDialogOpen] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [hasAuditStarted, setHasAuditStarted] = useState(false);
+  const [isGraphInfoOpen, setIsGraphInfoOpen] = useState(false);
+  const [isLlmInfoOpen, setIsLlmInfoOpen] = useState(false);
+  const [detailGraph, setDetailGraph] = useState<GraphOption | null>(null);
+  const [detailProvider, setDetailProvider] = useState<"azure" | "lmstudio" | null>(null);
+
   const eventStreamRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const promptPanelHeight = 160;
@@ -1190,7 +1218,7 @@ export default function HomePage() {
           next.add(initialFolder);
           return next;
         });
-        loadFolderFiles(initialFolder);
+        void loadFolderFiles(initialFolder);
       })
       .catch(() => {
         if (!isMounted) return;
@@ -1304,7 +1332,7 @@ export default function HomePage() {
 
   const handleCopyPath = useCallback((path: string) => {
     if (!path) return;
-    navigator.clipboard.writeText(path).then(() => {
+    void navigator.clipboard.writeText(path).then(() => {
       setCopiedPath(path);
       setTimeout(() => setCopiedPath(null), 1500);
     });
@@ -1528,7 +1556,7 @@ export default function HomePage() {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       if (canSendMessage && !loading) {
-        handleSendMessage();
+        void handleSendMessage();
       }
     }
     // Shift+Enter for new line (default behavior)
@@ -1771,6 +1799,14 @@ export default function HomePage() {
               onAuditContextEnabledChange={setAuditContextEnabled}
               auditContextSummary={auditContextSummary}
               onConfigureAuditContext={() => setIsAuditContextDialogOpen(true)}
+              isGraphInfoOpen={isGraphInfoOpen}
+              onSetGraphInfoOpen={setIsGraphInfoOpen}
+              isLlmInfoOpen={isLlmInfoOpen}
+              onSetLlmInfoOpen={setIsLlmInfoOpen}
+              detailGraph={detailGraph}
+              onSetDetailGraph={setDetailGraph}
+              detailProvider={detailProvider}
+              onSetDetailProvider={setDetailProvider}
             />
           </div>
         </header>
@@ -1828,78 +1864,91 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Compact input area - VS Code style */}
-                <div className="sticky bottom-0 border-t border-border-subtle bg-bg-elevated px-4 py-3">
-                  <div className="flex items-end gap-2">
-                    {/* Prompt selector button */}
-                    <button
-                      type="button"
-                      onClick={() => setIsPromptSelectorOpen(true)}
-                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-border-subtle bg-bg-surface text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-                      title="Select prompt (⌘K)"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                        className="h-4 w-4"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                    </button>
+                {/* Refined Cursor-style input area */}
+                <div className="sticky bottom-0 bg-bg-surface px-4 py-4 backdrop-blur-md">
+                  <div className="mx-auto max-w-4xl">
+                    <div className="rounded-xl border border-border-subtle bg-bg-elevated p-3 shadow-lg transition-all focus-within:border-border-strong group">
+                      <textarea
+                        ref={textareaRef}
+                        value={messageInput}
+                        onChange={(event) => setMessageInput(event.target.value)}
+                        onKeyDown={handleMessageInputKeyDown}
+                        placeholder="Ask anything (⌘L), @ to mention, / for workflows"
+                        rows={1}
+                        className="w-full resize-none border-none bg-transparent p-0 text-[13px] font-medium text-text-primary outline-none focus:ring-0 placeholder:text-text-muted/60 scrollbar-elegant"
+                        style={{
+                          minHeight: '28px',
+                          maxHeight: '160px',
+                          height: 'auto'
+                        }}
+                      />
 
-                    {/* Auto-expanding textarea */}
-                    <textarea
-                      ref={textareaRef}
-                      value={messageInput}
-                      onChange={(event) => setMessageInput(event.target.value)}
-                      onKeyDown={handleMessageInputKeyDown}
-                      placeholder="Type your message..."
-                      rows={1}
-                      className="flex-1 resize-none rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong scrollbar-elegant"
-                      style={{
-                        minHeight: '36px',
-                        maxHeight: '120px',
-                        height: 'auto'
-                      }}
-                    />
-
-                    {/* Inline send button */}
-                    <button
-                      type="button"
-                      onClick={loading ? handleStop : handleSendMessage}
-                      disabled={!loading && !canSendMessage}
-                      className="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-md bg-state-selected px-4 text-sm font-medium text-text-primary transition hover:bg-state-active disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {loading ? (
-                        <>
-                          <span className="h-3 w-3 animate-spin rounded-full border-2 border-text-primary border-t-transparent" />
-                          <span>Stop</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="h-4 w-4"
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {/* Prompt selector / Add button */}
+                          <button
+                            type="button"
+                            onClick={() => setIsPromptSelectorOpen(true)}
+                            className="flex h-6 w-6 items-center justify-center rounded-md border border-border-subtle bg-bg-surface text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+                            title="Select prompt (⌘K)"
                           >
-                            <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
-                          </svg>
-                          <span>Send</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                            </svg>
+                          </button>
 
-                  {/* Error message */}
-                  {(promptLoadError || promptContentLoading) && (
-                    <p className="mt-2 text-xs text-rose-400">
-                      {promptLoadError || "Applying prompt content…"}
-                    </p>
-                  )}
+                          {/* Mode Indicator - Clickable to open graph info */}
+                          <button
+                            type="button"
+                            onClick={() => setIsGraphInfoOpen(true)}
+                            className="flex items-center gap-1.5 rounded-md border border-border-subtle bg-bg-surface px-2 py-0.5 text-[10px] font-medium text-text-secondary transition hover:bg-state-hover hover:border-border-strong select-none"
+                          >
+                            <span className="text-[9px] text-text-muted opacity-50">︿</span>
+                            <span className="capitalize">{selectedGraphId || 'Chat'}</span>
+                          </button>
+
+                          {/* Model Indicator - Clickable to open LLM info */}
+                          <button
+                            type="button"
+                            onClick={() => setIsLlmInfoOpen(true)}
+                            className="flex items-center gap-1.5 rounded-md border border-border-subtle bg-bg-surface px-2 py-0.5 text-[10px] font-medium text-text-secondary transition hover:bg-state-hover hover:border-border-strong select-none"
+                          >
+                            <span className="text-[9px] text-text-muted opacity-50">︿</span>
+                            <span>{modelProvider === 'azure' ? 'Azure OpenAI' : 'LM Studio'}</span>
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          {/* Sending action */}
+
+                          {/* Circular action button */}
+                          <button
+                            type="button"
+                            onClick={loading ? handleStop : handleSendMessage}
+                            disabled={!loading && !canSendMessage}
+                            className={`flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200 ${loading
+                              ? "bg-bg-surface border border-border-strong text-rose-500 scale-110 active:scale-95"
+                              : "bg-text-primary text-bg-surface hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed"
+                              }`}
+                          >
+                            {loading ? (
+                              <div className="h-2.5 w-2.5 bg-rose-500 rounded-sm animate-pulse" />
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                                <path fillRule="evenodd" d="M11.47 2.47a.75.75 0 011.06 0l7.5 7.5a.75.75 0 11-1.06 1.06l-6.22-6.22V21a.75.75 0 01-1.5 0V4.81l-6.22 6.22a.75.75 0 11-1.06-1.06l7.5-7.5z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Error message */}
+                    {(promptLoadError || promptContentLoading) && (
+                      <p className="mt-2 text-center text-[10px] text-rose-400 font-medium">
+                        {promptLoadError || "Applying prompt template…"}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </main>

@@ -51,6 +51,37 @@ export const listPromptDirs = async () => {
   return dirs.sort((a, b) => a.localeCompare(b));
 };
 
+export const listAllPromptFiles = async () => {
+  const files: PromptFileEntry[] = [];
+
+  const walk = async (relativeDir: string) => {
+    const absDir = resolvePromptPath(relativeDir);
+    const entries = await fs.readdir(absDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const relPath = relativeDir ? path.posix.join(relativeDir, entry.name) : entry.name;
+      if (entry.isDirectory()) {
+        if (!shouldSkipEntry(entry.name)) {
+          await walk(relPath);
+        }
+      } else if (entry.isFile() && entry.name.endsWith(".md") && !shouldSkipEntry(entry.name)) {
+        files.push({
+          name: entry.name,
+          path: relPath,
+        });
+      }
+    }
+  };
+
+  try {
+    await walk("");
+  } catch (error) {
+    console.error("Error walking prompt directory:", error);
+  }
+
+  return files.sort((a, b) => a.path.localeCompare(b.path));
+};
+
 export const listPromptFiles = async (relativeDir: string) => {
   const absDir = resolvePromptPath(relativeDir);
   const dirStats = await fs.stat(absDir);
