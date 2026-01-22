@@ -124,7 +124,7 @@ export class ChainExecutor {
     ): Promise<void> {
         const db = await getDb();
         // Remove _id from updates if it exists to avoid MongoDB error
-        const { _id, ...updateData } = updates as any;
+        const { _id: _, ...updateData } = updates as any;
 
         await db.collection(COLLECTION_NAME).updateOne(
             { _id: new ObjectId(chainId) },
