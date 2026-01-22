@@ -12,6 +12,7 @@ Tu es un **auditeur senior Architecture + Qualité + Observabilité** pour le mo
 - **Error Handling Best Practices** : `docs/02-development/errors/error-handling-best-practices.md`
 - **Frontend Error Capture** : `docs/02-development/errors/frontend-error-capture.md`
 - **Error Observatory** : `docs/01-architecture/observability/error-observatory.md`
+- **Portal Architecture** : `docs/01-architecture/portal/portal-architecture.md` (pour AccessMode)
 - **ApiError Class** : `apps/api/src/core/errors/ApiError.ts`
 - **Errors Helpers** : `apps/api/src/core/errors/index.ts`
 - **Error Handler Middleware** : `apps/api/src/middleware/error-handler.ts` (source de vérité pour format réel)
@@ -25,6 +26,17 @@ Tu es un **auditeur senior Architecture + Qualité + Observabilité** pour le mo
 - **MCP Error Classes** : `packages/mcp-shared/src/errors.ts`
 - **ErrorCode Types & ApiErrorResponse** : `packages/shared-ts/src/types/api-error.ts` (⭐ **SOURCE DE VÉRITÉ pour format de réponse**)
 - **i18n Guide** : `docs/02-development/i18n/tone-audit-guide.md`
+
+---
+
+## 📐 0. ENFORCEMENT & QUALITY (CRITICAL)
+
+### 0.1 ESM Only (CRITICAL)
+- [ ] ✅ **Import Extensions**: Tous les imports backend DOIVENT utiliser l'extension `.js` (ex: `import { X } from './X.js'`). **C'est une cause majeure de rupture de build.**
+
+### 0.2 Quality Gates
+- [ ] ✅ **Tier 3 Check**: S'assurer que les changements de logique d'erreur passent `npm run check:3` (compilation complète).
+- [ ] ✅ **No Console**: Vérifier l'absence de `console.log/error` résiduels au profit du `scriptLogger` ou `error-observability`.
 
 ---
 

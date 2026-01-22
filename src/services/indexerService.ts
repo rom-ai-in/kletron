@@ -8,6 +8,7 @@ import {
     clearVectors,
     getFileHash,
     deleteFileVectors,
+    deleteFilesVectors,
     getAllIndexedFilePaths,
     type CodeVector
 } from "./vectorService";
@@ -21,6 +22,7 @@ interface IndexStatus {
     lastIndexedAt?: Date;
     currentFile?: string;
     errors: string[];
+    dimensions?: number;
 }
 
 // Persist status across dev-mode reloads
@@ -41,6 +43,20 @@ const currentStatus: IndexStatus = (globalThis as any)[statusKey];
  * Get current indexing status
  */
 export function getIndexStatus(): IndexStatus {
+    // Attempt to discover dimensions from DB if not set
+    if (!currentStatus.dimensions && !currentStatus.isIndexing) {
+        import("./mongoClient").then(async m => {
+            try {
+                const db = await m.getDatabase();
+                const doc = await db.collection("code_vectors").findOne({});
+                if (doc && (doc as any).embedding) {
+                    currentStatus.dimensions = (doc as any).embedding.length;
+                }
+            } catch (e) {
+                // Silently ignore if DB not ready or other error
+            }
+        });
+    }
     return { ...currentStatus };
 }
 
@@ -110,20 +126,16 @@ export async function startIndexing(repoPath: string, force = false, explicitFil
                 // Full reconciliation: Detect deleted files
                 currentStatus.currentFile = "Checking for deleted files...";
                 const existingFiles = await getAllIndexedFilePaths();
-                const diskFilesSet = new Set(filesToIndex);
-                const deletedFiles = existingFiles.filter(p => !diskFilesSet.has(p));
+
+                // Map disk files to relative paths for comparison with DB paths
+                const diskFilesRelativeSet = new Set(filesToIndex.map(f => path.relative(repoPath, f)));
+                const deletedFiles = existingFiles.filter(p => !diskFilesRelativeSet.has(p));
 
                 if (deletedFiles.length > 0) {
                     console.log(`[Indexer] Removing ${deletedFiles.length} deleted files from index...`);
-                    for (let i = 0; i < deletedFiles.length; i++) {
-                        const f = deletedFiles[i];
-                        currentStatus.currentFile = `Cleanup: ${path.basename(f)}`;
-                        try {
-                            await deleteFileVectors(f);
-                        } catch (e) {
-                            console.error(`Failed to delete vectors for ${f}:`, e);
-                        }
-                    }
+                    currentStatus.currentFile = `Cleanup: Removing ${deletedFiles.length} old files...`;
+                    // Optimize with bulk delete
+                    await deleteFilesVectors(deletedFiles);
                 }
             }
         }
@@ -171,6 +183,9 @@ export async function startIndexing(repoPath: string, force = false, explicitFil
                     // bursting too many concurrent requests to the embedding API
                     for (const chunk of chunks) {
                         const embedding = await generateEmbedding(chunk.content);
+                        if (!currentStatus.dimensions) {
+                            currentStatus.dimensions = embedding.length;
+                        }
                         fileChunksWithEmbeddings.push({
                             ...chunk,
                             contentHash,

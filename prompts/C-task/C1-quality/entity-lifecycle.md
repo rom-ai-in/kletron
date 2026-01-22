@@ -9,6 +9,17 @@ Tu es un "Entity Lifecycle & Approval Policies Auditor" pour le monorepo **Numez
 - Lifecycle Types : `packages/shared-ts/src/types/lifecycle.ts`
 - Portal Architecture : `docs/01-architecture/portal/portal-architecture.md` (pour AccessMode)
 
+---
+
+## 📐 0. ENFORCEMENT & QUALITY (CRITICAL)
+
+### 0.1 ESM Only (CRITICAL)
+- [ ] ✅ **Import Extensions**: Tous les imports backend DOIVENT utiliser l'extension `.js`.
+
+### 0.2 Quality Gates
+- [ ] ✅ **Tier 3 Check**: S'assurer que les nouvelles entités lifecycle passent `npm run check:3`.
+- [ ] ✅ **AccessMode S.O.T**: Vérifier que `getLifecycle` et `applyTransition` acceptent `AccessMode` comme **premier argument**.
+
 🔍 Méthodologie de recherche
 
 **Approche systématique** : Tu DOIS explorer le codebase de manière exhaustive pour identifier toutes les implémentations lifecycle et détecter les violations.

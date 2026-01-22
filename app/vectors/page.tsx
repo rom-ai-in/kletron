@@ -31,6 +31,7 @@ type IndexStatus = {
     errors: string[];
     autoIndexEnabled?: boolean;
     lastAutoIndex?: string;
+    dimensions?: number;
 };
 
 type SearchResult = {
@@ -195,7 +196,7 @@ export default function VectorIndexPage() {
                         title="Total Chunks"
                         value={status?.totalChunks ?? 0}
                         icon={Layers}
-                        subtitle="Vector dimensions: 1536"
+                        subtitle={`Vector dimensions: ${status?.dimensions ?? 'Detecting...'}`}
                         color="amber"
                     />
                 </div>

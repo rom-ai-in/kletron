@@ -28,6 +28,17 @@ Tu es un **auditeur senior Architecture + Qualité + UX** pour le monorepo **Num
 
 ---
 
+## 📐 0. ENFORCEMENT & QUALITY (CRITICAL)
+
+### 0.1 ESM Only (CRITICAL)
+- [ ] ✅ **Import Extensions**: Tous les imports backend DOIVENT utiliser l'extension `.js` (ex: `import { X } from './X.js'`).
+
+### 0.2 Quality Gates
+- [ ] ✅ **Tier 3 Check**: Vérifier que les nouveaux feedbacks/alerts passent `npm run check:3`.
+- [ ] ✅ **Zod Coercion**: S'assurer que les payloads de feedback sont validés/coercés via Zod.
+
+---
+
 ## 🎯 CONTEXTE D'AUDIT (OBLIGATOIRE)
 
 Commence par expliciter :

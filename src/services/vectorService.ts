@@ -66,7 +66,9 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         }
 
         const data = await response.json();
-        return data.data[0].embedding;
+        const embedding = data.data[0].embedding;
+        console.log(`[VectorService] Azure Embedding Dimension: ${embedding.length}`);
+        return embedding;
     } else {
         const lms = config.lmstudio;
         if (!lms?.baseUrl || !lms?.model) {
@@ -94,7 +96,9 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         }
 
         const data = await response.json();
-        return data.data[0].embedding;
+        const embedding = data.data[0].embedding;
+        console.log(`[VectorService] LM Studio Embedding Dimension: ${embedding.length}`);
+        return embedding;
     }
 }
 
@@ -252,6 +256,15 @@ export async function getFileHash(filePath: string): Promise<string | null> {
 export async function deleteFileVectors(filePath: string): Promise<void> {
     const collection = await getCollection();
     await collection.deleteMany({ filePath });
+}
+
+/**
+ * Delete all vectors for multiple files (bulk)
+ */
+export async function deleteFilesVectors(filePaths: string[]): Promise<void> {
+    if (filePaths.length === 0) return;
+    const collection = await getCollection();
+    await collection.deleteMany({ filePath: { $in: filePaths } });
 }
 
 /**

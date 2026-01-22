@@ -4,9 +4,8 @@ Tu es un **expert Architecte & Linguiste i18n** pour le monorepo **Numezis**. Ta
 
 ## 📚 Sources de Vérité (MANDATORY READ)
 - **i18n Standards** : `docs/01-architecture/core/internationalization-standards.md`
-- **Translation Strategy** : `docs/02-development/i18n/translation-completion-strategy.md`
-- **Translator Guide** : `docs/02-development/i18n/translator-guide.md`
-- **Quality Gates** : `docs/02-development/quality/quality-architecture.md` (Section i18n)
+- **Quality Architecture** : `docs/02-development/quality/quality-architecture.md`
+- **Formatting Utils** : `packages/shared-ts/src/formatting/`
 
 ---
 
@@ -14,8 +13,9 @@ Tu es un **expert Architecte & Linguiste i18n** pour le monorepo **Numezis**. Ta
 
 Identifie le type d'audit :
 1.  **Architecture Check** : Code purity, hooks, helpers (Backend/Frontend).
-2.  **Data Integrity** : Parité des clés, placeholders, structure JSON.
-3.  **Linguistic Quality** : Ton (Vouvoiement), Swiss compliance, Terminology.
+2.  **Data Integrity** : Parité des clés, placeholders, structure JSON (100% Flat).
+3.  **Linguistic Quality** : Ton formel (Swiss-Grade), vouvoiement, terminologie ERP.
+4.  **Formatting Consistency** : Dates, nombres, devises locale-aware.
 
 ---
 
@@ -24,62 +24,60 @@ Identifie le type d'audit :
 ### 1.1 Backend Compliance
 - [ ] ✅ **Helper Usage** : Utiliser `translate(key, lang, params)` uniquement. Jamais d'accès direct aux JSON.
 - [ ] ✅ **Safety** : Pas de fallback en anglais hardcodé. Gestion d'erreur si clé manquante.
-- [ ] ✅ **Dependency Injection** : Le service `I18nService` est-il correctement injecté ?
+- [ ] ✅ **Zero-Drift Registry** : Toutes les clés utilisées dans le code doivent être déclarées.
 
 ### 1.2 Frontend Compliance
-- [ ] ✅ **Client vs Server** :
-    - Client Components: `useTranslations()` from `@/lib/i18n/client`.
-    - Server Components: `getServerTranslations()` from `@/lib/i18n/server`.
-- [ ] ✅ **Prop Drilling** : INTERDIT de passer des strings traduites en props. Passer les CLÉS i18n.
-- [ ] ✅ **Hardcoded Strings** : Aucune string UI en dur (JSX, Error messages, Placeholders).
+- [ ] ✅ **Hooks** :
+    - Client Components: `useTranslations()`.
+    - Server Components: `getServerTranslations()`.
+- [ ] ✅ **Prop Drilling** : INTERDIT de passer des strings traduites en props. Passer les CLÉS i18n (sauf labels dynamiques calculés).
+- [ ] ✅ **Hardcoded Strings** : Aucune string UI en dur (JSX, Tooltips, aria-labels, placeholders).
 
-### 1.3 File Structure (Zero-Drift)
-- [ ] ✅ **Flat Registry** : Les fichiers JSON (`en.json`, `fr.json`...) doivent être 100% plats (pas de nesting).
+### 1.3 File Structure (100% Flat)
+- [ ] ✅ **Flat JSON** : Les fichiers JSON (`en.json`, `fr.json`...) doivent être 100% plats (pas de nesting).
 - [ ] ✅ **Canonical Naming** : Format `domain.module.component.key` respecté.
 
 ---
 
-## 🛡️ 2. DATA INTEGRITY & COMPLETENESS
+## 🛡️ 2. DATA INTEGRITY & LINGUISTIC QUALITY
 
 ### 2.1 Critical Gates (`npm run check:3`)
-- [ ] ✅ **Key Parity** : Chaque clé présente dans `en` DOIT exister dans `fr`, `de`, `it`. Zéro exception.
-- [ ] ✅ **Placeholders** : DETECTER les valeurs `[key.path]` (placeholder automatique).
-    - **CRITICAL** (`auth.*`, `errors.*`, `nav.*`) : Doit être 0. Bloque le CI.
-    - **HIGH** (`dashboard.*`) : < 10 toléré.
-- [ ] ✅ **Interpolation Params** : Vérifier que `{name}` existe dans toutes les locales pour la même clé.
+- [ ] ✅ **Key Parity** : Chaque clé présente dans `en` DOIT exister dans `fr`, `de`, `it`.
+- [ ] ✅ **Placeholders** : Les placeholders de traduction (e.g., `[key.path]`) ne doivent pas être visibles en production.
+- [ ] ✅ **Interpolation** : Vérifier que les variables `{name}` sont identiques dans toutes les locales.
 
-### 2.2 Scripts de Maintenance
-- Utiliser `npm run i18n:analyze-placeholders` pour la dette technique.
-- Utiliser `npm run i18n:fix-placeholders` pour l'auto-correction (si traduction EN dispo).
+### 2.2 Swiss-Grade Tone (Formal)
+- [ ] ✅ **Vouvoiement** : FR "Vous", DE "Sie", IT "Lei" (Jamais de "Tu"/"Du").
+- [ ] ✅ **Style** : Calme et précis. Pas de ponctuation excessive ("Success!" -> "Action confirmée.").
 
----
-
-## 🎨 3. LINGUISTIC QUALITY (TONE & CONTENT)
-
-### 3.1 Ton "Swiss-Grade" (Formal & Precise)
-- [ ] ✅ **Vouvoiement Obligatoire** :
-    - FR : "Vous" (jamais "Tu").
-    - DE : "Sie" (jamais "Du").
-    - IT : "Lei" (jamais "Tu").
-- [ ] ✅ **Style** : Calme, Précis, Confiant. Pas de points d'exclamation excessifs ("Success!" -> "Action completed.").
-- [ ] ✅ **Terminologie** : Cohérence ERP (e.g., "Invoice" = "Facture", pas "Note").
-
-### 3.2 Formatage Locale-Aware
-- [ ] ✅ **Dates** : Utiliser `formatDate(date, locale)`. Jamais `date.toString()`.
-- [ ] ✅ **Nombres/Devises** : Utiliser `formatCurrency(val, currency, locale)`.
-- [ ] ✅ **Pluriels** : Utiliser syntaxe ICU `{count, plural, =0 {None} other {# items}}`.
+### 2.3 Localized Formatting
+- [ ] ✅ **Dates/Times** : Utiliser `formatDate` ou `Intl.DateTimeFormat`.
+- [ ] ✅ **Currencies** : Utiliser `formatCurrency` (respect des symboles et positions selon locale/pays).
+- [ ] ✅ **Plurals** : Utiliser la syntaxe ICU standard pour les pluriels complexes.
 
 ---
 
-## 📊 4. FORMAT DE RAPPORT
+## 📊 3. FORMAT DE RÉPORT (STANDARD)
 
-1.  **Résumé Santé** :
-    - Architecture Check : ✅/❌
-    - Completeness : X placeholders critiques, Y manquants.
-    - Tone Check : ✅/❌ (Patterns informels détectés ?)
-2.  **Top Violations** (Tableau) :
-    - Fichier / Clé / Problème / Action.
-3.  **Action Plan** :
-    - Si Placeholders Critiques > 0 : 🔴 **BLOCK MERGE**.
-    - Si Architecture Check fail : 🔴 **REFACTOR REQUIRED**.
-    - Si Ton informel : 🟡 **FIX BEFORE RELEASE**.
+### 3.1 Résumé Santé
+Verdict: 🟥 CRITIQUE / 🟨 ATTENTION / 🟩 OK
+
+### 3.2 Matrice de Complétude
+| Locale | Total Keys | Missing | Placeholders | Drift % |
+|--------|------------|---------|--------------|---------|
+| EN | 1200 | 0 | 0 | 0% |
+| FR | 1198 | 2 | 5 | 0.2% |
+| ... | ... | ... | ... | ... |
+
+### 3.3 Top Violations
+| Catégorie | Fichier / Clé | Problème | Gravité | Fix |
+|-----------|---------------|----------|---------|-----|
+| Error | `api/invoices` | Error message hardcodé | 🔴 | Utiliser `translate('err.invoice.failed')` |
+| Tone | `nav.welcome` | "Bienvenue à toi" | 🟡 | Changer en "Bienvenue sur votre espace" |
+
+---
+
+## 📌 4. ACTIONS PRIORITAIRES
+- [ ] **P1** : Supprimer les hardcoded strings.
+- [ ] **P1** : Rétablir la parité des clés (Zero-Drift).
+- [ ] **P2** : Harmoniser le ton (Formalisation).
