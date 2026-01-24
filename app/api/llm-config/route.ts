@@ -39,6 +39,30 @@ export async function GET() {
 }
 
 /**
+ * POST /api/llm-config
+ * Update the default provider or configuration
+ */
+export async function POST(req: NextRequest) {
+    try {
+        const body = await req.json();
+
+        if (body.provider) {
+            const { updateDefaultProvider } = await import("@/src/services/llmConfigService");
+            const config = await updateDefaultProvider(body.provider);
+            return NextResponse.json(config, { status: 200 });
+        }
+
+        return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    } catch (error) {
+        console.error("Error updating LLM config:", error);
+        return NextResponse.json(
+            { error: "Failed to update LLM configuration" },
+            { status: 500 }
+        );
+    }
+}
+
+/**
  * DELETE /api/llm-config
  * Reset configuration to environment variables
  */

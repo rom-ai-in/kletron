@@ -8,6 +8,7 @@ import {
   runPhase3InvestigationAgents,
   runPhase4AdjudicatorAgent,
   runPhase5ReporterAgent,
+  runPhase6NextStepsAgent,
   type PhaseKey,
 } from "./agents/phases";
 import { normalizeAndValidateTargetFiles } from "./lib/repoPath";
@@ -76,6 +77,7 @@ export type AgentWorkflowResult = {
     report: string;
     meta?: Record<string, unknown>;
     stageMetrics?: StageMetric[];
+    todo?: string[];
   };
   eventStream: AgentEvent[];
 };
@@ -718,23 +720,47 @@ export async function runAgentWorkflow(
     }
     await flushUpdate();
 
-    const finalResult: AgentWorkflowResult = {
+    const phase6Result = await runPhase(
+      "phase6",
+      () =>
+        runPhase6NextStepsAgent({
+          userRequest,
+          reportMarkdown: safeReportMarkdown,
+          verifiedFindings: verdicts,
+          extraMessages: contextMessages,
+          onMessage: async (message) => { await appendPhaseEvents([message], "phase6"); },
+          llmSelection: options?.llmSelection,
+        }),
+      timeline,
+      {
+        flushUpdate,
+      }
+    );
+    addStageMetric(stageMetrics, "phase6", phaseDefinitions["phase6"].label, phase6Result);
+
+    const nextSteps = (phase6Result.parsed as any)?.next_steps?.map((s: any) => `- [ ] **${s.priority.toUpperCase()}**: ${s.title} (${s.type})`) ?? [];
+
+    let finalReport = safeReportMarkdown;
+    if (nextSteps.length > 0) {
+      finalReport += "\n\n## 📝 Actionable Next Steps (Phase 6)\n\n" + nextSteps.join("\n");
+    }
+
+    const finalResult = createFinalSummary({
       sessionId,
       timeline,
-      conclusion: finalSummary || "Pipeline completed successfully.",
-      outputs: {
-        context,
-        target_files: targetFiles,
-        raw_claims: rawClaims,
-        verified_findings: verdicts,
-        findings: Array.isArray(findings) ? findings : [],
-        tasks: Array.isArray(tasksSummary) ? tasksSummary : [],
-        report: safeReportMarkdown,
-        meta: {},
-        stageMetrics,
-      },
       eventStream,
-    };
+      context,
+      targetFiles,
+      rawClaims,
+      findings,
+      verdicts,
+      tasks: tasksSummary,
+      report: finalReport,
+      stageMetrics,
+      todo: nextSteps,
+      conclusion: (phase6Result.parsed as any)?.final_summary || finalSummary
+    });
+
     await flushUpdate(finalResult.outputs);
     console.info(
       `[AgentRunner] workflow completed conclusion="${sanitizeForLog(finalResult.conclusion)}" events=${finalResult.eventStream.length}`
@@ -753,4 +779,39 @@ export async function runAgentWorkflow(
     }
     throw error;
   }
+}
+
+function createFinalSummary(opts: {
+  sessionId: string;
+  timeline: TimelineEvent[];
+  eventStream: AgentEvent[];
+  context: AuditState["context"];
+  targetFiles: AuditState["target_files"];
+  rawClaims: AuditState["raw_claims"];
+  findings: AuditState["findings"];
+  verdicts: AuditState["verified_findings"];
+  tasks: TaskTicket[];
+  report: string;
+  stageMetrics: StageMetric[];
+  todo: string[];
+  conclusion: string;
+}): AgentWorkflowResult {
+  return {
+    sessionId: opts.sessionId,
+    timeline: opts.timeline,
+    conclusion: opts.conclusion || "Pipeline completed successfully.",
+    outputs: {
+      context: opts.context,
+      target_files: opts.targetFiles,
+      raw_claims: opts.rawClaims,
+      verified_findings: opts.verdicts,
+      findings: Array.isArray(opts.findings) ? opts.findings : [],
+      tasks: Array.isArray(opts.tasks) ? opts.tasks : [],
+      report: opts.report,
+      meta: {},
+      stageMetrics: opts.stageMetrics,
+      todo: opts.todo,
+    },
+    eventStream: opts.eventStream,
+  };
 }

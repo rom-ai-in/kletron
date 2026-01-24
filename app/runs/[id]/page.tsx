@@ -60,16 +60,6 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
         <div className="flex h-full flex-col bg-bg-app">
             {/* Header */}
             <div className="border-b border-border-subtle bg-bg-surface px-6 py-4">
-                <div className="mb-4 flex items-center gap-2 text-xs font-medium">
-                    <button
-                        onClick={() => router.push("/runs")}
-                        className="text-text-muted transition hover:text-text-primary"
-                    >
-                        Execution Runs
-                    </button>
-                    <span className="text-border-strong">/</span>
-                    <span className="text-text-primary">{run._id?.toString()}</span>
-                </div>
                 <div className="flex items-center justify-between">
                     <div>
                         <div className="flex items-center gap-3">

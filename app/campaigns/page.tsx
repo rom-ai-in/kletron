@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ChainCard } from "@/src/components/ChainCard";
 import { Button } from "@/src/components/ui/Button";
+import { Skeleton } from "@/src/components/ui/Skeleton";
 import { Panel } from "@/src/components/ui/Panel";
 import { ChainBuilderModal } from "@/src/components/ChainBuilderModal";
 import type { AuditChain } from "@/src/services/chainTypes";
@@ -142,8 +143,29 @@ export default function ChainsPage() {
             {/* Chain List */}
             <div className="flex-1 overflow-y-auto scrollbar-elegant p-6">
                 {loading && (
-                    <div className="flex items-center justify-center py-12">
-                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-border-subtle border-t-text-muted" />
+                    <div className="space-y-4">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="rounded-lg border border-border-subtle bg-bg-surface p-4">
+                                <div className="flex justify-between items-start">
+                                    <div className="space-y-3 flex-1">
+                                        <div className="flex items-center gap-3">
+                                            <Skeleton className="h-5 w-48" />
+                                            <Skeleton className="h-5 w-20" />
+                                        </div>
+                                        <Skeleton className="h-4 w-3/4" />
+                                        <div className="flex gap-4 pt-1">
+                                            <Skeleton className="h-3 w-24" />
+                                            <Skeleton className="h-3 w-16" />
+                                            <Skeleton className="h-3 w-32" />
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Skeleton className="h-8 w-16" />
+                                        <Skeleton className="h-8 w-16" />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
 

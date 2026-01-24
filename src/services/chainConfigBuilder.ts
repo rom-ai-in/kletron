@@ -238,6 +238,179 @@ export class ChainConfigBuilder {
                 },
             ],
         },
+
+        /**
+         * Full Backend Audit - Focus on API, Workers, Infra, and Modules
+         * Duration: ~4 hours
+         */
+        FULL_BACKEND_AUDIT: {
+            name: "Full Backend Audit",
+            description: "Comprehensive analysis of API patterns, Workers, Infrastructure, and Error handling",
+            stages: [
+                {
+                    id: "be-api",
+                    name: "API Audit",
+                    graphId: "audit",
+                    promptPath: "A-audit/A1-api/general-api-audit.md",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "be-workers",
+                    name: "Worker Architecture",
+                    graphId: "audit",
+                    promptPath: "A-audit/A15-workers/worker-architecture-audit.md",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "be-modules",
+                    name: "Module Consistency",
+                    graphId: "audit",
+                    promptPath: "A-audit/A11-modules/inter-module-consistency.md",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "be-infra",
+                    name: "Infrastructure Review",
+                    graphId: "audit",
+                    promptPath: "A-audit/A9-infrastructure/infrastructure-production-readiness.md",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "be-errors",
+                    name: "Error Logic",
+                    graphId: "audit",
+                    promptPath: "A-audit/A12-error-logic/error-logic-audit.md",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "be-security",
+                    name: "Backend Security",
+                    graphId: "audit",
+                    promptPath: "A-audit/A6-security/permission-access-control.md",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "be-perf",
+                    name: "Performance & Scaling",
+                    graphId: "audit",
+                    promptPath: "A-audit/A16-performance/full-stack-performance-audit.md",
+                    llmProvider: "azure",
+                },
+            ],
+        },
+
+        /**
+         * Full Frontend & UX Audit - Focus on Portals, Navigation, I18n, and UI
+         * Duration: ~4 hours
+         */
+        FULL_FRONTEND_AUDIT: {
+            name: "Full UX/UI & Frontend Audit",
+            description: "Deep dive into Portal Architecture, UX patterns, Navigation, and I18n compliance",
+            stages: [
+                {
+                    id: "fe-portals",
+                    name: "Portal Architecture",
+                    graphId: "audit",
+                    promptPath: "A-audit/A4-portals/portal-architecture-audit.md",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fe-ux",
+                    name: "UX/UI Standards",
+                    graphId: "audit",
+                    promptPath: "A-audit/A7-ux-ui/portal-ux.md",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fe-nav",
+                    name: "Navigation Registry",
+                    graphId: "audit",
+                    promptPath: "A-audit/A10-navigation/navigation-permissions-registry-audit.md",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fe-alerts",
+                    name: "Alerts & Feedback",
+                    graphId: "audit",
+                    promptPath: "A-audit/A13-alert-snackbar-feedback-audit/alert-snackbar-feedback-audit.md",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fe-i18n",
+                    name: "I18n Compliance",
+                    graphId: "audit",
+                    promptPath: "A-audit/A3-i18n/i18n-master-audit.md",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fe-perf",
+                    name: "Frontend Performance",
+                    graphId: "audit",
+                    promptPath: "A-audit/A16-performance/full-stack-performance-audit.md",
+                    llmProvider: "azure",
+                },
+            ],
+        },
+
+        /**
+         * MongoDB Index & Performance Audit - Critical Infra Check
+         * Duration: ~1 hour
+         */
+        MONGO_INDEX_AUDIT: {
+            name: "MongoDB Index & Performance",
+            description: "Deep analysis of MongoDB indexes, text search limits, and query performance",
+            stages: [
+                {
+                    id: "mongo-index",
+                    name: "Index Strategy",
+                    graphId: "audit",
+                    promptPath: "A-audit/A22-Mongo/mongodb-index-audit.md",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "mongo-patterns",
+                    name: "Schema Patterns",
+                    graphId: "audit",
+                    promptPath: "A-audit/A22-Mongo/mongodb-pattern.md",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["mongo-index.findings"],
+                },
+                {
+                    id: "mongo-perf",
+                    name: "Performance Impact",
+                    graphId: "audit",
+                    promptPath: "A-audit/A16-performance/full-stack-performance-audit.md",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["mongo-index.findings"],
+                },
+            ],
+        },
+
+        /**
+         * Documentation Quality Audit - Knowledge Base Health
+         * Duration: ~30 mins
+         */
+        DOC_QUALITY_AUDIT: {
+            name: "Documentation Quality Audit",
+            description: "Verify documentation consistency, freshness, and completeness",
+            stages: [
+                {
+                    id: "doc-freshness",
+                    name: "Documentation Freshness",
+                    graphId: "audit",
+                    promptPath: "A-audit/A17-documentation/documentation-freshness.md",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "doc-consistency",
+                    name: "Knowledge Consistency",
+                    graphId: "audit",
+                    promptPath: "A-audit/A17-documentation/knowledge-consistency.md",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["doc-freshness.findings"],
+                },
+            ],
+        },
     };
 
     /**
@@ -386,8 +559,12 @@ export class ChainConfigBuilder {
         const durations: Record<string, string> = {
             FULL_AUDIT: "~8 hours",
             SECURITY_DEEP_DIVE: "~3 hours",
-            I18N_QUALITY_CHAIN: "~2 hours",
+            I18N_QUALITY_CAMPAIGN: "~2 hours",
             API_QUALITY_GATE: "~1 hour",
+            FULL_BACKEND_AUDIT: "~4 hours",
+            FULL_FRONTEND_AUDIT: "~4 hours",
+            MONGO_INDEX_AUDIT: "~1 hour",
+            DOC_QUALITY_AUDIT: "~30 mins",
         };
 
         return {

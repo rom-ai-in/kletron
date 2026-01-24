@@ -2,6 +2,7 @@ import {
   ensurePortsFree,
   createLangGraphDevServer,
   createMcpLauncher,
+  createI18nProcessWorkerLauncher,
   createWebLauncher,
   requireTargetRepoRoot,
   waitForHttpOk,
@@ -36,6 +37,7 @@ async function main() {
       },
     }),
     createWebLauncher(WEB_PORT),
+    createI18nProcessWorkerLauncher(),
   ];
 
   console.log("⏳ Waiting for MCP + LangGraph dev server...");

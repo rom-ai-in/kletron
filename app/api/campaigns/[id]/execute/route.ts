@@ -25,12 +25,15 @@ export async function PUT(
             );
         }
 
-        // Execute chain in background (don't await)
-        chainExecutor.executeChain(chainId).catch((error) => {
-            console.error(`[ChainExecution] Chain ${chainId} failed:`, error);
+        // Create a run immediately so the UI can navigate to it deterministically.
+        const runId = await chainExecutor.startNewRun(chainId);
+
+        // Execute run in background (don't await)
+        chainExecutor.executeRun(runId).catch((error) => {
+            console.error(`[ChainExecution] Run ${runId} (Chain ${chainId}) failed:`, error);
         });
 
-        return NextResponse.json({ status: "STARTED" }, { status: 200 });
+        return NextResponse.json({ status: "STARTED", runId }, { status: 200 });
     } catch (error) {
         console.error(`[API /api/campaigns/${params.id}/execute PUT] Error:`, error);
         return NextResponse.json(

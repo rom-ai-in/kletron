@@ -224,6 +224,16 @@ export function createWebLauncher(port: number = 3000) {
   });
 }
 
+export function createI18nProcessWorkerLauncher() {
+  const command = process.platform === "win32" ? "npx.cmd" : "npx";
+  return spawnService({
+    name: "I18n Process Worker",
+    command,
+    args: ["tsx", "scripts/i18n-process-worker.ts"],
+    stdio: "pipe",
+  });
+}
+
 export function createLangGraphDevServer(options: {
   port: number;
   configPath?: string;

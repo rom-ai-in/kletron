@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/src/lib/db";
 import { chainExecutor } from "@/src/services/chainExecutor";
+import { ObjectId } from "mongodb";
 
 /**
  * GET /api/activity
@@ -13,6 +14,7 @@ export async function GET(req: NextRequest) {
         const db = await getDb();
         const searchParams = req.nextUrl.searchParams;
         const limit = parseInt(searchParams.get("limit") || "50");
+        const campaignId = searchParams.get("campaignId") || undefined;
 
         // 1. Fetch workbench sessions
         const sessions = await db.collection("audit_sessions")
@@ -30,8 +32,16 @@ export async function GET(req: NextRequest) {
             .toArray();
 
         // 2. Fetch campaign runs
+        const runsQuery: any = {};
+        if (campaignId) {
+            try {
+                runsQuery.chainId = new ObjectId(campaignId);
+            } catch {
+                return NextResponse.json({ error: "Invalid campaignId" }, { status: 400 });
+            }
+        }
         const runs = await db.collection("audit_runs")
-            .find({})
+            .find(runsQuery)
             .sort({ startedAt: -1 })
             .limit(limit)
             .toArray();

@@ -95,3 +95,19 @@ export const Phase5OutputSchema = z.object({
     tasks: z.array(TaskTicketSchema),
 });
 export type Phase5Output = z.infer<typeof Phase5OutputSchema>;
+
+// --- Phase 6: Next Steps ---
+
+export const NextStepSchema = z.object({
+    title: z.string(),
+    description: z.string(),
+    priority: z.enum(["high", "medium", "low"]),
+    type: z.enum(["fix", "test", "refactor", "process"]),
+});
+export type NextStep = z.infer<typeof NextStepSchema>;
+
+export const Phase6OutputSchema = z.object({
+    next_steps: z.array(NextStepSchema),
+    final_summary: z.string().optional(),
+});
+export type Phase6Output = z.infer<typeof Phase6OutputSchema>;

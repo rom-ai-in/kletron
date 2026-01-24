@@ -2,6 +2,7 @@ import {
   ensurePortsFree,
   createMcpLauncher,
   createLangGraphLauncher,
+  createI18nProcessWorkerLauncher,
   requireTargetRepoRoot,
 } from "./lib/serviceLauncher.js";
 
@@ -21,6 +22,7 @@ async function main() {
   const children = [
     createMcpLauncher(targetRepoRoot, { MCP_PORT: "9000" }),
     createLangGraphLauncher({ overrides: { LANGGRAPH_PORT: "8080", MCP_URL } }),
+    createI18nProcessWorkerLauncher(),
   ];
 
   const stopChildren = () => {

@@ -133,6 +133,8 @@ const parseMultilineList = (value: string) =>
     .filter(Boolean);
 
 import { Modal } from "../src/components/ui/Modal";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type TimelinePanelProps = {
   timeline: TimelineEvent[];
@@ -1195,10 +1197,68 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
                 </button>
               </>
             )}
+            {isToolEvent && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsFullScreen(true);
+                }}
+                className="flex items-center gap-1 rounded-md border border-border-subtle bg-bg-surface px-3 py-1 text-[10px] text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
+                aria-label="View full screen"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  className="h-3 w-3"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                </svg>
+                <span className="whitespace-nowrap">Full screen</span>
+              </button>
+            )}
           </div>
-          <pre className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-border-subtle bg-bg-surface p-3 text-[12px] leading-relaxed text-text-primary whitespace-pre-wrap break-words scrollbar-elegant">
-            {resultText}
-          </pre>
+          {event.name === "semantic_code_search" || resultText.includes("Semantic Search Preview") ? (
+            <div className="mt-2 max-h-96 overflow-y-auto rounded-lg border border-border-subtle bg-bg-surface p-3 text-[12px] leading-relaxed text-text-primary scrollbar-elegant">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  code({ node, inline, className, children, ...props }: any) {
+                    return !inline ? (
+                      <div className="bg-bg-elevated border border-border-subtle rounded-md my-2 overflow-hidden">
+                        <pre className="p-2 overflow-x-auto text-xs font-mono !bg-transparent !m-0">
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
+                        </pre>
+                      </div>
+                    ) : (
+                      <code className="bg-bg-elevated px-1 py-0.5 rounded text-sky-300 font-mono text-[90%]" {...props}>
+                        {children}
+                      </code>
+                    )
+                  },
+                  h1({ children }: any) { return <h1 className="text-lg font-bold text-text-primary mt-4 mb-2 pb-1 border-b border-border-subtle">{children}</h1> },
+                  h2({ children }: any) { return <h2 className="text-base font-bold text-text-primary mt-3 mb-2">{children}</h2> },
+                  h3({ children }: any) { return <h3 className="text-sm font-bold text-text-primary mt-2 mb-1">{children}</h3> },
+                  a({ children, href }: any) {
+                    return <a href={href} className="text-emerald-400 hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>
+                  },
+                }}
+              >
+                {resultText}
+              </ReactMarkdown>
+            </div>
+          ) : (
+            <pre className="mt-2 max-h-96 overflow-y-auto rounded-lg border border-border-subtle bg-bg-surface p-3 text-[12px] leading-relaxed text-text-primary whitespace-pre-wrap break-words scrollbar-elegant">
+              {resultText}
+            </pre>
+          )}
         </section>
         {isToolEvent && toolMeta && (
           <div className="flex justify-end">
@@ -2058,7 +2118,13 @@ export default function HomePage() {
                       <textarea
                         ref={textareaRef}
                         value={messageInput}
-                        onChange={(event) => setMessageInput(event.target.value)}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setMessageInput(value);
+                          if (value === "/") {
+                            setIsPromptSelectorOpen(true);
+                          }
+                        }}
                         onKeyDown={handleMessageInputKeyDown}
                         placeholder="Ask anything (⌘L), @ to mention, / for workflows"
                         rows={1}

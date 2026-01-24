@@ -27,7 +27,10 @@ export async function getLlmConfig(): Promise<LlmConfig> {
         const storedConfig = await collection.findOne({});
 
         if (storedConfig) {
-            return storedConfig;
+            return {
+                ...storedConfig,
+                _id: storedConfig._id.toString(),
+            };
         }
 
         // Fallback to environment variables
@@ -98,10 +101,13 @@ export async function updateAzureConfig(
     updatedConfig.azure = validatedAzure;
 
     if (currentConfig._id) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { _id, ...configWithoutId } = updatedConfig;
+
         await collection.updateOne(
             { _id: new ObjectId(currentConfig._id) } as any,
             {
-                $set: updatedConfig,
+                $set: configWithoutId,
             }
         );
     } else {
@@ -149,10 +155,13 @@ export async function updateLMStudioConfig(
     updatedConfig.lmstudio = validatedLMStudio;
 
     if (currentConfig._id) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { _id, ...configWithoutId } = updatedConfig;
+
         await collection.updateOne(
             { _id: new ObjectId(currentConfig._id) } as any,
             {
-                $set: updatedConfig,
+                $set: configWithoutId,
             }
         );
     } else {
@@ -185,10 +194,13 @@ export async function updateDefaultProvider(
     const validatedConfig = validateLlmConfig(updatedConfig);
 
     if (currentConfig._id) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { _id, ...configWithoutId } = validatedConfig;
+
         await collection.updateOne(
             { _id: new ObjectId(currentConfig._id) } as any,
             {
-                $set: validatedConfig,
+                $set: configWithoutId,
             }
         );
     } else {

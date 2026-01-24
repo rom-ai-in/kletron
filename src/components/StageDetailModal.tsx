@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { Copy, Check } from "lucide-react";
 import { Modal } from "./ui/Modal";
+import { Skeleton } from "./ui/Skeleton";
 import type { AgentEvent } from "../agentRunner";
 
 interface StageDetailModalProps {
@@ -25,6 +27,7 @@ export function StageDetailModal({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [activeTab, setActiveTab] = useState<"logs" | "json">("logs");
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         if (isOpen && sessionId) {
@@ -56,6 +59,18 @@ export function StageDetailModal({
         }
     };
 
+    const handleCopy = async () => {
+        if (!events.length) return;
+
+        const text = activeTab === "json"
+            ? JSON.stringify(events, null, 2)
+            : events.map(e => `[${new Date(e.timestamp).toLocaleTimeString()}] ${e.kind.toUpperCase()} (${e.phaseLabel}): ${e.content || ""}`).join("\n");
+
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
     return (
         <Modal
             open={isOpen}
@@ -85,13 +100,37 @@ export function StageDetailModal({
                     >
                         Raw JSON
                     </button>
+
+                    <button
+                        onClick={handleCopy}
+                        disabled={events.length === 0}
+                        className="ml-auto mb-1 flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-text-muted hover:bg-bg-elevated hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Copy to clipboard"
+                    >
+                        {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                        <span className="hidden sm:inline">Copy All</span>
+                    </button>
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 relative min-h-0 bg-bg-app">
                     {loading && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="h-8 w-8 animate-spin rounded-full border-2 border-border-subtle border-t-text-muted" />
+                        <div className="absolute inset-0 overflow-hidden p-4 space-y-4">
+                            {[1, 2, 3, 4, 5].map((i) => (
+                                <div key={i} className="rounded-lg border border-border-subtle bg-bg-surface p-3">
+                                    <div className="flex items-start gap-3">
+                                        <Skeleton className="h-5 w-5 rounded" />
+                                        <div className="min-w-0 flex-1 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <Skeleton className="h-4 w-32" />
+                                                <Skeleton className="h-3 w-16" />
+                                            </div>
+                                            <Skeleton className="h-4 w-full" />
+                                            <Skeleton className="h-4 w-2/3" />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
 

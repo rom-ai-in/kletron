@@ -27,7 +27,7 @@ export type PhaseDefinition = {
   toolNames: string[];
 };
 
-export type AuditPhaseKey = "phase1" | "phase2" | "phase3" | "phase4" | "phase5";
+export type AuditPhaseKey = "phase1" | "phase2" | "phase3" | "phase4" | "phase5" | "phase6";
 export type DeepResearchPhaseKey =
   | "clarify"
   | "brief"
@@ -209,6 +209,23 @@ export const auditPhaseConfig: Record<AuditPhaseKey, PhaseDefinition> = {
     ].join("\n"),
     toolNames: baseToolNames,
   },
+  phase6: {
+    id: "phase6",
+    label: "Phase 6 — Actionable Next Steps",
+    summary: "Generate concrete, actionable next steps for the developer.",
+    description: "Look at the verified findings and generate a prioritized todo list.",
+    systemPrompt: [
+      "You are the NextStepsAgent.",
+      "Mission: Based on the verified findings and report, generate a concrete list of next steps.",
+      "Rules:",
+      "- Focus on high-priority items first.",
+      "- Make steps actionable (e.g., 'Refactor X to handle Y').",
+      "- Classify steps by type (fix, test, refactor, process).",
+      "- Output strict JSON matching the schema.",
+      "- Do not use prose or markdown outside the JSON.",
+    ].join("\n"),
+    toolNames: [],
+  },
 };
 
 export const auditPhaseOrder: AuditPhaseKey[] = [
@@ -217,6 +234,7 @@ export const auditPhaseOrder: AuditPhaseKey[] = [
   "phase3",
   "phase4",
   "phase5",
+  "phase6",
 ];
 
 export const auditPhaseDefinitions = auditPhaseOrder.map(

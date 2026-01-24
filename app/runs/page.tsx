@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Panel } from "@/src/components/ui/Panel";
 import { Button } from "@/src/components/ui/Button";
 import type { AuditRun, ChainStatus } from "@/src/services/chainTypes";
@@ -11,21 +11,51 @@ type FilterStatus = "all" | "running" | "completed" | "failed";
 
 export default function RunsPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [runs, setRuns] = useState<(AuditRun & { chainName: string })[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [filter, setFilter] = useState<FilterStatus>("all");
+    const campaignId = searchParams.get("campaignId");
+    const [campaignName, setCampaignName] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!campaignId) {
+            setCampaignName(null);
+            return;
+        }
+        let cancelled = false;
+        void fetch(`/api/campaigns/${campaignId}`)
+            .then(async (res) => {
+                if (!res.ok) return null;
+                const data = (await res.json()) as { chain?: { name?: string } };
+                return data.chain?.name || null;
+            })
+            .then((name) => {
+                if (!cancelled) setCampaignName(name);
+            })
+            .catch(() => {
+                if (!cancelled) setCampaignName(null);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [campaignId]);
 
     useEffect(() => {
         void fetchRuns();
-    }, []);
+    }, [campaignId]);
 
     const fetchRuns = async () => {
         setLoading(true);
         setError("");
         try {
-            const res = await fetch("/api/runs");
+            const qs = new URLSearchParams();
+            if (campaignId) qs.set("campaignId", campaignId);
+            const url = `/api/runs${qs.toString() ? `?${qs.toString()}` : ""}`;
+
+            const res = await fetch(url);
             if (!res.ok) throw new Error("Failed to load execution runs");
             const data = (await res.json()) as { runs: (AuditRun & { chainName: string })[] };
             setRuns(data.runs || []);
@@ -61,12 +91,38 @@ export default function RunsPage() {
                     </div>
                     <div>
                         <h1 className="text-lg font-semibold text-text-primary">Execution Runs</h1>
-                        <p className="text-sm text-text-muted">History of all campaign execution sessions</p>
+                        <p className="text-sm text-text-muted">
+                            {campaignId ? (
+                                <>
+                                    Filtered to{" "}
+                                    <span className="text-text-secondary font-medium">
+                                        {campaignName || "Campaign"}
+                                    </span>{" "}
+                                    <span className="font-mono text-text-muted">
+                                        ({campaignId.slice(0, 6)}…{campaignId.slice(-3)})
+                                    </span>
+                                </>
+                            ) : (
+                                "History of all campaign execution sessions"
+                            )}
+                        </p>
                     </div>
                 </div>
-                <Button onClick={() => void fetchRuns()} variant="secondary" size="sm">
-                    Refresh
-                </Button>
+                    <div className="flex gap-2">
+                        {campaignId && (
+                            <>
+                                <Button onClick={() => router.push(`/campaigns/${campaignId}`)} variant="secondary" size="sm">
+                                    View campaign
+                                </Button>
+                                <Button onClick={() => router.push(`/history?type=campaign&campaignId=${encodeURIComponent(campaignId)}`)} variant="secondary" size="sm">
+                                    Back to Activity
+                                </Button>
+                            </>
+                        )}
+                        <Button onClick={() => void fetchRuns()} variant="secondary" size="sm">
+                            Refresh
+                        </Button>
+                    </div>
             </div>
 
             {/* Filters */}

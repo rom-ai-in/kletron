@@ -5,11 +5,8 @@ import { useRouter } from "next/navigation";
 import type { AuditChain } from "@/src/services/chainTypes";
 import { Panel } from "@/src/components/ui/Panel";
 import { Button } from "@/src/components/ui/Button";
-import { HotspotHeatmap } from "@/src/components/HotspotHeatmap";
-import { LLMComparisonTable } from "@/src/components/LLMComparisonTable";
 import { ChainBuilderModal } from "@/src/components/ChainBuilderModal";
-import type { AuditRun } from "@/src/services/chainTypes";
-import { StageDetailModal } from "@/src/components/StageDetailModal";
+import { useBreadcrumbLabelOverride } from "@/src/components/ui/BreadcrumbOverridesProvider";
 
 interface ChainDetailPageProps {
     params: { id: string };
@@ -18,64 +15,26 @@ interface ChainDetailPageProps {
 export default function ChainDetailPage({ params }: ChainDetailPageProps) {
     const router = useRouter();
     const [chain, setChain] = useState<AuditChain | null>(null);
-    const [runs, setRuns] = useState<AuditRun[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [isEditing, setIsEditing] = useState(false);
-    const [selectedStage, setSelectedStage] = useState<{ id: string; name: string; sessionId: string; status: string } | null>(null);
+
+    // Dynamic breadcrumb label: replace "Campaign <id>" with the fetched campaign name.
+    useBreadcrumbLabelOverride(`/campaigns/${params.id}`, chain?.name);
 
     useEffect(() => {
         void fetchChain();
     }, [params.id]);
 
-    // Setup SSE for running chains
-    useEffect(() => {
-        if (!chain || chain.status !== "RUNNING") return;
-
-        const eventSource = new EventSource(`/api/campaigns/${params.id}/stream`);
-
-        eventSource.onmessage = (event) => {
-            const update = JSON.parse(event.data);
-
-            if (update.type === "progress") {
-                // Refresh chain data
-                void fetchChain();
-            }
-
-            if (update.type === "chain_complete") {
-                // Close connection and refresh
-                eventSource.close();
-                void fetchChain();
-            }
-        };
-
-        eventSource.onerror = () => {
-            console.error("SSE connection error");
-            eventSource.close();
-        };
-
-        return () => {
-            eventSource.close();
-        };
-    }, [chain?.status]);
-
     const fetchChain = async () => {
         setLoading(true);
         setError("");
         try {
-            const [chainRes, runsRes] = await Promise.all([
-                fetch(`/api/campaigns/${params.id}`),
-                fetch(`/api/campaigns/${params.id}/runs`)
-            ]);
+            const chainRes = await fetch(`/api/campaigns/${params.id}`);
 
             if (!chainRes.ok) throw new Error("Failed to load campaign");
             const chainData = await chainRes.json();
             setChain(chainData.chain);
-
-            if (runsRes.ok) {
-                const runsData = await runsRes.json();
-                setRuns(runsData.runs || []);
-            }
         } catch (err: any) {
             setError(err.message || "Unknown error");
         } finally {
@@ -89,7 +48,9 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                 method: "PUT",
             });
             if (!res.ok) throw new Error("Failed to start execution");
-            await fetchChain();
+            const data = (await res.json()) as { status?: string; runId?: string };
+            if (!data.runId) throw new Error("Execution started but no runId was returned");
+            router.push(`/runs/${data.runId}`);
         } catch (err: any) {
             alert(`Failed to start chain: ${err.message}`);
         }
@@ -156,11 +117,6 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
         );
     }
 
-    const progress =
-        chain.stages.length > 0
-            ? ((chain.currentStageIndex / chain.stages.length) * 100).toFixed(0)
-            : 0;
-
     return (
         <div className="flex h-full flex-col">
             <ChainBuilderModal
@@ -172,24 +128,16 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                 }}
                 editChainId={params.id}
             />
-            {/* Header with Breadcrumbs */}
             <div className="border-b border-border-subtle bg-bg-surface px-6 py-4">
-                <div className="mb-4 flex items-center gap-2 text-xs font-medium">
-                    <button
-                        onClick={() => router.push("/campaigns")}
-                        className="text-text-muted transition hover:text-text-primary"
-                    >
-                        Audit Campaigns
-                    </button>
-                    <span className="text-border-strong">/</span>
-                    <span className="text-text-primary">{chain.name}</span>
-                </div>
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-lg font-semibold text-text-primary">{chain.name}</h1>
                         <p className="text-sm text-text-muted">{chain.description}</p>
                     </div>
                     <div className="flex gap-2">
+                        <Button onClick={() => router.push(`/history?type=campaign&campaignId=${params.id}`)} variant="secondary">
+                            View Runs
+                        </Button>
                         {chain.status !== "RUNNING" && (
                             <Button onClick={() => setIsEditing(true)} variant="secondary">
                                 Edit Campaign
@@ -225,274 +173,39 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                 </div>
             </div>
 
-            {/* Progress Bar */}
-            {chain.status === "RUNNING" && (
-                <div className="border-b border-border-subtle bg-bg-surface px-6 py-4">
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                            <span className="font-medium text-text-primary">
-                                Stage {chain.currentStageIndex + 1} of {chain.stages.length}
-                            </span>
-                            <span className="text-text-muted">{progress}%</span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-bg-elevated">
-                            <div
-                                className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all duration-500"
-                                style={{ width: `${progress}%` }}
-                            />
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* Content */}
             <div className="flex-1 overflow-y-auto scrollbar-elegant p-6">
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                    <div className="space-y-4 lg:col-span-2">
-                        {/* Stages */}
-                        <Panel className="p-4">
-                            <h2 className="mb-4 text-sm font-semibold text-text-primary">Stages</h2>
-                            <div className="space-y-3">
-                                {chain.stages.map((stage, index) => {
-                                    const isActive = index === chain.currentStageIndex;
-                                    const isCompleted = index < chain.currentStageIndex;
-
-                                    const statusIcon = isCompleted
-                                        ? "✅"
-                                        : isActive && chain.status === "RUNNING"
-                                            ? "🔄"
-                                            : "⏸";
-
-                                    const sessionId = chain.sessionIds?.[index];
-
-                                    return (
-                                        <button
-                                            key={stage.id}
-                                            onClick={() => {
-                                                if (sessionId) {
-                                                    setSelectedStage({
-                                                        id: stage.id,
-                                                        name: stage.name,
-                                                        sessionId,
-                                                        status: isCompleted ? "Completed" : isActive ? "Running" : "Pending"
-                                                    });
-                                                }
-                                            }}
-                                            disabled={!sessionId}
-                                            className={`w-full text-left rounded-lg border p-3 transition ${isActive
-                                                ? "border-sky-500/40 bg-sky-500/5"
-                                                : "border-border-subtle bg-bg-surface hover:border-border-strong hover:bg-state-hover"
-                                                } ${isCompleted ? "opacity-60" : ""} ${!sessionId ? "cursor-default opacity-50" : "cursor-pointer"}`}
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-lg">{statusIcon}</span>
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-sm font-medium text-text-primary truncate">
-                                                            {stage.name}
-                                                        </span>
-                                                        {sessionId && (
-                                                            <span className="text-[10px] text-text-muted bg-bg-elevated px-1.5 py-0.5 rounded border border-border-subtle">
-                                                                Details
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <span className="text-xs text-text-muted block truncate">
-                                                        Graph: {stage.graphId} | Prompt: {stage.promptPath.split('/').pop()?.replace('.md', '')}
-                                                    </span>
-                                                </div>
+                <div className="space-y-4">
+                    <Panel className="p-4">
+                        <h2 className="mb-4 text-sm font-semibold text-text-primary">Stages</h2>
+                        <div className="space-y-3">
+                            {chain.stages.map((stage) => (
+                                <div
+                                    key={stage.id}
+                                    className="w-full text-left rounded-lg border border-border-subtle bg-bg-surface p-3"
+                                >
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-medium text-text-primary truncate">
+                                                {stage.name}
                                             </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </Panel>
-
-                        {selectedStage && (
-                            <StageDetailModal
-                                isOpen={!!selectedStage}
-                                onClose={() => setSelectedStage(null)}
-                                stageId={selectedStage.id}
-                                stageName={selectedStage.name}
-                                sessionId={selectedStage.sessionId}
-                                status={selectedStage.status}
-                            />
-                        )}
-
-                        {/* Advanced Visualizations (Completed or with findings) */}
-                        {chain.aggregatedFindings.length > 0 && (
-                            <>
-                                <HotspotHeatmap findings={chain.aggregatedFindings} />
-                                {chain.stages.length > 1 && (
-                                    <LLMComparisonTable
-                                        stages={chain.stages}
-                                        findings={chain.aggregatedFindings}
-                                    />
-                                )}
-                            </>
-                        )}
-
-                        {/* Findings */}
-                        {chain.aggregatedFindings.length > 0 && (
-                            <Panel className="p-4">
-                                <h2 className="mb-4 text-sm font-semibold text-text-primary">
-                                    Findings ({chain.aggregatedFindings.length})
-                                </h2>
-                                <div className="space-y-2">
-                                    {chain.aggregatedFindings.slice(0, 10).map((finding, i) => (
-                                        <div
-                                            key={i}
-                                            className="rounded-lg border border-border-subtle bg-bg-surface p-3 text-sm"
-                                        >
-                                            <div className="flex items-start gap-2">
-                                                <span
-                                                    className={`text-xs font-medium ${finding.type === "BLOQUANT"
-                                                        ? "text-rose-400"
-                                                        : finding.type === "WARNING"
-                                                            ? "text-amber-400"
-                                                            : "text-sky-400"
-                                                        }`}
-                                                >
-                                                    {finding.type}
-                                                </span>
-                                                <div className="flex-1">
-                                                    <p className="text-text-primary">{finding.description}</p>
-                                                    <p className="mt-1 font-mono text-xs text-text-muted">{finding.file}</p>
-                                                </div>
+                                            <div className="text-xs text-text-muted truncate">
+                                                Graph: {stage.graphId} · Prompt: {stage.promptPath.split("/").pop()?.replace(".md", "")}
                                             </div>
                                         </div>
-                                    ))}
-                                    {chain.aggregatedFindings.length > 10 && (
-                                        <p className="text-center text-xs text-text-muted">
-                                            + {chain.aggregatedFindings.length - 10} more findings
-                                        </p>
-                                    )}
-                                </div>
-                            </Panel>
-                        )}
-
-                        {/* Insights */}
-                        {chain.crossStageInsights.length > 0 && (
-                            <Panel className="p-4">
-                                <h2 className="mb-4 text-sm font-semibold text-text-primary">
-                                    Cross-Stage Insights
-                                </h2>
-                                <div className="space-y-3">
-                                    {chain.crossStageInsights.map((insight) => (
-                                        <div
-                                            key={insight.id}
-                                            className="rounded-lg border border-border-subtle bg-bg-surface p-3"
-                                        >
-                                            <div className="flex items-start justify-between">
-                                                <div>
-                                                    <h3 className="text-sm font-medium text-text-primary">
-                                                        {insight.title}
-                                                    </h3>
-                                                    <p className="mt-1 text-xs text-text-muted">{insight.description}</p>
-                                                </div>
-                                                <span
-                                                    className={`rounded px-2 py-0.5 text-[10px] font-medium uppercase ${insight.priority === "CRITICAL"
-                                                        ? "bg-rose-500/10 text-rose-400"
-                                                        : insight.priority === "HIGH"
-                                                            ? "bg-amber-500/10 text-amber-400"
-                                                            : "bg-sky-500/10 text-sky-400"
-                                                        }`}
-                                                >
-                                                    {insight.priority}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </Panel>
-                        )}
-
-                        {/* Final Report */}
-                        {chain.status === "COMPLETED" && chain.finalReport && (
-                            <Panel className="p-4">
-                                <h2 className="mb-4 text-sm font-semibold text-text-primary">Final Report</h2>
-                                <div className="prose prose-invert prose-sm max-w-none">
-                                    <pre className="whitespace-pre-wrap rounded-lg bg-bg-elevated p-4 text-xs text-text-secondary">
-                                        {chain.finalReport}
-                                    </pre>
-                                </div>
-                            </Panel>
-                        )}
-                    </div>
-
-                    {/* Run History Sidebar */}
-                    <div className="space-y-4">
-                        <Panel className="p-4">
-                            <h2 className="mb-4 text-sm font-semibold text-text-primary">Run History</h2>
-                            <div className="space-y-3">
-                                {runs.map((run) => (
-                                    <div
-                                        key={run._id?.toString()}
-                                        onClick={() => router.push(`/runs/${run._id}`)}
-                                        className={`cursor-pointer rounded-md border p-3 transition ${run.status === "RUNNING"
-                                            ? "border-sky-500/50 bg-sky-500/5"
-                                            : "border-border-subtle bg-bg-surface hover:bg-state-hover"
-                                            }`}
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-xs font-medium text-text-primary">
-                                                {new Date(run.startedAt).toLocaleString(undefined, {
-                                                    dateStyle: "short",
-                                                    timeStyle: "short",
-                                                })}
-                                            </span>
-                                            <span
-                                                className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${run.status === "COMPLETED"
-                                                    ? "bg-emerald-500/10 text-emerald-400"
-                                                    : run.status === "FAILED"
-                                                        ? "bg-rose-500/10 text-rose-400"
-                                                        : run.status === "RUNNING"
-                                                            ? "bg-sky-500/10 text-sky-400"
-                                                            : "bg-bg-elevated text-text-muted"
-                                                    }`}
-                                            >
-                                                {run.status}
-                                            </span>
-                                        </div>
-                                        {run.metadata && (
-                                            <div className="mt-2 text-[10px] text-text-muted">
-                                                {run.aggregatedFindings.length} findings · {run.metadata.totalVerified}/{run.metadata.totalClaims} verified
-                                            </div>
-                                        )}
+                                        <span className="text-[10px] text-text-muted bg-bg-elevated px-1.5 py-0.5 rounded border border-border-subtle">
+                                            Config
+                                        </span>
                                     </div>
-                                ))}
-                                {runs.length === 0 && (
-                                    <p className="text-center text-xs text-text-muted py-4">No previous runs.</p>
-                                )}
-                            </div>
-                        </Panel>
-
-                        {chain.metadata && (
-                            <Panel className="p-4">
-                                <h2 className="mb-4 text-sm font-semibold text-text-primary">Latest Run Stats</h2>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <StatBox label="Claims" value={chain.metadata.totalClaims} />
-                                    <StatBox label="Verified" value={chain.metadata.totalVerified} />
-                                    <StatBox label="Rejected" value={chain.metadata.totalRejected} />
-                                    <StatBox
-                                        label="Duration"
-                                        value={`${(chain.metadata.totalDuration / 1000 / 60).toFixed(1)}m`}
-                                    />
                                 </div>
-                            </Panel>
-                        )}
-                    </div>
+                            ))}
+                        </div>
+                        <div className="mt-4 text-xs text-text-muted">
+                            Execution logs, findings, and reports live under <span className="text-text-secondary">Runs</span>.
+                        </div>
+                    </Panel>
                 </div>
             </div>
-        </div>
-    );
-}
-
-function StatBox({ label, value }: { label: string; value: string | number }) {
-    return (
-        <div className="rounded-md border border-border-subtle bg-bg-elevated p-2">
-            <div className="text-[10px] text-text-muted uppercase tracking-wider">{label}</div>
-            <div className="mt-1 text-sm font-semibold text-text-primary">{value}</div>
         </div>
     );
 }

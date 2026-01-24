@@ -12,6 +12,7 @@ import {
     getAllIndexedFilePaths,
     type CodeVector
 } from "./vectorService";
+import { recordVectorIndexRun } from "./vectorHistoryService";
 import { config } from "../config";
 
 interface IndexStatus {
@@ -125,13 +126,16 @@ export async function startIndexing(repoPath: string, force = false, explicitFil
     currentStatus.errors = [];
     currentStatus.currentFile = "Starting...";
 
+    let chunksGeneratedInRun = 0;
+    const startTime = new Date();
+
     try {
         let filesToIndex: string[] = [];
 
         if (explicitFiles) {
             filesToIndex = explicitFiles;
         } else {
-            console.log(`[Indexer] Scanning files in ${repoPath}...`);
+            console.info(`[Indexer] Scanning files in ${repoPath}...`);
             currentStatus.currentFile = "Scanning repository...";
             filesToIndex = await findFiles(repoPath);
             currentStatus.totalFiles = filesToIndex.length;
@@ -149,7 +153,7 @@ export async function startIndexing(repoPath: string, force = false, explicitFil
                 const deletedFiles = existingFiles.filter(p => !diskFilesRelativeSet.has(p));
 
                 if (deletedFiles.length > 0) {
-                    console.log(`[Indexer] Removing ${deletedFiles.length} deleted files from index...`);
+                    console.info(`[Indexer] Removing ${deletedFiles.length} deleted files from index...`);
                     currentStatus.currentFile = `Cleanup: Removing ${deletedFiles.length} old files...`;
                     // Optimize with bulk delete
                     await deleteFilesVectors(deletedFiles);
@@ -226,6 +230,7 @@ export async function startIndexing(repoPath: string, force = false, explicitFil
             if (batchChunksWithEmbeddings.length > 0) {
                 await upsertChunks(batchChunksWithEmbeddings);
                 currentStatus.totalChunks += batchChunksWithEmbeddings.length;
+                chunksGeneratedInRun += batchChunksWithEmbeddings.length;
             }
 
             // Yield to event loop to keep API responsive
@@ -238,6 +243,20 @@ export async function startIndexing(repoPath: string, force = false, explicitFil
         console.error(errorMsg);
         currentStatus.errors.push(errorMsg);
     } finally {
+        const endTime = new Date();
+        await recordVectorIndexRun({
+            start: startTime,
+            end: endTime,
+            durationMs: endTime.getTime() - startTime.getTime(),
+            totalFiles: currentStatus.totalFiles,
+            processedFiles: currentStatus.indexedFiles,
+            chunksGenerated: chunksGeneratedInRun,
+            status: currentStatus.errors.length > 0 ? (currentStatus.errors.length < currentStatus.totalFiles ? 'partial_error' : 'error') : 'success',
+            errors: [...currentStatus.errors],
+            trigger: explicitFiles ? 'auto' : 'manual',
+            repoPath
+        });
+
         currentStatus.isIndexing = false;
         currentStatus.currentFile = undefined;
     }

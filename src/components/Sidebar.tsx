@@ -5,16 +5,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
     LayoutDashboard,
-    ListTodo,
-    PlayCircle,
     Settings,
     Layers,
+    Share2,
     Folder,
     Terminal,
     History,
     Copy,
     Check,
-    Database
+    Database,
+    Globe
 } from "lucide-react";
 
 const navItems = [
@@ -29,9 +29,9 @@ const navItems = [
         href: "/campaigns",
     },
     {
-        label: "Execution Runs",
-        icon: PlayCircle,
-        href: "/runs",
+        label: "Agent Graphs",
+        icon: Share2,
+        href: "/agent-graphs",
     },
     {
         label: "Vector Index",
@@ -39,14 +39,19 @@ const navItems = [
         href: "/vectors",
     },
     {
-        label: "History",
+        label: "Activity",
         icon: History,
         href: "/history",
     },
     {
-        label: "Context Config",
+        label: "Translation Agents",
+        icon: Globe,
+        href: "/i18n",
+    },
+    {
+        label: "Configuration",
         icon: Settings,
-        href: "/context",
+        href: "/config",
     }
 ];
 
@@ -114,7 +119,7 @@ export function Sidebar() {
                 {navItems.map((item) => {
                     const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
                     const Icon = item.icon;
-                    const showBadge = item.href === "/runs" && runningCount > 0;
+                    const showBadge = item.href === "/history" && runningCount > 0;
 
                     return (
                         <Link

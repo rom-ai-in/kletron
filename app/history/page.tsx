@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Panel } from "@/src/components/ui/Panel";
 import { Button } from "@/src/components/ui/Button";
 import {
@@ -39,22 +39,61 @@ type FilterType = "all" | "workbench" | "campaign";
 
 export default function HistoryPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [activity, setActivity] = useState<ActivityItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [filter, setFilter] = useState<FilterType>("all");
+    const [campaignId, setCampaignId] = useState<string | null>(null);
+    const [campaignName, setCampaignName] = useState<string | null>(null);
     const [selectedSession, setSelectedSession] = useState<{ id: string; title: string, status: string } | null>(null);
 
     useEffect(() => {
+        const id = searchParams.get("campaignId");
+        if (!id) {
+            setCampaignName(null);
+            return;
+        }
+        let cancelled = false;
+        void fetch(`/api/campaigns/${id}`)
+            .then(async (res) => {
+                if (!res.ok) return null;
+                const data = (await res.json()) as { chain?: { name?: string } };
+                return data.chain?.name || null;
+            })
+            .then((name) => {
+                if (!cancelled) setCampaignName(name);
+            })
+            .catch(() => {
+                if (!cancelled) setCampaignName(null);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [searchParams]);
+
+    useEffect(() => {
         void fetchActivity();
-    }, []);
+    }, [searchParams]);
 
     const fetchActivity = async () => {
         setLoading(true);
         setError("");
         try {
-            const res = await fetch("/api/activity");
+            const typeParam = (searchParams.get("type") || "").toLowerCase();
+            const nextFilter: FilterType =
+                typeParam === "campaign" ? "campaign" : typeParam === "workbench" ? "workbench" : "all";
+            setFilter(nextFilter);
+
+            const campaignIdParam = searchParams.get("campaignId");
+            setCampaignId(campaignIdParam);
+
+            const qs = new URLSearchParams();
+            if (campaignIdParam) qs.set("campaignId", campaignIdParam);
+            const url = `/api/activity${qs.toString() ? `?${qs.toString()}` : ""}`;
+
+            const res = await fetch(url);
             if (!res.ok) throw new Error("Failed to load activity history");
             const data = (await res.json()) as { activity: ActivityItem[] };
             setActivity(data.activity || []);
@@ -88,13 +127,22 @@ export default function HistoryPage() {
                         <Activity className="h-5 w-5" />
                     </div>
                     <div>
-                        <h1 className="text-lg font-semibold text-text-primary">System Activity</h1>
+                            <h1 className="text-lg font-semibold text-text-primary">Activity</h1>
                         <p className="text-sm text-text-muted">History of workbench sessions and campaign runs</p>
                     </div>
                 </div>
-                <Button onClick={() => void fetchActivity()} variant="secondary" size="sm">
-                    Refresh
-                </Button>
+                <div className="flex gap-2">
+                    <Button
+                        onClick={() => router.push("/runs")}
+                        variant="secondary"
+                        size="sm"
+                    >
+                        Advanced runs table
+                    </Button>
+                    <Button onClick={() => void fetchActivity()} variant="secondary" size="sm">
+                        Refresh
+                    </Button>
+                </div>
             </div>
 
             {/* FIlter bar */}
@@ -110,13 +158,34 @@ export default function HistoryPage() {
                     />
                 </div>
                 <div className="flex gap-2">
-                    <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>
+                    <FilterButton
+                        active={filter === "all"}
+                        onClick={() =>
+                            router.push(
+                                `/history?type=all${campaignId ? `&campaignId=${encodeURIComponent(campaignId)}` : ""}`
+                            )
+                        }
+                    >
                         All
                     </FilterButton>
-                    <FilterButton active={filter === "workbench"} onClick={() => setFilter("workbench")}>
+                    <FilterButton
+                        active={filter === "workbench"}
+                        onClick={() =>
+                            router.push(
+                                `/history?type=workbench${campaignId ? `&campaignId=${encodeURIComponent(campaignId)}` : ""}`
+                            )
+                        }
+                    >
                         Workbench
                     </FilterButton>
-                    <FilterButton active={filter === "campaign"} onClick={() => setFilter("campaign")}>
+                    <FilterButton
+                        active={filter === "campaign"}
+                        onClick={() =>
+                            router.push(
+                                `/history?type=campaign${campaignId ? `&campaignId=${encodeURIComponent(campaignId)}` : ""}`
+                            )
+                        }
+                    >
                         Campaigns
                     </FilterButton>
                 </div>
@@ -125,6 +194,42 @@ export default function HistoryPage() {
             {/* List */}
             <div className="flex-1 overflow-y-auto scrollbar-elegant p-6">
                 <div className="space-y-4">
+                    {campaignId && (
+                        <div className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-surface p-3">
+                            <div className="text-xs text-text-secondary">
+                                Filtered to campaign{" "}
+                                <span className="text-text-primary font-medium">
+                                    {campaignName || "Campaign"}
+                                </span>{" "}
+                                <span className="font-mono text-text-muted">
+                                    ({campaignId.slice(0, 6)}…{campaignId.slice(-3)})
+                                </span>
+                            </div>
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => router.push(`/campaigns/${campaignId}`)}
+                                >
+                                    View campaign
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => router.push("/history?type=campaign")}
+                                >
+                                    Clear filter
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => router.push(`/runs?campaignId=${encodeURIComponent(campaignId)}`)}
+                                >
+                                    Advanced runs table
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                     {loading && (
                         <div className="flex items-center justify-center py-20">
                             <div className="h-6 w-6 animate-spin rounded-full border-2 border-border-subtle border-t-text-muted" />
@@ -164,65 +269,84 @@ export default function HistoryPage() {
                         >
                             <div className="flex items-stretch text-left">
                                 {/* Type indicator */}
-                                <div className={`flex w-1 items-stretch ${item.type === "WORKBENCH" ? "bg-sky-500/40" : "bg-emerald-500/40"
+                                <div className={`w-1 shrink-0 ${item.type === "WORKBENCH" ? "bg-sky-500/40" : "bg-emerald-500/40"
                                     }`} />
 
-                                <div className="flex flex-1 gap-4 p-4">
+                                <div className="flex flex-1 items-center gap-4 p-4 min-w-0">
                                     {/* Column 1: Icon */}
-                                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${item.type === "WORKBENCH" ? "bg-sky-500/10 text-sky-400" : "bg-emerald-500/10 text-emerald-400"
+                                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${item.type === "WORKBENCH"
+                                        ? "bg-sky-500/10 border-sky-500/10 text-sky-400"
+                                        : "bg-emerald-500/10 border-emerald-500/10 text-emerald-400"
                                         }`}>
-                                        {item.type === "WORKBENCH" ? <Terminal className="h-4 w-4" /> : <Layers className="h-4 w-4" />}
+                                        {item.type === "WORKBENCH" ? <Terminal className="h-5 w-5" /> : <Layers className="h-5 w-5" />}
                                     </div>
 
-                                    {/* Column 2: Main Content (Flex-1 to consume space + Min-W-0 to force truncate) */}
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-3">
-                                            <h3 className="truncate text-sm font-semibold text-text-primary group-hover:text-text-primary">
+                                    {/* Column 2: Main Content */}
+                                    <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                                        <div className="flex items-center gap-2">
+                                            <h3
+                                                className="truncate text-sm font-semibold text-text-primary"
+                                                title={item.title}
+                                            >
                                                 {item.title}
                                             </h3>
                                         </div>
 
-                                        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-text-muted">
-                                            <span className="flex items-center gap-1">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            {/* Type Chip */}
+                                            <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${item.type === "WORKBENCH"
+                                                ? "bg-sky-500/10 text-sky-400"
+                                                : "bg-emerald-500/10 text-emerald-400"
+                                                }`}>
+                                                {item.type === "WORKBENCH" ? "Workbench" : "Campaign"}
+                                            </span>
+
+                                            {/* Date Chip */}
+                                            <span className="inline-flex items-center gap-1 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-muted">
                                                 <Clock className="h-3 w-3" />
                                                 {new Date(item.startedAt).toLocaleString(undefined, {
-                                                    dateStyle: "medium",
-                                                    timeStyle: "short"
+                                                    month: "short",
+                                                    day: "numeric",
+                                                    hour: "2-digit",
+                                                    minute: "2-digit"
                                                 })}
                                             </span>
-                                            <span className="font-mono opacity-60">
-                                                {item.type === "WORKBENCH" ? "Workbench Run" : "Campaign Execution"}
-                                            </span>
+
+                                            {/* Findings Chip */}
                                             {item.metadata?.totalFindings !== undefined && (
-                                                <span className="flex items-center gap-1 text-text-secondary">
+                                                <span className="inline-flex items-center gap-1 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-secondary">
+                                                    <Search className="h-3 w-3" />
                                                     {item.metadata.totalFindings} findings
                                                 </span>
                                             )}
                                         </div>
 
                                         {item.conclusion && (
-                                            <p className="mt-2 line-clamp-1 text-xs text-text-secondary italic">
-                                                "{item.conclusion}"
+                                            <p
+                                                className="line-clamp-1 text-xs text-text-secondary"
+                                                title={item.conclusion}
+                                            >
+                                                {item.conclusion}
                                             </p>
                                         )}
                                     </div>
 
-                                    {/* Column 3: Status & Actions (Right aligned, fixed width behavior) */}
-                                    <div className="flex shrink-0 flex-col items-end justify-between gap-2 pl-2">
+                                    {/* Column 3: Status & Actions */}
+                                    <div className="flex shrink-0 flex-col items-end gap-2 pl-2">
                                         <StatusBadge status={item.status} />
 
-                                        <div className="flex items-center gap-1">
+                                        <div className="flex items-center justify-end">
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-7 w-7 text-text-muted transition hover:text-text-primary"
+                                                className="h-7 w-7 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                 }}
                                             >
                                                 <MoreHorizontal className="h-4 w-4" />
                                             </Button>
-                                            <ChevronRight className="h-4 w-4 text-text-muted opacity-0 transition group-hover:opacity-100" />
+                                            <ChevronRight className="h-4 w-4 text-text-muted opacity-0 transition-opacity group-hover:opacity-100" />
                                         </div>
                                     </div>
                                 </div>

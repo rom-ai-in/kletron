@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Modal } from "./ui/Modal";
+import { Skeleton } from "./ui/Skeleton";
 
 interface PromptFile {
     name: string;
@@ -104,12 +105,20 @@ export function PromptSelectorModal({
         }
     };
 
-    // Helper to check if a folder or its children match the search query
-    const matchesSearch = (folder: PromptFolder, query: string): boolean => {
-        if (folder.name.toLowerCase().includes(query) || folder.path.toLowerCase().includes(query)) {
-            return true;
-        }
-        return folder.children.some(child => matchesSearch(child, query));
+    // Recursive filter function
+    const filterFolders = (folders: PromptFolder[], query: string): PromptFolder[] => {
+        return folders.reduce<PromptFolder[]>((acc, folder) => {
+            const matchesSelf = folder.name.toLowerCase().includes(query) || folder.path.toLowerCase().includes(query);
+            const filteredChildren = filterFolders(folder.children, query);
+
+            if (matchesSelf || filteredChildren.length > 0) {
+                acc.push({
+                    ...folder,
+                    children: filteredChildren
+                });
+            }
+            return acc;
+        }, []);
     };
 
     // Filter and sort folders based on search
@@ -119,7 +128,7 @@ export function PromptSelectorModal({
         let folders = promptFolders;
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
-            folders = folders.filter((folder) => matchesSearch(folder, query));
+            folders = filterFolders(folders, query);
 
             // Automatically expand folders when searching
             const allPaths = new Set<string>();
@@ -215,7 +224,15 @@ export function PromptSelectorModal({
                     </div>
                     <div className="flex-1 overflow-y-auto rounded-lg border border-border-subtle bg-bg-surface p-4 scrollbar-elegant">
                         {loadingPreview ? (
-                            <p className="text-sm text-text-muted">Loading preview...</p>
+                            <div className="space-y-3">
+                                <Skeleton className="h-4 w-3/4" />
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-5/6" />
+                                <div className="h-4" />
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-4/5" />
+                            </div>
                         ) : previewContent ? (
                             <pre className="text-xs leading-relaxed text-text-primary whitespace-pre-wrap break-words font-mono">
                                 {previewContent}
@@ -277,7 +294,11 @@ function FolderNode({
             {isExpanded && (
                 <div className="ml-4 mt-1 space-y-0.5">
                     {isLoadingFiles ? (
-                        <p className="px-2 py-1 text-xs text-text-muted">Loading files...</p>
+                        <div className="space-y-1 px-2 pt-1">
+                            <Skeleton className="h-7 w-full" />
+                            <Skeleton className="h-7 w-full" />
+                            <Skeleton className="h-7 w-full" />
+                        </div>
                     ) : files && files.length > 0 ? (
                         [...files]
                             .sort((a, b) => new Intl.Collator(undefined, { numeric: true }).compare(a.name, b.name))

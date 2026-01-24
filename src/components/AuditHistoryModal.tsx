@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Modal } from "./ui/Modal";
+import { Skeleton } from "./ui/Skeleton";
 
 type AuditSessionSummary = {
     _id: string;
@@ -63,8 +64,25 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
         >
             <div className="space-y-4">
                 {loading && (
-                    <div className="flex items-center justify-center py-12">
-                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-border-subtle border-t-text-muted" />
+                    <div className="space-y-4">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="rounded-lg border border-border-subtle bg-bg-surface p-4">
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-3">
+                                        <Skeleton className="h-5 w-20" />
+                                        <Skeleton className="h-3 w-32" />
+                                    </div>
+                                    <Skeleton className="h-5 w-3/4" />
+                                    <div className="border-t border-border-subtle pt-2 mt-3">
+                                        <Skeleton className="h-4 w-24 mb-2" />
+                                        <div className="space-y-1">
+                                            <Skeleton className="h-6 w-full" />
+                                            <Skeleton className="h-6 w-full" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
 

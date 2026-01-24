@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { Panel } from "@/src/components/ui/Panel";
 import { Button } from "@/src/components/ui/Button";
 import {
@@ -226,37 +227,22 @@ export default function VectorIndexPage() {
                         isAnimated={status?.isIndexing}
                     />
                     <StatusCard
-                        title="Auto-Indexing"
-                        value={
-                            status?.schedulerStatus === 'running' ? "Running..." :
-                                status?.autoIndexEnabled !== false ?
-                                    `Enabled (${Math.round((status?.schedulerInterval || 600000) / 60000)}m)` :
-                                    "Disabled"
-                        }
-                        icon={Clock}
-                        subtitle={
-                            status?.schedulerStatus === 'running' ? "Indexing in progress..." :
-                                status?.nextAutoIndex ? `Next run: ${new Date(status.nextAutoIndex).toLocaleTimeString()}` :
-                                    status?.lastAutoIndex ? `Last: ${new Date(status.lastAutoIndex).toLocaleTimeString()}` :
-                                        "Waiting for schedule"
-                        }
-                        color={status?.schedulerStatus === 'running' ? "emerald" : "sky"}
-                        isAnimated={status?.schedulerStatus === 'running'}
-                    />
-                    <StatusCard
                         title="Indexed Files"
                         value={`${status?.indexedFiles ?? 0} / ${status?.totalFiles ?? 0}`}
                         icon={FileCode}
                         progress={status?.totalFiles ? (status.indexedFiles / status.totalFiles) * 100 : 0}
                         color="indigo"
                     />
-                    <StatusCard
-                        title="Total Chunks"
-                        value={status?.totalChunks ?? 0}
-                        icon={Layers}
-                        subtitle={`Vector dimensions: ${status?.dimensions ?? 'Detecting...'}`}
-                        color="amber"
-                    />
+                    <Link href="/vectors/history" className="block h-full">
+                        <StatusCard
+                            title="Run History"
+                            value="View Log"
+                            icon={Clock}
+                            subtitle="Audit past indexing runs"
+                            color="amber"
+                            className="h-full hover:bg-bg-elevated cursor-pointer"
+                        />
+                    </Link>
                 </div>
 
                 {/* Actions Panel */}
@@ -480,7 +466,7 @@ export default function VectorIndexPage() {
     );
 }
 
-function StatusCard({ title, value, icon: Icon, subtitle, progress, color, isAnimated }: any) {
+function StatusCard({ title, value, icon: Icon, subtitle, progress, color, isAnimated, className }: any) {
     const colors: any = {
         emerald: "text-emerald-500 bg-emerald-500/10",
         sky: "text-sky-500 bg-sky-500/10",
@@ -491,7 +477,7 @@ function StatusCard({ title, value, icon: Icon, subtitle, progress, color, isAni
     };
 
     return (
-        <Panel className="p-4 flex flex-col gap-3 relative overflow-hidden group hover:border-border-strong transition">
+        <Panel className={`p-4 flex flex-col gap-3 relative overflow-hidden group hover:border-border-strong transition ${className || ''}`}>
             <div className="flex justify-between items-start">
                 <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-1">{title}</p>

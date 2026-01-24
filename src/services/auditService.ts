@@ -1,6 +1,14 @@
 import { ObjectId } from "mongodb";
 import { getDb } from "../lib/db";
 import type { AgentWorkflowResult, TimelineEvent, AgentEvent } from "../agentRunner";
+import {
+    type AccessMode,
+    isCompanyAccessMode,
+    isTenantAccessMode,
+    isPartnerAccessMode,
+    isSuperadminAccessMode
+} from "../shared/accessMode";
+import { Filter } from "mongodb";
 
 export type AuditSessionStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
 
@@ -22,16 +30,44 @@ export interface AuditSession {
 
 const COLLECTION_NAME = "audit_sessions";
 
+function buildScopeQuery(accessMode: AccessMode): Filter<AuditSession> {
+    if (isSuperadminAccessMode(accessMode)) {
+        return {};
+    }
+    if (isCompanyAccessMode(accessMode)) {
+        return { companyId: accessMode.companyId, tenantId: accessMode.tenantId } as any;
+    }
+    if (isTenantAccessMode(accessMode)) {
+        return { tenantId: accessMode.tenantId } as any;
+    }
+    if (isPartnerAccessMode(accessMode)) {
+        return { companyId: { $in: accessMode.accessibleCompanyIds } } as any;
+    }
+    return { _id: { $exists: false } };
+}
+
 export const auditService = {
-    async createSession(prompt: string): Promise<string> {
+    async createSession(prompt: string, accessMode?: AccessMode): Promise<string> {
         try {
             const db = await getDb();
-            const session: AuditSession = {
+            const session: any = {
                 prompt,
                 status: "PENDING",
                 startedAt: new Date(),
                 lastUpdated: new Date(),
             };
+
+            if (accessMode) {
+                if (isCompanyAccessMode(accessMode)) {
+                    session.companyId = accessMode.companyId;
+                    session.tenantId = accessMode.tenantId;
+                } else if (isTenantAccessMode(accessMode)) {
+                    session.tenantId = accessMode.tenantId;
+                }
+                if ('userId' in accessMode) {
+                    session.userId = accessMode.userId;
+                }
+            }
 
             const result = await db.collection(COLLECTION_NAME).insertOne(session);
             return result.insertedId.toString();
@@ -99,6 +135,43 @@ export const auditService = {
             );
         } catch (dbError) {
             console.error(`Failed to complete session ${id}:`, dbError);
+        }
+    },
+
+    async listSessions(accessMode: AccessMode, limit = 50) {
+        try {
+            const db = await getDb();
+            const query = buildScopeQuery(accessMode);
+
+            return await db.collection<AuditSession>(COLLECTION_NAME)
+                .find(query)
+                .sort({ startedAt: -1 })
+                .limit(limit)
+                .project({
+                    _id: 1, prompt: 1, status: 1, startedAt: 1, endedAt: 1,
+                    "workflowResult.conclusion": 1,
+                    "workflowResult.outputs.stageMetrics": 1,
+                    lastUpdated: 1
+                })
+                .toArray();
+        } catch (error) {
+            console.error("Failed to list sessions:", error);
+            return [];
+        }
+    },
+
+    async getSession(id: string, accessMode: AccessMode) {
+        if (!ObjectId.isValid(id)) return null;
+        try {
+            const db = await getDb();
+            const query = {
+                _id: new ObjectId(id),
+                ...buildScopeQuery(accessMode)
+            };
+            return await db.collection<AuditSession>(COLLECTION_NAME).findOne(query);
+        } catch (error) {
+            console.error("Failed to get session:", error);
+            return null;
         }
     }
 };

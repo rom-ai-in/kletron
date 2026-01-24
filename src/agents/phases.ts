@@ -26,6 +26,7 @@ import {
   Phase3OutputSchema,
   Phase4OutputSchema,
   Phase5OutputSchema,
+  Phase6OutputSchema,
   type TargetFile,
 } from "../shared/agentSchemas";
 
@@ -56,6 +57,10 @@ const FALLBACKS = {
     report_markdown:
       "# Audit report\n\nThe reporting agent failed to produce a valid report.\n\n## Status\n- Phase 5 returned an invalid or empty payload.",
     tasks: [],
+  },
+  phase6: {
+    next_steps: [],
+    final_summary: "Failed to generate next steps.",
   },
 };
 
@@ -494,6 +499,45 @@ export async function runPhase5ReporterAgent(input: {
     tools: [],
     schema: Phase5OutputSchema,
     fallback: FALLBACKS.phase5 as z.infer<typeof Phase5OutputSchema>,
+    llmSelection: input.llmSelection,
+    extraMessages: input.extraMessages,
+    onMessage: input.onMessage,
+    maxToolCalls: 0,
+  });
+}
+
+export async function runPhase6NextStepsAgent(input: {
+  userRequest: string;
+  reportMarkdown: string;
+  verifiedFindings: unknown;
+  extraMessages?: BaseMessage[];
+  onMessage?: (message: BaseMessage) => Promise<void> | void;
+  llmSelection?: LlmSelection;
+}) {
+  const systemPrompt = auditPhaseConfig.phase6.systemPrompt;
+  const userPrompt = [
+    `User request: ${input.userRequest}`,
+    "",
+    "Audit Report:",
+    input.reportMarkdown,
+    "",
+    "Verified Findings (Summary):",
+    JSON.stringify(input.verifiedFindings ?? {}, null, 2),
+    "",
+    "Return JSON matching this schema:",
+    "- next_steps: array of { title, description, priority (high/medium/low), type (fix/test/refactor/process) }",
+    "- final_summary: string (concise wrap-up)",
+    "",
+    "If unsure, return empty next_steps.",
+  ].join("\n");
+
+  return runSchemaReactAgent({
+    name: "NextStepsAgent",
+    systemPrompt,
+    userPrompt,
+    tools: [],
+    schema: Phase6OutputSchema,
+    fallback: FALLBACKS.phase6 as z.infer<typeof Phase6OutputSchema>,
     llmSelection: input.llmSelection,
     extraMessages: input.extraMessages,
     onMessage: input.onMessage,
