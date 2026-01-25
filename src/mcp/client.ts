@@ -28,7 +28,7 @@ export class McpClient {
       return McpClient.instance;
     }
 
-    const mcpUrl = process.env.MCP_URL ?? process.env.GITHUB_MCP_URL;
+    const mcpUrl = process.env.MCP_URL ?? process.env.GITHUB_MCP_URL ?? "http://localhost:9000/sse";
     const transport = mcpUrl
       ? (() => {
         // SSEClientTransport requires an EventSource implementation in Node.
@@ -59,15 +59,34 @@ export class McpClient {
       }
     );
 
-    await client.connect(transport);
+    try {
+      await client.connect(transport);
+    } catch (error: any) {
+      console.error(`[McpClient] Failed to connect to MCP server (pid=${process.pid}):`, error);
+      if (error.code === "EBADF") {
+        console.error("Detected 'EBADF' error. This often happens on macOS when file descriptors are leaked or when spawning from a restricted context. Check system limits and open file count.");
+      }
+      throw error;
+    }
 
     // Initialize Automated Vector Indexing
-    if (!process.env.DISABLE_AUTO_INDEX) {
+    const isNextWorker = process.env.NEXT_PRIVATE_WORKER ||
+      process.env.IS_NEXT_WORKER ||
+      process.env.NEXT_RUNTIME ||
+      process.env.NODE_ENV === "test" ||
+      process.argv.some(arg => arg.includes("next-dev") || arg.includes("next-server"));
+
+    const isDisabled = process.env.DISABLE_AUTO_INDEX === "true" || !!process.env.DISABLE_AUTO_INDEX;
+
+    console.log(`[McpClient] Initializing... pid=${process.pid} isNextWorker=${!!isNextWorker} isDisabled=${isDisabled} alreadyInit=${!!(globalThis as any).__MCP_SERVICES_INITIALIZED__}`);
+
+    if (!isDisabled && !isNextWorker && !(globalThis as any).__MCP_SERVICES_INITIALIZED__) {
       try {
         const { startWatcher } = await import("../services/autoIndexer");
         const { startAutoIndexScheduler } = await import("../services/autoIndexScheduler");
 
         console.log("[AutoIndex] Initializing services...");
+        (globalThis as any).__MCP_SERVICES_INITIALIZED__ = true;
         startWatcher(config.repoRoot);
         startAutoIndexScheduler(config.repoRoot);
       } catch (error) {
@@ -87,11 +106,19 @@ export class McpClient {
       },
       CallToolResultSchema
     )) as CallToolResult;
+
     const contents = response.content ?? [];
-    return contents
+    const text = contents
       .map((chunk) => chunk.text ?? JSON.stringify(chunk))
       .join("\n");
+
+    if (response.isError) {
+      throw new Error(text || `Tool ${name} failed without error message`);
+    }
+
+    return text;
   }
+
 
   async listTools() {
     const result = await this.client.listTools({});

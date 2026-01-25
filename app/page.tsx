@@ -143,6 +143,14 @@ type TimelinePanelProps = {
   className?: string;
 };
 
+type AgentGraphRecord = {
+  _id?: string;
+  name: string;
+  description?: string;
+  nodes?: Array<{ id: string; label: string; react?: { systemPrompt?: string; toolNames?: string[] }; output?: { schemaId?: string } }>;
+  edges?: Array<{ id: string; source: string; target: string }>;
+};
+
 function TimelinePanel({ timeline, selectedEventId, onPhaseSelect, className }: TimelinePanelProps) {
   return (
     <section className={`sticky top-6 space-y-4 rounded-lg border border-border-subtle bg-bg-surface p-0 shadow-sm h-full flex flex-col overflow-hidden ${className}`}>
@@ -282,9 +290,12 @@ function ToolExplorerPanel({ tools, usedToolNames, openToolDialog, className }: 
 type GraphOption = (typeof graphOptions)[number];
 
 type HeaderControlsProps = {
-  selectedGraphId: GraphId;
+  selectedGraphKey: string;
+  selectedGraphLabel: string;
+  builtinSelectedGraphId: GraphId;
   selectedGraph: GraphOption;
-  onSelectGraph: (graphId: GraphId) => void;
+  agentGraphs: AgentGraphRecord[];
+  onSelectGraphKey: (graphKey: string) => void;
   modelProvider: "azure" | "lmstudio";
   onSelectProvider: (provider: "azure" | "lmstudio") => void;
   azureConfigured: boolean;
@@ -310,9 +321,12 @@ type HeaderControlsProps = {
 };
 
 function HeaderControls({
-  selectedGraphId,
+  selectedGraphKey,
+  selectedGraphLabel,
+  builtinSelectedGraphId,
   selectedGraph,
-  onSelectGraph,
+  agentGraphs,
+  onSelectGraphKey,
   modelProvider,
   onSelectProvider,
   azureConfigured,
@@ -498,7 +512,7 @@ function HeaderControls({
           }}
         >
           <span className="text-[10px] uppercase tracking-wider text-text-muted">Graph</span>
-          <span>{selectedGraph.name}</span>
+          <span>{selectedGraphLabel}</span>
           <svg
             className="h-3 w-3 text-text-muted"
             viewBox="0 0 12 12"
@@ -513,7 +527,13 @@ function HeaderControls({
           <div className="absolute left-0 z-20 mt-2 w-60 rounded-xl border border-border-subtle bg-bg-elevated p-1 shadow-xl">
             <p className="px-2 py-1.5 text-[10px] font-medium text-text-muted">Choose graph</p>
             <div className="space-y-0.5">
-              {graphOptions.map((graph) => (
+              <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                Built-in
+              </div>
+              {graphOptions.map((graph) => {
+                const key = `builtin:${graph.id}`;
+                const isActive = selectedGraphKey === key;
+                return (
                 <div
                   key={graph.id}
                   role="button"
@@ -521,20 +541,20 @@ function HeaderControls({
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      onSelectGraph(graph.id);
+                      onSelectGraphKey(key);
                       setIsGraphMenuOpen(false);
                     }
                   }}
                   onClick={() => {
-                    onSelectGraph(graph.id);
+                    onSelectGraphKey(key);
                     setIsGraphMenuOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs font-medium transition ${graph.id === selectedGraphId ? "bg-state-selected text-text-primary" : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
+                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs font-medium transition ${isActive ? "bg-state-selected text-text-primary" : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
                     }`}
                 >
                   <span>{graph.name}</span>
                   <span className="flex items-center gap-2">
-                    {graph.id === selectedGraphId && <span className="text-[10px] text-text-muted">active</span>}
+                    {isActive && <span className="text-[10px] text-text-muted">active</span>}
                     <button
                       type="button"
                       className="text-text-muted transition hover:text-text-primary"
@@ -554,7 +574,58 @@ function HeaderControls({
                     </button>
                   </span>
                 </div>
-              ))}
+              );
+              })}
+
+              {agentGraphs.length > 0 && (
+                <>
+                  <div className="mt-2 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                    Agent graphs (DB)
+                  </div>
+                  {agentGraphs.map((g) => {
+                    const key = `agent:${String(g._id ?? "")}`;
+                    const isActive = selectedGraphKey === key;
+                    return (
+                      <div
+                        key={String(g._id)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            onSelectGraphKey(key);
+                            setIsGraphMenuOpen(false);
+                          }
+                        }}
+                        onClick={() => {
+                          onSelectGraphKey(key);
+                          setIsGraphMenuOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs font-medium transition ${isActive
+                          ? "bg-state-selected text-text-primary"
+                          : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
+                          }`}
+                      >
+                        <span className="truncate">{g.name}</span>
+                        <span className="flex items-center gap-2">
+                          {isActive && <span className="text-[10px] text-text-muted">active</span>}
+                          <a
+                            className="text-text-muted transition hover:text-text-primary"
+                            href={`/agent-graphs/${String(g._id)}`}
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label={`Open ${g.name} in editor`}
+                          >
+                            <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                              <path d="M4.5 2.5h5v5" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M9.5 2.5 2.5 9.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </a>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1442,7 +1513,8 @@ export default function HomePage() {
     return [root];
   }, [promptFolders]);
 
-  const [selectedGraphId, setSelectedGraphId] = useState(graphOptions[0].id);
+  const [selectedGraphKey, setSelectedGraphKey] = useState<string>(() => `builtin:${graphOptions[0].id}`);
+  const [agentGraphs, setAgentGraphs] = useState<AgentGraphRecord[]>([]);
   const [targetDir, setTargetDir] = useState<string | null>(null);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [eventStream, setEventStream] = useState<AgentEvent[]>(() => [createSystemEvent()]);
@@ -1485,6 +1557,16 @@ export default function HomePage() {
         }
       })
       .catch(() => setTools([]));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/agent-graphs", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => {
+        const list = Array.isArray(data?.graphs) ? (data.graphs as AgentGraphRecord[]) : [];
+        setAgentGraphs(list);
+      })
+      .catch(() => setAgentGraphs([]));
   }, []);
 
   useEffect(() => {
@@ -1715,9 +1797,25 @@ export default function HomePage() {
     }
   };
 
+  const selectedAgentGraphId = selectedGraphKey.startsWith("agent:") ? selectedGraphKey.slice("agent:".length) : null;
+  const selectedAgentGraph =
+    selectedAgentGraphId ? agentGraphs.find((g) => String(g._id) === selectedAgentGraphId) ?? null : null;
+
+  const builtinSelectedGraphId: GraphId = selectedGraphKey.startsWith("builtin:")
+    ? (selectedGraphKey.slice("builtin:".length) as GraphId)
+    : graphOptions[0].id;
   const selectedGraph =
-    graphOptions.find((graph) => graph.id === selectedGraphId) ?? graphOptions[0];
-  const graphToolNames = selectedGraph.toolNames ?? [];
+    graphOptions.find((graph) => graph.id === builtinSelectedGraphId) ?? graphOptions[0];
+
+  const selectedGraphLabel = selectedAgentGraph?.name ?? selectedGraph.name;
+
+  const graphToolNames = selectedAgentGraph
+    ? Array.from(
+      new Set(
+        (selectedAgentGraph.nodes ?? []).flatMap((n) => (Array.isArray(n.react?.toolNames) ? n.react!.toolNames! : []))
+      )
+    )
+    : (selectedGraph.toolNames ?? []);
   const activePhaseDefinitions = useMemo(() => {
     if (timeline.length) {
       return timeline.map((event) => ({
@@ -1728,8 +1826,17 @@ export default function HomePage() {
         systemPrompt: event.systemPrompt ?? "",
       }));
     }
+    if (selectedAgentGraph) {
+      return (selectedAgentGraph.nodes ?? []).map((n) => ({
+        id: n.id,
+        label: n.label,
+        summary: "",
+        description: selectedAgentGraph.description ?? "",
+        systemPrompt: n.react?.systemPrompt ?? "",
+      }));
+    }
     return selectedGraph.phases;
-  }, [timeline, selectedGraph]);
+  }, [timeline, selectedGraph, selectedAgentGraph]);
 
   const nodePromptOverrides = useMemo(() => {
     if (!timeline.length) return new Map<string, string>();
@@ -1740,14 +1847,19 @@ export default function HomePage() {
     );
   }, [timeline]);
 
-  const displayNodePrompts = useMemo(
-    () =>
-      selectedGraph.nodePrompts.map((nodePrompt) => ({
-        ...nodePrompt,
-        prompt: nodePromptOverrides.get(nodePrompt.id) ?? nodePrompt.prompt,
-      })),
-    [selectedGraph.nodePrompts, nodePromptOverrides]
-  );
+  const displayNodePrompts = useMemo(() => {
+    if (selectedAgentGraph) {
+      return (selectedAgentGraph.nodes ?? []).map((n) => ({
+        id: n.id,
+        label: n.label,
+        prompt: n.react?.systemPrompt ?? "",
+      }));
+    }
+    return selectedGraph.nodePrompts.map((nodePrompt) => ({
+      ...nodePrompt,
+      prompt: nodePromptOverrides.get(nodePrompt.id) ?? nodePrompt.prompt,
+    }));
+  }, [selectedAgentGraph, selectedGraph.nodePrompts, nodePromptOverrides]);
 
   const graphTools = useMemo(() => {
     if (!graphToolNames.length) return tools;
@@ -1767,6 +1879,65 @@ export default function HomePage() {
     }
     if (modelProvider === "lmstudio" && !lmStudioModel.trim()) {
       setLlmError("LM Studio model name is required before sending.");
+      return;
+    }
+
+    // Agent-graph selection: stream progress directly in Workbench (no redirect).
+    if (selectedAgentGraphId) {
+      setHasAuditStarted(true);
+      const userEvent: AgentEvent = {
+        id: `user-${Date.now()}`,
+        phaseId: "user",
+        phaseLabel: "User input",
+        kind: "user",
+        role: "user",
+        content: trimmedMessage,
+        timestamp: new Date().toISOString(),
+      };
+
+      setEventStream([createSystemEvent(), userEvent]);
+      setOutputs(null);
+      setTimeline([]);
+      setSelectedEventId(activePhaseDefinitions[0]?.id ?? null);
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      setLoading(true);
+      try {
+        const response = await fetch(`/api/agent-graphs/${selectedAgentGraphId}/stream`, {
+          signal: controller.signal,
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: trimmedMessage,
+            provider: modelProvider,
+            model: modelProvider === "lmstudio" ? lmStudioModel.trim() : undefined,
+          }),
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || response.statusText);
+        }
+        await readEventStream(response);
+      } catch (error) {
+        if ((error as Error).name === "AbortError") {
+          return;
+        }
+        setEventStream((prev) => [
+          ...prev,
+          {
+            id: `agent-error-${Date.now()}`,
+            phaseId: "user",
+            phaseLabel: "Error",
+            kind: "assistant",
+            role: "assistant",
+            content: `Agent graph error: ${(error as Error).message}`,
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+      } finally {
+        setLoading(false);
+        abortControllerRef.current = null;
+      }
       return;
     }
 
@@ -1798,7 +1969,7 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: trimmedMessage,
-          graph: selectedGraphId,
+          graph: builtinSelectedGraphId,
           provider: modelProvider,
           model: modelProvider === "lmstudio" ? lmStudioModel.trim() : undefined,
           auditContext: normalizedAuditContext ?? undefined,
@@ -2037,9 +2208,12 @@ export default function HomePage() {
         <header className="rounded-lg border border-border-subtle bg-bg-surface p-2 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <HeaderControls
-              selectedGraphId={selectedGraphId}
+              selectedGraphKey={selectedGraphKey}
+              selectedGraphLabel={selectedGraphLabel}
+              builtinSelectedGraphId={builtinSelectedGraphId}
               selectedGraph={selectedGraph}
-              onSelectGraph={setSelectedGraphId}
+              agentGraphs={agentGraphs}
+              onSelectGraphKey={setSelectedGraphKey}
               modelProvider={modelProvider}
               onSelectProvider={setModelProvider}
               azureConfigured={azureConfigured}
@@ -2066,8 +2240,8 @@ export default function HomePage() {
           </div>
         </header>
 
-        <div className="flex h-full min-h-0 gap-4">
-          <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex h-full min-h-0 min-w-0 gap-4">
+          <div className="flex-1 min-h-0 min-w-0 flex flex-col">
             <main className="flex h-full min-h-0 w-full flex-col gap-3 rounded-lg border border-border-subtle bg-bg-surface p-0 shadow-sm overflow-hidden">
               <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -2153,11 +2327,17 @@ export default function HomePage() {
                           {/* Mode Indicator - Clickable to open graph info */}
                           <button
                             type="button"
-                            onClick={() => setIsGraphInfoOpen(true)}
+                            onClick={() => {
+                              if (selectedAgentGraphId) {
+                                window.location.href = `/agent-graphs/${selectedAgentGraphId}`;
+                                return;
+                              }
+                              setIsGraphInfoOpen(true);
+                            }}
                             className="flex items-center gap-1.5 rounded-md border border-border-subtle bg-bg-surface px-2 py-0.5 text-[10px] font-medium text-text-secondary transition hover:bg-state-hover hover:border-border-strong select-none"
                           >
                             <span className="text-[9px] text-text-muted opacity-50">︿</span>
-                            <span className="capitalize">{selectedGraphId || 'Chat'}</span>
+                            <span className="truncate max-w-[140px]">{selectedGraphLabel}</span>
                           </button>
 
                           {/* Model Indicator - Clickable to open LLM info */}
@@ -2207,8 +2387,13 @@ export default function HomePage() {
             </main>
           </div>
 
-          <aside className={`transition-all duration-300 ease-in-out ${isSidebarOpen ? "w-[360px] opacity-100" : "w-0 opacity-0 overflow-hidden"}`}>
-            <div className="flex h-full flex-col gap-4 min-w-[360px]">
+          <aside
+            className={`min-w-0 flex-shrink-0 transition-all duration-300 ease-in-out ${isSidebarOpen
+              ? "w-[360px] opacity-100"
+              : "w-0 opacity-0 overflow-hidden pointer-events-none"
+              }`}
+          >
+            <div className="flex h-full w-[360px] flex-col gap-4">
               <div className="flex-1 min-h-0 h-1/2">
                 <TimelinePanel
                   timeline={activeTimeline}

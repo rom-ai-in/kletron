@@ -18,6 +18,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [selectedStage, setSelectedStage] = useState<{ id: string; name: string; sessionId: string; status: string } | null>(null);
+    const [isCancelling, setIsCancelling] = useState(false);
 
     useEffect(() => {
         void fetchRun();
@@ -36,6 +37,26 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
             setError(err.message || "Unknown error");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleCancelRun = async () => {
+        if (!run) return;
+        const ok = window.confirm(
+            "Cancel this run? This will stop the run after the current stage finishes. This action cannot be resumed."
+        );
+        if (!ok) return;
+
+        setIsCancelling(true);
+        try {
+            const res = await fetch(`/api/runs/${params.id}/cancel`, { method: "POST" });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || "Failed to cancel run");
+            await fetchRun();
+        } catch (err: any) {
+            alert(err.message || "Failed to cancel run");
+        } finally {
+            setIsCancelling(false);
         }
     };
 
@@ -79,6 +100,15 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                         >
                             View Campaign Config
                         </Button>
+                        {(run.status === "RUNNING" || run.status === "PAUSED" || run.status === "PENDING") && (
+                            <Button
+                                onClick={() => void handleCancelRun()}
+                                variant="secondary"
+                                disabled={isCancelling}
+                            >
+                                {isCancelling ? "Cancelling..." : "Cancel Run"}
+                            </Button>
+                        )}
                         {run.status === "COMPLETED" && (
                             <Button onClick={() => window.print()} variant="primary">
                                 Print Report
@@ -267,6 +297,7 @@ function StatusBadge({ status }: { status: ChainStatus }) {
         RUNNING: "bg-sky-500/10 text-sky-400 border-sky-500/20",
         PENDING: "bg-bg-elevated text-text-muted border-border-subtle",
         PAUSED: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+        CANCELLED: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
     };
 
     return (

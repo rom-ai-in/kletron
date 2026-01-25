@@ -31,7 +31,7 @@ export const gitDiff = {
     else if (from) args.push(from);
     if (filePath) args.push("--", filePath);
 
-    const stdout = await runGit({ cwd: root, args, timeoutMs: 15_000, maxBuffer: 2 * 1024 * 1024 });
+    const stdout = await runGit({ cwd: root, args, timeoutMs: 15_000, maxBuffer: 20 * 1024 * 1024 });
     const { text, truncated } = truncateText(stdout, Math.max(1_000, Math.trunc(maxChars)));
     return { diff: text, truncated };
   },

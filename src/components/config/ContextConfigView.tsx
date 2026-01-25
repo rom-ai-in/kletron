@@ -25,19 +25,36 @@ export function ContextConfigView() {
   const [auditContextEnabled, setAuditContextEnabled] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let hadLocal = false;
     const stored = window.localStorage.getItem("numezis-audit-context");
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
         if (typeof parsed.enabled === "boolean") setAuditContextEnabled(parsed.enabled);
         if (parsed.context) setAuditContext(parsed.context);
+        hadLocal = true;
       } catch (e) {
         console.error("Failed to parse stored context", e);
       }
     }
-    setHasLoaded(true);
+
+    // Load DB-backed config (source of truth), but don't clobber local edits unless there was no local state.
+    fetch("/api/context-config")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.error) return;
+        if (!hadLocal) {
+          if (typeof data.enabled === "boolean") setAuditContextEnabled(data.enabled);
+          if (data.context) setAuditContext(data.context);
+        }
+      })
+      .catch(() => {
+        // ignore; localStorage fallback is fine
+      })
+      .finally(() => setHasLoaded(true));
   }, []);
 
   useEffect(() => {
@@ -46,10 +63,28 @@ export function ContextConfigView() {
     window.localStorage.setItem("numezis-audit-context", JSON.stringify(payload));
   }, [auditContext, auditContextEnabled, hasLoaded]);
 
-  const handleSave = (newContext: AuditContext) => {
+  const persist = async (nextEnabled: boolean, nextContext: AuditContext) => {
+    setError(null);
+    const res = await fetch("/api/context-config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: nextEnabled, context: nextContext }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error((json as any)?.error || "Failed to save context config");
+    }
+  };
+
+  const handleSave = async (newContext: AuditContext) => {
     setAuditContext(newContext);
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 2000);
+    try {
+      await persist(auditContextEnabled, newContext);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+    } catch (e) {
+      setError((e as Error).message);
+    }
   };
 
   return (
@@ -76,7 +111,17 @@ export function ContextConfigView() {
             </span>
             <button
               type="button"
-              onClick={() => setAuditContextEnabled(!auditContextEnabled)}
+              onClick={async () => {
+                const next = !auditContextEnabled;
+                setAuditContextEnabled(next);
+                try {
+                  await persist(next, auditContext);
+                  setIsSaved(true);
+                  setTimeout(() => setIsSaved(false), 1500);
+                } catch (e) {
+                  setError((e as Error).message);
+                }
+              }}
               className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${auditContextEnabled ? "bg-emerald-500" : "bg-bg-elevated border border-border-subtle"}`}
             >
               <span
@@ -91,6 +136,14 @@ export function ContextConfigView() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-elegant">
+        {error && (
+          <Panel className="p-3 border border-border-subtle bg-bg-elevated text-rose-300 text-sm">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 h-4 w-4 text-rose-400" />
+              <span>{error}</span>
+            </div>
+          </Panel>
+        )}
         {/* Status Card */}
         <Panel
           className={`p-4 border-l-4 ${auditContextEnabled ? "border-l-emerald-500" : "border-l-text-muted"}`}

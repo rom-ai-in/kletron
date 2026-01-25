@@ -224,12 +224,13 @@ export function createWebLauncher(port: number = 3000) {
   });
 }
 
-export function createI18nProcessWorkerLauncher() {
+export function createI18nProcessWorkerLauncher(options?: { watch?: boolean }) {
   const command = process.platform === "win32" ? "npx.cmd" : "npx";
+  const watch = options?.watch ?? false;
   return spawnService({
     name: "I18n Process Worker",
     command,
-    args: ["tsx", "scripts/i18n-process-worker.ts"],
+    args: watch ? ["tsx", "watch", "scripts/i18n-process-worker.ts"] : ["tsx", "scripts/i18n-process-worker.ts"],
     stdio: "pipe",
   });
 }

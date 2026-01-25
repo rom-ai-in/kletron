@@ -50,6 +50,46 @@ export function parseRowKey(rowKey: string): { namespace: string; key: string } 
   return { namespace, key };
 }
 
+export function buildTranslationsFilter(opts: {
+  q?: string;
+  namespace?: string;
+  status?: I18nStatus;
+  reviewed?: boolean;
+  excludeRowKeys?: string[];
+}) {
+  const and: any[] = [];
+  if (opts.namespace) and.push({ namespace: opts.namespace });
+  if (opts.status) and.push({ status: opts.status });
+  if (typeof opts.reviewed === "boolean") {
+    if (opts.reviewed) and.push({ reviewed: true });
+    else and.push({ $or: [{ reviewed: false }, { reviewed: { $exists: false } }] });
+  }
+  if (opts.q && opts.q.trim()) {
+    const q = opts.q.trim();
+    and.push({
+      $or: [
+        { key: { $regex: q, $options: "i" } },
+        { namespace: { $regex: q, $options: "i" } },
+        { source_file: { $regex: q, $options: "i" } },
+        { context_usage: { $regex: q, $options: "i" } },
+        { en: { $regex: q, $options: "i" } },
+        { de: { $regex: q, $options: "i" } },
+        { fr: { $regex: q, $options: "i" } },
+        { it: { $regex: q, $options: "i" } },
+      ],
+    });
+  }
+
+  const excludePairs = (opts.excludeRowKeys ?? [])
+    .map((rk) => parseRowKey(rk))
+    .filter(Boolean) as Array<{ namespace: string; key: string }>;
+  if (excludePairs.length) {
+    and.push({ $nor: excludePairs.map((p) => ({ namespace: p.namespace, key: p.key })) });
+  }
+
+  return and.length ? { $and: and } : {};
+}
+
 const COLLECTION_NAME = "i18n_translations";
  
 let didEnsureIndexes = false;
@@ -181,30 +221,7 @@ export async function listTranslations(opts: {
   const limit = Math.min(Math.max(opts.limit ?? 200, 1), 5000);
   const offset = Math.max(opts.offset ?? 0, 0);
  
-  const and: any[] = [];
-  if (opts.namespace) and.push({ namespace: opts.namespace });
-  if (opts.status) and.push({ status: opts.status });
-  if (typeof opts.reviewed === "boolean") {
-    if (opts.reviewed) and.push({ reviewed: true });
-    else and.push({ $or: [{ reviewed: false }, { reviewed: { $exists: false } }] });
-  }
-  if (opts.q && opts.q.trim()) {
-    const q = opts.q.trim();
-    and.push({
-      $or: [
-        { key: { $regex: q, $options: "i" } },
-        { namespace: { $regex: q, $options: "i" } },
-        { source_file: { $regex: q, $options: "i" } },
-        { context_usage: { $regex: q, $options: "i" } },
-        { en: { $regex: q, $options: "i" } },
-        { de: { $regex: q, $options: "i" } },
-        { fr: { $regex: q, $options: "i" } },
-        { it: { $regex: q, $options: "i" } },
-      ],
-    });
-  }
- 
-  const filter = and.length ? { $and: and } : {};
+  const filter = buildTranslationsFilter(opts);
   const [total, rows] = await Promise.all([
     col.countDocuments(filter),
     col
@@ -228,38 +245,7 @@ export async function findRowKeysByFilter(opts: {
 }): Promise<string[]> {
   const col = await getCollection();
   const limit = Math.min(Math.max(opts.limit ?? 5000, 1), 5000);
-
-  const and: any[] = [];
-  if (opts.namespace) and.push({ namespace: opts.namespace });
-  if (opts.status) and.push({ status: opts.status });
-  if (typeof opts.reviewed === "boolean") {
-    if (opts.reviewed) and.push({ reviewed: true });
-    else and.push({ $or: [{ reviewed: false }, { reviewed: { $exists: false } }] });
-  }
-  if (opts.q && opts.q.trim()) {
-    const q = opts.q.trim();
-    and.push({
-      $or: [
-        { key: { $regex: q, $options: "i" } },
-        { namespace: { $regex: q, $options: "i" } },
-        { source_file: { $regex: q, $options: "i" } },
-        { context_usage: { $regex: q, $options: "i" } },
-        { en: { $regex: q, $options: "i" } },
-        { de: { $regex: q, $options: "i" } },
-        { fr: { $regex: q, $options: "i" } },
-        { it: { $regex: q, $options: "i" } },
-      ],
-    });
-  }
-
-  const excludePairs = (opts.excludeRowKeys ?? [])
-    .map((rk) => parseRowKey(rk))
-    .filter(Boolean) as Array<{ namespace: string; key: string }>;
-  if (excludePairs.length) {
-    and.push({ $nor: excludePairs.map((p) => ({ namespace: p.namespace, key: p.key })) });
-  }
-
-  const filter = and.length ? { $and: and } : {};
+  const filter = buildTranslationsFilter(opts);
   const docs = await col
     .find(filter, { projection: { _id: 0, namespace: 1, key: 1 } as any })
     .sort({ namespace: 1, key: 1 })

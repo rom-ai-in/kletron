@@ -1,8 +1,8 @@
 import { ObjectId } from "mongodb";
 
 import { getDb } from "@/src/lib/db";
-import { resolveLlmSelection, type LlmSelection } from "@/src/llm";
-import { getTranslationsByRowKeys, toRowKey } from "@/src/services/i18nTranslationsService";
+import { resolveLlmSelection, resolveResolvedLlmInfo, type LlmSelection } from "@/src/llm";
+import { buildTranslationsFilter, getTranslationsByRowKeys, toRowKey, type I18nStatus } from "@/src/services/i18nTranslationsService";
 import type { TranslationAgentRowInput } from "@/src/services/translationReactAgent";
 import { computeChangedLocales, runTranslationAgentChunk } from "@/src/services/translationReactAgent";
 
@@ -17,11 +17,28 @@ export type I18nProcessJobDoc = {
 
   totalRows: number;
   processedRows: number;
-  nextIndex: number; // checkpoint into selectionKeys
+  nextIndex: number; // checkpoint into selectionKeys (legacy selection mode)
+  checkpointId?: ObjectId; // checkpoint into Mongo _id (query selection mode)
   chunkSize: number;
 
   llmSelection?: { provider?: string; model?: string };
-  selectionKeys: string[];
+  resolvedLlm?: {
+    provider: "azure" | "lmstudio";
+    model?: string;
+    azure?: { deployment?: string; endpoint?: string; apiVersion?: string };
+    lmstudio?: { baseUrl?: string };
+  };
+  // Legacy selection: materialized row keys
+  selectionKeys?: string[];
+  // New selection: durable query (supports > 5k selections)
+  selection?: {
+    mode: "query";
+    q?: string;
+    namespace?: string;
+    status?: I18nStatus;
+    reviewed?: boolean;
+    excludeRowKeys?: string[];
+  };
 
   error?: string;
   log?: string[];
@@ -142,10 +159,13 @@ async function claimNextJob(lockId: string, opts: Required<I18nWorkerOptions>): 
 
   // Different mongodb type packages disagree on return shape (value vs direct doc).
   const anyRes = res as any;
-  if (anyRes && typeof anyRes === "object" && "value" in anyRes) {
-    return (anyRes.value as any) ?? null;
-  }
-  return anyRes ?? null;
+  const claimed = anyRes && typeof anyRes === "object" && "value" in anyRes ? ((anyRes.value as any) ?? null) : (anyRes ?? null);
+  if (!claimed?._id) return null;
+
+  // Defensive re-fetch: some driver/runtime combinations can return a partial document from findOneAndUpdate.
+  // We need the full job payload (notably `selection` / `selectionKeys`) to decide processing mode correctly.
+  const full = await jobs.findOne({ _id: claimed._id });
+  return (full as any) ?? (claimed as any);
 }
 
 async function heartbeat(jobId: ObjectId, lockId: string) {
@@ -179,20 +199,83 @@ function dedupeRecommendations(recs: Array<{ rowKey: string; decision: "KEEP" | 
   return Array.from(recByKey.values());
 }
 
+function normalizeRowKey(value: unknown) {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
+}
+
+function coerceDecision(value: unknown): "KEEP" | "UPDATE" | null {
+  if (value === "KEEP" || value === "UPDATE") return value;
+  return null;
+}
+
+function filterAndAlignRecommendationsToInputs(
+  inputRowKeys: string[],
+  recs: Array<{ rowKey: unknown; decision?: unknown; [k: string]: any }>
+) {
+  const allowed = new Set(inputRowKeys);
+  let invalidRowKeyCount = 0;
+  let invalidDecisionCount = 0;
+
+  const matched: Array<{ rowKey: string; decision: "KEEP" | "UPDATE"; [k: string]: any }> = [];
+  for (const rec of recs ?? []) {
+    const rk = normalizeRowKey(rec?.rowKey);
+    if (!rk || !allowed.has(rk)) {
+      invalidRowKeyCount += 1;
+      continue;
+    }
+    const decision = coerceDecision(rec?.decision);
+    if (!decision) {
+      invalidDecisionCount += 1;
+      continue;
+    }
+    matched.push({ ...rec, rowKey: rk, decision });
+  }
+
+  // De-dupe again after normalization and dropping invalids
+  const deduped = dedupeRecommendations(matched);
+  const have = new Set(deduped.map((r) => r.rowKey));
+  const missing = inputRowKeys.filter((rk) => !have.has(rk));
+
+  return { deduped, missing, invalidRowKeyCount, invalidDecisionCount };
+}
+
 async function processJob(job: I18nProcessJobDoc, lockId: string, opts: Required<I18nWorkerOptions>) {
   const db = await getDb();
   const jobs = db.collection<I18nProcessJobDoc>(JOBS_COLLECTION);
   const results = db.collection<I18nProcessResultDoc>(RESULTS_COLLECTION);
 
   const selectionKeys = job.selectionKeys ?? [];
-  const totalRows = selectionKeys.length;
-  let nextIndex = Math.max(0, Math.min(job.nextIndex ?? 0, totalRows));
+  const totalRows = Math.max(0, job.totalRows ?? selectionKeys.length);
+  let nextIndex = Math.max(0, Math.min(job.nextIndex ?? 0, selectionKeys.length));
   let processedRows = Math.max(0, Math.min(job.processedRows ?? 0, totalRows));
+  let checkpointId: ObjectId | undefined = job.checkpointId;
   const chunkSize = Math.max(5, Math.min(job.chunkSize ?? 20, 50));
 
-  const llmSelection: LlmSelection = resolveLlmSelection(job.llmSelection);
+  const llmSelection: Partial<LlmSelection> | undefined = job.llmSelection?.provider
+    ? resolveLlmSelection(job.llmSelection)
+    : undefined;
+  const resolved = await resolveResolvedLlmInfo(llmSelection);
+  if (!job.resolvedLlm) {
+    await jobs.updateOne(
+      { _id: job._id, lockId, status: "running" },
+      { $set: { resolvedLlm: resolved } }
+    );
+    await appendLogLine(
+      db,
+      job._id,
+      resolved.provider === "lmstudio"
+        ? `LLM: lmstudio model=${resolved.model ?? "(missing)"} baseUrl=${resolved.lmstudio?.baseUrl ?? ""}`
+        : `LLM: azure deployment=${resolved.azure?.deployment ?? ""} model=${resolved.model ?? ""} endpoint=${resolved.azure?.endpoint ?? ""}`
+    );
+  }
 
-  await appendLogLine(db, job._id, `Worker claimed job. rows=${totalRows}, chunkSize=${chunkSize}, nextIndex=${nextIndex}`);
+  await appendLogLine(
+    db,
+    job._id,
+    job.selection?.mode === "query"
+      ? `Worker claimed job. rows=${totalRows}, chunkSize=${chunkSize}, checkpointId=${checkpointId ? String(checkpointId) : "(none)"}`
+      : `Worker claimed job. rows=${selectionKeys.length}, chunkSize=${chunkSize}, nextIndex=${nextIndex}`
+  );
 
   // Heartbeat runs independently so long chunks don't look stale.
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -211,7 +294,206 @@ async function processJob(job: I18nProcessJobDoc, lockId: string, opts: Required
   startHeartbeat();
 
   try {
-    while (nextIndex < totalRows) {
+    // Query selection mode (durable select-all without materializing keys).
+    if (job.selection?.mode === "query") {
+      const translations = db.collection("i18n_translations");
+      const baseFilter = buildTranslationsFilter({
+        q: job.selection.q,
+        namespace: job.selection.namespace,
+        status: job.selection.status,
+        reviewed: job.selection.reviewed,
+        excludeRowKeys: job.selection.excludeRowKeys,
+      });
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        if (await isCancelled(job._id)) {
+          await appendLogLine(db, job._id, "Job cancelled by user.");
+          return;
+        }
+
+        const filter: any = checkpointId
+          ? { $and: [baseFilter, { _id: { $gt: checkpointId } }] }
+          : baseFilter;
+
+        const chunkDocs = (await translations
+          .find(filter, {
+            projection: {
+              _id: 1,
+              namespace: 1,
+              key: 1,
+              source_file: 1,
+              context_usage: 1,
+              status: 1,
+              en: 1,
+              de: 1,
+              fr: 1,
+              it: 1,
+            },
+          })
+          .sort({ _id: 1 })
+          .limit(chunkSize)
+          .toArray()) as any[];
+
+        if (!chunkDocs.length) break;
+
+        const agentRows: TranslationAgentRowInput[] = chunkDocs.map((r) => ({
+          rowKey: toRowKey(r),
+          namespace: r?.namespace ?? "",
+          key: r?.key ?? "",
+          source_file: r?.source_file ?? "",
+          context_usage: r?.context_usage ?? "",
+          status: r?.status,
+          en: r?.en ?? "",
+          de: r?.de ?? "",
+          fr: r?.fr ?? "",
+          it: r?.it ?? "",
+        }));
+
+        const chunkIndex = Math.floor(processedRows / chunkSize) + 1;
+        await appendLogLine(db, job._id, `Running chunk ${chunkIndex} (${agentRows.length} rows)…`);
+
+        // Hard timeout guard per chunk
+        const chunkPromise = runTranslationAgentChunk({
+          rows: agentRows,
+          llmSelection,
+          maxToolCalls: opts.maxToolCallsPerChunk,
+        });
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          const id = setTimeout(() => {
+            clearTimeout(id);
+            reject(new Error(`Chunk timed out after ${Math.round(opts.hardChunkTimeoutMs / 1000)}s`));
+          }, opts.hardChunkTimeoutMs);
+        });
+
+        const { output } = await Promise.race([chunkPromise, timeoutPromise]);
+
+        const inputRowKeys = agentRows.map((r) => r.rowKey);
+        const aligned = filterAndAlignRecommendationsToInputs(inputRowKeys, output.recommendations as any);
+        const deduped = aligned.deduped;
+        const missing = aligned.missing;
+
+        if (aligned.invalidRowKeyCount || aligned.invalidDecisionCount) {
+          await appendLogLine(
+            db,
+            job._id,
+            `Model returned ${deduped.length}/${agentRows.length} valid recommendations; ignored ${aligned.invalidRowKeyCount} with unknown rowKey and ${aligned.invalidDecisionCount} with invalid decision.`
+          );
+        }
+
+        if (missing.length) {
+          await appendLogLine(
+            db,
+            job._id,
+            `Model returned ${deduped.length}/${agentRows.length} recommendations; defaulting ${missing.length} to KEEP.`
+          );
+          for (const rk of missing) {
+            deduped.push({
+              rowKey: rk,
+              decision: "KEEP",
+              confidence: 0.25,
+              rationale: "Model did not return a recommendation for this row in the chunk output; defaulted to KEEP.",
+              proposed: undefined,
+              evidence: [],
+            });
+          }
+        }
+
+        const tNow = now();
+        const originalByRowKey = new Map(agentRows.map((r) => [r.rowKey, r]));
+        const docs: I18nProcessResultDoc[] = deduped.map((rec: any) => {
+          const originalRow = originalByRowKey.get(rec.rowKey) ?? agentRows[0];
+          const changedLocales = computeChangedLocales(originalRow, rec.proposed);
+          return {
+            jobId: job._id,
+            rowKey: rec.rowKey,
+            namespace: originalRow.namespace,
+            key: originalRow.key,
+            original: {
+              en: originalRow.en ?? "",
+              de: originalRow.de ?? "",
+              fr: originalRow.fr ?? "",
+              it: originalRow.it ?? "",
+            },
+            proposed: rec.proposed,
+            decision: rec.decision,
+            changedLocales,
+            confidence: rec.confidence,
+            rationale: rec.rationale,
+            evidence: rec.evidence,
+            createdAt: tNow,
+            updatedAt: tNow,
+          };
+        });
+
+        if (docs.length) {
+          await results.bulkWrite(
+            docs.map((d) => ({
+              updateOne: {
+                filter: { jobId: d.jobId, rowKey: d.rowKey },
+                update: {
+                  $set: {
+                    jobId: d.jobId,
+                    rowKey: d.rowKey,
+                    namespace: d.namespace,
+                    key: d.key,
+                    original: d.original,
+                    proposed: d.proposed,
+                    decision: d.decision,
+                    changedLocales: d.changedLocales,
+                    confidence: d.confidence,
+                    rationale: d.rationale,
+                    evidence: d.evidence,
+                    updatedAt: d.updatedAt,
+                  },
+                  $setOnInsert: { createdAt: d.createdAt },
+                },
+                upsert: true,
+              },
+            })),
+            { ordered: false }
+          );
+        }
+
+        // Commit checkpoint after chunk completes
+        checkpointId = chunkDocs[chunkDocs.length - 1]?._id as ObjectId;
+        processedRows += agentRows.length;
+
+        await jobs.updateOne(
+          { _id: job._id, lockId, status: "running" },
+          {
+            $set: {
+              processedRows,
+              checkpointId,
+              totalRows,
+              heartbeatAt: now(),
+            },
+          }
+        );
+      }
+
+      await jobs.updateOne(
+        { _id: job._id, lockId, status: "running" },
+        {
+          $set: {
+            status: "success",
+            finishedAt: now(),
+            processedRows,
+            heartbeatAt: now(),
+          },
+          $unset: {
+            lockId: "",
+            lockedAt: "",
+          },
+        } as any
+      );
+      await appendLogLine(db, job._id, "Job completed successfully.");
+      return;
+    }
+
+    // Legacy selection mode (materialized keys).
+    while (nextIndex < selectionKeys.length) {
 
       if (await isCancelled(job._id)) {
         await appendLogLine(db, job._id, "Job cancelled by user.");
@@ -256,11 +538,42 @@ async function processJob(job: I18nProcessJobDoc, lockId: string, opts: Required
       });
 
       const { output } = await Promise.race([chunkPromise, timeoutPromise]);
-      const deduped = dedupeRecommendations(output.recommendations as any);
+
+      // The model can omit rows or return wrong rowKeys. We enforce 1 result per *input* rowKey.
+      const aligned = filterAndAlignRecommendationsToInputs(chunkKeys, output.recommendations as any);
+      const deduped = aligned.deduped;
+      const missing = aligned.missing;
+
+      if (aligned.invalidRowKeyCount || aligned.invalidDecisionCount) {
+        await appendLogLine(
+          db,
+          job._id,
+          `Model returned ${deduped.length}/${chunkKeys.length} valid recommendations; ignored ${aligned.invalidRowKeyCount} with unknown rowKey and ${aligned.invalidDecisionCount} with invalid decision.`
+        );
+      }
+
+      if (missing.length) {
+        await appendLogLine(
+          db,
+          job._id,
+          `Model returned ${deduped.length}/${chunkKeys.length} recommendations; defaulting ${missing.length} to KEEP.`
+        );
+        for (const rk of missing) {
+          deduped.push({
+            rowKey: rk,
+            decision: "KEEP",
+            confidence: 0.25,
+            rationale: "Model did not return a recommendation for this row in the chunk output; defaulted to KEEP.",
+            proposed: undefined,
+            evidence: [],
+          });
+        }
+      }
 
       const tNow = now();
+      const originalByRowKey = new Map(agentRows.map((r) => [r.rowKey, r]));
       const docs: I18nProcessResultDoc[] = deduped.map((rec: any) => {
-        const originalRow = agentRows.find((r) => r.rowKey === rec.rowKey) ?? agentRows[0];
+        const originalRow = originalByRowKey.get(rec.rowKey) ?? agentRows[0];
         const changedLocales = computeChangedLocales(originalRow, rec.proposed);
         return {
           jobId: job._id,
@@ -336,8 +649,8 @@ async function processJob(job: I18nProcessJobDoc, lockId: string, opts: Required
         $set: {
           status: "success",
           finishedAt: now(),
-          processedRows: totalRows,
-          nextIndex: totalRows,
+          processedRows,
+          nextIndex,
           heartbeatAt: now(),
         },
         $unset: {

@@ -72,7 +72,10 @@ const segmentLabels: Record<string, string> = {
   "/vectors": "Vector Index",
   "/vectors/history": "Vector History",
   "/history": "Activity",
+  "/changes": "Changes",
   "/i18n": "Translation Agents",
+
+  "/i18n/logs": "Translation Logs",
   "/config": "Configuration",
   "/config/context": "Context",
   "/config/llm": "LLM",

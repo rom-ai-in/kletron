@@ -19,7 +19,8 @@ export async function POST(request: Request) {
   const auditContext = normalizeAuditContext(
     (payload as { auditContext?: AuditContext }).auditContext
   );
-  const llmSelection = resolveLlmSelection({ provider, model });
+  // If provider isn't explicitly chosen, let DB-configured defaults apply.
+  const llmSelection = provider ? resolveLlmSelection({ provider, model }) : undefined;
 
   if (!message) {
     return new Response(JSON.stringify({ error: "Please provide a user message in the request body." }), {
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
           onUpdate: async (update) => {
             sendChunk({ type: "update", payload: update });
           },
-          llmSelection,
+          ...(llmSelection ? { llmSelection } : {}),
           auditContext,
         });
         sendChunk({ type: "final", payload: result });

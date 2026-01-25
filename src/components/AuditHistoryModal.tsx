@@ -170,6 +170,7 @@ function StatusBadge({ status }: { status: string }) {
         FAILED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
         RUNNING: "bg-bg-elevated text-text-primary border-border-strong",
         PENDING: "bg-bg-elevated text-text-muted border-border-subtle",
+        CANCELLED: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
     };
 
     const className = styles[status as keyof typeof styles] || "bg-bg-elevated text-text-muted border-border-subtle";

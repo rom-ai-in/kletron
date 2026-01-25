@@ -3,8 +3,8 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 
 import { getDb } from "@/src/lib/db";
-import { resolveLlmSelection } from "@/src/llm";
-import { I18nStatusSchema, findRowKeysByFilter } from "@/src/services/i18nTranslationsService";
+import { resolveLlmSelection, resolveResolvedLlmInfo } from "@/src/llm";
+import { I18nStatusSchema, buildTranslationsFilter, findRowKeysByFilter } from "@/src/services/i18nTranslationsService";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,9 +18,26 @@ type ProcessJobDoc = {
   totalRows: number;
   processedRows: number;
   nextIndex: number;
+  checkpointId?: ObjectId;
   chunkSize: number;
   llmSelection?: { provider: string; model?: string };
-  selectionKeys: string[];
+  resolvedLlm?: {
+    provider: "azure" | "lmstudio";
+    model?: string;
+    azure?: { deployment?: string; endpoint?: string; apiVersion?: string };
+    lmstudio?: { baseUrl?: string };
+  };
+  // Legacy selection (materialized row keys).
+  selectionKeys?: string[];
+  // New: select-by-query (supports >5000 selections without materializing keys).
+  selection?: {
+    mode: "query";
+    q?: string;
+    namespace?: string;
+    status?: z.infer<typeof I18nStatusSchema>;
+    reviewed?: boolean;
+    excludeRowKeys?: string[];
+  };
   error?: string;
   log?: string[];
   lockId?: string;
@@ -42,7 +59,8 @@ const SelectionSchema = z.union([
     namespace: z.string().optional(),
     status: I18nStatusSchema.optional(),
     reviewed: z.boolean().optional(),
-    limit: z.number().int().min(1).max(5000).optional(),
+    // If omitted, the job will process *all* matching rows (no materialized selectionKeys).
+    limit: z.number().int().min(1).max(1_000_000).optional(),
     excludeRowKeys: z.array(z.string().min(1)).max(5000).optional(),
   }),
 ]);
@@ -54,7 +72,7 @@ const BodySchema = z.union([
     chunkSize: z.number().int().min(5).max(50).optional(),
     llmSelection: z
       .object({
-        provider: z.string().optional(),
+        provider: z.enum(["azure", "lmstudio"]).optional(),
         model: z.string().optional(),
       })
       .optional(),
@@ -64,7 +82,7 @@ const BodySchema = z.union([
     chunkSize: z.number().int().min(5).max(50).optional(),
     llmSelection: z
       .object({
-        provider: z.string().optional(),
+        provider: z.enum(["azure", "lmstudio"]).optional(),
         model: z.string().optional(),
       })
       .optional(),
@@ -90,7 +108,18 @@ export async function POST(req: Request) {
     const body = BodySchema.parse(await req.json());
     const chunkSize = ("chunkSize" in body ? body.chunkSize : undefined) ?? 20;
 
-    const llmSelection = resolveLlmSelection(("llmSelection" in body ? body.llmSelection : undefined) as any);
+    // Only override provider if explicitly requested; otherwise use DB-configured default.
+    const llmSelection =
+      "llmSelection" in body && body.llmSelection?.provider
+        ? resolveLlmSelection(body.llmSelection)
+        : undefined;
+    const resolved = await resolveResolvedLlmInfo(llmSelection);
+    if (resolved.provider === "lmstudio" && !resolved.model) {
+      return NextResponse.json(
+        { error: "LM Studio is selected but no model is configured. Set LMSTUDIO_MODEL (or configure it in the UI) or specify a model." },
+        { status: 400 }
+      );
+    }
     const db = await getDb();
     const jobs = db.collection<ProcessJobDoc>(JOBS_COLLECTION);
 
@@ -107,20 +136,51 @@ export async function POST(req: Request) {
         ? ({ mode: "keys", rowKeys: body.rowKeys } as const)
         : (body.selection as z.infer<typeof SelectionSchema>);
 
-    let selectionKeys: string[] = [];
+    let selectionKeys: string[] | undefined = undefined;
+    let selectionQuery: ProcessJobDoc["selection"] | undefined = undefined;
+    let totalRows: number;
+
     if (selection.mode === "keys") {
       selectionKeys = selection.rowKeys;
+      totalRows = selectionKeys.length;
     } else {
-      selectionKeys = await findRowKeysByFilter({
-        q: selection.q,
-        namespace: selection.namespace,
-        status: selection.status,
-        reviewed: selection.reviewed,
-        limit: selection.limit ?? 5000,
-        excludeRowKeys: selection.excludeRowKeys ?? [],
-      });
-      if (selectionKeys.length === 0) {
-        return NextResponse.json({ error: "No rows match the current filters." }, { status: 400 });
+      const wantsAll = selection.limit === undefined;
+      const limit = selection.limit ?? 5000;
+
+      if (!wantsAll && limit <= 5000) {
+        selectionKeys = await findRowKeysByFilter({
+          q: selection.q,
+          namespace: selection.namespace,
+          status: selection.status,
+          reviewed: selection.reviewed,
+          limit,
+          excludeRowKeys: selection.excludeRowKeys ?? [],
+        });
+        if (selectionKeys.length === 0) {
+          return NextResponse.json({ error: "No rows match the current filters." }, { status: 400 });
+        }
+        totalRows = selectionKeys.length;
+      } else {
+        // Durable select-all job: store query instead of materializing row keys.
+        selectionQuery = {
+          mode: "query",
+          q: selection.q,
+          namespace: selection.namespace,
+          status: selection.status,
+          reviewed: selection.reviewed,
+          excludeRowKeys: selection.excludeRowKeys ?? [],
+        };
+        const filter = buildTranslationsFilter({
+          q: selectionQuery.q,
+          namespace: selectionQuery.namespace,
+          status: selectionQuery.status,
+          reviewed: selectionQuery.reviewed,
+          excludeRowKeys: selectionQuery.excludeRowKeys,
+        });
+        totalRows = await db.collection("i18n_translations").countDocuments(filter);
+        if (!totalRows) {
+          return NextResponse.json({ error: "No rows match the current filters." }, { status: 400 });
+        }
       }
     }
 
@@ -129,18 +189,27 @@ export async function POST(req: Request) {
       _id: jobId,
       status: "queued",
       createdAt: new Date(),
-      totalRows: selectionKeys.length,
+      totalRows,
       processedRows: 0,
       nextIndex: 0,
       chunkSize,
-      llmSelection: { provider: llmSelection.provider, model: llmSelection.model },
+      llmSelection: llmSelection ? { provider: llmSelection.provider, model: llmSelection.model } : undefined,
+      resolvedLlm: resolved,
       selectionKeys,
+      selection: selectionQuery,
       log: [],
       attempts: 0,
     };
     await jobs.insertOne(insertDoc);
 
-    await appendLogLine(db, jobId, `Job queued. rows=${selectionKeys.length}, chunkSize=${chunkSize}`);
+    await appendLogLine(db, jobId, `Job queued. rows=${totalRows}, chunkSize=${chunkSize}`);
+    await appendLogLine(
+      db,
+      jobId,
+      resolved.provider === "lmstudio"
+        ? `LLM: lmstudio model=${resolved.model ?? "(missing)"} baseUrl=${resolved.lmstudio?.baseUrl ?? ""}`
+        : `LLM: azure deployment=${resolved.azure?.deployment ?? ""} model=${resolved.model ?? ""} endpoint=${resolved.azure?.endpoint ?? ""}`
+    );
 
     return NextResponse.json({ success: true, jobId: jobId.toString() });
   } catch (e) {

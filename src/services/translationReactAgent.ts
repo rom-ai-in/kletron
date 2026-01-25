@@ -90,6 +90,7 @@ function buildSystemPrompt() {
     "- Do NOT invent new product names or change established branding.",
     "- Do NOT call write tools (write_file/execute_bash/str_replace_editor). This is a review-only task.",
     "- Output MUST be strict JSON only (no markdown, no prose).",
+    "- Never invent row keys. Only use rowKey values that appear in the provided input rows.",
   ].join("\n");
 }
 
@@ -105,6 +106,12 @@ function buildUserPrompt(inputRows: TranslationAgentRowInput[]) {
 
   return [
     "Review the following translation rows and output recommendations.",
+    "",
+    "CRITICAL OUTPUT REQUIREMENTS:",
+    `- You MUST return exactly ${inputRows.length} recommendations (one per input row).`,
+    "- The recommendations MUST be in the same order as the input rows.",
+    '- You MUST copy the "rowKey" exactly from each input row (do not modify, do not shorten, do not reformat).',
+    "- If a row is already good or you are unsure, set decision=KEEP with a short rationale.",
     "",
     "Output JSON schema:",
     "{",
@@ -138,11 +145,12 @@ async function runSchemaReactAgent<T extends z.ZodTypeAny>(opts: {
   tools: any[];
   schema: T;
   fallback: z.infer<T>;
-  llmSelection?: LlmSelection;
+  llmSelection?: Partial<LlmSelection>;
   onMessage?: (message: BaseMessage) => Promise<void> | void;
   maxToolCalls?: number;
 }): Promise<{ parsed: z.infer<T>; messages: BaseMessage[] }> {
-  const model = await getChatModel(opts.llmSelection);
+  // Lower temperature for this schema-driven workflow to reduce partial/invalid outputs.
+  const model = await getChatModel(opts.llmSelection, { temperature: 0 });
   const agent = createReactAgent({
     llm: model,
     tools: opts.tools,
@@ -260,7 +268,7 @@ async function runSchemaReactAgent<T extends z.ZodTypeAny>(opts: {
 
 export async function runTranslationAgentChunk(opts: {
   rows: TranslationAgentRowInput[];
-  llmSelection?: LlmSelection;
+  llmSelection?: Partial<LlmSelection>;
   onMessage?: (message: BaseMessage) => Promise<void> | void;
   maxToolCalls?: number;
 }): Promise<{ output: TranslationAgentOutput; messages: BaseMessage[] }> {
@@ -285,15 +293,39 @@ export async function runTranslationAgentChunk(opts: {
     maxToolCalls: opts.maxToolCalls ?? 20,
   });
 
-  // Normalize changedLocales if missing
+  // Align to input rowKeys to guarantee 1:1 coverage (models sometimes omit rows or return wrong keys).
+  const inputRowKeys = opts.rows.map((r) => r.rowKey);
+  const allowed = new Set(inputRowKeys);
+  const byKey = new Map<string, TranslationRecommendation>();
+  for (const rec of parsed.recommendations ?? []) {
+    const rk = rec.rowKey.trim();
+    if (!allowed.has(rk)) continue;
+    const existing = byKey.get(rk);
+    if (!existing) {
+      byKey.set(rk, { ...rec, rowKey: rk });
+      continue;
+    }
+    // Prefer UPDATE when duplicates occur
+    if (existing.decision !== "UPDATE" && rec.decision === "UPDATE") {
+      byKey.set(rk, { ...rec, rowKey: rk });
+    }
+  }
+
   const normalized: TranslationAgentOutput = {
-    recommendations: parsed.recommendations.map((rec) => {
-      const original = opts.rows.find((r) => r.rowKey === rec.rowKey);
-      const changedLocales = original ? computeChangedLocales(original, rec.proposed) : rec.changedLocales ?? [];
-      return {
-        ...rec,
-        changedLocales,
-      };
+    recommendations: inputRowKeys.map((rk) => {
+      const original = opts.rows.find((r) => r.rowKey === rk);
+      const existing = byKey.get(rk);
+      if (!existing) {
+        return {
+          rowKey: rk,
+          decision: "KEEP",
+          confidence: 0.25,
+          rationale: "Model did not return a valid recommendation for this row; defaulted to KEEP.",
+          changedLocales: [],
+        };
+      }
+      const changedLocales = original ? computeChangedLocales(original, existing.proposed) : existing.changedLocales ?? [];
+      return { ...existing, rowKey: rk, changedLocales };
     }),
   };
 

@@ -1,6 +1,6 @@
 import { BaseMessage } from "@langchain/core/messages";
 
-import type { AgentEvent, AgentEventKind, AgentWorkflowResult, TimelineEvent } from "../agentRunner";
+import type { AgentEvent, AgentEventKind, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent } from "../agentRunner";
 import { streamReactAgentMessages } from "../reactAgentRunner";
 import { allMcpTools } from "../tools/mcpTools";
 import { auditService } from "./auditService";
@@ -10,6 +10,7 @@ import type { AgentGraphNode } from "./agentGraphTypes";
 import { topoSortAgentGraph } from "./agentGraphTopo";
 import { nodeOutputSchemaRegistry } from "../shared/nodeOutputSchemas";
 import { parseJsonOutput, renderUserPrompt } from "./agentGraphUtils";
+import { McpClient } from "../mcp/client";
 
 const cloneValue = <T>(value: T): T => {
     if (
@@ -189,8 +190,64 @@ function selectToolsByName(toolNames: string[]) {
     return allMcpTools.filter((tool: any) => allow.has(String(tool?.name ?? "")));
 }
 
+async function maybeExecuteJsonActionTool(opts: {
+    schemaId: string;
+    parsed: unknown;
+    allowedToolNames: string[];
+    phaseId: string;
+    phaseLabel: string;
+    makeEventId: () => string;
+    pushEvent: (event: AgentEvent) => void;
+}) {
+    // Only support this compatibility shim for generic JSON nodes.
+    if (opts.schemaId !== "generic_json") return opts.parsed;
+    if (!opts.parsed || typeof opts.parsed !== "object") return opts.parsed;
+    const record = opts.parsed as Record<string, unknown>;
+    const action = typeof record.action === "string" ? record.action : undefined;
+    const args = record.arguments && typeof record.arguments === "object" ? (record.arguments as Record<string, unknown>) : undefined;
+    if (!action || !args) return opts.parsed;
+
+    // Only execute actions that are explicitly allowed on the node.
+    if (!opts.allowedToolNames.includes(action)) return opts.parsed;
+
+    // For safety, only allow write_file via this shim (LM Studio often "prints" tool calls).
+    if (action !== "write_file") return opts.parsed;
+    if (typeof args.filePath !== "string" || typeof args.content !== "string") return opts.parsed;
+
+    const client = await McpClient.getInstance();
+    const toolResult = await client.callTool(action, args);
+
+    opts.pushEvent({
+        id: opts.makeEventId(),
+        phaseId: opts.phaseId,
+        phaseLabel: opts.phaseLabel,
+        kind: "tool",
+        role: "tool",
+        name: action,
+        toolArgs: JSON.stringify(args),
+        content: toolResult,
+        timestamp: new Date().toISOString(),
+    });
+
+    return {
+        action,
+        arguments: args,
+        toolResult,
+    };
+}
+
 export class AgentGraphExecutor {
     async executeRun(runId: string): Promise<void> {
+        await this.executeRunStreaming(runId);
+    }
+
+    async executeRunStreaming(
+        runId: string,
+        opts?: {
+            onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
+            llmSelectionOverride?: { provider: "azure" | "lmstudio"; model?: string };
+        }
+    ): Promise<AgentWorkflowResult> {
         const run = await agentGraphRunService.getRun(runId);
         if (!run) throw new Error(`Run ${runId} not found`);
 
@@ -207,6 +264,49 @@ export class AgentGraphExecutor {
 
         await agentGraphRunService.updateRunStatus(runId, "RUNNING", {});
 
+        const globalTimeline: TimelineEvent[] = nodeOrder.map((id) => {
+            const node = graph.nodes.find((n) => n.id === id);
+            return {
+                id,
+                label: node?.label ?? id,
+                status: "pending",
+                summary: "Pending",
+                details: graph.description ?? "",
+                systemPrompt: node?.react?.systemPrompt ?? "",
+                thoughtLog: [],
+            };
+        });
+
+        const globalEventStream: AgentEvent[] = [];
+        let globalEventCounter = 0;
+        const nextGlobalEventId = () => `event-${globalEventCounter++}`;
+        const initialUserEvent: AgentEvent = {
+            id: nextGlobalEventId(),
+            phaseId: "user",
+            phaseLabel: "User input",
+            kind: "user",
+            role: "user",
+            content: typeof state.mission === "string" ? state.mission : "",
+            timestamp: new Date().toISOString(),
+        };
+        globalEventStream.push(initialUserEvent);
+
+        const emitUpdate = async () => {
+            if (!opts?.onUpdate) return;
+            const outputs = createPlaceholderOutputs({
+                mission: typeof state.mission === "string" ? state.mission : "",
+                report: JSON.stringify(state.nodes ?? {}, null, 2),
+                meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
+            });
+            await opts.onUpdate({
+                timeline: cloneValue(globalTimeline),
+                eventStream: cloneValue(globalEventStream),
+                outputs,
+            });
+        };
+
+        await emitUpdate();
+
         for (const nodeId of nodeOrder) {
             const node = graph.nodes.find((n) => n.id === nodeId);
             if (!node) {
@@ -214,10 +314,29 @@ export class AgentGraphExecutor {
                     endedAt: new Date(),
                     error: `Missing node ${nodeId} in graph definition`,
                 } as any);
-                return;
+                const failureResult: AgentWorkflowResult = {
+                    sessionId: runId,
+                    timeline: globalTimeline,
+                    conclusion: "Run failed (missing node).",
+                    outputs: createPlaceholderOutputs({
+                        mission: typeof state.mission === "string" ? state.mission : "",
+                        report: `ERROR: Missing node ${nodeId} in graph definition`,
+                        meta: { runId, graphId: run.graphId.toString() },
+                    }),
+                    eventStream: globalEventStream,
+                };
+                await emitUpdate();
+                return failureResult;
             }
 
             await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "RUNNING");
+            const timelineEntry = globalTimeline.find((t) => t.id === nodeId);
+            if (timelineEntry) {
+                timelineEntry.status = "running";
+                timelineEntry.summary = "Running";
+                timelineEntry.startedAt = new Date().toISOString();
+            }
+            await emitUpdate();
 
             const sessionPrompt = `[AgentGraph] run=${runId} node=${node.id} label="${node.label}"`;
             const sessionId = await auditService.createSession(sessionPrompt);
@@ -261,6 +380,8 @@ export class AgentGraphExecutor {
                     eventStream: cloneValue(eventStream),
                     outputs: cloneValue(outputs),
                 } as any);
+
+                await emitUpdate();
             };
 
             await flushUpdate();
@@ -272,6 +393,7 @@ export class AgentGraphExecutor {
                     const event = createAgentEvent(message, node.id, node.label, nextEventId());
                     builtMessageEvents.push(event);
                     eventStream.push(event);
+                    globalEventStream.push(event);
                     await flushUpdate();
                 };
 
@@ -281,7 +403,7 @@ export class AgentGraphExecutor {
                     userPrompt,
                     tools,
                     onMessage: handleStreamingMessage,
-                    llmSelection: node.react.llmSelection,
+                    llmSelection: opts?.llmSelectionOverride ?? node.react.llmSelection,
                 });
 
                 const finalAgentEvent =
@@ -289,12 +411,24 @@ export class AgentGraphExecutor {
                     builtMessageEvents.at(-1);
                 const finalContent = finalAgentEvent?.content ?? "";
 
-                const parsed = parseJsonOutput(finalContent);
+                let parsed: unknown = parseJsonOutput(finalContent);
                 const schemaId = node.output.schemaId as keyof typeof nodeOutputSchemaRegistry;
                 const schema = nodeOutputSchemaRegistry[schemaId];
                 if (!schema) {
                     throw new Error(`Unknown schemaId: ${node.output.schemaId}`);
                 }
+                parsed = await maybeExecuteJsonActionTool({
+                    schemaId: String(schemaId),
+                    parsed,
+                    allowedToolNames: node.react.toolNames ?? [],
+                    phaseId: node.id,
+                    phaseLabel: node.label,
+                    makeEventId: nextGlobalEventId,
+                    pushEvent: (event) => {
+                        globalEventStream.push(event);
+                        eventStream.push(event);
+                    },
+                });
                 const validated = schema.parse(parsed);
 
                 state.nodes[node.id] = validated;
@@ -305,6 +439,13 @@ export class AgentGraphExecutor {
                 timeline[0].summary = "Node execution (done)";
                 timeline[0].endedAt = new Date().toISOString();
                 await flushUpdate(JSON.stringify(validated, null, 2));
+
+                if (timelineEntry) {
+                    timelineEntry.status = "success";
+                    timelineEntry.summary = "Done";
+                    timelineEntry.endedAt = new Date().toISOString();
+                }
+                await emitUpdate();
 
                 const finalResult: AgentWorkflowResult = {
                     sessionId,
@@ -330,6 +471,13 @@ export class AgentGraphExecutor {
                 timeline[0].endedAt = new Date().toISOString();
                 await flushUpdate(`ERROR: ${err?.message ?? String(err)}`);
 
+                if (timelineEntry) {
+                    timelineEntry.status = "error";
+                    timelineEntry.summary = `Failed: ${err?.message ?? "unknown error"}`;
+                    timelineEntry.endedAt = new Date().toISOString();
+                }
+                await emitUpdate();
+
                 const finalResult: AgentWorkflowResult = {
                     sessionId,
                     timeline,
@@ -342,13 +490,37 @@ export class AgentGraphExecutor {
                     eventStream,
                 };
                 await auditService.completeSession(sessionId, finalResult, err instanceof Error ? err : new Error(String(err)));
-                return;
+                return {
+                    sessionId: runId,
+                    timeline: globalTimeline,
+                    conclusion: "Run failed.",
+                    outputs: createPlaceholderOutputs({
+                        mission: typeof state.mission === "string" ? state.mission : "",
+                        report: `ERROR: ${err?.message ?? String(err)}`,
+                        meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
+                    }),
+                    eventStream: globalEventStream,
+                };
             }
         }
 
         await agentGraphRunService.updateRunStatus(runId, "COMPLETED", {
             endedAt: new Date(),
         } as any);
+
+        const successResult: AgentWorkflowResult = {
+            sessionId: runId,
+            timeline: globalTimeline,
+            conclusion: "Run completed.",
+            outputs: createPlaceholderOutputs({
+                mission: typeof state.mission === "string" ? state.mission : "",
+                report: JSON.stringify(state.nodes ?? {}, null, 2),
+                meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
+            }),
+            eventStream: globalEventStream,
+        };
+        await emitUpdate();
+        return successResult;
     }
 }
 

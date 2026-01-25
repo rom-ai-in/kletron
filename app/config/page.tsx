@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Settings, Sparkles, ListTree, ArrowRight } from "lucide-react";
+import { Settings, Sparkles, ListTree, ArrowRight, Wrench } from "lucide-react";
 
 import { Panel } from "@/src/components/ui/Panel";
-import { graphOptions } from "@/src/shared/graphCatalog";
 
 type LlmConfigSummary = { provider?: "azure" | "lmstudio" } | null;
 
 export default function ConfigOverviewPage() {
-  const graphsCount = useMemo(() => graphOptions.length, []);
+  const [graphsCount, setGraphsCount] = useState<number>(0);
+  const [toolsCount, setToolsCount] = useState<number>(0);
   const [contextEnabled, setContextEnabled] = useState<boolean | null>(null);
   const [llmProvider, setLlmProvider] = useState<LlmConfigSummary>(null);
 
@@ -41,6 +41,34 @@ export default function ConfigOverviewPage() {
     };
 
     void fetchProvider();
+  }, []);
+
+  useEffect(() => {
+    const fetchGraphs = async () => {
+      try {
+        const res = await fetch("/api/agent-graphs");
+        if (!res.ok) return;
+        const data = await res.json();
+        setGraphsCount(Array.isArray(data?.graphs) ? data.graphs.length : 0);
+      } catch {
+        setGraphsCount(0);
+      }
+    };
+    void fetchGraphs();
+  }, []);
+
+  useEffect(() => {
+    const fetchTools = async () => {
+      try {
+        const res = await fetch("/api/tools/list");
+        if (!res.ok) return;
+        const data = await res.json();
+        setToolsCount(Array.isArray(data) ? data.length : 0);
+      } catch {
+        setToolsCount(0);
+      }
+    };
+    void fetchTools();
   }, []);
 
   return (
@@ -76,10 +104,17 @@ export default function ConfigOverviewPage() {
           />
           <ConfigCard
             title="Graphs"
-            description="Available flows + phase/tool details."
+            description="DB-backed agent graphs (nodes + edges)."
             icon={<ListTree className="h-4 w-4 text-text-muted" />}
             href="/config/graphs"
             meta={`${graphsCount} graphs`}
+          />
+          <ConfigCard
+            title="Tools"
+            description="Available tools for agents."
+            icon={<Wrench className="h-4 w-4 text-text-muted" />}
+            href="/config/tools"
+            meta={`${toolsCount} tools available`}
           />
         </div>
 

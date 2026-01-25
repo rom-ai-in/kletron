@@ -14,8 +14,10 @@ import {
     Copy,
     Check,
     Database,
-    Globe
+    Globe,
+    FileCode
 } from "lucide-react";
+
 
 const navItems = [
     {
@@ -39,10 +41,16 @@ const navItems = [
         href: "/vectors",
     },
     {
+        label: "Changes",
+        icon: FileCode,
+        href: "/changes",
+    },
+    {
         label: "Activity",
         icon: History,
         href: "/history",
     },
+
     {
         label: "Translation Agents",
         icon: Globe,

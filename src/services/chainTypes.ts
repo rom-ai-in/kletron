@@ -3,7 +3,7 @@ import type { ObjectId } from "mongodb";
 /**
  * Chain execution status
  */
-export type ChainStatus = "PENDING" | "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED";
+export type ChainStatus = "PENDING" | "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED" | "CANCELLED";
 
 /**
  * Available audit modes (corresponds to prompts/A-audit/ suites)

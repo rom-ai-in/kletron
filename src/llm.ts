@@ -18,6 +18,22 @@ const normalizeProvider = (value?: string): LlmProvider | undefined => {
   return undefined;
 };
 
+// Use this when you want DB-configured defaults to apply.
+// (i.e. if provider isn't explicitly provided, return undefined)
+export const parseLlmSelectionInput = (input?: {
+  provider?: string;
+  model?: string;
+}): Partial<LlmSelection> | undefined => {
+  const provider = normalizeProvider(input?.provider);
+  const model = typeof input?.model === "string" ? input.model.trim() : undefined;
+
+  if (!provider && !model) return undefined;
+  return {
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+  };
+};
+
 export const resolveLlmSelection = (input?: {
   provider?: string;
   model?: string;
@@ -27,11 +43,72 @@ export const resolveLlmSelection = (input?: {
   return { provider: provider as LlmProvider, model: model || undefined };
 };
 
+export type ResolvedLlmInfo = {
+  provider: LlmProvider;
+  model?: string;
+  // Helpful debugging fields for Azure/LM Studio
+  azure?: { deployment?: string; endpoint?: string; apiVersion?: string };
+  lmstudio?: { baseUrl?: string };
+};
+
+export type ChatModelOverrides = {
+  temperature?: number;
+};
+
+export async function resolveResolvedLlmInfo(selection?: Partial<LlmSelection>): Promise<ResolvedLlmInfo> {
+  // Fetch current configuration from MongoDB (or env fallback)
+  let runtimeConfig;
+  try {
+    runtimeConfig = await getLlmConfig();
+  } catch (error) {
+    console.warn("Failed to fetch LLM config, using environment variables:", error);
+    runtimeConfig = {
+      provider: config.defaultProvider as "azure" | "lmstudio",
+      azure: config.azure.endpoint
+        ? {
+            endpoint: config.azure.endpoint,
+            apiKey: config.azure.apiKey ?? "",
+            deployment: config.azure.deployment ?? "",
+            model: config.azure.model,
+            apiVersion: config.azure.apiVersion,
+          }
+        : undefined,
+      lmstudio: {
+        baseUrl: config.lmstudio.baseUrl,
+        apiKey: config.lmstudio.apiKey,
+        model: config.lmstudio.model,
+      },
+      defaultProvider: config.defaultProvider as "azure" | "lmstudio",
+    };
+  }
+
+  const provider = (selection?.provider ?? runtimeConfig.defaultProvider) as LlmProvider;
+  if (provider === "lmstudio") {
+    const model = selection?.model ?? runtimeConfig.lmstudio?.model;
+    return {
+      provider,
+      model,
+      lmstudio: { baseUrl: runtimeConfig.lmstudio?.baseUrl ?? config.lmstudio.baseUrl },
+    };
+  }
+
+  const azureConfig = runtimeConfig.azure;
+  return {
+    provider: "azure",
+    model: selection?.model ?? azureConfig?.model,
+    azure: {
+      deployment: azureConfig?.deployment,
+      endpoint: azureConfig?.endpoint,
+      apiVersion: azureConfig?.apiVersion,
+    },
+  };
+}
+
 /**
  * Get chat model with runtime configuration from MongoDB (falls back to env vars)
  * Now async to support dynamic configuration loading
  */
-export async function getChatModel(selection?: Partial<LlmSelection>) {
+export async function getChatModel(selection?: Partial<LlmSelection>, overrides?: ChatModelOverrides) {
   // Fetch current configuration from MongoDB (or env fallback)
   let runtimeConfig;
   try {
@@ -57,6 +134,7 @@ export async function getChatModel(selection?: Partial<LlmSelection>) {
   }
 
   const provider = selection?.provider ?? runtimeConfig.defaultProvider;
+  const temperature = typeof overrides?.temperature === "number" ? overrides.temperature : 1;
 
   if (provider === "lmstudio") {
     const model = selection?.model ?? runtimeConfig.lmstudio?.model;
@@ -71,7 +149,7 @@ export async function getChatModel(selection?: Partial<LlmSelection>) {
       configuration: {
         baseURL: runtimeConfig.lmstudio?.baseUrl ?? config.lmstudio.baseUrl,
       },
-      temperature: 1,
+      temperature,
     });
   }
 
@@ -92,6 +170,6 @@ export async function getChatModel(selection?: Partial<LlmSelection>) {
       : undefined,
     azureOpenAIEndpoint: azureConfig.endpoint,
     model: selection?.model ?? azureConfig.model,
-    temperature: 1,
+    temperature,
   });
 }

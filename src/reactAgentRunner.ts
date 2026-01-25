@@ -33,6 +33,16 @@ export async function streamReactAgentMessages(opts: StreamReactAgentOptions) {
   const accumulatedMessages: BaseMessage[] = [];
   let lastState: { messages?: BaseMessage[] } | undefined;
 
+  const shouldEmitToCallback = (message: BaseMessage) => {
+    const messageType = typeof message.type === "string" ? message.type.toLowerCase() : "";
+    const role = typeof (message as any).role === "string" ? String((message as any).role).toLowerCase() : "";
+    // UI already knows the user prompt; emitting it again causes duplicates.
+    if (messageType === "human" || role === "user" || role === "human") return false;
+    // System prompt is configured out-of-band; avoid duplicating it in event streams.
+    if (messageType === "system" || role === "system") return false;
+    return true;
+  };
+
   for await (const state of stream) {
     if (!state || typeof state !== "object") continue;
     lastState = state as { messages?: BaseMessage[] };
@@ -46,7 +56,9 @@ export async function streamReactAgentMessages(opts: StreamReactAgentOptions) {
       seenMessageIds.add(idKey);
       accumulatedMessages.push(message);
       if (opts.onMessage) {
-        await opts.onMessage(message);
+        if (shouldEmitToCallback(message)) {
+          await opts.onMessage(message);
+        }
       }
     }
   }

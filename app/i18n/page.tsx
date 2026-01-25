@@ -2,7 +2,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Globe, RefreshCw, Upload, Search, AlertTriangle, ChevronDown, Check } from "lucide-react";
+import { Globe, RefreshCw, Upload, Search, AlertTriangle, ChevronDown, Check, Download } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/src/components/ui/Button";
 import type { I18nStatus, TranslationRecord } from "@/src/services/i18nTranslationsService";
 import { TranslationProcessModal } from "@/src/components/i18n/TranslationProcessModal";
@@ -43,12 +44,12 @@ export default function I18nPage() {
   const importCollapseTimerRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const SELECTION_CAP = 5000;
   type SelectionMode = "explicit" | "allMatching";
   const [selectionMode, setSelectionMode] = useState<SelectionMode>("explicit");
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(() => new Set());
   const [excludedRowKeys, setExcludedRowKeys] = useState<Set<string>>(() => new Set());
   const [processOpen, setProcessOpen] = useState(false);
+  const EXCLUSION_CAP = 5000;
   const [processSelection, setProcessSelection] = useState<
     | { mode: "keys"; rowKeys: string[]; previewRows?: TranslationRecord[] }
     | {
@@ -65,11 +66,12 @@ export default function I18nPage() {
     | null
   >(null);
 
-  const load = async () => {
+  const load = async (overrides?: { pageLimit?: number }) => {
     setLoading(true);
     try {
+      const limitToUse = overrides?.pageLimit ?? pageLimit;
       const params = new URLSearchParams();
-      params.set("limit", String(pageLimit));
+      params.set("limit", String(limitToUse));
       if (q.trim()) params.set("q", q.trim());
       if (namespace.trim()) params.set("namespace", namespace.trim());
       if (status) params.set("status", status);
@@ -102,11 +104,10 @@ export default function I18nPage() {
     setSelectionMode("explicit");
   }, [rows]);
 
-  const maxSelectable = useMemo(() => Math.min(total, SELECTION_CAP), [SELECTION_CAP, total]);
   const selectedCount = useMemo(() => {
-    if (selectionMode === "allMatching") return Math.max(0, maxSelectable - excludedRowKeys.size);
+    if (selectionMode === "allMatching") return Math.max(0, total - excludedRowKeys.size);
     return selectedRowKeys.size;
-  }, [excludedRowKeys.size, maxSelectable, selectedRowKeys.size, selectionMode]);
+  }, [excludedRowKeys.size, selectedRowKeys.size, selectionMode, total]);
 
   const isRowSelected = (rowKey: string) => {
     if (selectionMode === "allMatching") return !excludedRowKeys.has(rowKey);
@@ -126,8 +127,13 @@ export default function I18nPage() {
     if (selectionMode === "allMatching") {
       setExcludedRowKeys((prev) => {
         const next = new Set(prev);
-        if (next.has(rowKey)) next.delete(rowKey);
-        else next.add(rowKey);
+        if (next.has(rowKey)) {
+          next.delete(rowKey);
+        } else {
+          // Keep exclusions bounded so we don't send huge payloads to the API.
+          if (next.size >= EXCLUSION_CAP) return next;
+          next.add(rowKey);
+        }
         return next;
       });
       return;
@@ -175,8 +181,8 @@ export default function I18nPage() {
   };
 
   const canSelectAllMatching = useMemo(() => {
-    return selectionMode === "explicit" && isAllVisibleSelected && visibleRows.length > 0 && total > visibleRows.length;
-  }, [isAllVisibleSelected, selectionMode, total, visibleRows.length]);
+    return selectionMode === "explicit" && total > 0;
+  }, [selectionMode, total]);
 
   const selectAllMatching = () => {
     setSelectionMode("allMatching");
@@ -195,7 +201,6 @@ export default function I18nPage() {
         namespace: nsTrim || undefined,
         status: status || undefined,
         reviewed: reviewed === "reviewed" ? true : reviewed === "unreviewed" ? false : undefined,
-        limit: maxSelectable,
         excludeRowKeys: Array.from(excludedRowKeys),
         estimatedSelected: selectedCount,
         previewRows: preview,
@@ -369,7 +374,23 @@ export default function I18nPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="secondary" size="sm" onClick={load} disabled={loading}>
+          <Link href="/i18n/logs">
+            <Button variant="secondary" size="sm">
+              Logs
+            </Button>
+          </Link>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              window.location.href = "/api/i18n/export";
+            }}
+            title="Export all translations as CSV (unfiltered)"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
@@ -377,7 +398,7 @@ export default function I18nPage() {
       </div>
 
       <div className="shrink-0 border-b border-border-subtle bg-bg-surface px-6 py-4">
-        <div className="grid gap-3 md:grid-cols-[1fr_1fr_140px_160px_140px_auto]">
+        <div className="grid gap-3 md:grid-cols-[1fr_1fr_140px_160px_auto]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
             <input
@@ -412,23 +433,48 @@ export default function I18nPage() {
             <option value="unreviewed">Unreviewed</option>
             <option value="reviewed">Reviewed</option>
           </select>
-          <select
-            className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-border-strong focus:outline-none"
-            value={pageLimit}
-            onChange={(e) => {
-              const next = Number.parseInt(e.target.value, 10);
-              setPageLimit(next);
-            }}
-            title="Rows per page"
-          >
-            <option value={200}>200 rows</option>
-            <option value={500}>500 rows</option>
-            <option value={1000}>1,000 rows</option>
-            <option value={5000}>5,000 rows</option>
-          </select>
-          <Button variant="primary" onClick={load} disabled={loading}>
+          <Button variant="primary" onClick={() => void load()} disabled={loading}>
             Apply
           </Button>
+        </div>
+
+        {/* Selection controls (in filters area) */}
+        <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="text-xs text-text-muted">
+            <span className="font-semibold text-text-primary">{selectedCount}</span> selected
+            {selectionMode === "allMatching" && excludedRowKeys.size > 0 ? (
+              <span className="text-text-muted"> ({excludedRowKeys.size.toLocaleString()} excluded)</span>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={toggleSelectAllVisible}
+              disabled={visibleRows.length === 0}
+              title="Select/unselect all rows currently visible in the table"
+            >
+              {isAllVisibleSelected ? "Unselect page" : "Select page"}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={selectAllMatching}
+              disabled={!canSelectAllMatching || selectionMode === "allMatching"}
+              title="Select all rows matching the current filters (including beyond the current page)"
+            >
+              Select all matching ({total.toLocaleString()})
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearSelection}
+              disabled={selectedCount === 0}
+              title="Clear selection"
+            >
+              Clear
+            </Button>
+          </div>
         </div>
 
         {/* Import panel (collapsible) */}
@@ -627,7 +673,28 @@ export default function I18nPage() {
             Showing <span className="font-mono">{visibleRows.length}</span> / <span className="font-mono">{total}</span>{" "}
             rows (API limit {pageLimit})
           </span>
-          <span className="hidden md:inline">Tip: scroll inside the table (vertical + horizontal)</span>
+          <div className="flex items-center gap-2">
+            <span className="hidden md:inline">Tip: scroll inside the table (vertical + horizontal)</span>
+            <span className="mx-2 hidden md:inline text-border-subtle">|</span>
+            <label className="flex items-center gap-2">
+              <span className="hidden md:inline">Rows per page</span>
+              <select
+                className="rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-xs text-text-primary focus:border-border-strong focus:outline-none"
+                value={pageLimit}
+                onChange={(e) => {
+                  const next = Number.parseInt(e.target.value, 10);
+                  setPageLimit(next);
+                  void load({ pageLimit: next });
+                }}
+                title="Rows per page"
+              >
+                <option value={200}>200</option>
+                <option value={500}>500</option>
+                <option value={1000}>1,000</option>
+                <option value={5000}>5,000</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className="h-[75vh] min-h-[520px] overflow-hidden rounded-lg border border-border-strong bg-bg-surface shadow-sm flex flex-col">
@@ -643,21 +710,19 @@ export default function I18nPage() {
                 >
                   Clear
                 </button>
-                {selectionMode === "allMatching" && total > SELECTION_CAP && (
-                  <span className="text-text-muted">(capped to first {SELECTION_CAP.toLocaleString()})</span>
+                {selectionMode === "allMatching" && excludedRowKeys.size > 0 && (
+                  <span className="text-text-muted">
+                    ({excludedRowKeys.size.toLocaleString()} excluded)
+                  </span>
                 )}
                 {canSelectAllMatching && (
                   <button
                     className="ml-3 text-xs text-sky-400 hover:text-sky-300"
                     onClick={selectAllMatching}
                     type="button"
-                    title={
-                      total > SELECTION_CAP
-                        ? `Select first ${SELECTION_CAP.toLocaleString()} matching rows`
-                        : `Select all ${total.toLocaleString()} matching rows`
-                    }
+                    title={`Select all ${total.toLocaleString()} matching rows`}
                   >
-                    Select all matching ({maxSelectable.toLocaleString()})
+                    Select all matching ({total.toLocaleString()})
                   </button>
                 )}
               </div>

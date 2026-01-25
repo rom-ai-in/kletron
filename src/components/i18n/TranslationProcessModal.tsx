@@ -15,6 +15,13 @@ type ProcessJobStatus = {
   chunkSize: number;
   error?: string;
   log?: string[];
+  llmSelection?: { provider?: string; model?: string };
+  resolvedLlm?: {
+    provider: "azure" | "lmstudio";
+    model?: string;
+    azure?: { deployment?: string; endpoint?: string; apiVersion?: string };
+    lmstudio?: { baseUrl?: string };
+  };
 };
 
 type ProcessResultRow = {
@@ -30,6 +37,7 @@ type ProcessResultRow = {
 };
 
 type ResultsResponse = { total: number; rows: ProcessResultRow[]; error?: string };
+type ApplyResponse = { success: boolean; applied?: number; matched?: number; modified?: number; error?: string };
 
 type EnvInfo = {
   llm?: {
@@ -77,7 +85,7 @@ export function TranslationProcessModal({
   const [env, setEnv] = useState<EnvInfo | null>(null);
   const [provider, setProvider] = useState<"azure" | "lmstudio" | "default">("default");
   const [model, setModel] = useState<string>("");
-  const [chunkSize, setChunkSize] = useState<number>(20);
+  const [chunkSize, setChunkSize] = useState<number>(50);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const [jobId, setJobId] = useState<string | null>(null);
@@ -119,7 +127,7 @@ export function TranslationProcessModal({
     setAdvancedOpen(false);
     setProvider("default");
     setModel("");
-    setChunkSize(20);
+    setChunkSize(50);
 
     // Seed preview immediately (then fetch canonical)
     setRows(selection.previewRows ?? []);
@@ -146,6 +154,7 @@ export function TranslationProcessModal({
           if (selection.q?.trim()) params.set("q", selection.q.trim());
           if (selection.namespace?.trim()) params.set("namespace", selection.namespace.trim());
           if (selection.status) params.set("status", selection.status);
+          if (typeof selection.reviewed === "boolean") params.set("reviewed", selection.reviewed ? "true" : "false");
           const res = await fetch(`/api/i18n/list?${params.toString()}`);
           const json = await res.json();
           if (res.ok) setRows((json.rows || []) as TranslationRecord[]);
@@ -175,6 +184,10 @@ export function TranslationProcessModal({
   }, [env]);
 
   const canRun = (selection.mode === "query" || rowKeys.length > 0) && !loadingRows;
+  const selectedCountLabel = useMemo(() => {
+    if (selection.mode === "keys") return rowKeys.length;
+    return selection.estimatedSelected ?? 0;
+  }, [rowKeys.length, selection]);
 
   const startJob = async () => {
     setJobError(null);
@@ -239,8 +252,8 @@ export function TranslationProcessModal({
           return;
         }
         if (json.status === "cancelled") {
-          setJobError("Job cancelled.");
-          setStep("review");
+          setJobError("Job cancelled. You can review and apply the processed results below.");
+          setStep("results");
           return;
         }
         if (json.status === "success") {
@@ -342,24 +355,26 @@ export function TranslationProcessModal({
     setApplyError(null);
     setApplySuccess(null);
     try {
-      const updates = results
-        .filter((r) => r.decision === "UPDATE" && accepted.has(r.rowKey) && r.proposed)
-        .map((r) => ({ rowKey: r.rowKey, proposed: r.proposed! }));
+      if (!jobId) {
+        setApplyError("Missing jobId.");
+        return;
+      }
 
-      if (!updates.length) {
+      const rowKeysToApply = Array.from(accepted);
+      if (!rowKeysToApply.length) {
         setApplyError("No updates selected.");
         return;
       }
 
-      const res = await fetch("/api/i18n/translations/bulk-update", {
+      const res = await fetch("/api/i18n/process/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ updates }),
+        body: JSON.stringify({ jobId, mode: "row_keys", rowKeys: rowKeysToApply }),
       });
-      const json = await res.json();
+      const json = (await res.json()) as ApplyResponse;
       if (!res.ok) throw new Error(json.error || "Failed to apply updates");
 
-      setApplySuccess(`Applied ${updates.length} updates.`);
+      setApplySuccess(`Applied ${json.applied ?? rowKeysToApply.length} updates.`);
       if (onApplied) await Promise.resolve(onApplied());
 
       // Auto-close shortly after successful apply.
@@ -374,19 +389,54 @@ export function TranslationProcessModal({
     }
   };
 
+  const applyAllUpdates = async () => {
+    setApplying(true);
+    setApplyError(null);
+    setApplySuccess(null);
+    try {
+      if (!jobId) {
+        setApplyError("Missing jobId.");
+        return;
+      }
+
+      const res = await fetch("/api/i18n/process/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId, mode: "all_updates" }),
+      });
+      const json = (await res.json()) as ApplyResponse;
+      if (!res.ok) throw new Error(json.error || "Failed to apply updates");
+
+      setApplySuccess(`Applied ${json.applied ?? 0} updates.`);
+      if (onApplied) await Promise.resolve(onApplied());
+
+      if (autoCloseTimerRef.current) window.clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = window.setTimeout(() => {
+        onClose();
+      }, 900);
+    } catch (e) {
+      setApplyError((e as Error).message);
+    } finally {
+      setApplying(false);
+    }
+  };
+
   const reviewList = useMemo(() => {
+    if (selection.mode === "query") {
+      return rows;
+    }
     const map = new Map(rows.map((r) => [`${r.namespace}.${r.key}`, r]));
-    return rowKeys
-      .map((rk) => map.get(rk) ?? null)
-      .filter(Boolean) as TranslationRecord[];
-  }, [rowKeys, rows]);
+    return rowKeys.map((rk) => map.get(rk) ?? null).filter(Boolean) as TranslationRecord[];
+  }, [rowKeys, rows, selection.mode]);
 
   const footer = useMemo(() => {
     if (step === "review") {
       return (
         <div className="flex items-center justify-between gap-3">
           <div className="text-xs text-text-muted">
-            {rowKeys.length} selected
+            {selection.mode === "keys"
+              ? `${rowKeys.length} selected`
+              : `All matching filters (${(selection.estimatedSelected ?? 0).toLocaleString()} rows)`}
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" onClick={onClose}>
@@ -429,6 +479,9 @@ export function TranslationProcessModal({
           <Button variant="secondary" onClick={acceptNone} disabled={!results.length}>
             Select none
           </Button>
+          <Button variant="secondary" onClick={applyAllUpdates} disabled={applying || resultsTotal === 0 || !jobId}>
+            Apply all updates
+          </Button>
           <Button variant="primary" onClick={applySelected} disabled={applying || accepted.size === 0}>
             {applying ? (
               <>
@@ -467,7 +520,11 @@ export function TranslationProcessModal({
           <div className="rounded-lg border border-border-subtle bg-bg-elevated">
             <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
               <div className="text-sm font-medium text-text-primary">Selected translations</div>
-              <div className="text-xs text-text-muted">{rowKeys.length} rows</div>
+              <div className="text-xs text-text-muted">
+                {selection.mode === "keys"
+                  ? `${rowKeys.length} rows`
+                  : `All matching filters • ${(selection.estimatedSelected ?? 0).toLocaleString()} rows`}
+              </div>
             </div>
             <div className="max-h-[320px] overflow-auto scrollbar-elegant">
               {loadingRows && rows.length === 0 ? (
@@ -475,7 +532,11 @@ export function TranslationProcessModal({
                   <Loader2 className="h-4 w-4 animate-spin" /> Loading…
                 </div>
               ) : reviewList.length === 0 ? (
-                <div className="px-4 py-4 text-sm text-text-muted">No rows selected.</div>
+                <div className="px-4 py-4 text-sm text-text-muted">
+                  {selection.mode === "query"
+                    ? "No preview rows loaded yet. You can still run the agent on all matching filters."
+                    : "No rows selected."}
+                </div>
               ) : (
                 <div className="divide-y divide-border-subtle">
                   {reviewList.map((r) => {
@@ -487,20 +548,36 @@ export function TranslationProcessModal({
                           <div className="mt-1 text-xs text-text-secondary line-clamp-2">{r.en || r.fr || r.de || r.it || ""}</div>
                           <div className="mt-1 text-[11px] text-text-muted font-mono truncate">{r.context_usage || r.source_file}</div>
                         </div>
-                        <button
-                          type="button"
-                          className="shrink-0 rounded-md border border-border-subtle px-2 py-1 text-xs text-text-secondary hover:bg-state-hover hover:text-text-primary"
-                          onClick={() => setRowKeys((prev) => prev.filter((x) => x !== rk))}
-                          title="Remove from run"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
+                        {selection.mode === "keys" ? (
+                          <button
+                            type="button"
+                            className="shrink-0 rounded-md border border-border-subtle px-2 py-1 text-xs text-text-secondary hover:bg-state-hover hover:text-text-primary"
+                            onClick={() => setRowKeys((prev) => prev.filter((x) => x !== rk))}
+                            title="Remove from run"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
                       </div>
                     );
                   })}
                 </div>
               )}
             </div>
+            {selection.mode === "query" ? (
+              <div className="border-t border-border-subtle px-4 py-3 text-[11px] text-text-muted space-y-1">
+                <div>
+                  Previewing <span className="font-mono">{Math.min(50, rows.length)}</span> rows. This run will process{" "}
+                  <span className="font-mono">{(selection.estimatedSelected ?? 0).toLocaleString()}</span> matching rows.
+                </div>
+                <div className="font-mono">
+                  filters: q={selection.q?.trim() ? JSON.stringify(selection.q.trim()) : "—"} • namespace=
+                  {selection.namespace?.trim() ? JSON.stringify(selection.namespace.trim()) : "—"} • status=
+                  {selection.status ?? "—"} • reviewed={typeof selection.reviewed === "boolean" ? String(selection.reviewed) : "—"} • exclusions=
+                  {(selection.excludeRowKeys?.length ?? 0).toLocaleString()}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="rounded-lg border border-border-subtle bg-bg-elevated overflow-hidden">
@@ -523,9 +600,9 @@ export function TranslationProcessModal({
                       min={5}
                       max={50}
                       value={chunkSize}
-                      onChange={(e) => setChunkSize(Math.max(5, Math.min(50, Number(e.target.value) || 20)))}
+                      onChange={(e) => setChunkSize(Math.max(5, Math.min(50, Number(e.target.value) || 50)))}
                     />
-                    <div className="mt-1 text-[11px] text-text-muted">For 100+ rows, 15–25 is usually safest.</div>
+                    <div className="mt-1 text-[11px] text-text-muted">Default is 50. If your LLM hits limits, try 15–25.</div>
                   </label>
 
                   <label className="text-xs text-text-secondary">
@@ -583,8 +660,23 @@ export function TranslationProcessModal({
                 }
               />
             </div>
-            <div className="mt-2 text-[11px] text-text-muted">
-              Chunk size: <span className="font-mono">{job?.chunkSize ?? chunkSize}</span>
+            <div className="mt-2 text-[11px] text-text-muted space-y-1">
+              <div>
+                Chunk size: <span className="font-mono">{job?.chunkSize ?? chunkSize}</span>
+              </div>
+              <div className="truncate">
+                LLM:{" "}
+                <span className="font-mono">
+                  {job?.resolvedLlm?.provider ?? job?.llmSelection?.provider ?? "unknown"}
+                  {job?.resolvedLlm?.model || job?.llmSelection?.model ? `/${job?.resolvedLlm?.model ?? job?.llmSelection?.model}` : ""}
+                </span>
+                {job?.resolvedLlm?.provider === "lmstudio" && job?.resolvedLlm?.lmstudio?.baseUrl ? (
+                  <span className="ml-2 text-text-muted">({job.resolvedLlm.lmstudio.baseUrl})</span>
+                ) : null}
+                {job?.resolvedLlm?.provider === "azure" && job?.resolvedLlm?.azure?.deployment ? (
+                  <span className="ml-2 text-text-muted">(deployment {job.resolvedLlm.azure.deployment})</span>
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -617,7 +709,9 @@ export function TranslationProcessModal({
               Show only updates
             </label>
             <div className="text-xs text-text-muted">
-              Toggle rows to apply. The agent may keep already-good translations.
+              {onlyChanged && job?.totalRows
+                ? `Showing ${resultsTotal.toLocaleString()} updates out of ${job.totalRows.toLocaleString()} processed. Toggle off to see KEEP decisions.`
+                : "Toggle rows to apply. The agent may keep already-good translations."}
             </div>
           </div>
 

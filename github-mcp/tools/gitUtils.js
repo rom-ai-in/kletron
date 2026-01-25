@@ -3,7 +3,8 @@ import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
 
-export async function runGit({ cwd, args, timeoutMs = 10_000, maxBuffer = 1024 * 1024 }) {
+export async function runGit({ cwd, args, timeoutMs = 10_000, maxBuffer = 20 * 1024 * 1024 }) {
+
   try {
     const { stdout } = await execFileAsync("git", args, {
       cwd,

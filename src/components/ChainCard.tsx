@@ -115,6 +115,7 @@ function ChainStatusBadge({ status }: { status: ChainStatus }) {
         RUNNING: "bg-sky-500/10 text-sky-400 border-sky-500/20",
         PENDING: "bg-bg-elevated text-text-muted border-border-subtle",
         PAUSED: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+        CANCELLED: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
     };
 
     return (

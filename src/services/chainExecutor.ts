@@ -263,6 +263,17 @@ export class ChainExecutor {
         const chain = await this.getChain(run.chainId.toString());
         if (!chain) throw new Error(`Campaign ${run.chainId} not found`);
 
+        // If run was cancelled before we started, don't restart it.
+        if (run.status === "CANCELLED") {
+            console.info(`[ChainExecutor] Run ${runId} is cancelled. Skipping execution.`);
+            return {
+                chainId: chain._id!.toString(),
+                success: false,
+                stages: [],
+                aggregation: { findings: [], insights: [], report: "", stats: { totalStages: 0, totalFindings: 0, criticalCount: 0, warningCount: 0 } }
+            };
+        }
+
         await this.updateRunStatus(runId, "RUNNING");
         // Also update parent chain status
         await this.updateChainStatus(run.chainId.toString(), "RUNNING");
@@ -272,7 +283,7 @@ export class ChainExecutor {
 
         // Execute each stage sequentially
         for (let i = run.currentStageIndex; i < chain.stages.length; i++) {
-            // Check if run was paused
+            // Check if run was paused or cancelled (best-effort: takes effect between stages)
             const currentRun = await this.getRun(runId);
             if (currentRun?.status === "PAUSED") {
                 console.info(`[ChainExecutor] Run ${runId} is paused. Stopping execution loop.`);
@@ -281,6 +292,15 @@ export class ChainExecutor {
                     success: false,
                     stages: results,
                     aggregation: { findings: [], insights: [], report: "", stats: { totalStages: 0, totalFindings: 0, criticalCount: 0, warningCount: 0 } }
+                };
+            }
+            if (currentRun?.status === "CANCELLED") {
+                console.info(`[ChainExecutor] Run ${runId} is cancelled. Stopping execution loop.`);
+                return {
+                    chainId: chain._id!.toString(),
+                    success: false,
+                    stages: results,
+                    aggregation: { findings: [], insights: [], report: "", stats: { totalStages: results.length, totalFindings: results.flatMap((r) => r.findings).length, criticalCount: 0, warningCount: 0 } }
                 };
             }
 
@@ -706,6 +726,31 @@ export class ChainExecutor {
 
         // Continue execution of the latest run
         await this.executeRun(latestRun._id!.toString());
+    }
+
+    /**
+     * Cancel a specific run (best-effort: takes effect between stages)
+     */
+    async cancelRun(runId: string): Promise<void> {
+        const run = await this.getRun(runId);
+        if (!run) throw new Error(`Run ${runId} not found`);
+
+        await this.updateRunStatus(runId, "CANCELLED", {
+            endedAt: new Date(),
+        });
+
+        // Also update parent chain status (represents latest run status)
+        await this.updateChainStatus(run.chainId.toString(), "CANCELLED");
+    }
+
+    /**
+     * Cancel the latest run of a campaign
+     */
+    async cancelChain(chainId: string): Promise<{ runId: string }> {
+        const latestRun = await this.getLatestRun(chainId);
+        if (!latestRun) throw new Error(`No run found for chain ${chainId} to cancel`);
+        await this.cancelRun(latestRun._id!.toString());
+        return { runId: latestRun._id!.toString() };
     }
 
     /**

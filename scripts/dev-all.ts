@@ -37,7 +37,7 @@ async function main() {
       },
     }),
     createWebLauncher(WEB_PORT),
-    createI18nProcessWorkerLauncher(),
+    createI18nProcessWorkerLauncher({ watch: true }),
   ];
 
   console.log("⏳ Waiting for MCP + LangGraph dev server...");

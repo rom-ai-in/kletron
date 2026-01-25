@@ -61,6 +61,7 @@ export default function VectorIndexPage() {
         message: string;
         action: () => void;
     } | null>(null);
+    const [topK, setTopK] = useState(5);
 
     // Fetch initial data
     const fetchData = useCallback(async () => {
@@ -148,7 +149,10 @@ export default function VectorIndexPage() {
             const res = await fetch("/api/vectors/search", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query: searchQuery }),
+                body: JSON.stringify({
+                    query: searchQuery,
+                    maxResults: topK
+                }),
             });
             const data = await res.json();
             if (res.ok) {
@@ -307,7 +311,7 @@ export default function VectorIndexPage() {
 
                 {/* Search Preview */}
                 <div className="flex flex-col gap-6 pb-6">
-                    <Panel className="p-0 flex flex-col h-[600px]">
+                    <div className="flex flex-col h-[600px] overflow-hidden rounded-lg border border-border-subtle bg-bg-surface shadow-sm">
                         <div className="p-4 border-b border-border-subtle bg-bg-surface flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <Search className="h-4 w-4 text-text-muted" />
@@ -326,12 +330,23 @@ export default function VectorIndexPage() {
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
+                                <div className="flex items-center gap-2 px-2 border-l border-border-subtle">
+                                    <span className="text-[10px] text-text-muted font-bold uppercase whitespace-nowrap">Top K:</span>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="50"
+                                        value={topK}
+                                        onChange={(e) => setTopK(parseInt(e.target.value) || 1)}
+                                        className="w-12 rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-xs text-text-primary outline-none focus:border-emerald-500/50"
+                                    />
+                                </div>
                                 <Button type="submit" size="sm" disabled={isSearching || !status?.totalChunks}>
                                     {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
                                 </Button>
                             </form>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-elegant bg-bg-app/20">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-elegant bg-bg-app/20 min-h-0">
                             {searchError && (
                                 <div className="p-4 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-start gap-3">
                                     <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -364,21 +379,21 @@ export default function VectorIndexPage() {
                                             <span className="text-xs font-bold text-emerald-400">{(result.score * 100).toFixed(1)}%</span>
                                         </div>
                                     </div>
-                                    <pre className="text-xs leading-relaxed text-text-secondary bg-bg-app p-3 rounded border border-border-subtle overflow-x-auto whitespace-pre font-mono">
+                                    <pre className="text-xs leading-relaxed text-text-secondary bg-bg-app p-3 rounded border border-border-subtle overflow-auto whitespace-pre font-mono max-h-[400px]">
                                         {result.content}
                                     </pre>
                                 </div>
                             ))}
                         </div>
-                    </Panel>
+                    </div>
 
                     {/* Errors / Logs */}
-                    <Panel className="p-0 flex flex-col h-[300px]">
+                    <div className="flex flex-col h-[300px] overflow-hidden rounded-lg border border-border-subtle bg-bg-surface shadow-sm">
                         <div className="p-4 border-b border-border-subtle bg-bg-surface flex items-center gap-2">
                             <AlertCircle className="h-4 w-4 text-text-muted" />
                             <h2 className="text-sm font-semibold text-text-primary">Indexing Logs</h2>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-2 font-mono scrollbar-elegant bg-bg-app/40">
+                        <div className="flex-1 overflow-y-auto p-2 font-mono scrollbar-elegant bg-bg-app/40 min-h-0">
                             {!status?.errors?.length && (
                                 <div className="p-4 text-xs text-text-muted italic">No errors reported</div>
                             )}
@@ -388,7 +403,7 @@ export default function VectorIndexPage() {
                                 </div>
                             ))}
                         </div>
-                    </Panel>
+                    </div>
                 </div>
             </div>
 

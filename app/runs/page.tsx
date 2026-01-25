@@ -7,7 +7,7 @@ import { Button } from "@/src/components/ui/Button";
 import type { AuditRun, ChainStatus } from "@/src/services/chainTypes";
 import { PlayCircle, Search } from "lucide-react";
 
-type FilterStatus = "all" | "running" | "completed" | "failed";
+type FilterStatus = "all" | "running" | "completed" | "failed" | "cancelled";
 
 export default function RunsPage() {
     const router = useRouter();
@@ -70,6 +70,7 @@ export default function RunsPage() {
         if (filter === "running" && run.status !== "RUNNING") return false;
         if (filter === "completed" && run.status !== "COMPLETED") return false;
         if (filter === "failed" && run.status !== "FAILED") return false;
+        if (filter === "cancelled" && run.status !== "CANCELLED") return false;
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
@@ -149,6 +150,9 @@ export default function RunsPage() {
                     </FilterButton>
                     <FilterButton active={filter === "failed"} onClick={() => setFilter("failed")}>
                         Failed
+                    </FilterButton>
+                    <FilterButton active={filter === "cancelled"} onClick={() => setFilter("cancelled")}>
+                        Cancelled
                     </FilterButton>
                 </div>
             </div>
@@ -262,6 +266,7 @@ function StatusBadge({ status }: { status: ChainStatus }) {
         RUNNING: "bg-sky-500/10 text-sky-400 border-sky-500/20",
         PENDING: "bg-bg-elevated text-text-muted border-border-subtle",
         PAUSED: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+        CANCELLED: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
     };
 
     return (

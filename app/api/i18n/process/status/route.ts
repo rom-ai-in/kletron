@@ -22,7 +22,9 @@ export async function GET(req: Request) {
 
   try {
     const db = await getDb();
-    const job = await db.collection(JOBS_COLLECTION).findOne({ _id: oid }, { projection: { _id: 0 } });
+    const job = await db
+      .collection(JOBS_COLLECTION)
+      .findOne({ _id: oid }, { projection: { _id: 0, selectionKeys: 0 } });
     if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
     return NextResponse.json(job);
   } catch (e) {

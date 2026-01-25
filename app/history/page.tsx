@@ -22,7 +22,7 @@ type ActivityItem = {
     id: string;
     type: "WORKBENCH" | "CAMPAIGN";
     title: string;
-    status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "PAUSED";
+    status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "PAUSED" | "CANCELLED";
     startedAt: string;
     endedAt?: string;
     conclusion?: string;
@@ -399,6 +399,7 @@ function StatusBadge({ status }: { status: ActivityItem["status"] }) {
         RUNNING: { bg: "bg-sky-500/10", text: "text-sky-400", icon: PlayCircle },
         PENDING: { bg: "bg-bg-elevated", text: "text-text-muted", icon: Clock },
         PAUSED: { bg: "bg-amber-500/10", text: "text-amber-400", icon: Clock },
+        CANCELLED: { bg: "bg-zinc-500/10", text: "text-zinc-300", icon: AlertCircle },
     };
 
     const config = styles[status] || styles.PENDING;
