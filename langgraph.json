@@ -8,15 +8,6 @@
     "eventsource>=4.0.0",
     "zod>=3.23.0"
   ],
-  "graphs": {
-    "numezis": {
-      "path": "src/graph.ts:graph",
-      "description": "5-phase Diamond Flow (Recon → Strategy → Investigation → Adjudication → Reporting) backed by github-mcp tools."
-    },
-    "simple_react": {
-      "path": "src/simpleReactGraph.ts:graph",
-      "description": "Single-phase ReAct agent for quick repository questions."
-    }
-  },
+  "graphs": {},
   "env": ".env"
 }

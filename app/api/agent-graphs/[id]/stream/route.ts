@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 import { resolveLlmSelection } from "@/src/llm";
-import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@/src/agentRunner";
+import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@/src/types";
 import { agentGraphService } from "@/src/services/agentGraphService";
 import { agentGraphRunService } from "@/src/services/agentGraphRunService";
 import { topoSortAgentGraph } from "@/src/services/agentGraphTopo";

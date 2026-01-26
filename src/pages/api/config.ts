@@ -1,0 +1,43 @@
+// src/pages/api/config.ts
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { getConfig, saveConfig } from '../../config';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    // TODO: add auth middleware if needed
+    if (req.method === 'GET') {
+        try {
+            const cfg = await getConfig();
+            res.status(200).json(cfg);
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+        return;
+    }
+
+    if (req.method === 'POST') {
+        const body = req.body;
+        if (!body.mcpDefaultDir) {
+            res.status(400).json({ error: '`mcpDefaultDir` is required' });
+            return;
+        }
+        try {
+            await saveConfig({ mcpDefaultDir: body.mcpDefaultDir });
+
+            // 1. Refresh the configuration cache
+            const { refreshConfig } = await import('../../config');
+            const updated = await refreshConfig();
+
+            // 2. Reload McpClient (restarts transport and background services)
+            const { McpClient } = await import('../../mcp/client');
+            await McpClient.reloadInstance();
+
+            res.status(200).json(updated);
+        } catch (e: any) {
+            res.status(500).json({ error: e.message });
+        }
+        return;
+    }
+
+    res.setHeader('Allow', ['GET', 'POST']);
+    res.status(405).end(`Method ${req.method} Not Allowed`);
+}

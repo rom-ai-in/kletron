@@ -1,6 +1,6 @@
 import { BaseMessage } from "@langchain/core/messages";
 
-import type { AgentEvent, AgentEventKind, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent } from "../agentRunner";
+import type { AgentEvent, AgentEventKind, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent } from "../types";
 import { streamReactAgentMessages } from "../reactAgentRunner";
 import { allMcpTools } from "../tools/mcpTools";
 import { auditService } from "./auditService";

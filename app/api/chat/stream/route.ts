@@ -1,4 +1,4 @@
-import { AgentWorkflowResult, AgentWorkflowUpdate } from "../../../../src/agentRunner";
+import { AgentWorkflowResult, AgentWorkflowUpdate } from "../../../../src/types";
 import { resolveLlmSelection } from "../../../../src/llm";
 import { runWorkflow } from "../../../../src/workflows";
 import { normalizeAuditContext, type AuditContext } from "../../../../src/shared/auditContext";

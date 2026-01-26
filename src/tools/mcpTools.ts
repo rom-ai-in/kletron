@@ -5,7 +5,13 @@ import { McpClient } from "../mcp/client";
 
 const formatResult = (raw: unknown) => {
   if (typeof raw === "string") return raw;
-  if (Array.isArray(raw)) return raw.join("\n");
+  if (Array.isArray(raw)) {
+    // If any item is an object, stringify the whole array to preserve structure
+    if (raw.some((item) => item && typeof item === "object")) {
+      return JSON.stringify(raw, null, 2);
+    }
+    return raw.join("\n");
+  }
   if (raw && typeof raw === "object") return JSON.stringify(raw, null, 2);
   return String(raw);
 };

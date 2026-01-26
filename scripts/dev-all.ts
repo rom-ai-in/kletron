@@ -3,6 +3,8 @@ import {
   createLangGraphDevServer,
   createMcpLauncher,
   createI18nProcessWorkerLauncher,
+  createDriftAnalysisWorkerLauncher,
+  createTerminalWorkerLauncher,
   createWebLauncher,
   requireTargetRepoRoot,
   waitForHttpOk,
@@ -38,6 +40,8 @@ async function main() {
     }),
     createWebLauncher(WEB_PORT),
     createI18nProcessWorkerLauncher({ watch: true }),
+    createDriftAnalysisWorkerLauncher({ watch: true }),
+    createTerminalWorkerLauncher({ watch: true }),
   ];
 
   console.log("⏳ Waiting for MCP + LangGraph dev server...");

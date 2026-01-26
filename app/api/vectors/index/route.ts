@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { startIndexing } from "@/src/services/indexerService";
-import { config } from "@/src/config";
+import { getConfig } from "@/src/config";
 
 export async function POST(request: NextRequest) {
     try {
-        const repoPath = config.repoRoot;
+        const cfg = await getConfig();
+        const repoPath = cfg.mcpDefaultDir;
 
         // Start indexing in the background
         void startIndexing(repoPath, false);

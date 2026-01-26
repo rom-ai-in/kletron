@@ -12,13 +12,17 @@ import {
     FileCode,
     History,
     Clock,
-    AlertTriangle
+    AlertTriangle,
+    ShieldAlert
 } from "lucide-react";
 import { Button } from "@/src/components/ui/Button";
 import { Panel } from "@/src/components/ui/Panel";
 import { Breadcrumbs } from "@/src/components/ui/Breadcrumbs";
 import { FolderTreePicker } from "@/src/components/ui/FolderTreePicker";
 
+
+
+import { DriftAnalysisModal } from "@/src/components/drift/DriftAnalysisModal";
 
 export interface DiffChunk {
     sha: string;
@@ -47,6 +51,7 @@ export default function ChangesPage() {
     const [diffs, setDiffs] = useState<DiffChunk[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [driftOpen, setDriftOpen] = useState(false);
 
     const fetchDiffs = async (newEnd?: string) => {
         setLoading(true);
@@ -123,6 +128,14 @@ export default function ChangesPage() {
                 </div>
                 <div className="flex items-center gap-3">
                     <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDriftOpen(true)}
+                    >
+                        <ShieldAlert className="mr-2 h-4 w-4" />
+                        Run Drift Analysis
+                    </Button>
+                    <Button
                         variant="secondary"
                         size="sm"
                         onClick={() => {
@@ -135,6 +148,7 @@ export default function ChangesPage() {
                         <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                         Refresh
                     </Button>
+                    <DriftAnalysisModal open={driftOpen} onClose={() => setDriftOpen(false)} />
                 </div>
             </div>
 

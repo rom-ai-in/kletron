@@ -8,7 +8,7 @@ import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { EventSource } from "eventsource";
 
-import { config } from "../config";
+import { config, getConfig } from "../config";
 
 type ToolResultContent = {
   text?: string;
@@ -29,6 +29,7 @@ export class McpClient {
     }
 
     const mcpUrl = process.env.MCP_URL ?? process.env.GITHUB_MCP_URL ?? "http://localhost:9000/sse";
+    const cfg = await getConfig();
     const transport = mcpUrl
       ? (() => {
         // SSEClientTransport requires an EventSource implementation in Node.
@@ -42,8 +43,8 @@ export class McpClient {
           args: [serverScript, "--mcp"],
           env: {
             ...process.env,
-            MCP_DEFAULT_DIR: config.repoRoot,
-            GITHUB_MCP_DEFAULT_DIR: config.repoRoot,
+            MCP_DEFAULT_DIR: cfg.mcpDefaultDir,
+            GITHUB_MCP_DEFAULT_DIR: cfg.mcpDefaultDir,
             MCP_TRANSPORT: "stdio",
             GITHUB_MCP_TRANSPORT: "stdio",
           },
@@ -87,8 +88,9 @@ export class McpClient {
 
         console.log("[AutoIndex] Initializing services...");
         (globalThis as any).__MCP_SERVICES_INITIALIZED__ = true;
-        startWatcher(config.repoRoot);
-        startAutoIndexScheduler(config.repoRoot);
+        const cfg = await getConfig();
+        startWatcher(cfg.mcpDefaultDir);
+        startAutoIndexScheduler(cfg.mcpDefaultDir);
       } catch (error) {
         console.error("[AutoIndex] Failed to initialize:", error);
       }
@@ -99,6 +101,17 @@ export class McpClient {
   }
 
   async callTool(name: string, args: Record<string, unknown> = {}) {
+    if (name === "semantic_code_search") {
+      const { semanticSearch } = await import("../services/vectorService");
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { query, ...options } = args;
+      if (typeof query !== "string") {
+        throw new Error("Missing query parameter for semantic_code_search");
+      }
+      const results = await semanticSearch(query, options);
+      return JSON.stringify(results, null, 2);
+    }
+
     const response = (await this.client.callTool(
       {
         name,
@@ -128,5 +141,37 @@ export class McpClient {
   async close() {
     await this.client.close();
     McpClient.instance = null;
+  }
+
+  static async reloadInstance() {
+    console.log("[McpClient] Reloading instance due to configuration change...");
+
+    // 1. Stop background services if they were initialized in this process
+    if ((globalThis as any).__MCP_SERVICES_INITIALIZED__) {
+      try {
+        const { stopWatcher } = await import("../services/autoIndexer");
+        const { stopAutoIndexScheduler } = await import("../services/autoIndexScheduler");
+        stopWatcher();
+        stopAutoIndexScheduler();
+        (globalThis as any).__MCP_SERVICES_INITIALIZED__ = false;
+        console.log("[McpClient] Background services stopped.");
+      } catch (e) {
+        console.error("[McpClient] Error stopping background services:", e);
+      }
+    }
+
+    // 2. Close and nullify the current client instance
+    if (McpClient.instance) {
+      try {
+        await McpClient.instance.close();
+        console.log("[McpClient] Client connection closed.");
+      } catch (e) {
+        console.error("[McpClient] Error closing client:", e);
+        McpClient.instance = null;
+      }
+    }
+
+    // 3. Re-initialize by calling getInstance() which will fetch fresh config
+    return await McpClient.getInstance();
   }
 }

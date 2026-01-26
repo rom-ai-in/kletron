@@ -200,19 +200,31 @@ export async function semanticSearch(query: string, options: {
         }
     ];
 
+    // Atlas Vector Search filter construction can be fragile if the index definition doesn't match exactly.
+    // We'll attempt a best-effort filter but wrap it to fail gracefully or simplify it.
+    // For now, based on user errors, 'language' is NOT indexed for filtering, so we remove it.
+    // Regex on 'filePath' also caused issues.
+    // We will proceed WITHOUT explicit pre-filtering for now to ensure stability.
+    // If strict filtering is needed, the Atlas index must be updated first.
+
+    // pipeline[0].$vectorSearch.filter = filter; // Disabled to prevent errors
+
+    // START LEGACY FILTER LOGIC (Disabled)
+    /*
     if (options.path || options.language) {
         const filter: any = {};
         if (options.path) {
-            filter.filePath = { $regex: options.path, $options: "i" };
+             // filter.filePath = { $regex: options.path, $options: "i" };
         }
         if (options.language) {
-            filter.language = options.language;
+            // filter.language = options.language;
         }
-        // $vectorSearch allows a 'filter' property in some versions, 
-        // but for broader compatibility with Atlas versions, we might need to adjust.
-        // Putting it in the $vectorSearch stage if supported by the user's Atlas version.
-        pipeline[0].$vectorSearch.filter = filter;
+        if (Object.keys(filter).length > 0) {
+             pipeline[0].$vectorSearch.filter = filter;
+        }
     }
+    */
+    // END LEGACY FILTER LOGIC
 
     const results = await collection.aggregate(pipeline).toArray();
 

@@ -20,12 +20,16 @@ function splitPath(pathname: string): string[] {
   return pathname.split("?")[0].split("#")[0].split("/").filter(Boolean);
 }
 
+// function buildCrumbsFromSegments
 function buildCrumbsFromSegments(pathname: string, segmentLabels: Record<string, string>): BreadcrumbItem[] {
   const segments = splitPath(pathname);
   const items: BreadcrumbItem[] = [];
 
-  // Root
-  items.push({ href: "/", label: "Workbench", isCurrent: segments.length === 0 });
+  // Only show Workbench if we are strictly at the root.
+  // Otherwise, top-level items (Editor, Campaigns, etc.) are siblings in the sidebar.
+  if (segments.length === 0) {
+    items.push({ href: "/", label: "Workbench", isCurrent: true });
+  }
 
   let acc = "";
   for (let i = 0; i < segments.length; i++) {
@@ -45,7 +49,6 @@ const resolverCampaignDetails: BreadcrumbResolver = (pathname) => {
   const id = m[1];
   const short = id.length > 10 ? `${id.slice(0, 6)}…${id.slice(-3)}` : id;
   return [
-    { href: "/", label: "Workbench", isCurrent: false },
     { href: "/campaigns", label: "Campaigns", isCurrent: false },
     { href: `/campaigns/${id}`, label: `Campaign ${short}`, isCurrent: true },
   ];
@@ -57,7 +60,6 @@ const resolverRunDetails: BreadcrumbResolver = (pathname) => {
   const id = m[1];
   const short = id.length > 10 ? `${id.slice(0, 6)}…${id.slice(-3)}` : id;
   return [
-    { href: "/", label: "Workbench", isCurrent: false },
     { href: "/history", label: "Activity", isCurrent: false },
     { href: `/runs/${id}`, label: `Run ${short}`, isCurrent: true },
   ];
@@ -67,6 +69,7 @@ const resolvers: BreadcrumbResolver[] = [resolverCampaignDetails, resolverRunDet
 
 const segmentLabels: Record<string, string> = {
   "/": "Workbench",
+  "/editor": "Editor",
   "/campaigns": "Campaigns",
   "/runs": "Execution Runs",
   "/vectors": "Vector Index",

@@ -1,9 +1,8 @@
 import { createInterface } from "node:readline";
-
-import { graph } from "./graph";
+import { runWorkflow } from "./workflows";
 
 async function main() {
-  console.log("🚀 Numezis TS LangGraph Agent");
+  console.log("🚀 Numezis Coder - Agent Executor");
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -20,18 +19,20 @@ async function main() {
       break;
     }
 
-    console.log("\n🧠 Running Diamond Flow audit (Recon → Strategy → Investigation → Adjudication → Reporting)...");
-    const result = await graph.invoke({
-      context: {
-        mission: userRequest,
-        languages: [],
-        frameworks: [],
-        hotspots: [],
-      },
+    console.log("\n🧠 Running Agent Graph Workflow...");
+    const result = await runWorkflow(userRequest, undefined, {
+      onUpdate: (update) => {
+        const lastEvent = update.eventStream[update.eventStream.length - 1];
+        if (lastEvent?.kind === "assistant") {
+          console.log(`[Agent]: ${lastEvent.content.slice(0, 100)}...`);
+        }
+      }
     });
+
     console.log("\n✅ Output:");
-    console.log(result.finalAnswer ?? "Done.");
+    console.log(result.conclusion ?? "Done.");
   }
+
 
   rl.close();
 }

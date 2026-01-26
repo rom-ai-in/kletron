@@ -20,15 +20,30 @@ export function getSchedulerStatus() {
     };
 }
 
+let schedulerInterval: NodeJS.Timeout | null = null;
+let initTimeout: NodeJS.Timeout | null = null;
+
 export function startAutoIndexScheduler(repoPath: string) {
+    stopAutoIndexScheduler();
     // Initial delay to let server start up
-    setTimeout(() => {
+    initTimeout = setTimeout(() => {
         scheduleNextRun(repoPath);
     }, 10000);
 }
 
+export function stopAutoIndexScheduler() {
+    if (initTimeout) {
+        clearTimeout(initTimeout);
+        initTimeout = null;
+    }
+    if (schedulerInterval) {
+        clearInterval(schedulerInterval);
+        schedulerInterval = null;
+    }
+}
+
 function scheduleNextRun(repoPath: string) {
-    setInterval(async () => {
+    schedulerInterval = setInterval(async () => {
         await runAutoIndex(repoPath);
     }, INTERVAL_MS);
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Settings, Sparkles, ListTree, ArrowRight, Wrench } from "lucide-react";
+import { Settings, Sparkles, ListTree, ArrowRight, Wrench, Folder } from "lucide-react";
 
 import { Panel } from "@/src/components/ui/Panel";
 
@@ -82,6 +82,13 @@ export default function ConfigOverviewPage() {
 
       <div className="flex-1 overflow-y-auto p-6 scrollbar-elegant">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <ConfigCard
+            title="Workspace"
+            description="Manage MCP repository root."
+            icon={<Folder className="h-4 w-4 text-text-muted" />}
+            href="/config/workspace"
+            meta="Repository Settings"
+          />
           <ConfigCard
             title="Context"
             description="Global context injected into agent runs."
