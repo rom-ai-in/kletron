@@ -31,13 +31,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'DELETE') {
-        const { id } = req.query;
+        const { id, permanent } = req.query;
         if (!id || typeof id !== 'string') {
             res.status(400).json({ error: 'ID is required' });
             return;
         }
         try {
-            await service.archive(id);
+            if (permanent === 'true') {
+                await service.delete(id);
+            } else {
+                await service.archive(id);
+            }
             res.status(200).json({ success: true });
         } catch (e: any) {
             res.status(500).json({ error: e.message });

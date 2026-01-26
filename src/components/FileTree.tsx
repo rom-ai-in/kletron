@@ -69,19 +69,19 @@ const FileTreeNode: React.FC<{ node: TreeNode; onSelect: (path: string) => void;
             >
                 <span className="mr-1 text-zinc-400">
                     {isDir ? (
-                        isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+                        isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />
                     ) : (
-                        <span className="w-[14px] inline-block" />
+                        <span className="w-[15px] inline-block" />
                     )}
                 </span>
-                <span className="mr-1.5 flex-shrink-0">
+                <span className="mr-2 flex-shrink-0">
                     {isDir ? (
-                        isOpen ? <FolderOpen size={14} className="text-sky-500" /> : <Folder size={14} className="text-text-muted" />
+                        isOpen ? <FolderOpen size={15} className="text-sky-500" /> : <Folder size={15} className="text-text-muted" />
                     ) : (
-                        <File size={14} className="text-text-muted" />
+                        <File size={15} className="text-text-muted" />
                     )}
                 </span>
-                <span className="truncate flex-1">{node.name}</span>
+                <span className="truncate flex-1 text-[13px]">{node.name}</span>
 
                 {/* Status Badge */}
                 {!isDir && (
@@ -229,7 +229,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelect, currentFile }) => 
                 <div className="relative group">
                     <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-text-muted group-focus-within:text-sky-500 transition-colors" />
                     <input
-                        className="w-full bg-bg-elevated border border-border-subtle rounded-md py-2 pl-8 pr-8 text-xs focus:outline-none focus:border-zinc-500 placeholder-text-muted transition-colors"
+                        className="w-full bg-bg-elevated border border-border-subtle rounded-md py-2 pl-8 pr-8 text-sm focus:outline-none focus:border-zinc-500 placeholder-text-muted transition-colors"
                         placeholder="Search files..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
@@ -334,7 +334,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelect, currentFile }) => 
                     <>
                         {/* Custom Header with Repo Name */}
                         <div className="px-3 py-2 border-b border-border-subtle">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-text-muted flex items-center justify-between mb-0.5">
+                            <div className="text-[11px] font-bold uppercase tracking-widest text-text-muted flex items-center justify-between mb-0.5">
                                 <span>Explorer</span>
                             </div>
                             {repoName && (

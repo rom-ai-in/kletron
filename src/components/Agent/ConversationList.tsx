@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Plus, MessageSquare, Archive, Loader2, ChevronRight, ChevronDown, Clock, AlertCircle, PlayCircle, StopCircle, CheckCircle2 } from 'lucide-react';
+import { Plus, MessageSquare, Archive, Loader2, ChevronRight, ChevronDown, Clock, AlertCircle, PlayCircle, StopCircle, CheckCircle2, Trash2 } from 'lucide-react';
 
 interface ConversationMetadata {
     id: string;
@@ -55,6 +55,17 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
         void fetchData();
     }, []);
 
+    const handleDelete = async (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        if (!confirm("Permanently delete this conversation? This cannot be undone.")) return;
+        try {
+            await fetch(`/api/agent?id=${id}&permanent=true`, { method: 'DELETE' });
+            void fetchData();
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     const handleArchive = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
         if (!confirm("Archive this conversation?")) return;
@@ -97,28 +108,36 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
         return (
             <div
                 onClick={() => onSelect(conv.id, conv.title)}
-                className={`group flex flex-col p-2 border-b border-zinc-800 cursor-pointer transition-all hover:bg-zinc-800/60 relative ${isActive ? 'bg-sky-500/10 border-l-2 border-l-sky-500' : ''
+                className={`group flex flex-col p-3 border-b border-zinc-800 cursor-pointer transition-all hover:bg-zinc-800/60 relative ${isActive ? 'bg-sky-500/10 border-l-2 border-l-sky-500' : ''
                     }`}
             >
-                <div className="flex items-start justify-between w-full mb-1">
-                    <span className="text-[10px] font-semibold text-zinc-100 truncate pr-6 leading-tight">{conv.title}</span>
-                    {conv.status !== 'archived' && (
+                <div className="flex items-start justify-between w-full mb-1.5">
+                    <span className="text-[13px] font-semibold text-zinc-100 truncate pr-6 leading-tight">{conv.title}</span>
+                    {conv.status !== 'archived' ? (
                         <button
                             onClick={(e) => handleArchive(e, conv.id)}
-                            className="absolute right-1.5 top-1.5 opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded border border-zinc-600 text-zinc-400 hover:text-zinc-200 transition-all"
+                            className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded border border-zinc-600 text-zinc-400 hover:text-zinc-200 transition-all"
                             title="Archive"
                         >
-                            <Archive className="w-2.5 h-2.5" />
+                            <Archive className="w-3 h-3" />
+                        </button>
+                    ) : (
+                        <button
+                            onClick={(e) => handleDelete(e, conv.id)}
+                            className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-red-900/40 rounded border border-red-900/50 text-red-500 hover:text-red-400 transition-all"
+                            title="Delete Permanently"
+                        >
+                            <Trash2 className="w-3 h-3" />
                         </button>
                     )}
                 </div>
                 <div className="flex items-center justify-between">
-                    <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full border ${status.borderColor} ${status.bgColor} ${status.color} text-[8px] font-bold uppercase tracking-wider`}>
-                        <StatusIcon className="w-2 h-2" />
+                    <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border ${status.borderColor} ${status.bgColor} ${status.color} text-[10px] font-bold uppercase tracking-wider`}>
+                        <StatusIcon className="w-2.5 h-2.5" />
                         {status.label}
                     </span>
-                    <span className="flex items-center gap-0.5 text-zinc-500 text-[8px] font-medium">
-                        <Clock className="w-2 h-2" />
+                    <span className="flex items-center gap-1 text-zinc-500 text-[10px] font-medium">
+                        <Clock className="w-2.5 h-2.5" />
                         {formatDate(conv.updatedAt)}
                     </span>
                 </div>

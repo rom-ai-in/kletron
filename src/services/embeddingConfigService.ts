@@ -49,8 +49,9 @@ function getEnvBasedConfig(): EmbeddingConfig {
             ? {
                 endpoint: config.azure.endpoint,
                 apiKey: config.azure.apiKey ?? "",
-                deployment: process.env.AZURE_EMBEDDING_DEPLOYMENT ?? config.azure.deployment ?? "",
-                model: process.env.AZURE_EMBEDDING_MODEL ?? "text-embedding-ada-002",
+                // which suggests the embeddings endpoint would fail.
+                deployment: config.azure.embeddingDeployment,
+                model: config.azure.embeddingModel,
                 apiVersion: config.azure.apiVersion ?? "2024-02-01",
             }
             : undefined,
@@ -166,12 +167,29 @@ export async function updateDefaultEmbeddingProvider(
     const collection = await getCollection();
     const currentConfig = await getEmbeddingConfig();
 
+    const envConfig = getEnvBasedConfig();
+
+    // Fix ObjectId vs String mismatch for Zod validation
+    const safeCurrentConfig = { ...currentConfig };
+    if (safeCurrentConfig._id && typeof safeCurrentConfig._id !== 'string') {
+        safeCurrentConfig._id = (safeCurrentConfig._id as any).toString();
+    }
+
     const updatedConfig: EmbeddingConfig = {
-        ...currentConfig,
+        ...safeCurrentConfig,
         provider,
         defaultProvider: provider,
         updatedAt: new Date(),
     };
+
+
+    // Ensure the selected provider has at least default config
+    if (provider === "azure" && !updatedConfig.azure) {
+        updatedConfig.azure = envConfig.azure;
+    }
+    if (provider === "lmstudio" && !updatedConfig.lmstudio) {
+        updatedConfig.lmstudio = envConfig.lmstudio;
+    }
 
     const validatedConfig = validateEmbeddingConfig(updatedConfig);
 

@@ -128,6 +128,7 @@ Rules:
 - Limit to top 20 files.
 - Only output paths that exist in list_files; paths must be repo-relative.
 - Output MUST be valid JSON only (no markdown).
+- JSON Structure: { "target_files": [ { "path": "string", "focus_area": "string", "score": number } ] }
 - Do not use ellipses (...) or trailing commas; output strict JSON.`
   },
   {

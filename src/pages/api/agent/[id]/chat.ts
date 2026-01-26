@@ -19,13 +19,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         try {
-            // Basic implementation: wait for full response
-            // TODO: Support SSE for streaming
-            const response = await engine.chat(id, message);
-            res.status(200).json({ response });
+            // Enable streaming
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+
+            await engine.chat(id, message, (event) => {
+                res.write(`data: ${JSON.stringify(event)}\n\n`);
+            });
+
+            res.write(`data: [DONE]\n\n`);
+            res.end();
         } catch (e: any) {
             console.error(e);
-            res.status(500).json({ error: e.message });
+            // If headers are already sent, we can't send a JSON error.
+            // We should ideally send an error event.
+            if (!res.headersSent) {
+                res.status(500).json({ error: e.message });
+            } else {
+                res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
+                res.end();
+            }
         }
         return;
     }

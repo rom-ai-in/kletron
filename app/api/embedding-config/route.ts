@@ -45,7 +45,7 @@ export async function PATCH(request: NextRequest) {
     } catch (error) {
         console.error("Failed to switch embedding provider:", error);
         return NextResponse.json(
-            { error: "Failed to switch embedding provider" },
+            { error: error instanceof Error ? error.message : "Failed to switch embedding provider" },
             { status: 500 }
         );
     }

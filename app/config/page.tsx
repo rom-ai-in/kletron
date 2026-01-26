@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Settings, Sparkles, ListTree, ArrowRight, Wrench, Folder } from "lucide-react";
+import { Settings, Sparkles, ListTree, ArrowRight, Wrench, Folder, Database } from "lucide-react";
 
 import { Panel } from "@/src/components/ui/Panel";
 
@@ -13,6 +13,7 @@ export default function ConfigOverviewPage() {
   const [toolsCount, setToolsCount] = useState<number>(0);
   const [contextEnabled, setContextEnabled] = useState<boolean | null>(null);
   const [llmProvider, setLlmProvider] = useState<LlmConfigSummary>(null);
+  const [embeddingProvider, setEmbeddingProvider] = useState<string | null>(null);
 
   useEffect(() => {
     // Context (local)
@@ -40,7 +41,20 @@ export default function ConfigOverviewPage() {
       }
     };
 
+    // Embedding provider (server)
+    const fetchEmbedding = async () => {
+      try {
+        const res = await fetch("/api/embedding-config");
+        if (!res.ok) throw new Error("Failed to fetch embedding config");
+        const data = await res.json();
+        setEmbeddingProvider(data.provider);
+      } catch {
+        setEmbeddingProvider(null);
+      }
+    };
+
     void fetchProvider();
+    void fetchEmbedding();
   }, []);
 
   useEffect(() => {
@@ -110,6 +124,17 @@ export default function ConfigOverviewPage() {
             }
           />
           <ConfigCard
+            title="Embeddings"
+            description="Vector model configuration."
+            icon={<Database className="h-4 w-4 text-text-muted" />}
+            href="/config/embeddings"
+            meta={
+              embeddingProvider
+                ? `Active: ${embeddingProvider === "azure" ? "Azure OpenAI" : "LM Studio"}`
+                : "Unknown"
+            }
+          />
+          <ConfigCard
             title="Graphs"
             description="DB-backed agent graphs (nodes + edges)."
             icon={<ListTree className="h-4 w-4 text-text-muted" />}
@@ -171,4 +196,3 @@ function ConfigCard({
     </Link>
   );
 }
-

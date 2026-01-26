@@ -11,27 +11,6 @@ import { extractJsonObject } from "@/src/lib/jsonExtract";
 import { z } from "zod";
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import { StructuredTool } from "@langchain/core/tools";
-
-class McpLangChainTool extends StructuredTool {
-    constructor(
-        public name: string,
-        public description: string,
-        public schema: z.ZodObject<any>
-    ) {
-        super();
-    }
-
-    async _call(arg: any): Promise<string> {
-        try {
-            const mcp = await McpClient.getInstance();
-            const res = await mcp.callTool(this.name, arg);
-            return typeof res === "string" ? res : JSON.stringify(res);
-        } catch (e: any) {
-            return `Error: ${e.message}`;
-        }
-    }
-}
 
 export type DriftJobStatus = "queued" | "running" | "success" | "error" | "cancelled";
 
@@ -174,24 +153,11 @@ Analyze the diff strictly against the Audit Rule.
 Does the code in the diff violate the standards or requirements in the Audit Rule?
 `;
 
-    // 3. Define Tools
-    const tools = [
-        new McpLangChainTool("read_file", "Read file content",
-            z.object({ filePath: z.string() })
-        ),
-        new McpLangChainTool("list_files", "List files in directory",
-            z.object({ path: z.string().optional() })
-        ),
-        new McpLangChainTool("search_code", "Search code",
-            z.object({ query: z.string() })
-        )
-    ];
-
-    // 4. Call LLM
+    // 3. Call LLM
     const model = await getChatModel(llmSelection, { temperature: 0 });
     const agent = createReactAgent({
         llm: model,
-        tools: tools,
+        tools: [], // Read-only analysis
         prompt: new SystemMessage(systemPrompt),
     });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Modal } from "./ui/Modal";
 import { Skeleton } from "./ui/Skeleton";
 
@@ -59,7 +59,7 @@ export function PromptSelectorModal({
     };
 
     // Load files for a folder
-    const loadFolderFiles = async (folderPath: string) => {
+    const loadFolderFiles = useCallback(async (folderPath: string) => {
         setLoadingFiles((prev) => new Set(prev).add(folderPath));
         try {
             const res = await fetch(`/api/prompts/files?dir=${encodeURIComponent(folderPath)}`);
@@ -75,7 +75,7 @@ export function PromptSelectorModal({
                 return next;
             });
         }
-    };
+    }, []);
 
     // Load prompt preview
     const loadPreview = async (path: string) => {
@@ -129,19 +129,39 @@ export function PromptSelectorModal({
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
             folders = filterFolders(folders, query);
-
-            // Automatically expand folders when searching
-            const allPaths = new Set<string>();
-            const addPaths = (f: PromptFolder) => {
-                allPaths.add(f.path);
-                f.children.forEach(addPaths);
-            };
-            folders.forEach(addPaths);
-            setExpandedFolders(allPaths);
         }
 
         return [...folders].sort((a, b) => collator.compare(a.name, b.name));
     }, [promptFolders, searchQuery]);
+
+    // Automatically expand and load files when searching
+    useEffect(() => {
+        if (!searchQuery) return;
+
+        const pathsToLoad = new Set<string>();
+        const traverse = (nodes: PromptFolder[]) => {
+            for (const node of nodes) {
+                pathsToLoad.add(node.path);
+                traverse(node.children);
+            }
+        };
+        traverse(filteredFolders);
+
+        setExpandedFolders(prev => {
+            const next = new Set(prev);
+            for (const path of pathsToLoad) {
+                next.add(path);
+            }
+            return next;
+        });
+
+        // Trigger fetches for any expanded folder that doesn't have files yet
+        for (const path of pathsToLoad) {
+            if (!folderFiles.has(path) && !loadingFiles.has(path)) {
+                void loadFolderFiles(path);
+            }
+        }
+    }, [filteredFolders, searchQuery, folderFiles, loadingFiles, loadFolderFiles]);
 
     // Keyboard navigation
     useEffect(() => {
@@ -179,22 +199,35 @@ export function PromptSelectorModal({
                 </div>
             }
         >
-            <div className="flex h-full min-h-[600px] gap-4 p-6 overflow-hidden">
+            <div className="flex h-full min-h-[500px] gap-0 overflow-hidden">
                 {/* Left panel: Folder tree */}
-                <div className="flex w-1/2 flex-col gap-3">
-                    {/* Search input */}
-                    <input
-                        type="text"
-                        placeholder="Search prompts..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none transition focus:border-border-strong"
-                        autoFocus
-                    />
+                <div className="flex w-[280px] flex-shrink-0 flex-col border-r border-border-subtle bg-bg-surface pr-0">
+                    <div className="p-3 border-b border-border-subtle">
+                        <div className="relative">
+                            <input
+                                type="text"
+                                placeholder="Search prompts..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full rounded bg-bg-elevated border border-border-subtle px-2 py-1.5 text-[11px] text-text-primary placeholder:text-text-muted focus:border-border-strong focus:outline-none transition-colors"
+                                autoFocus
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery("")}
+                                    className="absolute right-2 top-2 text-text-muted hover:text-text-primary"
+                                >
+                                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
+                    </div>
 
                     {/* Folder tree */}
-                    <div className="flex-1 overflow-y-auto scrollbar-elegant pr-2">
-                        <div className="space-y-1">
+                    <div className="flex-1 overflow-y-auto scrollbar-elegant p-0">
+                        <div className="space-y-0.5 p-2">
                             {filteredFolders.map((folder) => (
                                 <FolderNode
                                     key={folder.path}
@@ -215,30 +248,32 @@ export function PromptSelectorModal({
                 </div>
 
                 {/* Right panel: Preview */}
-                <div className="flex w-1/2 flex-col gap-3 border-l border-border-subtle pl-6">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Preview</h3>
+                <div className="flex flex-1 flex-col bg-bg-surface">
+                    <div className="flex h-[45px] flex-none items-center justify-between border-b border-border-subtle px-4">
+                        <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Preview</h3>
                         {selectedPath && (
-                            <span className="text-[10px] font-mono text-text-muted">{selectedPath}</span>
+                            <span className="text-[10px] text-text-muted truncate max-w-[300px]" title={selectedPath}>{selectedPath}</span>
                         )}
                     </div>
-                    <div className="flex-1 overflow-y-auto rounded-lg border border-border-subtle bg-bg-surface p-4 scrollbar-elegant">
+                    <div className="flex-1 overflow-y-auto p-4 scrollbar-elegant bg-bg-surface">
                         {loadingPreview ? (
-                            <div className="space-y-3">
-                                <Skeleton className="h-4 w-3/4" />
-                                <Skeleton className="h-4 w-full" />
+                            <div className="space-y-3 opacity-50">
+                                <Skeleton className="h-4 w-1/3" />
                                 <Skeleton className="h-4 w-full" />
                                 <Skeleton className="h-4 w-5/6" />
                                 <div className="h-4" />
-                                <Skeleton className="h-4 w-full" />
-                                <Skeleton className="h-4 w-4/5" />
+                                <Skeleton className="h-4 w-2/3" />
                             </div>
                         ) : previewContent ? (
-                            <pre className="text-xs leading-relaxed text-text-primary whitespace-pre-wrap break-words font-mono">
-                                {previewContent}
-                            </pre>
+                            <div className="prose prose-invert prose-xs max-w-none">
+                                <pre className="text-[11px] leading-relaxed text-text-secondary whitespace-pre-wrap break-words font-mono bg-transparent p-0 m-0 border-none">
+                                    {previewContent}
+                                </pre>
+                            </div>
                         ) : (
-                            <p className="text-sm text-text-muted text-center mt-10">Select a prompt to preview</p>
+                            <div className="flex h-full items-center justify-center text-text-muted">
+                                <p className="text-[11px] italic">Select a prompt to preview content</p>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -276,28 +311,27 @@ function FolderNode({
         <div>
             <button
                 onClick={() => onToggle(folder.path)}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-state-hover group"
+                className="flex w-full items-center gap-1.5 rounded bg-transparent px-2 py-1 text-left text-[12px] transition-colors hover:bg-state-hover group"
             >
-                <span className={`transition-transform duration-200 ${isExpanded ? "rotate-90" : ""} text-text-muted group-hover:text-text-primary`}>
+                <span className={`transition-transform duration-200 text-[10px] ${isExpanded ? "rotate-90" : ""} text-text-muted group-hover:text-text-primary`}>
                     ▸
                 </span>
-                <span className="font-medium text-text-primary">
+                <span className="font-medium text-text-primary truncate">
                     {isExpanded ? "📂" : "📁"} {folder.name}
                 </span>
                 {folder.children.length > 0 && (
-                    <span className="ml-auto text-[10px] bg-bg-surface border border-border-subtle rounded-full px-1.5 py-0.5 text-text-muted">
+                    <span className="ml-auto text-[9px] text-text-muted opacity-60">
                         {folder.children.length}
                     </span>
                 )}
             </button>
 
             {isExpanded && (
-                <div className="ml-4 mt-1 space-y-0.5">
+                <div className="ml-3 mt-0.5 space-y-0.5 border-l border-border-subtle pl-1">
                     {isLoadingFiles ? (
-                        <div className="space-y-1 px-2 pt-1">
-                            <Skeleton className="h-7 w-full" />
-                            <Skeleton className="h-7 w-full" />
-                            <Skeleton className="h-7 w-full" />
+                        <div className="space-y-1 px-2 pt-1 opacity-50">
+                            <Skeleton className="h-4 w-full" />
+                            <Skeleton className="h-4 w-2/3" />
                         </div>
                     ) : files && files.length > 0 ? (
                         [...files]
@@ -306,17 +340,17 @@ function FolderNode({
                                 <button
                                     key={file.path}
                                     onClick={() => onSelectFile(file.path)}
-                                    className={`flex w-full flex-col rounded-md px-2 py-1.5 text-left text-xs transition ${selectedPath === file.path
-                                        ? "bg-state-selected border border-border-strong"
-                                        : "hover:bg-state-hover"
+                                    className={`flex w-full items-start gap-2 rounded px-2 py-1 text-left text-[12px] transition-colors ${selectedPath === file.path
+                                        ? "bg-state-selected text-text-primary font-medium"
+                                        : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
                                         }`}
                                 >
-                                    <span className="font-medium text-text-primary">{file.name}</span>
-                                    <span className="text-[10px] text-text-muted">{file.path}</span>
+                                    <span className="mt-0.5 text-[10px] opacity-70">📄</span>
+                                    <span className="truncate">{file.name}</span>
                                 </button>
                             ))
                     ) : (
-                        <p className="px-2 py-1 text-xs text-text-muted">No files</p>
+                        <p className="px-2 py-1 text-[10px] text-text-muted italic opacity-60">No files</p>
                     )}
                     {[...folder.children]
                         .sort((a, b) => new Intl.Collator(undefined, { numeric: true }).compare(a.name, b.name))

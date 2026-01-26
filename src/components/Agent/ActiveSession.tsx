@@ -1,10 +1,28 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Send, Loader2, Play, CheckCircle, XCircle, Clock, Wrench, Brain, Terminal } from 'lucide-react';
+import { Send, Loader2, Play, CheckCircle, XCircle, Clock, Wrench, Brain, Terminal, StopCircle, Copy, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ToolOutput } from './ToolOutput';
 import { ThoughtsPanel } from './ThoughtsPanel';
 import { CodeBlock } from './CodeBlock';
+import { Selector } from '../ui/Selector';
+import { graphOptions } from '../../shared/graphCatalog';
+
+type LlmEnvInfo = {
+    defaultProvider?: "azure" | "lmstudio";
+    azure?: {
+        configured: boolean;
+        endpoint?: string | null;
+        deployment?: string | null;
+        model?: string | null;
+        apiVersion?: string | null;
+    };
+    lmstudio?: {
+        configured: boolean;
+        baseUrl?: string | null;
+        model?: string | null;
+    };
+};
 
 interface Message {
     id: string;
@@ -39,9 +57,88 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
     const [input, setInput] = useState('');
     const [sending, setSending] = useState(false);
     const [pendingEdits, setPendingEdits] = useState<PendingEdit[]>([]);
+    const [isPromptSelectorOpen, setIsPromptSelectorOpen] = useState(false);
+
+    const [llmProvider, setLlmProvider] = useState<string>('azure');
+    const [selectedGraphId, setSelectedGraphId] = useState<string>(graphOptions[0]?.id || 'universal-v1');
+    const [envInfo, setEnvInfo] = useState<LlmEnvInfo | null>(null);
+
+    useEffect(() => {
+        const fetchEnv = async () => {
+            try {
+                const res = await fetch("/api/env");
+                const data = await res.json();
+                const envLLM = data.llm as LlmEnvInfo;
+                setEnvInfo(envLLM);
+
+                // Initialize from Env or LocalStorage
+                const stored = window.localStorage.getItem("numezis-llm-selection");
+                if (stored) {
+                    try {
+                        const parsed = JSON.parse(stored);
+                        if (parsed.provider) setLlmProvider(parsed.provider);
+                    } catch { }
+                } else {
+                    setLlmProvider(envLLM?.defaultProvider || 'azure');
+                }
+
+                const storedGraph = window.localStorage.getItem("numezis-graph-selection");
+                if (storedGraph) {
+                    setSelectedGraphId(storedGraph);
+                }
+
+            } catch (e) {
+                console.error("Failed to fetch env", e);
+            }
+        };
+        fetchEnv();
+    }, []);
+
+    const handleLlmChange = (provider: string) => {
+        setLlmProvider(provider);
+        window.localStorage.setItem("numezis-llm-selection", JSON.stringify({ provider, model: provider === 'azure' ? envInfo?.azure?.model : envInfo?.lmstudio?.model }));
+    };
+
+    const handleGraphChange = (graphId: string) => {
+        setSelectedGraphId(graphId);
+        window.localStorage.setItem("numezis-graph-selection", graphId);
+    };
+
+    const llmOptions = [
+        {
+            id: 'azure',
+            label: 'Azure OpenAI',
+            sub: envInfo?.azure?.model || 'Not configured'
+        },
+        {
+            id: 'lmstudio',
+            label: 'LM Studio',
+            sub: envInfo?.lmstudio?.model || 'Not configured'
+        }
+    ];
+
+    const graphSelectOptions = graphOptions.map(g => ({
+        id: g.id,
+        label: g.name,
+        sub: g.description
+    }));
 
     // Auto-scroll ref
     const bottomRef = useRef<HTMLDivElement>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const isAtBottomRef = useRef(true);
+    const abortControllerRef = useRef<AbortController | null>(null);
+
+    const checkIsAtBottom = () => {
+        if (!scrollContainerRef.current) return true;
+        const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+        // Tolerance of 50px
+        return scrollHeight - scrollTop - clientHeight < 50;
+    };
+
+    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+        isAtBottomRef.current = checkIsAtBottom();
+    };
 
     const loadData = async () => {
         try {
@@ -70,46 +167,118 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
     }, [conversationId]);
 
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (isAtBottomRef.current) {
+            bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
     }, [messages, pendingEdits]);
+
+    const handleStop = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+            setSending(false);
+        }
+    };
 
     const handleSend = async () => {
         if (!input.trim() || sending) return;
         const msg = input;
         setInput('');
         setSending(true);
+        isAtBottomRef.current = true; // Force scroll on user send
 
         // Optimistic update
+        const tempId = `temp-${Date.now()}`;
         const optimisticMsg: Message = {
-            id: `temp-${Date.now()}`,
+            id: tempId,
             role: 'user',
             content: msg,
             timestamp: new Date().toISOString()
         };
         setMessages(prev => [...prev, optimisticMsg]);
 
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
         try {
             const res = await fetch(`/api/agent/${conversationId}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: msg })
+                body: JSON.stringify({
+                    message: msg,
+                    graphId: selectedGraphId,
+                    llmProvider
+                }),
+                signal: controller.signal
             });
 
             if (!res.ok) throw new Error("Failed to send");
 
-            // Reload to get the real response
+            const reader = res.body?.getReader();
+            const decoder = new TextDecoder();
+            if (!reader) throw new Error("No reader");
+
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                buffer += chunk;
+
+                const lines = buffer.split('\n\n');
+                buffer = lines.pop() || ''; // Keep the incomplete part
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const dataStr = line.slice(6);
+                        if (dataStr === '[DONE]') break;
+
+                        try {
+                            const event = JSON.parse(dataStr);
+
+                            // If it's the user message echoing back, replace the optimistic one
+                            // Or generally, just merge into messages
+                            setMessages(prev => {
+                                // If we have the optimistic message, and this is the user message (same content), replace it
+                                if (event.role === 'user' && event.content === msg) {
+                                    return prev.map(m => m.id === tempId ? event : m);
+                                }
+                                // Otherwise append if not exists
+                                if (prev.some(m => m.id === event.id)) return prev;
+                                return [...prev, event];
+                            });
+
+                        } catch (e) {
+                            console.error("Failed to parse SSE event", e);
+                        }
+                    }
+                }
+            }
+
+            // Final sync to be sure
             await loadData();
-        } catch (e) {
-            console.error(e);
-            alert("Failed to send message: " + (e as any).message);
+        } catch (e: any) {
+            if (e.name === 'AbortError') {
+                console.log("Request aborted by user");
+            } else {
+                console.error(e);
+                // Keep the input if it failed?
+            }
         } finally {
-            setSending(false);
+            if (abortControllerRef.current === controller) {
+                setSending(false);
+                abortControllerRef.current = null;
+            }
         }
     };
 
+
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        // Cmd+Enter to send
-        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        // Enter to send, Shift+Enter for new line
+        if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             void handleSend();
         }
@@ -120,10 +289,22 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
+    // Focus ref
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        // Focus input on load/switch
+        textareaRef.current?.focus();
+    }, [conversationId]);
+
     return (
         <div className="flex flex-col h-full bg-bg-surface">
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-3 scrollbar-elegant">
+            <div
+                ref={scrollContainerRef}
+                onScroll={handleScroll}
+                className="flex-1 overflow-y-auto p-2 scrollbar-elegant"
+            >
                 {messages.map((m, i) => {
                     const isUser = m.role === 'user';
                     const isSystem = m.role === 'system';
@@ -132,18 +313,13 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
 
                     if (isSystem) return null;
 
-                    // TOOL MESSAGE (Output)
-                    if (isTool) {
-                        return (
-                            <div key={m.id || i} className="pl-2 border-l-2 border-purple-500/20 ml-2">
-                                <ToolOutput output={m.content || m.toolOutput || ''} />
-                            </div>
-                        );
-                    }
+
+                    // TOOL MESSAGE (Output) - content is handled within the invocating assistant message
+                    if (isTool) return null;
 
                     // ASSISTANT / USER MESSAGE
                     return (
-                        <div key={m.id || i} className={`group flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+                        <div key={m.id || i} className={`group flex flex-col ${isUser ? 'items-end' : 'items-start'} ${m.toolName ? 'mb-0' : 'mb-3'}`}>
 
                             {/* Thoughts / Planning (Only for Assistant) */}
                             {isAssistant && (
@@ -158,21 +334,21 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
                             )}
 
                             {/* Main Message Bubble */}
-                            <div className={`relative max-w-[90%] rounded-lg shadow-sm border px-3 py-2 ${isUser
-                                    ? 'bg-zinc-800 border-zinc-700 text-zinc-100' // Darker user bubble for contrast
-                                    : 'bg-transparent border-transparent pl-0 pt-0' // Assistant "bubble" is cleaner/transparent
+                            <div className={`relative rounded-lg shadow-sm border ${m.toolName ? 'p-0' : 'px-3 py-2'} ${isUser
+                                ? 'bg-zinc-800 border-zinc-700 text-zinc-100 max-w-[90%]' // Darker user bubble for contrast
+                                : 'bg-transparent border-transparent pl-0 pt-0 w-full' // Assistant "bubble" is cleaner/transparent
                                 }`}>
 
-                                {/* Tool Call Indicator (If assistant triggered a tool) */}
+                                {/* Tool Call Indicator (Merged with output) */}
                                 {m.toolName && (
-                                    <div className="mb-2 inline-flex items-center gap-2 px-2 py-1 bg-purple-500/10 border border-purple-500/30 rounded text-[10px] text-purple-300 font-mono">
-                                        <Wrench size={10} />
-                                        <span className="font-semibold">Used: {m.toolName}</span>
-                                        {m.toolArgs && <span className="opacity-50 truncate max-w-[150px]">{m.toolArgs}</span>}
-                                    </div>
+                                    <ToolInvocation
+                                        name={m.toolName}
+                                        args={m.toolArgs}
+                                        output={messages[i + 1]?.role === 'tool' ? (messages[i + 1].content || messages[i + 1].toolOutput) : undefined}
+                                    />
                                 )}
 
-                                <div className={`prose prose-invert prose-p:leading-relaxed prose-pre:m-0 max-w-none text-[12px] ${isUser ? 'text-zinc-200' : 'text-zinc-300'}`}>
+                                <div className={`prose prose-invert prose-p:leading-relaxed prose-pre:m-0 max-w-none text-[12px] break-words break-all whitespace-pre-wrap ${isUser ? 'text-zinc-200' : 'text-zinc-300'}`}>
                                     <ReactMarkdown
                                         remarkPlugins={[remarkGfm]}
                                         components={{
@@ -187,10 +363,13 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
                                     </ReactMarkdown>
                                 </div>
 
-                                {/* Timestamp Footer */}
-                                <div className={`mt-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${isUser ? 'justify-end' : 'justify-start'}`}>
-                                    <span className="text-[9px] text-zinc-600 font-mono">{formatTime(m.timestamp)}</span>
-                                </div>
+                                {/* Timestamp Footer - Only for Assistant Messages (Non-tool) */}
+                                {isAssistant && !m.toolName && (
+                                    <div className="mt-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-start">
+                                        <span className="text-[9px] text-zinc-600 font-mono">{formatTime(m.timestamp)}</span>
+                                        <CopyButton content={m.content} />
+                                    </div>
+                                )}
                             </div>
                         </div>
                     );
@@ -241,30 +420,186 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
                 <div ref={bottomRef} />
             </div>
 
-            {/* Input Area */}
-            <div className="p-3 bg-zinc-900 border-t border-zinc-800">
-                <div className="relative bg-zinc-950 border border-zinc-800 rounded-lg focus-within:ring-1 focus-within:ring-zinc-700 transition-all shadow-inner">
-                    <textarea
-                        value={input}
-                        onChange={e => setInput(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        placeholder="Ask the agent..."
-                        className="w-full bg-transparent border-none rounded-lg px-3 py-2 text-[11px] text-zinc-200 placeholder-zinc-600 focus:ring-0 resize-none h-14 scrollbar-elegant leading-relaxed"
-                    />
-                    <div className="absolute bottom-1.5 right-2 flex items-center gap-2">
-                        <span className="text-[9px] text-zinc-600 font-mono hidden group-focus-within:inline-block">
-                            ⌘ + ⏎ to send
-                        </span>
-                        <button
-                            onClick={handleSend}
-                            disabled={!input.trim() || sending}
-                            className="p-1 text-zinc-500 hover:text-zinc-200 disabled:opacity-30 disabled:hover:text-zinc-500 transition-colors"
-                        >
-                            <Send size={12} />
-                        </button>
+            {/* Input Area - Exact match from workbench page */}
+            <div className="sticky bottom-0 bg-bg-surface px-4 py-4 backdrop-blur-md border-t border-border-subtle">
+                <div className="mx-auto max-w-4xl">
+                    <div className="rounded-xl border border-border-subtle bg-bg-elevated p-3 shadow-lg transition-all focus-within:border-border-strong group">
+                        <textarea
+                            ref={textareaRef}
+                            value={input}
+                            onChange={(event) => {
+                                const value = event.target.value;
+                                setInput(value);
+                                if (value === "/") {
+                                    setIsPromptSelectorOpen(true);
+                                }
+                            }}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Ask anything (⌘L), @ to mention, / for workflows"
+                            rows={1}
+                            className="w-full resize-none border-none bg-transparent p-0 text-[13px] font-medium text-text-primary outline-none focus:ring-0 placeholder:text-text-muted/60 scrollbar-elegant"
+                            style={{
+                                minHeight: '28px',
+                                maxHeight: '160px',
+                                height: 'auto'
+                            }}
+                        />
+
+                        <div className="mt-2 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                {/* Prompt selector / Add button */}
+                                <button
+                                    type="button"
+                                    onClick={() => setIsPromptSelectorOpen(true)}
+                                    className="flex h-6 w-6 items-center justify-center rounded-md border border-border-subtle bg-bg-surface text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+                                    title="Select prompt (⌘K)"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                    </svg>
+                                </button>
+
+                                {/* Mode Indicator - Clickable to open graph info */}
+                                <div className="flex items-center gap-2">
+                                    <Selector
+                                        label="GRAPH"
+                                        value={selectedGraphId}
+                                        options={graphSelectOptions}
+                                        onSelect={handleGraphChange}
+                                        direction="up"
+                                        size="sm"
+                                    />
+                                    <Selector
+                                        label="LLM"
+                                        value={llmProvider}
+                                        options={llmOptions}
+                                        onSelect={handleLlmChange}
+                                        direction="up"
+                                        size="sm"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                {/* Sending action */}
+
+                                {/* Circular action button */}
+                                <button
+                                    type="button"
+                                    onClick={sending ? handleStop : () => void handleSend()}
+                                    disabled={!sending && !input.trim()}
+                                    className={`flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200 ${sending
+                                        ? "bg-bg-surface border border-border-strong text-rose-500 scale-110 active:scale-95"
+                                        : "bg-text-primary text-bg-surface hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed"
+                                        }`}
+                                >
+                                    {sending ? (
+                                        <div className="h-2.5 w-2.5 bg-rose-500 rounded-sm animate-pulse" />
+                                    ) : (
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                                            <path fillRule="evenodd" d="M11.47 2.47a.75.75 0 011.06 0l7.5 7.5a.75.75 0 11-1.06 1.06l-6.22-6.22V21a.75.75 0 01-1.5 0V4.81l-6.22 6.22a.75.75 0 11-1.06-1.06l7.5-7.5z" clipRule="evenodd" />
+                                        </svg>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     );
 };
+
+const CopyButton = ({ content }: { content: string }) => {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(content);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <button
+            onClick={handleCopy}
+            className="ml-2 p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+            title="Copy message"
+        >
+            {copied ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
+        </button>
+    );
+};
+
+const ToolInvocation: React.FC<{ name: string; args?: string; output?: string }> = ({ name, args, output }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    // Parse args to get a friendly display value
+    const getDisplayInfo = () => {
+        let displayArgs = "";
+        let displayName = name;
+
+        try {
+            const parsed = args ? JSON.parse(args) : {};
+
+            if (name === 'grep_search') {
+                displayName = "Grepped";
+                displayArgs = parsed.Query || parsed.query || "";
+                if (parsed.SearchPath || parsed.path) displayArgs += ` in ${parsed.SearchPath || parsed.path}`;
+            } else if (name === 'read_file' || name === 'view_file') {
+                displayName = "Read";
+                // precise filename only
+                const path = parsed.AbsolutePath || parsed.path || "";
+                displayArgs = path.split('/').pop() || path;
+            } else if (name === 'list_dir') {
+                displayName = "Listed";
+                const path = parsed.DirectoryPath || parsed.path || "";
+                displayArgs = path.split('/').pop() || path;
+            } else if (name === 'run_command') {
+                displayName = "Ran";
+                displayArgs = parsed.CommandLine || parsed.command || "";
+            } else if (name === 'replace_file_content' || name === 'write_to_file') {
+                displayName = name === 'write_to_file' ? "Created" : "Edited";
+                const path = parsed.TargetFile || parsed.path || "";
+                displayArgs = path.split('/').pop() || path;
+            } else if (name === 'codebase_search') {
+                displayName = "Searched code";
+                displayArgs = parsed.query || "";
+            }
+        } catch (e) {
+            displayArgs = args || "";
+        }
+
+        return { displayName, displayArgs };
+    };
+
+    const { displayName, displayArgs } = getDisplayInfo();
+
+    return (
+        <div className="mb-0 group/tool">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="flex items-center gap-2 w-full text-left py-0.5 hover:bg-zinc-800/30 rounded px-1 -ml-1 transition-colors"
+            >
+                <div className={`text-zinc-500 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>
+                    <ChevronRight size={12} />
+                </div>
+                <div className="flex items-center gap-2 text-[11px] overflow-hidden">
+                    <span className="font-semibold text-zinc-400">{displayName}</span>
+                    <span className="text-zinc-600 truncate max-w-[300px] font-mono">{displayArgs}</span>
+                </div>
+            </button>
+
+            {isOpen && output && (
+                <div className="pl-5 mt-0.5 border-l border-zinc-800 ml-1.5 pb-2">
+                    <div className="text-[10px] text-zinc-500 mb-1 font-mono bg-zinc-900/50 p-1.5 rounded inline-block max-w-full truncate">
+                        {name}({args ? args.substring(0, 100) + (args.length > 100 ? '...' : '') : ''})
+                    </div>
+                    <ToolOutput output={output} />
+                </div>
+            )}
+        </div>
+    );
+};
+
+// Add ChevronRight to imports if not present
+import { ChevronRight } from 'lucide-react';

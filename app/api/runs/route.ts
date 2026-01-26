@@ -42,10 +42,8 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({ runs: enrichedRuns }, { status: 200 });
     } catch (error) {
-        console.error("[API /api/runs GET] Error:", error);
-        return NextResponse.json(
-            { error: "Failed to list execution runs" },
-            { status: 500 }
-        );
+        console.error("[API /api/runs GET] Error (returning empty list):", error);
+        // Fallback to empty list so UI doesn't break if DB is unreachable
+        return NextResponse.json({ runs: [] }, { status: 200 });
     }
 }

@@ -17,7 +17,8 @@ import {
     Globe,
     FileCode,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+
 } from "lucide-react";
 
 
@@ -73,6 +74,7 @@ export function Sidebar() {
     const pathname = usePathname();
     const [runningCount, setRunningCount] = useState(0);
     const [targetDir, setTargetDir] = useState<string | null>(null);
+
     const [copied, setCopied] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -96,6 +98,8 @@ export function Sidebar() {
                 if (res.ok) {
                     const data = await res.json();
                     setTargetDir(data.targetDir || null);
+
+
                 }
             } catch (e) {
                 console.error("Failed to fetch env", e);
@@ -216,6 +220,8 @@ export function Sidebar() {
                         )}
                     </div>
                 )}
+
+
 
                 <div className={`flex items-center rounded-lg border border-border-subtle bg-bg-elevated p-3 mt-4 transition-all duration-300 ${isCollapsed ? "justify-center border-transparent bg-transparent p-0 mt-2" : "gap-3"}`}>
                     <div className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-tr from-zinc-700 to-zinc-500" />

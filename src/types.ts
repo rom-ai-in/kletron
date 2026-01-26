@@ -72,3 +72,30 @@ export type AgentWorkflowOptions = {
     llmSelection?: { provider: "azure" | "lmstudio"; model?: string };
     auditContext?: any | null;
 };
+
+export type RepoGraphNode = {
+    id: string;
+    label: string;
+    type: "directory" | "file" | "root";
+    path: string;
+    parentId?: string; // For hierarchy
+    data?: any; // Additional metadata (description, etc.)
+};
+
+export type RepoGraphEdge = {
+    id: string;
+    source: string;
+    target: string;
+    type?: string;
+};
+
+export type RepoAnalysisResult = {
+    nodes: RepoGraphNode[];
+    edges: RepoGraphEdge[];
+    structureContext: {
+        mission: string;
+        invariants: string[];
+        techStack: string[];
+        architectureType: string;
+    };
+};

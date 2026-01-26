@@ -160,6 +160,8 @@ export const config = {
     deployment: azureDeployment,
     model: azureModel,
     apiVersion: azureApiVersion,
+    embeddingDeployment: process.env.AZURE_EMBEDDING_DEPLOYMENT ?? "text-embedding-ada-002",
+    embeddingModel: process.env.AZURE_EMBEDDING_MODEL ?? "text-embedding-ada-002",
   },
   lmstudio: {
     baseUrl: lmstudioBaseUrl,

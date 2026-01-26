@@ -139,4 +139,17 @@ export class ConversationService {
         conversation.status = "archived";
         await this.save(conversation);
     }
+
+    async delete(id: string): Promise<void> {
+        const activePath = path.join(this.baseDir, `${id}.json`);
+        const archivePath = path.join(this.baseDir, "archive", `${id}.json`);
+
+        try {
+            await fs.unlink(activePath);
+        } catch { }
+
+        try {
+            await fs.unlink(archivePath);
+        } catch { }
+    }
 }

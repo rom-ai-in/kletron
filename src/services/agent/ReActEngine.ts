@@ -76,7 +76,7 @@ Stop and ask the user to approve the edit to ${input.filePath || input.path}.`;
         return tools;
     }
 
-    async chat(conversationId: string, userMessage: string, onUpdate?: (chunk: string) => void): Promise<string> {
+    async chat(conversationId: string, userMessage: string, onUpdate?: (event: AgentEvent) => void): Promise<string> {
         // 1. Load conversation history
         const conversation = await conversationService.get(conversationId);
         if (!conversation) throw new Error("Conversation not found");
@@ -108,6 +108,7 @@ Stop and ask the user to approve the edit to ${input.filePath || input.path}.`;
             timestamp: new Date().toISOString()
         };
         await conversationService.appendEvent(conversationId, newUserEvent);
+        if (onUpdate) onUpdate(newUserEvent);
 
         // 4. Run the agent
         const tools = this.getSafeTools(conversationId);
@@ -120,34 +121,14 @@ If you need to run terminal commands, use the 'execute_bash' tool, but be carefu
         let finalResponse = "";
 
         try {
-            const allMessages = await streamReactAgentMessages({
-                name: "AgentDeveloper",
-                systemPrompt,
-                userPrompt: userMessage,
-                tools,
-                extraMessages: previousMessages.filter(m => m.getType() !== "system"),
-                onMessage: async (msg: BaseMessage) => {
-                    // Optional: implement real-time streaming here
-                }
-            });
-
-            // 5. Process ONLY the new messages. 
-            // We use a simple heurstic: take messages after the known previous set.
-            // LangGraph usually returns the full state.
-            // We'll iterate from previousMessages.length
-
-            // To be precise, since 'streamReactAgentMessages' might include the new User message we passed in 'userPrompt',
-            // let's look at the tail.
-
-            // The logic: allMessages contains [ ...previousMessages, UserMessage, ...NewAgentMessages ]
-            const newMessages = allMessages.slice(previousMessages.length);
-
-            for (const msg of newMessages) {
+            // Helper to process and save a message
+            const processMessage = async (msg: BaseMessage) => {
                 const type = msg.getType();
                 const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
 
-                // Skip the user message we already added manually above
-                if (type === "human" && content === userMessage) continue;
+                // Skip user/system messages we already know
+                if (type === "human" && content === userMessage) return;
+                if (type === "system") return;
 
                 if (type === "ai") {
                     const aiMsg = msg as any;
@@ -161,10 +142,11 @@ If you need to run terminal commands, use the 'execute_bash' tool, but be carefu
                             kind: "assistant",
                             role: "assistant",
                             content: content,
-                            thoughts: toolCalls.length > 0 ? [content] : undefined, // Heuristic: text before tool call is often thought
+                            thoughts: toolCalls.length > 0 ? [content] : undefined,
                             timestamp: new Date().toISOString()
                         };
                         await conversationService.appendEvent(conversationId, event);
+                        if (onUpdate) onUpdate(event);
                     }
 
                     // 2. Handle Tool Calls
@@ -172,7 +154,7 @@ If you need to run terminal commands, use the 'execute_bash' tool, but be carefu
                         const event: AgentEvent = {
                             id: `ev-${Date.now()}-${tc.id}`,
                             phaseId: "chat",
-                            kind: "assistant", // It's an assistant action
+                            kind: "assistant",
                             role: "assistant",
                             content: "",
                             toolName: tc.name,
@@ -180,6 +162,7 @@ If you need to run terminal commands, use the 'execute_bash' tool, but be carefu
                             timestamp: new Date().toISOString()
                         };
                         await conversationService.appendEvent(conversationId, event);
+                        if (onUpdate) onUpdate(event);
                     }
                 } else if (type === "tool") {
                     const toolMsg = msg as any;
@@ -194,8 +177,20 @@ If you need to run terminal commands, use the 'execute_bash' tool, but be carefu
                         timestamp: new Date().toISOString()
                     };
                     await conversationService.appendEvent(conversationId, event);
+                    if (onUpdate) onUpdate(event);
                 }
-            }
+            };
+
+            await streamReactAgentMessages({
+                name: "AgentDeveloper",
+                systemPrompt,
+                userPrompt: userMessage,
+                tools,
+                extraMessages: previousMessages.filter(m => m.getType() !== "system"),
+                onMessage: async (msg: BaseMessage) => {
+                    await processMessage(msg);
+                }
+            });
 
             finalResponse = "Agent execution completed.";
 
@@ -210,6 +205,7 @@ If you need to run terminal commands, use the 'execute_bash' tool, but be carefu
                 timestamp: new Date().toISOString()
             };
             await conversationService.appendEvent(conversationId, errorEvent);
+            if (onUpdate) onUpdate(errorEvent);
             finalResponse = "Error: " + error.message;
         }
 

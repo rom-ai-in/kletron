@@ -1,7 +1,9 @@
+import path from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
 import { McpClient } from "../mcp/client";
+import { getConfig } from "../config";
 
 const formatResult = (raw: unknown) => {
   if (typeof raw === "string") return raw;
@@ -21,7 +23,42 @@ async function callMcpTool<TArgs extends Record<string, unknown> | undefined>(
   args?: TArgs
 ) {
   const client = await McpClient.getInstance();
-  return client.callTool(name, args ?? {});
+  const config = await getConfig();
+  const rootDir = config.mcpDefaultDir;
+
+  const resolvedArgs = { ...args };
+
+  // Helper to resolve a path property if it exists and is relative
+  const resolveIfRelative = (key: string) => {
+    // @ts-ignore
+    const val = resolvedArgs[key];
+    if (typeof val === 'string') {
+      if (!path.isAbsolute(val)) {
+        // @ts-ignore
+        resolvedArgs[key] = path.resolve(rootDir, val);
+      }
+    } else if (val === undefined || val === null) {
+      // If 'path' is explicitly undefined (or missing) and the tool expects it as context, defaulting to rootDir is often desired for 'path' arg.
+      // But verify tool semantics. 'list_files' with no path lists root.
+      // If we pass 'rootDir', it is effectively the same, but implicit becomes explicit.
+      if (key === 'path') {
+        // @ts-ignore
+        resolvedArgs[key] = rootDir;
+      }
+    }
+  };
+
+  // Properties to attempt to resolve against the configured workspace root
+  // 'path' is commonly used as "directory context" or "search scope"
+  resolveIfRelative('path');
+
+  // 'filePath' is usually a specific file target
+  resolveIfRelative('filePath');
+
+  // 'repoPath' is used by write_file
+  resolveIfRelative('repoPath');
+
+  return client.callTool(name, resolvedArgs);
 }
 
 const createListFilesTool = (defaultMaxDepth?: number) =>

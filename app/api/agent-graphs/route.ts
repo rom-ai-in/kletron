@@ -96,8 +96,9 @@ export async function GET(req: NextRequest) {
         const graphs = await agentGraphService.listGraphs({ search });
         return NextResponse.json({ graphs }, { status: 200 });
     } catch (error) {
-        console.error("[API /api/agent-graphs GET] Error:", error);
-        return NextResponse.json({ error: "Failed to list graphs" }, { status: 500 });
+        console.error("[API /api/agent-graphs GET] Error (returning empty list):", error);
+        // Fallback to empty list so UI doesn't break if DB is unreachable
+        return NextResponse.json({ graphs: [] }, { status: 200 });
     }
 }
 

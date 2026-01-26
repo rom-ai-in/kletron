@@ -55,5 +55,29 @@ export type GraphOption = {
   toolNames: string[];
 };
 
-export const graphOptions: GraphOption[] = [];
+export const graphOptions: GraphOption[] = [
+  {
+    id: "universal-v1",
+    name: "Universal Agent",
+    description: "Standard agent with access to all registered tools.",
+    phases: [
+      {
+        id: "main",
+        label: "Main",
+        summary: "Main execution loop",
+        description: "The primary interaction loop for the agent.",
+        systemPrompt: "You are a helpful AI assistant. You have access to a variety of tools. Use them to help the user.",
+        toolNames: baseToolNames,
+      },
+    ],
+    nodePrompts: [
+      {
+        id: "main",
+        label: "Main",
+        prompt: "You are a helpful AI assistant.",
+      },
+    ],
+    toolNames: baseToolNames,
+  },
+];
 

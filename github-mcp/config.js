@@ -5,7 +5,7 @@ import path from "path";
 const configuredDir =
   process.env.GITHUB_MCP_DEFAULT_DIR ||
   process.env.MCP_DEFAULT_DIR ||
-  "/Users/romainmagnin/Desktop";
+  process.cwd();
 
 const fetchAllowlistRaw =
   process.env.GITHUB_MCP_FETCH_ALLOWLIST || process.env.MCP_FETCH_ALLOWLIST || "";

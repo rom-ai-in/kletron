@@ -14,13 +14,10 @@ import {
     Clock,
     AlertCircle,
     Loader2,
-    Layers,
     FileCode,
-    ChevronRight,
     Play
 } from "lucide-react";
 import { Modal } from "@/src/components/ui/Modal";
-import { AzureEmbeddingConfigForm, LMStudioEmbeddingConfigForm } from "@/src/components/EmbeddingConfigForms";
 
 type IndexStatus = {
     isIndexing: boolean;
@@ -50,7 +47,6 @@ type SearchResult = {
 export default function VectorIndexPage() {
     const [status, setStatus] = useState<IndexStatus | null>(null);
     const [config, setConfig] = useState<any>(null);
-    const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
     const [isSearching, setIsSearching] = useState(false);
@@ -109,9 +105,6 @@ export default function VectorIndexPage() {
             return;
         }
 
-        // For initial indexing, we can also add a confirmation if we want, 
-        // but it's less "destructive" than a full reindex on an existing index.
-        // Let's keep it simple for now as requested for "Full Reindex".
         void (async () => {
             setIsActionLoading(true);
             try {
@@ -172,21 +165,6 @@ export default function VectorIndexPage() {
         }
     };
 
-    const handleSaveConfig = async (provider: string, data: any) => {
-        const res = await fetch(`/api/embedding-config/${provider}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data),
-        });
-        if (res.ok) {
-            void fetchData();
-            setIsConfigModalOpen(false);
-        } else {
-            const err = await res.json();
-            throw new Error(err.error || "Failed to save config");
-        }
-    };
-
     return (
         <div className="flex h-full flex-col bg-bg-app overflow-hidden">
             {/* Header */}
@@ -200,11 +178,20 @@ export default function VectorIndexPage() {
                         <p className="text-sm text-text-muted">Code semantic indexing and vector store management</p>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="secondary" size="sm" onClick={() => setIsConfigModalOpen(true)}>
-                        <Settings className="mr-2 h-4 w-4" />
-                        Configure Embedding
-                    </Button>
+                <div className="flex items-center gap-3">
+                    {/* Indicator replacing config button */}
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-bg-elevated border border-border-subtle">
+                        <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                        <span className="text-xs text-text-secondary">
+                            {config?.provider === 'azure' ? "Azure OpenAI" : config?.provider === 'lmstudio' ? "LM Studio" : "Unknown"}
+                        </span>
+                        {config?.provider && (
+                            <span className="text-xs text-text-muted border-l border-border-subtle pl-2">
+                                {config[config.provider]?.model}
+                            </span>
+                        )}
+                    </div>
+
                     <Button variant="secondary" size="sm" onClick={() => void fetchData()}>
                         <RefreshCw className="mr-2 h-4 w-4" />
                         Refresh Status
@@ -406,51 +393,6 @@ export default function VectorIndexPage() {
                     </div>
                 </div>
             </div>
-
-            {/* Config Modal */}
-            <Modal
-                open={isConfigModalOpen}
-                onClose={() => setIsConfigModalOpen(false)}
-                title="Embedding Configuration"
-                subtitle="Select and configure your embedding provider"
-            >
-                <div className="space-y-6">
-                    <div className="flex p-1 bg-bg-app rounded-lg border border-border-subtle">
-                        <button
-                            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition ${config?.provider === 'azure' ? 'bg-bg-elevated text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary'}`}
-                            onClick={() => setConfig({ ...config, provider: 'azure' })}
-                        >
-                            Azure OpenAI
-                        </button>
-                        <button
-                            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition ${config?.provider === 'lmstudio' ? 'bg-bg-elevated text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary'}`}
-                            onClick={() => setConfig({ ...config, provider: 'lmstudio' })}
-                        >
-                            LM Studio
-                        </button>
-                    </div>
-
-                    {config ? (
-                        config.provider === 'azure' ? (
-                            <AzureEmbeddingConfigForm
-                                initialConfig={config.azure}
-                                onSave={(data) => handleSaveConfig('azure', data)}
-                                onCancel={() => setIsConfigModalOpen(false)}
-                            />
-                        ) : (
-                            <LMStudioEmbeddingConfigForm
-                                initialConfig={config.lmstudio}
-                                onSave={(data) => handleSaveConfig('lmstudio', data)}
-                                onCancel={() => setIsConfigModalOpen(false)}
-                            />
-                        )
-                    ) : (
-                        <div className="flex items-center justify-center p-8">
-                            <Loader2 className="h-6 w-6 animate-spin text-text-muted" />
-                        </div>
-                    )}
-                </div>
-            </Modal>
 
             {/* Confirmation Modal */}
             <Modal

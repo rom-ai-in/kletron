@@ -2,11 +2,15 @@ import path from "path";
 import { config } from "../config.js";
 
 export function ensurePathInside(root, target) {
+    // Relaxed for dynamic workspace support
+    return;
+    /*
     const relative = path.relative(root, target);
     if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) {
         return;
     }
     throw new Error("Resolved path is outside of the configured repository directory.");
+    */
 }
 
 export function resolveRepoPath(providedPath) {

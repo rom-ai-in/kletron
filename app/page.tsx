@@ -12,6 +12,7 @@ import type {
 } from "../src/agentRunner";
 import { graphOptions } from "../src/shared/graphCatalog";
 import type { GraphId } from "../src/shared/graphCatalog";
+import { Selector } from "../src/components/ui/Selector";
 import {
   formatAuditContextSummary,
   normalizeAuditContext,
@@ -153,23 +154,23 @@ type AgentGraphRecord = {
 
 function TimelinePanel({ timeline, selectedEventId, onPhaseSelect, className }: TimelinePanelProps) {
   return (
-    <section className={`sticky top-6 space-y-4 rounded-lg border border-border-subtle bg-bg-surface p-0 shadow-sm h-full flex flex-col overflow-hidden ${className}`}>
-      <div className="border-b border-border-subtle px-3 py-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Phases</h2>
+    <section className={`flex flex-col h-full bg-bg-surface border-b border-border-subtle overflow-hidden ${className}`}>
+      <div className="flex-none border-b border-border-subtle px-3 py-2 bg-bg-surface">
+        <h2 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Phases</h2>
       </div>
-      <div className="flex-1 overflow-y-auto space-y-1 p-2 scrollbar-elegant">
+      <div className="flex-1 overflow-y-auto p-0 scrollbar-elegant">
         {timeline.map((event) => (
           <button
             key={event.id}
             type="button"
             onClick={() => onPhaseSelect(event.id)}
-            className={`w-full rounded-md border px-2 py-1.5 text-left transition group ${selectedEventId === event.id
-              ? "border-border-strong bg-state-selected"
-              : "border-transparent hover:bg-state-hover border-b border-border-subtle last:border-0"
+            className={`w-full px-3 py-2.5 text-left transition-colors border-b border-border-subtle last:border-0 group ${selectedEventId === event.id
+              ? "bg-state-selected"
+              : "bg-transparent hover:bg-state-hover"
               }`}
           >
             <div className="flex items-center justify-between mb-0.5">
-              <span className={`text-[11px] font-medium leading-tight ${selectedEventId === event.id ? "text-text-primary" : "text-text-secondary group-hover:text-text-primary"}`}>
+              <span className={`text-[12px] font-medium leading-tight ${selectedEventId === event.id ? "text-text-primary" : "text-text-secondary group-hover:text-text-primary"}`}>
                 {event.label}
               </span>
               {event.status !== "pending" && (
@@ -183,20 +184,19 @@ function TimelinePanel({ timeline, selectedEventId, onPhaseSelect, className }: 
             </div>
 
             {event.summary && (
-              <p className="text-[10px] text-text-muted truncate leading-relaxed opacity-80">
+              <p className="text-[11px] text-text-muted truncate leading-relaxed opacity-80 mt-0.5">
                 {event.summary}
               </p>
             )}
 
             {event.status === "running" && (
-              <div className="mt-1.5 h-0.5 w-full overflow-hidden rounded-full bg-bg-elevated/50">
+              <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-bg-elevated/50">
                 <div className="h-full w-full bg-emerald-500/50 animate-progress-loader origin-left" />
               </div>
             )}
           </button>
         ))}
       </div>
-
     </section>
   );
 }
@@ -218,22 +218,22 @@ function ToolExplorerPanel({ tools, usedToolNames, openToolDialog, className }: 
   }, [tools, searchQuery]);
 
   return (
-    <section className={`sticky top-6 space-y-0 rounded-lg border border-border-subtle bg-bg-surface shadow-sm h-full flex flex-col overflow-hidden ${className}`}>
-      <div className="flex flex-col border-b border-border-subtle bg-bg-surface">
+    <section className={`flex flex-col h-full bg-bg-surface overflow-hidden ${className}`}>
+      <div className="flex-none flex flex-col border-b border-border-subtle bg-bg-surface">
         <div className="flex items-center justify-between px-3 py-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Tools</h3>
+          <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Tools</h3>
           <span className="text-[10px] text-text-muted">
             {usedToolNames.size} used
           </span>
         </div>
-        <div className="px-2 pb-2">
+        <div className="px-3 pb-2">
           <div className="relative">
             <input
               type="text"
               placeholder="Search tools..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-[11px] text-text-primary placeholder:text-text-muted focus:border-border-strong focus:outline-none"
+              className="w-full rounded bg-bg-elevated border border-border-subtle px-2 py-1 text-[11px] text-text-primary placeholder:text-text-muted focus:border-border-strong focus:outline-none transition-colors"
             />
             {searchQuery && (
               <button
@@ -248,36 +248,27 @@ function ToolExplorerPanel({ tools, usedToolNames, openToolDialog, className }: 
           </div>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto scrollbar-elegant p-1">
-        <ul className="space-y-0.5">
+      <div className="flex-1 overflow-y-auto scrollbar-elegant p-0">
+        <ul className="divide-y divide-border-subtle">
           {filteredTools.map((tool) => (
             <li key={tool.name}>
               <button
                 type="button"
                 onClick={() => openToolDialog(tool)}
-                className="group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[12px] text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
+                className="group flex w-full items-center justify-between px-3 py-2 text-left text-[12px] text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
               >
-                <span className="truncate">{tool.label}</span>
-                <span className="opacity-0 transition-opacity group-hover:opacity-100">
-                  <svg
-                    className="h-3 w-3"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`w-1 h-1 rounded-full ${usedToolNames.has(tool.name) ? 'bg-emerald-400' : 'bg-transparent'}`}></div>
+                  <span className="truncate">{tool.label}</span>
+                </div>
+                {usedToolNames.has(tool.name) && (
+                  <span className="text-[10px] text-emerald-400 font-medium opacity-80">Used</span>
+                )}
               </button>
             </li>
           ))}
           {filteredTools.length === 0 && (
-            <li className="px-2 py-4 text-center text-[11px] text-text-muted italic">
+            <li className="px-3 py-4 text-center text-[11px] text-text-muted italic">
               No tools found
             </li>
           )}
@@ -501,254 +492,8 @@ function HeaderControls({
   }, [isGraphMenuOpen, isLlmMenuOpen]);
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div ref={graphMenuRef} className="relative">
-        <button
-          type="button"
-          className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-focus-ring"
-          onClick={() => {
-            setIsGraphMenuOpen((prev) => !prev);
-            setIsLlmMenuOpen(false);
-          }}
-        >
-          <span className="text-[10px] uppercase tracking-wider text-text-muted">Graph</span>
-          <span>{selectedGraphLabel}</span>
-          <svg
-            className="h-3 w-3 text-text-muted"
-            viewBox="0 0 12 12"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          >
-            <path d="M3 5l3 3 3-3" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        {isGraphMenuOpen && (
-          <div className="absolute left-0 z-20 mt-2 w-60 rounded-xl border border-border-subtle bg-bg-elevated p-1 shadow-xl">
-            <p className="px-2 py-1.5 text-[10px] font-medium text-text-muted">Choose graph</p>
-            <div className="space-y-0.5">
-              <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                Built-in
-              </div>
-              {graphOptions.map((graph) => {
-                const key = `builtin:${graph.id}`;
-                const isActive = selectedGraphKey === key;
-                return (
-                <div
-                  key={graph.id}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onSelectGraphKey(key);
-                      setIsGraphMenuOpen(false);
-                    }
-                  }}
-                  onClick={() => {
-                    onSelectGraphKey(key);
-                    setIsGraphMenuOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs font-medium transition ${isActive ? "bg-state-selected text-text-primary" : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
-                    }`}
-                >
-                  <span>{graph.name}</span>
-                  <span className="flex items-center gap-2">
-                    {isActive && <span className="text-[10px] text-text-muted">active</span>}
-                    <button
-                      type="button"
-                      className="text-text-muted transition hover:text-text-primary"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onSetDetailGraph(graph);
-                        onSetGraphInfoOpen(true);
-                        setIsGraphMenuOpen(false);
-                      }}
-                      aria-label={`View details for ${graph.name}`}
-                    >
-                      <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <circle cx="6" cy="6" r="5" />
-                        <path d="M6 4.5V6.75" strokeLinecap="round" />
-                        <circle cx="6" cy="8.75" r=".25" fill="currentColor" stroke="none" />
-                      </svg>
-                    </button>
-                  </span>
-                </div>
-              );
-              })}
+    <>
 
-              {agentGraphs.length > 0 && (
-                <>
-                  <div className="mt-2 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                    Agent graphs (DB)
-                  </div>
-                  {agentGraphs.map((g) => {
-                    const key = `agent:${String(g._id ?? "")}`;
-                    const isActive = selectedGraphKey === key;
-                    return (
-                      <div
-                        key={String(g._id)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            onSelectGraphKey(key);
-                            setIsGraphMenuOpen(false);
-                          }
-                        }}
-                        onClick={() => {
-                          onSelectGraphKey(key);
-                          setIsGraphMenuOpen(false);
-                        }}
-                        className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs font-medium transition ${isActive
-                          ? "bg-state-selected text-text-primary"
-                          : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
-                          }`}
-                      >
-                        <span className="truncate">{g.name}</span>
-                        <span className="flex items-center gap-2">
-                          {isActive && <span className="text-[10px] text-text-muted">active</span>}
-                          <a
-                            className="text-text-muted transition hover:text-text-primary"
-                            href={`/agent-graphs/${String(g._id)}`}
-                            onClick={(event) => event.stopPropagation()}
-                            aria-label={`Open ${g.name} in editor`}
-                          >
-                            <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-                              <path d="M4.5 2.5h5v5" strokeLinecap="round" strokeLinejoin="round" />
-                              <path d="M9.5 2.5 2.5 9.5" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          </a>
-                        </span>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div ref={llmMenuRef} className="relative">
-        <button
-          type="button"
-          className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-focus-ring"
-          onClick={() => {
-            setIsLlmMenuOpen((prev) => !prev);
-            setIsGraphMenuOpen(false);
-          }}
-        >
-          <span className="text-[10px] uppercase tracking-wider text-text-muted">LLM</span>
-          <span>{modelProvider === "azure" ? "Azure" : "LM Studio"}</span>
-          <svg
-            className="h-3 w-3 text-text-muted"
-            viewBox="0 0 12 12"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          >
-            <path d="M3 5l3 3 3-3" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        {isLlmMenuOpen && (
-          <div className="absolute left-0 z-20 mt-2 w-56 rounded-xl border border-border-subtle bg-bg-elevated p-1 shadow-xl">
-            <p className="px-2 py-1.5 text-[10px] font-medium text-text-muted">Select provider</p>
-            <div className="space-y-0.5">
-              {(["azure", "lmstudio"] as const).map((provider) => (
-                <div
-                  key={provider}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onSelectProvider(provider);
-                      setIsLlmMenuOpen(false);
-                    }
-                  }}
-                  onClick={() => {
-                    onSelectProvider(provider);
-                    setIsLlmMenuOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs font-medium transition ${provider === modelProvider ? "bg-state-selected text-text-primary" : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
-                    }`}
-                >
-                  <span>{provider === "azure" ? "Azure OpenAI" : "LM Studio (local)"}</span>
-                  <span className="flex items-center gap-2">
-                    {provider === modelProvider && <span className="text-[10px] text-text-muted">active</span>}
-                    <button
-                      type="button"
-                      className="text-text-muted transition hover:text-text-primary"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onSetDetailProvider(provider);
-                        onSetLlmInfoOpen(true);
-                        setIsLlmMenuOpen(false);
-                      }}
-                      aria-label={`View details for ${provider === "azure" ? "Azure OpenAI" : "LM Studio"}`}
-                    >
-                      <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <circle cx="6" cy="6" r="5" />
-                        <path d="M6 4.5V6.75" strokeLinecap="round" />
-                        <circle cx="6" cy="8.75" r=".25" fill="currentColor" stroke="none" />
-                      </svg>
-                    </button>
-                  </span>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                onSetLlmInfoOpen(true);
-                setIsLlmMenuOpen(false);
-              }}
-              className="mt-2 flex w-full items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-2 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
-            >
-              <svg
-                className="h-3 w-3"
-                viewBox="0 0 12 12"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              >
-                <circle cx="6" cy="6" r="5" />
-                <path d="M6 4.5V6.75" strokeLinecap="round" />
-                <circle cx="6" cy="8.75" r=".25" fill="currentColor" stroke="none" />
-              </svg>
-              View details
-            </button>
-
-          </div>
-        )}
-      </div>
-
-
-
-      <div className="h-4 w-[1px] bg-border-subtle mx-1" />
-
-      <button
-        type="button"
-        onClick={onToggleSidebar}
-        className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-focus-ring ${isSidebarOpen
-          ? "border-border-strong bg-state-selected text-text-primary"
-          : "border-border-subtle bg-bg-surface text-text-secondary hover:bg-state-hover hover:text-text-primary"
-          }`}
-        aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
-      >
-        <svg
-          className="h-3.5 w-3.5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={1.5}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-        </svg>
-        <span className="hidden sm:inline">{isSidebarOpen ? "Close Details" : "Open Details"}</span>
-      </button>
 
 
 
@@ -941,7 +686,7 @@ function HeaderControls({
         )
         }
       </Modal >
-    </div >
+    </>
   );
 }
 type EventCardProps = {
@@ -1694,6 +1439,27 @@ export default function HomePage() {
     window.localStorage.setItem("numezis-audit-context", JSON.stringify(payload));
   }, [auditContext, auditContextEnabled]);
 
+  const handleProviderChange = useCallback(async (provider: "azure" | "lmstudio") => {
+    setModelProvider(provider);
+
+    try {
+      await Promise.all([
+        fetch('/api/llm-config/provider', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider })
+        }),
+        fetch('/api/embedding-config', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider })
+        })
+      ]);
+    } catch (err) {
+      console.error("Failed to sync provider to backend", err);
+    }
+  }, []);
+
   useEffect(() => {
     setLlmError(null);
   }, [modelProvider, lmStudioModel]);
@@ -2204,45 +1970,41 @@ export default function HomePage() {
 
   return (
     <div className="h-full overflow-hidden bg-bg-app text-text-primary font-sans antialiased selection:bg-state-selected selection:text-text-primary">
-      <div className="grid h-full grid-rows-[auto_minmax(0,1fr)] gap-4 px-4 py-4">
-        <header className="rounded-lg border border-border-subtle bg-bg-surface p-2 shadow-sm">
-          <div className="flex flex-wrap items-center gap-3">
-            <HeaderControls
-              selectedGraphKey={selectedGraphKey}
-              selectedGraphLabel={selectedGraphLabel}
-              builtinSelectedGraphId={builtinSelectedGraphId}
-              selectedGraph={selectedGraph}
-              agentGraphs={agentGraphs}
-              onSelectGraphKey={setSelectedGraphKey}
-              modelProvider={modelProvider}
-              onSelectProvider={setModelProvider}
-              azureConfigured={azureConfigured}
-              llmInfo={llmInfo}
-              lmStudioBaseUrl={lmStudioBaseUrl}
-              lmStudioModel={lmStudioModel}
-              onLmStudioModelChange={setLmStudioModel}
-              llmError={llmError}
-              auditContextEnabled={auditContextEnabled}
-              onAuditContextEnabledChange={setAuditContextEnabled}
-              auditContextSummary={auditContextSummary}
-              onConfigureAuditContext={() => setIsAuditContextDialogOpen(true)}
-              isGraphInfoOpen={isGraphInfoOpen}
-              onSetGraphInfoOpen={setIsGraphInfoOpen}
-              isLlmInfoOpen={isLlmInfoOpen}
-              onSetLlmInfoOpen={setIsLlmInfoOpen}
-              detailGraph={detailGraph}
-              onSetDetailGraph={setDetailGraph}
-              detailProvider={detailProvider}
-              onSetDetailProvider={setDetailProvider}
-              isSidebarOpen={isSidebarOpen}
-              onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
-            />
-          </div>
-        </header>
+      <div className="flex h-full flex-col bg-bg-app">
+        <HeaderControls
+          selectedGraphKey={selectedGraphKey}
+          selectedGraphLabel={selectedGraphLabel}
+          builtinSelectedGraphId={builtinSelectedGraphId}
+          selectedGraph={selectedGraph}
+          agentGraphs={agentGraphs}
+          onSelectGraphKey={setSelectedGraphKey}
+          modelProvider={modelProvider}
+          onSelectProvider={handleProviderChange}
+          azureConfigured={azureConfigured}
+          llmInfo={llmInfo}
+          lmStudioBaseUrl={lmStudioBaseUrl}
+          lmStudioModel={lmStudioModel}
+          onLmStudioModelChange={setLmStudioModel}
+          llmError={llmError}
+          auditContextEnabled={auditContextEnabled}
+          onAuditContextEnabledChange={setAuditContextEnabled}
+          auditContextSummary={auditContextSummary}
+          onConfigureAuditContext={() => setIsAuditContextDialogOpen(true)}
+          isGraphInfoOpen={isGraphInfoOpen}
+          onSetGraphInfoOpen={setIsGraphInfoOpen}
+          isLlmInfoOpen={isLlmInfoOpen}
+          onSetLlmInfoOpen={setIsLlmInfoOpen}
+          detailGraph={detailGraph}
+          onSetDetailGraph={setDetailGraph}
+          detailProvider={detailProvider}
+          onSetDetailProvider={setDetailProvider}
+          isSidebarOpen={isSidebarOpen}
+          onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+        />
 
-        <div className="flex h-full min-h-0 min-w-0 gap-4">
+        <div className="flex-1 min-h-0 min-w-0 flex gap-0">
           <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-            <main className="flex h-full min-h-0 w-full flex-col gap-3 rounded-lg border border-border-subtle bg-bg-surface p-0 shadow-sm overflow-hidden">
+            <main className="flex h-full min-h-0 w-full flex-col bg-bg-surface overflow-hidden">
               <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
                   Activity log
@@ -2325,30 +2087,28 @@ export default function HomePage() {
                           </button>
 
                           {/* Mode Indicator - Clickable to open graph info */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (selectedAgentGraphId) {
-                                window.location.href = `/agent-graphs/${selectedAgentGraphId}`;
-                                return;
-                              }
-                              setIsGraphInfoOpen(true);
-                            }}
-                            className="flex items-center gap-1.5 rounded-md border border-border-subtle bg-bg-surface px-2 py-0.5 text-[10px] font-medium text-text-secondary transition hover:bg-state-hover hover:border-border-strong select-none"
-                          >
-                            <span className="text-[9px] text-text-muted opacity-50">︿</span>
-                            <span className="truncate max-w-[140px]">{selectedGraphLabel}</span>
-                          </button>
-
-                          {/* Model Indicator - Clickable to open LLM info */}
-                          <button
-                            type="button"
-                            onClick={() => setIsLlmInfoOpen(true)}
-                            className="flex items-center gap-1.5 rounded-md border border-border-subtle bg-bg-surface px-2 py-0.5 text-[10px] font-medium text-text-secondary transition hover:bg-state-hover hover:border-border-strong select-none"
-                          >
-                            <span className="text-[9px] text-text-muted opacity-50">︿</span>
-                            <span>{modelProvider === 'azure' ? 'Azure OpenAI' : 'LM Studio'}</span>
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <Selector
+                              label="GRAPH"
+                              value={selectedGraphKey}
+                              options={[
+                                ...graphOptions.map(g => ({ id: `builtin:${g.id}`, label: g.name, sub: 'Built-in' })),
+                                ...agentGraphs.map(g => ({ id: `agent:${g._id}`, label: g.name, sub: 'Agent' }))
+                              ]}
+                              onSelect={setSelectedGraphKey}
+                              direction="up"
+                            />
+                            <Selector
+                              label="LLM"
+                              value={modelProvider}
+                              options={[
+                                { id: 'azure', label: 'Azure OpenAI', sub: 'Cloud' },
+                                { id: 'lmstudio', label: 'LM Studio', sub: 'Local' }
+                              ]}
+                              onSelect={(id) => handleProviderChange(id as any)}
+                              direction="up"
+                            />
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-3">
@@ -2388,20 +2148,20 @@ export default function HomePage() {
           </div>
 
           <aside
-            className={`min-w-0 flex-shrink-0 transition-all duration-300 ease-in-out ${isSidebarOpen
+            className={`min-w-0 flex-shrink-0 transition-all duration-300 ease-in-out border-l border-border-subtle bg-bg-surface ${isSidebarOpen
               ? "w-[360px] opacity-100"
-              : "w-0 opacity-0 overflow-hidden pointer-events-none"
+              : "w-0 opacity-0 overflow-hidden pointer-events-none border-l-0"
               }`}
           >
-            <div className="flex h-full w-[360px] flex-col gap-4">
-              <div className="flex-1 min-h-0 h-1/2">
+            <div className="flex h-full w-[360px] flex-col">
+              <div className="flex-1 min-h-0">
                 <TimelinePanel
                   timeline={activeTimeline}
                   selectedEventId={selectedEventId}
                   onPhaseSelect={handlePhaseClick}
                 />
               </div>
-              <div className="flex-1 min-h-0 h-1/2">
+              <div className="flex-1 min-h-0">
                 <ToolExplorerPanel
                   tools={graphTools}
                   usedToolNames={usedToolNames}

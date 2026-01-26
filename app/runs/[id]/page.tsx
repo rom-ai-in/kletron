@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Panel } from "@/src/components/ui/Panel";
 import { Button } from "@/src/components/ui/Button";
 import type { AuditChain, AuditRun, ChainStatus } from "@/src/services/chainTypes";
@@ -90,7 +91,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                             <StatusBadge status={run.status} />
                         </div>
                         <p className="text-sm text-text-muted">
-                            Campaign: <span className="text-text-secondary">{chain.name}</span> · Started {new Date(run.startedAt).toLocaleString()}
+                            Campaign: <Link href={`/campaigns/${run.chainId.toString()}`} className="text-text-secondary hover:text-text-primary hover:underline transition-colors">{chain.name}</Link> · Started {new Date(run.startedAt).toLocaleString()}
                         </p>
                     </div>
                     <div className="flex gap-2">
@@ -250,9 +251,18 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                         <Panel className="p-4">
                             <h2 className="mb-4 text-sm font-semibold text-text-primary">Run Metadata</h2>
                             <div className="space-y-4 text-xs">
-                                <div className="flex justify-between">
+                                <div className="flex justify-between items-center">
                                     <span className="text-text-muted">Run ID</span>
                                     <span className="font-mono text-text-secondary">{run._id?.toString()}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-text-muted">Campaign ID</span>
+                                    <Link
+                                        href={`/campaigns/${run.chainId.toString()}`}
+                                        className="font-mono text-text-secondary hover:text-text-primary hover:underline decoration-text-muted/50 underline-offset-2 transition-colors"
+                                    >
+                                        {run.chainId.toString()}
+                                    </Link>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-text-muted">Started</span>

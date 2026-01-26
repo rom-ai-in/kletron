@@ -100,20 +100,20 @@ const EditorPageContent: React.FC = () => {
                             onClick={() => setShowDiffOverlay(!showDiffOverlay)}
                             className={`text-xs px-2 py-1 rounded transition-colors ${showDiffOverlay ? 'bg-state-selected text-text-primary' : 'text-text-muted hover:bg-state-hover hover:text-text-primary'}`}
                         >
-                            {showDiffOverlay ? 'Hide Diffs' : 'Show Diffs'}
+                            {showDiffOverlay ? 'Hide Agent Diffs' : 'Agent Diffs'}
                         </button>
                         <button
                             onClick={() => setShowDiff(!showDiff)}
                             className={`text-xs px-2 py-1 rounded transition-colors ${showDiff ? 'bg-state-selected text-text-primary' : 'text-text-muted hover:bg-state-hover hover:text-text-primary'}`}
                         >
-                            {showDiff ? 'Code View' : 'Show Diff'}
+                            {showDiff ? 'Hide Editor Diff' : 'Editor Diff'}
                         </button>
                         <button
                             onClick={() => setIsAgentPanelOpen(!isAgentPanelOpen)}
                             className={`text-xs p-1.5 rounded transition-colors ${isAgentPanelOpen ? 'bg-state-selected text-text-primary' : 'text-text-muted hover:bg-state-hover hover:text-text-primary'}`}
                             title={isAgentPanelOpen ? "Close Agent Panel" : "Open Agent Panel"}
                         >
-                            {isAgentPanelOpen ? <PanelRightClose className="w-3.5 h-3.5" /> : <PanelRightOpen className="w-3.5 h-3.5" />}
+                            {isAgentPanelOpen ? <PanelRightClose className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
                         </button>
                     </div>
                 </div>
