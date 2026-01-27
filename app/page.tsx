@@ -21,6 +21,7 @@ import {
 import { AzureConfigForm, LMStudioConfigForm } from "../src/components/LlmConfigForms";
 import { Loader2 } from "lucide-react";
 import { PromptSelectorModal } from "../src/components/PromptSelectorModal";
+import { useLlmHealth } from "../src/hooks/useLlmHealth";
 
 type AgentEventKind = AgentEvent["kind"];
 
@@ -1404,6 +1405,8 @@ export default function HomePage() {
     }
   }, []);
 
+  const { status: llmStatus } = useLlmHealth(modelProvider);
+
   useEffect(() => {
     fetch("/api/env")
       .then((res) => res.json())
@@ -2107,6 +2110,7 @@ export default function HomePage() {
                               ]}
                               onSelect={(id) => handleProviderChange(id as any)}
                               direction="up"
+                              status={llmStatus}
                             />
                           </div>
                         </div>

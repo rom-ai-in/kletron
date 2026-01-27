@@ -76,7 +76,7 @@ Stop and ask the user to approve the edit to ${input.filePath || input.path}.`;
         return tools;
     }
 
-    async chat(conversationId: string, userMessage: string, onUpdate?: (event: AgentEvent) => void): Promise<string> {
+    async chat(conversationId: string, userMessage: string, onUpdate?: (event: AgentEvent) => void, llmSelection?: { provider: "azure" | "lmstudio"; model?: string }): Promise<string> {
         // 1. Load conversation history
         const conversation = await conversationService.get(conversationId);
         if (!conversation) throw new Error("Conversation not found");
@@ -159,6 +159,7 @@ If you need to run terminal commands, use the 'execute_bash' tool, but be carefu
                             content: "",
                             toolName: tc.name,
                             toolArgs: JSON.stringify(tc.args),
+                            toolCallId: tc.id,
                             timestamp: new Date().toISOString()
                         };
                         await conversationService.appendEvent(conversationId, event);
@@ -174,6 +175,7 @@ If you need to run terminal commands, use the 'execute_bash' tool, but be carefu
                         content: content,
                         toolName: toolMsg.name || "unknown",
                         toolOutput: content,
+                        toolCallId: toolMsg.tool_call_id,
                         timestamp: new Date().toISOString()
                     };
                     await conversationService.appendEvent(conversationId, event);
@@ -186,6 +188,7 @@ If you need to run terminal commands, use the 'execute_bash' tool, but be carefu
                 systemPrompt,
                 userPrompt: userMessage,
                 tools,
+                llmSelection,
                 extraMessages: previousMessages.filter(m => m.getType() !== "system"),
                 onMessage: async (msg: BaseMessage) => {
                     await processMessage(msg);

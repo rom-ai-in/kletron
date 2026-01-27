@@ -68,7 +68,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
 
     const handleArchive = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
-        if (!confirm("Archive this conversation?")) return;
+        // if (!confirm("Archive this conversation?")) return;
         try {
             await fetch(`/api/agent?id=${id}`, { method: 'DELETE' });
             void fetchData();

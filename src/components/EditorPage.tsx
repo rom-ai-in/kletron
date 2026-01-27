@@ -10,7 +10,6 @@ import { Bot, PanelRightClose, PanelRightOpen } from 'lucide-react';
 
 import { FileViewer } from './Editor/FileViewer';
 import { FileTabs } from './Editor/FileTabs';
-import { AgentStatusBar } from './Editor/AgentStatusBar';
 import { DiffOverlay } from './Editor/DiffOverlay';
 
 /**
@@ -162,8 +161,7 @@ const EditorPageContent: React.FC = () => {
                     )}
                 </div>
 
-                {/* Status Bar */}
-                <AgentStatusBar />
+                {/* Status Bar Removed */}
             </div>
 
 

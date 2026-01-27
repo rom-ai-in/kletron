@@ -47,6 +47,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = () => {
         }
     };
 
+    // Shared New Chat Button
+    const NewChatButton = (
+        <button
+            onClick={() => handleCreate()}
+            className="flex items-center gap-1.5 px-2 py-1 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 rounded text-[11px] font-medium transition-colors"
+            title="Start New Chat"
+        >
+            <Plus className="w-4 h-4" />
+        </button>
+    );
+
     // If active conversation, show chat. Otherwise show list.
     if (activeConversationId) {
         return (
@@ -58,9 +69,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = () => {
                     >
                         <ArrowLeft className="w-3 h-3" /> Back
                     </button>
-                    <span className="text-[12px] font-bold text-zinc-100 truncate max-w-[200px]" title={activeTitle}>
-                        {activeTitle}
-                    </span>
+
+                    <div className="flex items-center gap-2">
+                        {NewChatButton}
+                    </div>
                 </div>
                 <div className="flex-1 overflow-hidden">
                     <ActiveSession
@@ -76,15 +88,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = () => {
     return (
         <div className="flex flex-col h-full bg-bg-surface font-sans border-l border-zinc-800">
             {/* Header */}
-            <div className="h-8 min-h-[32px] border-b border-zinc-800 flex items-center px-2 justify-between bg-zinc-900/60">
-                <span className="text-[11px] font-black uppercase tracking-widest text-zinc-300">AI Agent</span>
-                <button
-                    onClick={() => handleCreate()}
-                    className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-100 transition-all border border-transparent hover:border-zinc-600"
-                    title="New Chat"
-                >
-                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                </button>
+            <div className="h-8 min-h-[32px] border-b border-zinc-800 flex items-center px-2 justify-end bg-zinc-900/60">
+                {NewChatButton}
             </div>
 
             {/* Content */}

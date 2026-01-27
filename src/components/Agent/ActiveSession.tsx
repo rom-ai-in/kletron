@@ -7,6 +7,7 @@ import { ThoughtsPanel } from './ThoughtsPanel';
 import { CodeBlock } from './CodeBlock';
 import { Selector } from '../ui/Selector';
 import { graphOptions } from '../../shared/graphCatalog';
+import { useLlmHealth } from '../../hooks/useLlmHealth'; // Import hook
 
 type LlmEnvInfo = {
     defaultProvider?: "azure" | "lmstudio";
@@ -32,6 +33,7 @@ interface Message {
     toolName?: string;
     toolArgs?: string;
     toolOutput?: string;
+    toolCallId?: string; // Added for matching
     thoughts?: string[];
     thinking?: string; // Legacy support
 }
@@ -62,6 +64,8 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
     const [llmProvider, setLlmProvider] = useState<string>('azure');
     const [selectedGraphId, setSelectedGraphId] = useState<string>(graphOptions[0]?.id || 'universal-v1');
     const [envInfo, setEnvInfo] = useState<LlmEnvInfo | null>(null);
+
+    const { status: llmStatus } = useLlmHealth(llmProvider); // Use hook
 
     useEffect(() => {
         const fetchEnv = async () => {
@@ -319,7 +323,7 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
 
                     // ASSISTANT / USER MESSAGE
                     return (
-                        <div key={m.id || i} className={`group flex flex-col ${isUser ? 'items-end' : 'items-start'} ${m.toolName ? 'mb-0' : 'mb-3'}`}>
+                        <div key={m.id || i} className={`group flex flex-col ${isUser ? 'items-end' : 'items-start'} ${m.toolName ? 'mb-0' : 'mb-1'}`}>
 
                             {/* Thoughts / Planning (Only for Assistant) */}
                             {isAssistant && (
@@ -334,9 +338,9 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
                             )}
 
                             {/* Main Message Bubble */}
-                            <div className={`relative rounded-lg shadow-sm border ${m.toolName ? 'p-0' : 'px-3 py-2'} ${isUser
-                                ? 'bg-zinc-800 border-zinc-700 text-zinc-100 max-w-[90%]' // Darker user bubble for contrast
-                                : 'bg-transparent border-transparent pl-0 pt-0 w-full' // Assistant "bubble" is cleaner/transparent
+                            <div className={`relative rounded-lg ${m.toolName ? 'p-0' : 'px-3 py-2'} ${isUser
+                                ? 'shadow-sm border bg-zinc-800 border-zinc-700 text-zinc-100 max-w-[90%]' // Darker user bubble for contrast
+                                : 'bg-transparent pl-0 pt-0 w-full' // Assistant "bubble" is cleaner/transparent
                                 }`}>
 
                                 {/* Tool Call Indicator (Merged with output) */}
@@ -344,7 +348,19 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
                                     <ToolInvocation
                                         name={m.toolName}
                                         args={m.toolArgs}
-                                        output={messages[i + 1]?.role === 'tool' ? (messages[i + 1].content || messages[i + 1].toolOutput) : undefined}
+                                        output={(() => {
+                                            // 1. Try to find by explicit toolCallId
+                                            if (m.toolCallId) {
+                                                const outputMsg = messages.find(om => om.role === 'tool' && om.toolCallId === m.toolCallId);
+                                                if (outputMsg) return outputMsg.content || outputMsg.toolOutput;
+                                            }
+                                            // 2. Fallback: Check immediate next message (legacy behavior)
+                                            const nextMsg = messages[i + 1];
+                                            if (nextMsg?.role === 'tool') {
+                                                return nextMsg.content || nextMsg.toolOutput;
+                                            }
+                                            return undefined;
+                                        })()}
                                     />
                                 )}
 
@@ -476,6 +492,7 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
                                         onSelect={handleLlmChange}
                                         direction="up"
                                         size="sm"
+                                        status={llmStatus}
                                     />
                                 </div>
                             </div>

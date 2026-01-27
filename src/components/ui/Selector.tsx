@@ -14,6 +14,7 @@ export type SelectorProps = {
     onSelect: (id: string) => void;
     direction?: 'up' | 'down';
     size?: 'sm' | 'md';
+    status?: 'success' | 'error' | 'loading' | 'none';
 };
 
 export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSelect, direction = 'up', size = 'md' }) => {
@@ -34,6 +35,11 @@ export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSel
 
     const isSmall = size === 'sm';
 
+    let statusColor = "bg-transparent";
+    if (status === 'success') statusColor = "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]";
+    else if (status === 'error') statusColor = "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]";
+    else if (status === 'loading') statusColor = "bg-amber-500 animate-pulse";
+
     return (
         <div className="relative" ref={containerRef}>
             <button
@@ -43,6 +49,11 @@ export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSel
             >
                 <span className={`font-bold text-zinc-600 uppercase tracking-wider ${isSmall ? 'text-[9px]' : 'text-[10px]'}`}>{label}</span>
                 <span className={`text-zinc-300 font-medium truncate max-w-[120px] ${isSmall ? 'text-[11px]' : 'text-[13px]'}`}>{selectedOption?.label || value}</span>
+
+                {status && status !== 'none' && (
+                    <div className={`w-1.5 h-1.5 rounded-full ${statusColor}`} />
+                )}
+
                 <ChevronDown className={`text-zinc-600 group-hover:text-zinc-400 transition-all duration-200 ${isOpen ? 'rotate-180' : ''} ${isSmall ? 'w-2.5 h-2.5' : 'w-3 h-3'}`} />
             </button>
 

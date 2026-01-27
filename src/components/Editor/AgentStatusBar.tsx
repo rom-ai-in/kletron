@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useEditorState } from '../../context/EditorContext';
 import { AlertCircle, Activity, ChevronDown, Check, X } from 'lucide-react';
 import { graphOptions } from '../../shared/graphCatalog';
+import { useLlmHealth } from '../../hooks/useLlmHealth';
 
 type LlmEnvInfo = {
     defaultProvider?: "azure" | "lmstudio";
@@ -31,6 +32,8 @@ export const AgentStatusBar: React.FC = () => {
     const [llmProvider, setLlmProvider] = useState<string>('azure');
     const [selectedGraphId, setSelectedGraphId] = useState<string>(graphOptions[0]?.id || 'universal-v1');
     const [envInfo, setEnvInfo] = useState<LlmEnvInfo | null>(null);
+
+    const { status: llmStatus, recheck: recheckHealth } = useLlmHealth(llmProvider);
 
     useEffect(() => {
         const fetchEnv = async () => {
@@ -66,8 +69,6 @@ export const AgentStatusBar: React.FC = () => {
     const handleLlmChange = (provider: string) => {
         setLlmProvider(provider);
         window.localStorage.setItem("numezis-llm-selection", JSON.stringify({ provider, model: provider === 'azure' ? envInfo?.azure?.model : envInfo?.lmstudio?.model }));
-        // Trigger a reload or context update if necessary - currently just UI state
-        // In a real app we might want to update a global context
     };
 
     const handleGraphChange = (graphId: string) => {
@@ -116,7 +117,26 @@ export const AgentStatusBar: React.FC = () => {
                 )}
             </div>
 
-
+            {/* Right Controls */}
+            <div className="flex items-center gap-2">
+                <Selector
+                    label="GRAPH"
+                    value={selectedGraphId}
+                    options={graphSelectOptions}
+                    onSelect={handleGraphChange}
+                    direction="up"
+                    size="sm"
+                />
+                <Selector
+                    label="LLM"
+                    value={llmProvider}
+                    options={llmOptions}
+                    onSelect={handleLlmChange}
+                    direction="up"
+                    size="sm"
+                    status={llmStatus}
+                />
+            </div>
         </div>
     );
 };
