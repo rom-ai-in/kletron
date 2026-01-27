@@ -2,10 +2,11 @@ import path from "path";
 
 // ⚙️ Configuration du Serveur MCP
 
+// Get configured directory from environment - NO FALLBACK TO process.cwd()
 const configuredDir =
   process.env.GITHUB_MCP_DEFAULT_DIR ||
   process.env.MCP_DEFAULT_DIR ||
-  process.cwd();
+  null; // Explicit null when not configured
 
 const fetchAllowlistRaw =
   process.env.GITHUB_MCP_FETCH_ALLOWLIST || process.env.MCP_FETCH_ALLOWLIST || "";
@@ -17,7 +18,13 @@ const fetchAllowlist = fetchAllowlistRaw
 
 export const config = {
   // 📂 Dossier par défaut analysé si aucun chemin n'est précisé.
-  defaultDir: configuredDir ? path.resolve(configuredDir) : undefined,
+  // Will be null if not configured, requiring explicit path in tool calls
+  defaultDir: configuredDir ? path.resolve(configuredDir) : null,
+
+  // Helper to check if configured
+  get isConfigured() {
+    return this.defaultDir !== null;
+  },
 
   // 🌐 Allowlist de domaines autorisés pour fetch_url (ex: "docs.github.com,raw.githubusercontent.com,*.npmjs.com").
   fetchAllowlist,

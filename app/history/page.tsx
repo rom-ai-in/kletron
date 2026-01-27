@@ -1,7 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+
+export const dynamic = "force-dynamic";
+
 import { Panel } from "@/src/components/ui/Panel";
 import { Button } from "@/src/components/ui/Button";
 import {
@@ -37,7 +40,7 @@ type ActivityItem = {
 
 type FilterType = "all" | "workbench" | "campaign";
 
-export default function HistoryPage() {
+function HistoryPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [activity, setActivity] = useState<ActivityItem[]>([]);
@@ -50,7 +53,7 @@ export default function HistoryPage() {
     const [selectedSession, setSelectedSession] = useState<{ id: string; title: string, status: string } | null>(null);
 
     useEffect(() => {
-        const id = searchParams.get("campaignId");
+        const id = searchParams?.get("campaignId");
         if (!id) {
             setCampaignName(null);
             return;
@@ -81,13 +84,13 @@ export default function HistoryPage() {
         setLoading(true);
         setError("");
         try {
-            const typeParam = (searchParams.get("type") || "").toLowerCase();
+            const typeParam = (searchParams?.get("type") || "").toLowerCase();
             const nextFilter: FilterType =
                 typeParam === "campaign" ? "campaign" : typeParam === "workbench" ? "workbench" : "all";
             setFilter(nextFilter);
 
-            const campaignIdParam = searchParams.get("campaignId");
-            setCampaignId(campaignIdParam);
+            const campaignIdParam = searchParams?.get("campaignId");
+            setCampaignId(campaignIdParam || null);
 
             const qs = new URLSearchParams();
             if (campaignIdParam) qs.set("campaignId", campaignIdParam);
@@ -127,8 +130,8 @@ export default function HistoryPage() {
                         <Activity className="h-5 w-5" />
                     </div>
                     <div>
-                            <h1 className="text-lg font-semibold text-text-primary">Activity</h1>
-                        <p className="text-sm text-text-muted">History of workbench sessions and campaign runs</p>
+                        <h1 className="text-lg font-semibold text-text-primary">Activity</h1>
+                        <p className="text-sm text-text-muted">History of deep agent sessions and campaign runs</p>
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -176,7 +179,7 @@ export default function HistoryPage() {
                             )
                         }
                     >
-                        Workbench
+                        Deep Agent
                     </FilterButton>
                     <FilterButton
                         active={filter === "campaign"}
@@ -298,7 +301,7 @@ export default function HistoryPage() {
                                                 ? "bg-sky-500/10 text-sky-400"
                                                 : "bg-emerald-500/10 text-emerald-400"
                                                 }`}>
-                                                {item.type === "WORKBENCH" ? "Workbench" : "Campaign"}
+                                                {item.type === "WORKBENCH" ? "Deep Agent" : "Campaign"}
                                             </span>
 
                                             {/* Date Chip */}
@@ -417,5 +420,13 @@ function StatusBadge({ status }: { status: ActivityItem["status"] }) {
             )}
             {status}
         </span>
+    );
+}
+
+export default function HistoryPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-text-muted">Loading...</div>}>
+            <HistoryPageContent />
+        </Suspense>
     );
 }

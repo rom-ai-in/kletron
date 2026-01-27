@@ -25,10 +25,10 @@ function buildCrumbsFromSegments(pathname: string, segmentLabels: Record<string,
   const segments = splitPath(pathname);
   const items: BreadcrumbItem[] = [];
 
-  // Only show Workbench if we are strictly at the root.
+  // Only show Editor if we are strictly at the root.
   // Otherwise, top-level items (Editor, Campaigns, etc.) are siblings in the sidebar.
   if (segments.length === 0) {
-    items.push({ href: "/", label: "Workbench", isCurrent: true });
+    items.push({ href: "/", label: "Editor", isCurrent: true });
   }
 
   let acc = "";
@@ -68,8 +68,8 @@ const resolverRunDetails: BreadcrumbResolver = (pathname) => {
 const resolvers: BreadcrumbResolver[] = [resolverCampaignDetails, resolverRunDetails];
 
 const segmentLabels: Record<string, string> = {
-  "/": "Workbench",
-  "/editor": "Editor",
+  "/": "Editor",
+  "/deep-agent": "Deep Agent",
   "/campaigns": "Campaigns",
   "/runs": "Execution Runs",
   "/vectors": "Vector Index",

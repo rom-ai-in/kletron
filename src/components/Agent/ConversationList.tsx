@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Plus, MessageSquare, Archive, Loader2, ChevronRight, ChevronDown, Clock, AlertCircle, PlayCircle, StopCircle, CheckCircle2, Trash2 } from 'lucide-react';
+import { Plus, MessageSquare, Archive, Loader2, ChevronRight, ChevronDown, Clock, AlertCircle, PlayCircle, StopCircle, CheckCircle2, Trash2, Pencil } from 'lucide-react';
 
 interface ConversationMetadata {
     id: string;
@@ -25,6 +25,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
     const [pendingEditCounts, setPendingEditCounts] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(false);
     const [isArchiveOpen, setIsArchiveOpen] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingTitle, setEditingTitle] = useState('');
 
     const fetchData = async () => {
         setLoading(true);
@@ -100,36 +102,94 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
     const activeConvs = conversations.filter(c => c.status !== 'archived');
     const archivedConvs = conversations.filter(c => c.status === 'archived');
 
+    const handleTitleEdit = (e: React.MouseEvent, conv: ConversationMetadata) => {
+        e.stopPropagation();
+        setEditingId(conv.id);
+        setEditingTitle(conv.title);
+    };
+
+    const handleTitleSave = async (e: React.FormEvent | React.FocusEvent, convId: string) => {
+        e.preventDefault();
+        if (!editingTitle.trim()) {
+            setEditingId(null);
+            return;
+        }
+        try {
+            await fetch('/api/agent/update-title', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversationId: convId, title: editingTitle.trim() })
+            });
+            setConversations(prev => prev.map(c => c.id === convId ? { ...c, title: editingTitle.trim() } : c));
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setEditingId(null);
+        }
+    };
+
     const ConversationItem = ({ conv }: { conv: ConversationMetadata }) => {
         const status = getStatus(conv);
         const StatusIcon = status.icon;
         const isActive = currentId === conv.id;
+        const isEditing = editingId === conv.id;
 
         return (
             <div
-                onClick={() => onSelect(conv.id, conv.title)}
+                onClick={() => !isEditing && onSelect(conv.id, conv.title)}
                 className={`group flex flex-col p-3 border-b border-zinc-800 cursor-pointer transition-all hover:bg-zinc-800/60 relative ${isActive ? 'bg-sky-500/10 border-l-2 border-l-sky-500' : ''
                     }`}
             >
                 <div className="flex items-start justify-between w-full mb-1.5">
-                    <span className="text-[13px] font-semibold text-zinc-100 truncate pr-6 leading-tight">{conv.title}</span>
-                    {conv.status !== 'archived' ? (
-                        <button
-                            onClick={(e) => handleArchive(e, conv.id)}
-                            className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded border border-zinc-600 text-zinc-400 hover:text-zinc-200 transition-all"
-                            title="Archive"
-                        >
-                            <Archive className="w-3 h-3" />
-                        </button>
+                    {isEditing ? (
+                        <form onSubmit={(e) => handleTitleSave(e, conv.id)} className="flex-1 pr-6">
+                            <input
+                                type="text"
+                                value={editingTitle}
+                                onChange={(e) => setEditingTitle(e.target.value)}
+                                onBlur={(e) => handleTitleSave(e, conv.id)}
+                                autoFocus
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-0.5 text-[13px] font-semibold text-zinc-100 outline-none focus:border-sky-500"
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                        </form>
                     ) : (
-                        <button
-                            onClick={(e) => handleDelete(e, conv.id)}
-                            className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-red-900/40 rounded border border-red-900/50 text-red-500 hover:text-red-400 transition-all"
-                            title="Delete Permanently"
+                        <span
+                            className="text-[13px] font-semibold text-zinc-100 truncate pr-6 leading-tight cursor-text hover:text-sky-300"
+                            onClick={(e) => handleTitleEdit(e, conv)}
+                            title="Click to edit"
                         >
-                            <Trash2 className="w-3 h-3" />
-                        </button>
+                            {conv.title}
+                        </span>
                     )}
+                    <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                        {!isEditing && conv.status !== 'archived' && (
+                            <button
+                                onClick={(e) => handleTitleEdit(e, conv)}
+                                className="p-1 hover:bg-zinc-700 rounded border border-zinc-600 text-zinc-400 hover:text-zinc-200 transition-all"
+                                title="Edit title"
+                            >
+                                <Pencil className="w-3 h-3" />
+                            </button>
+                        )}
+                        {conv.status !== 'archived' ? (
+                            <button
+                                onClick={(e) => handleArchive(e, conv.id)}
+                                className="p-1 hover:bg-zinc-700 rounded border border-zinc-600 text-zinc-400 hover:text-zinc-200 transition-all"
+                                title="Archive"
+                            >
+                                <Archive className="w-3 h-3" />
+                            </button>
+                        ) : (
+                            <button
+                                onClick={(e) => handleDelete(e, conv.id)}
+                                className="p-1 hover:bg-red-900/40 rounded border border-red-900/50 text-red-500 hover:text-red-400 transition-all"
+                                title="Delete Permanently"
+                            >
+                                <Trash2 className="w-3 h-3" />
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <div className="flex items-center justify-between">
                     <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border ${status.borderColor} ${status.bgColor} ${status.color} text-[10px] font-bold uppercase tracking-wider`}>

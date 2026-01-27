@@ -3,27 +3,45 @@ import "dotenv/config";
 import path from "node:path";
 import process from "node:process";
 import fs from "node:fs/promises";
+import * as fsSync from "node:fs";
 import { execFile, spawn, ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 
 const execFileAsync = promisify(execFile);
 
-function getConfiguredRepoRoot() {
+// Path to the config.json file
+const CONFIG_FILE = path.resolve(process.cwd(), "config", "config.json");
+
+function getConfiguredRepoRoot(): string | undefined {
+  // 1. First, try to read from config.json (UI-configured path)
+  try {
+    if (fsSync.existsSync(CONFIG_FILE)) {
+      const raw = fsSync.readFileSync(CONFIG_FILE, "utf-8");
+      const json = JSON.parse(raw);
+      if (json.mcpDefaultDir && typeof json.mcpDefaultDir === "string" && json.mcpDefaultDir.trim()) {
+        return path.resolve(json.mcpDefaultDir.trim());
+      }
+    }
+  } catch (e) {
+    // Ignore errors, fall through to env vars
+  }
+
+  // 2. Fall back to environment variables (for backwards compatibility during startup)
   const configuredRaw =
     process.env.GITHUB_MCP_DEFAULT_DIR ?? process.env.MCP_DEFAULT_DIR;
   const configured = configuredRaw?.trim();
   return configured ? path.resolve(configured) : undefined;
 }
 
-export function resolveTargetRepoRoot() {
+export function resolveTargetRepoRoot(): string {
   const resolved = getConfiguredRepoRoot();
   if (!resolved) {
-    console.warn(
-      "⚠️  GITHUB_MCP_DEFAULT_DIR/MCP_DEFAULT_DIR not set; defaulting MCP repo root to current working directory."
+    throw new Error(
+      "Repository path not configured. Please configure it in the UI at Configuration > Repository Settings, or set GITHUB_MCP_DEFAULT_DIR in .env"
     );
   }
-  return resolved ?? process.cwd();
+  return resolved;
 }
 
 export async function requireTargetRepoRoot() {

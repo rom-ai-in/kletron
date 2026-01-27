@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+
+export const dynamic = "force-dynamic";
+
 import { AlertTriangle, Check, ClipboardCopy, Loader2, RefreshCw } from "lucide-react";
 
 import { Button } from "@/src/components/ui/Button";
@@ -40,9 +43,9 @@ function fmtDate(d?: string) {
   }
 }
 
-export default function I18nLogsPage() {
+function I18nLogsPageContent() {
   const searchParams = useSearchParams();
-  const selectedJobId = searchParams.get("jobId") || "";
+  const selectedJobId = searchParams?.get("jobId") || "";
 
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [jobs, setJobs] = useState<JobListItem[]>([]);
@@ -450,11 +453,10 @@ export default function I18nLogsPage() {
                                 <div className="font-mono text-xs text-text-primary truncate">{r.rowKey}</div>
                                 <div className="mt-1 text-xs text-text-secondary line-clamp-2">{r.rationale}</div>
                               </div>
-                              <div className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${
-                                r.decision === "UPDATE"
-                                  ? "bg-amber-500/15 text-amber-300"
-                                  : "bg-bg-elevated text-text-secondary border border-border-subtle"
-                              }`}>
+                              <div className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${r.decision === "UPDATE"
+                                ? "bg-amber-500/15 text-amber-300"
+                                : "bg-bg-elevated text-text-secondary border border-border-subtle"
+                                }`}>
                                 {r.decision}
                               </div>
                             </div>
@@ -489,6 +491,14 @@ export default function I18nLogsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function I18nLogsPage() {
+  return (
+    <Suspense fallback={<div className="p-12 text-center text-text-muted">Loading...</div>}>
+      <I18nLogsPageContent />
+    </Suspense>
   );
 }
 

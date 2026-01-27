@@ -138,6 +138,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                 {chain.stages.map((stage, index) => {
                                     const isCompleted = index < run.currentStageIndex;
                                     const isCurrent = index === run.currentStageIndex;
+
                                     const sessionId = run.sessionIds?.[index];
 
                                     return (

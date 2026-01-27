@@ -1,16 +1,16 @@
 "use client";
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { EditorProvider } from '@/src/context/EditorContext';
 import { FileTree } from './FileTree';
-import { Terminal } from './Terminal';
 import { SlashPalette } from './SlashPalette';
 import { AgentPanel } from './Agent/AgentPanel';
-import { Bot, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { ListFilter, Sparkles, Terminal as TerminalIcon } from 'lucide-react';
 
 import { FileViewer } from './Editor/FileViewer';
 import { FileTabs } from './Editor/FileTabs';
 import { DiffOverlay } from './Editor/DiffOverlay';
+import { TerminalPanel, TerminalToggleButton } from './Editor/TerminalPanel';
 
 /**
  * EditorPage – top‑level page that composes the FileTree, MonacoEditor, Terminal and SlashPalette.
@@ -28,10 +28,17 @@ const EditorPageContent: React.FC = () => {
     const [fileContent, setFileContent] = useState<string>('');
     const [savedContent, setSavedContent] = useState<string>('');
     const [isDirty, setIsDirty] = useState(false);
-    const [isTerminalOpen, setIsTerminalOpen] = useState(true);
+    const [isTerminalOpen, setIsTerminalOpen] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('terminalOpen');
+            return saved !== null ? saved === 'true' : true;
+        }
+        return true;
+    });
+    const [isTerminalVisible, setIsTerminalVisible] = useState(true); // Track if terminal was ever opened
     const [showDiff, setShowDiff] = useState(false);
     const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(false);
-    const [showDiffOverlay, setShowDiffOverlay] = useState(true); // Default to open for visibility
+    const [showDiffOverlay, setShowDiffOverlay] = useState(false); // Default to closed as we use Ghost Text now
     const [drawerWidth, setDrawerWidth] = useState(() => {
         if (typeof window !== 'undefined') {
             const savedWidth = localStorage.getItem('agentDrawerWidth');
@@ -39,6 +46,38 @@ const EditorPageContent: React.FC = () => {
         }
         return 500;
     });
+
+    // Keyboard shortcut: Cmd/Ctrl + ` to toggle terminal
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Check for Cmd+` (Mac) or Ctrl+` (Windows/Linux)
+            if ((e.metaKey || e.ctrlKey) && e.key === '`') {
+                e.preventDefault();
+                setIsTerminalOpen(prev => {
+                    const newState = !prev;
+                    localStorage.setItem('terminalOpen', String(newState));
+                    return newState;
+                });
+            }
+            // Cmd/Ctrl + J as alternative (VS Code style)
+            if ((e.metaKey || e.ctrlKey) && e.key === 'j') {
+                e.preventDefault();
+                setIsTerminalOpen(prev => {
+                    const newState = !prev;
+                    localStorage.setItem('terminalOpen', String(newState));
+                    return newState;
+                });
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
+    // Persist terminal open state
+    useEffect(() => {
+        localStorage.setItem('terminalOpen', String(isTerminalOpen));
+    }, [isTerminalOpen]);
 
     // Load file content when a file is selected
     const loadFile = useCallback(async (path: string) => {
@@ -76,6 +115,15 @@ const EditorPageContent: React.FC = () => {
         }
     }, [selectedFile]);
 
+    const handleTerminalToggle = useCallback(() => {
+        setIsTerminalOpen(prev => !prev);
+    }, []);
+
+    const handleTerminalClose = useCallback(() => {
+        setIsTerminalOpen(false);
+        setIsTerminalVisible(false);
+    }, []);
+
     return (
         <div className="flex h-full w-full bg-bg-app text-text-primary overflow-hidden font-sans">
             <SlashPalette />
@@ -95,33 +143,41 @@ const EditorPageContent: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* Terminal Toggle Button */}
+                        <TerminalToggleButton
+                            isOpen={isTerminalOpen}
+                            onClick={handleTerminalToggle}
+                        />
+
+                        {/* Traceability Report / Review Toggle */}
                         <button
                             onClick={() => setShowDiffOverlay(!showDiffOverlay)}
-                            className={`text-xs px-2 py-1 rounded transition-colors ${showDiffOverlay ? 'bg-state-selected text-text-primary' : 'text-text-muted hover:bg-state-hover hover:text-text-primary'}`}
+                            className={`text-xs p-1.5 rounded transition-colors ${showDiffOverlay ? 'bg-state-selected text-text-primary' : 'text-text-muted hover:bg-state-hover hover:text-text-primary'}`}
+                            title={showDiffOverlay ? "Hide Traceability Report" : "Review Changes (Traceability)"}
                         >
-                            {showDiffOverlay ? 'Hide Agent Diffs' : 'Agent Diffs'}
+                            <ListFilter className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                            onClick={() => setShowDiff(!showDiff)}
-                            className={`text-xs px-2 py-1 rounded transition-colors ${showDiff ? 'bg-state-selected text-text-primary' : 'text-text-muted hover:bg-state-hover hover:text-text-primary'}`}
-                        >
-                            {showDiff ? 'Hide Editor Diff' : 'Editor Diff'}
-                        </button>
+
+                        {/* Agent Panel Toggle */}
                         <button
                             onClick={() => setIsAgentPanelOpen(!isAgentPanelOpen)}
-                            className={`text-xs p-1.5 rounded transition-colors ${isAgentPanelOpen ? 'bg-state-selected text-text-primary' : 'text-text-muted hover:bg-state-hover hover:text-text-primary'}`}
-                            title={isAgentPanelOpen ? "Close Agent Panel" : "Open Agent Panel"}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium transition-all duration-200 ${isAgentPanelOpen
+                                ? 'bg-sky-500/10 border-sky-500/20 text-sky-500 shadow-sm shadow-sky-500/10'
+                                : 'bg-bg-elevated border-border-subtle text-text-secondary hover:text-text-primary hover:border-border-strong hover:bg-bg-surface'
+                                }`}
+                            title={isAgentPanelOpen ? "Close Agent" : "Open Agent"}
                         >
-                            {isAgentPanelOpen ? <PanelRightClose className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                            <Sparkles className={`w-3 h-3 ${isAgentPanelOpen ? 'text-sky-500' : 'text-purple-400'}`} />
+                            <span>Agent</span>
                         </button>
                     </div>
                 </div>
 
-                {/* Editor Container + Diff Overlay Split */}
+                {/* Editor Container + Review Overlay Split */}
                 <div className="flex-1 flex min-h-0 relative">
                     <div className="flex-1 flex flex-col min-w-0">
                         {/* Top: Monaco Editor */}
-                        <div className={`w-full relative ${isTerminalOpen ? 'h-[70%]' : 'h-full'} transition-all duration-300`}>
+                        <div className="flex-1 w-full relative min-h-0">
                             {selectedFile ? (
                                 <FileViewer
                                     fileId={selectedFile}
@@ -141,27 +197,22 @@ const EditorPageContent: React.FC = () => {
                             )}
                         </div>
 
-                        {/* Bottom: Terminal */}
-                        {isTerminalOpen && (
-                            <div className="h-[30%] w-full bg-black border-t border-border-subtle p-2 overflow-hidden">
-                                <Terminal />
-                            </div>
-                        )}
+                        {/* Bottom: Terminal Panel (VS Code style) */}
+                        <TerminalPanel
+                            isOpen={isTerminalOpen}
+                            onToggle={handleTerminalToggle}
+                            onClose={handleTerminalClose}
+                        />
                     </div>
 
-                    {/* Right: Diff Overlay (Split View) */}
+                    {/* Right: Review Overlay (Split View) */}
                     {showDiffOverlay && selectedFile && (
-                        <div className="w-80 border-l border-border-subtle bg-bg-surface flex flex-col animate-in slide-in-from-right-10 duration-200">
-                            <div className="p-2 border-b border-border-subtle text-xs font-bold text-text-muted uppercase tracking-wider flex items-center justify-between">
-                                <span>Pending Agent Changes</span>
-                                <span className="text-[10px] bg-red-500/10 text-red-400 px-1 rounded">Beta</span>
-                            </div>
+                        <div className="w-96 border-l border-border-subtle bg-bg-surface flex flex-col animate-in slide-in-from-right-10 duration-200">
+                            {/* DiffOverlay component handles its own header now */}
                             <DiffOverlay fileId={selectedFile} />
                         </div>
                     )}
                 </div>
-
-                {/* Status Bar Removed */}
             </div>
 
 

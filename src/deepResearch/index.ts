@@ -37,7 +37,7 @@ import type {
   AgentWorkflowResult,
   AgentWorkflowUpdate,
   TimelineEvent,
-} from "../agentRunner";
+} from "../types";
 import {
   deepResearchPhaseConfig,
   deepResearchPhaseOrder,

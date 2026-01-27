@@ -10,7 +10,7 @@ import {
     Share2,
     Folder,
     Terminal,
-    History,
+
     Copy,
     Check,
     Database,
@@ -26,12 +26,12 @@ const navItems = [
     {
         label: "Editor",
         icon: FileCode,
-        href: "/editor",
+        href: "/",
     },
     {
-        label: "Workbench",
+        label: "Deep Agent",
         icon: Terminal,
-        href: "/",
+        href: "/deep-agent",
     },
     {
         label: "Campaigns",
@@ -53,11 +53,7 @@ const navItems = [
         icon: FileCode,
         href: "/changes",
     },
-    {
-        label: "Activity",
-        icon: History,
-        href: "/history",
-    },
+
     {
         label: "Translation Agents",
         icon: Globe,
@@ -72,25 +68,14 @@ const navItems = [
 
 export function Sidebar() {
     const pathname = usePathname();
-    const [runningCount, setRunningCount] = useState(0);
+
     const [targetDir, setTargetDir] = useState<string | null>(null);
 
     const [copied, setCopied] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     useEffect(() => {
-        const fetchRunningCount = async () => {
-            try {
-                const res = await fetch("/api/runs?limit=100");
-                if (res.ok) {
-                    const data = await res.json();
-                    const running = data.runs?.filter((r: any) => r.status === "RUNNING").length || 0;
-                    setRunningCount(running);
-                }
-            } catch (e) {
-                console.error("Failed to fetch running count", e);
-            }
-        };
+
 
         const fetchEnv = async () => {
             try {
@@ -106,10 +91,9 @@ export function Sidebar() {
             }
         };
 
-        void fetchRunningCount();
+
         void fetchEnv();
-        const interval = setInterval(() => void fetchRunningCount(), 10000);
-        return () => clearInterval(interval);
+
     }, []);
 
     const handleCopyPath = () => {
@@ -154,7 +138,7 @@ export function Sidebar() {
                 {navItems.map((item) => {
                     const isActive = pathname === item.href || (item.href !== "/" && (pathname?.startsWith(item.href) ?? false));
                     const Icon = item.icon;
-                    const showBadge = item.href === "/history" && runningCount > 0;
+
 
                     return (
                         <Link
@@ -168,19 +152,13 @@ export function Sidebar() {
                         >
                             <div className="relative flex items-center justify-center">
                                 <Icon className={`h-4 w-4 transition-colors ${isActive ? "text-text-primary" : "text-text-muted group-hover:text-text-primary"}`} />
-                                {showBadge && isCollapsed && (
-                                    <span className="absolute -top-1 -right-1 flex h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
-                                )}
+
                             </div>
 
                             {!isCollapsed && (
                                 <>
                                     <span className="flex-1 whitespace-nowrap overflow-hidden">{item.label}</span>
-                                    {showBadge && (
-                                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 text-[9px] font-bold text-white animate-pulse">
-                                            {runningCount}
-                                        </span>
-                                    )}
+
                                 </>
                             )}
                         </Link>

@@ -18,6 +18,7 @@ import {
     Play
 } from "lucide-react";
 import { Modal } from "@/src/components/ui/Modal";
+import { useLlmHealth } from "@/src/hooks/useLlmHealth";
 
 type IndexStatus = {
     isIndexing: boolean;
@@ -58,6 +59,8 @@ export default function VectorIndexPage() {
         action: () => void;
     } | null>(null);
     const [topK, setTopK] = useState(5);
+
+    const { status: healthStatus, message: healthMessage, recheck: recheckHealth } = useLlmHealth(config?.provider);
 
     // Fetch initial data
     const fetchData = useCallback(async () => {
@@ -165,6 +168,20 @@ export default function VectorIndexPage() {
         }
     };
 
+    const getHealthColor = () => {
+        if (healthStatus === 'success') return 'emerald';
+        if (healthStatus === 'error') return 'rose';
+        if (healthStatus === 'loading') return 'amber';
+        return 'zinc';
+    };
+
+    const getHealthIcon = () => {
+        if (healthStatus === 'loading') return Loader2;
+        if (healthStatus === 'error') return AlertCircle;
+        if (healthStatus === 'success') return CheckCircle2;
+        return Settings; // Default
+    };
+
     return (
         <div className="flex h-full flex-col bg-bg-app overflow-hidden">
             {/* Header */}
@@ -180,8 +197,12 @@ export default function VectorIndexPage() {
                 </div>
                 <div className="flex items-center gap-3">
                     {/* Indicator replacing config button */}
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-bg-elevated border border-border-subtle">
-                        <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-subtle ${healthStatus === 'error' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-bg-elevated'
+                        }`}>
+                        <div className={`h-2 w-2 rounded-full ${healthStatus === 'success' ? 'bg-emerald-500' :
+                                healthStatus === 'error' ? 'bg-rose-500' :
+                                    healthStatus === 'loading' ? 'bg-amber-500 animate-pulse' : 'bg-zinc-500'
+                            }`} />
                         <span className="text-xs text-text-secondary">
                             {config?.provider === 'azure' ? "Azure OpenAI" : config?.provider === 'lmstudio' ? "LM Studio" : "Unknown"}
                         </span>
@@ -192,7 +213,7 @@ export default function VectorIndexPage() {
                         )}
                     </div>
 
-                    <Button variant="secondary" size="sm" onClick={() => void fetchData()}>
+                    <Button variant="secondary" size="sm" onClick={() => { void fetchData(); recheckHealth(); }}>
                         <RefreshCw className="mr-2 h-4 w-4" />
                         Refresh Status
                     </Button>
@@ -205,9 +226,15 @@ export default function VectorIndexPage() {
                     <StatusCard
                         title="Active Provider"
                         value={config?.provider === 'azure' ? "Azure OpenAI" : config?.provider === 'lmstudio' ? "LM Studio" : "None"}
-                        icon={Settings}
-                        subtitle={config?.provider ? (config[config.provider]?.model || "Unknown model") : "Configure provider"}
-                        color="blue"
+                        icon={getHealthIcon()}
+                        subtitle={
+                            healthStatus === 'error' ? (healthMessage || "Connection failed") :
+                                healthStatus === 'success' ? (healthMessage || "Online") :
+                                    healthStatus === 'loading' ? "Checking connection..." :
+                                        (config?.provider ? (config[config.provider]?.model || "Unknown model") : "Configure provider")
+                        }
+                        color={healthStatus === 'success' ? 'emerald' : healthStatus === 'error' ? 'rose' : healthStatus === 'loading' ? 'amber' : 'zinc'}
+                        isAnimated={healthStatus === 'loading'}
                     />
                     <StatusCard
                         title="Index Status"

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Copy, Check } from "lucide-react";
 import { Modal } from "./ui/Modal";
 import { Skeleton } from "./ui/Skeleton";
-import type { AgentEvent } from "../agentRunner";
+import type { AgentEvent } from "../types";
 
 interface StageDetailModalProps {
     isOpen: boolean;

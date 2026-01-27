@@ -15,8 +15,17 @@ import {
     ArrowLeft,
     Settings,
     Activity,
-    CheckCircle2
+    CheckCircle2,
+    Terminal,
+    Layers,
+    ChevronRight,
+    Clock,
+    AlertCircle,
+    PlayCircle,
+    Search,
+    MoreHorizontal
 } from "lucide-react";
+import { Panel } from "@/src/components/ui/Panel";
 import { cn } from "@/src/utils/cn";
 
 interface ChainDetailPageProps {
@@ -197,10 +206,9 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                     />
                     <TabButton
                         active={activeTab === "history"}
-                        onClick={() => router.push(`/history?type=campaign&campaignId=${params.id}`)}
+                        onClick={() => setActiveTab("history")}
                         icon={<History className="h-3.5 w-3.5" />}
                         label="Runs & History"
-                        external
                     />
                 </div>
             </div>
@@ -303,6 +311,12 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                         </div>
                     </div>
                 )}
+
+                {activeTab === "history" && (
+                    <div className="max-w-4xl mx-auto">
+                        <ActivityList campaignId={params.id} />
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -350,5 +364,185 @@ function StatCard({ label, value, status }: { label: string; value: string | num
             <span className="text-[10px] uppercase tracking-wider text-text-muted font-medium">{label}</span>
             <span className={valueClass}>{value}</span>
         </div>
+    );
+}
+
+type ActivityItem = {
+    id: string;
+    type: "WORKBENCH" | "CAMPAIGN";
+    title: string;
+    status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "PAUSED" | "CANCELLED";
+    startedAt: string;
+    endedAt?: string;
+    conclusion?: string;
+    metadata?: {
+        totalFindings?: number;
+        totalClaims?: number;
+        totalVerified?: number;
+        totalDuration?: number;
+    };
+    link: string;
+};
+
+function ActivityList({ campaignId }: { campaignId: string }) {
+    const router = useRouter();
+    const [activity, setActivity] = useState<ActivityItem[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+
+    useEffect(() => {
+        void fetchActivity();
+    }, [campaignId]);
+
+    const fetchActivity = async () => {
+        setLoading(true);
+        setError("");
+        try {
+            const url = `/api/activity?campaignId=${campaignId}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error("Failed to load activity history");
+            const data = (await res.json()) as { activity: ActivityItem[] };
+            setActivity(data.activity || []);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Unknown error");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-border-subtle border-t-text-muted" />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-4 text-center text-sm text-rose-300">
+                Error: {error}
+            </div>
+        );
+    }
+
+    if (activity.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border-subtle bg-bg-surface p-20 text-center">
+                <Activity className="mb-4 h-10 w-10 text-text-muted opacity-20" />
+                <p className="text-sm text-text-muted">
+                    No activity history found for this campaign.
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            {activity.map((item) => (
+                <Panel
+                    key={`${item.type}-${item.id}`}
+                    className="group relative cursor-pointer overflow-hidden p-0 transition hover:border-border-strong hover:bg-state-hover"
+                    onClick={() => router.push(item.link)}
+                >
+                    <div className="flex items-stretch text-left">
+                        {/* Type indicator */}
+                        <div className={`w-1 shrink-0 ${item.type === "WORKBENCH" ? "bg-sky-500/40" : "bg-emerald-500/40"}`} />
+
+                        <div className="flex flex-1 items-center gap-4 p-4 min-w-0">
+                            {/* Column 1: Icon */}
+                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${item.type === "WORKBENCH"
+                                ? "bg-sky-500/10 border-sky-500/10 text-sky-400"
+                                : "bg-emerald-500/10 border-emerald-500/10 text-emerald-400"
+                                }`}>
+                                {item.type === "WORKBENCH" ? <Terminal className="h-5 w-5" /> : <Layers className="h-5 w-5" />}
+                            </div>
+
+                            {/* Column 2: Main Content */}
+                            <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                                <div className="flex items-center gap-2">
+                                    <h3
+                                        className="truncate text-sm font-semibold text-text-primary"
+                                        title={item.title}
+                                    >
+                                        {item.title}
+                                    </h3>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {/* Date Chip */}
+                                    <span className="inline-flex items-center gap-1 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-muted">
+                                        <Clock className="h-3 w-3" />
+                                        {new Date(item.startedAt).toLocaleString(undefined, {
+                                            month: "short",
+                                            day: "numeric",
+                                            hour: "2-digit",
+                                            minute: "2-digit"
+                                        })}
+                                    </span>
+
+                                    {/* Findings Chip */}
+                                    {item.metadata?.totalFindings !== undefined && (
+                                        <span className="inline-flex items-center gap-1 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-secondary">
+                                            <Search className="h-3 w-3" />
+                                            {item.metadata.totalFindings} findings
+                                        </span>
+                                    )}
+                                </div>
+
+                                {item.conclusion && (
+                                    <p
+                                        className="line-clamp-1 text-xs text-text-secondary"
+                                        title={item.conclusion}
+                                    >
+                                        {item.conclusion}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Column 3: Status & Actions */}
+                            <div className="flex shrink-0 flex-col items-end gap-2 pl-2">
+                                <StatusBadge status={item.status} />
+
+                                <div className="flex items-center justify-end">
+                                    <div className="h-7 w-7 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                    </div>
+                                    <ChevronRight className="h-4 w-4 text-text-muted opacity-0 transition-opacity group-hover:opacity-100" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </Panel>
+            ))}
+        </div>
+    );
+}
+
+function StatusBadge({ status }: { status: ActivityItem["status"] }) {
+    const styles: Record<ActivityItem["status"], { bg: string; text: string; icon: any }> = {
+        COMPLETED: { bg: "bg-emerald-500/10", text: "text-emerald-400", icon: CheckCircle2 },
+        FAILED: { bg: "bg-rose-500/10", text: "text-rose-400", icon: AlertCircle },
+        RUNNING: { bg: "bg-sky-500/10", text: "text-sky-400", icon: PlayCircle },
+        PENDING: { bg: "bg-bg-elevated", text: "text-text-muted", icon: Clock },
+        PAUSED: { bg: "bg-amber-500/10", text: "text-amber-400", icon: Clock },
+        CANCELLED: { bg: "bg-zinc-500/10", text: "text-zinc-300", icon: AlertCircle },
+    };
+
+    const config = styles[status] || styles.PENDING;
+    const Icon = config.icon;
+
+    return (
+        <span className={`inline-flex items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${config.bg} ${config.text}`}>
+            {status === "RUNNING" ? (
+                <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-current" />
+                </span>
+            ) : (
+                <Icon className="h-3 w-3" />
+            )}
+            {status}
+        </span>
     );
 }

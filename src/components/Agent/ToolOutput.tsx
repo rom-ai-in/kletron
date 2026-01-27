@@ -26,7 +26,7 @@ export const ToolOutput: React.FC<ToolOutputProps> = ({ output, isError }) => {
     return (
 
         <div className="relative group">
-            <div className="p-3 overflow-x-auto max-h-[400px] overflow-y-auto bg-zinc-950/50">
+            <div className="p-2 overflow-x-auto max-h-[400px] overflow-y-auto bg-zinc-950/50">
                 <pre className={`whitespace-pre-wrap break-all font-mono text-[10px] ${isError ? 'text-red-300' : 'text-zinc-300'}`}>
                     {output}
                 </pre>

@@ -9,6 +9,7 @@ interface MonacoEditorWrapperProps {
     isDiff?: boolean;
     onSave: (content: string) => void;
     onChange?: (content: string) => void;
+    onMount?: (editor: any, monaco: any) => void;
 }
 
 export const MonacoEditor: React.FC<MonacoEditorWrapperProps> = ({
@@ -18,6 +19,7 @@ export const MonacoEditor: React.FC<MonacoEditorWrapperProps> = ({
     isDiff = false,
     onSave,
     onChange,
+    onMount,
 }) => {
     const { theme } = useTheme(); // "dark" | "light"
     const editorRef = useRef<any>(null);
@@ -81,7 +83,12 @@ export const MonacoEditor: React.FC<MonacoEditorWrapperProps> = ({
                     defaultValue={initialContent}
                     value={initialContent}
                     theme={theme === 'dark' ? 'vs-dark' : 'light'}
-                    onMount={handleEditorDidMount}
+                    onMount={(editor, monaco) => {
+                        handleEditorDidMount(editor, monaco);
+                        onChange?.(initialContent); // Ensure initial state sync if needed
+                        // Expose to parent
+                        if (onMount) onMount(editor, monaco);
+                    }}
                     onChange={handleChange}
                     options={{
                         minimap: { enabled: false },

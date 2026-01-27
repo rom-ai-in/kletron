@@ -81,3 +81,64 @@ export const graphOptions: GraphOption[] = [
   },
 ];
 
+export type DeepResearchPhaseKey = "clarify" | "brief" | "plan" | "research" | "summary" | "report";
+
+export const deepResearchPhaseOrder: DeepResearchPhaseKey[] = [
+  "clarify",
+  "brief",
+  "plan",
+  "research",
+  "summary",
+  "report"
+];
+
+export const deepResearchPhaseConfig: Record<DeepResearchPhaseKey, PhaseDefinition> = {
+  clarify: {
+    id: "clarify",
+    label: "Clarify Question",
+    summary: "Ensuring question clarity",
+    description: "Asks the user for clarification if the request is ambiguous.",
+    systemPrompt: "You are an expert researcher. Clarify the user request if needed.",
+    toolNames: []
+  },
+  brief: {
+    id: "brief",
+    label: "Research Brief",
+    summary: "Creating research brief",
+    description: "Generates a detailed research brief based on the request.",
+    systemPrompt: "You are a lead researcher. Create a comprehensive research brief.",
+    toolNames: []
+  },
+  plan: {
+    id: "plan",
+    label: "Plan Research",
+    summary: "Planning research steps",
+    description: "Creates a step-by-step plan to execute the research.",
+    systemPrompt: "You are a research planner. Break down the brief into actionable steps.",
+    toolNames: []
+  },
+  research: {
+    id: "research",
+    label: "Researcher",
+    summary: "Conducting research",
+    description: "Executes specific research tasks using tools.",
+    systemPrompt: "You are a code researcher. Use tools to find information.",
+    toolNames: baseToolNames
+  },
+  summary: {
+    id: "summary",
+    label: "Summarize Findings",
+    summary: "Synthesizing findings",
+    description: "Aggregates all research findings into a summary.",
+    systemPrompt: "Synthesize the gathered information into a coherent summary.",
+    toolNames: []
+  },
+  report: {
+    id: "report",
+    label: "Action Report",
+    summary: "Generating report",
+    description: "Creates the final action report.",
+    systemPrompt: "Write a final report based on the research findings.",
+    toolNames: []
+  }
+};

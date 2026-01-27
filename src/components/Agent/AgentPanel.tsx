@@ -79,6 +79,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = () => {
                         conversationId={activeConversationId}
                         title={activeTitle}
                         onApproveEdit={handleApproveEdit}
+                        onTitleChange={(newTitle) => setActiveTitle(newTitle)}
                     />
                 </div>
             </div>

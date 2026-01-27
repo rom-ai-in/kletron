@@ -37,26 +37,17 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ inline, className, childre
     // Compact Mode for single line items (like filenames in agent output)
     if (isSingleLine && !inline) {
         return (
-            <div className="group relative my-1 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-between pl-2 pr-1 py-1">
-                <code className="text-[11px] font-mono text-zinc-300 overflow-x-auto whitespace-pre scrollbar-hide">
-                    {codeString.replace(/[.,;]$/, '')}
-                </code>
-                <button
-                    onClick={handleCopy}
-                    className="ml-2 p-1 hover:bg-zinc-800 rounded transition-colors text-zinc-500 hover:text-zinc-300 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                    title="Copy"
-                >
-                    {copied ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
-                </button>
-            </div>
+            <span className="bg-zinc-800/50 border border-zinc-700/30 px-1.5 py-0.5 rounded text-zinc-300 font-mono text-[11px] inline-block max-w-full overflow-x-auto scrollbar-hide align-middle mx-0.5 my-0.5">
+                {codeString.replace(/[.,;]$/, '')}
+            </span>
         );
     }
 
     // Full Code Block
     return (
-        <div className="relative group my-3 rounded-md overflow-hidden border border-zinc-800 bg-zinc-900/50">
+        <div className="relative group my-1 rounded-md overflow-hidden border border-zinc-800 bg-zinc-900/50">
             {/* Header / Language Badge */}
-            <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-900/80 border-b border-zinc-800">
+            <div className="flex items-center justify-between px-2.5 py-1 bg-zinc-900/80 border-b border-zinc-800">
                 <span className="text-[10px] font-mono text-zinc-500 lowercase">
                     {language || 'text'}
                 </span>
@@ -70,7 +61,8 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ inline, className, childre
             </div>
 
             {/* Code Content */}
-            <div className="text-[11px] [&>pre]:!m-0 [&>pre]:!bg-transparent [&>pre]:!p-3">
+            <div className="text-[11px] [&>pre]:!m-0 [&>pre]:!bg-transparent [&>pre]:!p-2">
+
                 <SyntaxHighlighter
                     style={vscDarkPlus}
                     language={language}

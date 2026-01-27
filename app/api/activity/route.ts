@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
                 startedAt: s.startedAt,
                 endedAt: s.endedAt,
                 conclusion: s.workflowResult?.conclusion,
-                link: `/`, // workbench runs are currently just in the main page, but we could add a detail view
+                link: `/deep-agent`, // deep-agent runs are on the deep-agent page
             })),
             ...await Promise.all(runs.map(async (r) => {
                 const chain = await chainExecutor.getChain(r.chainId.toString());

@@ -6,8 +6,11 @@ import { ToolOutput } from './ToolOutput';
 import { ThoughtsPanel } from './ThoughtsPanel';
 import { CodeBlock } from './CodeBlock';
 import { Selector } from '../ui/Selector';
+import { Modal } from '../ui/Modal'; // Import Modal
+import { ContextVisualizer } from '../context/ContextVisualizer'; // Import Visualizer
 import { graphOptions } from '../../shared/graphCatalog';
 import { useLlmHealth } from '../../hooks/useLlmHealth'; // Import hook
+import { AgentAuditModal } from './AgentAuditModal'; // Import Audit Modal
 
 type LlmEnvInfo = {
     defaultProvider?: "azure" | "lmstudio";
@@ -52,16 +55,19 @@ interface ActiveSessionProps {
     conversationId: string;
     title: string;
     onApproveEdit: (editId: string) => void;
+    onTitleChange?: (newTitle: string) => void;
 }
 
-export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, title, onApproveEdit }) => {
+export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, title, onApproveEdit, onTitleChange }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [sending, setSending] = useState(false);
     const [pendingEdits, setPendingEdits] = useState<PendingEdit[]>([]);
     const [isPromptSelectorOpen, setIsPromptSelectorOpen] = useState(false);
+    const [isGraphOpen, setIsGraphOpen] = useState(false); // New state for Graph Visualizer
 
     const [llmProvider, setLlmProvider] = useState<string>('azure');
+    const [isAuditOpen, setIsAuditOpen] = useState(false); // New state for Audit Log
     const [selectedGraphId, setSelectedGraphId] = useState<string>(graphOptions[0]?.id || 'universal-v1');
     const [envInfo, setEnvInfo] = useState<LlmEnvInfo | null>(null);
 
@@ -276,6 +282,25 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
                 abortControllerRef.current = null;
             }
         }
+
+        // Generate title if this is the first user message and title is still default
+        if (title === "New Chat" && msg.trim()) {
+            try {
+                const res = await fetch('/api/agent/generate-title', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ conversationId, userMessage: msg })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.title && onTitleChange) {
+                        onTitleChange(data.title);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to generate title:", e);
+            }
+        }
     };
 
 
@@ -364,10 +389,21 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
                                     />
                                 )}
 
-                                <div className={`prose prose-invert prose-p:leading-relaxed prose-pre:m-0 max-w-none text-[12px] break-words break-all whitespace-pre-wrap ${isUser ? 'text-zinc-200' : 'text-zinc-300'}`}>
+                                <div className={`text-[12px] break-words ${isUser ? 'text-zinc-200' : 'text-zinc-300'}`}>
                                     <ReactMarkdown
                                         remarkPlugins={[remarkGfm]}
                                         components={{
+                                            pre: ({ children }: any) => <>{children}</>,
+                                            p: ({ children }: any) => <p className="mb-0.5 last:mb-0 leading-[1.35] min-h-[1em] text-zinc-300">{children}</p>,
+                                            ul: ({ children }: any) => <ul className="list-disc pl-3.5 mb-0.5 space-y-0 marker:text-zinc-500">{children}</ul>,
+                                            ol: ({ children }: any) => <ol className="list-decimal pl-3.5 mb-0.5 space-y-0 marker:text-zinc-500">{children}</ol>,
+                                            li: ({ children }: any) => <li className="pl-0.5 whitespace-normal leading-[1.35]">{children}</li>,
+                                            h1: ({ children }: any) => <h1 className="font-bold text-sm text-zinc-100 mt-1.5 mb-0.5">{children}</h1>,
+                                            h2: ({ children }: any) => <h2 className="font-semibold text-sm text-zinc-100 mt-1.5 mb-0.5">{children}</h2>,
+                                            h3: ({ children }: any) => <h3 className="font-medium text-[13px] text-zinc-100 mt-1 mb-0.5">{children}</h3>,
+                                            h4: ({ children }: any) => <h4 className="font-medium text-[12px] text-zinc-100 mt-1 mb-0.5">{children}</h4>,
+                                            a: ({ href, children }: any) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">{children}</a>,
+                                            blockquote: ({ children }: any) => <blockquote className="border-l-2 border-zinc-700 pl-2 italic text-zinc-400 my-0.5">{children}</blockquote>,
                                             code: ({ node, inline, className, children, ...props }: any) => (
                                                 <CodeBlock inline={inline} className={className} {...props}>
                                                     {children}
@@ -381,7 +417,7 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
 
                                 {/* Timestamp Footer - Only for Assistant Messages (Non-tool) */}
                                 {isAssistant && !m.toolName && (
-                                    <div className="mt-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-start">
+                                    <div className="mt-0.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-start">
                                         <span className="text-[9px] text-zinc-600 font-mono">{formatTime(m.timestamp)}</span>
                                         <CopyButton content={m.content} />
                                     </div>
@@ -477,6 +513,22 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
 
                                 {/* Mode Indicator - Clickable to open graph info */}
                                 <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsGraphOpen(true)}
+                                        className="flex h-6 w-6 items-center justify-center rounded-md border border-border-subtle bg-bg-surface text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+                                        title="View Context Graph"
+                                    >
+                                        <Brain className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAuditOpen(true)}
+                                        className="flex h-6 w-6 items-center justify-center rounded-md border border-border-subtle bg-bg-surface text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+                                        title="View Audit Logs"
+                                    >
+                                        <Terminal className="h-4 w-4" />
+                                    </button>
                                     <Selector
                                         label="GRAPH"
                                         value={selectedGraphId}
@@ -523,6 +575,24 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
                     </div>
                 </div>
             </div>
+
+            {/* Context Graph Modal */}
+            <Modal
+                open={isGraphOpen}
+                onClose={() => setIsGraphOpen(false)}
+                title="Context Graph Visualizer"
+                subtitle="Live Agent Context Memory"
+                fullHeight
+            >
+                <ContextVisualizer />
+            </Modal>
+
+            {/* Audit Log Modal */}
+            <AgentAuditModal
+                open={isAuditOpen}
+                onClose={() => setIsAuditOpen(false)}
+                conversationId={conversationId}
+            />
         </div>
     );
 };

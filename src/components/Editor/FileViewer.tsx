@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { MonacoEditor } from '../MonacoEditor';
 import { CursorLayer } from './CursorLayer';
 import { useEditorState } from '../../context/EditorContext';
+import { useGhostText } from '../../hooks/useGhostText';
 
 interface FileViewerProps {
     fileId: string;
@@ -20,18 +21,31 @@ export const FileViewer: React.FC<FileViewerProps> = ({
     onSave,
     onChange
 }) => {
-    const { updateCursor } = useEditorState();
-    const myAgentId = 'me'; // In a real app, this would be the current user's ID
+    const { updateCursor, state, commitDiff } = useEditorState();
+    const [editorInstance, setEditorInstance] = useState<any>(null); // Store editor instance
 
-    // We throttle cursor updates to avoid flooding the server
+    // Get pending diffs for this file
+    const pendingDiffs = state.pendingDiffs[fileId] || [];
+
+    // Correct handler:
+    const handleAcceptDiff = (diffId: string) => {
+        const diff = pendingDiffs.find(d => d.id === diffId);
+        if (diff) {
+            commitDiff(fileId, diff.agentId, diffId);
+        }
+    };
+
+    // Enable Ghost Text
+    useGhostText(editorInstance, pendingDiffs, handleAcceptDiff, (id) => {
+        console.log('Rejected diff', id);
+        // todo: implement reject logic in context
+    });
+
+
+    const myAgentId = 'me';
+
     const handleCursorChange = (position: { lineNumber: number, column: number }) => {
-        // This would require lifting state from MonacoEditor or ref forwarding.
-        // For now, we assume MonacoEditor tracks its own cursor but doesn't expose it easily via props.
-        // We'll skip implementing the *outgoing* cursor updates for "me" in this iteration 
-        // unless we modify MonacoEditor to expose onCursorPositionChange.
-        // Let's assume we implement it later or add a listener if we had ref access.
-
-        // updateCursor(fileId, myAgentId, { line: position.lineNumber, column: position.column });
+        // ... implementation pending
     };
 
     return (
@@ -43,6 +57,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({
                 isDiff={showDiff}
                 onSave={onSave}
                 onChange={onChange}
+                onMount={(editor) => setEditorInstance(editor)}
             />
             {/* Remote Cursors Overlay */}
             {!showDiff && <CursorLayer fileId={fileId} />}

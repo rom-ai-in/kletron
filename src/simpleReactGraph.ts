@@ -8,7 +8,8 @@ import {
 } from "@langchain/langgraph";
 
 import { streamReactAgentMessages } from "./reactAgentRunner";
-import { simpleReactPhaseId, simpleReactSystemPrompt } from "./shared/reactAgentConfig";
+const simpleReactPhaseId = "simple_react";
+const simpleReactSystemPrompt = "You are a helpful AI assistant.";
 import { allMcpTools } from "./tools/mcpTools";
 
 const simpleReactTools = allMcpTools;
@@ -37,8 +38,8 @@ async function simpleReactNode(state: typeof SimpleReactAnnotation.State) {
     typeof finalMessage?.content === "string"
       ? finalMessage.content
       : typeof finalMessage?.text === "string"
-      ? finalMessage.text
-      : JSON.stringify(finalMessage?.content ?? "", null, 2);
+        ? finalMessage.text
+        : JSON.stringify(finalMessage?.content ?? "", null, 2);
 
   return {
     messages: agentMessages,

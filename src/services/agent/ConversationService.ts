@@ -152,4 +152,12 @@ export class ConversationService {
             await fs.unlink(archivePath);
         } catch { }
     }
+
+    async updateTitle(id: string, title: string): Promise<void> {
+        const conversation = await this.get(id);
+        if (!conversation) throw new Error("Conversation not found");
+
+        conversation.title = title;
+        await this.save(conversation);
+    }
 }

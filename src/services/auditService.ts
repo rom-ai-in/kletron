@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 import { getDb } from "../lib/db";
-import type { AgentWorkflowResult, TimelineEvent, AgentEvent } from "../agentRunner";
+import type { AgentWorkflowResult, TimelineEvent, AgentEvent } from "../types";
 import {
     type AccessMode,
     isCompanyAccessMode,

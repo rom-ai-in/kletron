@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+export const dynamic = "force-dynamic";
+
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Panel } from "@/src/components/ui/Panel";
 import { Button } from "@/src/components/ui/Button";
@@ -9,7 +11,7 @@ import { PlayCircle, Search } from "lucide-react";
 
 type FilterStatus = "all" | "running" | "completed" | "failed" | "cancelled";
 
-export default function RunsPage() {
+function RunsPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [runs, setRuns] = useState<(AuditRun & { chainName: string })[]>([]);
@@ -17,7 +19,7 @@ export default function RunsPage() {
     const [error, setError] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [filter, setFilter] = useState<FilterStatus>("all");
-    const campaignId = searchParams.get("campaignId");
+    const campaignId = searchParams?.get("campaignId");
     const [campaignName, setCampaignName] = useState<string | null>(null);
 
     useEffect(() => {
@@ -109,21 +111,21 @@ export default function RunsPage() {
                         </p>
                     </div>
                 </div>
-                    <div className="flex gap-2">
-                        {campaignId && (
-                            <>
-                                <Button onClick={() => router.push(`/campaigns/${campaignId}`)} variant="secondary" size="sm">
-                                    View campaign
-                                </Button>
-                                <Button onClick={() => router.push(`/history?type=campaign&campaignId=${encodeURIComponent(campaignId)}`)} variant="secondary" size="sm">
-                                    Back to Activity
-                                </Button>
-                            </>
-                        )}
-                        <Button onClick={() => void fetchRuns()} variant="secondary" size="sm">
-                            Refresh
-                        </Button>
-                    </div>
+                <div className="flex gap-2">
+                    {campaignId && (
+                        <>
+                            <Button onClick={() => router.push(`/campaigns/${campaignId}`)} variant="secondary" size="sm">
+                                View campaign
+                            </Button>
+                            <Button onClick={() => router.push(`/history?type=campaign&campaignId=${encodeURIComponent(campaignId)}`)} variant="secondary" size="sm">
+                                Back to Activity
+                            </Button>
+                        </>
+                    )}
+                    <Button onClick={() => void fetchRuns()} variant="secondary" size="sm">
+                        Refresh
+                    </Button>
+                </div>
             </div>
 
             {/* Filters */}
@@ -278,5 +280,13 @@ function StatusBadge({ status }: { status: ChainStatus }) {
             )}
             {status}
         </span>
+    );
+}
+
+export default function RunsPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-text-muted">Loading...</div>}>
+            <RunsPageContent />
+        </Suspense>
     );
 }

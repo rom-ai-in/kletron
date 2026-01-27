@@ -17,7 +17,7 @@ export type SelectorProps = {
     status?: 'success' | 'error' | 'loading' | 'none';
 };
 
-export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSelect, direction = 'up', size = 'md' }) => {
+export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSelect, direction = 'up', size = 'md', status = 'none' }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
