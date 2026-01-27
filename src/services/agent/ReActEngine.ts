@@ -32,9 +32,7 @@ export class ReActEngine {
                 // Propose the edit instead of executing
                 const edit = safeEditGate.proposeEdit(conversationId, "write_file", input, `Write to ${input.filePath}`);
 
-                return `Edit proposed (ID: ${edit.id}). Waiting for user approval. 
-IMPORTANT: You must NOT proceed with verification until the user explicitly confirms this edit is approved. 
-Stop and ask the user to approve the edit to ${input.filePath}.`;
+                return `Edit proposed (ID: ${edit.id}) for ${input.filePath}. The edit has been queued for user review. Continue with your task - the user will review all proposed edits together at the end.`;
             },
             {
                 name: "write_file",
@@ -51,9 +49,7 @@ Stop and ask the user to approve the edit to ${input.filePath}.`;
         const safeStrReplace = tool(
             async (input: { repoPath?: string; path?: string; filePath?: string; action?: string; operation?: string; startLine?: number; endLine?: number; maxBytes?: number }) => {
                 const edit = safeEditGate.proposeEdit(conversationId, "str_replace_editor", input, `Edit (str_replace) ${input.filePath || input.path}`);
-                return `Edit proposed (ID: ${edit.id}). Waiting for user approval. 
-IMPORTANT: You must NOT proceed until the user explicitly confirms this edit is approved. 
-Stop and ask the user to approve the edit to ${input.filePath || input.path}.`;
+                return `Edit proposed (ID: ${edit.id}) for ${input.filePath || input.path}. The edit has been queued for user review. Continue with your task.`;
             },
             {
                 name: "str_replace_editor",
@@ -112,11 +108,19 @@ Stop and ask the user to approve the edit to ${input.filePath || input.path}.`;
 
         // 4. Run the agent
         const tools = this.getSafeTools(conversationId);
-        const systemPrompt = `You are an expert developer assistant embedded in the Numezis Coder. 
+        const systemPrompt = `You are an expert developer assistant embedded in Numezis Coder.
 You can analyze code, browse files, and propose edits.
-When you want to change a file, use the 'write_file' tool. This will propose an edit for the user to review.
-Always verify your changes after they are approved.
-If you need to run terminal commands, use the 'execute_bash' tool, but be careful with destructive commands.`;
+
+WORKFLOW:
+- When you use 'write_file' or 'str_replace_editor', the edit is queued for user review.
+- You should CONTINUE working after proposing edits - do NOT stop to wait for approval.
+- The user will review all proposed edits together at the end (like Cursor).
+- Complete your entire task, proposing all necessary file changes.
+
+IMPORTANT:
+- Do NOT ask about approving individual edits - just keep working.
+- The execute_bash tool only supports: find, grep, rg, ls, cat (safe emulation). Complex shell commands won't work.
+- For file verification, use read_file or list_dir instead of bash commands.`;
 
         let finalResponse = "";
 

@@ -47,6 +47,47 @@ export const AgentPanel: React.FC<AgentPanelProps> = () => {
         }
     };
 
+    const handleApproveAll = async () => {
+        if (!activeConversationId) return;
+        try {
+            await fetch('/api/agent/approve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversationId: activeConversationId, action: 'all' })
+            });
+        } catch (e) {
+            console.error(e);
+            alert("Failed to approve all edits");
+        }
+    };
+
+    const handleRejectEdit = async (editId: string) => {
+        try {
+            await fetch('/api/agent/reject', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ editId })
+            });
+        } catch (e) {
+            console.error(e);
+            alert("Failed to reject edit");
+        }
+    };
+
+    const handleRejectAll = async () => {
+        if (!activeConversationId) return;
+        try {
+            await fetch('/api/agent/reject', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversationId: activeConversationId, action: 'all' })
+            });
+        } catch (e) {
+            console.error(e);
+            alert("Failed to reject all edits");
+        }
+    };
+
     // Shared New Chat Button
     const NewChatButton = (
         <button
@@ -79,6 +120,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = () => {
                         conversationId={activeConversationId}
                         title={activeTitle}
                         onApproveEdit={handleApproveEdit}
+                        onApproveAll={handleApproveAll}
+                        onRejectEdit={handleRejectEdit}
+                        onRejectAll={handleRejectAll}
                         onTitleChange={(newTitle) => setActiveTitle(newTitle)}
                     />
                 </div>

@@ -55,16 +55,22 @@ interface ActiveSessionProps {
     conversationId: string;
     title: string;
     onApproveEdit: (editId: string) => void;
+    onApproveAll?: () => void;
+    onRejectEdit?: (editId: string) => void;
+    onRejectAll?: () => void;
     onTitleChange?: (newTitle: string) => void;
 }
 
-export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, title, onApproveEdit, onTitleChange }) => {
+export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, title, onApproveEdit, onApproveAll, onRejectEdit, onRejectAll, onTitleChange }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [sending, setSending] = useState(false);
     const [pendingEdits, setPendingEdits] = useState<PendingEdit[]>([]);
     const [isPromptSelectorOpen, setIsPromptSelectorOpen] = useState(false);
-    const [isGraphOpen, setIsGraphOpen] = useState(false); // New state for Graph Visualizer
+    const [isGraphOpen, setIsGraphOpen] = useState(false);
+    const [expandedEditId, setExpandedEditId] = useState<string | null>(null);
+    const [approvingAll, setApprovingAll] = useState(false);
+    const [rejectingAll, setRejectingAll] = useState(false);
 
     const [llmProvider, setLlmProvider] = useState<string>('azure');
     const [isAuditOpen, setIsAuditOpen] = useState(false); // New state for Audit Log
@@ -427,38 +433,130 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
                     );
                 })}
 
-                {/* Pending Edits Block */}
+                {/* Cursor-Style Changes Review Panel */}
                 {pendingEdits.length > 0 && (
-                    <div className="mt-4 mx-2 p-3 bg-zinc-900/80 border border-amber-500/30 rounded-lg shadow-lg">
-                        <div className="flex items-center gap-2 mb-3 pb-2 border-b border-zinc-800">
-                            <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-                            <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Approval Required</span>
+                    <div className="mt-4 mx-2 bg-zinc-900/90 border border-amber-500/40 rounded-lg shadow-xl overflow-hidden">
+                        {/* Header with Batch Actions */}
+                        <div className="flex items-center justify-between px-3 py-2 bg-zinc-950/50 border-b border-zinc-800">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
+                                <span className="text-[11px] font-semibold text-amber-400">
+                                    {pendingEdits.length} Pending Change{pendingEdits.length > 1 ? 's' : ''}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={async () => {
+                                        setApprovingAll(true);
+                                        try {
+                                            if (onApproveAll) {
+                                                await onApproveAll();
+                                            } else {
+                                                // Fallback: approve each individually
+                                                for (const edit of pendingEdits) {
+                                                    await onApproveEdit(edit.id);
+                                                }
+                                            }
+                                            await loadData();
+                                        } finally {
+                                            setApprovingAll(false);
+                                        }
+                                    }}
+                                    disabled={approvingAll || rejectingAll}
+                                    className="py-1 px-2.5 bg-green-900/40 hover:bg-green-800/60 text-green-400 border border-green-700/50 hover:border-green-600 rounded text-[10px] font-medium flex items-center gap-1.5 transition-all disabled:opacity-50"
+                                >
+                                    {approvingAll ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle size={10} />}
+                                    Accept All
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        setRejectingAll(true);
+                                        try {
+                                            if (onRejectAll) {
+                                                await onRejectAll();
+                                            }
+                                            await loadData();
+                                        } finally {
+                                            setRejectingAll(false);
+                                        }
+                                    }}
+                                    disabled={approvingAll || rejectingAll}
+                                    className="py-1 px-2.5 bg-zinc-800 hover:bg-red-900/30 text-zinc-400 hover:text-red-400 border border-zinc-700 hover:border-red-800 rounded text-[10px] font-medium flex items-center gap-1.5 transition-all disabled:opacity-50"
+                                >
+                                    {rejectingAll ? <Loader2 size={10} className="animate-spin" /> : <XCircle size={10} />}
+                                    Reject All
+                                </button>
+                            </div>
                         </div>
-                        <div className="space-y-3">
-                            {pendingEdits.map(edit => (
-                                <div key={edit.id} className="relative">
-                                    <div className="flex items-center justify-between mb-1">
-                                        <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/30 px-1.5 py-0.5 rounded border border-cyan-900">
-                                            {edit.toolName}
-                                        </span>
-                                        <span className="text-[9px] text-zinc-500">{formatTime(edit.createdAt)}</span>
-                                    </div>
-                                    <p className="text-[11px] text-zinc-300 mb-2 pl-1 leading-relaxed">
-                                        {edit.description || "Proposed file modifications..."}
-                                    </p>
-                                    <div className="flex gap-2">
+
+                        {/* File List */}
+                        <div className="divide-y divide-zinc-800/50">
+                            {pendingEdits.map(edit => {
+                                const isExpanded = expandedEditId === edit.id;
+                                const filePath = edit.args?.filePath || edit.args?.path || 'Unknown file';
+                                const fileName = filePath.split('/').pop() || filePath;
+                                const isCreate = edit.toolName === 'write_file';
+                                const content = edit.args?.content || '';
+
+                                return (
+                                    <div key={edit.id} className="group">
+                                        {/* File Header - Click to Expand */}
                                         <button
-                                            onClick={() => onApproveEdit(edit.id)}
-                                            className="flex-1 py-1.5 px-3 bg-zinc-800 hover:bg-green-900/30 text-zinc-400 hover:text-green-400 border border-zinc-700 hover:border-green-800 rounded flex items-center justify-center gap-2 transition-all text-[10px] font-medium"
+                                            onClick={() => setExpandedEditId(isExpanded ? null : edit.id)}
+                                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-800/30 transition-colors text-left"
                                         >
-                                            <CheckCircle size={12} /> Approve Change
+                                            <ChevronRight
+                                                size={12}
+                                                className={`text-zinc-500 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                                            />
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${isCreate ? 'bg-green-900/30 text-green-400 border border-green-800/50' : 'bg-amber-900/30 text-amber-400 border border-amber-800/50'}`}>
+                                                {isCreate ? 'NEW' : 'EDIT'}
+                                            </span>
+                                            <span className="text-[11px] font-mono text-zinc-300 truncate flex-1">
+                                                {fileName}
+                                            </span>
+                                            <span className="text-[9px] text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {formatTime(edit.createdAt)}
+                                            </span>
                                         </button>
-                                        <button className="flex-1 py-1.5 px-3 bg-zinc-800 hover:bg-red-900/30 text-zinc-400 hover:text-red-400 border border-zinc-700 hover:border-red-800 rounded flex items-center justify-center gap-2 transition-all text-[10px] font-medium">
-                                            <XCircle size={12} /> Reject
-                                        </button>
+
+                                        {/* Expanded Content */}
+                                        {isExpanded && (
+                                            <div className="px-3 pb-3 pt-1 bg-zinc-950/30">
+                                                {/* File Path */}
+                                                <div className="text-[9px] font-mono text-zinc-600 mb-2 truncate">
+                                                    {filePath}
+                                                </div>
+
+                                                {/* Content Preview */}
+                                                {content && (
+                                                    <div className="bg-zinc-900 border border-zinc-800 rounded p-2 mb-2 overflow-hidden">
+                                                        <pre className="text-[10px] font-mono text-zinc-400 whitespace-pre-wrap max-h-40 overflow-y-auto scrollbar-elegant">
+                                                            {content.length > 500 ? content.substring(0, 500) + '\n... (truncated)' : content}
+                                                        </pre>
+                                                    </div>
+                                                )}
+
+                                                {/* Individual Actions */}
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => onApproveEdit(edit.id)}
+                                                        className="flex-1 py-1.5 px-3 bg-green-900/30 hover:bg-green-800/50 text-green-400 border border-green-700/50 hover:border-green-600 rounded flex items-center justify-center gap-1.5 transition-all text-[10px] font-medium"
+                                                    >
+                                                        <CheckCircle size={11} /> Accept
+                                                    </button>
+                                                    <button
+                                                        onClick={() => onRejectEdit?.(edit.id)}
+                                                        className="flex-1 py-1.5 px-3 bg-zinc-800 hover:bg-red-900/30 text-zinc-400 hover:text-red-400 border border-zinc-700 hover:border-red-800 rounded flex items-center justify-center gap-1.5 transition-all text-[10px] font-medium"
+                                                    >
+                                                        <XCircle size={11} /> Reject
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 )}
