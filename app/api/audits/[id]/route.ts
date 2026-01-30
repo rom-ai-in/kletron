@@ -6,11 +6,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id: sessionId } = await params;
         const db = await getDb();
-        const sessionId = params.id;
 
         // Validate ObjectId format
         if (!ObjectId.isValid(sessionId)) {

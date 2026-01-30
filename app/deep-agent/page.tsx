@@ -1258,6 +1258,7 @@ export default function HomePage() {
   }, [promptFolders]);
 
   const [selectedGraphKey, setSelectedGraphKey] = useState<string>("");
+  const [graphPrefsLoaded, setGraphPrefsLoaded] = useState(false);
   const [agentGraphs, setAgentGraphs] = useState<AgentGraphRecord[]>([]);
   const [targetDir, setTargetDir] = useState<string | null>(null);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
@@ -1309,12 +1310,19 @@ export default function HomePage() {
       .then((data) => {
         const list = Array.isArray(data?.graphs) ? (data.graphs as AgentGraphRecord[]) : [];
         setAgentGraphs(list);
-        // Auto-select first graph if none selected
-        if (list.length > 0 && !selectedGraphKey) {
+        // Load graph selection from localStorage or auto-select first
+        const storedGraph = window.localStorage.getItem("numezis-graph-selection");
+        if (storedGraph && list.some(g => `agent:${g._id}` === storedGraph)) {
+          setSelectedGraphKey(storedGraph);
+        } else if (list.length > 0 && !selectedGraphKey) {
           setSelectedGraphKey(`agent:${list[0]._id}`);
         }
+        setGraphPrefsLoaded(true);
       })
-      .catch(() => setAgentGraphs([]));
+      .catch(() => {
+        setAgentGraphs([]);
+        setGraphPrefsLoaded(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -1435,6 +1443,12 @@ export default function HomePage() {
     };
     window.localStorage.setItem("numezis-llm-selection", JSON.stringify(payload));
   }, [modelProvider, lmStudioModel, llmPrefsLoaded]);
+
+  // Persist graph selection to localStorage
+  useEffect(() => {
+    if (!graphPrefsLoaded || !selectedGraphKey) return;
+    window.localStorage.setItem("numezis-graph-selection", selectedGraphKey);
+  }, [selectedGraphKey, graphPrefsLoaded]);
 
   useEffect(() => {
     const payload = {

@@ -69,29 +69,67 @@ export function AgentGraphRunModal({
 
                 try {
                     const res = await fetch(`/api/audits/${node.sessionId}`);
-                    if (!res.ok) continue;
+                    if (!res.ok) {
+                        const errorText = await res.text();
+                        console.error(`[CopyAllLogs] Failed to fetch session ${node.sessionId}:`, res.status, errorText);
+                        allLogs.push(`\n[ERROR] Failed to fetch logs for node: ${node.label} (${res.status})\n`);
+                        continue;
+                    }
 
                     const data = await res.json();
                     const stream: AgentEvent[] = data.eventStream || data.workflowResult?.eventStream || [];
 
-                    if (stream.length > 0) {
-                        allLogs.push(`\n${"=".repeat(60)}`);
-                        allLogs.push(`NODE: ${node.label} (${node.id})`);
-                        allLogs.push(`STATUS: ${node.status || "UNKNOWN"}`);
-                        allLogs.push(`SESSION: ${node.sessionId}`);
-                        allLogs.push(`${"=".repeat(60)}\n`);
+                    // Always add node header, even if no events (to show which nodes were processed)
+                    allLogs.push(`\n${"=".repeat(60)}`);
+                    allLogs.push(`NODE: ${node.label} (${node.id})`);
+                    allLogs.push(`STATUS: ${node.status || "UNKNOWN"}`);
+                    allLogs.push(`SESSION: ${node.sessionId}`);
+                    allLogs.push(`${"=".repeat(60)}\n`);
 
+                    if (stream.length > 0) {
                         for (const event of stream) {
                             const timestamp = new Date(event.timestamp).toLocaleTimeString();
                             const kind = event.kind?.toUpperCase() || "EVENT";
                             const phase = event.phaseLabel || event.phaseId || "";
                             const name = event.name ? ` [${event.name}]` : "";
-                            const content = event.content || "";
+                            let content = event.content || "";
+
+                            // For tool results, truncate verbose outputs (web searches, fetches, etc.)
+                            if (kind === "TOOL" && content) {
+                                // Skip binary/PDF content entirely
+                                if (content.includes("%PDF-") || content.match(/^[\x00-\x08\x0E-\x1F]/)) {
+                                    content = "[Binary/PDF content - skipped]";
+                                } else {
+                                    // Try to extract just the key info for JSON tool results
+                                    try {
+                                        const parsed = JSON.parse(content);
+                                        if (parsed.query) {
+                                            // Web search result - just show query
+                                            content = `Query: "${parsed.query}" → ${parsed.results?.length || 0} results`;
+                                        } else if (parsed.url && parsed.status !== undefined) {
+                                            // Fetch result - just show URL and status
+                                            content = `URL: ${parsed.url} → ${parsed.ok ? "OK" : "Failed"} (${parsed.status})`;
+                                        } else if (parsed.filePath || parsed.path) {
+                                            // File operation
+                                            content = `File: ${parsed.filePath || parsed.path}`;
+                                        } else {
+                                            // Other JSON - truncate
+                                            content = content.length > 200 ? content.substring(0, 200) + "..." : content;
+                                        }
+                                    } catch {
+                                        // Not JSON - truncate if too long
+                                        content = content.length > 200 ? content.substring(0, 200) + "..." : content;
+                                    }
+                                }
+                            }
 
                             allLogs.push(`[${timestamp}] ${kind}${name} (${phase}): ${content}`);
                         }
+                    } else {
+                        allLogs.push(`(No events recorded for this node)`);
                     }
-                } catch {
+                } catch (err) {
+                    console.error(`[CopyAllLogs] Exception for node ${node.label}:`, err);
                     allLogs.push(`\n[ERROR] Failed to fetch logs for node: ${node.label}\n`);
                 }
             }

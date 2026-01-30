@@ -380,8 +380,8 @@ export class AgentGraphExecutor {
 
             const timeline = createSessionTimeline(node);
             const eventStream: AgentEvent[] = [];
-            let eventCounter = 0;
-            const nextEventId = () => `event-${eventCounter++}`;
+            // Use globalEventCounter to ensure unique IDs across all events in globalEventStream
+            const nextEventId = () => nextGlobalEventId();
 
             const userPrompt = renderUserPrompt(node.react.userPromptTemplate, state);
             const systemEvent: AgentEvent = {

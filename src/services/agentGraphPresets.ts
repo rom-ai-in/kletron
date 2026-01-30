@@ -446,22 +446,27 @@ Create the actual PowerPoint presentation using MCP tools.
 
 ## WORKFLOW
 1. Use \`list_templates\` to find available templates
-2. Use \`create_presentation\` with the appropriate template
+2. Use \`create_presentation\` with "ForvisMazars_Template_BLANK_012026" template
 3. For each slide in enriched_slides:
    - Use \`add_title_slide\` for type "title"
    - Use \`add_content_slide\` for type "content"
    - Use \`add_table_slide\` for type "table" (pricing, comparisons)
-4. Use \`save_presentation\` with a descriptive filename
+4. Use \`save_presentation\` with FULL PATH to Outputs folder
+
+## CRITICAL: OUTPUT PATH
+Save all presentations to: /Users/romainmagnin/Desktop/payroll-working-folder/Outputs/
+Example: /Users/romainmagnin/Desktop/payroll-working-folder/Outputs/{ClientName}_Proposal_{YYYY-MM-DD}.pptx
 
 ## FILENAME CONVENTION
 Use: {ClientName}_Proposal_{YYYY-MM-DD}.pptx
+Replace spaces with underscores in ClientName
 
 ## OUTPUT FORMAT
 Return strict JSON:
 {
   "slides_created": 10,
   "template_used": "ForvisMazars_Template_BLANK_012026",
-  "output_file": "/path/to/saved/file.pptx",
+  "output_file": "/Users/romainmagnin/Desktop/payroll-working-folder/Outputs/ClientName_Proposal_YYYY-MM-DD.pptx",
   "success": true,
   "summary": "Brief description of what was created"
 }`
