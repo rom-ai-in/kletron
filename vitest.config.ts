@@ -9,8 +9,8 @@ export default defineConfig({
     },
     test: {
         environment: 'node',
-        include: ['src/__tests__/**/*.test.ts', 'github-mcp/tests/safety.test.js'],
-        exclude: ['**/node_modules/**', '**/dist/**', 'github-mcp/tests/tools.test.js', 'github-mcp/tests/mcpRegistration.test.js'],
+        include: ['src/__tests__/**/*.test.ts', 'mcp-server/tests/safety.test.js'],
+        exclude: ['**/node_modules/**', '**/dist/**', 'mcp-server/tests/tools.test.js', 'mcp-server/tests/mcpRegistration.test.js'],
         coverage: {
             provider: 'v8',
         },

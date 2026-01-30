@@ -47,7 +47,7 @@ type ActivityItem = {
     link: string;
 };
 
-type FilterType = "all" | "workbench" | "campaign" | "agent_graph";
+type FilterType = "all" | "workbench" | "campaign";
 
 function HistoryPageContent() {
     const router = useRouter();
@@ -96,7 +96,8 @@ function HistoryPageContent() {
         try {
             const typeParam = (searchParams?.get("type") || "").toLowerCase();
             const nextFilter: FilterType =
-                typeParam === "campaign" ? "campaign" : typeParam === "workbench" ? "workbench" : "all";
+                typeParam === "campaign" ? "campaign" :
+                    (typeParam === "workbench" || typeParam === "agent_graph") ? "workbench" : "all";
             setFilter(nextFilter);
 
             const campaignIdParam = searchParams?.get("campaignId");
@@ -118,9 +119,9 @@ function HistoryPageContent() {
     };
 
     const filteredActivity = activity.filter((item) => {
-        if (filter === "workbench" && item.type !== "WORKBENCH") return false;
+        // Deep Agent filter shows both standalone workbench sessions AND agent graph runs
+        if (filter === "workbench" && item.type !== "WORKBENCH" && item.type !== "AGENT_GRAPH") return false;
         if (filter === "campaign" && item.type !== "CAMPAIGN") return false;
-        if (filter === "agent_graph" && item.type !== "AGENT_GRAPH") return false;
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
@@ -192,16 +193,7 @@ function HistoryPageContent() {
                     >
                         Deep Agent
                     </FilterButton>
-                    <FilterButton
-                        active={filter === "agent_graph"}
-                        onClick={() =>
-                            router.push(
-                                `/history?type=agent_graph${campaignId ? `&campaignId=${encodeURIComponent(campaignId)}` : ""}`
-                            )
-                        }
-                    >
-                        Agent Graphs
-                    </FilterButton>
+
                     <FilterButton
                         active={filter === "campaign"}
                         onClick={() =>
@@ -296,17 +288,17 @@ function HistoryPageContent() {
                             <div className="flex items-stretch text-left">
                                 {/* Type indicator */}
                                 <div className={`w-1 shrink-0 ${item.type === "WORKBENCH" ? "bg-sky-500/40" :
-                                        item.type === "AGENT_GRAPH" ? "bg-violet-500/40" :
-                                            "bg-emerald-500/40"
+                                    item.type === "AGENT_GRAPH" ? "bg-violet-500/40" :
+                                        "bg-emerald-500/40"
                                     }`} />
 
                                 <div className="flex flex-1 items-center gap-4 p-4 min-w-0">
                                     {/* Column 1: Icon */}
                                     <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${item.type === "WORKBENCH"
-                                            ? "bg-sky-500/10 border-sky-500/10 text-sky-400"
-                                            : item.type === "AGENT_GRAPH"
-                                                ? "bg-violet-500/10 border-violet-500/10 text-violet-400"
-                                                : "bg-emerald-500/10 border-emerald-500/10 text-emerald-400"
+                                        ? "bg-sky-500/10 border-sky-500/10 text-sky-400"
+                                        : item.type === "AGENT_GRAPH"
+                                            ? "bg-violet-500/10 border-violet-500/10 text-violet-400"
+                                            : "bg-emerald-500/10 border-emerald-500/10 text-emerald-400"
                                         }`}>
                                         {item.type === "WORKBENCH" ? <Terminal className="h-5 w-5" /> :
                                             item.type === "AGENT_GRAPH" ? <GitBranch className="h-5 w-5" /> :
@@ -327,10 +319,10 @@ function HistoryPageContent() {
                                         <div className="flex flex-wrap items-center gap-2">
                                             {/* Type Chip */}
                                             <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${item.type === "WORKBENCH"
-                                                    ? "bg-sky-500/10 text-sky-400"
-                                                    : item.type === "AGENT_GRAPH"
-                                                        ? "bg-violet-500/10 text-violet-400"
-                                                        : "bg-emerald-500/10 text-emerald-400"
+                                                ? "bg-sky-500/10 text-sky-400"
+                                                : item.type === "AGENT_GRAPH"
+                                                    ? "bg-violet-500/10 text-violet-400"
+                                                    : "bg-emerald-500/10 text-emerald-400"
                                                 }`}>
                                                 {item.type === "WORKBENCH" ? "Deep Agent" :
                                                     item.type === "AGENT_GRAPH" ? "Agent Graph" :

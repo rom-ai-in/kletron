@@ -37,7 +37,7 @@ export class McpClient {
         return new SSEClientTransport(new URL(mcpUrl));
       })()
       : (() => {
-        const serverScript = path.resolve("github-mcp", "server.js");
+        const serverScript = path.resolve("mcp-server", "server.js");
         return new StdioClientTransport({
           command: process.execPath,
           args: [serverScript, "--mcp"],

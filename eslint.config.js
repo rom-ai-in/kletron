@@ -56,7 +56,7 @@ export default [
     },
   },
   {
-    files: ["scripts/**", "github-mcp/**"],
+    files: ["scripts/**", "mcp-server/**"],
     rules: {
       "no-console": "off",
     },

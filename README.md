@@ -1,13 +1,13 @@
 # PayMe (TypeScript LangGraph)
 
-This repo houses a **Node/TypeScript LangGraph multi-agent pipeline** backed by the local `github-mcp` Model Context Protocol server. `npm run dev` starts both services and prints a clickable LangSmith Studio link for running the graph locally.
+This repo houses a **Node/TypeScript LangGraph multi-agent pipeline** backed by the local `mcp-server` Model Context Protocol server. `npm run dev` starts both services and prints a clickable LangSmith Studio link for running the graph locally.
 
 ## Architecture
 
 - **4-phase pipeline** (`src/graph.ts`): Map → Audit → Plan → Report.
 - **Phase agents** (`src/agents/phases.ts`): Each phase is a single ReAct agent with a specific mission prompt and an explicit MCP tool list.
 - **Simple ReAct agent** (`src/simpleReactGraph.ts`): A one-step LangGraph ReAct agent that answers lightweight repo questions; pick the "Simple ReAct agent" graph from the UI to run it instead of the full audit pipeline.
-- **MCP Server** (`github-mcp`): The agent no longer talks directly to the filesystem. All inspection/editing actions are routed through the MCP server, so agents behave like LM Studio clients and stay contained.
+- **MCP Server** (`mcp-server`): The agent no longer talks directly to the filesystem. All inspection/editing actions are routed through the MCP server, so agents behave like LM Studio clients and stay contained.
 
 ### Pipeline outputs (written via MCP)
 
@@ -22,7 +22,7 @@ Artifacts are written into the target repo under `.numezis/`:
 - `/app/page.tsx` renders a staged chat UI that submits to `/api/chat`.
 - `/api/chat` reuses the same Phase 1..4 logic and returns timeline events, meta/findings/tasks, and the final report summary.
 - The graph dropdown now exposes "Simple ReAct agent" as a quick alternative; the same graph is registered in `langgraph.json` so LangGraph can run it locally or via LangSmith.
-- The sidebar exposes `/api/tools/*` metadata so you can click any MCP tool and see the raw `github-mcp/tools` implementation.
+- The sidebar exposes `/api/tools/*` metadata so you can click any MCP tool and see the raw `mcp-server/tools` implementation.
 - The UI now uses Tailwind CSS (see `tailwind.config.js`, `postcss.config.js`, `app/globals.css`) for the Cursor-style layout.
 
 ## Setup
@@ -55,10 +55,10 @@ If `GITHUB_MCP_DEFAULT_DIR` is missing, `npm run dev`/`npm run dev:web` will sto
 npm start
 ```
 
-`npm start` frees ports `9000` / `8080`, launches `github-mcp` (MCP tooling) on port `9000`, and then runs the interactive CLI (`src/index.ts`). Type `exit` to quit.
+`npm start` frees ports `9000` / `8080`, launches `mcp-server` (MCP tooling) on port `9000`, and then runs the interactive CLI (`src/index.ts`). Type `exit` to quit.
 
 
-For iterative development, use `npm run dev`. It reclaims ports 9000/8080, launches `github-mcp`, and starts `@langchain/langgraph-cli dev` on port 8080. The command prints a clickable LangSmith Studio link for your local server: `https://smith.langchain.com/studio?baseUrl=http://localhost:8080`.
+For iterative development, use `npm run dev`. It reclaims ports 9000/8080, launches `mcp-server`, and starts `@langchain/langgraph-cli dev` on port 8080. The command prints a clickable LangSmith Studio link for your local server: `https://smith.langchain.com/studio?baseUrl=http://localhost:8080`.
 
 ## LangSmith Workflow
 
@@ -66,7 +66,7 @@ For iterative development, use `npm run dev`. It reclaims ports 9000/8080, launc
 npm run langsmith
 ```
 
-Use `npm run langsmith` when deploying under LangSmith Agent. It reclaims ports 9000/8080, launches `github-mcp`, and restarts the LangGraph CLI with `LANGSMITH_AGENT=1` so the LangSmith platform can track the run. You can also call the LangSmith CLI directly:
+Use `npm run langsmith` when deploying under LangSmith Agent. It reclaims ports 9000/8080, launches `mcp-server`, and restarts the LangGraph CLI with `LANGSMITH_AGENT=1` so the LangSmith platform can track the run. You can also call the LangSmith CLI directly:
 
 ```bash
 langsmith agent run --name numezis --command "npm run langsmith"
@@ -77,19 +77,19 @@ Ensure `LANGSMITH_API_KEY` and related telemetry variables are set so LangSmith 
 ## Environment Variables
 
 - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION`, `AZURE_OPENAI_MODEL`, `AZURE_OPENAI_MAX_TOKENS`: Provide your Azure credentials.
-- `GITHUB_MCP_DEFAULT_DIR` (preferred) / `MCP_DEFAULT_DIR`: Root path the MCP server should service. This repo’s scripts resolve the target root from these vars and pass it to both `github-mcp` and the agent so all tool calls stay focused on that repository.
+- `GITHUB_MCP_DEFAULT_DIR` (preferred) / `MCP_DEFAULT_DIR`: Root path the MCP server should service. This repo’s scripts resolve the target root from these vars and pass it to both `mcp-server` and the agent so all tool calls stay focused on that repository.
 - `LANGSMITH_API_KEY` / `LANGGRAPH_API_KEY`: Optional tracing keys. `npm run langsmith` honors `LANGSMITH_API_KEY` so the platform can publish run telemetry.
 
 ## MCP Tooling
 
-The TypeScript agent uses the MCP `tools/call` interface through `src/tools/mcpTools.ts`. Tools are exposed to the React agent as LangChain tools with `zod` schemas, ensuring all repository interactions are captive to `github-mcp`.
+The TypeScript agent uses the MCP `tools/call` interface through `src/tools/mcpTools.ts`. Tools are exposed to the React agent as LangChain tools with `zod` schemas, ensuring all repository interactions are captive to `mcp-server`.
 
 ## Notes
 
-- `github-mcp` is now the **only** tool provider—no more local filesystem helpers.
+- `mcp-server` is now the **only** tool provider—no more local filesystem helpers.
 - Old Python scripts, marketing assets, and branding logic were removed in favor of this focused TS stack.
 
 ## Troubleshooting
 
-- If the ReAct agent fails to reach MCP, restart via `npm start` so `scripts/start-all.ts` can re-launch `github-mcp` on port `9000` (it also checks for stuck processes using `lsof`).
+- If the ReAct agent fails to reach MCP, restart via `npm start` so `scripts/start-all.ts` can re-launch `mcp-server` on port `9000` (it also checks for stuck processes using `lsof`).
 - When updating dependencies or LangGraph versions, re-run `npm install` and restart both the MCP server and `npm start`.

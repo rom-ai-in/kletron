@@ -97,7 +97,7 @@ async function runServer() {
 
   const server = new Server(
     {
-      name: "github-mcp",
+      name: "mcp-server",
       version: "1.0.0",
     },
     {
@@ -223,7 +223,7 @@ async function runSseServer({ allTools, port }) {
           JSON.stringify(
             {
               ok: true,
-              name: "github-mcp",
+              name: "mcp-server",
               version: "1.0.0",
               transport: "sse",
               defaultDir: process.env.GITHUB_MCP_DEFAULT_DIR || process.env.MCP_DEFAULT_DIR || null,
@@ -239,7 +239,7 @@ async function runSseServer({ allTools, port }) {
       if (req.method === "GET" && url.pathname === "/sse") {
         const transport = new SSEServerTransport("/message", res);
         const mcpServer = new Server(
-          { name: "github-mcp", version: "1.0.0" },
+          { name: "mcp-server", version: "1.0.0" },
           { capabilities: { tools: {} } }
         );
 

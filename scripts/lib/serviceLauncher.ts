@@ -192,7 +192,7 @@ export function spawnService(config: ServiceLaunchConfig): ChildProcess {
 
 export function createMcpLauncher(rootDir: string, overrides: Record<string, string> = {}) {
   const mcpCommand = process.platform === "win32" ? "node.exe" : "node";
-  const mcpArgs = [path.join("github-mcp", "server.js"), "--mcp"];
+  const mcpArgs = [path.join("mcp-server", "server.js"), "--mcp"];
   return spawnService({
     name: "MCP Server",
     command: mcpCommand,

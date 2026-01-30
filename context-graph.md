@@ -36,7 +36,7 @@ Le **graph de contexte** sert de mémoire structurée du dépôt : fichiers, sym
 
 ## 7. Relation avec le protocole MCP
 - Les outils exposés (`src/tools/mcpTools.ts`) sont des wrappers `tool(...)` autour de `callMcpTool`, qui prépare les chemins (`filePath`, `repoPath`, `path`) par rapport à `config.mcpDefaultDir` puis invoque `McpClient.callTool`.
-- Le client MCP (`src/mcp/client.ts`) crée un `Client` SSE/stdio connecté au serveur `github-mcp`, en réutilisant le même dossier que celui scanné par le graphe. Cela garantit que l’injection contextuelle et les outils ciblent le même dépôt physique.
+- Le client MCP (`src/mcp/client.ts`) crée un `Client` SSE/stdio connecté au serveur `mcp-server`, en réutilisant le même dossier que celui scanné par le graphe. Cela garantit que l’injection contextuelle et les outils ciblent le même dépôt physique.
 - À chaque requête (chaque nœud LangGraph), l’agent exécute `streamReactAgentMessages` après l’injection ; les outils MCP sélectionnés dans `node.react.toolNames` sont mis à disposition, et les résultats retardent la conclusion de l’étape. Le contexte détecté en amont guide donc les appels MCP dans cette même requête.
 
 ## 8. Observabilité et utilitaires

@@ -16,7 +16,7 @@ Tip: environment variables are loaded from `.env` automatically (via `dotenv`) w
 
 1. Install dependencies in this repo: `npm install`
 2. In LM Studio → MCP servers, add a server using **one of these configurations**:
-   - Recommended (no `npm` required): command `node`, args `["/Users/<you>/Desktop/github-mcp/server.js","--mcp"]`
+   - Recommended (no `npm` required): command `node`, args `["/Users/<you>/Desktop/mcp-server/server.js","--mcp"]`
    - Alternative: command `npm`, args `["run","mcp"]` (requires `npm` to be in LM Studio’s PATH and the working directory set to this repo)
 3. In your agent prompt, encourage evidence-first tool usage. A common failure mode is incorrect tool arguments: always follow the `tools/list` schemas returned by MCP.
 
@@ -99,7 +99,7 @@ Run `npm run diagnose` (or `npm run dev`) to exercise diagnostic mode. It spawns
 
 If LM Studio shows intermittent `WebSocket closed by the client` errors, it usually means the server accidentally started in diagnostic mode (some launchers attach a pseudo‑TTY). Always use `npm start` (or `node server.js --mcp`) in LM Studio so the process stays alive.
 
-If you see errors like `Could not read package.json: .../.lmstudio/extensions/plugins/mcp/github-mcp/package.json`, you likely installed this as an LM Studio *plugin* instead of configuring it as an external MCP server. This repo is meant to be run from its own folder (with `node_modules` present).
+If you see errors like `Could not read package.json: .../.lmstudio/extensions/plugins/mcp/mcp-server/package.json`, you likely installed this as an LM Studio *plugin* instead of configuring it as an external MCP server. This repo is meant to be run from its own folder (with `node_modules` present).
 
 ## Troubleshooting (LM Studio)
 
@@ -111,15 +111,15 @@ Common failure modes are almost always **LM Studio launch config** issues (comma
 
 - **LM Studio *mcpBridge plugin* closes immediately / “Connection closed”**
   - Your plugin `mcp-bridge-config.json` is launching the diagnostic mode (`npm run dev` / `--diagnostic`), which exits on success.
-  - Fix: set it to run **MCP mode** (non-exiting): command `node`, args `["/path/to/github-mcp/server.js","--mcp"]` (or `npm run mcp`).
+  - Fix: set it to run **MCP mode** (non-exiting): command `node`, args `["/path/to/mcp-server/server.js","--mcp"]` (or `npm run mcp`).
 
-- **`Could not read package.json .../.lmstudio/extensions/plugins/mcp/github-mcp/package.json`**
+- **`Could not read package.json .../.lmstudio/extensions/plugins/mcp/mcp-server/package.json`**
   - You installed this as an LM Studio plugin. Remove that plugin and add it as an external MCP server instead.
 
 - **“Working Directory: No directory yet” (or missing cwd)**
   - Use the **node** launch method so no cwd is required:
     - Command: `node`
-    - Args: `/Users/<you>/Desktop/github-mcp/server.js`, `--mcp`
+    - Args: `/Users/<you>/Desktop/mcp-server/server.js`, `--mcp`
 
 - **It works in terminal (`npm run diagnose`) but not in LM Studio**
   - You are launching diagnostic mode in LM Studio (which exits). Ensure LM Studio uses `--mcp`.
