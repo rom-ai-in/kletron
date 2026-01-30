@@ -363,18 +363,30 @@ Design the slide-by-slide structure for the client proposal.
 - Research findings are in \`state.nodes.research\`
 - Example offer patterns are in \`state.nodes.offer_analysis\`
 
+## AVAILABLE SLIDE TYPES
+Use these exact type names - they map to specific template layouts:
+- **title**: Cover/first slide (e.g., "Proposal for [Client]")
+- **section**: Section dividers (e.g., "Our Approach", "Why Us")
+- **content**: Bullet points and text (e.g., "Benefits", "Services")
+- **table**: Data and timelines (e.g., "Pricing", "Timeline")
+- **thankyou**: Closing slide (e.g., "Thank You", "Next Steps")
+
 ## RULES
-1. Follow the common section patterns identified in offer analysis
-2. Plan 8-12 slides for a typical proposal
-3. For each slide, specify: number, title, type (title/content/table), key points
+1. First slide MUST have type: "title"
+2. Use "section" for dividers between major parts
+3. Use "content" for bullet points and explanations
+4. Last slide should be "thankyou"
+5. Plan 8-12 slides total
+6. For each slide specify: number, title, type, key_points (or subtitle for section/title)
 
 ## OUTPUT FORMAT
 Return strict JSON:
 {
   "total_slides": 10,
   "slides": [
-    { "number": 1, "title": "...", "type": "title", "key_points": ["..."] },
-    { "number": 2, "title": "Agenda", "type": "content", "key_points": ["..."] },
+    { "number": 1, "title": "Proposal for ClientName", "type": "title", "subtitle": "Payroll Services" },
+    { "number": 2, "title": "Agenda", "type": "content", "key_points": ["Understanding", "Solution", "Pricing"] },
+    { "number": 3, "title": "Our Approach", "type": "section", "subtitle": "How we work" },
     ...
   ],
   "summary": "Brief rationale for structure"
@@ -451,13 +463,12 @@ Create the actual PowerPoint presentation using the slide_loop_controller for in
 4. Use \`save_presentation\` with FULL PATH to Outputs folder
 
 ## TEMPLATE MAPPING (handled by slide_loop_controller)
-The controller automatically maps slide types to templates:
-- title/cover → Template Slide 3 (cover page)
-- section/divider/chapter → Template Slide 5-6 (section dividers)
-- content/bullets/text → Template Slide 7 (standard content with bullets)
-- two_column/comparison → Template Slide 10 (two-column layout)
-- table/data → Template Slide 11-12 (table layouts)
-- contact/thankyou/close → Template Slide 17-20 (closing slides)
+The controller automatically maps slide types to template layouts:
+- title/cover → Slide 3 (Title 1 + Subtitle 2)
+- section/divider → Slide 4 (Title 1 + Subtitle 2)
+- content/bullets → Slide 7 (Title 1 + Text Placeholder 2)
+- table/data → Slide 11 (Title 1 + Text Placeholder 2)
+- thankyou/close → Slide 3 (Title 1 + Subtitle 2)
 
 ## CRITICAL: OUTPUT PATH
 Save all presentations to: /Users/romainmagnin/Desktop/payroll-working-folder/Outputs/
