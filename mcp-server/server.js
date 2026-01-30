@@ -51,6 +51,7 @@ import { listSlides } from "./tools/listSlides.js";
 import { savePresentation } from "./tools/savePresentation.js";
 import { addTableSlide } from "./tools/addTableSlide.js";
 import { listTemplateLayouts } from "./tools/listTemplateLayouts.js";
+import { slideLoopController } from "./tools/slideLoopController.js";
 
 const argv = process.argv.slice(2);
 const hasArg = (flag) => argv.includes(flag);
@@ -164,6 +165,7 @@ function buildAllTools() {
     save_presentation: savePresentation,
     add_table_slide: addTableSlide,
     list_template_layouts: listTemplateLayouts,
+    slide_loop_controller: slideLoopController,
   };
 
   return { ...tools, ...advancedTools, ...presentationTools };

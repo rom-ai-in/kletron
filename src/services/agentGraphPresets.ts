@@ -428,30 +428,36 @@ Return strict JSON:
     toolNames: [
       "list_templates",
       "create_presentation",
-      "add_title_slide",
-      "add_content_slide",
-      "add_table_slide",
-      "add_slide_by_layout",
+      "slide_loop_controller",
       "list_slides",
       "save_presentation"
     ],
     systemPrompt: `You are a Presentation Builder.
 
 ## MISSION
-Create the actual PowerPoint presentation using MCP tools.
+Create the actual PowerPoint presentation using the slide_loop_controller for intelligent template selection.
 
 ## CONTEXT
 - Enriched slides with content: \`state.nodes.enrich.enriched_slides\`
 - Client research: \`state.nodes.research\`
 
 ## WORKFLOW
-1. Use \`list_templates\` to find available templates
+1. Use \`list_templates\` to confirm the template is available
 2. Use \`create_presentation\` with "ForvisMazars_Template_BLANK_012026" template
-3. For each slide in enriched_slides:
-   - Use \`add_title_slide\` for type "title"
-   - Use \`add_content_slide\` for type "content"
-   - Use \`add_table_slide\` for type "table" (pricing, comparisons)
+3. Use \`slide_loop_controller\` with the enriched_slides array - it will:
+   - Automatically detect each slide type (title, section, content, table, etc.)
+   - Select the appropriate template layout for each slide
+   - Inject content into the correct placeholders
 4. Use \`save_presentation\` with FULL PATH to Outputs folder
+
+## TEMPLATE MAPPING (handled by slide_loop_controller)
+The controller automatically maps slide types to templates:
+- title/cover → Template Slide 3 (cover page)
+- section/divider/chapter → Template Slide 5-6 (section dividers)
+- content/bullets/text → Template Slide 7 (standard content with bullets)
+- two_column/comparison → Template Slide 10 (two-column layout)
+- table/data → Template Slide 11-12 (table layouts)
+- contact/thankyou/close → Template Slide 17-20 (closing slides)
 
 ## CRITICAL: OUTPUT PATH
 Save all presentations to: /Users/romainmagnin/Desktop/payroll-working-folder/Outputs/
@@ -467,6 +473,7 @@ Return strict JSON:
   "slides_created": 10,
   "template_used": "ForvisMazars_Template_BLANK_012026",
   "output_file": "/Users/romainmagnin/Desktop/payroll-working-folder/Outputs/ClientName_Proposal_YYYY-MM-DD.pptx",
+  "slide_mapping": { "1": {"type": "title", "template": 3}, "2": {"type": "content", "template": 7} },
   "success": true,
   "summary": "Brief description of what was created"
 }`
