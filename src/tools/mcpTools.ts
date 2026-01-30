@@ -1004,6 +1004,33 @@ export const listSlidesTool = tool(
   }
 );
 
+export const slideLoopControllerTool = tool(
+  async (input: { enriched_slides: Array<{ number?: number; title: string; type?: string; content?: string; subtitle?: string; key_points?: string[] }> }) => {
+    return formatResult(await callMcpTool("slide_loop_controller", { enriched_slides: input.enriched_slides }));
+  },
+  {
+    name: "slide_loop_controller",
+    description: `Multi-Agent Slide Generation with 5 sub-agents:
+1. Planner - Validates input
+2. Type Selector - Chooses template (title→3, section→4, content→7, table→11, closing→3)
+3. Content Generator - Injects text
+4. Validator - Verifies creation
+5. Loop Controller - Handles retries
+
+Pass the enriched_slides array and it will automatically create all slides with correct templates.`,
+    schema: z.object({
+      enriched_slides: z.array(z.object({
+        number: z.number().optional().describe("Slide number"),
+        title: z.string().describe("Slide title"),
+        type: z.string().optional().describe("Slide type: title, section, content, table, thankyou"),
+        content: z.string().optional().describe("Slide content/body text"),
+        subtitle: z.string().optional().describe("Slide subtitle"),
+        key_points: z.array(z.string()).optional().describe("Key points for the slide"),
+      })).describe("Array of enriched slide objects"),
+    }),
+  }
+);
+
 export const savePresentationTool = tool(
   async (input: { outputPath: string }) => {
     return formatResult(await callMcpTool("save_presentation", { outputPath: input.outputPath }));
@@ -1157,6 +1184,7 @@ export const allMcpTools = [
   addTextBoxTool,
   addImageToSlideTool,
   listSlidesTool,
+  slideLoopControllerTool,
   savePresentationTool,
   // Document tools
   listWordTemplatesTool,
