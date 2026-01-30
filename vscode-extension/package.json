@@ -1,0 +1,92 @@
+{
+  "name": "numezis.studio",
+  "displayName": "Numezis Studio",
+  "description": "VS Code extension for the Numezis agent platform.",
+  "version": "0.1.0",
+  "icon": "resources/icon.svg",
+  "engines": {"vscode": ">=1.80.0"},
+  "activationEvents": [
+    "onCommand:numezis.openChat",
+    "onCommand:numezis.connectBackend",
+    "onCommand:numezis.runDriftAnalysis",
+    "onCommand:numezis.applyDiff"
+  ],
+  "main": "out/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./tsconfig.json",
+    "package": "vsce package"
+  },
+  "contributes": {
+    "commands": [
+      {"command": "numezis.openChat", "title": "Numezis: Open Chat"},
+      {"command": "numezis.connectBackend", "title": "Numezis: Connect Backend"},
+      {"command": "numezis.runDriftAnalysis", "title": "Numezis: Run Drift Analysis"},
+      {"command": "numezis.applyDiff", "title": "Numezis: Apply Last Diff"}
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Numezis Extension",
+      "properties": {
+        "numezis.backendUrl": {
+          "type": "string",
+          "description": "Base URL for the Numezis backend.",
+          "default": ""
+        },
+        "numezis.apiToken": {
+          "type": "string",
+          "description": "Optional API token for authenticated requests.",
+          "default": ""
+        },
+        "numezis.llm.provider": {
+          "type": "string",
+          "description": "LLM provider identifier (ex: openai, ollama, anthropic).",
+          "default": "openai"
+        },
+        "numezis.llm.baseUrl": {
+          "type": "string",
+          "description": "Base URL for the LLM provider (optional).",
+          "default": ""
+        },
+        "numezis.llm.model": {
+          "type": "string",
+          "description": "Default LLM model name.",
+          "default": "gpt-4o-mini"
+        },
+        "numezis.llm.apiKey": {
+          "type": "string",
+          "description": "API key for the LLM provider (optional).",
+          "default": ""
+        },
+        "numezis.llm.temperature": {
+          "type": "number",
+          "description": "Default LLM temperature.",
+          "default": 0.2
+        },
+        "numezis.llm.maxTokens": {
+          "type": "number",
+          "description": "Default LLM max tokens (optional).",
+          "default": 0
+        }
+      }
+    },
+    "viewsContainers": {"activitybar": [{"id": "numezis", "title": "Numezis", "icon": "resources/icon.svg"}]},
+    "views": {"numezis": [{"id": "agentTree", "name": "Agents"}]},
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "numezis.applyDiff",
+          "when": "view == agentTree && viewItem == agentRun"
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "typescript": "4.9.5",
+    "vsce": "^2.10.0"
+  }
+}
