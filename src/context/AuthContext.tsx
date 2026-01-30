@@ -6,6 +6,9 @@ import { getSupabaseClient, setRememberMePreference } from '../lib/supabase/supa
 import type { User, Session } from '@supabase/supabase-js';
 import type { UserProfile, UserContext as UserContextType } from '../lib/supabase/types';
 
+// Development auth bypass - set NEXT_PUBLIC_SKIP_AUTH=true in .env to skip authentication
+const SKIP_AUTH = process.env.NEXT_PUBLIC_SKIP_AUTH === 'true';
+
 interface AuthContextValue {
     user: User | null;
     session: Session | null;
@@ -77,6 +80,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Initialize auth state
     useEffect(() => {
         const initAuth = async () => {
+            // Skip auth initialization in dev mode
+            if (SKIP_AUTH) {
+                setLoading(false);
+                return;
+            }
+
             try {
                 const { data: { session: currentSession } } = await supabase.auth.getSession();
 
@@ -96,6 +105,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
         initAuth();
+
+        // Skip auth listener in dev mode
+        if (SKIP_AUTH) {
+            return;
+        }
 
         // Listen for auth state changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(

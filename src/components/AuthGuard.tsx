@@ -5,6 +5,9 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 
+// Development auth bypass - set NEXT_PUBLIC_SKIP_AUTH=true in .env to skip authentication
+const SKIP_AUTH = process.env.NEXT_PUBLIC_SKIP_AUTH === 'true';
+
 interface AuthGuardProps {
     children: React.ReactNode;
     redirectTo?: string;
@@ -12,6 +15,11 @@ interface AuthGuardProps {
 
 export function AuthGuard({ children, redirectTo = '/auth/login' }: AuthGuardProps) {
     const { user, loading } = useAuth();
+
+    // Dev mode: skip auth when NEXT_PUBLIC_SKIP_AUTH is true
+    if (SKIP_AUTH) {
+        return <>{children}</>;
+    }
     const router = useRouter();
 
     useEffect(() => {
