@@ -49,6 +49,7 @@ import { addTextBox } from "./tools/addTextBox.js";
 import { addImageToSlide } from "./tools/addImageToSlide.js";
 import { listSlides } from "./tools/listSlides.js";
 import { savePresentation } from "./tools/savePresentation.js";
+import { addTableSlide } from "./tools/addTableSlide.js";
 
 const argv = process.argv.slice(2);
 const hasArg = (flag) => argv.includes(flag);
@@ -160,6 +161,7 @@ function buildAllTools() {
     add_image_to_slide: addImageToSlide,
     list_slides: listSlides,
     save_presentation: savePresentation,
+    add_table_slide: addTableSlide,
   };
 
   return { ...tools, ...advancedTools, ...presentationTools };

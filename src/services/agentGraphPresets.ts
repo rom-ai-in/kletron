@@ -286,3 +286,345 @@ export function buildSimpleReactAgentGraph(): Omit<AgentGraphDefinition, "_id" |
   };
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRESENTATION GENERATOR PRO GRAPH
+// 6-phase pipeline: research → offer_analysis → structure → enrich → create → verify
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PRESENTATION_GEN_PHASES = [
+  {
+    id: "research",
+    label: "Client Research",
+    toolNames: ["web_search", "fetch_url"],
+    systemPrompt: `You are a Client Research Specialist.
+
+## MISSION
+Gather comprehensive information about the client mentioned in the user's request.
+
+## REQUIRED DATA TO COLLECT
+1. **Company name** (official name)
+2. **Headquarters** (city, country)
+3. **Employee count** (approximate)
+4. **Industry** (sector/vertical)
+5. **Recent news** (last 2-3 headlines from 2024-2025)
+6. **Key contacts** (CEO, CFO, HR Director if available)
+
+## TOOLS
+- Use \`web_search\` for initial discovery (company info, news)
+- Use \`fetch_url\` to gather details from official pages (if allowed)
+
+## OUTPUT FORMAT
+Return strict JSON:
+{
+  "company_name": "...",
+  "headquarters": "...",
+  "employee_count": "...",
+  "industry": "...",
+  "recent_news": ["headline1", "headline2"],
+  "key_contacts": ["Name — Role", ...],
+  "summary": "Brief 2-sentence company description"
+}`
+  },
+  {
+    id: "offer_analysis",
+    label: "Offer Analysis",
+    toolNames: ["list_files", "read_file"],
+    systemPrompt: `You are a Proposal Standards Analyst.
+
+## MISSION
+Analyze existing example offers in the working folder to understand structure and messaging patterns.
+
+## STEPS
+1. Use \`list_files\` to find files in "Example offers/" or similar directories
+2. Use \`read_file\` to extract content from 1-3 example proposals
+3. Identify common sections, slide patterns, and key messaging
+
+## OUTPUT FORMAT
+Return strict JSON:
+{
+  "analyzed_files": ["path1", "path2"],
+  "common_sections": ["Cover", "Agenda", "Understanding", ...],
+  "slide_patterns": ["Numbered sections", "Team slides with photos", ...],
+  "key_messaging": ["Compliance focus", "Swiss expertise", ...],
+  "summary": "Brief summary of the standard proposal structure"
+}`
+  },
+  {
+    id: "structure_planning",
+    label: "Structure Planning",
+    toolNames: [],
+    systemPrompt: `You are a Presentation Architect.
+
+## MISSION
+Design the slide-by-slide structure for the client proposal.
+
+## CONTEXT
+- Research findings are in \`state.nodes.research\`
+- Example offer patterns are in \`state.nodes.offer_analysis\`
+
+## RULES
+1. Follow the common section patterns identified in offer analysis
+2. Plan 8-12 slides for a typical proposal
+3. For each slide, specify: number, title, type (title/content/table), key points
+
+## OUTPUT FORMAT
+Return strict JSON:
+{
+  "total_slides": 10,
+  "slides": [
+    { "number": 1, "title": "...", "type": "title", "key_points": ["..."] },
+    { "number": 2, "title": "Agenda", "type": "content", "key_points": ["..."] },
+    ...
+  ],
+  "summary": "Brief rationale for structure"
+}`
+  },
+  {
+    id: "enrich",
+    label: "Content Enrichment",
+    toolNames: [],
+    systemPrompt: `You are a Content Personalization Specialist.
+
+## MISSION
+Enrich the planned slide structure with client-specific data from research.
+
+## CONTEXT
+- Client research: \`state.nodes.research\`
+- Slide structure: \`state.nodes.structure_planning\`
+
+## MANDATORY RULES
+1. For EVERY content slide, include at least ONE specific fact from research:
+   - Employee count or company size
+   - Recent news or milestone
+   - Key contact names
+   - Industry-specific compliance needs
+2. Replace generic phrases like "your organization" with specific client data
+3. Add concrete numbers and names wherever possible
+
+## OUTPUT FORMAT
+Return strict JSON:
+{
+  "enriched_slides": [
+    {
+      "number": 1,
+      "title": "...",
+      "type": "title|content|table",
+      "content": "Bullet points with client-specific data woven in",
+      "research_facts_used": ["employee_count", "recent_news"]
+    },
+    ...
+  ],
+  "personalization_metrics": {
+    "total_slides": 10,
+    "slides_with_research_data": 8,
+    "facts_used": ["company_name", "employee_count", "key_contacts", ...]
+  }
+}`
+  },
+  {
+    id: "create_slides",
+    label: "Create Slides",
+    toolNames: [
+      "list_templates",
+      "create_presentation",
+      "add_title_slide",
+      "add_content_slide",
+      "add_table_slide",
+      "add_slide_by_layout",
+      "list_slides",
+      "save_presentation"
+    ],
+    systemPrompt: `You are a Presentation Builder.
+
+## MISSION
+Create the actual PowerPoint presentation using MCP tools.
+
+## CONTEXT
+- Enriched slides with content: \`state.nodes.enrich.enriched_slides\`
+- Client research: \`state.nodes.research\`
+
+## WORKFLOW
+1. Use \`list_templates\` to find available templates
+2. Use \`create_presentation\` with the appropriate template
+3. For each slide in enriched_slides:
+   - Use \`add_title_slide\` for type "title"
+   - Use \`add_content_slide\` for type "content"
+   - Use \`add_table_slide\` for type "table" (pricing, comparisons)
+4. Use \`save_presentation\` with a descriptive filename
+
+## FILENAME CONVENTION
+Use: {ClientName}_Proposal_{YYYY-MM-DD}.pptx
+
+## OUTPUT FORMAT
+Return strict JSON:
+{
+  "slides_created": 10,
+  "template_used": "ForvisMazars_Template_BLANK_012026",
+  "output_file": "/path/to/saved/file.pptx",
+  "success": true,
+  "summary": "Brief description of what was created"
+}`
+  },
+  {
+    id: "verify",
+    label: "Verify Output",
+    toolNames: ["list_files", "read_file"],
+    systemPrompt: `You are a Quality Assurance Specialist.
+
+## MISSION
+Verify the generated presentation and compute a personalization score.
+
+## CONTEXT
+- Created file path: \`state.nodes.create_slides.output_file\`
+- Research data used: \`state.nodes.research\`
+- Enrichment metrics: \`state.nodes.enrich.personalization_metrics\`
+
+## VERIFICATION STEPS
+1. Use \`list_files\` to confirm the output file exists
+2. Use \`read_file\` to extract text content from the generated .pptx
+3. Count how many research facts appear in the actual content:
+   - Company name mentioned?
+   - Employee count mentioned?
+   - Key contact names mentioned?
+   - Recent news/milestones mentioned?
+
+## PERSONALIZATION SCORE
+Calculate: (facts found in output) / (total facts from research) × 100
+
+## OUTPUT FORMAT
+Return strict JSON:
+{
+  "file_exists": true,
+  "file_path": "...",
+  "file_verified": true,
+  "personalization_score": 75,
+  "facts_found": ["company_name", "employee_count"],
+  "facts_missing": ["key_contacts"],
+  "recommendations": ["Add key contact names to team slide"],
+  "status": "success",
+  "message": "Presentation verified with 75% personalization score"
+}`
+  }
+];
+
+function presentationGenPromptTemplate(phaseId: string) {
+  switch (phaseId) {
+    case "research":
+      return [
+        "Mission is in `state.mission`.",
+        "Current state:",
+        "{{state}}",
+        "",
+        "Gather client research and return strict JSON as specified."
+      ].join("\n");
+    case "offer_analysis":
+      return [
+        "Mission is in `state.mission`.",
+        "Working folder for examples is in the MCP context.",
+        "Current state:",
+        "{{state}}",
+        "",
+        "Analyze example offers and return strict JSON."
+      ].join("\n");
+    case "structure_planning":
+      return [
+        "Mission is in `state.mission`.",
+        "Research data: `state.nodes.research`",
+        "Offer patterns: `state.nodes.offer_analysis`",
+        "Current state:",
+        "{{state}}",
+        "",
+        "Plan the slide structure and return strict JSON."
+      ].join("\n");
+    case "enrich":
+      return [
+        "Mission is in `state.mission`.",
+        "",
+        "## CLIENT RESEARCH DATA (MANDATORY TO USE)",
+        "Company: {{state.nodes.research.company_name}}",
+        "Employees: {{state.nodes.research.employee_count}}",
+        "Headquarters: {{state.nodes.research.headquarters}}",
+        "Industry: {{state.nodes.research.industry}}",
+        "Recent News: {{state.nodes.research.recent_news}}",
+        "Key Contacts: {{state.nodes.research.key_contacts}}",
+        "",
+        "## SLIDE STRUCTURE",
+        "{{state.nodes.structure_planning.slides}}",
+        "",
+        "Current state:",
+        "{{state}}",
+        "",
+        "Enrich each slide with specific client data. Return strict JSON."
+      ].join("\n");
+    case "create_slides":
+      return [
+        "Mission is in `state.mission`.",
+        "",
+        "## ENRICHED SLIDES TO CREATE",
+        "{{state.nodes.enrich.enriched_slides}}",
+        "",
+        "## CLIENT INFO",
+        "Company: {{state.nodes.research.company_name}}",
+        "Location: {{state.nodes.research.headquarters}}",
+        "",
+        "Current state:",
+        "{{state}}",
+        "",
+        "Create the presentation using MCP tools. Return strict JSON."
+      ].join("\n");
+    case "verify":
+      return [
+        "Mission is in `state.mission`.",
+        "",
+        "## OUTPUT FILE",
+        "Path: {{state.nodes.create_slides.output_file}}",
+        "",
+        "## RESEARCH FACTS TO CHECK FOR",
+        "Company: {{state.nodes.research.company_name}}",
+        "Employees: {{state.nodes.research.employee_count}}",
+        "Contacts: {{state.nodes.research.key_contacts}}",
+        "News: {{state.nodes.research.recent_news}}",
+        "",
+        "Current state:",
+        "{{state}}",
+        "",
+        "Verify the output and compute personalization score. Return strict JSON."
+      ].join("\n");
+    default:
+      return ["Current state:", "{{state}}"].join("\n");
+  }
+}
+
+export function buildPresentationGeneratorProGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
+  const nodes: AgentGraphNode[] = PRESENTATION_GEN_PHASES.map((phase) => {
+    return {
+      id: phase.id,
+      label: phase.label,
+      react: {
+        systemPrompt: phase.systemPrompt,
+        userPromptTemplate: presentationGenPromptTemplate(phase.id),
+        toolNames: phase.toolNames,
+        llmSelection: { provider: "azure" },
+      },
+      output: { schemaId: "generic_json" },
+    };
+  });
+
+  const edges = PRESENTATION_GEN_PHASES.slice(1).map((phase, idx) => {
+    const source = PRESENTATION_GEN_PHASES[idx].id;
+    const target = phase.id;
+    return {
+      id: `edge-${source}-${target}`,
+      source,
+      target,
+    };
+  });
+
+  return {
+    name: "Presentation Generator Pro",
+    description: "6-phase pipeline for creating personalized client proposals with research injection, content enrichment, and quality verification.",
+    nodes,
+    edges,
+  };
+}
