@@ -90,6 +90,67 @@ export function buildTranslationsFilter(opts: {
   return and.length ? { $and: and } : {};
 }
 
+const DEFAULT_IMPORT_SOURCE_FILE = "import";
+
+const HEADER_ALIAS_MAP: Record<string, keyof TranslationRecord> = {
+  key: "key",
+  namespace: "namespace",
+  source_file: "source_file",
+  sourcefile: "source_file",
+  source: "source_file",
+  context_usage: "context_usage",
+  context: "context_usage",
+  en: "en",
+  de: "de",
+  fr: "fr",
+  it: "it",
+  status: "status",
+  reviewed: "reviewed",
+};
+
+function normalizeHeaderName(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function mapHeaderToField(headerName: string): keyof TranslationRecord | undefined {
+  const normalized = normalizeHeaderName(headerName);
+  if (!normalized) return undefined;
+  if (HEADER_ALIAS_MAP[normalized]) return HEADER_ALIAS_MAP[normalized];
+  if (normalized.startsWith("english")) return "en";
+  if (normalized.startsWith("german")) return "de";
+  if (normalized.startsWith("french")) return "fr";
+  if (normalized.startsWith("italian")) return "it";
+  if (normalized.startsWith("source") && normalized.includes("file")) return "source_file";
+  if (normalized.startsWith("context")) return "context_usage";
+  if (normalized === "key" || normalized === "row_key") return "key";
+  return undefined;
+}
+
+function buildCanonicalRow(
+  row: Record<string, unknown>,
+  defaultSourceFile?: string
+): Record<keyof TranslationRecord, unknown> {
+  const canonical: Partial<Record<keyof TranslationRecord, unknown>> = {};
+  for (const [header, value] of Object.entries(row)) {
+    const field = mapHeaderToField(header);
+    if (!field) continue;
+    canonical[field] = value;
+  }
+
+  const trimmedSource = typeof canonical.source_file === "string" ? canonical.source_file.trim() : "";
+  if (!trimmedSource) {
+    const fallback = defaultSourceFile?.trim();
+    canonical.source_file = fallback && fallback.length ? fallback : DEFAULT_IMPORT_SOURCE_FILE;
+  }
+
+  return canonical as Record<keyof TranslationRecord, unknown>;
+}
+
 const COLLECTION_NAME = "i18n_translations";
  
 let didEnsureIndexes = false;
@@ -120,7 +181,8 @@ function detectDelimiter(headerLine: string): "," | "\t" | ";" {
 }
  
 export function parseTranslationCsv(
-  csvText: string
+  csvText: string,
+  defaultSourceFile?: string
 ): { rows: TranslationRecord[]; errors: string[] } {
   const errors: string[] = [];
  
@@ -143,7 +205,8 @@ export function parseTranslationCsv(
   }
  
   const rows: TranslationRecord[] = [];
-  raw.forEach((r, idx) => {
+  const canonicalRows = raw.map((r) => buildCanonicalRow(r, defaultSourceFile));
+  canonicalRows.forEach((r, idx) => {
     const parsed = TranslationRecordSchema.safeParse(r);
     if (!parsed.success) {
       errors.push(
@@ -408,4 +471,3 @@ export async function runDbChecks(opts?: {
  
   return { verify, placeholders, qa, status };
 }
-

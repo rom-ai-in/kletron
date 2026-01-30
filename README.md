@@ -1,4 +1,4 @@
-# Numezis Coder (TypeScript LangGraph)
+# PayMe (TypeScript LangGraph)
 
 This repo houses a **Node/TypeScript LangGraph multi-agent pipeline** backed by the local `github-mcp` Model Context Protocol server. `npm run dev` starts both services and prints a clickable LangSmith Studio link for running the graph locally.
 

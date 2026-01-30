@@ -5,7 +5,7 @@ import { getConfig } from "@/src/config";
 export async function DELETE() {
     try {
         const cfg = await getConfig();
-        await clearVectors(cfg.mcpDefaultDir);
+        await clearVectors(cfg.workingFolder);
         return NextResponse.json({
             success: true,
             message: "All vectors cleared for current repository"

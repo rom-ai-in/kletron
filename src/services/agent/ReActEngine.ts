@@ -1,4 +1,5 @@
 
+import path from "node:path";
 import { BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { streamReactAgentMessages } from "../../reactAgentRunner";
 import { allMcpTools } from "../../tools/mcpTools";
@@ -8,6 +9,7 @@ import { AgentEvent } from "../../types";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { McpClient } from "../../mcp/client";
+import { getConfig } from "../../config";
 
 // Get the ConversationService instance (in a real app, use dependency injection)
 const conversationService = new ConversationService();
@@ -108,7 +110,7 @@ export class ReActEngine {
 
         // 4. Run the agent
         const tools = this.getSafeTools(conversationId);
-        const systemPrompt = `You are an expert developer assistant embedded in Numezis Coder.
+        const systemPrompt = `You are an expert developer assistant embedded in PayMe.
 You can analyze code, browse files, and propose edits.
 
 WORKFLOW:
@@ -223,16 +225,37 @@ IMPORTANT:
         const edit = safeEditGate.approveEdit(editId);
         if (!edit) throw new Error("Edit not found or not in pending state");
 
+        // Get the configured working folder for path resolution
+        const config = await getConfig();
+        const workingFolder = config.workingFolder;
+
+        // Helper to resolve relative paths against the working folder
+        const resolveFilePath = (filePath: string): string => {
+            if (!filePath) return filePath;
+            if (path.isAbsolute(filePath)) return filePath;
+            return path.resolve(workingFolder, filePath);
+        };
+
         if (edit.toolName === "write_file") {
             const client = await McpClient.getInstance();
-            // Force overwrite true since user approved
-            const args = { ...edit.args, overwrite: true };
+            // Resolve filePath and force overwrite true since user approved
+            const args = {
+                ...edit.args,
+                filePath: resolveFilePath(edit.args.filePath as string),
+                overwrite: true
+            };
             await client.callTool("write_file", args);
             return true;
         }
         if (edit.toolName === "str_replace_editor") {
             const client = await McpClient.getInstance();
-            await client.callTool("str_replace_editor", edit.args);
+            // Resolve path/filePath for str_replace_editor
+            const args = {
+                ...edit.args,
+                filePath: edit.args.filePath ? resolveFilePath(edit.args.filePath as string) : undefined,
+                path: edit.args.path ? resolveFilePath(edit.args.path as string) : undefined,
+            };
+            await client.callTool("str_replace_editor", args);
             return true;
         }
         return false;

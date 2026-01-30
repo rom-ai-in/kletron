@@ -16,12 +16,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'POST') {
         const body = req.body;
-        if (!body.mcpDefaultDir) {
-            res.status(400).json({ error: '`mcpDefaultDir` is required' });
+        // Accept workingFolder or legacy mcpDefaultDir
+        const folderPath = body.workingFolder || body.mcpDefaultDir;
+        if (!folderPath) {
+            res.status(400).json({ error: '`workingFolder` is required' });
             return;
         }
         try {
-            await saveConfig({ mcpDefaultDir: body.mcpDefaultDir });
+            await saveConfig({ workingFolder: folderPath });
 
             // 1. Refresh the configuration cache
             const { refreshConfig } = await import('../../config');

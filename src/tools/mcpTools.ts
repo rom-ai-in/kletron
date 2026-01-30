@@ -24,7 +24,7 @@ async function callMcpTool<TArgs extends Record<string, unknown> | undefined>(
 ) {
   const client = await McpClient.getInstance();
   const config = await getConfig();
-  const rootDir = config.mcpDefaultDir;
+  const rootDir = config.workingFolder;
 
   const resolvedArgs = { ...args };
 
@@ -842,6 +842,276 @@ export const outputFormatTool = tool(
   }
 );
 
+// ============================================================
+// Presentation Tools (PowerPoint)
+// ============================================================
+
+export const listTemplatesTool = tool(
+  async () => {
+    return formatResult(await callMcpTool("list_templates", {}));
+  },
+  {
+    name: "list_templates",
+    description: "List available PowerPoint templates.",
+    schema: z.object({}),
+  }
+);
+
+export const createPresentationTool = tool(
+  async (input: { templateName?: string }) => {
+    return formatResult(await callMcpTool("create_presentation", { templateName: input.templateName }));
+  },
+  {
+    name: "create_presentation",
+    description: "Create a new PowerPoint presentation from a template. Returns the presentation ID.",
+    schema: z.object({
+      templateName: z.string().optional().describe("Name of the template to use"),
+    }),
+  }
+);
+
+export const addTitleSlideTool = tool(
+  async (input: { title: string; subtitle?: string }) => {
+    return formatResult(await callMcpTool("add_title_slide", { title: input.title, subtitle: input.subtitle }));
+  },
+  {
+    name: "add_title_slide",
+    description: "Add a title slide to the current presentation.",
+    schema: z.object({
+      title: z.string().describe("Main title text"),
+      subtitle: z.string().optional().describe("Subtitle text"),
+    }),
+  }
+);
+
+export const addContentSlideTool = tool(
+  async (input: { title: string; content: string }) => {
+    return formatResult(await callMcpTool("add_content_slide", { title: input.title, content: input.content }));
+  },
+  {
+    name: "add_content_slide",
+    description: "Add a content slide with title and body text.",
+    schema: z.object({
+      title: z.string().describe("Slide title"),
+      content: z.string().describe("Body content text"),
+    }),
+  }
+);
+
+export const addSlideByLayoutTool = tool(
+  async (input: { layoutName: string }) => {
+    return formatResult(await callMcpTool("add_slide_by_layout", { layoutName: input.layoutName }));
+  },
+  {
+    name: "add_slide_by_layout",
+    description: "Add a slide using a specific layout name.",
+    schema: z.object({
+      layoutName: z.string().describe("Name of the layout to use (e.g., 'Two Content', 'Title Only')"),
+    }),
+  }
+);
+
+export const getSlidePlaceholdersTool = tool(
+  async (input: { slideIndex: number }) => {
+    return formatResult(await callMcpTool("get_slide_placeholders", { slideIndex: input.slideIndex }));
+  },
+  {
+    name: "get_slide_placeholders",
+    description: "Get available placeholders on a specific slide.",
+    schema: z.object({
+      slideIndex: z.number().int().nonnegative().describe("Zero-based slide index"),
+    }),
+  }
+);
+
+export const setPlaceholderTextTool = tool(
+  async (input: { slideIndex: number; placeholderIdx: number; text: string }) => {
+    return formatResult(await callMcpTool("set_placeholder_text", {
+      slideIndex: input.slideIndex,
+      placeholderIdx: input.placeholderIdx,
+      text: input.text,
+    }));
+  },
+  {
+    name: "set_placeholder_text",
+    description: "Set text content in a specific placeholder on a slide.",
+    schema: z.object({
+      slideIndex: z.number().int().nonnegative().describe("Zero-based slide index"),
+      placeholderIdx: z.number().int().nonnegative().describe("Placeholder index on the slide"),
+      text: z.string().describe("Text to set in the placeholder"),
+    }),
+  }
+);
+
+export const addTextBoxTool = tool(
+  async (input: { slideIndex: number; text: string; left: number; top: number; width: number; height?: number }) => {
+    return formatResult(await callMcpTool("add_text_box", {
+      slideIndex: input.slideIndex,
+      text: input.text,
+      left: input.left,
+      top: input.top,
+      width: input.width,
+      height: input.height,
+    }));
+  },
+  {
+    name: "add_text_box",
+    description: "Add a text box to a slide at a specific position.",
+    schema: z.object({
+      slideIndex: z.number().int().nonnegative().describe("Zero-based slide index"),
+      text: z.string().describe("Text content"),
+      left: z.number().describe("Left position in inches"),
+      top: z.number().describe("Top position in inches"),
+      width: z.number().describe("Width in inches"),
+      height: z.number().optional().describe("Height in inches"),
+    }),
+  }
+);
+
+export const addImageToSlideTool = tool(
+  async (input: { slideIndex: number; imagePath: string; left: number; top: number; width?: number; height?: number }) => {
+    return formatResult(await callMcpTool("add_image_to_slide", {
+      slideIndex: input.slideIndex,
+      imagePath: input.imagePath,
+      left: input.left,
+      top: input.top,
+      width: input.width,
+      height: input.height,
+    }));
+  },
+  {
+    name: "add_image_to_slide",
+    description: "Add an image to a slide at a specific position.",
+    schema: z.object({
+      slideIndex: z.number().int().nonnegative().describe("Zero-based slide index"),
+      imagePath: z.string().describe("Path to the image file"),
+      left: z.number().describe("Left position in inches"),
+      top: z.number().describe("Top position in inches"),
+      width: z.number().optional().describe("Width in inches"),
+      height: z.number().optional().describe("Height in inches"),
+    }),
+  }
+);
+
+export const listSlidesTool = tool(
+  async () => {
+    return formatResult(await callMcpTool("list_slides", {}));
+  },
+  {
+    name: "list_slides",
+    description: "List all slides in the current presentation.",
+    schema: z.object({}),
+  }
+);
+
+export const savePresentationTool = tool(
+  async (input: { outputPath: string }) => {
+    return formatResult(await callMcpTool("save_presentation", { outputPath: input.outputPath }));
+  },
+  {
+    name: "save_presentation",
+    description: "Save the current presentation to a file.",
+    schema: z.object({
+      outputPath: z.string().describe("Output file path for the .pptx file"),
+    }),
+  }
+);
+
+// ============================================================
+// Document Tools (Word)
+// ============================================================
+
+export const listWordTemplatesTool = tool(
+  async () => {
+    return formatResult(await callMcpTool("list_word_templates", {}));
+  },
+  {
+    name: "list_word_templates",
+    description: "List available Word document templates.",
+    schema: z.object({}),
+  }
+);
+
+export const createDocumentTool = tool(
+  async (input: { templateName?: string }) => {
+    return formatResult(await callMcpTool("create_document", { templateName: input.templateName }));
+  },
+  {
+    name: "create_document",
+    description: "Create a new Word document from a template. Returns the document ID.",
+    schema: z.object({
+      templateName: z.string().optional().describe("Name of the template to use"),
+    }),
+  }
+);
+
+export const addHeadingTool = tool(
+  async (input: { text: string; level?: number }) => {
+    return formatResult(await callMcpTool("add_heading", { text: input.text, level: input.level ?? 1 }));
+  },
+  {
+    name: "add_heading",
+    description: "Add a heading to the current document.",
+    schema: z.object({
+      text: z.string().describe("Heading text"),
+      level: z.number().int().min(1).max(6).optional().default(1).describe("Heading level (1-6)"),
+    }),
+  }
+);
+
+export const addParagraphTool = tool(
+  async (input: { text: string }) => {
+    return formatResult(await callMcpTool("add_paragraph", { text: input.text }));
+  },
+  {
+    name: "add_paragraph",
+    description: "Add a paragraph of text to the current document.",
+    schema: z.object({
+      text: z.string().describe("Paragraph text"),
+    }),
+  }
+);
+
+export const addBulletListTool = tool(
+  async (input: { items: string[] }) => {
+    return formatResult(await callMcpTool("add_bullet_list", { items: input.items }));
+  },
+  {
+    name: "add_bullet_list",
+    description: "Add a bulleted list to the current document.",
+    schema: z.object({
+      items: z.array(z.string()).describe("Array of list items"),
+    }),
+  }
+);
+
+export const addTableTool = tool(
+  async (input: { headers: string[]; rows: string[][] }) => {
+    return formatResult(await callMcpTool("add_table", { headers: input.headers, rows: input.rows }));
+  },
+  {
+    name: "add_table",
+    description: "Add a table to the current document.",
+    schema: z.object({
+      headers: z.array(z.string()).describe("Array of column headers"),
+      rows: z.array(z.array(z.string())).describe("2D array of row data"),
+    }),
+  }
+);
+
+export const saveDocumentTool = tool(
+  async (input: { outputPath: string }) => {
+    return formatResult(await callMcpTool("save_document", { outputPath: input.outputPath }));
+  },
+  {
+    name: "save_document",
+    description: "Save the current document to a file.",
+    schema: z.object({
+      outputPath: z.string().describe("Output file path for the .docx file"),
+    }),
+  }
+);
+
 import { semanticSearch } from "../services/vectorService";
 
 export const semanticCodeSearchTool = tool(
@@ -860,20 +1130,49 @@ export const semanticCodeSearchTool = tool(
   },
   {
     name: "semantic_code_search",
-    description: "Find code semantically similar to a natural language query. Use for conceptual searches like 'authentication handling', 'error retry logic', or 'validation patterns'. For exact text or regex matches, use git_grep instead.",
+    description: "Find content semantically similar to a natural language query. Use for conceptual searches in your working folder.",
     schema: z.object({
       query: z.string().describe("Natural language query describing what you are looking for"),
       path: z.string().optional().describe("Limit search to files under this relative path"),
-      language: z.string().optional().describe("Filter by programming language (e.g., typescript, python)"),
+      language: z.string().optional().describe("Filter by file type (e.g., markdown, text)"),
       maxResults: z.number().int().positive().optional().default(10).describe("Maximum number of snippets to return"),
     }),
   }
 );
 
 export const allMcpTools = [
+  // File operations
   listFilesTool,
   readFileTool,
   readFileRangeTool,
+  writeFileTool,
+  // Presentation tools
+  listTemplatesTool,
+  createPresentationTool,
+  addTitleSlideTool,
+  addContentSlideTool,
+  addSlideByLayoutTool,
+  getSlidePlaceholdersTool,
+  setPlaceholderTextTool,
+  addTextBoxTool,
+  addImageToSlideTool,
+  listSlidesTool,
+  savePresentationTool,
+  // Document tools
+  listWordTemplatesTool,
+  createDocumentTool,
+  addHeadingTool,
+  addParagraphTool,
+  addBulletListTool,
+  addTableTool,
+  saveDocumentTool,
+  // Research tools
+  webSearchTool,
+  fetchUrlTool,
+  // Semantic search
+  semanticCodeSearchTool,
+  outputFormatTool,
+  // Legacy code tools (keep for compatibility)
   searchCodeTool,
   repoMetricsTool,
   todoSearchTool,
@@ -889,14 +1188,9 @@ export const allMcpTools = [
   goToDefinitionTool,
   referencesTool,
   findReferencesTool,
-  webSearchTool,
-  fetchUrlTool,
   githubApiTool,
   bootstrapContextTool,
   locateUiFeatureTool,
-  writeFileTool,
   strReplaceEditorTool,
   executeBashTool,
-  outputFormatTool,
-  semanticCodeSearchTool,
 ];

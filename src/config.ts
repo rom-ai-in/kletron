@@ -11,7 +11,7 @@ dotenv.config();
 // 1️⃣ Schema – shape of persisted config
 // -------------------------------------------------------------------
 const ConfigSchema = z.object({
-  mcpDefaultDir: z.string().min(1, "Repository path cannot be empty"),
+  workingFolder: z.string().min(1, "Working folder path cannot be empty"),
 });
 export type Config = z.infer<typeof ConfigSchema>;
 
@@ -22,28 +22,17 @@ const CONFIG_DIR = path.resolve(process.cwd(), "config");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 
 // -------------------------------------------------------------------
-// 3️⃣ Helper – verify directory is a Git repo (GitHub‑enabled)
-// -------------------------------------------------------------------
-async function isGitRepo(dir: string): Promise<boolean> {
-  try {
-    return fs.existsSync(path.join(dir, ".git"));
-  } catch {
-    return false;
-  }
-}
-
-// -------------------------------------------------------------------
-// 4️⃣ Custom error for missing configuration
+// 3️⃣ Custom error for missing configuration
 // -------------------------------------------------------------------
 export class ConfigNotSetError extends Error {
-  constructor(message: string = "Repository path not configured") {
+  constructor(message: string = "Working folder not configured") {
     super(message);
     this.name = "ConfigNotSetError";
   }
 }
 
 // -------------------------------------------------------------------
-// 5️⃣ Check if config exists (for UI feedback)
+// 4️⃣ Check if config exists (for UI feedback)
 // -------------------------------------------------------------------
 export function isConfigured(): boolean {
   if (!fs.existsSync(CONFIG_FILE)) {
@@ -52,20 +41,20 @@ export function isConfigured(): boolean {
   try {
     const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
     const data = JSON.parse(raw);
-    return !!(data.mcpDefaultDir && data.mcpDefaultDir.trim().length > 0);
+    return !!(data.workingFolder && data.workingFolder.trim().length > 0);
   } catch {
     return false;
   }
 }
 
 // -------------------------------------------------------------------
-// 6️⃣ Load configuration (NO FALLBACKS - explicit config only)
+// 5️⃣ Load configuration (NO FALLBACKS - explicit config only)
 // -------------------------------------------------------------------
 export async function loadConfig(): Promise<Config> {
   // Only load from persisted JSON - no environment variable fallback
   if (!fs.existsSync(CONFIG_FILE)) {
     throw new ConfigNotSetError(
-      "Repository path not configured. Please configure it in Configuration > Repository Settings."
+      "Working folder not configured. Please configure it in Configuration > Workspace Settings."
     );
   }
 
@@ -75,14 +64,14 @@ export async function loadConfig(): Promise<Config> {
     persisted = JSON.parse(raw);
   } catch (e) {
     throw new ConfigNotSetError(
-      "Failed to read configuration file. Please re-configure in Configuration > Repository Settings."
+      "Failed to read configuration file. Please re-configure in Configuration > Workspace Settings."
     );
   }
 
-  // Validate that mcpDefaultDir is explicitly set
-  if (!persisted.mcpDefaultDir || persisted.mcpDefaultDir.trim() === "") {
+  // Validate that workingFolder is explicitly set
+  if (!persisted.workingFolder || persisted.workingFolder.trim() === "") {
     throw new ConfigNotSetError(
-      "Repository path not configured. Please set it in Configuration > Repository Settings."
+      "Working folder not configured. Please set it in Configuration > Workspace Settings."
     );
   }
 
@@ -92,24 +81,19 @@ export async function loadConfig(): Promise<Config> {
     throw new ConfigNotSetError(`Invalid configuration: ${result.error.message}`);
   }
 
-  // Runtime validation – existence & Git repo
-  const dir = path.resolve(result.data.mcpDefaultDir);
+  // Runtime validation – check directory exists (no git requirement)
+  const dir = path.resolve(result.data.workingFolder);
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
     throw new ConfigNotSetError(
       `Configured path does not exist or is not a directory: ${dir}`
     );
   }
-  if (!(await isGitRepo(dir))) {
-    throw new ConfigNotSetError(
-      `Configured path is not a Git repository: ${dir}. Please ensure it contains a .git folder.`
-    );
-  }
 
-  return { mcpDefaultDir: dir };
+  return { workingFolder: dir };
 }
 
 // -------------------------------------------------------------------
-// 7️⃣ Save configuration (persist to JSON)
+// 6️⃣ Save configuration (persist to JSON)
 // -------------------------------------------------------------------
 export async function saveConfig(newConfig: Config): Promise<void> {
   const result = ConfigSchema.safeParse(newConfig);
@@ -124,7 +108,7 @@ export async function saveConfig(newConfig: Config): Promise<void> {
 }
 
 // -------------------------------------------------------------------
-// 8️⃣ Cached getter for convenience
+// 7️⃣ Cached getter for convenience
 // -------------------------------------------------------------------
 let cachedConfig: Config | null = null;
 
@@ -140,7 +124,7 @@ export async function refreshConfig(): Promise<Config> {
 }
 
 // -------------------------------------------------------------------
-// 9️⃣ Safe getter that returns null instead of throwing
+// 8️⃣ Safe getter that returns null instead of throwing
 // -------------------------------------------------------------------
 export async function getConfigSafe(): Promise<Config | null> {
   try {
@@ -154,7 +138,7 @@ export async function getConfigSafe(): Promise<Config | null> {
 }
 
 // -------------------------------------------------------------------
-// 🔟 Export other existing config values (preserve original API)
+// 9️⃣ Export other existing config values (preserve original API)
 // -------------------------------------------------------------------
 const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT;
 const azureApiKey = process.env.AZURE_OPENAI_API_KEY;
@@ -187,20 +171,21 @@ if (!azureEndpoint || !azureApiKey || !azureDeployment) {
 }
 
 export const config = {
-  // repoRoot is now obtained via getConfig() lazily
-  get repoRoot() {
+  // workingFolder is now obtained via getConfig() lazily
+  get workingFolder() {
     // Synchronous getter – assumes config has been loaded earlier
     if (!cachedConfig) {
       throw new ConfigNotSetError("Config not loaded yet – call getConfig() first.");
     }
-    return cachedConfig.mcpDefaultDir;
+    return cachedConfig.workingFolder;
   },
-  // Synchronous check for UI components
+  // Legacy alias for mcpDefaultDir
   get mcpDefaultDir() {
-    if (!cachedConfig) {
-      throw new ConfigNotSetError("Config not loaded yet – call getConfig() first.");
-    }
-    return cachedConfig.mcpDefaultDir;
+    return this.workingFolder;
+  },
+  // Legacy alias for repoRoot
+  get repoRoot() {
+    return this.workingFolder;
   },
   defaultProvider,
   azure: {

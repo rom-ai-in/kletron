@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
                 }
 
                 // 3. Use the configured workspace
-                const workspaceRoot = config.mcpDefaultDir;
+                const workspaceRoot = config.workingFolder;
                 sendEvent({ type: "log", message: `Target Workspace: ${workspaceRoot}` });
 
                 // 4. Run Analysis on the configured target repository

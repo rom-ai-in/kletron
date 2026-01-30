@@ -284,7 +284,6 @@ type GraphOption = (typeof graphOptions)[number];
 type HeaderControlsProps = {
   selectedGraphKey: string;
   selectedGraphLabel: string;
-  builtinSelectedGraphId: GraphId;
   selectedGraph: GraphOption;
   agentGraphs: AgentGraphRecord[];
   onSelectGraphKey: (graphKey: string) => void;
@@ -315,7 +314,6 @@ type HeaderControlsProps = {
 function HeaderControls({
   selectedGraphKey,
   selectedGraphLabel,
-  builtinSelectedGraphId,
   selectedGraph,
   agentGraphs,
   onSelectGraphKey,
@@ -1259,7 +1257,7 @@ export default function HomePage() {
     return [root];
   }, [promptFolders]);
 
-  const [selectedGraphKey, setSelectedGraphKey] = useState<string>(() => `builtin:${graphOptions[0].id}`);
+  const [selectedGraphKey, setSelectedGraphKey] = useState<string>("");
   const [agentGraphs, setAgentGraphs] = useState<AgentGraphRecord[]>([]);
   const [targetDir, setTargetDir] = useState<string | null>(null);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
@@ -1311,6 +1309,10 @@ export default function HomePage() {
       .then((data) => {
         const list = Array.isArray(data?.graphs) ? (data.graphs as AgentGraphRecord[]) : [];
         setAgentGraphs(list);
+        // Auto-select first graph if none selected
+        if (list.length > 0 && !selectedGraphKey) {
+          setSelectedGraphKey(`agent:${list[0]._id}`);
+        }
       })
       .catch(() => setAgentGraphs([]));
   }, []);
@@ -1570,11 +1572,8 @@ export default function HomePage() {
   const selectedAgentGraph =
     selectedAgentGraphId ? agentGraphs.find((g) => String(g._id) === selectedAgentGraphId) ?? null : null;
 
-  const builtinSelectedGraphId: GraphId = selectedGraphKey.startsWith("builtin:")
-    ? (selectedGraphKey.slice("builtin:".length) as GraphId)
-    : graphOptions[0].id;
-  const selectedGraph =
-    graphOptions.find((graph) => graph.id === builtinSelectedGraphId) ?? graphOptions[0];
+  // No longer using built-in graphs - only DB agent graphs
+  const selectedGraph = graphOptions[0]; // Fallback for type compatibility only
 
   const selectedGraphLabel = selectedAgentGraph?.name ?? selectedGraph.name;
 
@@ -1738,7 +1737,7 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: trimmedMessage,
-          graph: builtinSelectedGraphId,
+          graph: selectedGraph.id, // Use the fallback graph ID
           provider: modelProvider,
           model: modelProvider === "lmstudio" ? lmStudioModel.trim() : undefined,
           auditContext: normalizedAuditContext ?? undefined,
@@ -1977,7 +1976,6 @@ export default function HomePage() {
         <HeaderControls
           selectedGraphKey={selectedGraphKey}
           selectedGraphLabel={selectedGraphLabel}
-          builtinSelectedGraphId={builtinSelectedGraphId}
           selectedGraph={selectedGraph}
           agentGraphs={agentGraphs}
           onSelectGraphKey={setSelectedGraphKey}
@@ -2095,7 +2093,6 @@ export default function HomePage() {
                               label="GRAPH"
                               value={selectedGraphKey}
                               options={[
-                                ...graphOptions.map(g => ({ id: `builtin:${g.id}`, label: g.name, sub: 'Built-in' })),
                                 ...agentGraphs.map(g => ({ id: `agent:${g._id}`, label: g.name, sub: 'Agent' }))
                               ]}
                               onSelect={setSelectedGraphKey}

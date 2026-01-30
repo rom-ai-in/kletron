@@ -427,6 +427,10 @@ async function processJob(job: I18nProcessJobDoc, lockId: string, opts: Required
           };
         });
 
+        const updateCount = docs.filter((d) => d.decision === "UPDATE").length;
+        const keepCount = docs.length - updateCount;
+        await appendLogLine(db, job._id, `Chunk ${chunkIndex} results: ${updateCount} UPDATE, ${keepCount} KEEP.`);
+
         if (docs.length) {
           await results.bulkWrite(
             docs.map((d) => ({
@@ -597,6 +601,10 @@ async function processJob(job: I18nProcessJobDoc, lockId: string, opts: Required
         };
       });
 
+      const updateCount = docs.filter((d) => d.decision === "UPDATE").length;
+      const keepCount = docs.length - updateCount;
+      await appendLogLine(db, job._id, `Chunk ${chunkIndex} results: ${updateCount} UPDATE, ${keepCount} KEEP.`);
+
       if (docs.length) {
         await results.bulkWrite(
           docs.map((d) => ({
@@ -718,4 +726,3 @@ export class I18nProcessWorker {
     }
   }
 }
-

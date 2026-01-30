@@ -43,8 +43,8 @@ export class McpClient {
           args: [serverScript, "--mcp"],
           env: {
             ...process.env,
-            MCP_DEFAULT_DIR: cfg.mcpDefaultDir,
-            GITHUB_MCP_DEFAULT_DIR: cfg.mcpDefaultDir,
+            MCP_DEFAULT_DIR: cfg.workingFolder,
+            GITHUB_MCP_DEFAULT_DIR: cfg.workingFolder,
             MCP_TRANSPORT: "stdio",
             GITHUB_MCP_TRANSPORT: "stdio",
           },
@@ -89,8 +89,8 @@ export class McpClient {
         console.log("[AutoIndex] Initializing services...");
         (globalThis as any).__MCP_SERVICES_INITIALIZED__ = true;
         const cfg = await getConfig();
-        startWatcher(cfg.mcpDefaultDir);
-        startAutoIndexScheduler(cfg.mcpDefaultDir);
+        startWatcher(cfg.workingFolder);
+        startAutoIndexScheduler(cfg.workingFolder);
       } catch (error) {
         console.error("[AutoIndex] Failed to initialize:", error);
       }

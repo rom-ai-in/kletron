@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Security check: Ensure we are only reading files within the allowed directories
     const config = await getConfig();
-    const repoRoot = config.mcpDefaultDir;
+    const repoRoot = config.workingFolder;
 
     // Resolve path relative to repo root if it's not absolute, or just verify if it is
     let fullPath = filePath;

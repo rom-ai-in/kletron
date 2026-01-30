@@ -68,7 +68,7 @@ export async function POST(req: Request) {
     void (async () => {
       try {
         await jobs.updateOne({ _id: insertRes.insertedId }, { $set: { phase: "parsing" } });
-        const { rows, errors } = parseTranslationCsv(csvText);
+        const { rows, errors } = parseTranslationCsv(csvText, file.name);
 
         if (errors.length) {
           await jobs.updateOne(
@@ -157,4 +157,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: (e as Error).message || "Import failed" }, { status: 500 });
   }
 }
-

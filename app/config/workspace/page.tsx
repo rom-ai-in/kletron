@@ -1,25 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, Save, Folder, Check, AlertCircle, GitBranch } from "lucide-react";
+import { ArrowLeft, Save, Folder, Check, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { Panel } from "@/src/components/ui/Panel";
 import { Button } from "@/src/components/ui/Button";
 
 type Config = {
-    mcpDefaultDir: string;
+    workingFolder: string;
 };
 
 type ValidationState = {
     valid: boolean;
     checked: boolean;
     error?: string;
-    currentBranch?: string;
-    branches?: string[];
 };
 
 export default function WorkspaceConfigPage() {
-    const [config, setConfig] = useState<Config>({ mcpDefaultDir: "" });
+    const [config, setConfig] = useState<Config>({ workingFolder: "" });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [validating, setValidating] = useState(false);
@@ -33,9 +31,8 @@ export default function WorkspaceConfigPage() {
                 if (!res.ok) throw new Error("Failed to load config");
                 const data = await res.json();
                 setConfig(data);
-                // Put in initial validation state so user sees current status
-                if (data.mcpDefaultDir) {
-                    void validatePath(data.mcpDefaultDir);
+                if (data.workingFolder) {
+                    void validatePath(data.workingFolder);
                 }
             } catch (e: any) {
                 setMessage({ text: e.message || "Failed to load config", type: "error" });
@@ -54,7 +51,7 @@ export default function WorkspaceConfigPage() {
 
         setValidating(true);
         try {
-            const res = await fetch("/api/validation/git", {
+            const res = await fetch("/api/validation/folder", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ path }),
@@ -65,8 +62,6 @@ export default function WorkspaceConfigPage() {
                 checked: true,
                 valid: data.valid,
                 error: data.error,
-                currentBranch: data.currentBranch,
-                branches: data.branches
             });
         } catch (e) {
             setValidation({
@@ -120,7 +115,7 @@ export default function WorkspaceConfigPage() {
                     </Link>
                     <div>
                         <h1 className="text-lg font-semibold text-text-primary">Workspace Configuration</h1>
-                        <p className="text-sm text-text-muted">Manage your MCP repository root.</p>
+                        <p className="text-sm text-text-muted">Manage your working folder for documents.</p>
                     </div>
                 </div>
                 <Button
@@ -149,30 +144,30 @@ export default function WorkspaceConfigPage() {
                         <div className="border-b border-border-subtle bg-bg-elevated/30 px-5 py-3">
                             <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
                                 <Folder className="h-4 w-4 text-emerald-500" />
-                                Repository Settings
+                                Working Folder Settings
                             </h2>
                         </div>
 
                         <div className="p-5 space-y-5">
                             <div className="space-y-1.5">
                                 <label className="text-xs font-medium text-text-secondary">
-                                    MCP Default Directory
+                                    Working Folder Path
                                 </label>
                                 <div className="flex gap-2">
                                     <input
                                         type="text"
-                                        value={config.mcpDefaultDir}
+                                        value={config.workingFolder}
                                         onChange={(e) => {
-                                            setConfig({ ...config, mcpDefaultDir: e.target.value });
-                                            setValidation({ valid: false, checked: false }); // Reset validation on edit
+                                            setConfig({ ...config, workingFolder: e.target.value });
+                                            setValidation({ valid: false, checked: false });
                                         }}
-                                        placeholder="/absolute/path/to/repo"
+                                        placeholder="/absolute/path/to/folder"
                                         className="flex-1 rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 transition-all"
                                     />
                                     <Button
                                         variant="secondary"
-                                        onClick={() => validatePath(config.mcpDefaultDir)}
-                                        disabled={validating || !config.mcpDefaultDir}
+                                        onClick={() => validatePath(config.workingFolder)}
+                                        disabled={validating || !config.workingFolder}
                                     >
                                         {validating ? "Checking..." : "Validate"}
                                     </Button>
@@ -188,33 +183,18 @@ export default function WorkspaceConfigPage() {
                                                 <AlertCircle className="h-4 w-4 text-red-500" />
                                             )}
                                             <span className={`font-semibold ${validation.valid ? "text-emerald-600" : "text-red-600"}`}>
-                                                {validation.valid ? "Valid Git Repository" : "Validation Failed"}
+                                                {validation.valid ? "Valid Working Folder" : "Validation Failed"}
                                             </span>
                                         </div>
 
                                         {!validation.valid && validation.error && (
                                             <p className="text-red-500 text-xs ml-6">{validation.error}</p>
                                         )}
-
-                                        {validation.valid && (
-                                            <div className="mt-2 ml-6 space-y-1 text-xs text-text-secondary">
-                                                <div className="flex items-center gap-2">
-                                                    <GitBranch className="h-3 w-3" />
-                                                    <span>Current Branch: <strong className="text-text-primary">{validation.currentBranch}</strong></span>
-                                                </div>
-                                                {validation.branches && validation.branches.length > 0 && (
-                                                    <div className="text-text-muted">
-                                                        Available branches: {validation.branches.slice(0, 5).join(", ")}
-                                                        {validation.branches.length > 5 && ` (+${validation.branches.length - 5} others)`}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
                                     </div>
                                 )}
 
                                 <p className="mt-2 text-xs text-text-muted">
-                                    The absolute path to the repository you want to edit. Must contain a <code>.git</code> folder.
+                                    The folder where your documents, presentations, and other files are stored.
                                 </p>
                             </div>
                         </div>

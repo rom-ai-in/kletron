@@ -5,7 +5,7 @@ import { getConfig } from "@/src/config";
 export async function POST(request: NextRequest) {
     try {
         const cfg = await getConfig();
-        const repoPath = cfg.mcpDefaultDir;
+        const repoPath = cfg.workingFolder;
 
         // Force reindex in the background
         void startIndexing(repoPath, true);

@@ -71,7 +71,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         res.setHeader('Cache-Control', 'no-store, max-age=0');
         const { root } = req.query;
         const config = await getConfig();
-        const repoRoot = config.mcpDefaultDir;
+        const repoRoot = config.workingFolder;
         console.log(`[FileTreeAPI] Loaded RepoRoot: ${repoRoot}`);
         console.log(`[FileTreeAPI] Request Root Query: ${root}`);
 

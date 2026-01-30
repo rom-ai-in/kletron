@@ -37,6 +37,19 @@ import { executeBash } from "./tools/executeBash.js";
 import { outputFormat } from "./tools/outputFormat.js";
 import { writeFile } from "./tools/writeFile.js";
 
+// Presentation Tools (PowerPoint)
+import { listTemplates } from "./tools/listTemplates.js";
+import { createPresentation } from "./tools/createPresentation.js";
+import { addTitleSlide } from "./tools/addTitleSlide.js";
+import { addContentSlide } from "./tools/addContentSlide.js";
+import { addSlideByLayout } from "./tools/addSlideByLayout.js";
+import { getSlidePlaceholders } from "./tools/getSlidePlaceholders.js";
+import { setPlaceholderText } from "./tools/setPlaceholderText.js";
+import { addTextBox } from "./tools/addTextBox.js";
+import { addImageToSlide } from "./tools/addImageToSlide.js";
+import { listSlides } from "./tools/listSlides.js";
+import { savePresentation } from "./tools/savePresentation.js";
+
 const argv = process.argv.slice(2);
 const hasArg = (flag) => argv.includes(flag);
 
@@ -51,11 +64,11 @@ const MODE = (() => {
 // Use `--mcp` / `--diagnostic` to force a mode and avoid accidental exits.
 const isInteractive = Boolean(process.stdin.isTTY);
 
-  if (MODE === "diagnostic") {
-    runDiagnostic();
-  } else if (MODE === "mcp") {
-    runServer();
-  } else if (isInteractive) {
+if (MODE === "diagnostic") {
+  runDiagnostic();
+} else if (MODE === "mcp") {
+  runServer();
+} else if (isInteractive) {
   runDiagnostic();
 } else {
   runServer();
@@ -134,7 +147,22 @@ function buildAllTools() {
     output_format: outputFormat,
   };
 
-  return { ...tools, ...advancedTools };
+  // Presentation Tools (PowerPoint generation)
+  const presentationTools = {
+    list_templates: listTemplates,
+    create_presentation: createPresentation,
+    add_title_slide: addTitleSlide,
+    add_content_slide: addContentSlide,
+    add_slide_by_layout: addSlideByLayout,
+    get_slide_placeholders: getSlidePlaceholders,
+    set_placeholder_text: setPlaceholderText,
+    add_text_box: addTextBox,
+    add_image_to_slide: addImageToSlide,
+    list_slides: listSlides,
+    save_presentation: savePresentation,
+  };
+
+  return { ...tools, ...advancedTools, ...presentationTools };
 }
 
 function wireToolHandlers({ server, allTools }) {

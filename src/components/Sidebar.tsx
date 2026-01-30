@@ -48,11 +48,6 @@ const navItems = [
         icon: Database,
         href: "/vectors",
     },
-    {
-        label: "Changes",
-        icon: FileCode,
-        href: "/changes",
-    },
 
     {
         label: "Translation Agents",
@@ -110,12 +105,12 @@ export function Sidebar() {
                 }`}
         >
             <div className={`flex items-center gap-3 border-b border-border-subtle py-4 transition-all duration-300 ${isCollapsed ? "flex-col justify-center px-2 gap-4" : "px-6"}`}>
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-text-primary text-bg-surface">
-                    <LayoutDashboard className="h-5 w-5" />
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-text-primary text-bg-surface text-lg">
+                    🧠
                 </div>
                 {!isCollapsed && (
                     <span className="text-sm font-semibold tracking-tight text-text-primary whitespace-nowrap overflow-hidden transition-opacity duration-300">
-                        Numezis Coder
+                        PayMe
                     </span>
                 )}
                 <button
@@ -171,7 +166,7 @@ export function Sidebar() {
                     <div className={`space-y-1.5 ${isCollapsed ? "flex justify-center" : ""}`}>
                         {!isCollapsed && (
                             <div className="px-2 text-[10px] font-bold uppercase tracking-widest text-text-muted whitespace-nowrap overflow-hidden">
-                                Target Repository
+                                Working Folder
                             </div>
                         )}
 
@@ -206,7 +201,7 @@ export function Sidebar() {
                     {!isCollapsed && (
                         <div className="flex-1 overflow-hidden">
                             <p className="truncate text-xs font-medium text-text-primary">Admin</p>
-                            <p className="truncate text-[10px] text-text-muted">Numezis Platform</p>
+                            <p className="truncate text-[10px] text-text-muted">PayMe Platform</p>
                         </div>
                     )}
                 </div>

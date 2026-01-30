@@ -64,6 +64,7 @@ function I18nLogsPageContent() {
   const [resultsOffset, setResultsOffset] = useState(0);
   const [loadingResults, setLoadingResults] = useState(false);
   const [applyingAll, setApplyingAll] = useState(false);
+  const [cancellingJob, setCancellingJob] = useState(false);
 
   const loadJobs = async () => {
     setLoadingJobs(true);
@@ -219,6 +220,26 @@ function I18nLogsPageContent() {
       return;
     }
     await loadJob(selectedJobId);
+  };
+
+  const cancelJob = async () => {
+    if (!selectedJobId) return;
+    setCancellingJob(true);
+    setJobError(null);
+    try {
+      const res = await fetch("/api/i18n/process/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: selectedJobId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((json as any)?.error || "Failed to cancel job");
+      await loadJob(selectedJobId);
+    } catch (e) {
+      setJobError((e as Error).message);
+    } finally {
+      setCancellingJob(false);
+    }
   };
 
   return (
@@ -379,6 +400,19 @@ function I18nLogsPageContent() {
                     <Button
                       variant="secondary"
                       size="sm"
+                      onClick={cancelJob}
+                      disabled={
+                        !job ||
+                        !["running", "queued"].includes(job.status) ||
+                        cancellingJob
+                      }
+                      title="Stop a running or queued job"
+                    >
+                      {cancellingJob ? "Cancelling…" : "Cancel job"}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={applyAllUpdates}
                       disabled={
                         applyingAll ||
@@ -501,4 +535,3 @@ export default function I18nLogsPage() {
     </Suspense>
   );
 }
-

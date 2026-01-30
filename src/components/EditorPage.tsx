@@ -5,12 +5,11 @@ import { EditorProvider } from '@/src/context/EditorContext';
 import { FileTree } from './FileTree';
 import { SlashPalette } from './SlashPalette';
 import { AgentPanel } from './Agent/AgentPanel';
-import { ListFilter, Sparkles, Terminal as TerminalIcon } from 'lucide-react';
+import { ListFilter, Sparkles } from 'lucide-react';
 
 import { FileViewer } from './Editor/FileViewer';
 import { FileTabs } from './Editor/FileTabs';
 import { DiffOverlay } from './Editor/DiffOverlay';
-import { TerminalPanel, TerminalToggleButton } from './Editor/TerminalPanel';
 
 /**
  * EditorPage – top‑level page that composes the FileTree, MonacoEditor, Terminal and SlashPalette.
@@ -28,17 +27,9 @@ const EditorPageContent: React.FC = () => {
     const [fileContent, setFileContent] = useState<string>('');
     const [savedContent, setSavedContent] = useState<string>('');
     const [isDirty, setIsDirty] = useState(false);
-    const [isTerminalOpen, setIsTerminalOpen] = useState(() => {
-        if (typeof window !== 'undefined') {
-            const saved = localStorage.getItem('terminalOpen');
-            return saved !== null ? saved === 'true' : true;
-        }
-        return true;
-    });
-    const [isTerminalVisible, setIsTerminalVisible] = useState(true); // Track if terminal was ever opened
     const [showDiff, setShowDiff] = useState(false);
     const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(false);
-    const [showDiffOverlay, setShowDiffOverlay] = useState(false); // Default to closed as we use Ghost Text now
+    const [showDiffOverlay, setShowDiffOverlay] = useState(false);
     const [drawerWidth, setDrawerWidth] = useState(() => {
         if (typeof window !== 'undefined') {
             const savedWidth = localStorage.getItem('agentDrawerWidth');
@@ -47,37 +38,6 @@ const EditorPageContent: React.FC = () => {
         return 500;
     });
 
-    // Keyboard shortcut: Cmd/Ctrl + ` to toggle terminal
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // Check for Cmd+` (Mac) or Ctrl+` (Windows/Linux)
-            if ((e.metaKey || e.ctrlKey) && e.key === '`') {
-                e.preventDefault();
-                setIsTerminalOpen(prev => {
-                    const newState = !prev;
-                    localStorage.setItem('terminalOpen', String(newState));
-                    return newState;
-                });
-            }
-            // Cmd/Ctrl + J as alternative (VS Code style)
-            if ((e.metaKey || e.ctrlKey) && e.key === 'j') {
-                e.preventDefault();
-                setIsTerminalOpen(prev => {
-                    const newState = !prev;
-                    localStorage.setItem('terminalOpen', String(newState));
-                    return newState;
-                });
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
-
-    // Persist terminal open state
-    useEffect(() => {
-        localStorage.setItem('terminalOpen', String(isTerminalOpen));
-    }, [isTerminalOpen]);
 
     // Load file content when a file is selected
     const loadFile = useCallback(async (path: string) => {
@@ -115,15 +75,6 @@ const EditorPageContent: React.FC = () => {
         }
     }, [selectedFile]);
 
-    const handleTerminalToggle = useCallback(() => {
-        setIsTerminalOpen(prev => !prev);
-    }, []);
-
-    const handleTerminalClose = useCallback(() => {
-        setIsTerminalOpen(false);
-        setIsTerminalVisible(false);
-    }, []);
-
     return (
         <div className="flex h-full w-full bg-bg-app text-text-primary overflow-hidden font-sans">
             <SlashPalette />
@@ -143,12 +94,6 @@ const EditorPageContent: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
-                        {/* Terminal Toggle Button */}
-                        <TerminalToggleButton
-                            isOpen={isTerminalOpen}
-                            onClick={handleTerminalToggle}
-                        />
-
                         {/* Traceability Report / Review Toggle */}
                         <button
                             onClick={() => setShowDiffOverlay(!showDiffOverlay)}
@@ -196,13 +141,6 @@ const EditorPageContent: React.FC = () => {
                                 </div>
                             )}
                         </div>
-
-                        {/* Bottom: Terminal Panel (VS Code style) */}
-                        <TerminalPanel
-                            isOpen={isTerminalOpen}
-                            onToggle={handleTerminalToggle}
-                            onClose={handleTerminalClose}
-                        />
                     </div>
 
                     {/* Right: Review Overlay (Split View) */}

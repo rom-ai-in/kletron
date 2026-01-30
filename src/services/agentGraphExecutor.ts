@@ -263,7 +263,7 @@ async function ensureContextGraphReady() {
         }
 
         const scanner = new ContextScanner();
-        await scanner.scanWorkspace(config.mcpDefaultDir);
+        await scanner.scanWorkspace(config.workingFolder);
         await contextGraphStore.save();
         console.log(`[AgentGraph] Scan complete. Graph now has ${contextGraphStore.getAllNodes().length} nodes.`);
     }
@@ -470,7 +470,8 @@ export class AgentGraphExecutor {
                     contextBlock += `No specific relevant files detected in context graph.\n`;
                 }
 
-                const enhancedSystemPrompt = `${node.react.systemPrompt}\n${contextBlock}`; // Using existing `node.react.systemPrompt`
+                const renderedSystemPrompt = renderUserPrompt(node.react.systemPrompt, state);
+                const enhancedSystemPrompt = `${renderedSystemPrompt}\n${contextBlock}`;
 
                 // Update timeline with the ACTUAL prompt used (including context)
                 if (timeline[0]) {

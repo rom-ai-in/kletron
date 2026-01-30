@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { MonacoEditor } from '../MonacoEditor';
 import { CursorLayer } from './CursorLayer';
+import { DocumentViewer } from './DocumentViewer';
 import { useEditorState } from '../../context/EditorContext';
 import { useGhostText } from '../../hooks/useGhostText';
+import { getFileViewerType } from '@/src/utils/fileTypes';
 
 interface FileViewerProps {
     fileId: string;
@@ -23,6 +25,9 @@ export const FileViewer: React.FC<FileViewerProps> = ({
 }) => {
     const { updateCursor, state, commitDiff } = useEditorState();
     const [editorInstance, setEditorInstance] = useState<any>(null); // Store editor instance
+
+    // Determine viewer type based on file extension
+    const viewerType = useMemo(() => getFileViewerType(fileId), [fileId]);
 
     // Get pending diffs for this file
     const pendingDiffs = state.pendingDiffs[fileId] || [];
@@ -48,6 +53,16 @@ export const FileViewer: React.FC<FileViewerProps> = ({
         // ... implementation pending
     };
 
+    // Route to appropriate viewer based on file type
+    if (viewerType === 'document') {
+        return (
+            <div className="relative h-full w-full">
+                <DocumentViewer filePath={fileId} />
+            </div>
+        );
+    }
+
+    // Default: Monaco editor for text/code files
     return (
         <div className="relative h-full w-full">
             <MonacoEditor

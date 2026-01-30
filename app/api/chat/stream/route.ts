@@ -1,7 +1,7 @@
 import { AgentWorkflowResult, AgentWorkflowUpdate } from "../../../../src/types";
 import { resolveLlmSelection } from "../../../../src/llm";
 import { runWorkflow } from "../../../../src/workflows";
-import { normalizeAuditContext, type AuditContext } from "../../../../src/shared/auditContext";
+import { normalizeAuditContext, type AuditContext } from "../../../../src/shared/documentContext";
 
 const textEncoder = new TextEncoder();
 

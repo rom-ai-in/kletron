@@ -6,8 +6,8 @@ import { ObjectId } from "mongodb";
 
 /**
  * GET /api/activity
- * Merges workbench sessions (audit_sessions) and campaign runs (audit_runs)
- * into a single chronological feed.
+ * Merges workbench sessions (audit_sessions), campaign runs (audit_runs),
+ * and agent graph runs (agent_graph_runs) into a single chronological feed.
  */
 export async function GET(req: NextRequest) {
     try {
@@ -16,9 +16,9 @@ export async function GET(req: NextRequest) {
         const limit = parseInt(searchParams.get("limit") || "50");
         const campaignId = searchParams.get("campaignId") || undefined;
 
-        // 1. Fetch workbench sessions
+        // 1. Fetch workbench sessions (excluding AgentGraph sessions)
         const sessions = await db.collection("audit_sessions")
-            .find({})
+            .find({ prompt: { $not: /^\[AgentGraph\]/ } })
             .project({
                 _id: 1,
                 prompt: 1,
@@ -46,7 +46,22 @@ export async function GET(req: NextRequest) {
             .limit(limit)
             .toArray();
 
-        // 3. Map to a unified format
+        // 3. Fetch agent graph runs
+        const graphRuns = await db.collection("agent_graph_runs")
+            .find({})
+            .sort({ startedAt: -1 })
+            .limit(limit)
+            .toArray();
+
+        // Fetch graph names for all unique graphIds
+        const graphIds = [...new Set(graphRuns.map(r => r.graphId?.toString()).filter(Boolean))];
+        const graphs = await db.collection("agent_graphs")
+            .find({ _id: { $in: graphIds.map(id => new ObjectId(id)) } })
+            .project({ _id: 1, name: 1 })
+            .toArray();
+        const graphNameMap = new Map(graphs.map(g => [g._id.toString(), g.name]));
+
+        // 4. Map to a unified format
         const unifiedActivity: any[] = [
             ...sessions.map((s) => ({
                 id: s._id.toString(),
@@ -56,7 +71,7 @@ export async function GET(req: NextRequest) {
                 startedAt: s.startedAt,
                 endedAt: s.endedAt,
                 conclusion: s.workflowResult?.conclusion,
-                link: `/deep-agent`, // deep-agent runs are on the deep-agent page
+                link: `/deep-agent`,
             })),
             ...await Promise.all(runs.map(async (r) => {
                 const chain = await chainExecutor.getChain(r.chainId.toString());
@@ -70,10 +85,34 @@ export async function GET(req: NextRequest) {
                     metadata: r.metadata,
                     link: `/runs/${r._id}`,
                 };
-            }))
+            })),
+            ...graphRuns.map((r) => {
+                const graphName = graphNameMap.get(r.graphId?.toString()) || "Unknown Graph";
+                const nodeCount = r.nodeOrder?.length || 0;
+                const completedNodes = Object.values(r.nodeStatuses || {}).filter(s => s === "COMPLETED").length;
+                const failedNodes = Object.values(r.nodeStatuses || {}).filter(s => s === "FAILED").length;
+                return {
+                    id: r._id.toString(),
+                    type: "AGENT_GRAPH",
+                    title: graphName,
+                    status: r.status,
+                    startedAt: r.startedAt,
+                    endedAt: r.endedAt,
+                    graphId: r.graphId?.toString(),
+                    metadata: {
+                        nodeCount,
+                        completedNodes,
+                        failedNodes,
+                        nodeSessionIds: r.nodeSessionIds,
+                        nodeStatuses: r.nodeStatuses,
+                        nodeOrder: r.nodeOrder,
+                    },
+                    link: `/agent-graph/${r.graphId}`,
+                };
+            })
         ];
 
-        // 4. Sort and limit again across both sources
+        // 5. Sort and limit again across all sources
         unifiedActivity.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
         const finalActivity = unifiedActivity.slice(0, limit);
 

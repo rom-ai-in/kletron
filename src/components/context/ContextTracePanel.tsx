@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Calculator, Zap, FileText, Hash, ArrowRight } from "lucide-react";
+import { Search, Calculator, Zap, FileText, Hash, ArrowRight, AlertCircle } from "lucide-react";
 import { Button } from "@/src/components/ui/Button";
 import { RankedContextItem } from "@/src/context/graph/ContextGraphTypes";
 
@@ -9,10 +9,13 @@ export function ContextTracePanel() {
     const [prompt, setPrompt] = useState("");
     const [results, setResults] = useState<RankedContextItem[]>([]);
     const [loading, setLoading] = useState(false);
+    const [message, setMessage] = useState<string | null>(null);
+    const [totalNodes, setTotalNodes] = useState<number | null>(null);
 
     const handleTrace = async () => {
         if (!prompt.trim()) return;
         setLoading(true);
+        setMessage(null);
         try {
             const res = await fetch("/api/context/graph", {
                 method: "POST",
@@ -20,11 +23,23 @@ export function ContextTracePanel() {
                 body: JSON.stringify({ prompt, limit: 10 }),
             });
             const data = await res.json();
-            if (data.ranked) {
+
+            if (data.error) {
+                setMessage(data.error);
+                setResults([]);
+            } else if (data.message) {
+                setMessage(data.message);
+                setResults([]);
+            } else if (data.ranked) {
                 setResults(data.ranked);
+                setTotalNodes(data.totalNodes || null);
+                if (data.ranked.length === 0) {
+                    setMessage("No relevant context found for this prompt. Try mentioning specific file names.");
+                }
             }
         } catch (e) {
             console.error(e);
+            setMessage("Failed to connect to context API");
         } finally {
             setLoading(false);
         }
@@ -80,10 +95,21 @@ export function ContextTracePanel() {
 
             {/* Results */}
             <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-elegant bg-bg-app/50">
-                {results.length === 0 && !loading && (
+                {/* Message Display */}
+                {message && (
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
+                        <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                        <span>{message}</span>
+                    </div>
+                )}
+
+                {results.length === 0 && !loading && !message && (
                     <div className="flex flex-col items-center justify-center h-32 text-text-muted text-xs gap-2">
                         <ArrowRight size={20} className="opacity-30" />
                         <span>Enter a prompt and trace to see results.</span>
+                        {totalNodes !== null && (
+                            <span className="text-[10px]">({totalNodes} nodes in graph)</span>
+                        )}
                     </div>
                 )}
 
@@ -106,10 +132,10 @@ export function ContextTracePanel() {
                             </div>
                             <span
                                 className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ${item.score >= 0.7
-                                        ? "bg-emerald-500/20 text-emerald-400"
-                                        : item.score >= 0.4
-                                            ? "bg-amber-500/20 text-amber-400"
-                                            : "bg-zinc-700 text-zinc-400"
+                                    ? "bg-emerald-500/20 text-emerald-400"
+                                    : item.score >= 0.4
+                                        ? "bg-amber-500/20 text-amber-400"
+                                        : "bg-zinc-700 text-zinc-400"
                                     }`}
                             >
                                 {(item.score * 100).toFixed(0)}%

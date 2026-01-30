@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "./ui/Button";
-import { AuditContext } from "../shared/auditContext";
+import { AuditContext } from "../shared/documentContext";
 
 type AuditContextFormProps = {
     initialContext: AuditContext;

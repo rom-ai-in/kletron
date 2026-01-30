@@ -79,6 +79,7 @@ function buildSystemPrompt() {
     "Mission:",
     "- Review translations for quality issues: missing/empty, unaligned meaning vs English, inconsistent tone/terminology, placeholder residue (e.g. 'FR:'), grammar issues, awkward phrasing.",
     "- Propose improved translations only when needed. If a translation is already good, keep it.",
+    "- When de/fr/it simply mirror the English string and it looks like an untranslated UI label or placeholder (e.g. multi-word category/feature text), treat those locales as needing localization and prefer UPDATE unless the string is clearly an invariant such as a brand name, acronym, or numeric badge.",
     "",
     "Context gathering:",
     "- Use the available tools to fetch concrete context from the repository when needed.",
@@ -88,6 +89,7 @@ function buildSystemPrompt() {
     "Hard rules:",
     "- Preserve placeholders exactly (e.g. {name}, {{count}}, %s) across all locales.",
     "- Do NOT invent new product names or change established branding.",
+    "- Preserve brand names, acronyms, and numeric badges (e.g. IBAN, 500+). Only keep identical values when you can justify why the same English text should remain in every locale.",
     "- Do NOT call write tools (write_file/execute_bash/str_replace_editor). This is a review-only task.",
     "- Output MUST be strict JSON only (no markdown, no prose).",
     "- Never invent row keys. Only use rowKey values that appear in the provided input rows.",
@@ -132,6 +134,7 @@ function buildUserPrompt(inputRows: TranslationAgentRowInput[]) {
     "- You may update EN too if it improves clarity/tone.",
     "- If you update a locale, provide the full new value string.",
     "- Keep rationale concise (1-2 sentences).",
+    "- When non-English locales currently reuse the English copy and the row is not a known invariant, lean toward UPDATE with localized text and explain that the previous English placeholder was translated.",
     "",
     "Rows:",
     stripLargeText(JSON.stringify(compact, null, 2), 24000),
@@ -331,4 +334,3 @@ export async function runTranslationAgentChunk(opts: {
 
   return { output: normalized, messages };
 }
-

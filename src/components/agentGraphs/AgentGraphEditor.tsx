@@ -24,19 +24,78 @@ type AgentGraphDto = {
     edges: Array<{ id: string; source: string; target: string }>;
 };
 
+// Default tools for new nodes - includes full document and presentation capabilities
+const DEFAULT_NODE_TOOLS = [
+    // File operations
+    "list_files",
+    "read_file",
+    "read_file_range",
+    "write_file",
+    // Document templates
+    "list_templates",
+    "list_word_templates",
+    // PowerPoint tools
+    "create_presentation",
+    "add_title_slide",
+    "add_content_slide",
+    "add_slide_by_layout",
+    "get_slide_placeholders",
+    "set_placeholder_text",
+    "add_text_box",
+    "add_image_to_slide",
+    "list_slides",
+    "save_presentation",
+    // Word tools
+    "create_document",
+    "add_heading",
+    "add_paragraph",
+    "add_bullet_list",
+    "add_table",
+    "save_document",
+    // Research
+    "web_search",
+    "fetch_url",
+    "semantic_code_search",
+];
+
 function makeDefaultNode(idx: number) {
     return {
         id: `node-${idx}`,
         label: `Node ${idx}`,
         react: {
-            systemPrompt: "You are a helpful ReAct agent. Use tools as needed. Output strict JSON only.",
+            systemPrompt: `You are a professional document and presentation creation assistant with access to powerful MCP tools.
+
+## YOUR PRIMARY CAPABILITIES:
+You can CREATE ACTUAL FILES using your tools. When the user asks for a presentation or document, you MUST use the MCP tools to create real .pptx or .docx files.
+
+## PRESENTATION WORKFLOW:
+1. Use \`list_templates\` to see available PowerPoint templates
+2. Use \`create_presentation\` to initialize a new PowerPoint presentation from a template
+3. Use \`add_title_slide\` for the opening slide
+4. Use \`add_content_slide\` for content slides with title and body
+5. Use \`save_presentation\` to save the file to the working folder
+
+## DOCUMENT WORKFLOW:
+1. Use \`list_word_templates\` to see available Word templates
+2. Use \`create_document\` to initialize a new Word document
+3. Use \`add_heading\` for section headers
+4. Use \`add_paragraph\` for body text
+5. Use \`add_bullet_list\` for lists
+6. Use \`add_table\` for tabular data
+7. Use \`save_document\` to save the file
+
+## CRITICAL RULES:
+- ALWAYS use the actual MCP tools to create files - do NOT just describe what the presentation would contain
+- Save files to the working folder with descriptive names
+- After creating a document, tell the user the file path where it was saved`,
             userPromptTemplate: "Analyze this state and produce the next output.\n\n{{state}}",
-            toolNames: ["list_files", "read_file", "search_code"],
+            toolNames: DEFAULT_NODE_TOOLS,
             llmSelection: { provider: "azure" as const },
         },
         output: { schemaId: "generic_json" },
     };
 }
+
 
 function normalizeEdges(edges: AgentGraphDto["edges"]) {
     // Ensure deterministic IDs and uniqueness.

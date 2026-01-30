@@ -17,28 +17,37 @@ import {
     CheckCircle2,
     PlayCircle,
     Search,
-    MoreHorizontal
+    MoreHorizontal,
+    GitBranch
 } from "lucide-react";
 import { StageDetailModal } from "@/src/components/StageDetailModal";
+import { AgentGraphRunModal } from "@/src/components/AgentGraphRunModal";
 
 type ActivityItem = {
     id: string;
-    type: "WORKBENCH" | "CAMPAIGN";
+    type: "WORKBENCH" | "CAMPAIGN" | "AGENT_GRAPH";
     title: string;
     status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "PAUSED" | "CANCELLED";
     startedAt: string;
     endedAt?: string;
     conclusion?: string;
+    graphId?: string;
     metadata?: {
         totalFindings?: number;
         totalClaims?: number;
         totalVerified?: number;
         totalDuration?: number;
+        nodeCount?: number;
+        completedNodes?: number;
+        failedNodes?: number;
+        nodeSessionIds?: Record<string, string>;
+        nodeStatuses?: Record<string, string>;
+        nodeOrder?: string[];
     };
     link: string;
 };
 
-type FilterType = "all" | "workbench" | "campaign";
+type FilterType = "all" | "workbench" | "campaign" | "agent_graph";
 
 function HistoryPageContent() {
     const router = useRouter();
@@ -51,6 +60,7 @@ function HistoryPageContent() {
     const [campaignId, setCampaignId] = useState<string | null>(null);
     const [campaignName, setCampaignName] = useState<string | null>(null);
     const [selectedSession, setSelectedSession] = useState<{ id: string; title: string, status: string } | null>(null);
+    const [selectedGraphRun, setSelectedGraphRun] = useState<ActivityItem | null>(null);
 
     useEffect(() => {
         const id = searchParams?.get("campaignId");
@@ -110,6 +120,7 @@ function HistoryPageContent() {
     const filteredActivity = activity.filter((item) => {
         if (filter === "workbench" && item.type !== "WORKBENCH") return false;
         if (filter === "campaign" && item.type !== "CAMPAIGN") return false;
+        if (filter === "agent_graph" && item.type !== "AGENT_GRAPH") return false;
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
@@ -180,6 +191,16 @@ function HistoryPageContent() {
                         }
                     >
                         Deep Agent
+                    </FilterButton>
+                    <FilterButton
+                        active={filter === "agent_graph"}
+                        onClick={() =>
+                            router.push(
+                                `/history?type=agent_graph${campaignId ? `&campaignId=${encodeURIComponent(campaignId)}` : ""}`
+                            )
+                        }
+                    >
+                        Agent Graphs
                     </FilterButton>
                     <FilterButton
                         active={filter === "campaign"}
@@ -265,6 +286,8 @@ function HistoryPageContent() {
                                         title: item.title,
                                         status: item.status
                                     });
+                                } else if (item.type === "AGENT_GRAPH") {
+                                    setSelectedGraphRun(item);
                                 } else {
                                     router.push(item.link);
                                 }
@@ -272,16 +295,22 @@ function HistoryPageContent() {
                         >
                             <div className="flex items-stretch text-left">
                                 {/* Type indicator */}
-                                <div className={`w-1 shrink-0 ${item.type === "WORKBENCH" ? "bg-sky-500/40" : "bg-emerald-500/40"
+                                <div className={`w-1 shrink-0 ${item.type === "WORKBENCH" ? "bg-sky-500/40" :
+                                        item.type === "AGENT_GRAPH" ? "bg-violet-500/40" :
+                                            "bg-emerald-500/40"
                                     }`} />
 
                                 <div className="flex flex-1 items-center gap-4 p-4 min-w-0">
                                     {/* Column 1: Icon */}
                                     <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${item.type === "WORKBENCH"
-                                        ? "bg-sky-500/10 border-sky-500/10 text-sky-400"
-                                        : "bg-emerald-500/10 border-emerald-500/10 text-emerald-400"
+                                            ? "bg-sky-500/10 border-sky-500/10 text-sky-400"
+                                            : item.type === "AGENT_GRAPH"
+                                                ? "bg-violet-500/10 border-violet-500/10 text-violet-400"
+                                                : "bg-emerald-500/10 border-emerald-500/10 text-emerald-400"
                                         }`}>
-                                        {item.type === "WORKBENCH" ? <Terminal className="h-5 w-5" /> : <Layers className="h-5 w-5" />}
+                                        {item.type === "WORKBENCH" ? <Terminal className="h-5 w-5" /> :
+                                            item.type === "AGENT_GRAPH" ? <GitBranch className="h-5 w-5" /> :
+                                                <Layers className="h-5 w-5" />}
                                     </div>
 
                                     {/* Column 2: Main Content */}
@@ -298,11 +327,23 @@ function HistoryPageContent() {
                                         <div className="flex flex-wrap items-center gap-2">
                                             {/* Type Chip */}
                                             <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${item.type === "WORKBENCH"
-                                                ? "bg-sky-500/10 text-sky-400"
-                                                : "bg-emerald-500/10 text-emerald-400"
+                                                    ? "bg-sky-500/10 text-sky-400"
+                                                    : item.type === "AGENT_GRAPH"
+                                                        ? "bg-violet-500/10 text-violet-400"
+                                                        : "bg-emerald-500/10 text-emerald-400"
                                                 }`}>
-                                                {item.type === "WORKBENCH" ? "Deep Agent" : "Campaign"}
+                                                {item.type === "WORKBENCH" ? "Deep Agent" :
+                                                    item.type === "AGENT_GRAPH" ? "Agent Graph" :
+                                                        "Campaign"}
                                             </span>
+
+                                            {/* Node count for Agent Graph */}
+                                            {item.type === "AGENT_GRAPH" && item.metadata?.nodeCount !== undefined && (
+                                                <span className="inline-flex items-center gap-1 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-secondary">
+                                                    <GitBranch className="h-3 w-3" />
+                                                    {item.metadata.completedNodes}/{item.metadata.nodeCount} nodes
+                                                </span>
+                                            )}
 
                                             {/* Date Chip */}
                                             <span className="inline-flex items-center gap-1 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-muted">
@@ -367,6 +408,17 @@ function HistoryPageContent() {
                     stageName={selectedSession.title}
                     sessionId={selectedSession.id}
                     status={selectedSession.status}
+                />
+            )}
+
+            {selectedGraphRun && (
+                <AgentGraphRunModal
+                    isOpen={!!selectedGraphRun}
+                    onClose={() => setSelectedGraphRun(null)}
+                    runId={selectedGraphRun.id}
+                    graphName={selectedGraphRun.title}
+                    status={selectedGraphRun.status}
+                    metadata={selectedGraphRun.metadata as any}
                 />
             )}
         </div >

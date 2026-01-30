@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import { ChevronRight, ChevronDown, Folder, File, FolderOpen, Search, X, Loader2, FileText, Sparkles } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { ChevronRight, ChevronDown, Folder, File, FolderOpen, Search, X, Loader2, FileText, Sparkles, RefreshCw, FilePlus, FolderPlus, Pencil, Trash2 } from 'lucide-react';
 import { TreeNode } from '../pages/api/fs/tree';
 import { useEditorState } from '../context/EditorContext';
+import { ContextMenu, ContextMenuEntry } from './ui/ContextMenu';
 
 interface FileTreeProps {
     onSelect: (filePath: string) => void;
@@ -16,6 +17,12 @@ interface SearchResult {
     text?: string;
     matchType: 'file' | 'content' | 'semantic';
     score?: number;
+}
+
+interface ContextMenuState {
+    x: number;
+    y: number;
+    node: TreeNode;
 }
 
 const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query }) => {
@@ -39,11 +46,50 @@ const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query
     );
 };
 
-const FileTreeNode: React.FC<{ node: TreeNode; onSelect: (path: string) => void; level: number; currentFile?: string }> = ({ node, onSelect, level, currentFile }) => {
+interface FileTreeNodeProps {
+    node: TreeNode;
+    onSelect: (path: string) => void;
+    level: number;
+    currentFile?: string;
+    onContextMenu: (e: React.MouseEvent, node: TreeNode) => void;
+    editingPath: string | null;
+    onRenameSubmit: (oldPath: string, newName: string) => void;
+    onRenameCancel: () => void;
+    newItemParent: string | null;
+    newItemType: 'file' | 'folder' | null;
+    onNewItemSubmit: (parentPath: string, name: string, type: 'file' | 'folder') => void;
+    onNewItemCancel: () => void;
+}
+
+const FileTreeNode: React.FC<FileTreeNodeProps> = ({
+    node,
+    onSelect,
+    level,
+    currentFile,
+    onContextMenu,
+    editingPath,
+    onRenameSubmit,
+    onRenameCancel,
+    newItemParent,
+    newItemType,
+    onNewItemSubmit,
+    onNewItemCancel
+}) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [renameValue, setRenameValue] = useState(node.name);
+    const [newItemName, setNewItemName] = useState('');
     const { state } = useEditorState();
     const isDir = node.isDirectory;
     const paddingLeft = level * 12 + 4; // 12px indentation per level
+    const isEditing = editingPath === node.path;
+    const showNewItem = newItemParent === node.path && newItemType !== null;
+
+    // Auto-expand when creating new item in this folder
+    useEffect(() => {
+        if (showNewItem && !isOpen) {
+            setIsOpen(true);
+        }
+    }, [showNewItem, isOpen]);
 
     // Determine file status
     const hasAgents = state.fileAgents[node.path]?.length > 0;
@@ -53,6 +99,7 @@ const FileTreeNode: React.FC<{ node: TreeNode; onSelect: (path: string) => void;
 
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
+        if (isEditing) return;
         if (isDir) {
             setIsOpen(!isOpen);
         } else {
@@ -60,12 +107,45 @@ const FileTreeNode: React.FC<{ node: TreeNode; onSelect: (path: string) => void;
         }
     };
 
+    const handleRightClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onContextMenu(e, node);
+    };
+
+    const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (renameValue.trim() && renameValue !== node.name) {
+                onRenameSubmit(node.path, renameValue.trim());
+            } else {
+                onRenameCancel();
+            }
+        } else if (e.key === 'Escape') {
+            onRenameCancel();
+        }
+    };
+
+    const handleNewItemKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (newItemName.trim()) {
+                onNewItemSubmit(node.path, newItemName.trim(), newItemType!);
+            } else {
+                onNewItemCancel();
+            }
+        } else if (e.key === 'Escape') {
+            onNewItemCancel();
+        }
+    };
+
     return (
         <div>
             <div
-                className={`flex items-center py-1 px-2 cursor-pointer hover:bg-state-hover text-sm whitespace-nowrap text-text-secondary hover:text-text-primary select-none transition-colors`}
+                className={`flex items-center py-1 px-2 cursor-pointer hover:bg-state-hover text-sm whitespace-nowrap text-text-secondary hover:text-text-primary select-none transition-colors ${isSelected ? 'bg-state-hover/50' : ''}`}
                 style={{ paddingLeft: `${paddingLeft}px` }}
                 onClick={handleClick}
+                onContextMenu={handleRightClick}
             >
                 <span className="mr-1 text-zinc-400">
                     {isDir ? (
@@ -81,10 +161,29 @@ const FileTreeNode: React.FC<{ node: TreeNode; onSelect: (path: string) => void;
                         <File size={15} className="text-text-muted" />
                     )}
                 </span>
-                <span className="truncate flex-1 text-[13px]">{node.name}</span>
+
+                {isEditing ? (
+                    <input
+                        autoFocus
+                        className="flex-1 bg-zinc-700 border border-sky-500 rounded px-1 py-0.5 text-[13px] text-white outline-none"
+                        value={renameValue}
+                        onChange={e => setRenameValue(e.target.value)}
+                        onKeyDown={handleRenameKeyDown}
+                        onBlur={() => {
+                            if (renameValue.trim() && renameValue !== node.name) {
+                                onRenameSubmit(node.path, renameValue.trim());
+                            } else {
+                                onRenameCancel();
+                            }
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    />
+                ) : (
+                    <span className="truncate flex-1 text-[13px]">{node.name}</span>
+                )}
 
                 {/* Status Badge */}
-                {!isDir && (
+                {!isDir && !isEditing && (
                     <>
                         {hasConflict && (
                             <span className="w-1.5 h-1.5 rounded-full bg-red-500 ml-auto flex-shrink-0 animate-pulse" title="Has conflicts" />
@@ -101,10 +200,59 @@ const FileTreeNode: React.FC<{ node: TreeNode; onSelect: (path: string) => void;
                     </>
                 )}
             </div>
-            {isDir && isOpen && node.children && (
+
+            {isDir && isOpen && (
                 <div>
-                    {node.children.map((child) => (
-                        <FileTreeNode key={child.path} node={child} onSelect={onSelect} level={level + 1} currentFile={currentFile} />
+                    {/* New item input row */}
+                    {showNewItem && (
+                        <div
+                            className="flex items-center py-1 px-2 text-sm"
+                            style={{ paddingLeft: `${(level + 1) * 12 + 4}px` }}
+                        >
+                            <span className="mr-1 text-zinc-400">
+                                <span className="w-[15px] inline-block" />
+                            </span>
+                            <span className="mr-2 flex-shrink-0">
+                                {newItemType === 'folder' ? (
+                                    <Folder size={15} className="text-sky-500" />
+                                ) : (
+                                    <File size={15} className="text-text-muted" />
+                                )}
+                            </span>
+                            <input
+                                autoFocus
+                                className="flex-1 bg-zinc-700 border border-sky-500 rounded px-1 py-0.5 text-[13px] text-white outline-none"
+                                placeholder={newItemType === 'folder' ? 'folder name' : 'file name'}
+                                value={newItemName}
+                                onChange={e => setNewItemName(e.target.value)}
+                                onKeyDown={handleNewItemKeyDown}
+                                onBlur={() => {
+                                    if (newItemName.trim()) {
+                                        onNewItemSubmit(node.path, newItemName.trim(), newItemType!);
+                                    } else {
+                                        onNewItemCancel();
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {node.children?.map((child) => (
+                        <FileTreeNode
+                            key={child.path}
+                            node={child}
+                            onSelect={onSelect}
+                            level={level + 1}
+                            currentFile={currentFile}
+                            onContextMenu={onContextMenu}
+                            editingPath={editingPath}
+                            onRenameSubmit={onRenameSubmit}
+                            onRenameCancel={onRenameCancel}
+                            newItemParent={newItemParent}
+                            newItemType={newItemType}
+                            onNewItemSubmit={onNewItemSubmit}
+                            onNewItemCancel={onNewItemCancel}
+                        />
                     ))}
                 </div>
             )}
@@ -127,8 +275,43 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelect, currentFile }) => 
 
     // User-added feature: Repo Name
     const [repoName, setRepoName] = useState<string>("");
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
-    // Load Tree & Env Info
+    // Context Menu State
+    const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+
+    // Editing State
+    const [editingPath, setEditingPath] = useState<string | null>(null);
+    const [newItemParent, setNewItemParent] = useState<string | null>(null);
+    const [newItemType, setNewItemType] = useState<'file' | 'folder' | null>(null);
+
+    // Confirmation Dialog State
+    const [deleteConfirm, setDeleteConfirm] = useState<TreeNode | null>(null);
+
+    // Fetch tree data function (reusable for refresh)
+    const refreshTree = useCallback(async () => {
+        setIsRefreshing(true);
+        const t = Date.now();
+        try {
+            const res = await fetch(`/api/fs/tree?t=${t}`, {
+                cache: 'no-store',
+                headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' }
+            });
+            if (!res.ok) throw new Error('Failed to load file tree');
+            const data = await res.json();
+            setTreeData(data);
+            setTreeError(null);
+        } catch (err: unknown) {
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            console.error(err);
+            setTreeError(errorMessage);
+        } finally {
+            setLoadingTree(false);
+            setIsRefreshing(false);
+        }
+    }, []);
+
+    // Load Tree & Env Info on mount
     useEffect(() => {
         const t = Date.now();
 
@@ -143,25 +326,9 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelect, currentFile }) => 
             })
             .catch(() => { /* Ignore env error */ });
 
-        // Fetch tree
-        fetch(`/api/fs/tree?t=${t}`, {
-            cache: 'no-store',
-            headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' }
-        })
-            .then((res) => {
-                if (!res.ok) throw new Error('Failed to load file tree');
-                return res.json();
-            })
-            .then((data) => {
-                setTreeData(data);
-                setLoadingTree(false);
-            })
-            .catch((err) => {
-                console.error(err);
-                setTreeError(err.message);
-                setLoadingTree(false);
-            });
-    }, []);
+        // Fetch tree on mount
+        refreshTree();
+    }, [refreshTree]);
 
     // Debounce Query
     useEffect(() => {
@@ -191,7 +358,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelect, currentFile }) => 
                     });
                     if (res.ok) {
                         const data = await res.json();
-                        results = (data.results || []).map((r: any) => ({
+                        results = (data.results || []).map((r: { filePath: string; startLine?: number; content?: string; score?: number }) => ({
                             file: r.filePath,
                             line: r.startLine,
                             text: r.content,
@@ -221,6 +388,157 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelect, currentFile }) => 
         setSearchQuery('');
         setDebouncedQuery('');
     };
+
+    // Context Menu Handlers
+    const handleContextMenu = useCallback((e: React.MouseEvent, node: TreeNode) => {
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY, node });
+    }, []);
+
+    const closeContextMenu = useCallback(() => {
+        setContextMenu(null);
+    }, []);
+
+    // File Operations
+    const handleCreateFolder = useCallback(async (parentPath: string, name: string) => {
+        try {
+            const fullPath = `${parentPath}/${name}`;
+            const res = await fetch('/api/fs/mkdir', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: fullPath })
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Failed to create folder');
+            }
+            await refreshTree();
+        } catch (err) {
+            console.error('Error creating folder:', err);
+            alert(err instanceof Error ? err.message : 'Failed to create folder');
+        }
+    }, [refreshTree]);
+
+    const handleCreateFile = useCallback(async (parentPath: string, name: string) => {
+        try {
+            const fullPath = `${parentPath}/${name}`;
+            const res = await fetch('/api/fs/write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: fullPath, content: '' })
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Failed to create file');
+            }
+            await refreshTree();
+            onSelect(fullPath); // Open the new file
+        } catch (err) {
+            console.error('Error creating file:', err);
+            alert(err instanceof Error ? err.message : 'Failed to create file');
+        }
+    }, [refreshTree, onSelect]);
+
+    const handleRename = useCallback(async (oldPath: string, newName: string) => {
+        try {
+            const parentPath = oldPath.substring(0, oldPath.lastIndexOf('/'));
+            const newPath = `${parentPath}/${newName}`;
+            const res = await fetch('/api/fs/rename', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ oldPath, newPath })
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Failed to rename');
+            }
+            await refreshTree();
+        } catch (err) {
+            console.error('Error renaming:', err);
+            alert(err instanceof Error ? err.message : 'Failed to rename');
+        } finally {
+            setEditingPath(null);
+        }
+    }, [refreshTree]);
+
+    const handleDelete = useCallback(async (node: TreeNode) => {
+        try {
+            const res = await fetch('/api/fs/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: node.path })
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Failed to delete');
+            }
+            await refreshTree();
+        } catch (err) {
+            console.error('Error deleting:', err);
+            alert(err instanceof Error ? err.message : 'Failed to delete');
+        } finally {
+            setDeleteConfirm(null);
+        }
+    }, [refreshTree]);
+
+    const handleNewItemSubmit = useCallback((parentPath: string, name: string, type: 'file' | 'folder') => {
+        if (type === 'folder') {
+            handleCreateFolder(parentPath, name);
+        } else {
+            handleCreateFile(parentPath, name);
+        }
+        setNewItemParent(null);
+        setNewItemType(null);
+    }, [handleCreateFolder, handleCreateFile]);
+
+    const handleNewItemCancel = useCallback(() => {
+        setNewItemParent(null);
+        setNewItemType(null);
+    }, []);
+
+    const handleRenameCancel = useCallback(() => {
+        setEditingPath(null);
+    }, []);
+
+    // Build context menu items
+    const getContextMenuItems = useCallback((node: TreeNode): ContextMenuEntry[] => {
+        const items: ContextMenuEntry[] = [];
+
+        if (node.isDirectory) {
+            items.push({
+                label: 'New File',
+                icon: <FilePlus size={14} />,
+                onClick: () => {
+                    setNewItemParent(node.path);
+                    setNewItemType('file');
+                }
+            });
+            items.push({
+                label: 'New Folder',
+                icon: <FolderPlus size={14} />,
+                onClick: () => {
+                    setNewItemParent(node.path);
+                    setNewItemType('folder');
+                }
+            });
+            items.push({ type: 'separator' });
+        }
+
+        items.push({
+            label: 'Rename',
+            icon: <Pencil size={14} />,
+            onClick: () => setEditingPath(node.path)
+        });
+
+        items.push({
+            label: 'Delete',
+            icon: <Trash2 size={14} />,
+            onClick: () => setDeleteConfirm(node),
+            danger: true
+        });
+
+        return items;
+    }, []);
 
     return (
         <div className="flex flex-col h-full bg-bg-surface border-r border-border-subtle font-sans">
@@ -336,6 +654,14 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelect, currentFile }) => 
                         <div className="px-3 py-2 border-b border-border-subtle">
                             <div className="text-[11px] font-bold uppercase tracking-widest text-text-muted flex items-center justify-between mb-0.5">
                                 <span>Explorer</span>
+                                <button
+                                    onClick={() => refreshTree()}
+                                    disabled={isRefreshing}
+                                    className="p-1 rounded hover:bg-state-hover text-text-muted hover:text-text-primary transition-colors disabled:opacity-50"
+                                    title="Refresh file tree"
+                                >
+                                    <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+                                </button>
                             </div>
                             {repoName && (
                                 <div className="text-xs font-semibold text-text-primary truncate" title={repoName}>
@@ -351,13 +677,66 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelect, currentFile }) => 
                         ) : (
                             <div className="font-mono">
                                 {treeData.map((node) => (
-                                    <FileTreeNode key={node.path} node={node} onSelect={onSelect} level={0} currentFile={currentFile} />
+                                    <FileTreeNode
+                                        key={node.path}
+                                        node={node}
+                                        onSelect={onSelect}
+                                        level={0}
+                                        currentFile={currentFile}
+                                        onContextMenu={handleContextMenu}
+                                        editingPath={editingPath}
+                                        onRenameSubmit={handleRename}
+                                        onRenameCancel={handleRenameCancel}
+                                        newItemParent={newItemParent}
+                                        newItemType={newItemType}
+                                        onNewItemSubmit={handleNewItemSubmit}
+                                        onNewItemCancel={handleNewItemCancel}
+                                    />
                                 ))}
                             </div>
                         )}
                     </>
                 )}
             </div>
+
+            {/* Context Menu */}
+            {contextMenu && (
+                <ContextMenu
+                    x={contextMenu.x}
+                    y={contextMenu.y}
+                    items={getContextMenuItems(contextMenu.node)}
+                    onClose={closeContextMenu}
+                />
+            )}
+
+            {/* Delete Confirmation Dialog */}
+            {deleteConfirm && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-4 max-w-sm mx-4 shadow-xl">
+                        <h3 className="text-white font-semibold mb-2">Delete {deleteConfirm.isDirectory ? 'Folder' : 'File'}</h3>
+                        <p className="text-zinc-300 text-sm mb-4">
+                            Are you sure you want to delete <span className="font-mono text-sky-400">{deleteConfirm.name}</span>?
+                            {deleteConfirm.isDirectory && (
+                                <span className="block mt-1 text-amber-400 text-xs">This will delete all contents inside the folder.</span>
+                            )}
+                        </p>
+                        <div className="flex gap-2 justify-end">
+                            <button
+                                className="px-3 py-1.5 text-sm rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-200 transition-colors"
+                                onClick={() => setDeleteConfirm(null)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="px-3 py-1.5 text-sm rounded bg-red-600 hover:bg-red-500 text-white transition-colors"
+                                onClick={() => handleDelete(deleteConfirm)}
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

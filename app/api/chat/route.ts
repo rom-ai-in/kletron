@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { runWorkflow } from "../../../src/workflows";
-import { normalizeAuditContext, type AuditContext } from "../../../src/shared/auditContext";
+import { normalizeAuditContext, type AuditContext } from "../../../src/shared/documentContext";
 
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({} as Record<string, unknown>));

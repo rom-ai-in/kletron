@@ -21,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Security check: Enforce repo root
     const config = await getConfig();
-    const repoRoot = config.mcpDefaultDir;
+    const repoRoot = config.workingFolder;
 
     // Resolve path relative to repo root if it's not absolute
     let fullPath = filePath;

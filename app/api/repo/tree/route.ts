@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
         const subPath = searchParams.get("path") || "";
 
         const config = await getConfig();
-        const repoRoot = config.mcpDefaultDir;
+        const repoRoot = config.workingFolder;
 
         if (!repoRoot || !existsSync(repoRoot)) {
             return NextResponse.json({ error: "Repository root not configured or does not exist" }, { status: 500 });

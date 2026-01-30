@@ -7,7 +7,7 @@ import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 import { RepoAnalysisResult, RepoGraphEdge, RepoGraphNode } from "@/src/types";
 import { getChatModel } from "@/src/llm";
-import { AuditContext } from "@/src/shared/auditContext";
+import { AuditContext } from "@/src/shared/documentContext";
 
 // Max depth for directory scanning to prevent overload
 const MAX_SCAN_DEPTH = 3;

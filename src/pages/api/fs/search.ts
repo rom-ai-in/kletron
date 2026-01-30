@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Determine root directory from config
     const config = await getConfig();
-    const rootDir = config.mcpDefaultDir;
+    const rootDir = config.workingFolder;
 
     try {
         let results: SearchResult[] = [];

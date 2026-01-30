@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getDb } from "@/src/lib/db";
-import { normalizeAuditContext, type AuditContext } from "@/src/shared/auditContext";
+import { normalizeAuditContext, type AuditContext } from "@/src/shared/documentContext";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
