@@ -13,8 +13,7 @@ import {
     getPresentation,
     isUsingAutomizer,
     getTemplateInfo,
-    trackSlide,
-    getSlides
+    trackSlide
 } from "./presentationState.js";
 
 // ============================================================================
