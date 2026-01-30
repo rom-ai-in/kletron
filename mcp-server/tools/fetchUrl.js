@@ -108,7 +108,40 @@ export const fetchUrl = {
         },
       });
 
-      const contentType = res.headers.get("content-type");
+      const contentType = res.headers.get("content-type") || "";
+      const contentTypeLower = contentType.toLowerCase();
+
+      // Detect binary/non-text content types that would flood LLM context
+      const binaryPatterns = [
+        "application/pdf",
+        "application/octet-stream",
+        "application/zip",
+        "application/gzip",
+        "application/x-tar",
+        "image/",
+        "audio/",
+        "video/",
+        "application/msword",
+        "application/vnd.openxmlformats",
+        "application/vnd.ms-",
+      ];
+
+      const isBinaryContent = binaryPatterns.some(pattern => contentTypeLower.includes(pattern));
+
+      if (isBinaryContent) {
+        // Return metadata only for binary files - don't fetch the full content
+        const contentLength = res.headers.get("content-length");
+        return {
+          url: parsed.toString(),
+          status: res.status,
+          ok: res.ok,
+          contentType,
+          isBinary: true,
+          bytes: contentLength ? parseInt(contentLength, 10) : null,
+          note: `Binary content detected (${contentType}). Raw content not returned to avoid flooding LLM context. Use a specialized tool for this file type.`,
+        };
+      }
+
       const buffer = Buffer.from(await res.arrayBuffer());
       const truncated = buffer.length > limit;
       const sliced = truncated ? buffer.subarray(0, limit) : buffer;
