@@ -6,10 +6,7 @@
   "icon": "resources/icon.svg",
   "engines": {"vscode": ">=1.80.0"},
   "activationEvents": [
-    "onCommand:numezis.openChat",
-    "onCommand:numezis.connectBackend",
-    "onCommand:numezis.runDriftAnalysis",
-    "onCommand:numezis.applyDiff"
+    "onView:numezis.chatView"
   ],
   "main": "out/extension.js",
   "scripts": {
@@ -18,12 +15,7 @@
     "package": "vsce package"
   },
   "contributes": {
-    "commands": [
-      {"command": "numezis.openChat", "title": "Numezis: Open Chat"},
-      {"command": "numezis.connectBackend", "title": "Numezis: Connect Backend"},
-      {"command": "numezis.runDriftAnalysis", "title": "Numezis: Run Drift Analysis"},
-      {"command": "numezis.applyDiff", "title": "Numezis: Apply Last Diff"}
-    ],
+    "commands": [],
     "configuration": {
       "type": "object",
       "title": "Numezis Extension",
@@ -71,15 +63,7 @@
       }
     },
     "viewsContainers": {"activitybar": [{"id": "numezis", "title": "Numezis", "icon": "resources/icon.svg"}]},
-    "views": {"numezis": [{"id": "agentTree", "name": "Agents"}]},
-    "menus": {
-      "view/item/context": [
-        {
-          "command": "numezis.applyDiff",
-          "when": "view == agentTree && viewItem == agentRun"
-        }
-      ]
-    }
+    "views": {"numezis": [{"id": "numezis.chatView", "name": "Studio", "type": "webview"}]}
   },
   "dependencies": {
     "node-fetch": "^3.3.2"

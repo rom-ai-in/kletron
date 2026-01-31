@@ -91,6 +91,58 @@ class BackendClient {
     async getHealth() {
         return this.fetchJson('/api/health');
     }
+    async getWorkspaceConfig() {
+        return this.fetchJson('/api/config');
+    }
+    async getLlmConfig() {
+        return this.fetchJson('/api/llm-config');
+    }
+    async getEmbeddingConfig() {
+        return this.fetchJson('/api/embedding-config');
+    }
+    async testLlmConfig(provider, config) {
+        return this.fetchJson('/api/llm-config/test', {
+            method: 'POST',
+            body: JSON.stringify({ provider, config }),
+        });
+    }
+    async listAgentGraphs() {
+        return this.fetchJson('/api/agent-graphs');
+    }
+    async runAgentGraphStream(graphId, message, selection, onChunk) {
+        this.assertConfigured();
+        const res = await (0, node_fetch_1.default)(`${this.baseUrl}/api/agent-graphs/${graphId}/stream`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({
+                message,
+                provider: selection.provider,
+                model: selection.model,
+            }),
+        });
+        if (!res.ok || !res.body) {
+            const payload = await res.text();
+            throw new Error(`Graph stream failed (${res.status}): ${payload}`);
+        }
+        let buffer = '';
+        for await (const chunk of res.body) {
+            buffer += chunk.toString('utf8');
+            let index = buffer.indexOf('\n');
+            while (index !== -1) {
+                const line = buffer.slice(0, index).trim();
+                buffer = buffer.slice(index + 1);
+                if (line) {
+                    try {
+                        onChunk(JSON.parse(line));
+                    }
+                    catch {
+                        onChunk({ type: 'error', payload: { message: line } });
+                    }
+                }
+                index = buffer.indexOf('\n');
+            }
+        }
+    }
     subscribeToRun(runId, onUpdate) {
         let cancelled = false;
         const poll = async () => {

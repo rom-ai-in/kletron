@@ -13,6 +13,10 @@ type WebviewRequest =
   | { type: 'openFile'; path: string }
   | { type: 'updateTags'; runId: string; tags: string[] }
   | { type: 'updateMemory'; memory: MemoryPayload }
+  | { type: 'openConfigPage' }
+  | { type: 'loadConfig' }
+  | { type: 'selectGraph'; graphId: string }
+  | { type: 'setLlmSelection'; provider: string; model: string }
 
 type PanelMessage =
   | { type: 'status'; runId: string; status: string; output?: AgentOutputMessage[] }
@@ -49,6 +53,11 @@ interface UiState {
   apiToken: string
   llm: LlmSettings
   memory: MemoryPayload
+  graphs: any[]
+  selectedGraphId?: string
+  llmConfig?: any
+  embeddingConfig?: any
+  workspaceConfig?: any
 }
 
 interface MemoryPayload {
@@ -60,7 +69,8 @@ interface MemoryPayload {
 export class ChatPanel {
   public static currentPanel: ChatPanel | undefined
 
-  private readonly panel: vscode.WebviewPanel
+  private readonly webview: vscode.Webview
+  private readonly onDidDispose: vscode.Event<void>
   private readonly disposables: vscode.Disposable[] = []
   private readonly pollCanceller = new Map<string, () => void>()
   private readonly diffCache = new Map<string, string>()
@@ -68,9 +78,15 @@ export class ChatPanel {
   private runs: RunViewModel[] = []
   private selectedRunId?: string
   private memory: MemoryPayload = { notes: '', rules: '', preferences: '' }
+  private graphs: any[] = []
+  private selectedGraphId?: string
+  private llmConfig?: any
+  private embeddingConfig?: any
+  private workspaceConfig?: any
+  private llmSelection: { provider?: string; model?: string } = {}
 
   private constructor(
-    panel: vscode.WebviewPanel,
+    host: { webview: vscode.Webview; onDidDispose: vscode.Event<void> },
     private readonly extensionUri: vscode.Uri,
     private readonly backendClient: BackendClient,
     private readonly treeProvider: AgentTreeProvider,
@@ -82,10 +98,15 @@ export class ChatPanel {
       setMemory: (memory: MemoryPayload) => void
     }
   ) {
-    this.panel = panel
-    panel.webview.html = this.getHtmlForWebview(panel.webview)
-    panel.webview.onDidReceiveMessage((message: WebviewRequest) => this.handleWebviewMessage(message), null, this.disposables)
-    panel.onDidDispose(() => this.dispose(), null, this.disposables)
+    this.webview = host.webview
+    this.onDidDispose = host.onDidDispose
+    this.webview.html = this.getHtmlForWebview(this.webview)
+    this.webview.onDidReceiveMessage(
+      (message: WebviewRequest) => this.handleWebviewMessage(message),
+      null,
+      this.disposables
+    )
+    this.onDidDispose(() => this.dispose(), null, this.disposables)
     this.restoreState()
   }
 
@@ -104,7 +125,6 @@ export class ChatPanel {
     const column = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One
 
     if (ChatPanel.currentPanel) {
-      ChatPanel.currentPanel.panel.reveal(column)
       return ChatPanel.currentPanel
     }
 
@@ -113,7 +133,7 @@ export class ChatPanel {
     })
 
     ChatPanel.currentPanel = new ChatPanel(
-      panel,
+      { webview: panel.webview, onDidDispose: panel.onDidDispose },
       extensionUri,
       backendClient,
       treeProvider,
@@ -121,6 +141,32 @@ export class ChatPanel {
       storage
     )
     return ChatPanel.currentPanel
+  }
+
+  static createForView(
+    view: vscode.WebviewView,
+    extensionUri: vscode.Uri,
+    backendClient: BackendClient,
+    treeProvider: AgentTreeProvider,
+    onSettingsUpdated: () => void,
+    storage: {
+      getRuns: () => RunViewModel[]
+      setRuns: (runs: RunViewModel[]) => void
+      getMemory: () => MemoryPayload
+      setMemory: (memory: MemoryPayload) => void
+    }
+  ) {
+    view.webview.options = {
+      enableScripts: true,
+    }
+    return new ChatPanel(
+      { webview: view.webview, onDidDispose: view.onDidDispose },
+      extensionUri,
+      backendClient,
+      treeProvider,
+      onSettingsUpdated,
+      storage
+    )
   }
 
   private dispose() {
@@ -162,6 +208,20 @@ export class ChatPanel {
       case 'updateMemory':
         this.updateMemory(message.memory)
         return
+      case 'openConfigPage':
+        void this.openConfigPage()
+        return
+      case 'loadConfig':
+        void this.loadBackendConfig()
+        return
+      case 'selectGraph':
+        this.selectedGraphId = message.graphId || undefined
+        this.pushState()
+        return
+      case 'setLlmSelection':
+        this.llmSelection = { provider: message.provider, model: message.model }
+        this.pushState()
+        return
     }
   }
 
@@ -172,7 +232,17 @@ export class ChatPanel {
     }
 
     try {
+      if (this.selectedGraphId) {
+        await this.runGraph(prompt)
+        return
+      }
       const llm = this.getLlmSettings()
+      if (this.llmSelection.provider) {
+        llm.provider = this.llmSelection.provider
+      }
+      if (this.llmSelection.model) {
+        llm.model = this.llmSelection.model
+      }
       const { runId, status } = await this.backendClient.runAgent(prompt, agentId, llm)
       const run: AgentRun = { runId, prompt, agentId, status }
       this.treeProvider.addRun(run)
@@ -305,13 +375,14 @@ export class ChatPanel {
   }
 
   private postToWebview(message: PanelMessage) {
-    this.panel.webview.postMessage(message)
+    this.webview.postMessage(message)
   }
 
   private restoreState() {
     this.runs = this.storage.getRuns()
     this.memory = this.storage.getMemory()
     this.pushState()
+    void this.loadBackendConfig()
   }
 
   private persistRuns() {
@@ -399,6 +470,11 @@ export class ChatPanel {
         apiToken: settings.apiToken,
         llm: settings.llm,
         memory: this.memory,
+        graphs: this.graphs,
+        selectedGraphId: this.selectedGraphId,
+        llmConfig: this.llmConfig,
+        embeddingConfig: this.embeddingConfig,
+        workspaceConfig: this.workspaceConfig,
       },
     })
     this.persistRuns()
@@ -445,6 +521,7 @@ export class ChatPanel {
     }
     this.onSettingsUpdated()
     this.pushState()
+    void this.loadBackendConfig()
   }
 
   private async checkHealth() {
@@ -457,6 +534,93 @@ export class ChatPanel {
       const message = typeof error === 'string' ? error : (error as Error).message
       this.postToWebview({ type: 'error', message: `Backend unavailable: ${message}` })
     }
+  }
+
+  private async loadBackendConfig() {
+    if (!this.backendClient.hasBaseUrl()) {
+      return
+    }
+    try {
+      const [llmConfig, embeddingConfig, graphs, workspaceConfig] = await Promise.all([
+        this.backendClient.getLlmConfig(),
+        this.backendClient.getEmbeddingConfig(),
+        this.backendClient.listAgentGraphs(),
+        this.backendClient.getWorkspaceConfig(),
+      ])
+      this.llmConfig = llmConfig
+      this.embeddingConfig = embeddingConfig
+      this.graphs = graphs.graphs ?? graphs
+      this.workspaceConfig = workspaceConfig
+      this.pushState()
+    } catch (error) {
+      const message = typeof error === 'string' ? error : (error as Error).message
+      this.postToWebview({ type: 'error', message: `Config load failed: ${message}` })
+    }
+  }
+
+  private async runGraph(message: string) {
+    const graphId = this.selectedGraphId
+    if (!graphId) {
+      return
+    }
+    const runId = `graph-${graphId}-${Date.now()}`
+    const run: AgentRun = { runId, prompt: message, agentId: graphId, status: 'running' }
+    this.treeProvider.addRun(run)
+    this.runs = [
+      { ...run, createdAt: new Date().toISOString(), tags: [], artifacts: { plans: [], patches: [], logs: [] } },
+      ...this.runs.filter((existing) => existing.runId !== runId),
+    ]
+    this.selectedRunId = runId
+    this.pushState()
+
+    await this.backendClient.runAgentGraphStream(
+      graphId,
+      message,
+      this.llmSelection,
+      (chunk) => {
+        if (chunk.type === 'update') {
+          const content = JSON.stringify(chunk.payload)
+          this.appendRunOutput(runId, { role: 'assistant', content })
+        }
+        if (chunk.type === 'final') {
+          const content = JSON.stringify(chunk.payload)
+          this.appendRunOutput(runId, { role: 'assistant', content })
+          this.updateRunStatus(runId, 'completed')
+        }
+        if (chunk.type === 'error') {
+          const content = chunk.payload?.message || 'Graph error'
+          this.appendRunOutput(runId, { role: 'system', content })
+          this.updateRunStatus(runId, 'failed')
+        }
+      }
+    )
+  }
+
+  private appendRunOutput(runId: string, message: AgentOutputMessage) {
+    this.runs = this.runs.map((item) => {
+      if (item.runId !== runId) return item
+      const output = [...(item.output ?? []), message]
+      const artifacts = this.extractArtifacts(output)
+      return { ...item, output, artifacts }
+    })
+    this.pushState()
+  }
+
+  private updateRunStatus(runId: string, status: string) {
+    this.runs = this.runs.map((item) =>
+      item.runId === runId ? { ...item, status } : item
+    )
+    this.pushState()
+  }
+
+  private async openConfigPage() {
+    const settings = this.getSettings()
+    if (!settings.backendUrl) {
+      this.postToWebview({ type: 'error', message: 'Backend URL is not configured.' })
+      return
+    }
+    const url = `${settings.backendUrl.replace(/\/$/, '')}/config`
+    await vscode.env.openExternal(vscode.Uri.parse(url))
   }
 
   private getHtmlForWebview(webview: vscode.Webview) {
@@ -477,20 +641,18 @@ export class ChatPanel {
             background: var(--vscode-editor-background);
           }
           .root {
-            display: grid;
-            grid-template-columns: 260px 1fr 320px;
-            grid-template-rows: auto 1fr auto;
+            display: flex;
+            flex-direction: column;
             height: 100vh;
           }
           .topbar {
-            grid-column: 1 / 4;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 1rem;
-            padding: 0.75rem 1rem;
+            gap: 0.75rem;
+            padding: 0.6rem 0.75rem;
             border-bottom: 1px solid var(--vscode-editorWidget-border);
-            background: var(--vscode-editor-background);
+            background: var(--vscode-sideBar-background);
           }
           .brand {
             display: flex;
@@ -521,18 +683,23 @@ export class ChatPanel {
           .settings-bar {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.35rem;
           }
           .search-input {
             width: 100%;
             margin-bottom: 0.5rem;
           }
-          .sidebar {
-            grid-row: 2 / 4;
-            border-right: 1px solid var(--vscode-editorWidget-border);
-            padding: 0.75rem;
-            overflow-y: auto;
+          .drawer {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
             background: var(--vscode-sideBar-background);
+          }
+          .drawer-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.75rem;
           }
           .runs-header {
             font-size: 0.75rem;
@@ -562,21 +729,24 @@ export class ChatPanel {
             opacity: 0.7;
           }
           .main {
-            grid-row: 2 / 3;
             display: flex;
             flex-direction: column;
             overflow: hidden;
           }
           .actions-bar {
             display: flex;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem 0;
+            gap: 0.35rem;
+            flex-wrap: wrap;
           }
           .messages {
             flex: 1;
             overflow-y: auto;
-            padding: 1rem;
+            padding: 0.6rem;
             background: var(--vscode-editor-background);
+            border-radius: 8px;
+            border: 1px solid var(--vscode-editorWidget-border);
+            min-height: 160px;
+            max-height: 280px;
           }
           .message {
             margin-bottom: 0.9rem;
@@ -593,12 +763,9 @@ export class ChatPanel {
             margin-bottom: 0.25rem;
           }
           .input-row {
-            grid-column: 2 / 3;
             display: flex;
             gap: 0.5rem;
-            padding: 0.75rem;
-            border-top: 1px solid var(--vscode-editorWidget-border);
-            background: var(--vscode-editor-background);
+            margin-top: 0.6rem;
           }
           .input-row input, .input-row textarea, .input-row select {
             background: var(--vscode-input-background);
@@ -611,7 +778,7 @@ export class ChatPanel {
           .input-row textarea {
             flex: 1;
             min-height: 44px;
-            max-height: 120px;
+            max-height: 96px;
             resize: vertical;
           }
           .btn {
@@ -622,18 +789,42 @@ export class ChatPanel {
             color: var(--vscode-button-foreground);
             cursor: pointer;
             font-weight: 600;
+            font-size: 0.8rem;
           }
           .btn.secondary {
             background: transparent;
             color: var(--vscode-button-foreground);
             border: 1px solid var(--vscode-button-border, var(--vscode-editorWidget-border));
           }
-          .right-panel {
-            grid-row: 2 / 4;
-            border-left: 1px solid var(--vscode-editorWidget-border);
-            padding: 0.75rem;
-            overflow-y: auto;
-            background: var(--vscode-sideBar-background);
+          .section {
+            margin-bottom: 0.9rem;
+            border: 1px solid var(--vscode-editorWidget-border);
+            border-radius: 10px;
+            background: var(--vscode-editor-background);
+          }
+          .section summary {
+            list-style: none;
+            cursor: pointer;
+            padding: 0.6rem 0.75rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+          }
+          .section summary::after {
+            content: "▾";
+            font-size: 0.75rem;
+            opacity: 0.7;
+          }
+          .section[open] summary::after {
+            content: "▴";
+          }
+          .section summary::-webkit-details-marker {
+            display: none;
+          }
+          .section-body {
+            padding: 0.6rem 0.75rem 0.75rem;
+            border-top: 1px solid var(--vscode-editorWidget-border);
           }
           .tag-row {
             display: flex;
@@ -724,6 +915,20 @@ export class ChatPanel {
             background: var(--vscode-editor-background);
             font-size: 0.75rem;
           }
+          .prompt-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.4rem;
+          }
+          .prompt-header .run-meta {
+            margin: 0;
+          }
+          .chat-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+          }
           .section-title {
             font-weight: 600;
             margin-bottom: 0.5rem;
@@ -788,10 +993,25 @@ export class ChatPanel {
             },
             search: '',
             tagFilter: '',
+            graphs: [],
+            selectedGraphId: '',
+            llmConfig: null,
+            embeddingConfig: null,
+            workspaceConfig: null,
+            llmSelection: {
+              provider: '',
+              model: '',
+            },
           }
 
           const updateState = (partial) => {
             Object.assign(state, partial)
+            if (!state.llmSelection.provider && state.llm?.provider) {
+              state.llmSelection.provider = state.llm.provider
+            }
+            if (!state.llmSelection.model && state.llm?.model) {
+              state.llmSelection.model = state.llm.model
+            }
             render()
           }
 
@@ -808,6 +1028,17 @@ export class ChatPanel {
             state.selectedRunId = runId
             vscode.postMessage({ type: 'selectRun', runId })
             render()
+          }
+
+          const setGraph = (graphId) => {
+            state.selectedGraphId = graphId
+            vscode.postMessage({ type: 'selectGraph', graphId })
+            render()
+          }
+
+          const setLlmSelection = (provider, model) => {
+            state.llmSelection = { provider, model }
+            vscode.postMessage({ type: 'setLlmSelection', provider, model })
           }
 
           const handleSend = () => {
@@ -905,6 +1136,28 @@ export class ChatPanel {
                 return '<div class="' + cls + '">' + escapeHtml(line) + '</div>'
               })
               .join('')
+          }
+
+          const getProviders = () => {
+            if (!state.llmConfig) {
+              return []
+            }
+            if (Array.isArray(state.llmConfig.providers)) {
+              return state.llmConfig.providers
+            }
+            const providers = []
+            if (state.llmConfig.azure) providers.push('azure')
+            if (state.llmConfig.lmstudio) providers.push('lmstudio')
+            if (state.llmConfig.openai) providers.push('openai')
+            return providers
+          }
+
+          const getSelectedProvider = () => {
+            return state.llmSelection.provider || state.llm.provider || ''
+          }
+
+          const getSelectedModel = () => {
+            return state.llmSelection.model || state.llm.model || ''
           }
 
           const updateTags = () => {
@@ -1058,6 +1311,35 @@ export class ChatPanel {
                   .join('')
               : '<span class="run-meta">No tags</span>'
 
+            const providers = getProviders()
+            const providerOptions = providers.length
+              ? providers
+                  .map((provider) => {
+                    const selectedAttr = provider === getSelectedProvider() ? 'selected' : ''
+                    return '<option value="' + provider + '" ' + selectedAttr + '>' + escapeHtml(provider) + '</option>'
+                  })
+                  .join('')
+              : '<option value="">default</option>'
+
+            const graphOptions = state.graphs.length
+              ? state.graphs
+                  .map((graph) => {
+                    const id = graph._id || graph.id || ''
+                    const name = graph.name || id
+                    const selectedAttr = id === state.selectedGraphId ? 'selected' : ''
+                    return '<option value="' + id + '" ' + selectedAttr + '>' + escapeHtml(name) + '</option>'
+                  })
+                  .join('')
+              : '<option value="">No graphs</option>'
+
+            const workspaceInfo = state.workspaceConfig?.workingFolder
+              ? 'Workspace: ' + escapeHtml(state.workspaceConfig.workingFolder)
+              : 'Workspace not configured'
+
+            const embeddingInfo = state.embeddingConfig?.provider
+              ? 'Embeddings: ' + escapeHtml(state.embeddingConfig.provider)
+              : 'Embeddings not configured'
+
             const html =
               '<div class="root">' +
                 '<div class="topbar">' +
@@ -1069,99 +1351,158 @@ export class ChatPanel {
                     '</span>' +
                   '</div>' +
                   '<div class="settings-bar">' +
-                    '<button class="btn secondary" id="healthCheck">Check health</button>' +
-                    '<button class="btn" id="saveSettings">Save settings</button>' +
+                    '<button class="btn secondary" id="reloadConfig">Reload</button>' +
+                    '<button class="btn secondary" id="openConfig">Config</button>' +
+                    '<button class="btn" id="saveSettings">Save</button>' +
                   '</div>' +
                 '</div>' +
-                '<aside class="sidebar">' +
-                  '<div class="runs-header">Runs</div>' +
-                  '<input id="runSearch" class="search-input" placeholder="Search runs..." value="' + escapeHtml(state.search) + '" />' +
-                  '<div class="run-meta">Filter tag</div>' +
-                  '<input id="tagFilter" class="search-input" placeholder="Tag name" value="' + escapeHtml(state.tagFilter) + '" />' +
-                  emptyRunsHtml +
-                  runItemsHtml +
-                '</aside>' +
-                '<main class="main">' +
-                  '<div class="actions-bar">' +
-                    '<button class="btn secondary" data-action="fix">Fix</button>' +
-                    '<button class="btn secondary" data-action="explain">Explain</button>' +
-                    '<button class="btn secondary" data-action="refactor">Refactor</button>' +
-                    '<button class="btn secondary" data-action="test">Test</button>' +
+                '<div class="drawer">' +
+                  '<div class="drawer-scroll">' +
+                    '<details class="section" open>' +
+                      '<summary>Chat</summary>' +
+                      '<div class="section-body">' +
+                        '<div class="prompt-header">' +
+                          '<span class="run-meta">Active run</span>' +
+                          '<div class="actions-bar">' +
+                            '<button class="btn secondary" data-action="fix">Fix</button>' +
+                            '<button class="btn secondary" data-action="explain">Explain</button>' +
+                            '<button class="btn secondary" data-action="refactor">Refactor</button>' +
+                            '<button class="btn secondary" data-action="test">Test</button>' +
+                          '</div>' +
+                        '</div>' +
+                        '<div class="chat-wrapper">' +
+                          '<div class="messages">' +
+                            messageHtml +
+                          '</div>' +
+                          '<div class="input-row">' +
+                            '<input id="agentInput" class="agent-input" placeholder="Agent ID" value="' + agentValue + '" />' +
+                            '<textarea id="promptInput" placeholder="Type a prompt..."></textarea>' +
+                            '<button class="btn" id="sendBtn">Send</button>' +
+                          '</div>' +
+                          '<div class="input-row">' +
+                            '<label class="run-meta" style="min-width:60px;">Graph</label>' +
+                            '<select id="graphSelect">' +
+                              graphOptions +
+                            '</select>' +
+                          '</div>' +
+                          '<div class="input-row">' +
+                            '<label class="run-meta" style="min-width:60px;">LLM</label>' +
+                            '<select id="llmProviderSelect">' +
+                              providerOptions +
+                            '</select>' +
+                            '<input id="llmModelInput" placeholder="Model" value="' + escapeHtml(getSelectedModel()) + '" />' +
+                          '</div>' +
+                        '</div>' +
+                      '</div>' +
+                    '</details>' +
+
+                    '<details class="section" open>' +
+                      '<summary>Runs</summary>' +
+                      '<div class="section-body">' +
+                        '<input id="runSearch" class="search-input" placeholder="Search runs..." value="' + escapeHtml(state.search) + '" />' +
+                        '<div class="run-meta">Filter tag</div>' +
+                        '<input id="tagFilter" class="search-input" placeholder="Tag name" value="' + escapeHtml(state.tagFilter) + '" />' +
+                        emptyRunsHtml +
+                        runItemsHtml +
+                      '</div>' +
+                    '</details>' +
+
+                    '<details class="section">' +
+                      '<summary>Settings</summary>' +
+                      '<div class="section-body">' +
+                        '<div class="run-meta" style="margin-bottom:0.4rem;">' + workspaceInfo + '</div>' +
+                        '<div class="run-meta" style="margin-bottom:0.6rem;">' + embeddingInfo + '</div>' +
+                        '<div class="settings-grid">' +
+                          '<label>Backend URL</label>' +
+                          '<input id="backendUrl" value="' + (state.backendUrl || '') + '" placeholder="http://localhost:3000" />' +
+                          '<label>API Token</label>' +
+                          '<input id="apiToken" type="password" value="' + (state.apiToken || '') + '" placeholder="optional" />' +
+                          '<label>LLM Provider</label>' +
+                          '<input id="llmProvider" value="' + (state.llm.provider || '') + '" placeholder="openai / ollama / anthropic" />' +
+                          '<label>LLM Base URL</label>' +
+                          '<input id="llmBaseUrl" value="' + (state.llm.baseUrl || '') + '" placeholder="optional" />' +
+                          '<label>LLM Model</label>' +
+                          '<input id="llmModel" value="' + (state.llm.model || '') + '" placeholder="model name" />' +
+                          '<label>LLM API Key</label>' +
+                          '<input id="llmApiKey" type="password" value="' + (state.llm.apiKey || '') + '" placeholder="optional" />' +
+                          '<div class="inline-fields">' +
+                            '<div>' +
+                              '<label>Temperature</label>' +
+                              '<input id="llmTemperature" type="number" step="0.1" value="' + (state.llm.temperature ?? 0.2) + '" />' +
+                            '</div>' +
+                            '<div>' +
+                              '<label>Max Tokens</label>' +
+                              '<input id="llmMaxTokens" type="number" step="1" value="' + (state.llm.maxTokens ?? 0) + '" />' +
+                            '</div>' +
+                          '</div>' +
+                        '</div>' +
+                      '</div>' +
+                    '</details>' +
+
+                    '<details class="section">' +
+                      '<summary>Memory</summary>' +
+                      '<div class="section-body">' +
+                        '<div class="settings-grid">' +
+                          '<label>Notes</label>' +
+                          '<textarea id="memoryNotes" rows="3" placeholder="Project notes">' + escapeHtml(state.memory.notes) + '</textarea>' +
+                          '<label>Rules</label>' +
+                          '<textarea id="memoryRules" rows="3" placeholder="Coding rules">' + escapeHtml(state.memory.rules) + '</textarea>' +
+                          '<label>Preferences</label>' +
+                          '<textarea id="memoryPrefs" rows="3" placeholder="Preferences">' + escapeHtml(state.memory.preferences) + '</textarea>' +
+                          '<button class="btn secondary" id="saveMemory">Save memory</button>' +
+                        '</div>' +
+                      '</div>' +
+                    '</details>' +
+
+                    '<details class="section">' +
+                      '<summary>Tags</summary>' +
+                      '<div class="section-body">' +
+                        '<div class="tag-row">' +
+                          tagHtml +
+                        '</div>' +
+                        '<div class="tag-input-row">' +
+                          '<input id="tagInput" placeholder="Add tags, comma separated" />' +
+                          '<button class="btn secondary" id="addTag">Add</button>' +
+                        '</div>' +
+                      '</div>' +
+                    '</details>' +
+
+                    '<details class="section">' +
+                      '<summary>Files / Edits</summary>' +
+                      '<div class="section-body">' +
+                        '<div class="files-panel">' +
+                          filesHtml +
+                        '</div>' +
+                      '</div>' +
+                    '</details>' +
+
+                    '<details class="section" open>' +
+                      '<summary>Diff</summary>' +
+                      '<div class="section-body">' +
+                        '<div class="diff">' + diffHtml + '</div>' +
+                        '<div style="margin-top:0.75rem; display:flex; gap:0.5rem;">' +
+                          '<button class="btn" id="applyDiff" ' + diffDisabled + '>Apply</button>' +
+                          '<button class="btn secondary" id="rejectDiff" ' + diffDisabled + '>Reject</button>' +
+                          '<button class="btn secondary" id="openDiff" ' + diffDisabled + '>Open diff</button>' +
+                        '</div>' +
+                      '</div>' +
+                    '</details>' +
+
+                    '<details class="section">' +
+                      '<summary>Artifacts</summary>' +
+                      '<div class="section-body">' +
+                        '<div class="artifact-section">' +
+                          '<div class="run-meta">Plans (' + artifacts.plans.length + ')</div>' +
+                          '<div class="artifact-body">' + artifacts.plans.map((item) => '<div class="artifact-item">' + escapeHtml(item) + '</div>').join('') + '</div>' +
+                          '<div class="run-meta">Patches (' + artifacts.patches.length + ')</div>' +
+                          '<div class="artifact-body">' + artifacts.patches.map((item) => '<div class="artifact-item">' + escapeHtml(item) + '</div>').join('') + '</div>' +
+                          '<div class="run-meta">Logs (' + artifacts.logs.length + ')</div>' +
+                          '<div class="artifact-body">' + artifacts.logs.map((item) => '<div class="artifact-item">' + escapeHtml(item) + '</div>').join('') + '</div>' +
+                        '</div>' +
+                      '</div>' +
+                    '</details>' +
                   '</div>' +
-                  '<div class="messages">' +
-                    messageHtml +
-                  '</div>' +
-                '</main>' +
-                '<div class="input-row">' +
-                  '<input id="agentInput" class="agent-input" placeholder="Agent ID" value="' + agentValue + '" />' +
-                  '<textarea id="promptInput" placeholder="Type a prompt..."></textarea>' +
-                  '<button class="btn" id="sendBtn">Send</button>' +
                 '</div>' +
-                '<aside class="right-panel">' +
-                  '<div class="section-title">Settings</div>' +
-                  '<div class="settings-grid">' +
-                    '<label>Backend URL</label>' +
-                    '<input id="backendUrl" value="' + (state.backendUrl || '') + '" placeholder="http://localhost:3000" />' +
-                    '<label>API Token</label>' +
-                    '<input id="apiToken" type="password" value="' + (state.apiToken || '') + '" placeholder="optional" />' +
-                    '<label>LLM Provider</label>' +
-                    '<input id="llmProvider" value="' + (state.llm.provider || '') + '" placeholder="openai / ollama / anthropic" />' +
-                    '<label>LLM Base URL</label>' +
-                    '<input id="llmBaseUrl" value="' + (state.llm.baseUrl || '') + '" placeholder="optional" />' +
-                    '<label>LLM Model</label>' +
-                    '<input id="llmModel" value="' + (state.llm.model || '') + '" placeholder="model name" />' +
-                    '<label>LLM API Key</label>' +
-                    '<input id="llmApiKey" type="password" value="' + (state.llm.apiKey || '') + '" placeholder="optional" />' +
-                    '<div class="inline-fields">' +
-                      '<div>' +
-                        '<label>Temperature</label>' +
-                        '<input id="llmTemperature" type="number" step="0.1" value="' + (state.llm.temperature ?? 0.2) + '" />' +
-                      '</div>' +
-                      '<div>' +
-                        '<label>Max Tokens</label>' +
-                        '<input id="llmMaxTokens" type="number" step="1" value="' + (state.llm.maxTokens ?? 0) + '" />' +
-                      '</div>' +
-                    '</div>' +
-                  '</div>' +
-                  '<div class="section-title" style="margin-top:1rem;">Memory</div>' +
-                  '<div class="settings-grid">' +
-                    '<label>Notes</label>' +
-                    '<textarea id="memoryNotes" rows="3" placeholder="Project notes">' + escapeHtml(state.memory.notes) + '</textarea>' +
-                    '<label>Rules</label>' +
-                    '<textarea id="memoryRules" rows="3" placeholder="Coding rules">' + escapeHtml(state.memory.rules) + '</textarea>' +
-                    '<label>Preferences</label>' +
-                    '<textarea id="memoryPrefs" rows="3" placeholder="Preferences">' + escapeHtml(state.memory.preferences) + '</textarea>' +
-                    '<button class="btn secondary" id="saveMemory">Save memory</button>' +
-                  '</div>' +
-                  '<div class="section-title" style="margin-top:1rem;">Tags</div>' +
-                  '<div class="tag-row">' +
-                    tagHtml +
-                  '</div>' +
-                  '<div class="tag-input-row">' +
-                    '<input id="tagInput" placeholder="Add tags, comma separated" />' +
-                    '<button class="btn secondary" id="addTag">Add</button>' +
-                  '</div>' +
-                  '<div class="section-title" style="margin-top:1rem;">Files / Edits</div>' +
-                  '<div class="files-panel">' +
-                    filesHtml +
-                  '</div>' +
-                  '<div class="section-title" style="margin-top:1rem;">Diff</div>' +
-                  '<div class="diff">' + diffHtml + '</div>' +
-                  '<div style="margin-top:0.75rem; display:flex; gap:0.5rem;">' +
-                    '<button class="btn" id="applyDiff" ' + diffDisabled + '>Apply diff</button>' +
-                    '<button class="btn secondary" id="rejectDiff" ' + diffDisabled + '>Reject</button>' +
-                    '<button class="btn secondary" id="openDiff" ' + diffDisabled + '>Open VS Code diff</button>' +
-                  '</div>' +
-                  '<div class="section-title" style="margin-top:1rem;">Artifacts</div>' +
-                  '<div class="artifact-section">' +
-                    '<div class="run-meta">Plans (' + artifacts.plans.length + ')</div>' +
-                    '<div class="artifact-body">' + artifacts.plans.map((item) => '<div class="artifact-item">' + escapeHtml(item) + '</div>').join('') + '</div>' +
-                    '<div class="run-meta">Patches (' + artifacts.patches.length + ')</div>' +
-                    '<div class="artifact-body">' + artifacts.patches.map((item) => '<div class="artifact-item">' + escapeHtml(item) + '</div>').join('') + '</div>' +
-                    '<div class="run-meta">Logs (' + artifacts.logs.length + ')</div>' +
-                    '<div class="artifact-body">' + artifacts.logs.map((item) => '<div class="artifact-item">' + escapeHtml(item) + '</div>').join('') + '</div>' +
-                  '</div>' +
-                '</aside>' +
               '</div>'
 
             root.innerHTML = html
@@ -1186,6 +1527,10 @@ export class ChatPanel {
             if (rejectBtn) rejectBtn.addEventListener('click', handleReject)
             const saveBtn = document.getElementById('saveSettings')
             if (saveBtn) saveBtn.addEventListener('click', saveSettings)
+            const reloadBtn = document.getElementById('reloadConfig')
+            if (reloadBtn) reloadBtn.addEventListener('click', () => vscode.postMessage({ type: 'loadConfig' }))
+            const openConfigBtn = document.getElementById('openConfig')
+            if (openConfigBtn) openConfigBtn.addEventListener('click', () => vscode.postMessage({ type: 'openConfigPage' }))
             const memoryBtn = document.getElementById('saveMemory')
             if (memoryBtn) memoryBtn.addEventListener('click', saveMemory)
             const addTagBtn = document.getElementById('addTag')
@@ -1199,6 +1544,18 @@ export class ChatPanel {
             if (tagFilter) tagFilter.addEventListener('input', (event) => {
               state.tagFilter = event.target.value
               render()
+            })
+            const graphSelect = document.getElementById('graphSelect')
+            if (graphSelect) graphSelect.addEventListener('change', (event) => {
+              setGraph(event.target.value)
+            })
+            const providerSelect = document.getElementById('llmProviderSelect')
+            if (providerSelect) providerSelect.addEventListener('change', (event) => {
+              setLlmSelection(event.target.value, getSelectedModel())
+            })
+            const modelInput = document.getElementById('llmModelInput')
+            if (modelInput) modelInput.addEventListener('input', (event) => {
+              setLlmSelection(getSelectedProvider(), event.target.value)
             })
             const healthBtn = document.getElementById('healthCheck')
             if (healthBtn) healthBtn.addEventListener('click', () => vscode.postMessage({ type: 'checkHealth' }))
@@ -1223,6 +1580,11 @@ export class ChatPanel {
                 llm: message.state.llm || state.llm,
                 apiToken: message.state.apiToken || '',
                 memory: message.state.memory || state.memory,
+                graphs: message.state.graphs || [],
+                selectedGraphId: message.state.selectedGraphId || '',
+                llmConfig: message.state.llmConfig || null,
+                embeddingConfig: message.state.embeddingConfig || null,
+                workspaceConfig: message.state.workspaceConfig || null,
               })
               return
             }

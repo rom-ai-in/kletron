@@ -124,6 +124,70 @@ export class BackendClient {
     return this.fetchJson<{ ok: boolean }>('/api/health')
   }
 
+  async getWorkspaceConfig() {
+    return this.fetchJson<any>('/api/config')
+  }
+
+  async getLlmConfig() {
+    return this.fetchJson<any>('/api/llm-config')
+  }
+
+  async getEmbeddingConfig() {
+    return this.fetchJson<any>('/api/embedding-config')
+  }
+
+  async testLlmConfig(provider: string, config: Record<string, unknown>) {
+    return this.fetchJson<any>('/api/llm-config/test', {
+      method: 'POST',
+      body: JSON.stringify({ provider, config }),
+    })
+  }
+
+  async listAgentGraphs() {
+    return this.fetchJson<{ graphs: any[] }>('/api/agent-graphs')
+  }
+
+  async runAgentGraphStream(
+    graphId: string,
+    message: string,
+    selection: { provider?: string; model?: string },
+    onChunk: (chunk: any) => void
+  ) {
+    this.assertConfigured()
+    const res = await fetch(`${this.baseUrl}/api/agent-graphs/${graphId}/stream`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        message,
+        provider: selection.provider,
+        model: selection.model,
+      }),
+    })
+
+    if (!res.ok || !res.body) {
+      const payload = await res.text()
+      throw new Error(`Graph stream failed (${res.status}): ${payload}`)
+    }
+
+    let buffer = ''
+    for await (const chunk of res.body as any) {
+      buffer += chunk.toString('utf8')
+      let index = buffer.indexOf('\n')
+      while (index !== -1) {
+        const line = buffer.slice(0, index).trim()
+        buffer = buffer.slice(index + 1)
+        if (line) {
+          try {
+            onChunk(JSON.parse(line))
+          } catch {
+            onChunk({ type: 'error', payload: { message: line } })
+          }
+        }
+        index = buffer.indexOf('\n')
+      }
+    }
+  }
+
   subscribeToRun(runId: string, onUpdate: (status: RunStatusResponse) => void) {
     let cancelled = false
 
