@@ -287,3 +287,154 @@ export function createTerminalWorkerLauncher(options?: { watch?: boolean }) {
     stdio: "pipe",
   });
 }
+
+/**
+ * Creates a launcher for Numezis Code IDE (Code-OSS fork)
+ * Launches the Electron app directly using scripts/code.sh
+ * Also starts `npm run watch` for hot-reload during development
+ */
+export function createNumezisCodeLauncher(options?: { skipPrelaunch?: boolean }): ChildProcess | null {
+  const cwd = path.resolve(process.cwd(), "numezis-code-oss");
+
+  // Check if the directory exists
+  if (!fsSync.existsSync(cwd)) {
+    console.warn("⚠️  numezis-code-oss directory not found, skipping Code IDE launcher");
+    return null;
+  }
+
+  const skipPrelaunch = options?.skipPrelaunch ?? true;
+
+  // Start the watch process for hot reload in the background
+  const watchCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+  console.log(`🔧 Starting Numezis Code watcher: npm run watch (in ${cwd})`);
+  const watchChild = spawn(watchCommand, ["run", "watch"], {
+    cwd,
+    env: { ...process.env, FORCE_COLOR: "1" },
+    stdio: "pipe",
+  });
+
+  watchChild.on("error", (error) => {
+    console.error("❌ Numezis Code watcher error:", error);
+  });
+
+  // Track compilation complete signal from watch process
+  let compilationComplete = false;
+  let compilationError = false;
+
+  // Monitor watch output for compilation complete signal
+  if (watchChild.stdout) {
+    watchChild.stdout.on("data", (buf) => {
+      const output = buf.toString();
+      process.stdout.write(`[numezis-code:watch] ${output}`);
+      // Look for multiple possible completion signals (case insensitive, flexible matching):
+      const lowerOutput = output.toLowerCase();
+      if (
+        (lowerOutput.includes("finished compilation") && !lowerOutput.includes("extensions")) ||
+        lowerOutput.includes("watch-out") ||
+        lowerOutput.includes("finished clean-out")
+      ) {
+        compilationComplete = true;
+      }
+      // Check for compilation errors
+      if (output.includes("ERROR:") || output.includes("exited with 1")) {
+        compilationError = true;
+      }
+    });
+  }
+  if (watchChild.stderr) {
+    watchChild.stderr.on("data", (buf) => {
+      process.stderr.write(`[numezis-code:watch] ${buf.toString()}`);
+    });
+  }
+
+  // Wait for compilation to complete
+  const waitForCompilation = async () => {
+    // Check for VS Code's actual output structure (out/vs/code/electron-main)
+    const vsCodeOutputPath = path.join(cwd, "out", "vs", "code", "electron-main");
+    const pollIntervalMs = 1000;
+    const startTime = Date.now();
+
+    console.log(`⏳ Waiting for compilation to complete...`);
+
+    // First wait for the VS Code output directory to exist (max 90 seconds)
+    let outputFound = false;
+    while (Date.now() - startTime < 90000) {
+      if (fsSync.existsSync(vsCodeOutputPath)) {
+        outputFound = true;
+        console.log(`✅ out/vs/code/electron-main found.`);
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    }
+
+    if (!outputFound) {
+      console.warn(`⚠️ VS Code output not found after 90s - IDE may not launch correctly`);
+      return false;
+    }
+
+    // Once output exists, wait up to 30 more seconds for compilation signal
+    // or wait for the client side compilation to finish
+    const afterOutputTime = Date.now();
+    while (Date.now() - afterOutputTime < 30000) {
+      if (compilationComplete) {
+        console.log(`✅ Compilation complete signal received.`);
+        return true;
+      }
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    }
+
+    // Fallback: output exists, proceed anyway
+    console.log(`✅ Proceeding with IDE launch (output exists, compilation likely complete).`);
+    return true;
+  };
+
+  // Launch the Electron IDE after compilation completes
+  waitForCompilation().then((ready) => {
+    if (!ready) {
+      console.warn(`⚠️ Launching IDE anyway, but it may fail...`);
+    }
+
+    const scriptPath = path.join(cwd, "scripts", "code.sh");
+
+    if (!fsSync.existsSync(scriptPath)) {
+      console.warn("⚠️  scripts/code.sh not found, cannot launch IDE");
+      return;
+    }
+
+    console.log(`🚀 Launching Numezis Code IDE: ./scripts/code.sh (in ${cwd})`);
+    const ideChild = spawn("bash", [scriptPath], {
+      cwd,
+      env: {
+        ...process.env,
+        FORCE_COLOR: "1",
+        VSCODE_SKIP_PRELAUNCH: skipPrelaunch ? "1" : "",
+        NODE_ENV: "development",
+        VSCODE_DEV: "1",
+      },
+      stdio: "pipe",
+      detached: true, // Let the IDE run independently
+    });
+
+    ideChild.on("exit", (code, signal) => {
+      console.log(`⚠️ Numezis Code IDE exited (code=${code ?? "n/a"}, signal=${signal ?? "n/a"}).`);
+    });
+
+    ideChild.on("error", (error) => {
+      console.error("❌ Numezis Code IDE error:", error);
+    });
+
+    if (ideChild.stdout && ideChild.stderr) {
+      ideChild.stdout.on("data", (buf) => {
+        process.stdout.write(`[numezis-code:ide] ${buf.toString()}`);
+      });
+      ideChild.stderr.on("data", (buf) => {
+        process.stderr.write(`[numezis-code:ide] ${buf.toString()}`);
+      });
+    }
+
+    // Unref so it doesn't block the parent from exiting immediately
+    ideChild.unref();
+  });
+
+  return watchChild;
+}

@@ -2,11 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Layers, Wrench, ListTree } from "lucide-react";
-
-import { Panel } from "@/src/components/ui/Panel";
-import { Button } from "@/src/components/ui/Button";
-import { Modal } from "@/src/components/ui/Modal";
-import { Skeleton } from "@/src/components/ui/Skeleton";
+import { Panel, Button, Modal, Skeleton } from "@/src/components/design-system";
 
 export function GraphsConfigView() {
   const [graphs, setGraphs] = useState<any[]>([]);

@@ -59,3 +59,7 @@ export async function closeDb() {
         await client.close();
     }
 }
+
+// Aliases for backward compatibility with services migrating from mongoClient.ts
+export const getDatabase = getDb;
+export const closeMongoConnection = closeDb;

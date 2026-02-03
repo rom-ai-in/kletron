@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Modal } from "./ui/Modal";
-import { Skeleton } from "./ui/Skeleton";
+import { Modal, Skeleton } from "@/src/components/design-system";
 import { StageDetailModal } from "./StageDetailModal";
 import { CheckCircle2, AlertCircle, Clock, PlayCircle, ChevronRight, GitBranch, Copy, Check, Loader2 } from "lucide-react";
 import type { AgentEvent } from "../types";

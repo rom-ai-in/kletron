@@ -18,7 +18,7 @@ const { mockDb, mockCollection } = vi.hoisted(() => {
     };
 });
 
-vi.mock('../../services/mongoClient', () => ({
+vi.mock('../../lib/db', () => ({
     getDatabase: vi.fn().mockResolvedValue(mockDb),
 }));
 

@@ -4,10 +4,17 @@ export const dynamic = "force-dynamic";
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Panel } from "@/src/components/ui/Panel";
-import { Button } from "@/src/components/ui/Button";
+import {
+    Panel,
+    Button,
+    SearchInput,
+    Badge,
+    EmptyState,
+    LoadingState,
+    ErrorState,
+} from "@/src/components/design-system";
 import type { AuditRun, ChainStatus } from "@/src/services/chainTypes";
-import { PlayCircle, Search } from "lucide-react";
+import { PlayCircle } from "lucide-react";
 
 type FilterStatus = "all" | "running" | "completed" | "failed" | "cancelled";
 
@@ -130,16 +137,13 @@ function RunsPageContent() {
 
             {/* Filters */}
             <div className="flex items-center gap-4 border-b border-border-subtle bg-bg-surface px-6 py-3">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-                    <input
-                        type="text"
-                        placeholder="Search runs by campaign or ID..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full rounded-md border border-border-subtle bg-bg-elevated pl-10 pr-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-focus-ring"
-                    />
-                </div>
+                <SearchInput
+                    placeholder="Search runs by campaign or ID..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onClear={() => setSearchQuery("")}
+                    className="flex-1"
+                />
                 <div className="flex gap-2">
                     <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>
                         All
@@ -161,17 +165,9 @@ function RunsPageContent() {
 
             {/* Runs List */}
             <div className="flex-1 overflow-y-auto scrollbar-elegant p-6 text-text-primary">
-                {loading && (
-                    <div className="flex items-center justify-center py-12">
-                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-border-subtle border-t-text-muted" />
-                    </div>
-                )}
+                {loading && <LoadingState message="Loading execution runs..." />}
 
-                {error && (
-                    <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-4 text-center text-sm text-rose-300">
-                        Error: {error}
-                    </div>
-                )}
+                {error && <ErrorState message={error} onRetry={() => void fetchRuns()} />}
 
                 {!loading && !error && (
                     <div className="space-y-4">
@@ -228,9 +224,11 @@ function RunsPageContent() {
                         ))}
 
                         {filteredRuns.length === 0 && (
-                            <div className="rounded-lg border border-dashed border-border-subtle p-12 text-center text-sm text-text-muted">
-                                {searchQuery ? "No runs match your search" : "No execution runs found."}
-                            </div>
+                            <EmptyState
+                                variant={searchQuery ? "search" : "no-data"}
+                                title={searchQuery ? "No runs match your search" : "No execution runs found"}
+                                description={searchQuery ? "Try adjusting your search criteria." : "Execute a campaign to see runs here."}
+                            />
                         )}
                     </div>
                 )}
@@ -262,24 +260,24 @@ function FilterButton({
 }
 
 function StatusBadge({ status }: { status: ChainStatus }) {
-    const styles: Record<ChainStatus, string> = {
-        COMPLETED: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-        FAILED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
-        RUNNING: "bg-zinc-400/10 text-zinc-300 border-zinc-400/20",
-        PENDING: "bg-bg-elevated text-text-muted border-border-subtle",
-        PAUSED: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
-        CANCELLED: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
+    const variantMap: Record<ChainStatus, "completed" | "failed" | "running" | "pending" | "paused" | "default"> = {
+        COMPLETED: "completed",
+        FAILED: "failed",
+        RUNNING: "running",
+        PENDING: "pending",
+        PAUSED: "paused",
+        CANCELLED: "default",
     };
 
     return (
-        <span
-            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${styles[status]}`}
+        <Badge
+            variant={variantMap[status]}
+            size="sm"
+            showIcon={status === "RUNNING"}
+            spinning={status === "RUNNING"}
         >
-            {status === "RUNNING" && (
-                <span className="mr-1.5 h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-            )}
             {status}
-        </span>
+        </Badge>
     );
 }
 

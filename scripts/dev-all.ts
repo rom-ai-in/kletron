@@ -6,6 +6,7 @@ import {
   createDriftAnalysisWorkerLauncher,
   createTerminalWorkerLauncher,
   createWebLauncher,
+  createNumezisCodeLauncher,
   requireTargetRepoRoot,
   waitForHttpOk,
 } from "./lib/serviceLauncher.js";
@@ -37,7 +38,8 @@ async function main() {
     createI18nProcessWorkerLauncher({ watch: true }),
     createDriftAnalysisWorkerLauncher({ watch: true }),
     createTerminalWorkerLauncher({ watch: true }),
-  ];
+    createNumezisCodeLauncher(),
+  ].filter(Boolean);
 
   console.log("⏳ Waiting for MCP + LangGraph dev server...");
   await waitForHttpOk(MCP_HEALTH, { timeoutMs: 20_000 });
@@ -50,7 +52,7 @@ async function main() {
     console.log("\n🛑 Stopping dev services...");
     for (const child of children) {
       try {
-        child.kill("SIGTERM");
+        if (child) child.kill("SIGTERM");
       } catch {
         // ignore silently
       }

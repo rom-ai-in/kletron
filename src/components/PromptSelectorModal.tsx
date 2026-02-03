@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Modal } from "./ui/Modal";
-import { Skeleton } from "./ui/Skeleton";
+import { Modal, Skeleton } from "@/src/components/design-system";
 
 interface PromptFile {
     name: string;

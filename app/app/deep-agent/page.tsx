@@ -12,7 +12,7 @@ import type {
 } from "@/src/types";
 import { graphOptions } from "@/src/shared/graphCatalog";
 import type { GraphId } from "@/src/shared/graphCatalog";
-import { Selector } from "@/src/components/ui/Selector";
+import { Selector } from "@/src/components/design-system";
 import {
   formatAuditContextSummary,
   normalizeAuditContext,
@@ -137,7 +137,7 @@ const parseMultilineList = (value: string) =>
     .map((line) => line.replace(/^\s*[-*]\s*/, "").trim())
     .filter(Boolean);
 
-import { Modal } from "@/src/components/ui/Modal";
+import { Modal } from "@/src/components/design-system";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 

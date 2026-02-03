@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useAuth } from '@/src/context/AuthContext';
 
-const extensionUrl = 'https://marketplace.visualstudio.com/items?itemName=numezis.code'
+const downloadUrl = '/pricing' // Points to pricing page with download links
 
 // Feature data - using muted zinc colors instead of vibrant gradients
 const features = [
@@ -32,14 +32,14 @@ const features = [
     ),
   },
   {
-    id: 'vscode',
-    title: 'Native VS Code Experience',
-    subtitle: 'Your favorite editor, supercharged',
-    description: 'No separate app, no context switching. Numezis Code lives where you code—with full access to your workspace, terminals, and extensions.',
-    bullets: ['Zero context switching', 'Access to terminals', 'Extension ecosystem', 'Native keybindings'],
+    id: 'ide',
+    title: 'Full AI-Powered IDE',
+    subtitle: 'Built on VS Code, designed for AI',
+    description: 'A complete desktop IDE with AI deeply integrated. Full access to your workspace, terminals, and extensions—plus exclusive agentic features not possible in extensions.',
+    bullets: ['Native desktop app', 'Full terminal access', 'Extension ecosystem', 'Agentic workflows'],
     icon: (
-      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z" />
+      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
       </svg>
     ),
   },
@@ -167,7 +167,7 @@ export default function HomePage() {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border-subtle bg-bg-surface mb-6 text-xs text-text-muted">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            Now available for VS Code
+            Available for macOS, Windows & Linux
           </div>
 
           {/* Main headline */}
@@ -185,17 +185,15 @@ export default function HomePage() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-3 mb-12">
-            <a
-              href={extensionUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href={downloadUrl}
               className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-5 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z" />
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              Install for VS Code
-            </a>
+              Download Numezis Code
+            </Link>
             <a
               href="#features"
               className="inline-flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-bg-surface hover:bg-bg-elevated px-5 py-2.5 text-sm font-medium text-text-primary transition-colors"
@@ -214,7 +212,7 @@ export default function HomePage() {
                 <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
               </div>
               <div className="flex-1 text-center">
-                <span className="text-[10px] text-text-muted font-mono">numezis-code — VS Code Extension</span>
+                <span className="text-[10px] text-text-muted font-mono">Numezis Code — AI-Powered IDE</span>
               </div>
             </div>
             {/* Code content */}
@@ -362,97 +360,45 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Why Keep Code in Europe Section */}
-      <section className="py-20 px-6">
+      {/* Data Sovereignty - Compact Version */}
+      <section className="py-12 px-6">
         <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl sm:text-3xl font-semibold text-text-primary mb-3">
-              Why EU entrepreneurs should never ship code to the US
-            </h2>
-            <p className="text-sm text-text-muted max-w-lg mx-auto">
-              Every line of code you send to US-based AI tools becomes subject to American surveillance laws.
-              Here's what that means for your business.
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            {/* CLOUD Act */}
-            <div className="p-5 rounded-lg border border-border-subtle bg-bg-surface">
-              <div className="flex items-start gap-4">
-                <div className="shrink-0 w-8 h-8 rounded-md bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
-                  ⚖️
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-text-primary mb-1">CLOUD Act (2018)</h3>
-                  <p className="text-xs text-text-muted leading-relaxed">
-                    US law enforcement can compel any US company to hand over data stored anywhere in the world—including
-                    your proprietary source code, API keys, and business logic. No EU court approval required.
-                    Companies like Microsoft, GitHub, and OpenAI must comply or face prosecution.
-                  </p>
-                </div>
-              </div>
+          {/* Single compact card */}
+          <div className="p-6 rounded-lg border border-border-subtle bg-bg-surface">
+            <div className="text-center mb-6">
+              <h2 className="text-lg font-semibold text-text-primary mb-2">
+                Why code sovereignty matters
+              </h2>
+              <p className="text-xs text-text-muted max-w-md mx-auto">
+                US-based AI tools may expose your code to CLOUD Act requests, FISA surveillance, and GDPR compliance risks.
+              </p>
             </div>
 
-            {/* FISA 702 */}
-            <div className="p-5 rounded-lg border border-border-subtle bg-bg-surface">
-              <div className="flex items-start gap-4">
-                <div className="shrink-0 w-8 h-8 rounded-md bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
-                  👁️
+            {/* Horizontal risk badges */}
+            <div className="flex flex-wrap justify-center gap-2 mb-6">
+              {[
+                { icon: '⚖️', label: 'CLOUD Act', risk: 'Data requests' },
+                { icon: '👁️', label: 'FISA 702', risk: 'Surveillance' },
+                { icon: '🏛️', label: 'Schrems II', risk: 'GDPR gaps' },
+                { icon: '💼', label: 'IP Rights', risk: 'Training data' },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-subtle bg-bg-elevated text-xs"
+                >
+                  <span>{item.icon}</span>
+                  <span className="text-text-secondary font-medium">{item.label}</span>
+                  <span className="text-text-muted">→ {item.risk}</span>
                 </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-text-primary mb-1">FISA Section 702</h3>
-                  <p className="text-xs text-text-muted leading-relaxed">
-                    Allows warrantless surveillance of non-US persons. The NSA can access data from any US cloud provider
-                    without notifying you. Your startup's AI training data, customer algorithms, and competitive
-                    advantages—all accessible to US intelligence agencies.
-                  </p>
-                </div>
-              </div>
+              ))}
             </div>
 
-            {/* Schrems II */}
-            <div className="p-5 rounded-lg border border-border-subtle bg-bg-surface">
-              <div className="flex items-start gap-4">
-                <div className="shrink-0 w-8 h-8 rounded-md bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                  🏛️
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-text-primary mb-1">Schrems II Ruling</h3>
-                  <p className="text-xs text-text-muted leading-relaxed">
-                    The EU Court of Justice invalidated Privacy Shield because US law provides no adequate protection
-                    for EU citizens' data. Using US AI tools for code generation may put you in violation of GDPR.
-                    Fines up to €20M or 4% of global annual revenue.
-                  </p>
-                </div>
-              </div>
+            {/* CTA strip */}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4 border-t border-border-subtle">
+              <p className="text-xs text-text-muted">
+                Numezis Code: <span className="text-text-secondary">Swiss HQ</span> • <span className="text-text-secondary">EU data centers</span> • <span className="text-text-secondary">No US parent</span>
+              </p>
             </div>
-
-            {/* IP Risks */}
-            <div className="p-5 rounded-lg border border-border-subtle bg-bg-surface">
-              <div className="flex items-start gap-4">
-                <div className="shrink-0 w-8 h-8 rounded-md bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                  💼
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-text-primary mb-1">Intellectual Property at Risk</h3>
-                  <p className="text-xs text-text-muted leading-relaxed">
-                    When you send code to US AI services, you're often granting them training rights. Your proprietary
-                    algorithms could end up improving competitors' tools. Patent applications may be compromised.
-                    Trade secrets lose their legal protection once disclosed.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom CTA */}
-          <div className="mt-10 p-5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-center">
-            <p className="text-sm font-medium text-text-primary mb-2">
-              With Numezis Code, your intellectual property stays under European law.
-            </p>
-            <p className="text-xs text-text-muted">
-              Swiss incorporation • EU data centers • No US parent company • No backdoors
-            </p>
           </div>
         </div>
       </section>
@@ -493,7 +439,7 @@ export default function HomePage() {
                   'Local LLM Support',
                   'EU Data Residency',
                   'No CLOUD Act',
-                  'VS Code Native',
+                  'Full Desktop IDE',
                 ].map((feature) => (
                   <div key={feature} className="flex items-center gap-2 text-xs">
                     <span className="text-emerald-500 text-sm">✓</span>
@@ -914,21 +860,19 @@ export default function HomePage() {
             Ready to code with <span className="text-text-secondary">true AI power</span>?
           </h2>
           <p className="text-sm text-text-muted mb-8">
-            Install the VS Code extension and experience the future of AI-assisted development.
+            Download the desktop IDE and experience the future of AI-assisted development.
             Free to start, no credit card required.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <a
-              href={extensionUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href={downloadUrl}
               className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-5 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z" />
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              Install for VS Code — Free
-            </a>
+              Download for Free
+            </Link>
             <Link
               href="/auth/register"
               className="inline-flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-bg-surface hover:bg-bg-elevated px-5 py-2.5 text-sm font-medium text-text-primary transition-colors"

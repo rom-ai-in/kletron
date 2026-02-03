@@ -51,6 +51,172 @@
   --chain-paused: #f59e0b;
   /* Amber 500 */
 
+  /* ============================================
+     Design System v4.0 - Numezis Code Fork Tokens
+     Exact values from numezis-code-oss/extensions/theme-2026/themes/2026-dark.json
+     ============================================ */
+
+  /* Editor Core */
+  --vscode-editor-background: #121314;
+  --vscode-editor-foreground: #BBBEBF;
+  --vscode-editorLineNumber-foreground: #858889;
+  --vscode-editorLineNumber-activeForeground: #BBBEBF;
+  --vscode-editor-selectionBackground: #3994BC33;
+  --vscode-editor-lineHighlightBackground: #242526;
+
+  /* Sidebar / Primary Panel */
+  --vscode-sideBar-background: #191A1B;
+  --vscode-sideBar-foreground: #bfbfbf;
+  --vscode-sideBar-border: #2A2B2CFF;
+  --vscode-sideBarTitle-foreground: #bfbfbf;
+  --vscode-sideBarSectionHeader-background: #191A1B;
+  --vscode-sideBarSectionHeader-border: #2A2B2CFF;
+
+  /* Activity Bar */
+  --vscode-activityBar-background: #191A1B;
+  --vscode-activityBar-foreground: #bfbfbf;
+  --vscode-activityBar-inactiveForeground: #888888;
+  --vscode-activityBar-border: #2A2B2CFF;
+  --vscode-activityBar-activeBorder: #bfbfbf;
+  --vscode-activityBarBadge-background: #3994BC;
+  --vscode-activityBarBadge-foreground: #FFFFFF;
+
+  /* Title Bar */
+  --vscode-titleBar-activeBackground: #191A1B;
+  --vscode-titleBar-activeForeground: #bfbfbf;
+  --vscode-titleBar-inactiveBackground: #191A1B;
+  --vscode-titleBar-inactiveForeground: #888888;
+  --vscode-titleBar-border: #2A2B2CFF;
+
+  /* Tab Bar */
+  --vscode-tab-activeBackground: #121314;
+  --vscode-tab-activeForeground: #bfbfbf;
+  --vscode-tab-inactiveBackground: #191A1B;
+  --vscode-tab-inactiveForeground: #888888;
+  --vscode-tab-border: #2A2B2CFF;
+  --vscode-tab-activeBorderTop: #3994BC;
+  --vscode-editorGroupHeader-tabsBackground: #191A1B;
+  --vscode-editorGroupHeader-tabsBorder: #2A2B2CFF;
+
+  /* Status Bar */
+  --vscode-statusBar-background: #191A1B;
+  --vscode-statusBar-foreground: #888888;
+  --vscode-statusBar-border: #2A2B2CFF;
+  --vscode-statusBar-debuggingBackground: #3994BC;
+  --vscode-statusBar-debuggingForeground: #FFFFFF;
+  --vscode-statusBarItem-prominentBackground: #3994BC;
+  --vscode-statusBarItem-prominentForeground: #FFFFFF;
+  --vscode-statusBarItem-hoverBackground: #262728;
+
+  /* Panel (Terminal, Output) */
+  --vscode-panel-background: #191A1B;
+  --vscode-panel-border: #2A2B2CFF;
+  --vscode-panelTitle-activeBorder: #3994BC;
+  --vscode-panelTitle-activeForeground: #bfbfbf;
+  --vscode-panelTitle-inactiveForeground: #888888;
+
+  /* Input / Quick Pick */
+  --vscode-input-background: #191A1B;
+  --vscode-input-border: #333536FF;
+  --vscode-input-foreground: #bfbfbf;
+  --vscode-input-placeholderForeground: #777777;
+  --vscode-quickInput-background: #202122;
+  --vscode-quickInput-foreground: #bfbfbf;
+  --vscode-quickInputList-focusBackground: #3994BC26;
+
+  /* Buttons */
+  --vscode-button-background: #3994BC;
+  --vscode-button-foreground: #FFFFFF;
+  --vscode-button-hoverBackground: #3E9BC4;
+  --vscode-button-border: #2A2B2CFF;
+
+  /* Badges */
+  --vscode-badge-background: #3994BC;
+  --vscode-badge-foreground: #FFFFFF;
+
+  /* Lists */
+  --vscode-list-activeSelectionBackground: #3994BC55;
+  --vscode-list-activeSelectionForeground: #bfbfbf;
+  --vscode-list-hoverBackground: #262728;
+  --vscode-list-hoverForeground: #bfbfbf;
+  --vscode-list-inactiveSelectionBackground: #2C2D2E;
+
+  /* Git Decorations */
+  --vscode-gitDecoration-addedResourceForeground: #73c991;
+  --vscode-gitDecoration-modifiedResourceForeground: #e5ba7d;
+  --vscode-gitDecoration-deletedResourceForeground: #f48771;
+
+  /* Diff Editor */
+  --vscode-diffEditor-insertedTextBackground: #72C89233;
+  --vscode-diffEditor-removedTextBackground: #F2877233;
+  --vscode-editorGutter-addedBackground: #72C892;
+  --vscode-editorGutter-deletedBackground: #F28772;
+
+  /* Notifications */
+  --vscode-notifications-background: #202122;
+  --vscode-notifications-foreground: #bfbfbf;
+  --vscode-notifications-border: #2A2B2CFF;
+
+  /* Primary accent (Numezis Code brand - teal/cyan) */
+  --numezis-accent: #3994BC;
+  --numezis-accent-hover: #3E9BC4;
+  --numezis-accent-muted: #3994BC26;
+
+  /* ============================================
+     Agent Interaction Tokens (Cursor-Style)
+     ============================================ */
+
+  /* Semantic Agent Colors */
+  --agent-thinking: #8b5cf6;
+  /* Violet-500 - Reasoning */
+  --agent-thinking-bg: rgba(139, 92, 246, 0.1);
+  --agent-thinking-border: rgba(167, 139, 250, 0.4);
+  --agent-thinking-text: #c4b5fd;
+  /* Violet-300 */
+
+  --agent-tool: #f59e0b;
+  /* Amber-500 - Tool execution */
+  --agent-tool-bg: rgba(245, 158, 11, 0.1);
+  --agent-tool-border: rgba(251, 191, 36, 0.4);
+  --agent-tool-text: #fcd34d;
+  /* Amber-300 */
+
+  --agent-success: #22c55e;
+  /* Emerald-500 - Completed */
+  --agent-success-bg: rgba(34, 197, 94, 0.1);
+  --agent-success-border: rgba(34, 197, 94, 0.4);
+
+  --agent-error: #f43f5e;
+  /* Rose-500 - Failed */
+  --agent-error-bg: rgba(244, 63, 94, 0.1);
+  --agent-error-border: rgba(244, 63, 94, 0.4);
+
+  --agent-running: #0ea5e9;
+  /* Sky-500 - In progress */
+  --agent-running-bg: rgba(14, 165, 233, 0.1);
+  --agent-running-border: rgba(56, 189, 248, 0.4);
+
+  --agent-pending: #71717a;
+  /* Zinc-500 - Waiting */
+  --agent-pending-bg: rgba(113, 113, 122, 0.1);
+  --agent-pending-border: rgba(113, 113, 122, 0.4);
+
+  /* ============================================
+     Motion Primitives
+     ============================================ */
+
+  --anim-duration-fast: 0.15s;
+  --anim-duration-normal: 0.3s;
+  --anim-duration-slow: 0.5s;
+  --anim-ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --anim-ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+  /* High-density sidebar tokens */
+  --sidebar-density-padding: 6px 8px;
+  --sidebar-density-gap: 4px;
+  --sidebar-density-font: 12px;
+  --sidebar-density-icon: 16px;
+
   color: var(--text-primary);
   background: var(--bg-app);
 }

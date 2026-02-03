@@ -5,8 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-import { Panel } from "@/src/components/ui/Panel";
-import { Button } from "@/src/components/ui/Button";
+import {
+    Panel,
+    Button,
+    Badge,
+    SearchInput,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+} from "@/src/components/design-system";
 import {
     Terminal,
     Layers,
@@ -162,16 +169,13 @@ function HistoryPageContent() {
 
             {/* FIlter bar */}
             <div className="flex items-center gap-4 border-b border-border-subtle bg-bg-surface px-6 py-3">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-                    <input
-                        type="text"
-                        placeholder="Search activity by title or conclusion..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full rounded-md border border-border-subtle bg-bg-elevated pl-10 pr-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-focus-ring"
-                    />
-                </div>
+                <SearchInput
+                    placeholder="Search activity by title or conclusion..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onClear={() => setSearchQuery("")}
+                    className="flex-1"
+                />
                 <div className="flex gap-2">
                     <FilterButton
                         active={filter === "all"}
@@ -246,25 +250,17 @@ function HistoryPageContent() {
                             </div>
                         </div>
                     )}
-                    {loading && (
-                        <div className="flex items-center justify-center py-20">
-                            <div className="h-6 w-6 animate-spin rounded-full border-2 border-border-subtle border-t-text-muted" />
-                        </div>
-                    )}
+                    {loading && <LoadingState message="Loading activity history..." />}
 
-                    {!loading && error && (
-                        <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-4 text-center text-sm text-rose-300">
-                            Error: {error}
-                        </div>
-                    )}
+                    {!loading && error && <ErrorState message={error} onRetry={() => void fetchActivity()} />}
 
                     {!loading && !error && filteredActivity.length === 0 && (
-                        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border-subtle bg-bg-surface p-20 text-center">
-                            <Activity className="mb-4 h-10 w-10 text-text-muted opacity-20" />
-                            <p className="text-sm text-text-muted">
-                                {searchQuery ? "No activity matches your search." : "No activity history found yet."}
-                            </p>
-                        </div>
+                        <EmptyState
+                            icon={<Activity className="h-10 w-10" />}
+                            variant={searchQuery ? "search" : "no-data"}
+                            title={searchQuery ? "No activity matches your search" : "No activity history found yet"}
+                            description={searchQuery ? "Try adjusting your search criteria." : "Start a deep agent session or campaign to see activity here."}
+                        />
                     )}
 
                     {!loading && !error && filteredActivity.map((item) => (

@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Globe, RefreshCw, Upload, Search, AlertTriangle, ChevronDown, Check, Download } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@/src/components/ui/Button";
+import { Button } from "@/src/components/design-system";
 import type { I18nStatus, TranslationRecord } from "@/src/services/i18nTranslationsService";
 import { TranslationProcessModal } from "@/src/components/i18n/TranslationProcessModal";
 
@@ -502,14 +502,14 @@ export default function I18nPage() {
                 )}
                 <span
                   className={`max-w-[320px] truncate rounded-full px-2.5 py-1 text-xs font-medium ${importStatus.tone === "running"
-                      ? "bg-zinc-400/15 text-zinc-300"
-                      : importStatus.tone === "success"
-                        ? "bg-emerald-500/15 text-emerald-300"
-                        : importStatus.tone === "error"
-                          ? "bg-rose-500/15 text-rose-300"
-                          : importStatus.tone === "ready"
-                            ? "bg-zinc-500/15 text-zinc-300"
-                            : "bg-bg-elevated text-text-secondary border border-border-subtle"
+                    ? "bg-zinc-400/15 text-zinc-300"
+                    : importStatus.tone === "success"
+                      ? "bg-emerald-500/15 text-emerald-300"
+                      : importStatus.tone === "error"
+                        ? "bg-rose-500/15 text-rose-300"
+                        : importStatus.tone === "ready"
+                          ? "bg-zinc-500/15 text-zinc-300"
+                          : "bg-bg-elevated text-text-secondary border border-border-subtle"
                     }`}
                   title={importStatus.label}
                 >
@@ -841,8 +841,8 @@ export default function I18nPage() {
                         <div className="px-3 py-2 border-r border-border-subtle">
                           <span
                             className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${r.status === "active"
-                                ? "bg-emerald-500/15 text-emerald-400"
-                                : "bg-zinc-500/15 text-zinc-400"
+                              ? "bg-emerald-500/15 text-emerald-400"
+                              : "bg-zinc-500/15 text-zinc-400"
                               }`}
                           >
                             {r.status || "unknown"}

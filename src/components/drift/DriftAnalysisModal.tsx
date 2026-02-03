@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, ChevronRight, Loader2, X, ShieldAlert, ShieldCheck, ClipboardCopy } from "lucide-react";
-import { Modal } from "@/src/components/ui/Modal";
-import { Button } from "@/src/components/ui/Button";
+import { Modal, Button } from "@/src/components/design-system";
 
 type DriftJobStatus = {
     status: "queued" | "running" | "success" | "error" | "cancelled";

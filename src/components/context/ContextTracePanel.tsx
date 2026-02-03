@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Search, Calculator, Zap, FileText, Hash, ArrowRight, AlertCircle } from "lucide-react";
-import { Button } from "@/src/components/ui/Button";
+import { Button } from "@/src/components/design-system";
 import { RankedContextItem } from "@/src/context/graph/ContextGraphTypes";
 
 export function ContextTracePanel() {

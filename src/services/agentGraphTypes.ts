@@ -19,6 +19,8 @@ export type AgentGraphNodeReactConfig = {
     userPromptTemplate: string;
     /** Tool allowlist (names must exist in MCP tool catalog). */
     toolNames: string[];
+    /** Skill IDs to inject into this node's context. */
+    skillIds?: string[];
     llmSelection?: AgentGraphLlmSelection;
     /** Future: enforce hard cap on tool calls. */
     maxToolCalls?: number;

@@ -36,6 +36,7 @@ import { strReplaceEditor } from "./tools/strReplaceEditor.js";
 import { executeBash } from "./tools/executeBash.js";
 import { outputFormat } from "./tools/outputFormat.js";
 import { writeFile } from "./tools/writeFile.js";
+import { loadSkill, listSkills } from "./tools/skillLoader.js";
 
 const argv = process.argv.slice(2);
 const hasArg = (flag) => argv.includes(flag);
@@ -132,6 +133,10 @@ function buildAllTools() {
     str_replace_editor: strReplaceEditor,
     execute_bash: executeBash,
     output_format: outputFormat,
+
+    // Skills system
+    load_skill: loadSkill,
+    list_skills: listSkills,
   };
 
   return { ...tools, ...advancedTools };

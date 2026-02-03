@@ -1,11 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Modal } from "./ui/Modal";
-import { Button } from "./ui/Button";
-import { Skeleton } from "./ui/Skeleton";
-import { Panel } from "./ui/Panel";
-import { SelectableRow } from "./ui/SelectableRow";
+import { Modal, Button, Skeleton, Panel, SelectableRow } from "@/src/components/design-system";
 import { ChainConfigBuilder } from "../services/chainConfigBuilder";
 import type { AuditChain, AuditStageConfig, GraphId } from "../services/chainTypes";
 import { graphOptions } from "../shared/graphCatalog";

@@ -1,6 +1,6 @@
 // src/services/subscriptionService.ts
 // MongoDB subscription management service
-import { getDatabase } from './mongoClient';
+import { getDatabase } from '../lib/db';
 import { ObjectId } from 'mongodb';
 
 const COLLECTION_NAME = 'subscriptions';

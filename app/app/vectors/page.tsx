@@ -2,8 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Panel } from "@/src/components/ui/Panel";
-import { Button } from "@/src/components/ui/Button";
+import {
+    Panel,
+    Button,
+    Modal,
+    Input,
+    ProgressBar,
+    EmptyState,
+} from "@/src/components/design-system";
 import {
     Database,
     Settings,
@@ -17,7 +23,6 @@ import {
     FileCode,
     Play
 } from "lucide-react";
-import { Modal } from "@/src/components/ui/Modal";
 import { useLlmHealth } from "@/src/hooks/useLlmHealth";
 
 type IndexStatus = {

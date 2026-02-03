@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Save, Folder, Check, AlertCircle, Github, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { Panel } from "@/src/components/ui/Panel";
-import { Button } from "@/src/components/ui/Button";
+import { Panel, Button } from "@/src/components/design-system";
 
 type Config = {
     workingFolder: string;

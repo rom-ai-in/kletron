@@ -43,7 +43,7 @@ export default function TermsOfServicePage() {
 
                     <Section title="2. Description of Service">
                         <p>
-                            Numezis Code is an AI-powered coding assistant provided as a VS Code extension and web platform.
+                            Numezis Code is an AI-powered coding assistant provided as a desktop IDE and web platform.
                             The Service includes:
                         </p>
                         <ul>

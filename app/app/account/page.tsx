@@ -3,7 +3,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/src/context/AuthContext';
-
+import {
+    Button,
+    Input,
+    PasswordInput,
+    Card,
+    CardHeader,
+    CardContent,
+    Badge,
+    LoadingState,
+    EmptyState
+} from '@/src/components/design-system';
+import { Copy, Key, Shield, User, LogOut, Plus, X } from 'lucide-react';
 interface ApiTokenInfo {
     id: string;
     label: string | null;
@@ -25,7 +36,7 @@ export default function AccountPage() {
     const [passwordStatus, setPasswordStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
     const [passwordError, setPasswordError] = useState('');
 
-    const [tokenLabel, setTokenLabel] = useState('VS Code Extension');
+    const [tokenLabel, setTokenLabel] = useState('Numezis Code IDE');
     const [tokens, setTokens] = useState<ApiTokenInfo[]>([]);
     const [tokensLoading, setTokensLoading] = useState(false);
     const [tokenError, setTokenError] = useState('');
@@ -173,7 +184,7 @@ export default function AccountPage() {
                     </button>
                 </div>
                 <p className="mt-2 text-[11px] text-emerald-100/80">
-                    This token will not be shown again. Paste it in the VS Code extension.
+                    This token will not be shown again. Paste it in the Numezis Code IDE.
                 </p>
             </div>
         );
@@ -282,17 +293,17 @@ export default function AccountPage() {
                     </form>
                 </section>
 
-                {/* VS Code Extension Section */}
+                {/* Numezis Code IDE Section */}
                 <section className="rounded-lg border border-border-subtle bg-bg-surface p-6">
-                    <h2 className="text-sm font-semibold text-text-primary">VS Code Extension</h2>
+                    <h2 className="text-sm font-semibold text-text-primary">Numezis Code IDE</h2>
                     <p className="mt-1 text-xs text-text-muted">
-                        Generate a token to sync your Numezis Code account with the extension.
+                        Generate a token to sync your Numezis Code account with the desktop IDE.
                     </p>
 
                     <div className="mt-4 space-y-3 text-xs text-text-secondary">
                         <p>1. Generate a token below.</p>
-                        <p>2. In VS Code, run <code className="rounded bg-bg-elevated px-1.5 py-0.5">numezis.connectBackend</code> and paste the token.</p>
-                        <p>3. The extension will use this token to connect to your account.</p>
+                        <p>2. In Numezis Code, run <code className="rounded bg-bg-elevated px-1.5 py-0.5">numezis.connectBackend</code> and paste the token.</p>
+                        <p>3. The IDE will use this token to connect to your account.</p>
                     </div>
 
                     <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">

@@ -64,6 +64,78 @@ export interface CronSchedule {
 }
 
 /**
+ * A claim discovered during investigation phase
+ */
+export interface Claim {
+    /** Unique identifier for this claim */
+    id: string;
+    /** File path where the issue was found */
+    file: string;
+    /** Starting line number (optional) */
+    lineStart?: number;
+    /** Ending line number (optional) */
+    lineEnd?: number;
+    /** Description of the potential issue */
+    description: string;
+    /** Severity level */
+    severity: "BLOQUANT" | "WARNING" | "INFO";
+    /** Category of the claim (e.g., security, performance, maintainability) */
+    category?: string;
+    /** Evidence or code snippet supporting the claim */
+    evidence?: string;
+}
+
+/**
+ * A remediation task generated from findings
+ */
+export interface Task {
+    /** Unique identifier for this task */
+    id: string;
+    /** Short title describing the task */
+    title: string;
+    /** Detailed description of what needs to be done */
+    description: string;
+    /** Priority level */
+    priority: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+    /** IDs of findings this task addresses */
+    relatedFindingIds: string[];
+    /** Estimated effort (e.g., "1h", "1d", "1w") */
+    estimatedEffort?: string;
+    /** Suggested fix or approach */
+    suggestedFix?: string;
+}
+
+/**
+ * A file targeted for investigation
+ */
+export interface TargetFile {
+    /** File path */
+    path: string;
+    /** Reason for targeting this file */
+    reason?: string;
+    /** Priority score (higher = more important) */
+    priority?: number;
+}
+
+/**
+ * Context passed between audit stages
+ */
+export interface AuditContext {
+    /** High-level mission or goal */
+    mission?: string;
+    /** Path to the repository being audited */
+    repoPath?: string;
+    /** Files targeted for investigation */
+    targetFiles?: TargetFile[];
+    /** System invariants or rules to check */
+    invariants?: string[];
+    /** Technology stack information */
+    techStack?: string[];
+    /** Findings from previous stages */
+    previousFindings?: Finding[];
+}
+
+/**
  * A finding from a stage execution
  */
 export interface Finding {
@@ -206,9 +278,9 @@ export interface StageResult {
     /** Findings from this stage */
     findings: Finding[];
     /** Raw claims from investigation phase */
-    claims: any[];
+    claims: Claim[];
     /** Generated tasks */
-    tasks: any[];
+    tasks: Task[];
     /** Execution duration in milliseconds */
     duration: number;
     /** Number of retry attempts */

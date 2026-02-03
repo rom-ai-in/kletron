@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Panel } from "@/src/components/ui/Panel";
-import { Button } from "@/src/components/ui/Button";
+import { Panel, Button } from "@/src/components/design-system";
 import type { AuditChain, AuditRun, ChainStatus } from "@/src/services/chainTypes";
 import { StageDetailModal } from "@/src/components/StageDetailModal";
 

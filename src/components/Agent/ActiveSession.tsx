@@ -5,12 +5,11 @@ import remarkGfm from 'remark-gfm';
 import { ToolOutput } from './ToolOutput';
 import { ThoughtsPanel } from './ThoughtsPanel';
 import { CodeBlock } from './CodeBlock';
-import { Selector } from '../ui/Selector';
-import { Modal } from '../ui/Modal'; // Import Modal
-import { ContextVisualizer } from '../context/ContextVisualizer'; // Import Visualizer
+import { Selector, Modal } from '@/src/components/design-system';
+import { ContextVisualizer } from '../context/ContextVisualizer';
 import { graphOptions } from '../../shared/graphCatalog';
-import { useLlmHealth } from '../../hooks/useLlmHealth'; // Import hook
-import { AgentAuditModal } from './AgentAuditModal'; // Import Audit Modal
+import { useLlmHealth } from '../../hooks/useLlmHealth';
+import { AgentAuditModal } from './AgentAuditModal';
 
 type LlmEnvInfo = {
     defaultProvider?: "azure" | "lmstudio";

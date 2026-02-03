@@ -1,8 +1,7 @@
 "use client";
 
 import type { AuditChain, ChainStatus } from "../services/chainTypes";
-import { Panel } from "./ui/Panel";
-import { Button } from "./ui/Button";
+import { Panel, Button } from "@/src/components/design-system";
 
 interface ChainCardProps {
     chain: AuditChain;

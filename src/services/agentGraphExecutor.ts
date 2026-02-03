@@ -14,6 +14,7 @@ import { McpClient } from "../mcp/client";
 import { evaluateCondition } from "./agentGraphConditions";
 import { getEntryNodeIds, getGraphNodeOrder, resolveExecutionMode } from "./agentGraphRuntime";
 import { setNestedValue } from "./agentGraphState";
+import { skillRegistry } from "../skills/registry";
 
 // --- Context Management Imports ---
 import { contextGraphStore } from "@/src/context/graph/ContextGraphStore";
@@ -514,7 +515,29 @@ export class AgentGraphExecutor {
 
             try {
                 const nodeKind = node.kind ?? "react";
-                const tools = selectToolsByName(node.react.toolNames ?? []);
+
+                // ---------------------------------------------------------
+                // 2.5. Skills Injection (NEW)
+                // ---------------------------------------------------------
+                const skillIds = node.react.skillIds ?? [];
+                let skillPromptPrefix = "";
+                let skillTools: string[] = [];
+                if (skillIds.length > 0) {
+                    try {
+                        const resolvedSkills = await skillRegistry.getSkills(skillIds);
+                        skillPromptPrefix = resolvedSkills
+                            .map((s) => s.resolvedSystemPrompt)
+                            .filter(Boolean)
+                            .join("\n\n---\n\n");
+                        skillTools = [...new Set(resolvedSkills.flatMap((s) => s.resolvedTools))];
+                    } catch (err) {
+                        console.warn(`[AgentGraph] Failed to load skills ${skillIds.join(", ")}:`, err);
+                    }
+                }
+                // Merge skill tools with node-defined tools
+                const mergedToolNames = [...new Set([...(node.react.toolNames ?? []), ...skillTools])];
+                const tools = selectToolsByName(mergedToolNames);
+
                 const builtMessageEvents: AgentEvent[] = [];
                 const handleStreamingMessage = async (message: BaseMessage) => {
                     const event = createAgentEvent(message, node.id, node.label, nextEventId());
@@ -561,8 +584,12 @@ export class AgentGraphExecutor {
                     contextBlock += `No specific relevant files detected in context graph.\n`;
                 }
 
+                // Compose final system prompt: skills prefix + base prompt + context
                 const renderedSystemPrompt = renderUserPrompt(node.react.systemPrompt, state);
-                const enhancedSystemPrompt = `${renderedSystemPrompt}\n${contextBlock}`;
+                const baseSystemPrompt = skillPromptPrefix
+                    ? `${skillPromptPrefix}\n\n---\n\n${renderedSystemPrompt}`
+                    : renderedSystemPrompt;
+                const enhancedSystemPrompt = `${baseSystemPrompt}\n${contextBlock}`;
 
                 // Update timeline with the ACTUAL prompt used (including context)
                 if (timeline[0]) {

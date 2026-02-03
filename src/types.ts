@@ -1,5 +1,6 @@
 import { BaseMessage } from "@langchain/core/messages";
 import type { LlmProviderType } from "./schemas/llmConfig.schema";
+import type { Finding, Claim, Task, TargetFile, AuditContext } from "./services/chainTypes";
 
 export type TimelineStatus = "pending" | "running" | "success" | "error";
 
@@ -48,12 +49,12 @@ export type AgentWorkflowResult = {
     timeline: TimelineEvent[];
     conclusion: string;
     outputs: {
-        context: any;
-        target_files: any[];
-        raw_claims: any[];
-        verified_findings: any[];
-        findings: any[];
-        tasks: any[];
+        context: AuditContext;
+        target_files: TargetFile[];
+        raw_claims: Claim[];
+        verified_findings: Finding[];
+        findings: Finding[];
+        tasks: Task[];
         report: string;
         meta?: Record<string, unknown>;
         stageMetrics?: StageMetric[];
@@ -71,7 +72,7 @@ export type AgentWorkflowUpdate = {
 export type AgentWorkflowOptions = {
     onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
     llmSelection?: { provider: LlmProviderType; model?: string };
-    auditContext?: any | null;
+    auditContext?: AuditContext | null;
 };
 
 export type RepoGraphNode = {
@@ -80,7 +81,12 @@ export type RepoGraphNode = {
     type: "directory" | "file" | "root";
     path: string;
     parentId?: string; // For hierarchy
-    data?: any; // Additional metadata (description, etc.)
+    data?: {
+        description?: string;
+        size?: number;
+        language?: string;
+        [key: string]: unknown;
+    };
 };
 
 export type RepoGraphEdge = {

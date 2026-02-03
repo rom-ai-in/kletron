@@ -2,9 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Sparkles, Save, RotateCcw, Monitor, Cloud, Check, Globe, Bot, Cpu, Server } from "lucide-react";
-
-import { Panel } from "@/src/components/ui/Panel";
-import { Button } from "@/src/components/ui/Button";
+import { Panel, Button } from "@/src/components/design-system";
 import type { LlmConfig } from "@/src/schemas/llmConfig.schema";
 import { MODEL_RECOMMENDATIONS, type LlmProviderType } from "@/src/schemas/llmConfig.schema";
 
@@ -226,8 +224,8 @@ export function LlmConfigView() {
                   key={provider.id}
                   onClick={() => void handleProviderChange(provider.id)}
                   className={`cursor-pointer group relative p-4 rounded-lg border-2 transition-all ${isActive
-                      ? "border-emerald-500 bg-bg-surface"
-                      : "border-border-subtle bg-bg-elevated/50 hover:border-border-strong"
+                    ? "border-emerald-500 bg-bg-surface"
+                    : "border-border-subtle bg-bg-elevated/50 hover:border-border-strong"
                     }`}
                 >
                   {isActive && (
@@ -238,8 +236,8 @@ export function LlmConfigView() {
                   <div className="flex items-start gap-4">
                     <div
                       className={`p-2 rounded-md transition-colors ${isActive
-                          ? "bg-emerald-500/10 text-emerald-500"
-                          : "bg-bg-elevated text-text-muted group-hover:text-text-primary"
+                        ? "bg-emerald-500/10 text-emerald-500"
+                        : "bg-bg-elevated text-text-muted group-hover:text-text-primary"
                         }`}
                     >
                       <Icon className="h-6 w-6" />
@@ -247,8 +245,8 @@ export function LlmConfigView() {
                     <div>
                       <h3
                         className={`font-semibold ${isActive
-                            ? "text-text-primary"
-                            : "text-text-secondary group-hover:text-text-primary"
+                          ? "text-text-primary"
+                          : "text-text-secondary group-hover:text-text-primary"
                           }`}
                       >
                         {provider.name}

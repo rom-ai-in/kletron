@@ -3,11 +3,12 @@
 import { useState, ReactNode } from "react";
 import { Lock, Eye, EyeOff } from "lucide-react";
 
-const CORRECT_PASSWORD = "numezis2026";
+const CORRECT_PASSWORD = process.env.DESIGN_SYSTEM_CODE || "numezis2026+";
+const PROTECT_ENABLED = process.env.NEXT_PUBLIC_DESIGN_SYSTEM_PROTECT !== "false";
 
 export default function DesignSystemLayout({ children }: { children: ReactNode }) {
     const [password, setPassword] = useState("");
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(!PROTECT_ENABLED);
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState("");
 

@@ -1,4 +1,4 @@
-import { getDatabase } from "./mongoClient";
+import { getDatabase } from "../lib/db";
 
 const LOCK_COLLECTION = "distributed_locks";
 

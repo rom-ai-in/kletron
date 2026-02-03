@@ -15,13 +15,8 @@ import {
     AlertTriangle,
     ShieldAlert
 } from "lucide-react";
-import { Button } from "@/src/components/ui/Button";
-import { Panel } from "@/src/components/ui/Panel";
-import { Breadcrumbs } from "@/src/components/ui/Breadcrumbs";
+import { Button, Panel, Breadcrumbs } from "@/src/components/design-system";
 import { FolderTreePicker } from "@/src/components/ui/FolderTreePicker";
-
-
-
 import { DriftAnalysisModal } from "@/src/components/drift/DriftAnalysisModal";
 
 export interface DiffChunk {

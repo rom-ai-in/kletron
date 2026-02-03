@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { History } from "lucide-react";
-import { Breadcrumbs } from "@/src/components/ui/Breadcrumbs";
+import { Breadcrumbs } from "@/src/components/design-system";
 
 export function AppHeader() {
   const [runningCount, setRunningCount] = useState(0);

@@ -4,9 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Layers } from "lucide-react";
 
-import { Button } from "@/src/components/ui/Button";
-import { Skeleton } from "@/src/components/ui/Skeleton";
-import { Panel } from "@/src/components/ui/Panel";
+import {
+    Button,
+    Skeleton,
+    Panel,
+    SearchInput,
+    EmptyState,
+    ErrorState,
+} from "@/src/components/design-system";
 import { AgentGraphCard } from "@/src/components/agentGraphs/AgentGraphCard";
 
 type AgentGraphSummary = {
@@ -122,12 +127,12 @@ export default function AgentGraphsPage() {
             </div>
 
             <div className="flex items-center gap-4 border-b border-border-subtle bg-bg-surface px-6 py-3">
-                <input
-                    type="text"
+                <SearchInput
                     placeholder="Search graphs..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-focus-ring"
+                    onClear={() => setSearchQuery("")}
+                    className="flex-1"
                 />
             </div>
 
@@ -155,11 +160,7 @@ export default function AgentGraphsPage() {
                     </div>
                 )}
 
-                {error && (
-                    <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-4 text-center text-sm text-rose-300">
-                        Error: {error}
-                    </div>
-                )}
+                {error && <ErrorState message={error} onRetry={() => void fetchGraphs()} />}
 
                 {!loading && !error && (
                     <div className="space-y-4">
@@ -173,16 +174,11 @@ export default function AgentGraphsPage() {
                         ))}
 
                         {filtered.length === 0 && (
-                            <Panel className="flex h-64 items-center justify-center">
-                                <div className="text-center">
-                                    <p className="text-sm text-text-muted">
-                                        {searchQuery ? "No graphs match your search" : "No agent graphs yet"}
-                                    </p>
-                                    <p className="mt-2 text-xs text-text-muted">
-                                        Create a new agent graph to start composing ReAct nodes.
-                                    </p>
-                                </div>
-                            </Panel>
+                            <EmptyState
+                                variant={searchQuery ? "search" : "no-data"}
+                                title={searchQuery ? "No graphs match your search" : "No agent graphs yet"}
+                                description="Create a new agent graph to start composing ReAct nodes."
+                            />
                         )}
                     </div>
                 )}

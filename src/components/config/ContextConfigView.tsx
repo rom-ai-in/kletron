@@ -21,9 +21,7 @@ import {
   FolderOpen,
   X,
 } from "lucide-react";
-
-import { Panel } from "@/src/components/ui/Panel";
-import { Button } from "@/src/components/ui/Button";
+import { Panel, Button } from "@/src/components/design-system";
 import { AuditContextForm } from "@/src/components/AuditContextForm";
 import { ContextVisualizer } from "@/src/components/context/ContextVisualizer";
 import { ContextTracePanel } from "@/src/components/context/ContextTracePanel";

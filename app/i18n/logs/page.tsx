@@ -7,8 +7,7 @@ import { useSearchParams } from "next/navigation";
 export const dynamic = "force-dynamic";
 
 import { AlertTriangle, Check, ClipboardCopy, Loader2, RefreshCw } from "lucide-react";
-
-import { Button } from "@/src/components/ui/Button";
+import { Button } from "@/src/components/design-system";
 
 type JobListItem = {
   id: string;

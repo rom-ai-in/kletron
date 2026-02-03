@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { PlayCircle, Trash2 } from "lucide-react";
 
 import { AgentGraphEditor } from "@/src/components/agentGraphs/AgentGraphEditor";
-import { Button } from "@/src/components/ui/Button";
-import { Skeleton } from "@/src/components/ui/Skeleton";
+import { Button, Skeleton } from "@/src/components/design-system";
 
 type AgentGraphDto = {
     _id?: string;

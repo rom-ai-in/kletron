@@ -48,6 +48,51 @@
   --zinc-700: #3f3f46;
   --zinc-800: #27272a;
   --zinc-900: #18181b;
+
+  /* ============================================
+     Design System v4.0 - IDE / Fork Tokens
+     ============================================ */
+
+  /* IDE Layout Colors */
+  --sidebar-bg: #1e1e1e;
+  --sidebar-fg: #cccccc;
+  --activitybar-bg: #333333;
+  --activitybar-fg: #858585;
+  --activitybar-fg-active: #ffffff;
+  --statusbar-bg: #007acc;
+  --statusbar-fg: #ffffff;
+
+  /* Agent Interaction Tokens (Cursor-Style) */
+  --agent-thinking: #8b5cf6;
+  --agent-thinking-bg: rgba(139, 92, 246, 0.1);
+  --agent-thinking-border: rgba(167, 139, 250, 0.4);
+  --agent-thinking-text: #c4b5fd;
+
+  --agent-tool: #f59e0b;
+  --agent-tool-bg: rgba(245, 158, 11, 0.1);
+  --agent-tool-border: rgba(251, 191, 36, 0.4);
+  --agent-tool-text: #fcd34d;
+
+  --agent-success: #22c55e;
+  --agent-success-bg: rgba(34, 197, 94, 0.1);
+  --agent-success-border: rgba(34, 197, 94, 0.4);
+
+  --agent-error: #f43f5e;
+  --agent-error-bg: rgba(244, 63, 94, 0.1);
+  --agent-error-border: rgba(244, 63, 94, 0.4);
+
+  --agent-running: #0ea5e9;
+  --agent-running-bg: rgba(14, 165, 233, 0.1);
+  --agent-running-border: rgba(56, 189, 248, 0.4);
+
+  --agent-pending: #71717a;
+  --agent-pending-bg: rgba(113, 113, 122, 0.1);
+  --agent-pending-border: rgba(113, 113, 122, 0.4);
+
+  /* Motion Primitives */
+  --anim-duration-fast: 0.15s;
+  --anim-duration-normal: 0.3s;
+  --anim-ease-default: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ==========================================================================

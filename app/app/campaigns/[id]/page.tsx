@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { AuditChain } from "@/src/services/chainTypes";
-import { Button } from "@/src/components/ui/Button";
+import { Button, Panel } from "@/src/components/design-system";
 import { ChainBuilderModal } from "@/src/components/ChainBuilderModal";
 import {
     Play,
@@ -25,7 +25,6 @@ import {
     Search,
     MoreHorizontal
 } from "lucide-react";
-import { Panel } from "@/src/components/ui/Panel";
 import { cn } from "@/src/utils/cn";
 
 interface ChainDetailPageProps {

@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, ChevronRight, Loader2, X } from "lucide-react";
-import { Modal } from "@/src/components/ui/Modal";
-import { Button } from "@/src/components/ui/Button";
+import { Modal, Button } from "@/src/components/design-system";
 import type { I18nStatus, TranslationRecord } from "@/src/services/i18nTranslationsService";
 
 type ProcessJobStatus = {
@@ -53,18 +52,18 @@ export type TranslationProcessModalProps = {
   open: boolean;
   onClose: () => void;
   selection:
-    | { mode: "keys"; rowKeys: string[]; previewRows?: TranslationRecord[] }
-    | {
-        mode: "query";
-        q?: string;
-        namespace?: string;
-        status?: I18nStatus;
-        reviewed?: boolean;
-        limit?: number;
-        excludeRowKeys?: string[];
-        estimatedSelected?: number;
-        previewRows?: TranslationRecord[];
-      };
+  | { mode: "keys"; rowKeys: string[]; previewRows?: TranslationRecord[] }
+  | {
+    mode: "query";
+    q?: string;
+    namespace?: string;
+    status?: I18nStatus;
+    reviewed?: boolean;
+    limit?: number;
+    excludeRowKeys?: string[];
+    estimatedSelected?: number;
+    previewRows?: TranslationRecord[];
+  };
   onApplied?: () => void;
 };
 
@@ -201,9 +200,9 @@ export function TranslationProcessModal({
       provider === "default"
         ? undefined
         : {
-            provider,
-            model: model.trim() || undefined,
-          };
+          provider,
+          model: model.trim() || undefined,
+        };
 
     try {
       const res = await fetch("/api/i18n/process/start", {
@@ -214,14 +213,14 @@ export function TranslationProcessModal({
             selection.mode === "keys"
               ? { mode: "keys", rowKeys }
               : {
-                  mode: "query",
-                  q: selection.q,
-                  namespace: selection.namespace,
-                  status: selection.status,
-                  reviewed: selection.reviewed,
-                  limit: selection.limit,
-                  excludeRowKeys: selection.excludeRowKeys ?? [],
-                },
+                mode: "query",
+                q: selection.q,
+                namespace: selection.namespace,
+                status: selection.status,
+                reviewed: selection.reviewed,
+                limit: selection.limit,
+                excludeRowKeys: selection.excludeRowKeys ?? [],
+              },
           chunkSize,
           llmSelection,
         }),
@@ -751,9 +750,8 @@ export function TranslationProcessModal({
                             <div className="flex items-center gap-2">
                               <span className="font-mono text-xs text-text-primary truncate">{r.rowKey}</span>
                               <span
-                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                                  isUpdate ? "bg-amber-500/15 text-amber-300" : "bg-bg-surface text-text-muted border border-border-subtle"
-                                }`}
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${isUpdate ? "bg-amber-500/15 text-amber-300" : "bg-bg-surface text-text-muted border border-border-subtle"
+                                  }`}
                               >
                                 {r.decision}
                               </span>

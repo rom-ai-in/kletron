@@ -1,4 +1,4 @@
-import { getDatabase } from "./mongoClient";
+import { getDatabase } from "../lib/db";
 
 export interface VectorIndexRun {
     _id?: any;

@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Settings, Sparkles, ListTree, ArrowRight, Wrench, Folder, Database } from "lucide-react";
-
-import { Panel } from "@/src/components/ui/Panel";
+import { Panel } from "@/src/components/design-system";
 
 type LlmConfigSummary = { provider?: "azure" | "lmstudio" } | null;
 

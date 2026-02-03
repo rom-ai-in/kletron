@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Database, Save, RotateCcw, Monitor, Cloud, Check, Sparkles, Ship, Gem, Bot } from "lucide-react";
-
-import { Panel } from "@/src/components/ui/Panel";
-import { Button } from "@/src/components/ui/Button";
+import { Panel, Button } from "@/src/components/design-system";
 import type { EmbeddingConfig } from "@/src/schemas/embeddingConfig.schema";
 import { EMBEDDING_PROVIDERS, EmbeddingProviderType } from "@/src/schemas/embeddingConfig.schema";
 import {

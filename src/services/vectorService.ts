@@ -1,5 +1,5 @@
 import { Collection, ObjectId } from "mongodb";
-import { getDatabase } from "./mongoClient";
+import { getDatabase } from "../lib/db";
 import { getEmbeddingConfig } from "./embeddingConfigService";
 
 export interface CodeChunk {

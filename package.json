@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest",
-    "test": "npm run typecheck && npm run test:unit"
+    "test": "npm run typecheck && npm run test:unit",
+    "dev:ide": "cd numezis-code-oss && ./scripts/code.sh"
   },
   "dependencies": {
     "@cyntler/react-doc-viewer": "^1.17.1",
@@ -41,6 +42,8 @@
     "csv-parse": "^6.1.0",
     "dotenv": "^16.4.7",
     "eventsource": "^4.0.0",
+    "gray-matter": "^4.0.3",
+    "jose": "^6.1.3",
     "langchain": "^1.2.10",
     "lucide-react": "^0.562.0",
     "mammoth": "^1.11.0",

@@ -3,7 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import dotenv from "dotenv";
 import { z } from "zod";
-import { getDatabase } from "./services/mongoClient";
+import { getDatabase } from "./lib/db";
 
 
 dotenv.config();

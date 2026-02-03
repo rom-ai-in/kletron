@@ -12,7 +12,7 @@ import {
     Clock,
     AlertCircle
 } from "lucide-react";
-import { Button } from "@/src/components/ui/Button";
+import { Button } from "@/src/components/design-system";
 import { ChainBuilderModal } from "@/src/components/ChainBuilderModal";
 import type { AuditChain } from "@/src/services/chainTypes";
 import { cn } from "@/src/utils/cn";

@@ -4,10 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, FileText } from "lucide-react";
-
-import { Button } from "@/src/components/ui/Button";
-import { Panel } from "@/src/components/ui/Panel";
-import { Skeleton } from "@/src/components/ui/Skeleton";
+import { Button, Panel, Skeleton } from "@/src/components/design-system";
 import { StageDetailModal } from "@/src/components/StageDetailModal";
 
 type AgentGraphDto = {

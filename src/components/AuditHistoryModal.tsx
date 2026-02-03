@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Modal } from "./ui/Modal";
-import { Skeleton } from "./ui/Skeleton";
+import { Modal, Skeleton } from "@/src/components/design-system";
 
 type AuditSessionSummary = {
     _id: string;

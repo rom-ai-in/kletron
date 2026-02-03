@@ -2,11 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Wrench, Search, Play, Loader2, AlertCircle } from "lucide-react";
-
-import { Panel } from "@/src/components/ui/Panel";
-import { Button } from "@/src/components/ui/Button";
-import { Skeleton } from "@/src/components/ui/Skeleton";
-import { Modal } from "@/src/components/ui/Modal";
+import { Panel, Button, Skeleton, Modal } from "@/src/components/design-system";
 
 type ToolMeta = {
     name: string;

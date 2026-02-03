@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { X, Copy, Check, Terminal } from 'lucide-react';
-import { Modal } from '../ui/Modal';
+import { Modal } from '@/src/components/design-system';
 
 interface AgentAuditModalProps {
     open: boolean;

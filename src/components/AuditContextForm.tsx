@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "./ui/Button";
+import { Button } from "@/src/components/design-system";
 import { AuditContext } from "../shared/documentContext";
 
 type AuditContextFormProps = {

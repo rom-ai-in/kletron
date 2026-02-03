@@ -1,6 +1,6 @@
 "use client";
 
-import { Panel } from "./ui/Panel";
+import { Panel } from "@/src/components/design-system";
 import type { Finding } from "../services/chainTypes";
 
 interface HotspotHeatmapProps {

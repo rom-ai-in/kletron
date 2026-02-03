@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useAuth } from '@/src/context/AuthContext';
 import { useSubscription } from '@/src/hooks/useSubscription';
 
-const extensionUrl = 'https://marketplace.visualstudio.com/items?itemName=numezis.code'
+const downloadUrl = '/auth/register' // Download after account creation
 
 // Pricing tiers
 const tiers = [
@@ -534,17 +534,15 @@ export default function PricingPage() {
                         Free to start with your own API keys. No credit card required.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                        <a
-                            href={extensionUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                        <Link
+                            href={downloadUrl}
                             className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-5 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
                         >
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z" />
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                             </svg>
-                            Install for VS Code — Free
-                        </a>
+                            Download Numezis Code — Free
+                        </Link>
                         <Link
                             href="/auth/register"
                             className="inline-flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-bg-surface hover:bg-bg-elevated px-5 py-2.5 text-sm font-medium text-text-primary transition-colors"

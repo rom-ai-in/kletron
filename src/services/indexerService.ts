@@ -46,7 +46,7 @@ const currentStatus: IndexStatus = (globalThis as any)[statusKey];
 export function getIndexStatus(): IndexStatus {
     // Attempt to discover dimensions and counts from DB if not set
     if (!currentStatus.isIndexing) {
-        import("./mongoClient").then(async m => {
+        import("../lib/db").then(async m => {
             try {
                 const db = await m.getDatabase();
                 const col = db.collection("code_vectors");
