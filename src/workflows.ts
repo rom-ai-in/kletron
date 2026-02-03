@@ -1,7 +1,7 @@
 import { AgentWorkflowOptions, AgentWorkflowResult } from "./types";
 import { agentGraphService } from "./services/agentGraphService";
 import { agentGraphRunService } from "./services/agentGraphRunService";
-import { topoSortAgentGraph } from "./services/agentGraphTopo";
+import { getGraphNodeOrder, buildInitialState } from "./services/agentGraphRuntime";
 import { agentGraphExecutor } from "./services/agentGraphExecutor";
 
 export async function runWorkflow(
@@ -26,7 +26,7 @@ export async function runWorkflow(
   }
 
   // Prepare run record (similar logic to the API route)
-  const nodeOrder = topoSortAgentGraph(graphRecord.nodes, graphRecord.edges);
+  const nodeOrder = getGraphNodeOrder(graphRecord);
   const runId = await agentGraphRunService.createRun(graphRecord._id!.toString());
   const initialNodeStatuses: Record<string, any> = {};
   for (const node of graphRecord.nodes) {
@@ -35,7 +35,7 @@ export async function runWorkflow(
   await agentGraphRunService.updateRunStatus(runId, "RUNNING", {
     nodeOrder,
     nodeStatuses: initialNodeStatuses,
-    state: { mission: message, nodes: {} },
+    state: buildInitialState(graphRecord, message),
   } as any);
 
   return agentGraphExecutor.executeRunStreaming(runId, {
@@ -43,4 +43,3 @@ export async function runWorkflow(
     llmSelectionOverride: options?.llmSelection,
   });
 }
-

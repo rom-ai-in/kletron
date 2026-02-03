@@ -21,10 +21,6 @@ async function main() {
   console.log("✨ Dev workflow initializing...");
   await ensurePortsFree(PORTS);
 
-  const studioHost = "https://smith.langchain.com";
-  const studioUrl = `${studioHost}/studio?baseUrl=http://localhost:8080`;
-  console.log(`🔗 LangSmith Studio: ${studioUrl}`);
-
   const targetRepoRoot = await requireTargetRepoRoot();
   console.log(`📁 MCP repo root: ${targetRepoRoot}`);
 
@@ -34,7 +30,6 @@ async function main() {
       port: 8080,
       configPath: "langgraph.json",
       env: {
-        LANGSMITH_TRACING: process.env.LANGSMITH_TRACING ?? "true",
         MCP_URL,
       },
     }),

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateDefaultProvider } from "@/src/services/llmConfigService";
 import { z } from "zod";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,14 @@ const ProviderSchema = z.object({
  * Update default LLM provider
  */
 export async function PUT(request: NextRequest) {
+    const auth = await requireAppRouteAuth(request);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
         const body = await request.json();
 

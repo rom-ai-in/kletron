@@ -33,7 +33,7 @@ export function AppHeader() {
         <Breadcrumbs />
 
         <Link
-          href="/history"
+          href="/app/history"
           className="relative flex items-center justify-center rounded-md p-2 text-text-secondary hover:bg-state-hover hover:text-text-primary transition-colors"
           title="Activity"
         >

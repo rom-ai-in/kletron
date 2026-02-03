@@ -1,4 +1,5 @@
 import { getDb } from "@/src/lib/db";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,7 +11,15 @@ function csvCell(value: unknown) {
   return s;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireAppRouteAuth(request);
+  if (!auth) {
+    return new Response(JSON.stringify({"error": "Unauthorized"}), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const db = await getDb();
   const col = db.collection("i18n_translations");
 

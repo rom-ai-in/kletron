@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { LlmProviderType } from "@/src/schemas/llmConfig.schema";
 
 /**
  * Chain execution status
@@ -26,7 +27,7 @@ export interface AuditStageConfig {
     /** Path to the prompt file (repo-relative) */
     promptPath: string;
     /** LLM provider to use */
-    llmProvider: "azure" | "lmstudio";
+    llmProvider: LlmProviderType;
     /** Optional model override (defaults to env config) */
     llmModel?: string;
     /** Context from previous stages to include (e.g., ["stage-1.findings"]) */

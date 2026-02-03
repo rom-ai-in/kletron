@@ -3,16 +3,26 @@ import { resolveLlmSelection } from "@/src/llm";
 import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@/src/types";
 import { agentGraphService } from "@/src/services/agentGraphService";
 import { agentGraphRunService } from "@/src/services/agentGraphRunService";
-import { topoSortAgentGraph } from "@/src/services/agentGraphTopo";
+import { getGraphNodeOrder, buildInitialState } from "@/src/services/agentGraphRuntime";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 const textEncoder = new TextEncoder();
 
 type StreamChunk =
+  | { type: "init"; payload: { runId: string; graphId: string } }
   | { type: "update"; payload: AgentWorkflowUpdate }
   | { type: "final"; payload: AgentWorkflowResult }
   | { type: "error"; payload: { message: string } };
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireAppRouteAuth(request);
+  if (!auth) {
+    return new Response(JSON.stringify({ "error": "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const payload = await request.json().catch(() => ({} as Record<string, unknown>));
   const message = typeof payload?.message === "string" ? payload.message.trim() : "";
   const provider = typeof payload?.provider === "string" ? payload.provider.trim() : undefined;
@@ -36,7 +46,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   // Prepare run record
-  const nodeOrder = topoSortAgentGraph(graph.nodes, graph.edges);
+  const nodeOrder = getGraphNodeOrder(graph as any);
   const runId = await agentGraphRunService.createRun(params.id);
   const initialNodeStatuses: Record<string, any> = {};
   for (const node of graph.nodes) {
@@ -45,7 +55,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   await agentGraphRunService.updateRunStatus(runId, "RUNNING", {
     nodeOrder,
     nodeStatuses: initialNodeStatuses,
-    state: { mission: message, nodes: {} },
+    state: buildInitialState(graph as any, message),
   } as any);
 
   const stream = new ReadableStream({
@@ -53,6 +63,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
       const sendChunk = (chunk: StreamChunk) => {
         controller.enqueue(textEncoder.encode(`${JSON.stringify(chunk)}\n`));
       };
+
+      // Send runId immediately so frontend can persist session
+      sendChunk({ type: "init", payload: { runId, graphId: params.id } });
 
       try {
         const { agentGraphExecutor } = await import("@/src/services/agentGraphExecutor");
@@ -78,4 +91,3 @@ export async function POST(request: Request, { params }: { params: { id: string 
     headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store" },
   });
 }
-

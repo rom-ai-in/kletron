@@ -28,7 +28,7 @@ export class McpClient {
       return McpClient.instance;
     }
 
-    const mcpUrl = process.env.MCP_URL ?? process.env.GITHUB_MCP_URL ?? "http://localhost:9000/sse";
+    const mcpUrl = process.env.MCP_URL ?? "http://localhost:9000/sse";
     const cfg = await getConfig();
     const transport = mcpUrl
       ? (() => {
@@ -44,9 +44,7 @@ export class McpClient {
           env: {
             ...process.env,
             MCP_DEFAULT_DIR: cfg.workingFolder,
-            GITHUB_MCP_DEFAULT_DIR: cfg.workingFolder,
             MCP_TRANSPORT: "stdio",
-            GITHUB_MCP_TRANSPORT: "stdio",
           },
         });
       })();

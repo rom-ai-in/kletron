@@ -10,6 +10,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { McpClient } from "../../mcp/client";
 import { getConfig } from "../../config";
+import type { LlmProviderType } from "@/src/schemas/llmConfig.schema";
 
 // Get the ConversationService instance (in a real app, use dependency injection)
 const conversationService = new ConversationService();
@@ -74,7 +75,7 @@ export class ReActEngine {
         return tools;
     }
 
-    async chat(conversationId: string, userMessage: string, onUpdate?: (event: AgentEvent) => void, llmSelection?: { provider: "azure" | "lmstudio"; model?: string }): Promise<string> {
+    async chat(conversationId: string, userMessage: string, onUpdate?: (event: AgentEvent) => void, llmSelection?: { provider: LlmProviderType; model?: string }): Promise<string> {
         // 1. Load conversation history
         const conversation = await conversationService.get(conversationId);
         if (!conversation) throw new Error("Conversation not found");
@@ -110,7 +111,7 @@ export class ReActEngine {
 
         // 4. Run the agent
         const tools = this.getSafeTools(conversationId);
-        const systemPrompt = `You are an expert developer assistant embedded in PayMe.
+        const systemPrompt = `You are an expert developer assistant embedded in Numezis Code.
 You can analyze code, browse files, and propose edits.
 
 WORKFLOW:

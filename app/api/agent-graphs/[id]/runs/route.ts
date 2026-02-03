@@ -4,7 +4,8 @@ import { z } from "zod";
 
 import { agentGraphService } from "@/src/services/agentGraphService";
 import { agentGraphRunService } from "@/src/services/agentGraphRunService";
-import { topoSortAgentGraph } from "@/src/services/agentGraphTopo";
+import { getGraphNodeOrder, buildInitialState } from "@/src/services/agentGraphRuntime";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 const CreateRunSchema = z.object({
     mission: z.string().optional(),
@@ -16,6 +17,14 @@ const CreateRunSchema = z.object({
  */
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
     try {
+        const auth = await requireAppRouteAuth(req);
+        if (!auth) {
+          return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         const runs = await agentGraphRunService.listRuns(params.id, 30);
         return NextResponse.json({ runs }, { status: 200 });
     } catch (error) {
@@ -30,6 +39,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
     try {
+        const auth = await requireAppRouteAuth(req);
+        if (!auth) {
+          return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         const graph = await agentGraphService.getGraph(params.id);
         if (!graph) {
             return NextResponse.json({ error: "Graph not found" }, { status: 404 });
@@ -44,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             );
         }
 
-        const nodeOrder = topoSortAgentGraph(graph.nodes, graph.edges);
+        const nodeOrder = getGraphNodeOrder(graph as any);
         const runId = await agentGraphRunService.createRun(params.id);
 
         const initialNodeStatuses: Record<string, any> = {};
@@ -55,10 +72,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         await agentGraphRunService.updateRunStatus(runId, "RUNNING", {
             nodeOrder,
             nodeStatuses: initialNodeStatuses,
-            state: {
-                mission: validation.data.mission ?? "",
-                nodes: {},
-            },
+            state: buildInitialState(graph as any, validation.data.mission ?? ""),
         } as any);
 
         // Execute in the background (best-effort). The executor updates the run record.
@@ -85,4 +99,3 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         return NextResponse.json({ error: "Failed to start run" }, { status: 500 });
     }
 }
-

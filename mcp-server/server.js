@@ -37,22 +37,6 @@ import { executeBash } from "./tools/executeBash.js";
 import { outputFormat } from "./tools/outputFormat.js";
 import { writeFile } from "./tools/writeFile.js";
 
-// Presentation Tools (PowerPoint)
-import { listTemplates } from "./tools/listTemplates.js";
-import { createPresentation } from "./tools/createPresentation.js";
-import { addTitleSlide } from "./tools/addTitleSlide.js";
-import { addContentSlide } from "./tools/addContentSlide.js";
-import { addSlideByLayout } from "./tools/addSlideByLayout.js";
-import { getSlidePlaceholders } from "./tools/getSlidePlaceholders.js";
-import { setPlaceholderText } from "./tools/setPlaceholderText.js";
-import { addTextBox } from "./tools/addTextBox.js";
-import { addImageToSlide } from "./tools/addImageToSlide.js";
-import { listSlides } from "./tools/listSlides.js";
-import { savePresentation } from "./tools/savePresentation.js";
-import { addTableSlide } from "./tools/addTableSlide.js";
-import { listTemplateLayouts } from "./tools/listTemplateLayouts.js";
-import { slideLoopController } from "./tools/slideLoopController.js";
-
 const argv = process.argv.slice(2);
 const hasArg = (flag) => argv.includes(flag);
 
@@ -150,25 +134,7 @@ function buildAllTools() {
     output_format: outputFormat,
   };
 
-  // Presentation Tools (PowerPoint generation)
-  const presentationTools = {
-    list_templates: listTemplates,
-    create_presentation: createPresentation,
-    add_title_slide: addTitleSlide,
-    add_content_slide: addContentSlide,
-    add_slide_by_layout: addSlideByLayout,
-    get_slide_placeholders: getSlidePlaceholders,
-    set_placeholder_text: setPlaceholderText,
-    add_text_box: addTextBox,
-    add_image_to_slide: addImageToSlide,
-    list_slides: listSlides,
-    save_presentation: savePresentation,
-    add_table_slide: addTableSlide,
-    list_template_layouts: listTemplateLayouts,
-    slide_loop_controller: slideLoopController,
-  };
-
-  return { ...tools, ...advancedTools, ...presentationTools };
+  return { ...tools, ...advancedTools };
 }
 
 function wireToolHandlers({ server, allTools }) {

@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+// ============================================================================
+// Provider-specific configuration schemas
+// ============================================================================
+
 export const AzureOpenAIConfigSchema = z.object({
     endpoint: z.string().url().describe("Azure OpenAI endpoint URL"),
     apiKey: z.string().min(1).describe("Azure OpenAI API key"),
@@ -8,27 +12,75 @@ export const AzureOpenAIConfigSchema = z.object({
     apiVersion: z.string().min(1).describe("API version"),
 });
 
+export const OpenAIConfigSchema = z.object({
+    apiKey: z.string().min(1).describe("OpenAI API key"),
+    model: z.string().min(1).describe("Model name (e.g., gpt-4o, gpt-4-turbo)"),
+    organization: z.string().optional().describe("OpenAI organization ID (optional)"),
+    baseUrl: z.string().url().optional().describe("Custom base URL (optional, for proxies)"),
+});
+
+export const ClaudeConfigSchema = z.object({
+    apiKey: z.string().min(1).describe("Anthropic API key"),
+    model: z.string().min(1).describe("Model name (e.g., claude-sonnet-4-20250514, claude-3-5-sonnet-20241022)"),
+});
+
+export const GeminiConfigSchema = z.object({
+    apiKey: z.string().min(1).describe("Google AI API key"),
+    model: z.string().min(1).describe("Model name (e.g., gemini-2.5-pro, gemini-2.5-flash)"),
+});
+
 export const LMStudioConfigSchema = z.object({
     baseUrl: z.string().url().describe("LM Studio base URL"),
     apiKey: z.string().optional().describe("LM Studio API key (optional)"),
     model: z.string().min(1).describe("Model name"),
 });
 
+export const OllamaConfigSchema = z.object({
+    baseUrl: z.string().url().describe("Ollama base URL (e.g., http://localhost:11434)"),
+    model: z.string().min(1).describe("Model name (e.g., llama3.2, mistral, codellama)"),
+});
+
+// ============================================================================
+// Provider types
+// ============================================================================
+
+export const LLM_PROVIDERS = ["azure", "openai", "claude", "gemini", "lmstudio", "ollama"] as const;
+export type LlmProviderType = (typeof LLM_PROVIDERS)[number];
+
+// ============================================================================
+// Main LLM config schema
+// ============================================================================
+
 export const LlmConfigSchema = z.object({
     _id: z.string().optional(),
-    provider: z.enum(["azure", "lmstudio"]).describe("LLM provider type"),
+    provider: z.enum(LLM_PROVIDERS).describe("LLM provider type"),
     azure: AzureOpenAIConfigSchema.optional(),
+    openai: OpenAIConfigSchema.optional(),
+    claude: ClaudeConfigSchema.optional(),
+    gemini: GeminiConfigSchema.optional(),
     lmstudio: LMStudioConfigSchema.optional(),
-    defaultProvider: z.enum(["azure", "lmstudio"]).describe("Default provider to use"),
+    ollama: OllamaConfigSchema.optional(),
+    defaultProvider: z.enum(LLM_PROVIDERS).describe("Default provider to use"),
     createdAt: z.date().optional(),
     updatedAt: z.date().optional(),
 });
 
+// ============================================================================
+// Type exports
+// ============================================================================
+
 export type AzureOpenAIConfig = z.infer<typeof AzureOpenAIConfigSchema>;
+export type OpenAIConfig = z.infer<typeof OpenAIConfigSchema>;
+export type ClaudeConfig = z.infer<typeof ClaudeConfigSchema>;
+export type GeminiConfig = z.infer<typeof GeminiConfigSchema>;
 export type LMStudioConfig = z.infer<typeof LMStudioConfigSchema>;
+export type OllamaConfig = z.infer<typeof OllamaConfigSchema>;
 export type LlmConfig = z.infer<typeof LlmConfigSchema>;
 
+// ============================================================================
 // Validation helpers
+// ============================================================================
+
 export function validateLlmConfig(data: unknown): LlmConfig {
     return LlmConfigSchema.parse(data);
 }
@@ -37,6 +89,35 @@ export function validateAzureConfig(data: unknown): AzureOpenAIConfig {
     return AzureOpenAIConfigSchema.parse(data);
 }
 
+export function validateOpenAIConfig(data: unknown): OpenAIConfig {
+    return OpenAIConfigSchema.parse(data);
+}
+
+export function validateClaudeConfig(data: unknown): ClaudeConfig {
+    return ClaudeConfigSchema.parse(data);
+}
+
+export function validateGeminiConfig(data: unknown): GeminiConfig {
+    return GeminiConfigSchema.parse(data);
+}
+
 export function validateLMStudioConfig(data: unknown): LMStudioConfig {
     return LMStudioConfigSchema.parse(data);
 }
+
+export function validateOllamaConfig(data: unknown): OllamaConfig {
+    return OllamaConfigSchema.parse(data);
+}
+
+// ============================================================================
+// Model recommendations (latest models as of Feb 2026)
+// ============================================================================
+
+export const MODEL_RECOMMENDATIONS = {
+    azure: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4"],
+    openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o3-mini", "o1"],
+    claude: ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-haiku-20240307"],
+    gemini: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-pro"],
+    lmstudio: ["local-model"],
+    ollama: ["llama3.2", "llama3.1", "mistral", "codellama", "deepseek-coder"],
+} as const;

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { LlmProviderType } from "@/src/schemas/llmConfig.schema";
 
 type LlmEnvInfo = {
-    defaultProvider?: "azure" | "lmstudio";
+    defaultProvider?: LlmProviderType;
     azure?: {
         configured: boolean;
         endpoint?: string | null;

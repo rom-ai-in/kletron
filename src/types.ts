@@ -1,4 +1,5 @@
 import { BaseMessage } from "@langchain/core/messages";
+import type { LlmProviderType } from "./schemas/llmConfig.schema";
 
 export type TimelineStatus = "pending" | "running" | "success" | "error";
 
@@ -69,7 +70,7 @@ export type AgentWorkflowUpdate = {
 
 export type AgentWorkflowOptions = {
     onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
-    llmSelection?: { provider: "azure" | "lmstudio"; model?: string };
+    llmSelection?: { provider: LlmProviderType; model?: string };
     auditContext?: any | null;
 };
 

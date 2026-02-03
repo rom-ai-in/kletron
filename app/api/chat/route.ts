@@ -2,8 +2,17 @@ import { NextResponse } from "next/server";
 
 import { runWorkflow } from "../../../src/workflows";
 import { normalizeAuditContext, type AuditContext } from "../../../src/shared/documentContext";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export async function POST(request: Request) {
+  const auth = await requireAppRouteAuth(request);
+  if (!auth) {
+    return new Response(JSON.stringify({"error": "Unauthorized"}), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const payload = await request.json().catch(() => ({} as Record<string, unknown>));
   const message = typeof payload?.message === "string" ? payload.message.trim() : "";
   const graph = typeof payload?.graph === "string" ? payload.graph.trim() : undefined;

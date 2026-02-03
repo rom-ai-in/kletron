@@ -2,8 +2,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ReActEngine } from '../../../services/agent/ReActEngine';
 import { SafeEditGate } from '../../../services/agent/SafeEditGate';
+import { requirePagesRouteAuth } from '@/src/lib/auth/apiAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    const auth = await requirePagesRouteAuth(req, res);
+    if (!auth) return;
+
     const engine = ReActEngine.getInstance();
     const gate = SafeEditGate.getInstance();
 

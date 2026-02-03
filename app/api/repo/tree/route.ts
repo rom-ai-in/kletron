@@ -3,8 +3,17 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { getConfig } from "@/src/config";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export async function GET(req: NextRequest) {
+    const auth = await requireAppRouteAuth(req);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
         const { searchParams } = new URL(req.url);
         const subPath = searchParams.get("path") || "";

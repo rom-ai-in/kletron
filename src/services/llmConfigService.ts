@@ -3,10 +3,19 @@ import { getDatabase } from "./mongoClient";
 import {
     LlmConfig,
     AzureOpenAIConfig,
+    OpenAIConfig,
+    ClaudeConfig,
+    GeminiConfig,
     LMStudioConfig,
+    OllamaConfig,
+    LlmProviderType,
     validateLlmConfig,
     AzureOpenAIConfigSchema,
+    OpenAIConfigSchema,
+    ClaudeConfigSchema,
+    GeminiConfigSchema,
     LMStudioConfigSchema,
+    OllamaConfigSchema,
 } from "../schemas/llmConfig.schema";
 import { config } from "../config";
 
@@ -46,7 +55,7 @@ export async function getLlmConfig(): Promise<LlmConfig> {
  */
 function getEnvBasedConfig(): LlmConfig {
     return {
-        provider: config.defaultProvider as "azure" | "lmstudio",
+        provider: config.defaultProvider as LlmProviderType,
         azure: config.azure.endpoint
             ? {
                 endpoint: config.azure.endpoint,
@@ -56,13 +65,95 @@ function getEnvBasedConfig(): LlmConfig {
                 apiVersion: config.azure.apiVersion,
             }
             : undefined,
+        openai: config.openai?.apiKey
+            ? {
+                apiKey: config.openai.apiKey,
+                model: config.openai.model,
+                organization: config.openai.organization,
+            }
+            : undefined,
+        claude: config.claude?.apiKey
+            ? {
+                apiKey: config.claude.apiKey,
+                model: config.claude.model,
+            }
+            : undefined,
+        gemini: config.gemini?.apiKey
+            ? {
+                apiKey: config.gemini.apiKey,
+                model: config.gemini.model,
+            }
+            : undefined,
         lmstudio: {
             baseUrl: config.lmstudio.baseUrl,
             apiKey: config.lmstudio.apiKey,
             model: config.lmstudio.model,
         },
-        defaultProvider: config.defaultProvider as "azure" | "lmstudio",
+        ollama: config.ollama?.baseUrl
+            ? {
+                baseUrl: config.ollama.baseUrl,
+                model: config.ollama.model,
+            }
+            : undefined,
+        defaultProvider: config.defaultProvider as LlmProviderType,
     };
+}
+
+/**
+ * Helper to preserve API key if the incoming value is masked or empty
+ */
+function preserveApiKey(
+    newKey: string | undefined,
+    existingKey: string | undefined
+): string | undefined {
+    if (!newKey || newKey.trim() === "" || newKey.includes("•")) {
+        if (existingKey && !existingKey.includes("•")) {
+            return existingKey;
+        }
+        if (newKey?.includes("•")) {
+            throw new Error("Cannot save masked API key. Please enter the actual API key.");
+        }
+        return newKey;
+    }
+    return newKey;
+}
+
+/**
+ * Generic update config helper
+ */
+async function updateProviderConfig<T>(
+    providerKey: keyof LlmConfig,
+    configToSave: T,
+    schema: { parse: (data: unknown) => T }
+): Promise<LlmConfig> {
+    const collection = await getCollection();
+    const currentConfig = await getLlmConfig();
+
+    const validatedConfig = schema.parse(configToSave);
+
+    const updatedConfig: LlmConfig = {
+        ...currentConfig,
+        [providerKey]: validatedConfig,
+        updatedAt: new Date(),
+    };
+
+    if (currentConfig._id) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { _id, ...configWithoutId } = updatedConfig;
+
+        await collection.updateOne(
+            { _id: new ObjectId(currentConfig._id) } as any,
+            { $set: configWithoutId }
+        );
+    } else {
+        const result = await collection.insertOne({
+            ...updatedConfig,
+            createdAt: new Date(),
+        });
+        updatedConfig._id = result.insertedId.toString();
+    }
+
+    return updatedConfig;
 }
 
 /**
@@ -71,54 +162,54 @@ function getEnvBasedConfig(): LlmConfig {
 export async function updateAzureConfig(
     azureConfig: AzureOpenAIConfig
 ): Promise<LlmConfig> {
-    const collection = await getCollection();
     const currentConfig = await getLlmConfig();
-
-    // If API key is empty or masked, try to preserve the existing one
-    let configToSave = { ...azureConfig };
-    if (!configToSave.apiKey || configToSave.apiKey.trim() === "" || configToSave.apiKey.includes("•")) {
-        if (currentConfig.azure?.apiKey && !currentConfig.azure.apiKey.includes("•")) {
-            configToSave.apiKey = currentConfig.azure.apiKey;
-        } else {
-            // If we can't recover the key, and it's masked or empty, this is invalid state if we're trying to save.
-            // However, allowing empty might be valid if they want to clear it?
-            // But allowing "••••••••" is definitely wrong.
-            if (configToSave.apiKey?.includes("•")) {
-                throw new Error("Cannot save masked API key. Please enter the actual API key.");
-            }
-        }
-    }
-
-    const updatedConfig: LlmConfig = {
-        ...currentConfig,
-        azure: configToSave,
-        updatedAt: new Date(),
+    const configToSave = {
+        ...azureConfig,
+        apiKey: preserveApiKey(azureConfig.apiKey, currentConfig.azure?.apiKey) ?? "",
     };
+    return updateProviderConfig("azure", configToSave, AzureOpenAIConfigSchema);
+}
 
-    // We only validate the Azure config here, as we don't want to fail
-    // if the existing LM Studio config is invalid/incomplete
-    const validatedAzure = AzureOpenAIConfigSchema.parse(configToSave);
-    updatedConfig.azure = validatedAzure;
+/**
+ * Update OpenAI configuration
+ */
+export async function updateOpenAIConfig(
+    openaiConfig: OpenAIConfig
+): Promise<LlmConfig> {
+    const currentConfig = await getLlmConfig();
+    const configToSave = {
+        ...openaiConfig,
+        apiKey: preserveApiKey(openaiConfig.apiKey, currentConfig.openai?.apiKey) ?? "",
+    };
+    return updateProviderConfig("openai", configToSave, OpenAIConfigSchema);
+}
 
-    if (currentConfig._id) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { _id, ...configWithoutId } = updatedConfig;
+/**
+ * Update Claude (Anthropic) configuration
+ */
+export async function updateClaudeConfig(
+    claudeConfig: ClaudeConfig
+): Promise<LlmConfig> {
+    const currentConfig = await getLlmConfig();
+    const configToSave = {
+        ...claudeConfig,
+        apiKey: preserveApiKey(claudeConfig.apiKey, currentConfig.claude?.apiKey) ?? "",
+    };
+    return updateProviderConfig("claude", configToSave, ClaudeConfigSchema);
+}
 
-        await collection.updateOne(
-            { _id: new ObjectId(currentConfig._id) } as any,
-            {
-                $set: configWithoutId,
-            }
-        );
-    } else {
-        const result = await collection.insertOne({
-            ...updatedConfig,
-            createdAt: new Date(),
-        });
-        updatedConfig._id = result.insertedId.toString();
-    }
-
-    return updatedConfig;
+/**
+ * Update Gemini configuration
+ */
+export async function updateGeminiConfig(
+    geminiConfig: GeminiConfig
+): Promise<LlmConfig> {
+    const currentConfig = await getLlmConfig();
+    const configToSave = {
+        ...geminiConfig,
+        apiKey: preserveApiKey(geminiConfig.apiKey, currentConfig.gemini?.apiKey) ?? "",
+    };
+    return updateProviderConfig("gemini", configToSave, GeminiConfigSchema);
 }
 
 /**
@@ -127,59 +218,28 @@ export async function updateAzureConfig(
 export async function updateLMStudioConfig(
     lmstudioConfig: LMStudioConfig
 ): Promise<LlmConfig> {
-    const collection = await getCollection();
     const currentConfig = await getLlmConfig();
-
-    // If API key is empty or masked, try to preserve the existing one
-    let configToSave = { ...lmstudioConfig };
-    if (!configToSave.apiKey || configToSave.apiKey.trim() === "" || configToSave.apiKey.includes("•") || configToSave.apiKey === "lm-studio") {
-        // Note: LM Studio default might be "lm-studio", but if user explicitly clears it or it's masked...
-        if (currentConfig.lmstudio?.apiKey && !currentConfig.lmstudio.apiKey.includes("•")) {
-            configToSave.apiKey = currentConfig.lmstudio.apiKey;
-        } else {
-            if (configToSave.apiKey?.includes("•")) {
-                throw new Error("Cannot save masked API key. Please enter the actual API key.");
-            }
-        }
-    }
-
-    const updatedConfig: LlmConfig = {
-        ...currentConfig,
-        lmstudio: configToSave,
-        updatedAt: new Date(),
+    const configToSave = {
+        ...lmstudioConfig,
+        apiKey: preserveApiKey(lmstudioConfig.apiKey, currentConfig.lmstudio?.apiKey),
     };
+    return updateProviderConfig("lmstudio", configToSave, LMStudioConfigSchema);
+}
 
-    // We only validate the LM Studio config here, as we don't want to fail
-    // if the existing Azure config is invalid/incomplete
-    const validatedLMStudio = LMStudioConfigSchema.parse(configToSave);
-    updatedConfig.lmstudio = validatedLMStudio;
-
-    if (currentConfig._id) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { _id, ...configWithoutId } = updatedConfig;
-
-        await collection.updateOne(
-            { _id: new ObjectId(currentConfig._id) } as any,
-            {
-                $set: configWithoutId,
-            }
-        );
-    } else {
-        const result = await collection.insertOne({
-            ...updatedConfig,
-            createdAt: new Date(),
-        });
-        updatedConfig._id = result.insertedId.toString();
-    }
-
-    return updatedConfig;
+/**
+ * Update Ollama configuration
+ */
+export async function updateOllamaConfig(
+    ollamaConfig: OllamaConfig
+): Promise<LlmConfig> {
+    return updateProviderConfig("ollama", ollamaConfig, OllamaConfigSchema);
 }
 
 /**
  * Update the default provider
  */
 export async function updateDefaultProvider(
-    provider: "azure" | "lmstudio"
+    provider: LlmProviderType
 ): Promise<LlmConfig> {
     const collection = await getCollection();
     const currentConfig = await getLlmConfig();
@@ -199,9 +259,7 @@ export async function updateDefaultProvider(
 
         await collection.updateOne(
             { _id: new ObjectId(currentConfig._id) } as any,
-            {
-                $set: configWithoutId,
-            }
+            { $set: configWithoutId }
         );
     } else {
         const result = await collection.insertOne({

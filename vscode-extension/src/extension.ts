@@ -3,8 +3,18 @@ import { BackendClient } from './utils/backendClient'
 import { AgentTreeProvider } from './tree/AgentTreeProvider'
 import { ChatPanel } from './panels/ChatPanel'
 import { NumezisViewProvider } from './views/NumezisViewProvider'
+import { registerAuthCommands, AuthState } from './commands/auth'
+
+// Store context globally for static factory access
+declare global {
+  // eslint-disable-next-line no-var
+  var numezisContext: vscode.ExtensionContext | undefined
+}
 
 export function activate(context: vscode.ExtensionContext) {
+  // Store context for ChatPanel static factory
+  globalThis.numezisContext = context
+
   const backendClient = new BackendClient()
   const treeProvider = new AgentTreeProvider()
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100)
@@ -19,41 +29,50 @@ export function activate(context: vscode.ExtensionContext) {
     backendClient.setToken(savedToken)
   }
 
+  let authState: AuthState = { isAuthenticated: false }
+
   const refreshStatusBar = () => {
-    if (backendClient.hasBaseUrl()) {
-      statusBar.text = `Numezis: connected`
-      statusBar.tooltip = `Connected to ${backendClient.getBaseUrl()}`
+    if (authState.isAuthenticated && authState.user) {
+      statusBar.text = `$(account) ${authState.user.email}`
+      statusBar.tooltip = `Signed in as ${authState.user.email}\n${authState.tokenLabel || 'VS Code Extension'}`
+      statusBar.command = 'numezis.logout'
+    } else if (backendClient.hasBaseUrl()) {
+      statusBar.text = `$(plug) Numezis`
+      statusBar.tooltip = `Connected to ${backendClient.getBaseUrl()} (not signed in)`
+      statusBar.command = 'numezis.login'
     } else {
-      statusBar.text = 'Numezis: disconnected'
-      statusBar.tooltip = 'Connect to Numezis backend'
+      statusBar.text = '$(plug) Numezis'
+      statusBar.tooltip = 'Click to sign in'
+      statusBar.command = 'numezis.login'
     }
-    statusBar.command = undefined
   }
 
   refreshStatusBar()
   statusBar.show()
   context.subscriptions.push(statusBar)
 
+  // Register auth commands
+  registerAuthCommands(context, backendClient, configuration, (newState) => {
+    authState = newState
+    refreshStatusBar()
+  })
+
+  // Auto-validate token on startup
+  if (savedToken) {
+    vscode.commands.executeCommand('numezis.validateToken')
+  }
+
   const storage = {
     getRuns: () => context.globalState.get('numezis.runs', []),
-    setRuns: (runs: any[]) => {
+    setRuns: (runs: unknown[]) => {
       void context.globalState.update('numezis.runs', runs)
-    },
-    getMemory: () =>
-      context.globalState.get('numezis.memory', {
-        notes: '',
-        rules: '',
-        preferences: '',
-      }),
-    setMemory: (memory: any) => {
-      void context.globalState.update('numezis.memory', memory)
     },
   }
 
-  const persistedRuns = storage.getRuns()
+  const persistedRuns = storage.getRuns() as { agentId: string; prompt: string; runId: string; status: string }[]
   if (persistedRuns.length) {
     treeProvider.setRuns(
-      persistedRuns.map((run: any) => ({
+      persistedRuns.map((run) => ({
         agentId: run.agentId,
         prompt: run.prompt,
         runId: run.runId,
@@ -90,5 +109,5 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
-  // Intentionally left blank.
+  globalThis.numezisContext = undefined
 }

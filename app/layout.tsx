@@ -5,7 +5,7 @@ import { AuthProvider } from "@/src/context/AuthContext";
 import { AppShell } from "@/src/components/AppShell";
 
 export const metadata = {
-  title: "PayMe",
+  title: "Numezis Code",
   description: "Agent dashboard with timeline and chat for the MCP stack.",
 };
 
@@ -22,5 +22,4 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     </html>
   );
 }
-
 

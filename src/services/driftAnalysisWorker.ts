@@ -11,6 +11,8 @@ import { extractJsonObject } from "@/src/lib/jsonExtract";
 import { z } from "zod";
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import type { LlmProviderType } from "@/src/schemas/llmConfig.schema";
+import type { ResolvedLlmInfo } from "@/src/llm";
 
 export type DriftJobStatus = "queued" | "running" | "success" | "error" | "cancelled";
 
@@ -39,12 +41,7 @@ export type DriftJobDoc = {
 
     // Configuration
     llmSelection?: { provider?: string; model?: string };
-    resolvedLlm?: {
-        provider: "azure" | "lmstudio";
-        model?: string;
-        azure?: { deployment?: string; endpoint?: string; apiVersion?: string };
-        lmstudio?: { baseUrl?: string };
-    };
+    resolvedLlm?: ResolvedLlmInfo;
 
     // Diff context (snapshot)
     diffSnapshot?: string;

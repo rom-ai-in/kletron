@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "../../../../src/lib/db";
 import { ObjectId } from "mongodb";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,15 @@ export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+
+  const auth = await requireAppRouteAuth(request);
+  if (!auth) {
+    return new Response(JSON.stringify({"error": "Unauthorized"}), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
     try {
         const { id: sessionId } = await params;
         const db = await getDb();

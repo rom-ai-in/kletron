@@ -3,11 +3,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { runRepoAnalysis } from "@/src/agents/repoScannerAgent";
 import { getLlmConfig } from "@/src/services/llmConfigService";
 import { getConfig, ConfigNotSetError } from "@/src/config";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 // Ensure dynamic route
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+    const auth = await requireAppRouteAuth(req);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({

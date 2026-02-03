@@ -1,6 +1,6 @@
-# PayMe (TypeScript LangGraph)
+# Numezis Code (TypeScript LangGraph)
 
-This repo houses a **Node/TypeScript LangGraph multi-agent pipeline** backed by the local `mcp-server` Model Context Protocol server. `npm run dev` starts both services and prints a clickable LangSmith Studio link for running the graph locally.
+This repo houses a **Node/TypeScript LangGraph multi-agent pipeline** backed by the local `mcp-server` Model Context Protocol server. `npm run dev` starts both services and the local UI for running the graph.
 
 ## Architecture
 
@@ -21,7 +21,7 @@ Artifacts are written into the target repo under `.numezis/`:
 
 - `/app/page.tsx` renders a staged chat UI that submits to `/api/chat`.
 - `/api/chat` reuses the same Phase 1..4 logic and returns timeline events, meta/findings/tasks, and the final report summary.
-- The graph dropdown now exposes "Simple ReAct agent" as a quick alternative; the same graph is registered in `langgraph.json` so LangGraph can run it locally or via LangSmith.
+- The graph dropdown now exposes "Simple ReAct agent" as a quick alternative; the same graph is registered in `langgraph.json` so LangGraph can run it locally.
 - The sidebar exposes `/api/tools/*` metadata so you can click any MCP tool and see the raw `mcp-server/tools` implementation.
 - The UI now uses Tailwind CSS (see `tailwind.config.js`, `postcss.config.js`, `app/globals.css`) for the Cursor-style layout.
 
@@ -36,8 +36,7 @@ Artifacts are written into the target repo under `.numezis/`:
    ```bash
    npm run dev
    ```
-   This reclaims ports `9000` (MCP) and `8080` (LangGraph dev), launches both services, waits for readiness, and prints a LangSmith Studio link:
-   `https://smith.langchain.com/studio?baseUrl=http://localhost:8080`
+   This reclaims ports `9000` (MCP) and `8080` (LangGraph dev), launches both services, and waits for readiness.
    MCP runs over SSE at `http://localhost:9000/sse` (the LangGraph graph connects via `MCP_URL`).
    The command also spins up `npm run dev:web` automatically and waits for `http://localhost:3000` to respond before reporting success.
 
@@ -58,27 +57,12 @@ npm start
 `npm start` frees ports `9000` / `8080`, launches `mcp-server` (MCP tooling) on port `9000`, and then runs the interactive CLI (`src/index.ts`). Type `exit` to quit.
 
 
-For iterative development, use `npm run dev`. It reclaims ports 9000/8080, launches `mcp-server`, and starts `@langchain/langgraph-cli dev` on port 8080. The command prints a clickable LangSmith Studio link for your local server: `https://smith.langchain.com/studio?baseUrl=http://localhost:8080`.
-
-## LangSmith Workflow
-
-```bash
-npm run langsmith
-```
-
-Use `npm run langsmith` when deploying under LangSmith Agent. It reclaims ports 9000/8080, launches `mcp-server`, and restarts the LangGraph CLI with `LANGSMITH_AGENT=1` so the LangSmith platform can track the run. You can also call the LangSmith CLI directly:
-
-```bash
-langsmith agent run --name numezis --command "npm run langsmith"
-```
-
-Ensure `LANGSMITH_API_KEY` and related telemetry variables are set so LangSmith can ingest the traces.
+For iterative development, use `npm run dev`. It reclaims ports 9000/8080, launches `mcp-server`, and starts `@langchain/langgraph-cli dev` on port 8080.
 
 ## Environment Variables
 
 - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION`, `AZURE_OPENAI_MODEL`, `AZURE_OPENAI_MAX_TOKENS`: Provide your Azure credentials.
 - `GITHUB_MCP_DEFAULT_DIR` (preferred) / `MCP_DEFAULT_DIR`: Root path the MCP server should service. This repo’s scripts resolve the target root from these vars and pass it to both `mcp-server` and the agent so all tool calls stay focused on that repository.
-- `LANGSMITH_API_KEY` / `LANGGRAPH_API_KEY`: Optional tracing keys. `npm run langsmith` honors `LANGSMITH_API_KEY` so the platform can publish run telemetry.
 
 ## MCP Tooling
 

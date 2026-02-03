@@ -12,8 +12,6 @@ export class NumezisViewProvider implements vscode.WebviewViewProvider {
     private readonly storage: {
       getRuns: () => any[]
       setRuns: (runs: any[]) => void
-      getMemory: () => any
-      setMemory: (memory: any) => void
     }
   ) {}
 

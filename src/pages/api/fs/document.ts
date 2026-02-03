@@ -3,12 +3,16 @@ import fs from 'fs';
 import path from 'path';
 import { getConfig } from '@/src/config';
 import { getMimeType } from '@/src/utils/fileTypes';
+import { requirePagesRouteAuth } from '@/src/lib/auth/apiAuth';
 
 /**
- * API endpoint to serve binary document files (pptx, docx, xlsx, pdf, etc.)
+ * API endpoint to serve binary document files (docx, xlsx, pdf, etc.)
  * Unlike /api/fs/read which reads as UTF-8, this serves raw binary content
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    const auth = await requirePagesRouteAuth(req, res);
+    if (!auth) return;
+
     if (req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' });
     }

@@ -2,8 +2,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getConfig, saveConfig } from '../../config';
 
+// NOTE: Auth is intentionally disabled for this local dev-only endpoint.
+// The workingFolder config is essential for the app to function.
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    // TODO: add auth middleware if needed
+
     if (req.method === 'GET') {
         try {
             const cfg = await getConfig();

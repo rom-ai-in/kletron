@@ -1,11 +1,13 @@
 import { MongoClient, ServerApiVersion } from "mongodb";
-import { config } from "../config";
+import dotenv from "dotenv";
 
-if (!config.mongo.uri) {
+dotenv.config();
+
+if (!process.env.MONGODB_URI) {
     console.warn("⚠️ MONGODB_URI is not defined in the environment variables.");
 }
 
-const uri = config.mongo.uri ?? "";
+const uri = process.env.MONGODB_URI ?? "";
 const options = {
     serverApi: {
         version: ServerApiVersion.v1,
@@ -13,10 +15,10 @@ const options = {
         deprecationErrors: true,
     },
     auth:
-        config.mongo.user && config.mongo.pass
+        process.env.MONGODB_USER && process.env.MONGODB_PASS
             ? {
-                username: config.mongo.user,
-                password: config.mongo.pass,
+                username: process.env.MONGODB_USER,
+                password: process.env.MONGODB_PASS,
             }
             : undefined,
 };
@@ -24,7 +26,7 @@ const options = {
 let client: MongoClient | undefined;
 let clientPromise: Promise<MongoClient> | undefined;
 
-if (config.mongo.uri) {
+if (process.env.MONGODB_URI) {
     if (process.env.NODE_ENV === "development") {
         // In development mode, use a global variable so that the value
         // is preserved across module reloads caused by HMR (Hot Module Replacement).

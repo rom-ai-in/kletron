@@ -2,8 +2,12 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { updateStore, editorStore } from '../../store';
 import fs from 'fs';
 import { AgentDiff } from '../../../../../types/editor';
+import { requirePagesRouteAuth } from '@/src/lib/auth/apiAuth';
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    const auth = await requirePagesRouteAuth(req, res);
+    if (!auth) return;
+
     if (req.method !== 'POST') return res.status(405).end();
 
     const { agentId } = req.query;

@@ -1,42 +1,52 @@
 // app/api/auth/me/route.ts
-// API route to get current user information
+// API route to get current user information (MongoDB version)
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@/src/lib/supabase/supabaseServer';
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
+import { getSupabaseAdminClient } from "@/src/lib/supabase/supabaseAdmin";
+import * as userProfileService from '@/src/services/userProfileService';
 
 export async function GET(request: Request) {
+    const auth = await requireAppRouteAuth(request);
+    if (!auth) {
+        return new Response(JSON.stringify({ "error": "Unauthorized" }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
-        const { client } = createRouteHandlerClient(request);
+        // Get user from Supabase Auth
+        const admin = getSupabaseAdminClient();
+        const { data: { user }, error: userError } = await admin.auth.admin.getUserById(auth.userId);
 
-        const { data: { user }, error } = await client.auth.getUser();
-
-        if (error || !user) {
+        if (userError || !user) {
             return NextResponse.json(
-                { success: false, message: 'Not authenticated', user: null },
-                { status: 401 }
+                { success: false, message: 'User not found', user: null },
+                { status: 404 }
             );
         }
 
-        // Get user profile
-        const { data: profile } = await client
-            .from('user_profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single();
-
-        // Get user context (groups, company, tenant)
-        const { data: context } = await client
-            .from('user_context')
-            .select('*')
-            .eq('user_id', user.id);
+        // Get or create profile in MongoDB
+        const profile = await userProfileService.upsertProfile(
+            user.id,
+            user.email || '',
+            user.user_metadata?.full_name || null
+        );
 
         return NextResponse.json({
             success: true,
             user: {
-                id: user.id,
-                email: user.email,
+                id: auth.userId,
+                email: user.email ?? null,
             },
-            profile,
-            context,
+            profile: {
+                id: profile.id,
+                fullName: profile.fullName,
+                email: profile.email,
+                createdAt: profile.createdAt,
+                updatedAt: profile.updatedAt,
+            },
+            context: [], // Context is not used in the new architecture
         });
     } catch (err) {
         console.error('Get user error:', err);

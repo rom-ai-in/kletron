@@ -1,5 +1,5 @@
 -- =====================================================
--- Supabase Schema for PayMe Multi-Tenant Auth System
+-- Supabase Schema for Numezis Code Multi-Tenant Auth System
 -- =====================================================
 -- Data Model: Tenant → Company → Group → User
 -- Run this in Supabase SQL Editor
@@ -99,7 +99,28 @@ CREATE INDEX IF NOT EXISTS idx_user_groups_user_id ON public.user_groups(user_id
 CREATE INDEX IF NOT EXISTS idx_user_groups_group_id ON public.user_groups(group_id);
 
 -- =====================================================
--- 6. ROW LEVEL SECURITY POLICIES
+-- 6. API TOKENS TABLE
+-- Long-lived tokens for extension sync
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.api_tokens (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    label VARCHAR(255),
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_used_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ
+);
+
+-- Enable RLS
+ALTER TABLE public.api_tokens ENABLE ROW LEVEL SECURITY;
+
+-- Indexes for faster lookups
+CREATE INDEX IF NOT EXISTS idx_api_tokens_user_id ON public.api_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_token_hash ON public.api_tokens(token_hash);
+
+-- =====================================================
+-- 7. ROW LEVEL SECURITY POLICIES
 -- =====================================================
 
 -- Tenants: Users can read tenants they belong to
@@ -160,8 +181,14 @@ CREATE POLICY "Users can view own group memberships" ON public.user_groups
     FOR SELECT
     USING (user_id = auth.uid());
 
+-- API Tokens: Users can manage their own tokens
+CREATE POLICY "Users can manage own api tokens" ON public.api_tokens
+    FOR ALL
+    USING (user_id = auth.uid())
+    WITH CHECK (user_id = auth.uid());
+
 -- =====================================================
--- 7. FUNCTION: Auto-create user profile on signup
+-- 8. FUNCTION: Auto-create user profile on signup
 -- =====================================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
@@ -183,7 +210,7 @@ CREATE TRIGGER on_auth_user_created
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- =====================================================
--- 8. FUNCTION: Update updated_at timestamp
+-- 9. FUNCTION: Update updated_at timestamp
 -- =====================================================
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -211,7 +238,7 @@ CREATE TRIGGER update_user_profiles_updated_at
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 -- =====================================================
--- 9. HELPER VIEW: Get user's full context
+-- 10. HELPER VIEW: Get user's full context
 -- =====================================================
 CREATE OR REPLACE VIEW public.user_context AS
 SELECT 

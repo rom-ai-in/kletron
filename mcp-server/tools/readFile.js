@@ -3,10 +3,10 @@ import path from "path";
 import { resolveRepoPath, ensurePathInside } from "./pathUtils.js";
 
 // Office file extensions that need text extraction
-const officeExtensions = ['.pptx', '.docx', '.xlsx', '.ppt', '.doc', '.xls', '.odt', '.odp', '.ods', '.pdf'];
+const officeExtensions = ['.docx', '.xlsx', '.doc', '.xls', '.odt', '.ods', '.pdf'];
 
 export const readFile = {
-    description: "Read a file from a repository. For Office documents (PPTX, DOCX, etc.), extracts text content automatically.",
+    description: "Read a file from a repository. For Office documents (DOCX, XLSX, etc.), extracts text content automatically.",
     inputSchema: {
         type: "object",
         properties: {
@@ -51,7 +51,7 @@ export const readFile = {
                 return `${header}\n\nExtracted text content:\n\n${text}`;
             } catch (err) {
                 // If officeparser fails, return a helpful message
-                return `[Office file: ${path.basename(resolvedFilePath)}]\n\nUnable to extract text content: ${err.message}\n\nThis is a binary Office file. Consider:\n- Using 'list_slides' tool for PowerPoint files\n- Asking the user for a text summary of the content`;
+                return `[Office file: ${path.basename(resolvedFilePath)}]\n\nUnable to extract text content: ${err.message}\n\nThis is a binary Office file. Consider asking the user for a text summary of the content.`;
             }
         }
 

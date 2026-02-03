@@ -7,10 +7,13 @@ import { auditService } from "./auditService";
 import { agentGraphRunService } from "./agentGraphRunService";
 import { agentGraphService } from "./agentGraphService";
 import type { AgentGraphNode } from "./agentGraphTypes";
-import { topoSortAgentGraph } from "./agentGraphTopo";
+import type { LlmProviderType } from "@/src/schemas/llmConfig.schema";
 import { nodeOutputSchemaRegistry } from "../shared/nodeOutputSchemas";
 import { parseJsonOutput, renderUserPrompt } from "./agentGraphUtils";
 import { McpClient } from "../mcp/client";
+import { evaluateCondition } from "./agentGraphConditions";
+import { getEntryNodeIds, getGraphNodeOrder, resolveExecutionMode } from "./agentGraphRuntime";
+import { setNestedValue } from "./agentGraphState";
 
 // --- Context Management Imports ---
 import { contextGraphStore } from "@/src/context/graph/ContextGraphStore";
@@ -278,7 +281,7 @@ export class AgentGraphExecutor {
         runId: string,
         opts?: {
             onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
-            llmSelectionOverride?: { provider: "azure" | "lmstudio"; model?: string };
+            llmSelectionOverride?: { provider: LlmProviderType; model?: string };
         }
     ): Promise<AgentWorkflowResult> {
         // Ensure context is ready before we start
@@ -290,17 +293,30 @@ export class AgentGraphExecutor {
         const graph = await agentGraphService.getGraph(run.graphId.toString());
         if (!graph) throw new Error(`Graph ${run.graphId.toString()} not found`);
 
-        const nodeOrder = (run.nodeOrder?.length ? run.nodeOrder : topoSortAgentGraph(graph.nodes, graph.edges)).slice();
+        const executionMode = resolveExecutionMode(graph);
+        const timelineNodeIds = (run.nodeOrder?.length ? run.nodeOrder : getGraphNodeOrder(graph)).slice();
         if (!run.nodeOrder?.length) {
-            await agentGraphRunService.setNodeOrder(runId, nodeOrder);
+            await agentGraphRunService.setNodeOrder(runId, timelineNodeIds);
         }
 
         const state = cloneValue(run.state ?? { nodes: {} });
         if (!state.nodes) state.nodes = {};
+        const nodeRunCounts: Record<string, number> = {
+            ...(state.execution?.runsByNode ?? {}),
+        };
+        let totalSteps = typeof state.execution?.step === "number" ? state.execution.step : 0;
+        const executionHistory = Array.isArray(state.execution?.history) ? [...state.execution!.history!] : [];
+        state.execution = {
+            ...(state.execution ?? {}),
+            mode: executionMode,
+            step: totalSteps,
+            runsByNode: nodeRunCounts,
+            history: executionHistory,
+        };
 
         await agentGraphRunService.updateRunStatus(runId, "RUNNING", {});
 
-        const globalTimeline: TimelineEvent[] = nodeOrder.map((id) => {
+        const globalTimeline: TimelineEvent[] = timelineNodeIds.map((id) => {
             const node = graph.nodes.find((n) => n.id === id);
             return {
                 id,
@@ -343,7 +359,29 @@ export class AgentGraphExecutor {
 
         await emitUpdate();
 
-        for (const nodeId of nodeOrder) {
+        const pendingNodeIds =
+            executionMode === "dag" ? timelineNodeIds.slice() : getEntryNodeIds(graph);
+        const maxIterations = graph.execution?.maxIterations ?? 200;
+        const maxNodeRuns = graph.execution?.maxNodeRuns ?? 20;
+
+        const selectNextNodes = (currentId: string) => {
+            if (executionMode !== "state_machine") return [];
+            const matched: string[] = [];
+            const seen = new Set<string>();
+            const outgoing = graph.edges.filter((e) => e.source === currentId);
+            for (const edge of outgoing) {
+                if (evaluateCondition(edge.condition, state)) {
+                    if (!seen.has(edge.target)) {
+                        matched.push(edge.target);
+                        seen.add(edge.target);
+                    }
+                }
+            }
+            return matched;
+        };
+
+        while (pendingNodeIds.length) {
+            const nodeId = pendingNodeIds.shift()!;
             const node = graph.nodes.find((n) => n.id === nodeId);
             if (!node) {
                 await agentGraphRunService.updateRunStatus(runId, "FAILED", {
@@ -358,6 +396,58 @@ export class AgentGraphExecutor {
                         mission: typeof state.mission === "string" ? state.mission : "",
                         report: `ERROR: Missing node ${nodeId} in graph definition`,
                         meta: { runId, graphId: run.graphId.toString() },
+                    }),
+                    eventStream: globalEventStream,
+                };
+                await emitUpdate();
+                return failureResult;
+            }
+
+            totalSteps += 1;
+            nodeRunCounts[nodeId] = (nodeRunCounts[nodeId] ?? 0) + 1;
+            state.execution = {
+                ...(state.execution ?? {}),
+                mode: executionMode,
+                step: totalSteps,
+                runsByNode: nodeRunCounts,
+                history: [...executionHistory, nodeId],
+                lastNodeId: nodeId,
+            };
+            executionHistory.push(nodeId);
+            if (totalSteps > maxIterations) {
+                const message = `Max iterations exceeded (${maxIterations}).`;
+                await agentGraphRunService.updateRunStatus(runId, "FAILED", {
+                    endedAt: new Date(),
+                    error: message,
+                } as any);
+                const failureResult: AgentWorkflowResult = {
+                    sessionId: runId,
+                    timeline: globalTimeline,
+                    conclusion: "Run failed (max iterations).",
+                    outputs: createPlaceholderOutputs({
+                        mission: typeof state.mission === "string" ? state.mission : "",
+                        report: `ERROR: ${message}`,
+                        meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
+                    }),
+                    eventStream: globalEventStream,
+                };
+                await emitUpdate();
+                return failureResult;
+            }
+            if (nodeRunCounts[nodeId] > maxNodeRuns) {
+                const message = `Max node executions exceeded for ${nodeId} (${maxNodeRuns}).`;
+                await agentGraphRunService.updateRunStatus(runId, "FAILED", {
+                    endedAt: new Date(),
+                    error: message,
+                } as any);
+                const failureResult: AgentWorkflowResult = {
+                    sessionId: runId,
+                    timeline: globalTimeline,
+                    conclusion: "Run failed (max node runs).",
+                    outputs: createPlaceholderOutputs({
+                        mission: typeof state.mission === "string" ? state.mission : "",
+                        report: `ERROR: ${message}`,
+                        meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
                     }),
                     eventStream: globalEventStream,
                 };
@@ -423,6 +513,7 @@ export class AgentGraphExecutor {
             await flushUpdate();
 
             try {
+                const nodeKind = node.kind ?? "react";
                 const tools = selectToolsByName(node.react.toolNames ?? []);
                 const builtMessageEvents: AgentEvent[] = [];
                 const handleStreamingMessage = async (message: BaseMessage) => {
@@ -484,45 +575,75 @@ export class AgentGraphExecutor {
                 // this.ensureActiveEvent("assistant"); // Commented out as `this` context is `AgentGraphExecutor` not a React component.
 
                 // We'll capture the *new* messages from this turn
-                const messages = await streamReactAgentMessages({
-                    name: `GraphNode:${node.id}`, // Using existing `node.id`
-                    systemPrompt: enhancedSystemPrompt, // Use enhanced prompt
-                    userPrompt: userPrompt, // Using existing `userPrompt`
-                    tools,
-                    llmSelection: opts?.llmSelectionOverride ?? node.react.llmSelection,
-                    // extraMessages: messageHistory, // Commented out as `messageHistory` is not defined.
-                    onMessage: handleStreamingMessage, // Using existing `handleStreamingMessage`
-                    // onToken: (token) => this.handleStreamingToken(token), // Commented out as `this` context is `AgentGraphExecutor`
-                    // onToolCallChunk: (chunk) => this.handleToolCallChunk(chunk), // Commented out as `this` context is `AgentGraphExecutor`
-                    // onMessage: (msg) => this.handleMessageCompletion(msg) // Commented out as `this` context is `AgentGraphExecutor`
-                });
+                let validated: unknown;
+                if (nodeKind === "router") {
+                    const routerNote: AgentEvent = {
+                        id: nextEventId(),
+                        phaseId: node.id,
+                        phaseLabel: node.label,
+                        kind: "assistant",
+                        role: "assistant",
+                        content: "Router node executed. Evaluating outgoing conditions.",
+                        timestamp: new Date().toISOString(),
+                    };
+                    eventStream.push(routerNote);
+                    globalEventStream.push(routerNote);
+                    await flushUpdate();
+                    const schemaId = node.output.schemaId as keyof typeof nodeOutputSchemaRegistry;
+                    const schema = nodeOutputSchemaRegistry[schemaId];
+                    if (!schema) {
+                        throw new Error(`Unknown schemaId: ${node.output.schemaId}`);
+                    }
+                    validated = schema.parse({
+                        route: "conditional_edges",
+                        timestamp: new Date().toISOString(),
+                    });
+                } else {
+                    const messages = await streamReactAgentMessages({
+                        name: `GraphNode:${node.id}`, // Using existing `node.id`
+                        systemPrompt: enhancedSystemPrompt, // Use enhanced prompt
+                        userPrompt: userPrompt, // Using existing `userPrompt`
+                        tools,
+                        llmSelection: opts?.llmSelectionOverride ?? node.react.llmSelection,
+                        // extraMessages: messageHistory, // Commented out as `messageHistory` is not defined.
+                        onMessage: handleStreamingMessage, // Using existing `handleStreamingMessage`
+                        // onToken: (token) => this.handleStreamingToken(token), // Commented out as `this` context is `AgentGraphExecutor`
+                        // onToolCallChunk: (chunk) => this.handleToolCallChunk(chunk), // Commented out as `this` context is `AgentGraphExecutor`
+                        // onMessage: (msg) => this.handleMessageCompletion(msg) // Commented out as `this` context is `AgentGraphExecutor`
+                    });
 
-                const finalAgentEvent =
-                    builtMessageEvents.slice().reverse().find((event) => event.kind === "assistant") ??
-                    builtMessageEvents.at(-1);
-                const finalContent = finalAgentEvent?.content ?? "";
+                    const finalAgentEvent =
+                        builtMessageEvents.slice().reverse().find((event) => event.kind === "assistant") ??
+                        builtMessageEvents.at(-1);
+                    const finalContent = finalAgentEvent?.content ?? "";
 
-                let parsed: unknown = parseJsonOutput(finalContent);
-                const schemaId = node.output.schemaId as keyof typeof nodeOutputSchemaRegistry;
-                const schema = nodeOutputSchemaRegistry[schemaId];
-                if (!schema) {
-                    throw new Error(`Unknown schemaId: ${node.output.schemaId}`);
+                    let parsed: unknown = parseJsonOutput(finalContent);
+                    const schemaId = node.output.schemaId as keyof typeof nodeOutputSchemaRegistry;
+                    const schema = nodeOutputSchemaRegistry[schemaId];
+                    if (!schema) {
+                        throw new Error(`Unknown schemaId: ${node.output.schemaId}`);
+                    }
+                    parsed = await maybeExecuteJsonActionTool({
+                        schemaId: String(schemaId),
+                        parsed,
+                        allowedToolNames: node.react.toolNames ?? [],
+                        phaseId: node.id,
+                        phaseLabel: node.label,
+                        makeEventId: nextGlobalEventId,
+                        pushEvent: (event) => {
+                            globalEventStream.push(event);
+                            eventStream.push(event);
+                        },
+                    });
+                    validated = schema.parse(parsed);
                 }
-                parsed = await maybeExecuteJsonActionTool({
-                    schemaId: String(schemaId),
-                    parsed,
-                    allowedToolNames: node.react.toolNames ?? [],
-                    phaseId: node.id,
-                    phaseLabel: node.label,
-                    makeEventId: nextGlobalEventId,
-                    pushEvent: (event) => {
-                        globalEventStream.push(event);
-                        eventStream.push(event);
-                    },
-                });
-                const validated = schema.parse(parsed);
 
-                state.nodes[node.id] = validated;
+                state.nodes[node.id] = validated as any;
+                if (node.output?.statePath) {
+                    setNestedValue(state as any, node.output.statePath, validated, {
+                        merge: node.output?.stateMerge,
+                    });
+                }
                 await agentGraphRunService.updateRunState(runId, cloneValue(state));
                 await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "COMPLETED");
 
@@ -550,6 +671,13 @@ export class AgentGraphExecutor {
                     eventStream,
                 };
                 await auditService.completeSession(sessionId, finalResult);
+
+                if (executionMode === "state_machine") {
+                    const nextNodes = selectNextNodes(nodeId);
+                    if (nextNodes.length) {
+                        pendingNodeIds.push(...nextNodes);
+                    }
+                }
             } catch (err: any) {
                 await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "FAILED");
                 await agentGraphRunService.updateRunStatus(runId, "FAILED", {

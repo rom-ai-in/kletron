@@ -4,8 +4,17 @@ import { getDb } from "../../../src/lib/db";
 export const dynamic = "force-dynamic";
 
 import { config } from "../../../src/config";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
-export async function GET() {
+export async function GET(request: Request) {
+    const auth = await requireAppRouteAuth(request);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
         const debugInfo = {
             uriExists: !!config.mongo.uri,

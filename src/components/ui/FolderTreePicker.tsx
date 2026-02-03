@@ -42,17 +42,39 @@ export function FolderTreePicker({ value, onChange, placeholder }: FolderTreePic
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const fetchNode = async (path: string) => {
+    const fetchNode = async (nodePath: string) => {
         try {
-            const res = await fetch(`/api/repo/tree?path=${encodeURIComponent(path)}`);
+            // Use the correct API endpoint and pass root parameter
+            const queryParams = new URLSearchParams();
+            if (nodePath) {
+                queryParams.set('root', nodePath);
+            }
+            const res = await fetch(`/api/fs/tree${queryParams.toString() ? '?' + queryParams.toString() : ''}`);
             const data = await res.json();
-            if (path === "") {
-                setTree(data.folders);
+
+            // The API returns an array of TreeNode objects directly
+            // Transform to match our TreeItem interface (filtering to directories only)
+            const folders: TreeItem[] = Array.isArray(data)
+                ? data
+                    .filter((node: { isDirectory: boolean }) => node.isDirectory)
+                    .map((node: { path: string; name: string; isDirectory: boolean }) => ({
+                        name: node.name,
+                        path: node.path,
+                        type: 'directory' as const,
+                    }))
+                : [];
+
+            if (nodePath === "") {
+                setTree(folders);
             } else {
-                setTree(prev => updateTree(prev, path, data.folders));
+                setTree(prev => updateTree(prev, nodePath, folders));
             }
         } catch (e) {
             console.error("Failed to fetch tree node", e);
+            // Set empty array to avoid undefined state on error
+            if (nodePath === "") {
+                setTree([]);
+            }
         }
     };
 
@@ -175,7 +197,7 @@ export function FolderTreePicker({ value, onChange, placeholder }: FolderTreePic
                             <Folder className="h-4 w-4" />
                             <span className="text-sm">/ (Project Root)</span>
                         </div>
-                        {tree.length === 0 ? (
+                        {!tree || tree.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-8 text-text-muted opacity-50">
                                 <Loader2 className="h-5 w-5 animate-spin mb-2" />
                                 <span className="text-xs">Loading structure...</span>

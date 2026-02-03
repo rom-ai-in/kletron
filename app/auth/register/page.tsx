@@ -13,6 +13,7 @@ export default function RegisterPage() {
     const [fullName, setFullName] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showConfirmation, setShowConfirmation] = useState(false);
     const router = useRouter();
     const { signUp } = useAuth();
 
@@ -35,7 +36,11 @@ export default function RegisterPage() {
         const result = await signUp(email, password, fullName);
 
         if (result.success) {
-            router.push('/');
+            if (result.requiresConfirmation) {
+                setShowConfirmation(true);
+            } else {
+                router.push('/');
+            }
         } else {
             setError(result.error || 'Registration failed');
         }
@@ -43,16 +48,45 @@ export default function RegisterPage() {
         setLoading(false);
     };
 
+    // Show confirmation message
+    if (showConfirmation) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-bg-app px-4">
+                <div className="w-full max-w-sm text-center">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 border border-green-500/20 mb-6">
+                        <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <h1 className="text-xl font-medium text-text-primary mb-2">Check your email</h1>
+                    <p className="text-sm text-text-muted mb-6">
+                        We sent a confirmation link to<br />
+                        <span className="text-text-secondary font-medium">{email}</span>
+                    </p>
+                    <p className="text-xs text-text-muted mb-6">
+                        Click the link in the email to activate your account.
+                    </p>
+                    <a
+                        href="/auth/login"
+                        className="text-sm text-text-secondary hover:text-text-primary transition-colors"
+                    >
+                        Back to login
+                    </a>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen flex items-center justify-center bg-bg-app px-4">
             <div className="w-full max-w-sm">
                 {/* Logo / Brand */}
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-bg-surface border border-border-subtle mb-4">
+                    <Link href="/" className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-bg-surface border border-border-subtle mb-4 hover:bg-state-hover hover:border-border-strong transition-all">
                         <span className="text-xl">🧠</span>
-                    </div>
+                    </Link>
                     <h1 className="text-xl font-medium text-text-primary">Create account</h1>
-                    <p className="text-sm text-text-muted mt-1">Get started with PayMe</p>
+                    <p className="text-sm text-text-muted mt-1">Get started with Numezis Code</p>
                 </div>
 
                 <div className="bg-bg-surface border border-border-subtle rounded-lg p-6">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chainExecutor } from "@/src/services/chainExecutor";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 /**
  * GET /api/runs/[id]
@@ -9,6 +10,14 @@ export async function GET(
     req: NextRequest,
     { params }: { params: { id: string } }
 ) {
+  const auth = await requireAppRouteAuth(req);
+  if (!auth) {
+    return new Response(JSON.stringify({"error": "Unauthorized"}), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
     try {
         const runId = params.id;
         const run = await chainExecutor.getRun(runId);

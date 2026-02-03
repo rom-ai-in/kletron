@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { semanticSearch } from "@/src/services/vectorService";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export async function POST(request: NextRequest) {
+    const auth = await requireAppRouteAuth(request);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
         const body = await request.json();
         const { query, path: searchPath, language, maxResults } = body;

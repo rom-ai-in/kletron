@@ -1,17 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLlmConfig, resetToEnvConfig } from "@/src/services/llmConfigService";
+import { getLlmConfig, resetToEnvConfig, updateDefaultProvider } from "@/src/services/llmConfigService";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
+import { LLM_PROVIDERS, type LlmProviderType } from "@/src/schemas/llmConfig.schema";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/llm-config
- * Retrieve the current LLM configuration
+ * Retrieve the current LLM configuration (with masked API keys)
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const auth = await requireAppRouteAuth(request);
+        if (!auth) {
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+                status: 401,
+                headers: { "Content-Type": "application/json" },
+            });
+        }
+
         const config = await getLlmConfig();
 
-        // Don't expose sensitive keys in full
+        // Don't expose sensitive keys in full - mask all API keys
         const sanitizedConfig = {
             ...config,
             azure: config.azure
@@ -20,12 +30,31 @@ export async function GET() {
                     apiKey: config.azure.apiKey ? "••••••••" : "",
                 }
                 : undefined,
+            openai: config.openai
+                ? {
+                    ...config.openai,
+                    apiKey: config.openai.apiKey ? "••••••••" : "",
+                }
+                : undefined,
+            claude: config.claude
+                ? {
+                    ...config.claude,
+                    apiKey: config.claude.apiKey ? "••••••••" : "",
+                }
+                : undefined,
+            gemini: config.gemini
+                ? {
+                    ...config.gemini,
+                    apiKey: config.gemini.apiKey ? "••••••••" : "",
+                }
+                : undefined,
             lmstudio: config.lmstudio
                 ? {
                     ...config.lmstudio,
                     apiKey: config.lmstudio.apiKey ? "••••••••" : "",
                 }
                 : undefined,
+            ollama: config.ollama ?? undefined,
         };
 
         return NextResponse.json(sanitizedConfig, { status: 200 });
@@ -40,15 +69,29 @@ export async function GET() {
 
 /**
  * POST /api/llm-config
- * Update the default provider or configuration
+ * Update the default provider
  */
 export async function POST(req: NextRequest) {
     try {
+        const auth = await requireAppRouteAuth(req);
+        if (!auth) {
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+                status: 401,
+                headers: { "Content-Type": "application/json" },
+            });
+        }
+
         const body = await req.json();
 
         if (body.provider) {
-            const { updateDefaultProvider } = await import("@/src/services/llmConfigService");
-            const config = await updateDefaultProvider(body.provider);
+            // Validate provider is one of the supported types
+            if (!LLM_PROVIDERS.includes(body.provider as LlmProviderType)) {
+                return NextResponse.json(
+                    { error: `Invalid provider. Must be one of: ${LLM_PROVIDERS.join(", ")}` },
+                    { status: 400 }
+                );
+            }
+            const config = await updateDefaultProvider(body.provider as LlmProviderType);
             return NextResponse.json(config, { status: 200 });
         }
 
@@ -66,8 +109,16 @@ export async function POST(req: NextRequest) {
  * DELETE /api/llm-config
  * Reset configuration to environment variables
  */
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
     try {
+        const auth = await requireAppRouteAuth(request);
+        if (!auth) {
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+                status: 401,
+                headers: { "Content-Type": "application/json" },
+            });
+        }
+
         const config = await resetToEnvConfig();
         return NextResponse.json(config, { status: 200 });
     } catch (error) {

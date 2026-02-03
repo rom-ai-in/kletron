@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { McpClient } from "@/src/mcp/client";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export async function POST(req: NextRequest) {
+    const auth = await requireAppRouteAuth(req);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
         const body = await req.json();
         const { toolName, args } = body;

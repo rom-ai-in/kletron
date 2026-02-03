@@ -17,8 +17,6 @@
     "glob": "^10.3.10",
     "minimatch": "^10.1.1",
     "officeparser": "^6.0.4",
-    "pptx-automizer": "^0.8.1",
-    "pptxgenjs": "^4.0.1",
     "typescript": "^5.9.3"
   }
 }

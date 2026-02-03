@@ -1,8 +1,12 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ConversationService } from '../../../services/agent/ConversationService';
+import { requirePagesRouteAuth } from '@/src/lib/auth/apiAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    const auth = await requirePagesRouteAuth(req, res);
+    if (!auth) return;
+
     if (req.method !== 'PUT') {
         res.setHeader('Allow', ['PUT']);
         res.status(405).end(`Method ${req.method} Not Allowed`);

@@ -3,8 +3,12 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { ConversationService } from '../../../services/agent/ConversationService';
 import { getChatModel } from '../../../llm';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { requirePagesRouteAuth } from '@/src/lib/auth/apiAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    const auth = await requirePagesRouteAuth(req, res);
+    if (!auth) return;
+
     if (req.method !== 'POST') {
         res.setHeader('Allow', ['POST']);
         res.status(405).end(`Method ${req.method} Not Allowed`);

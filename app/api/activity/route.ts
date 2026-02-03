@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/src/lib/db";
 import { chainExecutor } from "@/src/services/chainExecutor";
 import { ObjectId } from "mongodb";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 /**
  * GET /api/activity
@@ -10,6 +11,14 @@ import { ObjectId } from "mongodb";
  * and agent graph runs (agent_graph_runs) into a single chronological feed.
  */
 export async function GET(req: NextRequest) {
+    const auth = await requireAppRouteAuth(req);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
         const db = await getDb();
         const searchParams = req.nextUrl.searchParams;

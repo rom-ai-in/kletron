@@ -1,15 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, FileSpreadsheet, Presentation, AlertCircle, Download, Loader2 } from 'lucide-react';
-import { getFileExtension, isPresentationFile, isWordDocument, isSpreadsheet } from '@/src/utils/fileTypes';
+import { FileText, FileSpreadsheet, AlertCircle, Download, Loader2 } from 'lucide-react';
+import { isWordDocument, isSpreadsheet } from '@/src/utils/fileTypes';
 
 interface DocumentViewerProps {
     filePath: string;
 }
 
 /**
- * Document viewer component for Office files (pptx, docx, xlsx, pdf)
+ * Document viewer component for Office files (docx, xlsx, pdf)
  * Uses mammoth.js for Word documents and provides download fallback for others
  */
 export const DocumentViewer: React.FC<DocumentViewerProps> = ({ filePath }) => {
@@ -24,15 +24,12 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ filePath }) => {
 
     // Get file type icon
     const FileIcon = useMemo(() => {
-        if (isPresentationFile(filePath)) return Presentation;
         if (isWordDocument(filePath)) return FileText;
         if (isSpreadsheet(filePath)) return FileSpreadsheet;
         return FileText;
     }, [filePath]);
 
     const fileName = filePath.split('/').pop() || 'Document';
-    const ext = getFileExtension(filePath);
-
     useEffect(() => {
         let cancelled = false;
 
@@ -59,19 +56,6 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ filePath }) => {
                         if (result.messages.length > 0) {
                             console.log('Mammoth messages:', result.messages);
                         }
-                    }
-                } else if (isPresentationFile(filePath)) {
-                    // For PowerPoint, show a preview message with metadata
-                    if (!cancelled) {
-                        const sizeKB = Math.round(arrayBuffer.byteLength / 1024);
-                        setContent(`
-                            <div class="pptx-preview">
-                                <h2>PowerPoint Presentation</h2>
-                                <p><strong>File:</strong> ${fileName}</p>
-                                <p><strong>Size:</strong> ${sizeKB} KB</p>
-                                <p class="note">PowerPoint preview is not available in the browser. Click the download button to view in Microsoft PowerPoint or LibreOffice.</p>
-                            </div>
-                        `);
                     }
                 } else {
                     // For other document types, show info
@@ -189,17 +173,14 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ filePath }) => {
                     border-radius: 4px;
                     margin: 1em 0;
                 }
-                .pptx-preview,
                 .doc-info {
                     text-align: center;
                     padding: 3rem;
                 }
-                .pptx-preview h2,
                 .doc-info h2 {
                     font-size: 1.5rem;
                     margin-bottom: 1rem;
                 }
-                .pptx-preview .note,
                 .doc-info .note {
                     color: var(--color-text-muted);
                     font-style: italic;

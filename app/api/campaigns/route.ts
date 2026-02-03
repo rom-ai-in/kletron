@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { chainExecutor } from "@/src/services/chainExecutor";
 import { ChainConfigBuilder } from "@/src/services/chainConfigBuilder";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 /**
  * Zod schema for creating a chain
@@ -44,6 +45,14 @@ const CreateChainSchema = z.object({
  * List all campaigns with optional filtering
  */
 export async function GET(req: NextRequest) {
+    const auth = await requireAppRouteAuth(req);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
         const searchParams = req.nextUrl.searchParams;
         const status = searchParams.get("status");
@@ -71,6 +80,14 @@ export async function GET(req: NextRequest) {
  * Create a new campaign
  */
 export async function POST(req: NextRequest) {
+    const auth = await requireAppRouteAuth(req);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
         const body = await req.json();
 

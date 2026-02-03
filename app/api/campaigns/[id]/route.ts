@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { chainExecutor } from "@/src/services/chainExecutor";
 import { ChainConfigBuilder } from "@/src/services/chainConfigBuilder";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 /**
  * Zod schema for updating a campaign
@@ -43,6 +44,14 @@ export async function GET(
     req: NextRequest,
     { params }: { params: { id: string } }
 ) {
+  const auth = await requireAppRouteAuth(req);
+  if (!auth) {
+    return new Response(JSON.stringify({"error": "Unauthorized"}), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
     try {
         const chainId = params.id;
 
@@ -88,6 +97,14 @@ export async function DELETE(
     req: NextRequest,
     { params }: { params: { id: string } }
 ) {
+  const auth = await requireAppRouteAuth(req);
+  if (!auth) {
+    return new Response(JSON.stringify({"error": "Unauthorized"}), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
     try {
         const chainId = params.id;
 
@@ -125,6 +142,14 @@ export async function PUT(
     req: NextRequest,
     { params }: { params: { id: string } }
 ) {
+  const auth = await requireAppRouteAuth(req);
+  if (!auth) {
+    return new Response(JSON.stringify({"error": "Unauthorized"}), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
     try {
         const chainId = params.id;
         const body = await req.json();

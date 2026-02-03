@@ -4,7 +4,7 @@
 Le **graph de contexte** sert de mémoire structurée du dépôt : fichiers, symboles, relations d'import ou d'édition, dates et compteurs. Il permet au pipeline LangGraph d'ajouter des informations pertinentes aux prompts envoyés à l'agent, afin de limiter les allers-retours vers le serveur MCP et d'amener l'agent à raisonner avec l'état du code local.
 
 ## 2. Architecture du graphe
-- `ContextGraphStore` (`src/context/graph/ContextGraphStore.ts`) stocke les *ContextNode* et *ContextEdge* en mémoire avec adjacence, métadonnées et stats dynamiques. Les nœuds ont une clé `id` (chemin absolu pour les fichiers) et des champs `metadata`/`stats` mis à jour lorsqu'ils sont vus ou modifiés.
+- `ContextGraphStore` (`src/context/graph/ContextGraphStore.ts`) stocke les *ContextNode* et *ContextEdge* en mémoire avec adjacence, métadonnées et stats dynamiques. Les nœuds ont une clé `id` (chemin absolu pour les fichiers) et des champs `metadata`/`stats` mis à jour lorsqu'ils sont vus ou modifiés.  
 - Les arêtes typiques (`imports`, `referenced_in`, `contains`, etc.) relient des nœuds autour des dépendances et du flot structurel. L'API `getNeighborhood` fournit un voisinage en N sauts pour guider la proximité pendant le classement.
 - La persistance JSON s'effectue dans `.numezis/context_graph.json`, ce qui permet de recharger rapidement le graphe entre deux runs (`load`/`save`).
 

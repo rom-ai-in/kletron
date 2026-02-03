@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 
 import { getDb } from "@/src/lib/db";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,6 +10,14 @@ export const runtime = "nodejs";
 const RESULTS_COLLECTION = "i18n_process_job_results";
 
 export async function GET(req: Request) {
+  const auth = await requireAppRouteAuth(req);
+  if (!auth) {
+    return new Response(JSON.stringify({"error": "Unauthorized"}), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const url = new URL(req.url);
   const jobId = url.searchParams.get("jobId");
   const onlyChanged = url.searchParams.get("onlyChanged") === "true";

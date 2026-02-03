@@ -44,24 +44,24 @@ function buildCrumbsFromSegments(pathname: string, segmentLabels: Record<string,
 }
 
 const resolverCampaignDetails: BreadcrumbResolver = (pathname) => {
-  const m = pathname.match(/^\/campaigns\/([^/]+)\/?$/);
+  const m = pathname.match(/^\/app\/campaigns\/([^/]+)\/?$/);
   if (!m) return null;
   const id = m[1];
   const short = id.length > 10 ? `${id.slice(0, 6)}…${id.slice(-3)}` : id;
   return [
-    { href: "/campaigns", label: "Campaigns", isCurrent: false },
-    { href: `/campaigns/${id}`, label: `Campaign ${short}`, isCurrent: true },
+    { href: "/app/campaigns", label: "Campaigns", isCurrent: false },
+    { href: `/app/campaigns/${id}`, label: `Campaign ${short}`, isCurrent: true },
   ];
 };
 
 const resolverRunDetails: BreadcrumbResolver = (pathname) => {
-  const m = pathname.match(/^\/runs\/([^/]+)\/?$/);
+  const m = pathname.match(/^\/app\/runs\/([^/]+)\/?$/);
   if (!m) return null;
   const id = m[1];
   const short = id.length > 10 ? `${id.slice(0, 6)}…${id.slice(-3)}` : id;
   return [
-    { href: "/history", label: "Activity", isCurrent: false },
-    { href: `/runs/${id}`, label: `Run ${short}`, isCurrent: true },
+    { href: "/app/history", label: "Activity", isCurrent: false },
+    { href: `/app/runs/${id}`, label: `Run ${short}`, isCurrent: true },
   ];
 };
 
@@ -69,20 +69,37 @@ const resolvers: BreadcrumbResolver[] = [resolverCampaignDetails, resolverRunDet
 
 const segmentLabels: Record<string, string> = {
   "/": "Editor",
-  "/deep-agent": "Deep Agent",
-  "/campaigns": "Campaigns",
-  "/runs": "Execution Runs",
-  "/vectors": "Vector Index",
-  "/vectors/history": "Vector History",
-  "/history": "Activity",
+  "/app": "App",
+  "/app/deep-agent": "Deep Agent",
+  "/app/campaigns": "Campaigns",
+  "/app/runs": "Execution Runs",
+  "/app/vectors": "Vector Index",
+  "/app/vectors/history": "Vector History",
+  "/app/history": "Activity",
+  "/app/changes": "Code Comparator",
+  "/app/agent-graphs": "Agent Graphs",
+  "/app/config": "Configuration",
+  "/app/config/context": "Context",
+  "/app/config/llm": "LLM",
+  "/app/config/graphs": "Graphs",
+  "/app/account": "Account",
+
+  // Legacy mappings for breadcrumb segments
+  "deep-agent": "Deep Agent",
+  "campaigns": "Campaigns",
+  "runs": "Execution Runs",
+  "vectors": "Vector Index",
+  "history": "Activity",
+  "changes": "Code Comparator",
+  "agent-graphs": "Agent Graphs",
+  "config": "Configuration",
+  "context": "Context",
+  "llm": "LLM",
+  "graphs": "Graphs",
+  "account": "Account",
 
   "/i18n": "Translation Agents",
-
   "/i18n/logs": "Translation Logs",
-  "/config": "Configuration",
-  "/config/context": "Context",
-  "/config/llm": "LLM",
-  "/config/graphs": "Graphs",
 };
 
 export function getBreadcrumbItems(pathname: string): BreadcrumbItem[] {
@@ -93,4 +110,3 @@ export function getBreadcrumbItems(pathname: string): BreadcrumbItem[] {
 
   return buildCrumbsFromSegments(pathname, segmentLabels);
 }
-

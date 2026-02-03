@@ -215,77 +215,55 @@ export class AuthService {
     }
 
     /**
-     * Get the current user's profile
+     * Get the current user's profile from MongoDB via API
      */
     async getUserProfile(): Promise<UserProfile | null> {
         try {
-            const user = await this.getCurrentUser();
-            if (!user) return null;
+            const response = await fetch('/api/auth/me');
+            if (!response.ok) return null;
 
-            const { data, error } = await this.supabase
-                .from('user_profiles')
-                .select('*')
-                .eq('id', user.id)
-                .single();
+            const data = await response.json();
+            if (!data.success || !data.profile) return null;
 
-            if (error || !data) {
-                return null;
-            }
-
-            return data;
+            return {
+                id: data.profile.id,
+                full_name: data.profile.fullName,
+                email: data.profile.email,
+                avatar_url: null,
+                created_at: data.profile.createdAt,
+                updated_at: data.profile.updatedAt,
+            };
         } catch {
             return null;
         }
     }
 
     /**
-     * Get user context with tenant, company, and groups
+     * Get user context (deprecated - returns empty array in MongoDB architecture)
      */
     async getUserContext(): Promise<UserContext[] | null> {
-        try {
-            const user = await this.getCurrentUser();
-            if (!user) return null;
-
-            const { data, error } = await this.supabase
-                .from('user_context')
-                .select('*')
-                .eq('user_id', user.id);
-
-            if (error || !data) {
-                return null;
-            }
-
-            return data;
-        } catch {
-            return null;
-        }
+        // Context is not used in the MongoDB-only architecture
+        return [];
     }
 
     /**
-     * Update user profile
+     * Update user profile via API
      */
     async updateProfile(updates: Partial<Pick<UserProfile, 'full_name' | 'avatar_url'>>): Promise<AuthResponse> {
         try {
-            const user = await this.getCurrentUser();
-            if (!user) {
-                return {
-                    success: false,
-                    message: 'Not authenticated',
-                    error: 'User not logged in',
-                };
-            }
+            const response = await fetch('/api/auth/profile', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fullName: updates.full_name ?? null }),
+            });
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { error } = await this.supabase
-                .from('user_profiles')
-                .update(updates as any)
-                .eq('id', user.id);
+            const data = await response.json();
 
-            if (error) {
+            if (!response.ok || !data.success) {
                 return {
                     success: false,
                     message: 'Profile update failed',
-                    error: error.message,
+                    error: data.message || 'Unknown error',
                 };
             }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getDb } from "@/src/lib/db";
 import { normalizeAuditContext, type AuditContext } from "@/src/shared/documentContext";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -15,7 +16,15 @@ type ContextConfigDoc = {
   updatedAt: Date;
 };
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireAppRouteAuth(request);
+  if (!auth) {
+    return new Response(JSON.stringify({"error": "Unauthorized"}), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const db = await getDb();
     const doc = await db.collection(COLLECTION).findOne({}, { projection: { _id: 0 } });
@@ -33,6 +42,14 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  const auth = await requireAppRouteAuth(req);
+  if (!auth) {
+    return new Response(JSON.stringify({"error": "Unauthorized"}), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const body = (await req.json().catch(() => ({}))) as {
       enabled?: boolean;

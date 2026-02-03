@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateLMStudioEmbeddingConfig } from "@/src/services/embeddingConfigService";
 import { LMStudioEmbeddingConfigSchema } from "@/src/schemas/embeddingConfig.schema";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export async function PUT(request: NextRequest) {
+    const auth = await requireAppRouteAuth(request);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
         const body = await request.json();
 

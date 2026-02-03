@@ -1,8 +1,12 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { SafeEditGate } from '../../../services/agent/SafeEditGate';
+import { requirePagesRouteAuth } from '@/src/lib/auth/apiAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    const auth = await requirePagesRouteAuth(req, res);
+    if (!auth) return;
+
     const gate = SafeEditGate.getInstance();
 
     if (req.method === 'GET') {

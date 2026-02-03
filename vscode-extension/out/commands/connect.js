@@ -35,7 +35,7 @@ function registerConnectBackendCommand(context, backendClient, configuration, re
             return;
         }
         const token = await vscode.window.showInputBox({
-            prompt: 'API token (optional)',
+            prompt: 'API token (copiez depuis votre compte Numezis Code)',
             value: configuration.get('apiToken', ''),
         });
         backendClient.setBaseUrl(url);

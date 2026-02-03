@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AzureChatOpenAI, ChatOpenAI } from "@langchain/openai";
 import { getLlmConfig } from "@/src/services/llmConfigService";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,14 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: NextRequest) {
     try {
+        const auth = await requireAppRouteAuth(req);
+        if (!auth) {
+          return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         const body = await req.json();
         const { provider, config } = body;
 

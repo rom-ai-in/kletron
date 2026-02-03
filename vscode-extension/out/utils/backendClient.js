@@ -54,6 +54,40 @@ class BackendClient {
         const data = await res.json();
         return data;
     }
+    // ============================================================================
+    // Authentication
+    // ============================================================================
+    /**
+     * Check if the current token is valid and return user info.
+     * Returns null if not authenticated.
+     */
+    async checkAuth() {
+        if (!this.baseUrl || !this.token) {
+            return null;
+        }
+        try {
+            const res = await (0, node_fetch_1.default)(`${this.baseUrl}/api/auth/me`, {
+                headers: this.getHeaders(),
+            });
+            if (!res.ok) {
+                return null;
+            }
+            const data = await res.json();
+            if (!data.success || !data.user) {
+                return null;
+            }
+            return { userId: data.user.id, email: data.user.email };
+        }
+        catch {
+            return null;
+        }
+    }
+    hasToken() {
+        return Boolean(this.token);
+    }
+    // ============================================================================
+    // Agent Run Operations
+    // ============================================================================
     async runAgent(prompt, agentId, llm) {
         return this.fetchJson('/api/agent/run', {
             method: 'POST',
@@ -72,6 +106,9 @@ class BackendClient {
             body: JSON.stringify({ diff }),
         });
     }
+    // ============================================================================
+    // File Operations
+    // ============================================================================
     async readFile(path) {
         return this.fetchJson('/api/editor/file/read', {
             method: 'POST',
@@ -88,17 +125,64 @@ class BackendClient {
         const encoded = new URLSearchParams({ path }).toString();
         return this.fetchJson(`/api/editor/file/tree?${encoded}`);
     }
+    // ============================================================================
+    // Health & Config
+    // ============================================================================
     async getHealth() {
         return this.fetchJson('/api/health');
     }
     async getWorkspaceConfig() {
         return this.fetchJson('/api/config');
     }
+    async saveWorkspaceConfig(config) {
+        return this.fetchJson('/api/config', {
+            method: 'POST',
+            body: JSON.stringify(config),
+        });
+    }
+    async validateFolder(path) {
+        return this.fetchJson('/api/validation/folder', {
+            method: 'POST',
+            body: JSON.stringify({ path }),
+        });
+    }
+    async getContextConfig() {
+        return this.fetchJson('/api/context-config');
+    }
+    async saveContextConfig(config) {
+        return this.fetchJson('/api/context-config', {
+            method: 'POST',
+            body: JSON.stringify(config),
+        });
+    }
+    // ============================================================================
+    // LLM Configuration
+    // ============================================================================
     async getLlmConfig() {
         return this.fetchJson('/api/llm-config');
     }
-    async getEmbeddingConfig() {
-        return this.fetchJson('/api/embedding-config');
+    async setLlmProvider(provider) {
+        return this.fetchJson('/api/llm-config', {
+            method: 'POST',
+            body: JSON.stringify({ provider }),
+        });
+    }
+    async saveLlmAzure(config) {
+        return this.fetchJson('/api/llm-config/azure', {
+            method: 'PUT',
+            body: JSON.stringify(config),
+        });
+    }
+    async saveLlmLmstudio(config) {
+        return this.fetchJson('/api/llm-config/lmstudio', {
+            method: 'PUT',
+            body: JSON.stringify(config),
+        });
+    }
+    async resetLlm() {
+        return this.fetchJson('/api/llm-config', {
+            method: 'DELETE',
+        });
     }
     async testLlmConfig(provider, config) {
         return this.fetchJson('/api/llm-config/test', {
@@ -106,9 +190,64 @@ class BackendClient {
             body: JSON.stringify({ provider, config }),
         });
     }
+    // ============================================================================
+    // Embedding Configuration
+    // ============================================================================
+    async getEmbeddingConfig() {
+        return this.fetchJson('/api/embedding-config');
+    }
+    async setEmbeddingProvider(provider) {
+        return this.fetchJson('/api/embedding-config', {
+            method: 'PATCH',
+            body: JSON.stringify({ provider }),
+        });
+    }
+    async saveEmbeddingAzure(config) {
+        return this.fetchJson('/api/embedding-config/azure', {
+            method: 'PUT',
+            body: JSON.stringify(config),
+        });
+    }
+    async saveEmbeddingLmstudio(config) {
+        return this.fetchJson('/api/embedding-config/lmstudio', {
+            method: 'PUT',
+            body: JSON.stringify(config),
+        });
+    }
+    async resetEmbedding() {
+        return this.fetchJson('/api/embedding-config', {
+            method: 'DELETE',
+        });
+    }
+    // ============================================================================
+    // Agent Graphs
+    // ============================================================================
     async listAgentGraphs() {
         return this.fetchJson('/api/agent-graphs');
     }
+    async getAgentGraph(id) {
+        return this.fetchJson(`/api/agent-graphs/${id}`);
+    }
+    async updateAgentGraph(id, config) {
+        return this.fetchJson(`/api/agent-graphs/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(config),
+        });
+    }
+    async deleteAgentGraph(id) {
+        return this.fetchJson(`/api/agent-graphs/${id}`, {
+            method: 'DELETE',
+        });
+    }
+    // ============================================================================
+    // Tools
+    // ============================================================================
+    async getToolsList() {
+        return this.fetchJson('/api/tools/list');
+    }
+    // ============================================================================
+    // Streaming
+    // ============================================================================
     async runAgentGraphStream(graphId, message, selection, onChunk) {
         this.assertConfigured();
         const res = await (0, node_fetch_1.default)(`${this.baseUrl}/api/agent-graphs/${graphId}/stream`, {
@@ -143,6 +282,9 @@ class BackendClient {
             }
         }
     }
+    // ============================================================================
+    // Subscriptions (Polling)
+    // ============================================================================
     subscribeToRun(runId, onUpdate) {
         let cancelled = false;
         const poll = async () => {

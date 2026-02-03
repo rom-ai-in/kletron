@@ -2,7 +2,7 @@ import { createInterface } from "node:readline";
 import { runWorkflow } from "./workflows";
 
 async function main() {
-  console.log("🚀 PayMe - Agent Executor");
+  console.log("🚀 Numezis Code - Agent Executor");
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,

@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
 
 import { getDb } from "@/src/lib/db";
-import { resolveLlmSelection, resolveResolvedLlmInfo, type LlmSelection } from "@/src/llm";
+import { resolveLlmSelection, resolveResolvedLlmInfo, type LlmSelection, type ResolvedLlmInfo } from "@/src/llm";
 import { buildTranslationsFilter, getTranslationsByRowKeys, toRowKey, type I18nStatus } from "@/src/services/i18nTranslationsService";
 import type { TranslationAgentRowInput } from "@/src/services/translationReactAgent";
 import { computeChangedLocales, runTranslationAgentChunk } from "@/src/services/translationReactAgent";
@@ -22,12 +22,7 @@ export type I18nProcessJobDoc = {
   chunkSize: number;
 
   llmSelection?: { provider?: string; model?: string };
-  resolvedLlm?: {
-    provider: "azure" | "lmstudio";
-    model?: string;
-    azure?: { deployment?: string; endpoint?: string; apiVersion?: string };
-    lmstudio?: { baseUrl?: string };
-  };
+  resolvedLlm?: ResolvedLlmInfo;
   // Legacy selection: materialized row keys
   selectionKeys?: string[];
   // New selection: durable query (supports > 5k selections)
@@ -182,7 +177,7 @@ async function isCancelled(jobId: ObjectId) {
   return job?.status === "cancelled";
 }
 
-function dedupeRecommendations(recs: Array<{ rowKey: string; decision: "KEEP" | "UPDATE"; [k: string]: any }>) {
+function dedupeRecommendations(recs: Array<{ rowKey: string; decision: "KEEP" | "UPDATE";[k: string]: any }>) {
   const recByKey = new Map<string, (typeof recs)[number]>();
   for (const rec of recs) {
     const existing = recByKey.get(rec.rowKey);
@@ -210,13 +205,13 @@ function coerceDecision(value: unknown): "KEEP" | "UPDATE" | null {
 
 function filterAndAlignRecommendationsToInputs(
   inputRowKeys: string[],
-  recs: Array<{ rowKey: unknown; decision?: unknown; [k: string]: any }>
+  recs: Array<{ rowKey: unknown; decision?: unknown;[k: string]: any }>
 ) {
   const allowed = new Set(inputRowKeys);
   let invalidRowKeyCount = 0;
   let invalidDecisionCount = 0;
 
-  const matched: Array<{ rowKey: string; decision: "KEEP" | "UPDATE"; [k: string]: any }> = [];
+  const matched: Array<{ rowKey: string; decision: "KEEP" | "UPDATE";[k: string]: any }> = [];
   for (const rec of recs ?? []) {
     const rk = normalizeRowKey(rec?.rowKey);
     if (!rk || !allowed.has(rk)) {

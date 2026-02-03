@@ -160,30 +160,11 @@ export function spawnService(config: ServiceLaunchConfig): ChildProcess {
   });
 
   if (config.stdio === "pipe" && child.stdout && child.stderr) {
-    let emittedLink = false;
-    const maybeEmitLink = (chunk: string) => {
-      if (emittedLink) return;
-      const match = chunk.match(/https?:\/\/[^\s)"]+/);
-      if (match?.[0]) {
-        const url = match[0];
-        // Only emit Studio links (avoid spamming localhost API URLs).
-        const looksLikeStudio =
-          url.includes("smith.langchain.com/studio") || url.includes("/studio?baseUrl=");
-        if (!looksLikeStudio) return;
-        emittedLink = true;
-        console.log(`🔗 LangSmith Studio: ${url}`);
-      }
-    };
-
     child.stdout.on("data", (buf) => {
-      const text = buf.toString();
-      process.stdout.write(text);
-      maybeEmitLink(text);
+      process.stdout.write(buf.toString());
     });
     child.stderr.on("data", (buf) => {
-      const text = buf.toString();
-      process.stderr.write(text);
-      maybeEmitLink(text);
+      process.stderr.write(buf.toString());
     });
   }
 

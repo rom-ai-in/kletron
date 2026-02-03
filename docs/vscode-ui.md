@@ -31,5 +31,5 @@ The extension will expose several UI surfaces:
 
 ## 5. Settings
 - `backendUrl` (string)
-- Optional API token.
+- API token (required). Copy it from the Numezis Code account page (`/account`).
 - Settings are surfaced under `numezis.backendUrl` and `numezis.apiToken`; changes are persisted globally so the `connectBackend` command can pre-fill the last URL/token pair.

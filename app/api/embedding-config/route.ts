@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateDefaultEmbeddingProvider, getEmbeddingConfig, resetEmbeddingToEnvConfig } from "@/src/services/embeddingConfigService";
+import { EMBEDDING_PROVIDERS, EmbeddingProviderType } from "@/src/schemas/embeddingConfig.schema";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const auth = await requireAppRouteAuth(request);
+        if (!auth) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const config = await getEmbeddingConfig();
 
         // Mask API keys for security
@@ -10,12 +17,25 @@ export async function GET() {
             ...config,
             azure: config.azure ? {
                 ...config.azure,
-                apiKey: config.azure.apiKey ? "••••••••" : undefined,
+                apiKey: config.azure.apiKey ? "•".repeat(8) + config.azure.apiKey.slice(-4) : undefined,
+            } : undefined,
+            openai: config.openai ? {
+                ...config.openai,
+                apiKey: config.openai.apiKey ? "•".repeat(8) + config.openai.apiKey.slice(-4) : undefined,
+            } : undefined,
+            voyage: config.voyage ? {
+                ...config.voyage,
+                apiKey: config.voyage.apiKey ? "•".repeat(8) + config.voyage.apiKey.slice(-4) : undefined,
+            } : undefined,
+            gemini: config.gemini ? {
+                ...config.gemini,
+                apiKey: config.gemini.apiKey ? "•".repeat(8) + config.gemini.apiKey.slice(-4) : undefined,
             } : undefined,
             lmstudio: config.lmstudio ? {
                 ...config.lmstudio,
-                apiKey: config.lmstudio.apiKey ? "••••••••" : undefined,
+                apiKey: config.lmstudio.apiKey ? "•".repeat(8) + config.lmstudio.apiKey.slice(-4) : undefined,
             } : undefined,
+            ollama: config.ollama,
         };
 
         return NextResponse.json(maskedConfig);
@@ -30,17 +50,22 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
     try {
+        const auth = await requireAppRouteAuth(request);
+        if (!auth) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const body = await request.json();
         const { provider } = body;
 
-        if (!provider || (provider !== "azure" && provider !== "lmstudio")) {
+        if (!provider || !EMBEDDING_PROVIDERS.includes(provider as EmbeddingProviderType)) {
             return NextResponse.json(
-                { error: "Invalid provider selection" },
+                { error: `Invalid provider. Must be one of: ${EMBEDDING_PROVIDERS.join(", ")}` },
                 { status: 400 }
             );
         }
 
-        const config = await updateDefaultEmbeddingProvider(provider);
+        const config = await updateDefaultEmbeddingProvider(provider as EmbeddingProviderType);
         return NextResponse.json(config);
     } catch (error) {
         console.error("Failed to switch embedding provider:", error);
@@ -51,8 +76,13 @@ export async function PATCH(request: NextRequest) {
     }
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
     try {
+        const auth = await requireAppRouteAuth(request);
+        if (!auth) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const config = await resetEmbeddingToEnvConfig();
         return NextResponse.json({ success: true, config });
     } catch (error) {

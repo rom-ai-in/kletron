@@ -4,12 +4,21 @@ import { getDb } from "@/src/lib/db";
 import { ObjectId } from "mongodb";
 
 import { agentGraphRunService } from "@/src/services/agentGraphRunService";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 /**
  * GET /api/agent-graph-runs/[runId]/nodes
  * Fetch node labels from sessions for a given run.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
+    const auth = await requireAppRouteAuth(req);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
         const { runId } = await params;
         const run = await agentGraphRunService.getRun(runId);

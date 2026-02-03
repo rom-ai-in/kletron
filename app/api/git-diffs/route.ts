@@ -1,7 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getDiffsForWindow } from '@/src/services/gitLocalService';
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export async function GET(request: Request) {
+    const auth = await requireAppRouteAuth(request);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     const url = new URL(request.url);
     const pathValue = url.searchParams.get('path');
     const start = url.searchParams.get('start');

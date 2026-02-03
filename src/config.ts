@@ -3,6 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import dotenv from "dotenv";
 import { z } from "zod";
+import { getDatabase } from "./services/mongoClient";
 
 
 dotenv.config();
@@ -16,10 +17,15 @@ const ConfigSchema = z.object({
 export type Config = z.infer<typeof ConfigSchema>;
 
 // -------------------------------------------------------------------
-// 2️⃣ Paths for persisted JSON
+// 2️⃣ MongoDB collection
 // -------------------------------------------------------------------
-const CONFIG_DIR = path.resolve(process.cwd(), "config");
-const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
+const COLLECTION_NAME = "workspace_configs";
+
+type WorkspaceConfigDoc = Config & {
+  _id?: unknown;
+  updatedAt?: Date;
+  createdAt?: Date;
+};
 
 // -------------------------------------------------------------------
 // 3️⃣ Custom error for missing configuration
@@ -35,47 +41,23 @@ export class ConfigNotSetError extends Error {
 // 4️⃣ Check if config exists (for UI feedback)
 // -------------------------------------------------------------------
 export function isConfigured(): boolean {
-  if (!fs.existsSync(CONFIG_FILE)) {
-    return false;
-  }
-  try {
-    const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
-    const data = JSON.parse(raw);
-    return !!(data.workingFolder && data.workingFolder.trim().length > 0);
-  } catch {
-    return false;
-  }
+  return Boolean(cachedConfig?.workingFolder);
 }
 
 // -------------------------------------------------------------------
 // 5️⃣ Load configuration (NO FALLBACKS - explicit config only)
 // -------------------------------------------------------------------
 export async function loadConfig(): Promise<Config> {
-  // Only load from persisted JSON - no environment variable fallback
-  if (!fs.existsSync(CONFIG_FILE)) {
-    throw new ConfigNotSetError(
-      "Working folder not configured. Please configure it in Configuration > Workspace Settings."
-    );
-  }
+  const db = await getDatabase();
+  const collection = db.collection<WorkspaceConfigDoc>(COLLECTION_NAME);
+  const persisted = await collection.findOne({});
 
-  let persisted: Partial<Config>;
-  try {
-    const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
-    persisted = JSON.parse(raw);
-  } catch (e) {
-    throw new ConfigNotSetError(
-      "Failed to read configuration file. Please re-configure in Configuration > Workspace Settings."
-    );
-  }
-
-  // Validate that workingFolder is explicitly set
-  if (!persisted.workingFolder || persisted.workingFolder.trim() === "") {
+  if (!persisted?.workingFolder || persisted.workingFolder.trim() === "") {
     throw new ConfigNotSetError(
       "Working folder not configured. Please set it in Configuration > Workspace Settings."
     );
   }
 
-  // Validate schema
   const result = ConfigSchema.safeParse(persisted);
   if (!result.success) {
     throw new ConfigNotSetError(`Invalid configuration: ${result.error.message}`);
@@ -93,7 +75,7 @@ export async function loadConfig(): Promise<Config> {
 }
 
 // -------------------------------------------------------------------
-// 6️⃣ Save configuration (persist to JSON)
+// 6️⃣ Save configuration (persist to MongoDB + sync to config.json for MCP server)
 // -------------------------------------------------------------------
 export async function saveConfig(newConfig: Config): Promise<void> {
   const result = ConfigSchema.safeParse(newConfig);
@@ -101,10 +83,47 @@ export async function saveConfig(newConfig: Config): Promise<void> {
     throw new Error(`Invalid config payload: ${result.error.message}`);
   }
 
-  if (!fs.existsSync(CONFIG_DIR)) {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  // 1. Save to MongoDB (primary source)
+  const db = await getDatabase();
+  const collection = db.collection<WorkspaceConfigDoc>(COLLECTION_NAME);
+  await collection.updateOne(
+    {},
+    {
+      $set: { workingFolder: newConfig.workingFolder, updatedAt: new Date() },
+      $setOnInsert: { createdAt: new Date() },
+    },
+    { upsert: true }
+  );
+
+  // 2. Sync to config/config.json for MCP server compatibility
+  // The MCP server reads from this file for git operations
+  try {
+    const configDir = path.resolve(process.cwd(), "config");
+    const configJsonPath = path.join(configDir, "config.json");
+
+    // Ensure config directory exists
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+
+    // Read existing config.json or create new one
+    let existingConfig: Record<string, unknown> = {};
+    if (fs.existsSync(configJsonPath)) {
+      try {
+        existingConfig = JSON.parse(fs.readFileSync(configJsonPath, "utf-8"));
+      } catch {
+        // If file is corrupted, start fresh
+      }
+    }
+
+    // Update workingFolder and write back
+    existingConfig.workingFolder = newConfig.workingFolder;
+    fs.writeFileSync(configJsonPath, JSON.stringify(existingConfig, null, 2), "utf-8");
+    console.log(`[Config] Synced workingFolder to ${configJsonPath}`);
+  } catch (e) {
+    console.error("[Config] Failed to sync config.json:", e);
+    // Non-fatal: MongoDB is the primary source
   }
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(newConfig, null, 2), "utf-8");
 }
 
 // -------------------------------------------------------------------
@@ -137,23 +156,48 @@ export async function getConfigSafe(): Promise<Config | null> {
   }
 }
 
-// -------------------------------------------------------------------
 // 9️⃣ Export other existing config values (preserve original API)
 // -------------------------------------------------------------------
+
+// Azure OpenAI
 const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT;
 const azureApiKey = process.env.AZURE_OPENAI_API_KEY;
 const azureDeployment = process.env.AZURE_OPENAI_DEPLOYMENT;
-const azureModel = process.env.AZURE_OPENAI_MODEL ?? "gpt-5-mini";
+const azureModel = process.env.AZURE_OPENAI_MODEL ?? "gpt-4o";
 const azureApiVersion = process.env.AZURE_OPENAI_API_VERSION ?? "2024-12-01-preview";
+
+// OpenAI (direct)
+const openaiApiKey = process.env.OPENAI_API_KEY;
+const openaiModel = process.env.OPENAI_MODEL ?? "gpt-4o";
+const openaiOrganization = process.env.OPENAI_ORGANIZATION;
+
+// Claude (Anthropic)
+const claudeApiKey = process.env.ANTHROPIC_API_KEY;
+const claudeModel = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514";
+
+// Google Gemini
+const geminiApiKey = process.env.GOOGLE_API_KEY;
+const geminiModel = process.env.GOOGLE_MODEL ?? "gemini-2.5-flash";
+
+// LM Studio
 const lmstudioBaseUrl = process.env.LMSTUDIO_BASE_URL ?? "http://127.0.0.1:1234/v1";
 const lmstudioApiKey = process.env.LMSTUDIO_API_KEY;
 const lmstudioModel = process.env.LMSTUDIO_MODEL ?? "";
+
+// Ollama
+const ollamaBaseUrl = process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434";
+const ollamaModel = process.env.OLLAMA_MODEL ?? "llama3.2";
+
+// Default provider
+const VALID_PROVIDERS = ["azure", "openai", "claude", "gemini", "lmstudio", "ollama"];
 const defaultProviderRaw = process.env.LLM_DEFAULT_PROVIDER;
-const isDefaultProviderValid =
-  defaultProviderRaw === "azure" || defaultProviderRaw === "lmstudio";
+const isDefaultProviderValid = VALID_PROVIDERS.includes(defaultProviderRaw ?? "");
 const defaultProvider =
   (isDefaultProviderValid ? defaultProviderRaw : undefined) ??
-  (azureEndpoint && azureApiKey && azureDeployment ? "azure" : "lmstudio");
+  (azureEndpoint && azureApiKey && azureDeployment ? "azure" :
+    openaiApiKey ? "openai" :
+      claudeApiKey ? "claude" :
+        geminiApiKey ? "gemini" : "lmstudio");
 
 const parsedGraphRecursionLimit = Number.parseInt(
   process.env.GRAPH_RECURSION_LIMIT ?? "",
@@ -164,9 +208,9 @@ const graphRecursionLimit =
     ? parsedGraphRecursionLimit
     : 50;
 
-if (!azureEndpoint || !azureApiKey || !azureDeployment) {
+if (!azureEndpoint && !openaiApiKey && !claudeApiKey && !geminiApiKey) {
   console.warn(
-    "⚠️  Azure OpenAI variables (AZURE_OPENAI_ENDPOINT/AZURE_OPENAI_API_KEY/AZURE_OPENAI_DEPLOYMENT) are not set."
+    "⚠️  No LLM API keys configured. Set one of: AZURE_OPENAI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, or GOOGLE_API_KEY"
   );
 }
 
@@ -197,10 +241,27 @@ export const config = {
     embeddingDeployment: process.env.AZURE_EMBEDDING_DEPLOYMENT ?? "text-embedding-ada-002",
     embeddingModel: process.env.AZURE_EMBEDDING_MODEL ?? "text-embedding-ada-002",
   },
+  openai: {
+    apiKey: openaiApiKey,
+    model: openaiModel,
+    organization: openaiOrganization,
+  },
+  claude: {
+    apiKey: claudeApiKey,
+    model: claudeModel,
+  },
+  gemini: {
+    apiKey: geminiApiKey,
+    model: geminiModel,
+  },
   lmstudio: {
     baseUrl: lmstudioBaseUrl,
     apiKey: lmstudioApiKey,
     model: lmstudioModel,
+  },
+  ollama: {
+    baseUrl: ollamaBaseUrl,
+    model: ollamaModel,
   },
   graphRecursionLimit,
   mongo: {

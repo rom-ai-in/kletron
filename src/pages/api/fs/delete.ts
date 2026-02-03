@@ -2,8 +2,12 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import fs from 'fs';
 import path from 'path';
 import { getConfig } from '@/src/config';
+import { requirePagesRouteAuth } from '@/src/lib/auth/apiAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    const auth = await requirePagesRouteAuth(req, res);
+    if (!auth) return;
+
     if (req.method !== 'DELETE' && req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }

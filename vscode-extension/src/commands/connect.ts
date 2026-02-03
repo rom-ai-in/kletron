@@ -17,7 +17,7 @@ export function registerConnectBackendCommand(
     }
 
     const token = await vscode.window.showInputBox({
-      prompt: 'API token (optional)',
+      prompt: 'API token (copiez depuis votre compte Numezis Code)',
       value: configuration.get<string>('apiToken', ''),
     })
 

@@ -53,16 +53,16 @@ export default function I18nPage() {
   const [processSelection, setProcessSelection] = useState<
     | { mode: "keys"; rowKeys: string[]; previewRows?: TranslationRecord[] }
     | {
-        mode: "query";
-        q?: string;
-        namespace?: string;
-        status?: I18nStatus;
-        reviewed?: boolean;
-        limit?: number;
-        excludeRowKeys?: string[];
-        estimatedSelected?: number;
-        previewRows?: TranslationRecord[];
-      }
+      mode: "query";
+      q?: string;
+      namespace?: string;
+      status?: I18nStatus;
+      reviewed?: boolean;
+      limit?: number;
+      excludeRowKeys?: string[];
+      estimatedSelected?: number;
+      previewRows?: TranslationRecord[];
+    }
     | null
   >(null);
 
@@ -271,8 +271,7 @@ export default function I18nPage() {
         }
         if (status.status === "success") {
           setImportResult(
-            `Imported ${totalRows ?? processed} rows. upserted=${status.upserted ?? 0}, modified=${status.modified ?? 0}, inserted=${
-              status.inserted ?? 0
+            `Imported ${totalRows ?? processed} rows. upserted=${status.upserted ?? 0}, modified=${status.modified ?? 0}, inserted=${status.inserted ?? 0
             }`
           );
           await load();
@@ -502,17 +501,16 @@ export default function I18nPage() {
                   </span>
                 )}
                 <span
-                  className={`max-w-[320px] truncate rounded-full px-2.5 py-1 text-xs font-medium ${
-                    importStatus.tone === "running"
-                      ? "bg-sky-500/15 text-sky-300"
+                  className={`max-w-[320px] truncate rounded-full px-2.5 py-1 text-xs font-medium ${importStatus.tone === "running"
+                      ? "bg-zinc-400/15 text-zinc-300"
                       : importStatus.tone === "success"
                         ? "bg-emerald-500/15 text-emerald-300"
                         : importStatus.tone === "error"
                           ? "bg-rose-500/15 text-rose-300"
                           : importStatus.tone === "ready"
-                            ? "bg-amber-500/15 text-amber-300"
+                            ? "bg-zinc-500/15 text-zinc-300"
                             : "bg-bg-elevated text-text-secondary border border-border-subtle"
-                  }`}
+                    }`}
                   title={importStatus.label}
                 >
                   {importStatus.label}
@@ -523,7 +521,7 @@ export default function I18nPage() {
             {!importExpanded && importing && (
               <div className="h-1 w-full bg-black/20">
                 <div
-                  className={`${progressPct === null ? "w-1/3 animate-pulse bg-sky-500/40" : "bg-sky-500/60"}`}
+                  className={`${progressPct === null ? "w-1/3 animate-pulse bg-zinc-400/40" : "bg-zinc-400/60"}`}
                   style={progressPct === null ? undefined : { width: `${progressPct}%` }}
                 />
               </div>
@@ -644,7 +642,7 @@ export default function I18nPage() {
                   </div>
                   <div className="mt-2 h-2 w-full overflow-hidden rounded bg-black/20">
                     <div
-                      className={`h-full ${progressPct === null ? "w-1/3 animate-pulse bg-sky-500/40" : "bg-sky-500/60"}`}
+                      className={`h-full ${progressPct === null ? "w-1/3 animate-pulse bg-zinc-400/40" : "bg-zinc-400/60"}`}
                       style={progressPct === null ? undefined : { width: `${progressPct}%` }}
                     />
                   </div>
@@ -656,7 +654,7 @@ export default function I18nPage() {
                   {importResult.toLowerCase().includes("failed") || importResult.toLowerCase().includes("error") ? (
                     <AlertTriangle className="mt-0.5 h-4 w-4 text-rose-400" />
                   ) : (
-                <Check className="mt-0.5 h-4 w-4 text-emerald-400" />
+                    <Check className="mt-0.5 h-4 w-4 text-emerald-400" />
                   )}
                   <span>{importResult}</span>
                 </div>
@@ -783,9 +781,8 @@ export default function I18nPage() {
                         role="row"
                         aria-selected={isSelected}
                         onClick={() => toggleRowSelected(rowKey)}
-                        className={`grid grid-cols-[44px_280px_160px_320px_380px_260px_260px_260px_260px_110px_90px] ${zebra} hover:bg-state-hover cursor-pointer ${
-                          isSelected ? "ring-1 ring-inset ring-focusRing" : ""
-                        }`}
+                        className={`grid grid-cols-[44px_280px_160px_320px_380px_260px_260px_260px_260px_110px_90px] ${zebra} hover:bg-state-hover cursor-pointer ${isSelected ? "ring-1 ring-inset ring-focusRing" : ""
+                          }`}
                       >
                         <div
                           className="px-3 py-2 border-r border-border-subtle flex items-center justify-center"
@@ -843,11 +840,10 @@ export default function I18nPage() {
                         </div>
                         <div className="px-3 py-2 border-r border-border-subtle">
                           <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                              r.status === "active"
+                            className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${r.status === "active"
                                 ? "bg-emerald-500/15 text-emerald-400"
-                                : "bg-amber-500/15 text-amber-400"
-                            }`}
+                                : "bg-zinc-500/15 text-zinc-400"
+                              }`}
                           >
                             {r.status || "unknown"}
                           </span>

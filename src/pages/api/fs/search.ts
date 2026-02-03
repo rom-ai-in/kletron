@@ -3,6 +3,7 @@ import { exec } from 'child_process';
 import util from 'util';
 import path from 'path';
 import { getConfig } from '@/src/config';
+import { requirePagesRouteAuth } from '@/src/lib/auth/apiAuth';
 
 const execPromise = util.promisify(exec);
 
@@ -14,6 +15,9 @@ export type SearchResult = {
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    const auth = await requirePagesRouteAuth(req, res);
+    if (!auth) return;
+
     if (req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' });
     }

@@ -2,8 +2,7 @@
  * File type detection utilities for document viewer routing
  */
 
-const OFFICE_EXTENSIONS = ['.pptx', '.ppt', '.potx', '.pptm', '.docx', '.doc', '.dotx', '.docm', '.xlsx', '.xls', '.xltx', '.xlsm'];
-const PRESENTATION_EXTENSIONS = ['.pptx', '.ppt', '.potx', '.pptm'];
+const OFFICE_EXTENSIONS = ['.docx', '.doc', '.dotx', '.docm', '.xlsx', '.xls', '.xltx', '.xlsm'];
 const WORD_EXTENSIONS = ['.docx', '.doc', '.dotx', '.docm'];
 const SPREADSHEET_EXTENSIONS = ['.xlsx', '.xls', '.xltx', '.xlsm'];
 const PDF_EXTENSIONS = ['.pdf'];
@@ -24,13 +23,6 @@ export function getFileExtension(path: string): string {
  */
 export function isOfficeDocument(path: string): boolean {
     return OFFICE_EXTENSIONS.includes(getFileExtension(path));
-}
-
-/**
- * Check if file is a PowerPoint presentation
- */
-export function isPresentationFile(path: string): boolean {
-    return PRESENTATION_EXTENSIONS.includes(getFileExtension(path));
 }
 
 /**
@@ -83,10 +75,6 @@ export function getFileViewerType(path: string): ViewerType {
 export function getMimeType(path: string): string {
     const ext = getFileExtension(path);
     const mimeTypes: Record<string, string> = {
-        '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        '.ppt': 'application/vnd.ms-powerpoint',
-        '.potx': 'application/vnd.openxmlformats-officedocument.presentationml.template',
-        '.pptm': 'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
         '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         '.doc': 'application/msword',
         '.dotx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.template',

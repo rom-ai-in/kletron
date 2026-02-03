@@ -44,6 +44,16 @@ export interface UserGroup {
     created_at: string;
 }
 
+export interface ApiToken {
+    id: string;
+    user_id: string;
+    label: string | null;
+    token_hash: string;
+    created_at: string;
+    last_used_at: string | null;
+    revoked_at: string | null;
+}
+
 // View type for user context with all relationships
 export interface UserContext {
     user_id: string;
@@ -105,6 +115,16 @@ export interface Database {
                     created_at?: string;
                 };
                 Update: Partial<Omit<UserGroup, 'id' | 'created_at'>>;
+            };
+            api_tokens: {
+                Row: ApiToken;
+                Insert: Omit<ApiToken, 'id' | 'created_at' | 'last_used_at' | 'revoked_at'> & {
+                    id?: string;
+                    created_at?: string;
+                    last_used_at?: string | null;
+                    revoked_at?: string | null;
+                };
+                Update: Partial<Omit<ApiToken, 'id' | 'user_id' | 'created_at'>>;
             };
         };
         Views: {

@@ -2,6 +2,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ReActEngine } from '../../../../services/agent/ReActEngine';
 import { AgentEvent } from '../../../../types';
+import { requirePagesRouteAuth } from '@/src/lib/auth/apiAuth';
 
 export const config = {
     api: {
@@ -10,6 +11,9 @@ export const config = {
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    const auth = await requirePagesRouteAuth(req, res);
+    if (!auth) return;
+
     if (req.method !== 'POST') {
         res.setHeader('Allow', ['POST']);
         res.status(405).end(`Method ${req.method} Not Allowed`);

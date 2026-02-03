@@ -286,368 +286,586 @@ export function buildSimpleReactAgentGraph(): Omit<AgentGraphDefinition, "_id" |
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CURSOR-LIKE ROBUST LOOP GRAPH (STATE MACHINE)
+// Detailed example of router nodes + conditional edges + loopbacks
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CURSOR_CORE_TOOLS = [
+  "list_files",
+  "read_file",
+  "read_file_range",
+  "search_code",
+  "repo_metrics",
+  "dependency_info",
+  "describe_structure",
+  "git_log",
+  "git_diff",
+  "git_grep",
+  "git_blame",
+  "semantic_code_search",
+  "structural_search",
+  "symbols_list",
+  "find_symbol",
+  "go_to_definition",
+  "references",
+  "find_references",
+  "execute_bash",
+  "output_format"
+];
+
+const CURSOR_RESEARCH_TOOLS = [
+  ...CURSOR_CORE_TOOLS,
+  "web_search",
+  "fetch_url"
+];
+
+const CURSOR_CODER_TOOLS = [
+  ...CURSOR_CORE_TOOLS,
+  "write_file",
+  "str_replace_editor"
+];
+
+export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
+  const nodes: AgentGraphNode[] = [
+    {
+      id: "intake",
+      label: "Intake",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Intake agent.",
+          "Goal: normalize the user request and extract constraints.",
+          "Inputs: state.mission (user message), state (full).",
+          "Outputs: strict JSON only. Do not include markdown or prose.",
+          "",
+          "Write ONLY these keys (no extra keys):",
+          "{",
+          "  \"goal\": string,",
+          "  \"constraints\": string[],",
+          "  \"openQuestions\": string[],",
+          "  \"nonGoals\": string[],",
+          "  \"userInput\": string",
+          "}",
+          "",
+          "Guidance:",
+          "- Avoid asking the user unless absolutely necessary; put unknowns into openQuestions.",
+          "- Keep constraints concrete (language, framework, perf, security, time).",
+          "- Use userInput = original mission."
+        ].join("\n"),
+        userPromptTemplate: "Mission:\n{{mission}}\n\nCurrent state:\n{{state}}",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "spec_acceptance",
+      label: "Spec & Acceptance",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Spec & Acceptance agent.",
+          "Goal: translate goal into acceptance criteria and definition of done.",
+          "Inputs: state.goal, state.constraints, state.openQuestions.",
+          "Outputs: strict JSON only (no markdown).",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"acceptanceCriteria\": string[],",
+          "  \"definitionOfDone\": string[]",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "repo_scan",
+      label: "Repo Scan",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Repo Scan agent.",
+          "Goal: discover repo structure, stack, and build/test commands.",
+          "Use tools to inspect config files and structure.",
+          "Outputs: strict JSON only.",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"repoSummary\": string,",
+          "  \"envInfo\": object,",
+          "  \"buildCommands\": string[],",
+          "  \"constraintsDetected\": string[]",
+          "}",
+          "",
+          "If you infer commands, label them clearly in envInfo."
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: CURSOR_CORE_TOOLS,
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "planner",
+      label: "Planner",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Planner (orchestrator).",
+          "Goal: produce milestones, task queue, and risk register.",
+          "Do NOT edit files; only plan.",
+          "Outputs: strict JSON only.",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"plan\": object,",
+          "  \"taskQueue\": array,",
+          "  \"currentTaskId\": string,",
+          "  \"riskRegister\": array",
+          "}",
+          "",
+          "Ensure taskQueue is ordered and currentTaskId is the first task id."
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "route_prep",
+      label: "Task Router Prep",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Task Router Prep agent.",
+          "Goal: choose the next role based on state.",
+          "Do NOT use tools. Decide a single next step.",
+          "Outputs: strict JSON only.",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"route\": {",
+          "    \"next\": \"researcher\" | \"coder\" | \"reviewer\" | \"debugger\" | \"final_gate\",",
+          "    \"reason\": string",
+          "  }",
+          "}",
+          "",
+          "Routing rules (apply in this order):",
+          "1) If openQuestions has items -> researcher",
+          "2) If taskQueue has items -> coder",
+          "3) If qualityGates show failures -> debugger",
+          "4) If acceptanceCriteria satisfied and review pending -> reviewer",
+          "5) Otherwise -> final_gate"
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "task_router",
+      label: "Task Router",
+      kind: "router",
+      react: {
+        systemPrompt: "Router node. Routes based on state.route.next.",
+        userPromptTemplate: "",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json" }
+    },
+    {
+      id: "researcher",
+      label: "Researcher",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Researcher.",
+          "Goal: resolve openQuestions using repository info or web tools.",
+          "Outputs: strict JSON only.",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"workingNotes\": string[],",
+          "  \"openQuestions\": string[]",
+          "}",
+          "",
+          "Append to existing workingNotes; remove resolved openQuestions."
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: CURSOR_RESEARCH_TOOLS,
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "coder",
+      label: "Coder",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Coder.",
+          "Goal: implement ONE task from state.currentTaskId with minimal diff.",
+          "Rules:",
+          "- Use tools; prefer apply_patch or minimal edits.",
+          "- Update or add tests if needed.",
+          "- Record edits in fileChanges and notes in workingNotes.",
+          "Outputs: strict JSON only.",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"fileChanges\": array,",
+          "  \"workingNotes\": string[]",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: CURSOR_CODER_TOOLS,
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "policy_gate",
+      label: "Policy / Safety Gate",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Policy Gate.",
+          "Goal: review last changes for safety/risk and decide next step.",
+          "Outputs: strict JSON only.",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"reviewFeedback\": array,",
+          "  \"route\": {",
+          "    \"next\": \"coder\" | \"verify_fast\",",
+          "    \"reason\": string",
+          "  }",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: ["git_diff", "search_code"],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "policy_router",
+      label: "Policy Router",
+      kind: "router",
+      react: {
+        systemPrompt: "Router node. Routes based on state.route.next.",
+        userPromptTemplate: "",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json" }
+    },
+    {
+      id: "verify_fast",
+      label: "Verify (Fast)",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Fast Verifier.",
+          "Goal: run quick checks (lint/typecheck/unit) and summarize.",
+          "Outputs: strict JSON only.",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"testResults\": object,",
+          "  \"qualityGates\": object,",
+          "  \"route\": {",
+          "    \"next\": \"verify_full\" | \"debugger\",",
+          "    \"reason\": string",
+          "  }",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: ["execute_bash", "read_file"],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "verify_full",
+      label: "Verify (Full)",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Full Verifier.",
+          "Goal: run full test suite/integration and update gates.",
+          "Outputs: strict JSON only.",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"testResults\": object,",
+          "  \"qualityGates\": object,",
+          "  \"route\": {",
+          "    \"next\": \"reviewer\" | \"debugger\",",
+          "    \"reason\": string",
+          "  }",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: ["execute_bash", "read_file"],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "verify_router",
+      label: "Verify Router",
+      kind: "router",
+      react: {
+        systemPrompt: "Router node. Routes based on state.route.next.",
+        userPromptTemplate: "",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json" }
+    },
+    {
+      id: "debugger",
+      label: "Debugger",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Debugger.",
+          "Goal: analyze failures and propose minimal fix steps.",
+          "Outputs: strict JSON only.",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"reviewFeedback\": array,",
+          "  \"taskQueue\": array,",
+          "  \"workingNotes\": string[],",
+          "  \"route\": {",
+          "    \"next\": \"coder\",",
+          "    \"reason\": string",
+          "  }",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: ["read_file", "search_code", "git_diff", "execute_bash"],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "reviewer",
+      label: "Reviewer",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Reviewer.",
+          "Goal: check spec, edge cases, security, and correctness.",
+          "Outputs: strict JSON only.",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"reviewFeedback\": array,",
+          "  \"confidence\": string | number,",
+          "  \"suggestedTests\": string[],",
+          "  \"route\": {",
+          "    \"next\": \"coder\" | \"refactor\" | \"final_gate\",",
+          "    \"reason\": string",
+          "  }",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: ["read_file", "git_diff", "search_code"],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "review_router",
+      label: "Review Router",
+      kind: "router",
+      react: {
+        systemPrompt: "Router node. Routes based on state.route.next.",
+        userPromptTemplate: "",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json" }
+    },
+    {
+      id: "refactor",
+      label: "Refactor / Docs",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Refactor/Docs agent.",
+          "Goal: improve clarity, docs, and remove dead code with minimal risk.",
+          "Outputs: strict JSON only.",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"fileChanges\": array,",
+          "  \"workingNotes\": string[]",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: CURSOR_CODER_TOOLS,
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "final_gate",
+      label: "Final Gate",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Final Gate.",
+          "Goal: enforce definitionOfDone and decide if the run is complete.",
+          "Outputs: strict JSON only.",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"finalSummary\": string,",
+          "  \"nextSteps\": string[],",
+          "  \"route\": {",
+          "    \"next\": \"done\" | \"planner\" | \"coder\",",
+          "    \"reason\": string",
+          "  }",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "final_router",
+      label: "Final Router",
+      kind: "router",
+      react: {
+        systemPrompt: "Router node. Routes based on state.route.next.",
+        userPromptTemplate: "",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json" }
+    },
+    {
+      id: "done",
+      label: "Done",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Done node.",
+          "Goal: finalize output. No tools.",
+          "Outputs: strict JSON only.",
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"finalSummary\": string,",
+          "  \"nextSteps\": string[]",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: "Current state:\n{{state}}",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+    }
+  ];
+
+  const edges = [
+    { id: "edge-intake-spec", source: "intake", target: "spec_acceptance" },
+    { id: "edge-spec-scan", source: "spec_acceptance", target: "repo_scan" },
+    { id: "edge-scan-plan", source: "repo_scan", target: "planner" },
+    { id: "edge-plan-routeprep", source: "planner", target: "route_prep" },
+    { id: "edge-routeprep-router", source: "route_prep", target: "task_router" },
+
+    { id: "edge-router-researcher", source: "task_router", target: "researcher", condition: "state.route.next == \"researcher\"" },
+    { id: "edge-router-coder", source: "task_router", target: "coder", condition: "state.route.next == \"coder\"" },
+    { id: "edge-router-reviewer", source: "task_router", target: "reviewer", condition: "state.route.next == \"reviewer\"" },
+    { id: "edge-router-debugger", source: "task_router", target: "debugger", condition: "state.route.next == \"debugger\"" },
+    { id: "edge-router-final", source: "task_router", target: "final_gate", condition: "state.route.next == \"final_gate\"" },
+
+    { id: "edge-researcher-routeprep", source: "researcher", target: "route_prep" },
+
+    { id: "edge-coder-policy", source: "coder", target: "policy_gate" },
+    { id: "edge-policy-router", source: "policy_gate", target: "policy_router" },
+    { id: "edge-policy-coder", source: "policy_router", target: "coder", condition: "state.route.next == \"coder\"" },
+    { id: "edge-policy-verify", source: "policy_router", target: "verify_fast", condition: "state.route.next == \"verify_fast\"" },
+
+    { id: "edge-verifyfast-router", source: "verify_fast", target: "verify_router" },
+    { id: "edge-verifyfull-router", source: "verify_full", target: "verify_router" },
+    { id: "edge-router-verifyfull", source: "verify_router", target: "verify_full", condition: "state.route.next == \"verify_full\"" },
+    { id: "edge-router-debugger2", source: "verify_router", target: "debugger", condition: "state.route.next == \"debugger\"" },
+    { id: "edge-router-reviewer2", source: "verify_router", target: "reviewer", condition: "state.route.next == \"reviewer\"" },
+
+    { id: "edge-debugger-coder", source: "debugger", target: "coder" },
+
+    { id: "edge-reviewer-router", source: "reviewer", target: "review_router" },
+    { id: "edge-review-coder", source: "review_router", target: "coder", condition: "state.route.next == \"coder\"" },
+    { id: "edge-review-refactor", source: "review_router", target: "refactor", condition: "state.route.next == \"refactor\"" },
+    { id: "edge-review-final", source: "review_router", target: "final_gate", condition: "state.route.next == \"final_gate\"" },
+
+    { id: "edge-refactor-final", source: "refactor", target: "final_gate" },
+    { id: "edge-final-router", source: "final_gate", target: "final_router" },
+    { id: "edge-final-done", source: "final_router", target: "done", condition: "state.route.next == \"done\"" },
+    { id: "edge-final-planner", source: "final_router", target: "planner", condition: "state.route.next == \"planner\"" },
+    { id: "edge-final-coder", source: "final_router", target: "coder", condition: "state.route.next == \"coder\"" }
+  ];
+
+  return {
+    name: "Cursor-like Robust Loop (agent graph)",
+    description:
+      "State-machine graph with router nodes, conditional edges, and loopbacks implementing intake->plan->implement->verify->review->finalize.",
+    nodes,
+    edges,
+    execution: {
+      mode: "state_machine",
+      entryNodeId: "intake",
+      maxIterations: 200,
+      maxNodeRuns: 20
+    },
+    stateDefaults: {
+      goal: "",
+      constraints: [],
+      acceptanceCriteria: [],
+      definitionOfDone: [],
+      plan: {},
+      currentTaskId: "",
+      taskQueue: [],
+      riskRegister: [],
+      repoSummary: "",
+      envInfo: {},
+      buildCommands: [],
+      constraintsDetected: [],
+      workingNotes: [],
+      designDecisions: [],
+      openQuestions: [],
+      toolCalls: [],
+      terminalRuns: [],
+      fileChanges: [],
+      testResults: {},
+      qualityGates: {},
+      reviewFeedback: [],
+      suggestedTests: [],
+      confidence: "",
+      finalSummary: "",
+      nextSteps: [],
+      route: { next: "researcher", reason: "bootstrap" }
+    }
+  };
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRESENTATION GENERATOR PRO GRAPH
 // 6-phase pipeline: research → offer_analysis → structure → enrich → create → verify
 // ─────────────────────────────────────────────────────────────────────────────
-
-const PRESENTATION_GEN_PHASES = [
-  {
-    id: "research",
-    label: "Client Research",
-    toolNames: ["web_search", "fetch_url"],
-    systemPrompt: `You are a Client Research Specialist.
-
-## MISSION
-Gather comprehensive information about the client mentioned in the user's request.
-
-## REQUIRED DATA TO COLLECT
-1. **Company name** (official name)
-2. **Headquarters** (city, country)
-3. **Employee count** (approximate)
-4. **Industry** (sector/vertical)
-5. **Recent news** (last 2-3 headlines from 2024-2025)
-6. **Key contacts** (CEO, CFO, HR Director if available)
-
-## TOOLS
-- Use \`web_search\` for initial discovery (company info, news)
-- Use \`fetch_url\` to gather details from official pages (if allowed)
-
-## OUTPUT FORMAT
-Return strict JSON:
-{
-  "company_name": "...",
-  "headquarters": "...",
-  "employee_count": "...",
-  "industry": "...",
-  "recent_news": ["headline1", "headline2"],
-  "key_contacts": ["Name — Role", ...],
-  "summary": "Brief 2-sentence company description"
-}`
-  },
-  {
-    id: "offer_analysis",
-    label: "Offer Analysis",
-    toolNames: ["list_files", "read_file"],
-    systemPrompt: `You are a Proposal Standards Analyst.
-
-## MISSION
-Analyze existing example offers in the working folder to understand structure and messaging patterns.
-
-## STEPS
-1. Use \`list_files\` to find files in "Example offers/" or similar directories
-2. Use \`read_file\` to extract content from 1-3 example proposals
-3. Identify common sections, slide patterns, and key messaging
-
-## OUTPUT FORMAT
-Return strict JSON:
-{
-  "analyzed_files": ["path1", "path2"],
-  "common_sections": ["Cover", "Agenda", "Understanding", ...],
-  "slide_patterns": ["Numbered sections", "Team slides with photos", ...],
-  "key_messaging": ["Compliance focus", "Swiss expertise", ...],
-  "summary": "Brief summary of the standard proposal structure"
-}`
-  },
-  {
-    id: "structure_planning",
-    label: "Structure Planning",
-    toolNames: [],
-    systemPrompt: `You are a Presentation Architect.
-
-## MISSION
-Design the slide-by-slide structure for the client proposal.
-
-## CONTEXT
-- Research findings are in \`state.nodes.research\`
-- Example offer patterns are in \`state.nodes.offer_analysis\`
-
-## AVAILABLE SLIDE TYPES
-Use these exact type names - they map to specific template layouts:
-- **title**: Cover/first slide (e.g., "Proposal for [Client]")
-- **section**: Section dividers (e.g., "Our Approach", "Why Us")
-- **content**: Bullet points and text (e.g., "Benefits", "Services")
-- **table**: Data and timelines (e.g., "Pricing", "Timeline")
-- **thankyou**: Closing slide (e.g., "Thank You", "Next Steps")
-
-## RULES
-1. First slide MUST have type: "title"
-2. Use "section" for dividers between major parts
-3. Use "content" for bullet points and explanations
-4. Last slide should be "thankyou"
-5. Plan 8-12 slides total
-6. For each slide specify: number, title, type, key_points (or subtitle for section/title)
-
-## OUTPUT FORMAT
-Return strict JSON:
-{
-  "total_slides": 10,
-  "slides": [
-    { "number": 1, "title": "Proposal for ClientName", "type": "title", "subtitle": "Payroll Services" },
-    { "number": 2, "title": "Agenda", "type": "content", "key_points": ["Understanding", "Solution", "Pricing"] },
-    { "number": 3, "title": "Our Approach", "type": "section", "subtitle": "How we work" },
-    ...
-  ],
-  "summary": "Brief rationale for structure"
-}`
-  },
-  {
-    id: "enrich",
-    label: "Content Enrichment",
-    toolNames: [],
-    systemPrompt: `You are a Content Personalization Specialist.
-
-## MISSION
-Enrich the planned slide structure with client-specific data from research.
-
-## CONTEXT
-- Client research: \`state.nodes.research\`
-- Slide structure: \`state.nodes.structure_planning\`
-
-## MANDATORY RULES
-1. For EVERY content slide, include at least ONE specific fact from research:
-   - Employee count or company size
-   - Recent news or milestone
-   - Key contact names
-   - Industry-specific compliance needs
-2. Replace generic phrases like "your organization" with specific client data
-3. Add concrete numbers and names wherever possible
-
-## OUTPUT FORMAT
-Return strict JSON:
-{
-  "enriched_slides": [
-    {
-      "number": 1,
-      "title": "...",
-      "type": "title|content|table",
-      "content": "Bullet points with client-specific data woven in",
-      "research_facts_used": ["employee_count", "recent_news"]
-    },
-    ...
-  ],
-  "personalization_metrics": {
-    "total_slides": 10,
-    "slides_with_research_data": 8,
-    "facts_used": ["company_name", "employee_count", "key_contacts", ...]
-  }
-}`
-  },
-  {
-    id: "create_slides",
-    label: "Create Slides",
-    toolNames: [
-      "list_templates",
-      "create_presentation",
-      "slide_loop_controller",
-      "list_slides",
-      "save_presentation"
-    ],
-    systemPrompt: `You are a Presentation Builder.
-
-## MISSION
-Create the actual PowerPoint presentation using the slide_loop_controller for intelligent template selection.
-
-## CONTEXT
-- Enriched slides with content: \`state.nodes.enrich.enriched_slides\`
-- Client research: \`state.nodes.research\`
-
-## WORKFLOW
-1. Use \`list_templates\` to confirm the template is available
-2. Use \`create_presentation\` with "ForvisMazars_Template_BLANK_012026" template
-3. Use \`slide_loop_controller\` with the enriched_slides array - it will:
-   - Automatically detect each slide type (title, section, content, table, etc.)
-   - Select the appropriate template layout for each slide
-   - Inject content into the correct placeholders
-4. Use \`save_presentation\` with FULL PATH to Outputs folder
-
-## TEMPLATE MAPPING (handled by slide_loop_controller)
-The controller automatically maps slide types to template layouts:
-- title/cover → Slide 3 (Title 1 + Subtitle 2)
-- section/divider → Slide 4 (Title 1 + Subtitle 2)
-- content/bullets → Slide 7 (Title 1 + Text Placeholder 2)
-- table/data → Slide 11 (Title 1 + Text Placeholder 2)
-- thankyou/close → Slide 3 (Title 1 + Subtitle 2)
-
-## CRITICAL: OUTPUT PATH
-Save all presentations to: /Users/romainmagnin/Desktop/payroll-working-folder/Outputs/
-Example: /Users/romainmagnin/Desktop/payroll-working-folder/Outputs/{ClientName}_Proposal_{YYYY-MM-DD}.pptx
-
-## FILENAME CONVENTION
-Use: {ClientName}_Proposal_{YYYY-MM-DD}.pptx
-Replace spaces with underscores in ClientName
-
-## OUTPUT FORMAT
-Return strict JSON:
-{
-  "slides_created": 10,
-  "template_used": "ForvisMazars_Template_BLANK_012026",
-  "output_file": "/Users/romainmagnin/Desktop/payroll-working-folder/Outputs/ClientName_Proposal_YYYY-MM-DD.pptx",
-  "slide_mapping": { "1": {"type": "title", "template": 3}, "2": {"type": "content", "template": 7} },
-  "success": true,
-  "summary": "Brief description of what was created"
-}`
-  },
-  {
-    id: "verify",
-    label: "Verify Output",
-    toolNames: ["list_files", "read_file"],
-    systemPrompt: `You are a Quality Assurance Specialist.
-
-## MISSION
-Verify the generated presentation and compute a personalization score.
-
-## CONTEXT
-- Created file path: \`state.nodes.create_slides.output_file\`
-- Research data used: \`state.nodes.research\`
-- Enrichment metrics: \`state.nodes.enrich.personalization_metrics\`
-
-## VERIFICATION STEPS
-1. Use \`list_files\` to confirm the output file exists
-2. Use \`read_file\` to extract text content from the generated .pptx
-3. Count how many research facts appear in the actual content:
-   - Company name mentioned?
-   - Employee count mentioned?
-   - Key contact names mentioned?
-   - Recent news/milestones mentioned?
-
-## PERSONALIZATION SCORE
-Calculate: (facts found in output) / (total facts from research) × 100
-
-## OUTPUT FORMAT
-Return strict JSON:
-{
-  "file_exists": true,
-  "file_path": "...",
-  "file_verified": true,
-  "personalization_score": 75,
-  "facts_found": ["company_name", "employee_count"],
-  "facts_missing": ["key_contacts"],
-  "recommendations": ["Add key contact names to team slide"],
-  "status": "success",
-  "message": "Presentation verified with 75% personalization score"
-}`
-  }
-];
-
-function presentationGenPromptTemplate(phaseId: string) {
-  switch (phaseId) {
-    case "research":
-      return [
-        "Mission is in `state.mission`.",
-        "Current state:",
-        "{{state}}",
-        "",
-        "Gather client research and return strict JSON as specified."
-      ].join("\n");
-    case "offer_analysis":
-      return [
-        "Mission is in `state.mission`.",
-        "Working folder for examples is in the MCP context.",
-        "Current state:",
-        "{{state}}",
-        "",
-        "Analyze example offers and return strict JSON."
-      ].join("\n");
-    case "structure_planning":
-      return [
-        "Mission is in `state.mission`.",
-        "Research data: `state.nodes.research`",
-        "Offer patterns: `state.nodes.offer_analysis`",
-        "Current state:",
-        "{{state}}",
-        "",
-        "Plan the slide structure and return strict JSON."
-      ].join("\n");
-    case "enrich":
-      return [
-        "Mission is in `state.mission`.",
-        "",
-        "## CLIENT RESEARCH DATA (MANDATORY TO USE)",
-        "Company: {{state.nodes.research.company_name}}",
-        "Employees: {{state.nodes.research.employee_count}}",
-        "Headquarters: {{state.nodes.research.headquarters}}",
-        "Industry: {{state.nodes.research.industry}}",
-        "Recent News: {{state.nodes.research.recent_news}}",
-        "Key Contacts: {{state.nodes.research.key_contacts}}",
-        "",
-        "## SLIDE STRUCTURE",
-        "{{state.nodes.structure_planning.slides}}",
-        "",
-        "Current state:",
-        "{{state}}",
-        "",
-        "Enrich each slide with specific client data. Return strict JSON."
-      ].join("\n");
-    case "create_slides":
-      return [
-        "Mission is in `state.mission`.",
-        "",
-        "## ENRICHED SLIDES TO CREATE",
-        "{{state.nodes.enrich.enriched_slides}}",
-        "",
-        "## CLIENT INFO",
-        "Company: {{state.nodes.research.company_name}}",
-        "Location: {{state.nodes.research.headquarters}}",
-        "",
-        "Current state:",
-        "{{state}}",
-        "",
-        "Create the presentation using MCP tools. Return strict JSON."
-      ].join("\n");
-    case "verify":
-      return [
-        "Mission is in `state.mission`.",
-        "",
-        "## OUTPUT FILE",
-        "Path: {{state.nodes.create_slides.output_file}}",
-        "",
-        "## RESEARCH FACTS TO CHECK FOR",
-        "Company: {{state.nodes.research.company_name}}",
-        "Employees: {{state.nodes.research.employee_count}}",
-        "Contacts: {{state.nodes.research.key_contacts}}",
-        "News: {{state.nodes.research.recent_news}}",
-        "",
-        "Current state:",
-        "{{state}}",
-        "",
-        "Verify the output and compute personalization score. Return strict JSON."
-      ].join("\n");
-    default:
-      return ["Current state:", "{{state}}"].join("\n");
-  }
-}
-
-export function buildPresentationGeneratorProGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
-  const nodes: AgentGraphNode[] = PRESENTATION_GEN_PHASES.map((phase) => {
-    return {
-      id: phase.id,
-      label: phase.label,
-      react: {
-        systemPrompt: phase.systemPrompt,
-        userPromptTemplate: presentationGenPromptTemplate(phase.id),
-        toolNames: phase.toolNames,
-        llmSelection: { provider: "azure" },
-      },
-      output: { schemaId: "generic_json" },
-    };
-  });
-
-  const edges = PRESENTATION_GEN_PHASES.slice(1).map((phase, idx) => {
-    const source = PRESENTATION_GEN_PHASES[idx].id;
-    const target = phase.id;
-    return {
-      id: `edge-${source}-${target}`,
-      source,
-      target,
-    };
-  });
-
-  return {
-    name: "Presentation Generator Pro",
-    description: "6-phase pipeline for creating personalized client proposals with research injection, content enrichment, and quality verification.",
-    nodes,
-    edges,
-  };
-}

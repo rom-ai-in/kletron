@@ -10,84 +10,80 @@ type AgentGraphDto = {
     _id?: string;
     name: string;
     description?: string;
+    execution?: {
+        mode?: "dag" | "state_machine";
+        entryNodeId?: string;
+        maxIterations?: number;
+        maxNodeRuns?: number;
+    };
+    stateDefaults?: Record<string, unknown>;
     nodes: Array<{
         id: string;
         label: string;
+        kind?: "react" | "router";
         react: {
             systemPrompt: string;
             userPromptTemplate: string;
             toolNames: string[];
             llmSelection?: { provider: "azure" | "lmstudio"; model?: string };
         };
-        output: { schemaId: string };
+        output: { schemaId: string; statePath?: string; stateMerge?: boolean };
     }>;
-    edges: Array<{ id: string; source: string; target: string }>;
+    edges: Array<{ id: string; source: string; target: string; condition?: string }>;
 };
 
-// Default tools for new nodes - includes full document and presentation capabilities
+// Default tools for new nodes - focused on coding workflows
 const DEFAULT_NODE_TOOLS = [
     // File operations
     "list_files",
     "read_file",
     "read_file_range",
     "write_file",
-    // Document templates
-    "list_templates",
-    "list_word_templates",
-    // PowerPoint tools
-    "create_presentation",
-    "add_title_slide",
-    "add_content_slide",
-    "add_slide_by_layout",
-    "get_slide_placeholders",
-    "set_placeholder_text",
-    "add_text_box",
-    "add_image_to_slide",
-    "list_slides",
-    "save_presentation",
-    // Word tools
-    "create_document",
-    "add_heading",
-    "add_paragraph",
-    "add_bullet_list",
-    "add_table",
-    "save_document",
-    // Research
+    // Repo + code analysis
+    "search_code",
+    "repo_metrics",
+    "todo_search",
+    "dependency_info",
+    "describe_structure",
+    "git_log",
+    "git_diff",
+    "git_grep",
+    "git_blame",
+    "structural_search",
+    "symbols_list",
+    "find_symbol",
+    "go_to_definition",
+    "references",
+    "find_references",
     "web_search",
     "fetch_url",
     "semantic_code_search",
+    "github_api",
+    "bootstrap_context",
+    "locate_ui_feature",
+    "str_replace_editor",
+    "execute_bash",
+    "output_format",
 ];
 
 function makeDefaultNode(idx: number) {
     return {
         id: `node-${idx}`,
         label: `Node ${idx}`,
+        kind: "react" as const,
         react: {
-            systemPrompt: `You are a professional document and presentation creation assistant with access to powerful MCP tools.
+            systemPrompt: `You are a coding assistant focused on audits, campaigns, runs, and GitHub-centric workflows.
 
-## YOUR PRIMARY CAPABILITIES:
-You can CREATE ACTUAL FILES using your tools. When the user asks for a presentation or document, you MUST use the MCP tools to create real .pptx or .docx files.
+## PRIMARY CAPABILITIES:
+- Inspect and modify code in the local repository.
+- Analyze diffs, runs, and campaign outputs.
+- Use Git tooling to understand history and changes.
+- Use GitHub API for repo metadata, issues, and releases.
 
-## PRESENTATION WORKFLOW:
-1. Use \`list_templates\` to see available PowerPoint templates
-2. Use \`create_presentation\` to initialize a new PowerPoint presentation from a template
-3. Use \`add_title_slide\` for the opening slide
-4. Use \`add_content_slide\` for content slides with title and body
-5. Use \`save_presentation\` to save the file to the working folder
-
-## DOCUMENT WORKFLOW:
-1. Use \`list_word_templates\` to see available Word templates
-2. Use \`create_document\` to initialize a new Word document
-3. Use \`add_heading\` for section headers
-4. Use \`add_paragraph\` for body text
-5. Use \`add_bullet_list\` for lists
-6. Use \`add_table\` for tabular data
-7. Use \`save_document\` to save the file
-
-## CRITICAL RULES:
-- ALWAYS use the actual MCP tools to create files - do NOT just describe what the presentation would contain
-- Save files to the working folder with descriptive names
-- After creating a document, tell the user the file path where it was saved`,
+## WORKING PRINCIPLES:
+- Prefer concrete file references and diffs.
+- When modifying files, keep changes minimal and explain why.
+- Ask for clarification if repo scope or intent is ambiguous.`,
             userPromptTemplate: "Analyze this state and produce the next output.\n\n{{state}}",
             toolNames: DEFAULT_NODE_TOOLS,
             llmSelection: { provider: "azure" as const },
@@ -99,21 +95,32 @@ You can CREATE ACTUAL FILES using your tools. When the user asks for a presentat
 
 function normalizeEdges(edges: AgentGraphDto["edges"]) {
     // Ensure deterministic IDs and uniqueness.
-    const unique = new Map<string, { id: string; source: string; target: string }>();
+    const unique = new Map<string, { id: string; source: string; target: string; condition?: string }>();
     for (const e of edges) {
         const key = `${e.source}=>${e.target}`;
-        unique.set(key, { id: `edge-${e.source}-${e.target}`, source: e.source, target: e.target });
+        const existing = unique.get(key);
+        unique.set(key, {
+            id: `edge-${e.source}-${e.target}`,
+            source: e.source,
+            target: e.target,
+            condition: e.condition ?? existing?.condition,
+        });
     }
     return Array.from(unique.values());
 }
 
 function buildEdgesForTarget(targetId: string, upstreamIds: string[], existingEdges: AgentGraphDto["edges"]) {
     const kept = existingEdges.filter((e) => e.target !== targetId);
-    const added = upstreamIds.map((source) => ({
-        id: `edge-${source}-${targetId}`,
-        source,
-        target: targetId,
-    }));
+    const existingByKey = new Map(existingEdges.map((e) => [`${e.source}=>${e.target}`, e]));
+    const added = upstreamIds.map((source) => {
+        const existing = existingByKey.get(`${source}=>${targetId}`);
+        return {
+            id: `edge-${source}-${targetId}`,
+            source,
+            target: targetId,
+            condition: existing?.condition,
+        };
+    });
     return normalizeEdges([...kept, ...added]);
 }
 
@@ -126,6 +133,19 @@ export function AgentGraphEditor({
 }) {
     const [nodes, setNodes] = useState<AgentGraphDto["nodes"]>(() => initialGraph.nodes ?? []);
     const [edges, setEdges] = useState<AgentGraphDto["edges"]>(() => normalizeEdges(initialGraph.edges ?? []));
+    const [execution, setExecution] = useState<AgentGraphDto["execution"]>(() => ({
+        mode: initialGraph.execution?.mode ?? "dag",
+        entryNodeId: initialGraph.execution?.entryNodeId,
+        maxIterations: initialGraph.execution?.maxIterations,
+        maxNodeRuns: initialGraph.execution?.maxNodeRuns,
+    }));
+    const [stateDefaults, setStateDefaults] = useState<Record<string, unknown>>(
+        () => initialGraph.stateDefaults ?? {}
+    );
+    const [stateDefaultsRaw, setStateDefaultsRaw] = useState<string>(() =>
+        JSON.stringify(initialGraph.stateDefaults ?? {}, null, 2)
+    );
+    const [stateDefaultsError, setStateDefaultsError] = useState<string>("");
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
     const [saveError, setSaveError] = useState<string>("");
@@ -140,6 +160,7 @@ export function AgentGraphEditor({
         return {
             id: n.id,
             label: n.label,
+            kind: n.kind ?? "react",
             react: n.react,
             output: n.output,
         } satisfies AgentNodeEditorValue;
@@ -155,6 +176,9 @@ export function AgentGraphEditor({
     const handleDeleteNode = (nodeId: string) => {
         setNodes((prev) => prev.filter((n) => n.id !== nodeId));
         setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
+        setExecution((prev) =>
+            prev?.entryNodeId === nodeId ? { ...prev, entryNodeId: undefined } : prev
+        );
         setSelectedNodeId(null);
     };
 
@@ -165,6 +189,7 @@ export function AgentGraphEditor({
                 return {
                     ...n,
                     label: next.label,
+                    kind: next.kind ?? n.kind,
                     react: next.react,
                     output: next.output,
                 };
@@ -186,7 +211,44 @@ export function AgentGraphEditor({
         setEdges(buildEdgesForTarget(selectedNodeId, Array.from(current), edges));
     };
 
+    const getEdgeCondition = (sourceId: string, targetId: string) => {
+        return edges.find((e) => e.source === sourceId && e.target === targetId)?.condition ?? "";
+    };
+
+    const updateEdgeCondition = (sourceId: string, targetId: string, condition: string) => {
+        const trimmed = condition.trim();
+        setEdges((prev) =>
+            prev.map((e) => {
+                if (e.source !== sourceId || e.target !== targetId) return e;
+                return {
+                    ...e,
+                    condition: trimmed ? trimmed : undefined,
+                };
+            })
+        );
+    };
+
     const saveTimer = useRef<number | null>(null);
+    const handleStateDefaultsChange = (raw: string) => {
+        setStateDefaultsRaw(raw);
+        if (!raw.trim()) {
+            setStateDefaults({});
+            setStateDefaultsError("");
+            return;
+        }
+        try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object") {
+                setStateDefaults(parsed as Record<string, unknown>);
+                setStateDefaultsError("");
+            } else {
+                setStateDefaultsError("State defaults must be a JSON object.");
+            }
+        } catch {
+            setStateDefaultsError("Invalid JSON.");
+        }
+    };
+
     useEffect(() => {
         // debounce save
         if (saveTimer.current) window.clearTimeout(saveTimer.current);
@@ -203,6 +265,8 @@ export function AgentGraphEditor({
                             description: latestGraphDescriptionRef.current || undefined,
                             nodes: graphNodes,
                             edges: graphEdges,
+                            execution: execution ?? { mode: "dag" },
+                            stateDefaults: Object.keys(stateDefaults ?? {}).length ? stateDefaults : undefined,
                         },
                     };
                     const res = await fetch(`/api/agent-graphs/${graphId}`, {
@@ -229,7 +293,7 @@ export function AgentGraphEditor({
         return () => {
             if (saveTimer.current) window.clearTimeout(saveTimer.current);
         };
-    }, [nodes, edges, graphId]);
+    }, [nodes, edges, execution, stateDefaults, graphId]);
 
     return (
         <div className="flex h-full min-h-0">
@@ -334,6 +398,107 @@ export function AgentGraphEditor({
                     Inspector
                 </div>
 
+                <Panel className="mb-3 space-y-3 p-4">
+                    <div className="text-sm font-semibold text-text-primary">Graph settings</div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                                Execution mode
+                            </label>
+                            <select
+                                value={execution?.mode ?? "dag"}
+                                onChange={(e) =>
+                                    setExecution((prev) => ({
+                                        ...prev,
+                                        mode: e.target.value as "dag" | "state_machine",
+                                    }))
+                                }
+                                className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
+                            >
+                                <option value="dag">DAG (static order)</option>
+                                <option value="state_machine">State machine (conditional)</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                                Entry node
+                            </label>
+                            <select
+                                value={execution?.entryNodeId ?? ""}
+                                onChange={(e) =>
+                                    setExecution((prev) => ({
+                                        ...prev,
+                                        entryNodeId: e.target.value || undefined,
+                                    }))
+                                }
+                                className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
+                                disabled={(execution?.mode ?? "dag") !== "state_machine"}
+                            >
+                                <option value="">Auto (roots)</option>
+                                {nodes.map((n) => (
+                                    <option key={n.id} value={n.id}>
+                                        {n.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    {(execution?.mode ?? "dag") === "state_machine" && (
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                                    Max iterations
+                                </label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    value={execution?.maxIterations ?? ""}
+                                    onChange={(e) =>
+                                        setExecution((prev) => ({
+                                            ...prev,
+                                            maxIterations: e.target.value ? Number(e.target.value) : undefined,
+                                        }))
+                                    }
+                                    className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
+                                    placeholder="200"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                                    Max node runs
+                                </label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    value={execution?.maxNodeRuns ?? ""}
+                                    onChange={(e) =>
+                                        setExecution((prev) => ({
+                                            ...prev,
+                                            maxNodeRuns: e.target.value ? Number(e.target.value) : undefined,
+                                        }))
+                                    }
+                                    className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
+                                    placeholder="20"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                            State defaults (JSON)
+                        </label>
+                        <textarea
+                            value={stateDefaultsRaw}
+                            onChange={(e) => handleStateDefaultsChange(e.target.value)}
+                            className="h-28 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary"
+                            placeholder='{"goal":"...","constraints":["..."]}'
+                        />
+                        {stateDefaultsError && <div className="text-xs text-rose-400">{stateDefaultsError}</div>}
+                    </div>
+                </Panel>
+
                 <Panel className="mb-3 space-y-2 p-4">
                     <div className="flex items-center justify-between gap-2">
                         <div className="text-sm font-semibold text-text-primary">Dependencies</div>
@@ -349,20 +514,29 @@ export function AgentGraphEditor({
                                     .map((n) => {
                                         const checked = selectedUpstream.includes(n.id);
                                         return (
-                                            <label
-                                                key={n.id}
-                                                className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2 hover:bg-state-hover"
-                                            >
-                                                <div className="min-w-0">
-                                                    <div className="truncate text-sm text-text-primary">{n.label}</div>
-                                                    <div className="text-[10px] font-mono text-text-muted">{n.id}</div>
-                                                </div>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={checked}
-                                                    onChange={() => toggleUpstream(n.id)}
-                                                />
-                                            </label>
+                                            <div key={n.id} className="px-3 py-2 hover:bg-state-hover">
+                                                <label className="flex cursor-pointer items-center justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <div className="truncate text-sm text-text-primary">{n.label}</div>
+                                                        <div className="text-[10px] font-mono text-text-muted">{n.id}</div>
+                                                    </div>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={checked}
+                                                        onChange={() => toggleUpstream(n.id)}
+                                                    />
+                                                </label>
+                                                {checked && (
+                                                    <input
+                                                        value={getEdgeCondition(n.id, selectedNodeId)}
+                                                        onChange={(e) =>
+                                                            updateEdgeCondition(n.id, selectedNodeId, e.target.value)
+                                                        }
+                                                        className="mt-2 w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-[11px] font-mono text-text-secondary"
+                                                        placeholder='Condition (e.g. state.nextStep == "debug")'
+                                                    />
+                                                )}
+                                            </div>
                                         );
                                     })}
                                 {nodes.length <= 1 && (
@@ -378,7 +552,8 @@ export function AgentGraphEditor({
                 <Panel className="mt-4 p-3">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Notes</div>
                     <div className="mt-1 text-xs text-text-muted">
-                        - All nodes are ReAct agents.\n
+                        - Nodes can be ReAct or Router.\n
+                        - Router nodes skip LLM execution and only route via edge conditions.\n
                         - Node output must be strict JSON.\n
                         - `{"{{state}}"}` injects the current run state JSON.
                     </div>
@@ -387,4 +562,3 @@ export function AgentGraphEditor({
         </div>
     );
 }
-

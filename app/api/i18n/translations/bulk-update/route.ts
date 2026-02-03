@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bulkUpdateTranslations } from "@/src/services/i18nTranslationsService";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,6 +21,14 @@ const BodySchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const auth = await requireAppRouteAuth(req);
+  if (!auth) {
+    return new Response(JSON.stringify({"error": "Unauthorized"}), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const body = BodySchema.parse(await req.json());
     const res = await bulkUpdateTranslations(body.updates);

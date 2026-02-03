@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/src/lib/db";
 import { type DriftJobDoc } from "@/src/services/driftAnalysisWorker";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export async function POST(req: Request) {
+    const auth = await requireAppRouteAuth(req);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
         const body = await req.json();
         const { llmSelection } = body;

@@ -4,12 +4,21 @@ import { chainExecutor } from "@/src/services/chainExecutor";
 import { getDb } from "@/src/lib/db";
 import { AuditRun } from "@/src/services/chainTypes";
 import { ObjectId } from "mongodb";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 /**
  * GET /api/runs
  * List all execution runs across all campaigns
  */
 export async function GET(req: NextRequest) {
+    const auth = await requireAppRouteAuth(req);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
         const db = await getDb();
         const searchParams = req.nextUrl.searchParams;

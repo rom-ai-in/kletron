@@ -2,8 +2,17 @@
 // API route for user sign out
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@/src/lib/supabase/supabaseServer';
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 
 export async function POST(request: Request) {
+    const auth = await requireAppRouteAuth(request);
+    if (!auth) {
+        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
     try {
         const { client, getResponseCookies } = createRouteHandlerClient(request);
 

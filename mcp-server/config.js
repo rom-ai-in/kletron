@@ -24,8 +24,8 @@ function getWorkingFolderFromConfig() {
   } catch (e) {
     console.warn(`[MCP Config] Failed to read ${configFilePath}:`, e.message);
   }
-  // Fallback to env vars if config.json not found (backward compatibility)
-  return process.env.GITHUB_MCP_DEFAULT_DIR || process.env.MCP_DEFAULT_DIR || null;
+  // Fallback to MCP_DEFAULT_DIR env var if config.json not found
+  return process.env.MCP_DEFAULT_DIR || null;
 }
 
 // Read fetch allowlist from both config.json and env vars
@@ -42,9 +42,8 @@ function getFetchAllowlist() {
   } catch (e) {
     // Fall through to env vars
   }
-  // Fallback to env vars
-  const fetchAllowlistRaw =
-    process.env.GITHUB_MCP_FETCH_ALLOWLIST || process.env.MCP_FETCH_ALLOWLIST || "";
+  // Fallback to env var
+  const fetchAllowlistRaw = process.env.MCP_FETCH_ALLOWLIST || "";
   return fetchAllowlistRaw
     .split(",")
     .map((s) => s.trim())
@@ -67,7 +66,7 @@ export const config = {
   fetchAllowlist: getFetchAllowlist(),
 
   // 📦 Limite de taille de réponse (bytes) pour fetch_url.
-  fetchMaxBytes: Number(process.env.MCP_FETCH_MAX_BYTES || process.env.GITHUB_MCP_FETCH_MAX_BYTES || 1_000_000),
+  fetchMaxBytes: Number(process.env.MCP_FETCH_MAX_BYTES || 1_000_000),
 
   // 🔄 Method to reload config from file (for dynamic updates)
   reload() {

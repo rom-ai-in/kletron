@@ -15,13 +15,14 @@ type ToolMeta = {
 export type AgentNodeEditorValue = {
     id: string;
     label: string;
+    kind?: "react" | "router";
     react: {
         systemPrompt: string;
         userPromptTemplate: string;
         toolNames: string[];
         llmSelection?: { provider: "azure" | "lmstudio"; model?: string };
     };
-    output: { schemaId: string };
+    output: { schemaId: string; statePath?: string; stateMerge?: boolean };
 };
 
 export function NodeInspector({
@@ -71,6 +72,8 @@ export function NodeInspector({
         );
     }
 
+    const isRouter = node.kind === "router";
+
     const toggleTool = (name: string) => {
         const current = new Set(node.react.toolNames ?? []);
         if (current.has(name)) current.delete(name);
@@ -104,6 +107,20 @@ export function NodeInspector({
                         placeholder="Node label"
                     />
                     <div className="text-[10px] font-mono text-text-muted">id: {node.id}</div>
+                </div>
+
+                <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                        Node type
+                    </label>
+                    <select
+                        value={node.kind ?? "react"}
+                        onChange={(e) => onChange({ ...node, kind: e.target.value as "react" | "router" })}
+                        className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
+                    >
+                        <option value="react">ReAct node</option>
+                        <option value="router">Router node</option>
+                    </select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -161,7 +178,9 @@ export function NodeInspector({
                     </label>
                     <select
                         value={node.output.schemaId}
-                        onChange={(e) => onChange({ ...node, output: { schemaId: e.target.value } })}
+                        onChange={(e) =>
+                            onChange({ ...node, output: { ...node.output, schemaId: e.target.value } })
+                        }
                         className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
                     >
                         {nodeOutputSchemaOptions.map((opt) => (
@@ -171,6 +190,36 @@ export function NodeInspector({
                         ))}
                     </select>
                 </div>
+
+                <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                        State write path (optional)
+                    </label>
+                    <input
+                        value={node.output.statePath ?? ""}
+                        onChange={(e) =>
+                            onChange({
+                                ...node,
+                                output: { ...node.output, statePath: e.target.value || undefined },
+                            })
+                        }
+                        className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
+                        placeholder="e.g. plan or quality.gates"
+                    />
+                    <label className="flex items-center gap-2 text-xs text-text-muted">
+                        <input
+                            type="checkbox"
+                            checked={Boolean(node.output.stateMerge)}
+                            onChange={(e) =>
+                                onChange({
+                                    ...node,
+                                    output: { ...node.output, stateMerge: e.target.checked || undefined },
+                                })
+                            }
+                        />
+                        Merge objects at path
+                    </label>
+                </div>
             </Panel>
 
             <Panel className="space-y-2 p-4">
@@ -178,8 +227,9 @@ export function NodeInspector({
                 <textarea
                     value={node.react.systemPrompt}
                     onChange={(e) => onChange({ ...node, react: { ...node.react, systemPrompt: e.target.value } })}
-                    className="h-40 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary"
+                    className="h-40 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary disabled:opacity-60"
                     placeholder="System prompt for this ReAct node"
+                    disabled={node.kind === "router"}
                 />
             </Panel>
 
@@ -193,8 +243,9 @@ export function NodeInspector({
                     onChange={(e) =>
                         onChange({ ...node, react: { ...node.react, userPromptTemplate: e.target.value } })
                     }
-                    className="h-40 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary"
+                    className="h-40 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary disabled:opacity-60"
                     placeholder={"Example:\nAnalyze this state:\n{{state}}\nReturn strict JSON."}
+                    disabled={node.kind === "router"}
                 />
             </Panel>
 
@@ -203,6 +254,11 @@ export function NodeInspector({
                     <div className="text-sm font-semibold text-text-primary">Tools</div>
                     <div className="text-xs text-text-muted">{node.react.toolNames?.length ?? 0} enabled</div>
                 </div>
+                {isRouter && (
+                    <div className="text-xs text-text-muted">
+                        Router nodes do not execute tools. Tool selection is ignored.
+                    </div>
+                )}
 
                 <input
                     value={toolSearch}
@@ -225,6 +281,7 @@ export function NodeInspector({
                                         checked={checked}
                                         onChange={() => toggleTool(tool.name)}
                                         className="mt-1"
+                                        disabled={isRouter}
                                     />
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2">
@@ -247,4 +304,3 @@ export function NodeInspector({
         </div>
     );
 }
-

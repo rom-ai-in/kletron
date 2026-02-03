@@ -52,10 +52,9 @@ echo ""
 echo ""
 echo "📝 LangGraph Studio is web-based."
 echo "   The dev server will start and show you a URL"
-echo "   Open that URL (or https://smith.langchain.com) to access Studio"
+echo "   Open that URL to access Studio"
 echo ""
 echo "🚀 Starting LangGraph dev server..."
 echo "   Press Ctrl+C to stop"
 echo ""
 langgraph dev
-

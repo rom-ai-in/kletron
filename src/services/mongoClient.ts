@@ -1,5 +1,7 @@
 import { MongoClient, Db } from "mongodb";
-import { config } from "../config";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 let client: MongoClient | null = null;
 let db: Db | null = null;
@@ -9,17 +11,17 @@ export async function getMongoClient(): Promise<MongoClient> {
         return client;
     }
 
-    const uri = config.mongo.uri;
+    const uri = process.env.MONGODB_URI;
     if (!uri) {
         throw new Error("MONGODB_URI is not configured in environment variables");
     }
 
     client = new MongoClient(uri, {
         auth:
-            config.mongo.user && config.mongo.pass
+            process.env.MONGODB_USER && process.env.MONGODB_PASS
                 ? {
-                    username: config.mongo.user,
-                    password: config.mongo.pass,
+                    username: process.env.MONGODB_USER,
+                    password: process.env.MONGODB_PASS,
                 }
                 : undefined,
     });
@@ -35,7 +37,7 @@ export async function getDatabase(): Promise<Db> {
     }
 
     const mongoClient = await getMongoClient();
-    db = mongoClient.db("numezis-coder");
+    db = mongoClient.db("numezis-code");
     return db;
 }
 

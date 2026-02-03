@@ -90,7 +90,7 @@ export function CampaignListSidebar() {
     const handleChainCreated = (id: string) => {
         setIsBuilderOpen(false);
         void fetchChains();
-        router.push(`/campaigns/${id}`);
+        router.push(`/app/campaigns/${id}`);
     };
 
     return (
@@ -177,7 +177,7 @@ export function CampaignListSidebar() {
                             return (
                                 <button
                                     key={chainIdStr}
-                                    onClick={() => router.push(`/campaigns/${chainIdStr}`)}
+                                    onClick={() => router.push(`/app/campaigns/${chainIdStr}`)}
                                     className={cn(
                                         "group flex flex-col gap-0.5 px-3 py-2 text-left transition-colors border-l-[3px] border-transparent hover:bg-state-hover/50",
                                         isActive

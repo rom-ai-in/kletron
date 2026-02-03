@@ -3,8 +3,10 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 
 import { getDb } from "@/src/lib/db";
-import { resolveLlmSelection, resolveResolvedLlmInfo } from "@/src/llm";
+import { resolveLlmSelection, resolveResolvedLlmInfo, type ResolvedLlmInfo } from "@/src/llm";
 import { I18nStatusSchema, buildTranslationsFilter, findRowKeysByFilter } from "@/src/services/i18nTranslationsService";
+import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
+import { LLM_PROVIDERS, type LlmProviderType } from "@/src/schemas/llmConfig.schema";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,12 +23,7 @@ type ProcessJobDoc = {
   checkpointId?: ObjectId;
   chunkSize: number;
   llmSelection?: { provider: string; model?: string };
-  resolvedLlm?: {
-    provider: "azure" | "lmstudio";
-    model?: string;
-    azure?: { deployment?: string; endpoint?: string; apiVersion?: string };
-    lmstudio?: { baseUrl?: string };
-  };
+  resolvedLlm?: ResolvedLlmInfo;
   // Legacy selection (materialized row keys).
   selectionKeys?: string[];
   // New: select-by-query (supports >5000 selections without materializing keys).
@@ -72,7 +69,7 @@ const BodySchema = z.union([
     chunkSize: z.number().int().min(5).max(50).optional(),
     llmSelection: z
       .object({
-        provider: z.enum(["azure", "lmstudio"]).optional(),
+        provider: z.enum(["azure", "openai", "claude", "gemini", "lmstudio", "ollama"]).optional(),
         model: z.string().optional(),
       })
       .optional(),
@@ -82,7 +79,7 @@ const BodySchema = z.union([
     chunkSize: z.number().int().min(5).max(50).optional(),
     llmSelection: z
       .object({
-        provider: z.enum(["azure", "lmstudio"]).optional(),
+        provider: z.enum(["azure", "openai", "claude", "gemini", "lmstudio", "ollama"]).optional(),
         model: z.string().optional(),
       })
       .optional(),
@@ -104,6 +101,14 @@ async function appendLogLine(db: any, jobId: ObjectId, line: string) {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireAppRouteAuth(req);
+  if (!auth) {
+    return new Response(JSON.stringify({ "error": "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const body = BodySchema.parse(await req.json());
     const chunkSize = ("chunkSize" in body ? body.chunkSize : undefined) ?? 20;
