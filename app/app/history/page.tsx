@@ -50,9 +50,17 @@ type ActivityItem = {
         nodeSessionIds?: Record<string, string>;
         nodeStatuses?: Record<string, string>;
         nodeOrder?: string[];
+        totalTokens?: number;
     };
     link: string;
 };
+
+/** Format token count to human readable string */
+function formatTokenCount(count: number): string {
+    if (count < 1000) return String(count);
+    if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
+    return `${Math.round(count / 1000)}k`;
+}
 
 type FilterType = "all" | "workbench" | "campaign";
 
@@ -349,6 +357,16 @@ function HistoryPageContent() {
                                                 <span className="inline-flex items-center gap-1 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-secondary">
                                                     <Search className="h-3 w-3" />
                                                     {item.metadata.totalFindings} findings
+                                                </span>
+                                            )}
+
+                                            {/* Token Usage Chip */}
+                                            {item.type === "AGENT_GRAPH" && item.metadata?.totalTokens && item.metadata.totalTokens > 0 && (
+                                                <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400" title={`${item.metadata.totalTokens} tokens consumed`}>
+                                                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    {formatTokenCount(item.metadata.totalTokens)} tokens
                                                 </span>
                                             )}
                                         </div>

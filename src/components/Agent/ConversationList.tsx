@@ -95,7 +95,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
         if (pendingEditCounts[conv.id])
             return { label: 'Waiting', color: 'text-amber-400', bgColor: 'bg-amber-500/20', borderColor: 'border-amber-500/40', icon: AlertCircle };
         if (conv.lastRole === 'user' || conv.lastRole === 'tool')
-            return { label: 'Working', color: 'text-sky-400', bgColor: 'bg-sky-500/20', borderColor: 'border-sky-500/40', icon: PlayCircle };
+            return { label: 'Working', color: 'text-emerald-400', bgColor: 'bg-emerald-500/20', borderColor: 'border-emerald-500/40', icon: PlayCircle };
         return { label: 'Idle', color: 'text-zinc-500', bgColor: 'bg-zinc-700/20', borderColor: 'border-zinc-700/40', icon: CheckCircle2 };
     };
 
@@ -137,7 +137,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
         return (
             <div
                 onClick={() => !isEditing && onSelect(conv.id, conv.title)}
-                className={`group flex flex-col p-3 border-b border-zinc-800 cursor-pointer transition-all hover:bg-zinc-800/60 relative ${isActive ? 'bg-sky-500/10 border-l-2 border-l-sky-500' : ''
+                className={`group flex flex-col p-3 border-b border-zinc-800 cursor-pointer transition-all hover:bg-zinc-800/60 relative ${isActive ? 'bg-emerald-500/10 border-l-2 border-l-emerald-500' : ''
                     }`}
             >
                 <div className="flex items-start justify-between w-full mb-1.5">
@@ -149,13 +149,13 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
                                 onChange={(e) => setEditingTitle(e.target.value)}
                                 onBlur={(e) => handleTitleSave(e, conv.id)}
                                 autoFocus
-                                className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-0.5 text-[13px] font-semibold text-zinc-100 outline-none focus:border-sky-500"
+                                className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-0.5 text-[13px] font-semibold text-zinc-100 outline-none focus:border-emerald-500"
                                 onClick={(e) => e.stopPropagation()}
                             />
                         </form>
                     ) : (
                         <span
-                            className="text-[13px] font-semibold text-zinc-100 truncate pr-6 leading-tight cursor-text hover:text-sky-300"
+                            className="text-[13px] font-semibold text-zinc-100 truncate pr-6 leading-tight cursor-text hover:text-emerald-300"
                             onClick={(e) => handleTitleEdit(e, conv)}
                             title="Click to edit"
                         >
@@ -211,7 +211,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
             <div className="flex-1 overflow-y-auto scrollbar-elegant">
                 {loading && conversations.length === 0 ? (
                     <div className="flex justify-center p-3">
-                        <Loader2 className="w-3 h-3 animate-spin text-sky-500" />
+                        <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />
                     </div>
                 ) : (
                     <div className="flex flex-col">

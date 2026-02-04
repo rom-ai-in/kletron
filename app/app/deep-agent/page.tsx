@@ -22,6 +22,7 @@ import { AzureConfigForm, LMStudioConfigForm } from "@/src/components/LlmConfigF
 import { Loader2 } from "lucide-react";
 import { PromptSelectorModal } from "@/src/components/PromptSelectorModal";
 import { useLlmHealth } from "@/src/hooks/useLlmHealth";
+import type { LlmProviderType } from "@/src/schemas/llmConfig.schema";
 
 type AgentEventKind = AgentEvent["kind"];
 
@@ -122,6 +123,31 @@ const formatTimestamp = (value?: string) => {
   }
 };
 
+/**
+ * Format duration between two timestamps, or elapsed time from start to now.
+ * Returns human-readable string like "2.3s", "1m 12s", "5m 30s"
+ */
+const formatDuration = (startedAt?: string, endedAt?: string): string => {
+  if (!startedAt) return "";
+  try {
+    const start = new Date(startedAt).getTime();
+    const end = endedAt ? new Date(endedAt).getTime() : Date.now();
+    const diffMs = Math.max(0, end - start);
+    const totalSeconds = Math.floor(diffMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const tenths = Math.floor((diffMs % 1000) / 100);
+
+    if (minutes === 0) {
+      return `${seconds}.${tenths}s`;
+    }
+    return `${minutes}m ${seconds}s`;
+  } catch {
+    return "";
+  }
+};
+
+
 const formatJsonString = (value?: string) => {
   if (!value) return "";
   try {
@@ -141,11 +167,44 @@ import { Modal } from "@/src/components/design-system";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+/** Token usage summary for display */
+type TokenUsageForDisplay = {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
+  callCount: number;
+};
+
+/** Format token count to human readable string (e.g., 1.2k, 15k) */
+function formatTokenCount(count: number): string {
+  if (count < 1000) return String(count);
+  if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
+  return `${Math.round(count / 1000)}k`;
+}
+
+/** Token usage display component for timeline header */
+function TokenUsageDisplay({ tokenUsage }: { tokenUsage?: TokenUsageForDisplay }) {
+  if (!tokenUsage || tokenUsage.totalTokens === 0) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 text-[10px] font-mono">
+      <svg className="h-3 w-3 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span className="text-emerald-400" title={`${tokenUsage.totalInputTokens} input + ${tokenUsage.totalOutputTokens} output tokens`}>
+        {formatTokenCount(tokenUsage.totalTokens)}
+      </span>
+      <span className="text-text-muted">tokens</span>
+    </div>
+  );
+}
+
 type TimelinePanelProps = {
   timeline: TimelineEvent[];
   selectedEventId: string | null;
   onPhaseSelect: (eventId: string) => void;
   className?: string;
+  tokenUsage?: TokenUsageForDisplay;
 };
 
 type AgentGraphRecord = {
@@ -156,54 +215,160 @@ type AgentGraphRecord = {
   edges?: Array<{ id: string; source: string; target: string }>;
 };
 
-function TimelinePanel({ timeline, selectedEventId, onPhaseSelect, className }: TimelinePanelProps) {
+function TimelinePanel({ timeline, selectedEventId, onPhaseSelect, className, tokenUsage }: TimelinePanelProps) {
+  // Calculate total graph duration
+  const graphDuration = useMemo(() => {
+    const startedEvents = timeline.filter((e) => e.startedAt);
+    if (!startedEvents.length) return null;
+    const firstStart = startedEvents.reduce((min, e) => {
+      const t = new Date(e.startedAt!).getTime();
+      return t < min ? t : min;
+    }, Infinity);
+    const anyRunning = timeline.some((e) => e.status === "running");
+    if (anyRunning) return { startedAt: new Date(firstStart).toISOString(), endedAt: undefined };
+    const endedEvents = timeline.filter((e) => e.endedAt);
+    if (!endedEvents.length) return { startedAt: new Date(firstStart).toISOString(), endedAt: undefined };
+    const lastEnd = endedEvents.reduce((max, e) => {
+      const t = new Date(e.endedAt!).getTime();
+      return t > max ? t : max;
+    }, 0);
+    return { startedAt: new Date(firstStart).toISOString(), endedAt: new Date(lastEnd).toISOString() };
+  }, [timeline]);
+
   return (
     <section className={`flex flex-col h-full bg-bg-surface border-b border-border-subtle overflow-hidden ${className}`}>
       <div className="flex-none border-b border-border-subtle px-3 py-2 bg-bg-surface">
-        <h2 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Phases</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Phases</h2>
+          {graphDuration?.startedAt && (
+            <div className="flex items-center gap-3">
+              <TokenUsageDisplay tokenUsage={tokenUsage} />
+              <GraphDurationDisplay startedAt={graphDuration.startedAt} endedAt={graphDuration.endedAt} />
+            </div>
+          )}
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto p-0 scrollbar-elegant">
         {timeline.map((event) => (
-          <button
+          <PhaseItem
             key={event.id}
-            type="button"
-            onClick={() => onPhaseSelect(event.id)}
-            className={`w-full px-3 py-2.5 text-left transition-colors border-b border-border-subtle last:border-0 group ${selectedEventId === event.id
-              ? "bg-state-selected"
-              : "bg-transparent hover:bg-state-hover"
-              }`}
-          >
-            <div className="flex items-center justify-between mb-0.5">
-              <span className={`text-[12px] font-medium leading-tight ${selectedEventId === event.id ? "text-text-primary" : "text-text-secondary group-hover:text-text-primary"}`}>
-                {event.label}
-              </span>
-              {event.status !== "pending" && (
-                <div className={`h-1.5 w-1.5 rounded-full ${event.status === "success"
-                  ? "bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.4)]"
-                  : event.status === "error"
-                    ? "bg-rose-400"
-                    : "bg-amber-400 animate-pulse"
-                  }`} />
-              )}
-            </div>
-
-            {event.summary && (
-              <p className="text-[11px] text-text-muted truncate leading-relaxed opacity-80 mt-0.5">
-                {event.summary}
-              </p>
-            )}
-
-            {event.status === "running" && (
-              <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-bg-elevated/50">
-                <div className="h-full w-full bg-emerald-500/50 animate-progress-loader origin-left" />
-              </div>
-            )}
-          </button>
+            event={event}
+            isSelected={selectedEventId === event.id}
+            onSelect={() => onPhaseSelect(event.id)}
+          />
         ))}
       </div>
     </section>
   );
 }
+
+/** Live updating duration display for graph total */
+function GraphDurationDisplay({ startedAt, endedAt }: { startedAt: string; endedAt?: string }) {
+  const [elapsed, setElapsed] = useState(() => formatDuration(startedAt, endedAt));
+
+  useEffect(() => {
+    if (endedAt) {
+      setElapsed(formatDuration(startedAt, endedAt));
+      return;
+    }
+    setElapsed(formatDuration(startedAt));
+    const interval = setInterval(() => {
+      setElapsed(formatDuration(startedAt));
+    }, 500);
+    return () => clearInterval(interval);
+  }, [startedAt, endedAt]);
+
+  return (
+    <span className="text-[10px] font-mono text-text-muted">
+      {elapsed}
+    </span>
+  );
+}
+
+/** Individual phase item with live timer for running phases */
+function PhaseItem({
+  event,
+  isSelected,
+  onSelect,
+}: {
+  event: TimelineEvent;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const [elapsed, setElapsed] = useState(() =>
+    event.startedAt ? formatDuration(event.startedAt, event.endedAt) : ""
+  );
+
+  useEffect(() => {
+    if (!event.startedAt) {
+      setElapsed("");
+      return;
+    }
+    if (event.endedAt || event.status !== "running") {
+      setElapsed(formatDuration(event.startedAt, event.endedAt));
+      return;
+    }
+    // Live update for running phases
+    setElapsed(formatDuration(event.startedAt));
+    const interval = setInterval(() => {
+      setElapsed(formatDuration(event.startedAt));
+    }, 500);
+    return () => clearInterval(interval);
+  }, [event.startedAt, event.endedAt, event.status]);
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`w-full px-3 py-2.5 text-left transition-colors border-b border-border-subtle last:border-0 group ${isSelected
+        ? "bg-state-selected"
+        : "bg-transparent hover:bg-state-hover"
+        }`}
+    >
+      <div className="flex items-center justify-between mb-0.5">
+        <span className={`text-[12px] font-medium leading-tight ${isSelected ? "text-text-primary" : "text-text-secondary group-hover:text-text-primary"}`}>
+          {event.label}
+        </span>
+        <div className="flex items-center gap-1.5">
+          {event.tokenUsage && event.tokenUsage.totalTokens > 0 && (
+            <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-emerald-400" title={`${event.tokenUsage.inputTokens} in + ${event.tokenUsage.outputTokens} out`}>
+              <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {formatTokenCount(event.tokenUsage.totalTokens)}
+            </span>
+          )}
+          {elapsed && (
+            <span className={`text-[10px] font-mono ${event.status === "running" ? "text-amber-400" : event.status === "success" ? "text-emerald-400" : event.status === "error" ? "text-rose-400" : "text-text-muted"}`}>
+              {elapsed}
+            </span>
+          )}
+          {event.status !== "pending" && (
+            <div className={`h-1.5 w-1.5 rounded-full ${event.status === "success"
+              ? "bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.4)]"
+              : event.status === "error"
+                ? "bg-rose-400"
+                : "bg-amber-400 animate-pulse"
+              }`} />
+          )}
+        </div>
+      </div>
+
+      {event.summary && (
+        <p className="text-[11px] text-text-muted truncate leading-relaxed opacity-80 mt-0.5">
+          {event.summary}
+        </p>
+      )}
+
+      {event.status === "running" && (
+        <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-bg-elevated/50">
+          <div className="h-full w-full bg-emerald-500/50 animate-progress-loader origin-left" />
+        </div>
+      )}
+    </button>
+  );
+}
+
 
 type ToolExplorerPanelProps = {
   tools: McpToolMeta[];
@@ -290,8 +455,8 @@ type HeaderControlsProps = {
   selectedGraph: GraphOption;
   agentGraphs: AgentGraphRecord[];
   onSelectGraphKey: (graphKey: string) => void;
-  modelProvider: "azure" | "lmstudio";
-  onSelectProvider: (provider: "azure" | "lmstudio") => void;
+  modelProvider: LlmProviderType;
+  onSelectProvider: (provider: LlmProviderType) => void;
   azureConfigured: boolean;
   llmInfo: LlmEnvInfo | null;
   lmStudioBaseUrl: string;
@@ -308,8 +473,8 @@ type HeaderControlsProps = {
   onSetLlmInfoOpen: (open: boolean) => void;
   detailGraph: GraphOption | null;
   onSetDetailGraph: (graph: GraphOption | null) => void;
-  detailProvider: "azure" | "lmstudio" | null;
-  onSetDetailProvider: (provider: "azure" | "lmstudio" | null) => void;
+  detailProvider: LlmProviderType | null;
+  onSetDetailProvider: (provider: LlmProviderType | null) => void;
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
 };
@@ -1275,7 +1440,8 @@ export default function HomePage() {
   const [auditContextEnabled, setAuditContextEnabled] = useState(true);
   const [isAuditContextDialogOpen, setIsAuditContextDialogOpen] = useState(false);
   const [llmInfo, setLlmInfo] = useState<LlmEnvInfo | null>(null);
-  const [modelProvider, setModelProvider] = useState<"azure" | "lmstudio">("azure");
+  const [modelProvider, setModelProvider] = useState<LlmProviderType>("azure");
+  const [enabledProviders, setEnabledProviders] = useState<LlmProviderType[]>(["azure", "openai", "claude", "gemini", "lmstudio", "ollama"]);
   const [lmStudioModel, setLmStudioModel] = useState("");
   const [llmPrefsLoaded, setLlmPrefsLoaded] = useState(false);
   const [llmError, setLlmError] = useState<string | null>(null);
@@ -1289,10 +1455,26 @@ export default function HomePage() {
   const [isGraphInfoOpen, setIsGraphInfoOpen] = useState(false);
   const [isLlmInfoOpen, setIsLlmInfoOpen] = useState(false);
   const [detailGraph, setDetailGraph] = useState<GraphOption | null>(null);
-  const [detailProvider, setDetailProvider] = useState<"azure" | "lmstudio" | null>(null);
+  const [detailProvider, setDetailProvider] = useState<LlmProviderType | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [isRestoringSession, setIsRestoringSession] = useState(false);
+
+  // Derived token usage from streaming outputs
+  const tokenUsage = useMemo((): TokenUsageForDisplay | undefined => {
+    const meta = outputs?.meta;
+    if (!meta || typeof meta !== "object") return undefined;
+    const usage = (meta as Record<string, unknown>).tokenUsage;
+    if (!usage || typeof usage !== "object") return undefined;
+    const u = usage as Record<string, unknown>;
+    if (typeof u.totalTokens !== "number") return undefined;
+    return {
+      totalInputTokens: typeof u.totalInputTokens === "number" ? u.totalInputTokens : 0,
+      totalOutputTokens: typeof u.totalOutputTokens === "number" ? u.totalOutputTokens : 0,
+      totalTokens: u.totalTokens,
+      callCount: typeof u.callCount === "number" ? u.callCount : 0,
+    };
+  }, [outputs]);
 
   const eventStreamRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -1564,6 +1746,18 @@ export default function HomePage() {
 
   const { status: llmStatus } = useLlmHealth(modelProvider);
 
+  // Fetch enabled providers from API
+  useEffect(() => {
+    fetch("/api/llm-config/enable")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.enabledProviders) {
+          setEnabledProviders(data.enabledProviders);
+        }
+      })
+      .catch((err) => console.error("Failed to fetch enabled providers", err));
+  }, []);
+
   useEffect(() => {
     fetch("/api/env")
       .then((res) => res.json())
@@ -1571,10 +1765,9 @@ export default function HomePage() {
         setTargetDir(data.targetDir || null);
         setLlmInfo(data.llm ?? null);
         if (!window.localStorage.getItem("numezis-llm-selection")) {
-          const defaultProvider =
-            data.llm?.defaultProvider === "lmstudio" ? "lmstudio" : "azure";
+          const defaultProvider = (data.llm?.defaultProvider as LlmProviderType) || "azure";
           setModelProvider(defaultProvider);
-          if (defaultProvider === "lmstudio") {
+          if (defaultProvider === "lmstudio" || defaultProvider === "ollama") {
             setLmStudioModel(data.llm?.lmstudio?.model ?? "");
           }
         }
@@ -1605,7 +1798,7 @@ export default function HomePage() {
     window.localStorage.setItem("numezis-audit-context", JSON.stringify(payload));
   }, [auditContext, auditContextEnabled]);
 
-  const handleProviderChange = useCallback(async (provider: "azure" | "lmstudio") => {
+  const handleProviderChange = useCallback(async (provider: LlmProviderType) => {
     setModelProvider(provider);
 
     try {
@@ -2287,9 +2480,13 @@ export default function HomePage() {
                               value={modelProvider}
                               options={[
                                 { id: 'azure', label: 'Azure OpenAI', sub: 'Cloud' },
-                                { id: 'lmstudio', label: 'LM Studio', sub: 'Local' }
-                              ]}
-                              onSelect={(id) => handleProviderChange(id as any)}
+                                { id: 'openai', label: 'OpenAI', sub: 'Cloud' },
+                                { id: 'claude', label: 'Claude', sub: 'Cloud' },
+                                { id: 'gemini', label: 'Gemini', sub: 'Cloud' },
+                                { id: 'lmstudio', label: 'LM Studio', sub: 'Local' },
+                                { id: 'ollama', label: 'Ollama', sub: 'Local' }
+                              ].filter(opt => enabledProviders.includes(opt.id as LlmProviderType))}
+                              onSelect={(id) => handleProviderChange(id as LlmProviderType)}
                               direction="up"
                               status={llmStatus}
                             />
@@ -2344,6 +2541,7 @@ export default function HomePage() {
                   timeline={activeTimeline}
                   selectedEventId={selectedEventId}
                   onPhaseSelect={handlePhaseClick}
+                  tokenUsage={tokenUsage}
                 />
               </div>
               <div className="flex-1 min-h-0">

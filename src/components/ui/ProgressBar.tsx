@@ -22,7 +22,7 @@ const variantStyles: Record<ProgressVariant, string> = {
     success: 'bg-emerald-500',
     warning: 'bg-amber-500',
     error: 'bg-rose-500',
-    info: 'bg-sky-500',
+    info: 'bg-emerald-500',
 };
 
 const trackStyles: Record<ProgressVariant, string> = {
@@ -30,7 +30,7 @@ const trackStyles: Record<ProgressVariant, string> = {
     success: 'bg-emerald-500/20',
     warning: 'bg-amber-500/20',
     error: 'bg-rose-500/20',
-    info: 'bg-sky-500/20',
+    info: 'bg-emerald-500/20',
 };
 
 export interface ProgressBarProps {
@@ -157,7 +157,7 @@ export function CircularProgress({
         success: '#10b981',
         warning: '#f59e0b',
         error: '#f43f5e',
-        info: '#0ea5e9',
+        info: '#10b981',
     };
 
     return (

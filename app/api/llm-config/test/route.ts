@@ -13,10 +13,10 @@ export async function POST(req: NextRequest) {
     try {
         const auth = await requireAppRouteAuth(req);
         if (!auth) {
-          return new Response(JSON.stringify({"error": "Unauthorized"}), {
-            status: 401,
-            headers: { "Content-Type": "application/json" },
-          });
+            return new Response(JSON.stringify({ "error": "Unauthorized" }), {
+                status: 401,
+                headers: { "Content-Type": "application/json" },
+            });
         }
 
         const body = await req.json();
@@ -74,6 +74,162 @@ export async function POST(req: NextRequest) {
                     baseURL: baseUrl,
                 },
             });
+        } else if (provider === "ollama") {
+            // Use Ollama's native API for health check
+            const { baseUrl, model: modelName } = config;
+            const cleanBaseUrl = (baseUrl || "http://localhost:11434").replace(/\/+$/, "");
+
+            const startTime = Date.now();
+
+            // First, check if Ollama is reachable
+            const tagsResponse = await fetch(`${cleanBaseUrl}/api/tags`, {
+                method: "GET",
+                signal: AbortSignal.timeout(10000),
+            });
+
+            if (!tagsResponse.ok) {
+                return NextResponse.json(
+                    { error: `Ollama returned ${tagsResponse.status}: ${await tagsResponse.text()}` },
+                    { status: 500 }
+                );
+            }
+
+            const tagsData = await tagsResponse.json();
+            const availableModels = tagsData.models?.map((m: { name: string }) => m.name) || [];
+            const modelExists = !modelName || availableModels.some(
+                (m: string) => m === modelName || m.startsWith(`${modelName}:`)
+            );
+
+            if (modelName && !modelExists) {
+                return NextResponse.json(
+                    {
+                        error: `Model "${modelName}" not found. Available: ${availableModels.join(", ") || "none"}`,
+                        availableModels
+                    },
+                    { status: 404 }
+                );
+            }
+
+            const duration = Date.now() - startTime;
+
+            return NextResponse.json({
+                success: true,
+                latency: duration,
+                message: "Connection successful",
+                response: `Ollama ready. Models: ${availableModels.length}`,
+                availableModels,
+            }, { status: 200 });
+
+        } else if (provider === "openai") {
+            // Use ChatOpenAI for OpenAI testing
+            const { model: modelName } = config;
+
+            if (!effectiveApiKey) {
+                return NextResponse.json(
+                    { error: "API Key is required for OpenAI" },
+                    { status: 400 }
+                );
+            }
+
+            model = new ChatOpenAI({
+                model: modelName || "gpt-4o",
+                apiKey: effectiveApiKey,
+                configuration: config.baseUrl ? { baseURL: config.baseUrl } : undefined,
+            });
+
+        } else if (provider === "claude") {
+            // Use Anthropic API health check
+            const { model: modelName } = config;
+
+            if (!effectiveApiKey) {
+                return NextResponse.json(
+                    { error: "API Key is required for Claude (Anthropic)" },
+                    { status: 400 }
+                );
+            }
+
+            const startTime = Date.now();
+
+            // Simple health check by calling the messages API with minimal tokens
+            const response = await fetch("https://api.anthropic.com/v1/messages", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-api-key": effectiveApiKey,
+                    "anthropic-version": "2023-06-01",
+                },
+                body: JSON.stringify({
+                    model: modelName || "claude-sonnet-4-20250514",
+                    max_tokens: 10,
+                    messages: [{ role: "user", content: "Hi" }],
+                }),
+                signal: AbortSignal.timeout(30000),
+            });
+
+            const duration = Date.now() - startTime;
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                return NextResponse.json({
+                    success: false,
+                    error: errorData.error?.message || `Claude API returned ${response.status}`,
+                    latency: duration,
+                }, { status: response.status });
+            }
+
+            return NextResponse.json({
+                success: true,
+                latency: duration,
+                message: "Connection successful",
+                response: "Claude API ready",
+            }, { status: 200 });
+
+        } else if (provider === "gemini") {
+            // Use Google AI health check
+            const { model: modelName } = config;
+
+            if (!effectiveApiKey) {
+                return NextResponse.json(
+                    { error: "API Key is required for Gemini" },
+                    { status: 400 }
+                );
+            }
+
+            const startTime = Date.now();
+            const model_id = modelName || "gemini-2.5-flash";
+
+            // Call Gemini generateContent API with minimal request
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model_id}:generateContent?key=${effectiveApiKey}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: "Hi" }] }],
+                        generationConfig: { maxOutputTokens: 10 },
+                    }),
+                    signal: AbortSignal.timeout(30000),
+                }
+            );
+
+            const duration = Date.now() - startTime;
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                return NextResponse.json({
+                    success: false,
+                    error: errorData.error?.message || `Gemini API returned ${response.status}`,
+                    latency: duration,
+                }, { status: response.status });
+            }
+
+            return NextResponse.json({
+                success: true,
+                latency: duration,
+                message: "Connection successful",
+                response: "Gemini API ready",
+            }, { status: 200 });
+
         } else if (provider === "azure") {
             const { endpoint, deployment, apiVersion, model: modelName } = config;
 

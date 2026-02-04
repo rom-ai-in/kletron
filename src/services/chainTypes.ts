@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { LlmProviderType } from "@/src/schemas/llmConfig.schema";
+import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
 
 /**
  * Chain execution status
@@ -225,6 +226,10 @@ export interface AuditChain {
         totalVerified: number;
         /** Total rejected claims */
         totalRejected: number;
+        /** Total tokens consumed across all stages */
+        totalTokens?: number;
+        /** Detailed token usage breakdown */
+        tokenUsage?: TokenUsageSummary;
     };
 }
 
@@ -258,6 +263,10 @@ export interface AuditRun {
         totalClaims: number;
         totalVerified: number;
         totalRejected: number;
+        /** Total tokens consumed across all stages */
+        totalTokens?: number;
+        /** Detailed token usage breakdown */
+        tokenUsage?: TokenUsageSummary;
     };
 }
 
@@ -285,6 +294,8 @@ export interface StageResult {
     duration: number;
     /** Number of retry attempts */
     retries?: number;
+    /** Token usage for this stage */
+    tokenUsage?: TokenUsage;
 }
 
 /**

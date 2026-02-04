@@ -15,6 +15,8 @@ import { evaluateCondition } from "./agentGraphConditions";
 import { getEntryNodeIds, getGraphNodeOrder, resolveExecutionMode } from "./agentGraphRuntime";
 import { setNestedValue } from "./agentGraphState";
 import { skillRegistry } from "../skills/registry";
+import { tokenUsageService } from "./tokenUsageService";
+import { ObjectId } from "mongodb";
 
 // --- Context Management Imports ---
 import { contextGraphStore } from "@/src/context/graph/ContextGraphStore";
@@ -317,6 +319,9 @@ export class AgentGraphExecutor {
 
         await agentGraphRunService.updateRunStatus(runId, "RUNNING", {});
 
+        // Initialize token usage tracking for this run
+        tokenUsageService.startRunTracking(runId);
+
         const globalTimeline: TimelineEvent[] = timelineNodeIds.map((id) => {
             const node = graph.nodes.find((n) => n.id === id);
             return {
@@ -346,10 +351,17 @@ export class AgentGraphExecutor {
 
         const emitUpdate = async () => {
             if (!opts?.onUpdate) return;
+            // Include running token usage in meta
+            const runningTokenUsage = tokenUsageService.getRunAccumulatedUsage(runId);
             const outputs = createPlaceholderOutputs({
                 mission: typeof state.mission === "string" ? state.mission : "",
                 report: JSON.stringify(state.nodes ?? {}, null, 2),
-                meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
+                meta: {
+                    runId,
+                    graphId: run.graphId.toString(),
+                    state: cloneValue(state),
+                    tokenUsage: runningTokenUsage,
+                },
             });
             await opts.onUpdate({
                 timeline: cloneValue(globalTimeline),
@@ -626,7 +638,7 @@ export class AgentGraphExecutor {
                         timestamp: new Date().toISOString(),
                     });
                 } else {
-                    const messages = await streamReactAgentMessages({
+                    const result = await streamReactAgentMessages({
                         name: `GraphNode:${node.id}`, // Using existing `node.id`
                         systemPrompt: enhancedSystemPrompt, // Use enhanced prompt
                         userPrompt: userPrompt, // Using existing `userPrompt`
@@ -634,10 +646,20 @@ export class AgentGraphExecutor {
                         llmSelection: opts?.llmSelectionOverride ?? node.react.llmSelection,
                         // extraMessages: messageHistory, // Commented out as `messageHistory` is not defined.
                         onMessage: handleStreamingMessage, // Using existing `handleStreamingMessage`
-                        // onToken: (token) => this.handleStreamingToken(token), // Commented out as `this` context is `AgentGraphExecutor`
-                        // onToolCallChunk: (chunk) => this.handleToolCallChunk(chunk), // Commented out as `this` context is `AgentGraphExecutor`
-                        // onMessage: (msg) => this.handleMessageCompletion(msg) // Commented out as `this` context is `AgentGraphExecutor`
+                        onTokenUsage: async (usage, model) => {
+                            // Log individual usage to MongoDB and accumulate in-memory
+                            await tokenUsageService.logUsage({
+                                timestamp: new Date(),
+                                provider: (opts?.llmSelectionOverride?.provider ?? node.react.llmSelection?.provider ?? "unknown") as any,
+                                model,
+                                usage,
+                                runId: new ObjectId(runId),
+                                nodeId: node.id,
+                                callType: "react_agent",
+                            });
+                        },
                     });
+                    const messages = result.messages;
 
                     const finalAgentEvent =
                         builtMessageEvents.slice().reverse().find((event) => event.kind === "assistant") ??
@@ -674,6 +696,10 @@ export class AgentGraphExecutor {
                 await agentGraphRunService.updateRunState(runId, cloneValue(state));
                 await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "COMPLETED");
 
+                // Persist node-level token usage
+                const nodeTokenUsage = tokenUsageService.getNodeUsage(runId, nodeId);
+                await agentGraphRunService.updateNodeTokenUsage(runId, nodeId, nodeTokenUsage);
+
                 timeline[0].status = "success";
                 timeline[0].summary = "Node execution (done)";
                 timeline[0].endedAt = new Date().toISOString();
@@ -683,6 +709,11 @@ export class AgentGraphExecutor {
                     timelineEntry.status = "success";
                     timelineEntry.summary = "Done";
                     timelineEntry.endedAt = new Date().toISOString();
+                    timelineEntry.tokenUsage = nodeTokenUsage.totalTokens > 0 ? {
+                        inputTokens: nodeTokenUsage.inputTokens,
+                        outputTokens: nodeTokenUsage.outputTokens,
+                        totalTokens: nodeTokenUsage.totalTokens,
+                    } : undefined;
                 }
                 await emitUpdate();
 
@@ -749,6 +780,10 @@ export class AgentGraphExecutor {
                 };
             }
         }
+
+        // Finalize token usage tracking and persist run-level summary
+        const { summary: runTokenUsage } = tokenUsageService.finalizeRunTracking(runId);
+        await agentGraphRunService.updateRunTokenUsage(runId, runTokenUsage);
 
         await agentGraphRunService.updateRunStatus(runId, "COMPLETED", {
             endedAt: new Date(),

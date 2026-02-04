@@ -8,8 +8,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'GET') {
         try {
-            const cfg = await getConfig();
-            res.status(200).json(cfg);
+            // Use getConfigSafe to avoid throwing errors when config is not set
+            const { getConfigSafe } = await import('../../config');
+            const cfg = await getConfigSafe();
+            res.status(200).json(cfg || { workingFolder: "" });
         } catch (e: any) {
             res.status(500).json({ error: e.message });
         }

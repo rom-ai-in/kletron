@@ -48,7 +48,7 @@ export function HotspotHeatmap({ findings }: HotspotHeatmapProps) {
                         ? "bg-rose-500/20 text-rose-400 border-rose-500/30"
                         : spot.warning > 0
                             ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                            : "bg-sky-500/20 text-sky-400 border-sky-500/30";
+                            : "bg-zinc-500/20 text-zinc-400 border-zinc-500/30";
 
                     return (
                         <div key={idx} className="group relative overflow-hidden rounded border border-border-subtle bg-bg-surface p-2 transition hover:border-border-strong">
@@ -71,7 +71,7 @@ export function HotspotHeatmap({ findings }: HotspotHeatmapProps) {
                                         <div className="flex gap-1">
                                             {spot.bloquant > 0 && <span className="text-[9px] text-rose-400">{spot.bloquant}B</span>}
                                             {spot.warning > 0 && <span className="text-[9px] text-amber-400">{spot.warning}W</span>}
-                                            {spot.info > 0 && <span className="text-[9px] text-sky-400">{spot.info}I</span>}
+                                            {spot.info > 0 && <span className="text-[9px] text-zinc-400">{spot.info}I</span>}
                                         </div>
                                     </div>
                                 </div>

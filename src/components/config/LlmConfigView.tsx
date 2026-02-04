@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Sparkles, Save, RotateCcw, Monitor, Cloud, Check, Globe, Bot, Cpu, Server } from "lucide-react";
+import { Sparkles, Save, RotateCcw, Monitor, Cloud, Check, Globe, Bot, Cpu, Server, Power } from "lucide-react";
 import { Panel, Button } from "@/src/components/design-system";
 import type { LlmConfig } from "@/src/schemas/llmConfig.schema";
-import { MODEL_RECOMMENDATIONS, type LlmProviderType } from "@/src/schemas/llmConfig.schema";
+import { MODEL_RECOMMENDATIONS, LLM_PROVIDERS, type LlmProviderType } from "@/src/schemas/llmConfig.schema";
 
 // Provider metadata for display
 const PROVIDERS = [
@@ -67,6 +67,10 @@ export function LlmConfigView() {
   const [lmstudioForm, setLmstudioForm] = useState<Record<string, string>>({});
   const [ollamaForm, setOllamaForm] = useState<Record<string, string>>({});
 
+  // Enabled providers state
+  const [enabledProviders, setEnabledProviders] = useState<LlmProviderType[]>([...LLM_PROVIDERS]);
+  const [togglingProvider, setTogglingProvider] = useState<string | null>(null);
+
   const fetchConfig = async () => {
     try {
       const res = await fetch("/api/llm-config");
@@ -89,8 +93,21 @@ export function LlmConfigView() {
     }
   };
 
+  const fetchEnabledProviders = async () => {
+    try {
+      const res = await fetch("/api/llm-config/enable");
+      if (res.ok) {
+        const data = await res.json();
+        setEnabledProviders(data.enabledProviders || [...LLM_PROVIDERS]);
+      }
+    } catch (e) {
+      console.error("Failed to fetch enabled providers:", e);
+    }
+  };
+
   useEffect(() => {
     void fetchConfig();
+    void fetchEnabledProviders();
   }, []);
 
   const showMessage = (type: "success" | "error", text: string) => {
@@ -117,6 +134,34 @@ export function LlmConfigView() {
       showMessage("error", "Failed to switch provider");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleToggleProvider = async (provider: LlmProviderType, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click from triggering
+    const isCurrentlyEnabled = enabledProviders.includes(provider);
+
+    setTogglingProvider(provider);
+    try {
+      const res = await fetch("/api/llm-config/enable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, enabled: !isCurrentlyEnabled }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to toggle provider");
+      }
+
+      const data = await res.json();
+      setEnabledProviders(data.enabledProviders || [...LLM_PROVIDERS]);
+      showMessage("success", `${PROVIDERS.find(p => p.id === provider)?.name} ${!isCurrentlyEnabled ? "enabled" : "disabled"}`);
+    } catch (error) {
+      console.error(error);
+      showMessage("error", error instanceof Error ? error.message : "Failed to toggle provider");
+    } finally {
+      setTogglingProvider(null);
     }
   };
 
@@ -219,20 +264,39 @@ export function LlmConfigView() {
             {PROVIDERS.map((provider) => {
               const Icon = provider.icon;
               const isActive = activeProvider === provider.id;
+              const isEnabled = enabledProviders.includes(provider.id);
+              const isToggling = togglingProvider === provider.id;
               return (
                 <div
                   key={provider.id}
-                  onClick={() => void handleProviderChange(provider.id)}
-                  className={`cursor-pointer group relative p-4 rounded-lg border-2 transition-all ${isActive
-                    ? "border-emerald-500 bg-bg-surface"
-                    : "border-border-subtle bg-bg-elevated/50 hover:border-border-strong"
+                  onClick={() => isEnabled && void handleProviderChange(provider.id)}
+                  className={`group relative p-4 rounded-lg border-2 transition-all ${!isEnabled
+                      ? "opacity-50 border-border-subtle bg-bg-elevated/30 cursor-not-allowed"
+                      : isActive
+                        ? "cursor-pointer border-emerald-500 bg-bg-surface"
+                        : "cursor-pointer border-border-subtle bg-bg-elevated/50 hover:border-border-strong"
                     }`}
                 >
+                  {/* Active indicator */}
                   {isActive && (
-                    <div className="absolute top-3 right-3 text-emerald-500">
+                    <div className="absolute top-3 right-10 text-emerald-500">
                       <Check className="h-4 w-4" />
                     </div>
                   )}
+                  {/* Enable/Disable toggle */}
+                  <button
+                    onClick={(e) => void handleToggleProvider(provider.id, e)}
+                    disabled={isToggling || (isActive && isEnabled)}
+                    className={`absolute top-3 right-3 p-1 rounded transition-colors ${isToggling
+                        ? "animate-pulse"
+                        : isEnabled
+                          ? "text-emerald-500 hover:bg-emerald-500/10"
+                          : "text-zinc-500 hover:bg-zinc-500/10"
+                      } ${isActive && isEnabled ? "opacity-30 cursor-not-allowed" : ""}`}
+                    title={isActive && isEnabled ? "Cannot disable active provider" : isEnabled ? "Disable provider" : "Enable provider"}
+                  >
+                    <Power className="h-4 w-4" />
+                  </button>
                   <div className="flex items-start gap-4">
                     <div
                       className={`p-2 rounded-md transition-colors ${isActive
@@ -350,18 +414,11 @@ export function LlmConfigView() {
 
           {/* Ollama Form */}
           {activeProvider === "ollama" && (
-            <ProviderForm
-              title="Ollama Settings"
-              icon={Server}
-              onSubmit={(e) => void handleSaveProvider(e, "ollama", ollamaForm)}
-              saving={saving}
-              fields={[
-                { label: "Base URL", key: "baseUrl", type: "url", placeholder: "http://localhost:11434" },
-                { label: "Model Name", key: "model", placeholder: "llama3.2", suggestions: MODEL_RECOMMENDATIONS.ollama },
-              ]}
+            <OllamaConfigForm
               formData={ollamaForm}
               setFormData={setOllamaForm}
-              hint="Make sure Ollama is running. Use 'ollama list' to see available models."
+              onSubmit={(e) => void handleSaveProvider(e, "ollama", ollamaForm)}
+              saving={saving}
             />
           )}
         </div>
@@ -439,6 +496,232 @@ function ProviderForm({
               {hint}
             </p>
           )}
+        </div>
+      </form>
+    </Panel>
+  );
+}
+
+// Ollama-specific form with test connection
+import { Zap, AlertCircle, CheckCircle2, Loader2, XCircle } from "lucide-react";
+
+type OllamaTestResult = {
+  success: boolean;
+  connectionStatus: "connected" | "failed";
+  error?: string;
+  details: {
+    baseUrl: string;
+    requestedModel: string;
+    availableModels: string[];
+    modelFound: boolean;
+    responseTime: number;
+    ollamaVersion?: string;
+  };
+};
+
+function OllamaConfigForm({
+  formData,
+  setFormData,
+  onSubmit,
+  saving,
+}: {
+  formData: Record<string, string>;
+  setFormData: (data: Record<string, string>) => void;
+  onSubmit: (e: FormEvent) => void;
+  saving: boolean;
+}) {
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<OllamaTestResult | null>(null);
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+
+    try {
+      const res = await fetch("/api/llm-config/ollama/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseUrl: formData.baseUrl || "http://localhost:11434",
+          model: formData.model || "",
+        }),
+      });
+
+      const result = await res.json();
+      setTestResult(result);
+    } catch (error) {
+      setTestResult({
+        success: false,
+        connectionStatus: "failed",
+        error: error instanceof Error ? error.message : "Failed to test connection",
+        details: {
+          baseUrl: formData.baseUrl || "",
+          requestedModel: formData.model || "",
+          availableModels: [],
+          modelFound: false,
+          responseTime: 0,
+        },
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <Panel className="p-0 overflow-hidden">
+      <div className="border-b border-border-subtle bg-bg-elevated/30 px-5 py-3">
+        <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
+          <Server className="h-4 w-4 text-pink-500" />
+          Ollama Settings
+        </h2>
+      </div>
+      <form onSubmit={onSubmit} className="p-5 space-y-5">
+        {/* Base URL */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-text-secondary">Base URL</label>
+          <input
+            type="url"
+            value={formData.baseUrl || ""}
+            onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
+            placeholder="http://localhost:11434"
+            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-pink-500 focus:outline-none focus:ring-1 focus:ring-pink-500/20 transition-all"
+          />
+        </div>
+
+        {/* Model Name */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-text-secondary">Model Name</label>
+          <input
+            type="text"
+            value={formData.model || ""}
+            onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+            placeholder="llama3.2"
+            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-pink-500 focus:outline-none focus:ring-1 focus:ring-pink-500/20 transition-all"
+            list="ollama-model-suggestions"
+          />
+          <datalist id="ollama-model-suggestions">
+            {MODEL_RECOMMENDATIONS.ollama.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        </div>
+
+        {/* Test Connection Button */}
+        <div className="pt-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void handleTest()}
+            disabled={testing}
+            className="w-full"
+          >
+            {testing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Testing Connection...
+              </>
+            ) : (
+              <>
+                <Zap className="mr-2 h-4 w-4" />
+                Test Connection
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* Test Results */}
+        {testResult && (
+          <div
+            className={`rounded-lg border p-4 space-y-3 ${testResult.success
+              ? "bg-emerald-500/5 border-emerald-500/30"
+              : "bg-red-500/5 border-red-500/30"
+              }`}
+          >
+            {/* Status Header */}
+            <div className="flex items-start gap-3">
+              {testResult.success ? (
+                <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+              ) : (
+                <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-semibold ${testResult.success ? "text-emerald-500" : "text-red-500"}`}>
+                  {testResult.success ? "Connection Successful" : "Connection Failed"}
+                </p>
+                {testResult.error && (
+                  <p className="text-xs text-red-400 mt-1">{testResult.error}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Details Grid */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs border-t border-border-subtle pt-3">
+              <div>
+                <span className="text-text-muted">Base URL:</span>
+                <p className="font-mono text-text-secondary truncate">{testResult.details.baseUrl}</p>
+              </div>
+              <div>
+                <span className="text-text-muted">Response Time:</span>
+                <p className="font-mono text-text-secondary">{testResult.details.responseTime}ms</p>
+              </div>
+              {testResult.details.ollamaVersion && (
+                <div>
+                  <span className="text-text-muted">Ollama Version:</span>
+                  <p className="font-mono text-text-secondary">{testResult.details.ollamaVersion}</p>
+                </div>
+              )}
+              {testResult.details.requestedModel && (
+                <div>
+                  <span className="text-text-muted">Requested Model:</span>
+                  <p className={`font-mono ${testResult.details.modelFound ? "text-emerald-500" : "text-red-400"}`}>
+                    {testResult.details.requestedModel}
+                    {testResult.details.modelFound ? " ✓" : " ✗"}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Available Models */}
+            {testResult.details.availableModels.length > 0 && (
+              <div className="border-t border-border-subtle pt-3">
+                <p className="text-xs text-text-muted mb-2">Available Models ({testResult.details.availableModels.length}):</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {testResult.details.availableModels.map((model) => (
+                    <button
+                      key={model}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, model })}
+                      className={`px-2 py-0.5 rounded text-[11px] font-mono transition-all ${model === formData.model
+                        ? "bg-pink-500/20 text-pink-400 border border-pink-500/40"
+                        : "bg-bg-elevated text-text-secondary border border-border-subtle hover:border-pink-500/40 hover:text-pink-400"
+                        }`}
+                    >
+                      {model}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* No models warning */}
+            {testResult.connectionStatus === "connected" && testResult.details.availableModels.length === 0 && (
+              <div className="flex items-center gap-2 text-xs text-amber-400 border-t border-border-subtle pt-3">
+                <AlertCircle className="h-4 w-4" />
+                <span>No models installed. Run &apos;ollama pull llama3.2&apos; to download a model.</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Save Button */}
+        <div className="pt-4 flex justify-between items-center border-t border-border-subtle">
+          <p className="text-xs text-text-muted">
+            Make sure Ollama is running. Use &apos;ollama list&apos; to see available models.
+          </p>
+          <Button type="submit" variant="primary" disabled={saving}>
+            <Save className="mr-2 h-4 w-4" />
+            Save Changes
+          </Button>
         </div>
       </form>
     </Panel>

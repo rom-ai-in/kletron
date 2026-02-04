@@ -15,6 +15,11 @@ type LlmEnvInfo = {
         baseUrl?: string | null;
         model?: string | null;
     };
+    ollama?: {
+        configured: boolean;
+        baseUrl?: string | null;
+        model?: string | null;
+    };
 };
 
 type HealthStatus = 'success' | 'error' | 'loading' | 'none';
@@ -29,10 +34,6 @@ export function useLlmHealth(provider: string) {
 
         try {
             // 1. Fetch current effective configuration
-            // We need both env and potentially DB config to know what to test
-            // However, the simplest way is to fetch the "merged" config if the API supported it.
-            // Since we don't know if there's a "get effective config" API, we'll try to fetch both like HeaderControls does.
-
             const [envRes, dbRes] = await Promise.all([
                 fetch("/api/env"),
                 fetch("/api/llm-config")
@@ -42,10 +43,33 @@ export function useLlmHealth(provider: string) {
             const dbData = dbRes.ok ? await dbRes.json() : {};
             const envInfo = envData.llm as LlmEnvInfo;
 
-            // Determine config to test
-            const configToTest = provider === 'azure'
-                ? (dbData?.azure ?? envInfo?.azure)
-                : (dbData?.lmstudio ?? envInfo?.lmstudio);
+            // Determine config to test based on provider
+            let configToTest: Record<string, unknown> | undefined;
+
+            switch (provider) {
+                case 'azure':
+                    configToTest = dbData?.azure ?? envInfo?.azure;
+                    break;
+                case 'lmstudio':
+                    configToTest = dbData?.lmstudio ?? envInfo?.lmstudio;
+                    break;
+                case 'ollama':
+                    configToTest = dbData?.ollama ?? envInfo?.ollama;
+                    break;
+                case 'openai':
+                    configToTest = dbData?.openai;
+                    break;
+                case 'claude':
+                    configToTest = dbData?.claude;
+                    break;
+                case 'gemini':
+                    configToTest = dbData?.gemini;
+                    break;
+                default:
+                    setStatus('error');
+                    setMessage(`Unknown provider: ${provider}`);
+                    return;
+            }
 
             if (!configToTest) {
                 setStatus('error');

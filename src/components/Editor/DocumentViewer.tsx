@@ -99,7 +99,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ filePath }) => {
                 <a
                     href={documentUrl}
                     download={fileName}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs transition-colors flex-shrink-0"
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs transition-colors flex-shrink-0"
                 >
                     <Download className="w-3 h-3" />
                     Download

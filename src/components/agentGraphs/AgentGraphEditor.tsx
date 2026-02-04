@@ -346,7 +346,7 @@ export function AgentGraphEditor({
                                     key={node.id}
                                     onClick={() => setSelectedNodeId(node.id)}
                                     className={`w-full text-left rounded-lg border p-4 transition ${isSelected
-                                        ? "border-sky-500/50 bg-sky-500/5"
+                                        ? "border-emerald-500/50 bg-emerald-500/5"
                                         : "border-border-subtle bg-bg-surface hover:bg-state-hover"
                                         }`}
                                 >
@@ -376,7 +376,7 @@ export function AgentGraphEditor({
                                             </div>
                                         </div>
                                         {isSelected && (
-                                            <span className="rounded border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-sky-300">
+                                            <span className="rounded border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-300">
                                                 selected
                                             </span>
                                         )}

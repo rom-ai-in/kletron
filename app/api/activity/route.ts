@@ -13,7 +13,7 @@ import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 export async function GET(req: NextRequest) {
     const auth = await requireAppRouteAuth(req);
     if (!auth) {
-        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+        return new Response(JSON.stringify({ "error": "Unauthorized" }), {
             status: 401,
             headers: { "Content-Type": "application/json" },
         });
@@ -100,6 +100,9 @@ export async function GET(req: NextRequest) {
                 const nodeCount = r.nodeOrder?.length || 0;
                 const completedNodes = Object.values(r.nodeStatuses || {}).filter(s => s === "COMPLETED").length;
                 const failedNodes = Object.values(r.nodeStatuses || {}).filter(s => s === "FAILED").length;
+                // Extract token usage from run
+                const tokenUsage = r.tokenUsage;
+                const totalTokens = tokenUsage?.totalTokens || 0;
                 return {
                     id: r._id.toString(),
                     type: "AGENT_GRAPH",
@@ -115,6 +118,8 @@ export async function GET(req: NextRequest) {
                         nodeSessionIds: r.nodeSessionIds,
                         nodeStatuses: r.nodeStatuses,
                         nodeOrder: r.nodeOrder,
+                        totalTokens,
+                        tokenUsage,
                     },
                     link: `/agent-graph/${r.graphId}`,
                 };

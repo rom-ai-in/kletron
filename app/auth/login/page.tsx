@@ -19,6 +19,7 @@ export default function LoginPage() {
     const searchParams = useSearchParams();
     const { signIn, resendConfirmation } = useAuth();
     const isExtensionFlow = searchParams?.get('source') === 'extension';
+    const isIDEFlow = searchParams?.get('redirect') === 'ide';
 
     const isEmailNotConfirmed = error.toLowerCase().includes('email not confirmed');
 
@@ -31,7 +32,19 @@ export default function LoginPage() {
         const result = await signIn(email, password, rememberMe);
 
         if (result.success) {
-            router.push(isExtensionFlow ? '/auth/extension-success' : '/');
+            // Route based on flow type
+            if (isIDEFlow) {
+                // Preserve deviceSessionId for the callback page
+                const deviceSessionId = searchParams?.get('deviceSessionId');
+                const callbackUrl = deviceSessionId
+                    ? `/auth/ide-callback?deviceSessionId=${deviceSessionId}`
+                    : '/auth/ide-callback';
+                router.push(callbackUrl);
+            } else if (isExtensionFlow) {
+                router.push('/auth/extension-success');
+            } else {
+                router.push('/');
+            }
         } else {
             setError(result.error || 'Sign in failed');
         }
@@ -69,7 +82,7 @@ export default function LoginPage() {
                     </Link>
                     <h1 className="text-xl font-medium text-text-primary">Welcome back</h1>
                     <p className="text-sm text-text-muted mt-1">
-                        {isExtensionFlow ? 'Sign in to connect VS Code' : 'Sign in to your account'}
+                        {isIDEFlow ? 'Sign in to connect Numezis Code' : isExtensionFlow ? 'Sign in to connect VS Code' : 'Sign in to your account'}
                     </p>
                 </div>
 

@@ -39,7 +39,7 @@ export function AppHeader() {
         >
           <History className="h-4 w-4" />
           {runningCount > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 text-[10px] font-bold text-white border-2 border-bg-surface animate-pulse">
+            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white border-2 border-bg-surface animate-pulse">
               {runningCount}
             </span>
           )}

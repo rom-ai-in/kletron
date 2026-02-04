@@ -126,9 +126,29 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
             sub: envInfo?.azure?.model || 'Not configured'
         },
         {
+            id: 'openai',
+            label: 'OpenAI',
+            sub: 'gpt-4o'
+        },
+        {
+            id: 'claude',
+            label: 'Claude',
+            sub: 'claude-sonnet-4'
+        },
+        {
+            id: 'gemini',
+            label: 'Gemini',
+            sub: 'gemini-2.5-flash'
+        },
+        {
             id: 'lmstudio',
             label: 'LM Studio',
             sub: envInfo?.lmstudio?.model || 'Not configured'
+        },
+        {
+            id: 'ollama',
+            label: 'Ollama',
+            sub: 'qwen2.5:14b'
         }
     ];
 

@@ -41,19 +41,19 @@ function getChipIcon(variant: ChipVariant): React.ReactNode {
 function getChipStyles(variant: ChipVariant): string {
     switch (variant) {
         case 'file':
-            return 'bg-sky-500/10 text-sky-300 border-sky-500/30';
+            return 'bg-zinc-500/10 text-zinc-300 border-zinc-500/30';
         case 'folder':
             return 'bg-amber-500/10 text-amber-300 border-amber-500/30';
         case 'agent':
-            return 'bg-violet-500/10 text-violet-300 border-violet-500/30';
+            return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
         case 'model':
             return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
         case 'tag':
             return 'bg-rose-500/10 text-rose-300 border-rose-500/30';
         case 'mention':
-            return 'bg-blue-500/10 text-blue-300 border-blue-500/30';
+            return 'bg-zinc-500/10 text-zinc-300 border-zinc-500/30';
         case 'link':
-            return 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30';
+            return 'bg-zinc-500/10 text-zinc-300 border-zinc-500/30';
         default:
             return 'bg-zinc-800 text-zinc-300 border-zinc-700';
     }

@@ -177,7 +177,7 @@ function EventLogItem({ event }: { event: AgentEvent }) {
         <div className={`rounded-lg border bg-bg-surface p-3 transition ${isError ? "border-rose-500/30 bg-rose-500/5" : "border-border-subtle"}`}>
             <div className="flex items-start gap-3">
                 <div className={`mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded text-[10px] uppercase font-bold ${event.kind === "user" ? "bg-text-primary text-bg-surface" :
-                    event.kind === "assistant" ? "bg-sky-500/10 text-sky-400" :
+                    event.kind === "assistant" ? "bg-emerald-500/10 text-emerald-400" :
                         event.kind === "tool" ? "bg-bg-elevated text-text-muted border border-border-subtle" :
                             "bg-bg-elevated text-text-muted"
                     }`}>

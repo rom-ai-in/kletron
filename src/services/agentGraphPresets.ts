@@ -375,7 +375,8 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "}",
           "",
           "Routing rules (apply in this order):",
-          "1) If openQuestions has items -> researcher",
+          "0) If blockedReason is set OR consecutiveErrors >= 3 -> final_gate (report the blocker to user)",
+          "1) If openQuestions has items AND blockedReason is NOT set -> researcher",
           "2) If taskQueue has items -> coder",
           "3) If qualityGates show failures -> debugger",
           "4) If acceptanceCriteria satisfied and review pending -> reviewer",
@@ -407,15 +408,27 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: [
           "You are the Researcher.",
           "Goal: resolve openQuestions using repository info or web tools.",
+          "",
+          "CRITICAL ERROR HANDLING:",
+          "If you encounter a CONFIGURATION ERROR (e.g., 'Working folder not configured'),",
+          "or any UNRECOVERABLE ERROR that prevents tool usage, you MUST:",
+          "1) Set blockedReason to describe the error (e.g., 'Working folder not configured')",
+          "2) Clear openQuestions (set to empty array [])",
+          "3) Increment consecutiveErrors",
+          "4) Do NOT keep retrying the same failing tools",
+          "",
           "Outputs: strict JSON only.",
           "",
           "Write ONLY these keys:",
           "{",
           "  \"workingNotes\": string[],",
-          "  \"openQuestions\": string[]",
+          "  \"openQuestions\": string[],",
+          "  \"blockedReason\": string | null,",
+          "  \"consecutiveErrors\": number",
           "}",
           "",
-          "Append to existing workingNotes; remove resolved openQuestions."
+          "Append to existing workingNotes; remove resolved openQuestions.",
+          "If tools work successfully, set blockedReason to null and consecutiveErrors to 0."
         ].join("\n"),
         userPromptTemplate: "Current state:\n{{state}}",
         toolNames: CURSOR_RESEARCH_TOOLS,
@@ -778,7 +791,9 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
       confidence: "",
       finalSummary: "",
       nextSteps: [],
-      route: { next: "researcher", reason: "bootstrap" }
+      route: { next: "researcher", reason: "bootstrap" },
+      blockedReason: null,
+      consecutiveErrors: 0
     }
   };
 }

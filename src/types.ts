@@ -14,6 +14,11 @@ export type TimelineEvent = {
     thoughtLog?: string[];
     startedAt?: string;
     endedAt?: string;
+    tokenUsage?: {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+    };
 };
 
 export type StageMetric = {

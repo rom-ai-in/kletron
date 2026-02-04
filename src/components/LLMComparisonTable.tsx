@@ -71,8 +71,8 @@ export function LLMComparisonTable({ stages, findings }: LLMComparisonTableProps
                                         cellClass = "bg-amber-500/5";
                                         dotClass = "bg-amber-500";
                                     } else if (result?.severity === "INFO") {
-                                        cellClass = "bg-sky-500/5";
-                                        dotClass = "bg-sky-500";
+                                        cellClass = "bg-zinc-500/5";
+                                        dotClass = "bg-zinc-500";
                                     }
 
                                     return (

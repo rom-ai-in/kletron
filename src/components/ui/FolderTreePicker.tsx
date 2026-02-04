@@ -129,7 +129,7 @@ export function FolderTreePicker({ value, onChange, placeholder }: FolderTreePic
         return (
             <div key={item.path}>
                 <div
-                    className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-white/5 rounded-md group transition-colors ${value === item.path + "/" ? "bg-sky-500/10 text-sky-400" : "text-text-secondary"}`}
+                    className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-white/5 rounded-md group transition-colors ${value === item.path + "/" ? "bg-emerald-500/10 text-emerald-400" : "text-text-secondary"}`}
                     style={{ paddingLeft: `${depth * 1.25 + 0.5}rem` }}
                     onClick={() => handleSelect(item.path)}
                 >
@@ -165,7 +165,7 @@ export function FolderTreePicker({ value, onChange, placeholder }: FolderTreePic
             >
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted group-hover:text-text-secondary transition-colors" />
                 <div className="w-full flex items-center justify-between rounded-md border border-border-subtle bg-bg-elevated pl-10 pr-3 py-2 text-sm text-text-primary transition-all hover:border-border-strong group-focus-within:border-border-strong font-mono">
-                    <span className={value === "" || value === "/" ? "text-sky-400 font-bold" : value ? "text-text-primary" : "text-text-muted"}>
+                    <span className={value === "" || value === "/" ? "text-emerald-400 font-bold" : value ? "text-text-primary" : "text-text-muted"}>
                         {value === "" || value === "/" ? "/ (Root)" : value || placeholder || "Select folder..."}
                     </span>
                     <ChevronDown className={`h-4 w-4 text-text-muted transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
@@ -191,7 +191,7 @@ export function FolderTreePicker({ value, onChange, placeholder }: FolderTreePic
                     </div>
                     <div className="p-2 overflow-y-auto max-h-[350px] scrollbar-elegant">
                         <div
-                            className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-white/5 rounded-md text-text-secondary transition-colors mb-1 ${value === "" || value === "/" ? "bg-sky-500/10 text-sky-400" : ""}`}
+                            className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-white/5 rounded-md text-text-secondary transition-colors mb-1 ${value === "" || value === "/" ? "bg-emerald-500/10 text-emerald-400" : ""}`}
                             onClick={() => handleSelect("")}
                         >
                             <Folder className="h-4 w-4" />

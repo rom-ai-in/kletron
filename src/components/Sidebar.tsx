@@ -70,7 +70,7 @@ function getAvatarGradient(seed: string): string {
         'from-amber-500 to-orange-500',
         'from-rose-500 to-pink-500',
         'from-fuchsia-500 to-purple-500',
-        'from-sky-500 to-blue-600',
+        'from-emerald-500 to-teal-600',
         'from-lime-500 to-emerald-500',
     ];
     let hash = 0;

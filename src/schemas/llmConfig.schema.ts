@@ -53,7 +53,7 @@ export type LlmProviderType = (typeof LLM_PROVIDERS)[number];
 
 export const LlmConfigSchema = z.object({
     _id: z.string().optional(),
-    provider: z.enum(LLM_PROVIDERS).describe("LLM provider type"),
+    provider: z.enum(LLM_PROVIDERS).describe("Active LLM provider"),
     azure: AzureOpenAIConfigSchema.optional(),
     openai: OpenAIConfigSchema.optional(),
     claude: ClaudeConfigSchema.optional(),
@@ -61,6 +61,7 @@ export const LlmConfigSchema = z.object({
     lmstudio: LMStudioConfigSchema.optional(),
     ollama: OllamaConfigSchema.optional(),
     defaultProvider: z.enum(LLM_PROVIDERS).describe("Default provider to use"),
+    enabledProviders: z.array(z.enum(LLM_PROVIDERS)).optional().describe("List of enabled providers (default: all)"),
     createdAt: z.date().optional(),
     updatedAt: z.date().optional(),
 });

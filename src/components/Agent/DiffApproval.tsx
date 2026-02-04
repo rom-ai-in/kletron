@@ -133,10 +133,10 @@ export function DiffApproval({
                                 <FileCode className="w-4 h-4 text-zinc-400" />
                                 <span className="text-sm font-medium text-zinc-200">{file.filename}</span>
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${file.isNew
-                                        ? 'bg-emerald-500/20 text-emerald-400'
-                                        : file.isDeleted
-                                            ? 'bg-rose-500/20 text-rose-400'
-                                            : 'bg-zinc-700 text-zinc-400'
+                                    ? 'bg-emerald-500/20 text-emerald-400'
+                                    : file.isDeleted
+                                        ? 'bg-rose-500/20 text-rose-400'
+                                        : 'bg-zinc-700 text-zinc-400'
                                     }`}>
                                     {badge}
                                 </span>
@@ -176,8 +176,8 @@ export function DiffApproval({
                                     <button
                                         onClick={() => onPreview(file)}
                                         className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium
-                      bg-sky-500/10 text-sky-400 border border-sky-500/30
-                      hover:bg-sky-500/20 transition-colors"
+                      bg-zinc-800 text-zinc-400 border border-zinc-700
+                      hover:bg-zinc-700 transition-colors"
                                     >
                                         <Eye className="w-3 h-3" />
                                     </button>
@@ -203,10 +203,10 @@ export function DiffApproval({
                                     <div
                                         key={i}
                                         className={`px-1 -mx-1 ${line.type === 'add'
-                                                ? 'text-emerald-400 bg-emerald-500/10'
-                                                : line.type === 'remove'
-                                                    ? 'text-rose-400 bg-rose-500/10'
-                                                    : 'text-zinc-500'
+                                            ? 'text-emerald-400 bg-emerald-500/10'
+                                            : line.type === 'remove'
+                                                ? 'text-rose-400 bg-rose-500/10'
+                                                : 'text-zinc-500'
                                             }`}
                                     >
                                         {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}{line.content}

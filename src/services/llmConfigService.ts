@@ -84,11 +84,13 @@ function getEnvBasedConfig(): LlmConfig {
                 model: config.gemini.model,
             }
             : undefined,
-        lmstudio: {
-            baseUrl: config.lmstudio.baseUrl,
-            apiKey: config.lmstudio.apiKey,
-            model: config.lmstudio.model,
-        },
+        lmstudio: config.lmstudio?.model
+            ? {
+                baseUrl: config.lmstudio.baseUrl,
+                apiKey: config.lmstudio.apiKey,
+                model: config.lmstudio.model,
+            }
+            : undefined,
         ollama: config.ollama?.baseUrl
             ? {
                 baseUrl: config.ollama.baseUrl,
@@ -244,6 +246,8 @@ export async function updateDefaultProvider(
     const collection = await getCollection();
     const currentConfig = await getLlmConfig();
 
+    // Only update the provider fields - no full schema validation needed
+    // This allows switching to any provider even if other providers are not configured
     const updatedConfig: LlmConfig = {
         ...currentConfig,
         provider,
@@ -251,25 +255,20 @@ export async function updateDefaultProvider(
         updatedAt: new Date(),
     };
 
-    const validatedConfig = validateLlmConfig(updatedConfig);
-
     if (currentConfig._id) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { _id, ...configWithoutId } = validatedConfig;
-
         await collection.updateOne(
             { _id: new ObjectId(currentConfig._id) } as any,
-            { $set: configWithoutId }
+            { $set: { provider, defaultProvider: provider, updatedAt: new Date() } }
         );
     } else {
         const result = await collection.insertOne({
-            ...validatedConfig,
+            ...updatedConfig,
             createdAt: new Date(),
         });
-        validatedConfig._id = result.insertedId.toString();
+        updatedConfig._id = result.insertedId.toString();
     }
 
-    return validatedConfig;
+    return updatedConfig;
 }
 
 /**
@@ -279,4 +278,66 @@ export async function resetToEnvConfig(): Promise<LlmConfig> {
     const collection = await getCollection();
     await collection.deleteMany({});
     return getEnvBasedConfig();
+}
+
+/**
+ * Get list of enabled providers
+ * Returns all providers if enabledProviders is not set
+ */
+export async function getEnabledProviders(): Promise<LlmProviderType[]> {
+    const llmConfig = await getLlmConfig();
+    // Default: all providers are enabled
+    return llmConfig.enabledProviders ?? ["azure", "openai", "claude", "gemini", "lmstudio", "ollama"];
+}
+
+/**
+ * Enable or disable a specific provider
+ */
+export async function setProviderEnabled(
+    provider: LlmProviderType,
+    enabled: boolean
+): Promise<LlmConfig> {
+    const collection = await getCollection();
+    const currentConfig = await getLlmConfig();
+
+    // Get current enabled providers or default to all
+    const currentEnabled = currentConfig.enabledProviders ??
+        ["azure", "openai", "claude", "gemini", "lmstudio", "ollama"];
+
+    let newEnabledProviders: LlmProviderType[];
+
+    if (enabled) {
+        // Add provider if not already in list
+        newEnabledProviders = currentEnabled.includes(provider)
+            ? [...currentEnabled]
+            : [...currentEnabled, provider];
+    } else {
+        // Cannot disable the active provider
+        if (currentConfig.provider === provider) {
+            throw new Error(`Cannot disable the active provider (${provider}). Switch to a different provider first.`);
+        }
+        // Remove provider from list
+        newEnabledProviders = currentEnabled.filter(p => p !== provider);
+    }
+
+    const updatedConfig: LlmConfig = {
+        ...currentConfig,
+        enabledProviders: newEnabledProviders,
+        updatedAt: new Date(),
+    };
+
+    if (currentConfig._id) {
+        await collection.updateOne(
+            { _id: new ObjectId(currentConfig._id) } as any,
+            { $set: { enabledProviders: newEnabledProviders, updatedAt: new Date() } }
+        );
+    } else {
+        const result = await collection.insertOne({
+            ...updatedConfig,
+            createdAt: new Date(),
+        });
+        updatedConfig._id = result.insertedId.toString();
+    }
+
+    return updatedConfig;
 }

@@ -296,7 +296,7 @@ export function DriftAnalysisModal({
                         </div>
                         <div className="mt-3 h-2 w-full overflow-hidden rounded bg-black/20">
                             <div
-                                className={`${job ? "bg-sky-500/60" : "w-1/3 animate-pulse bg-sky-500/40"} h-full transition-all duration-300`}
+                                className={`${job ? "bg-emerald-500/60" : "w-1/3 animate-pulse bg-emerald-500/40"} h-full transition-all duration-300`}
                                 style={
                                     job && job.totalStages
                                         ? { width: fmtPct((job.processedStages / job.totalStages) * 100) }

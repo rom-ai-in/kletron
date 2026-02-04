@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { LlmProviderType } from "../schemas/llmConfig.schema";
+import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
 
 export type AgentGraphStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
 
@@ -140,6 +141,10 @@ export interface AgentGraphRun {
     nodeOrder: string[];
     nodeSessionIds: Record<string, string>;
     nodeStatuses: Record<string, AgentGraphNodeStatus>;
+    /** Per-node token usage tracking */
+    nodeTokenUsage?: Record<string, TokenUsage>;
+    /** Run-level aggregated token usage */
+    tokenUsage?: TokenUsageSummary;
     state: AgentGraphState;
     error?: string;
 }

@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import { getDb } from "../lib/db";
 import type { AgentGraphNodeStatus, AgentGraphRun, AgentGraphStatus, AgentGraphState } from "./agentGraphTypes";
+import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
 
 const COLLECTION_NAME = "agent_graph_runs";
 
@@ -17,6 +18,7 @@ export class AgentGraphRunService {
             nodeOrder: [],
             nodeSessionIds: {},
             nodeStatuses: {},
+            nodeTokenUsage: {},
             state: { nodes: {} },
         };
         const result = await db.collection(COLLECTION_NAME).insertOne(run as any);
@@ -108,7 +110,34 @@ export class AgentGraphRunService {
             { $set: { state } }
         );
     }
+
+    /**
+     * Update token usage for a specific node within a run.
+     */
+    async updateNodeTokenUsage(runId: string, nodeId: string, usage: TokenUsage): Promise<void> {
+        if (!ObjectId.isValid(runId)) {
+            throw new Error("Invalid run ID format");
+        }
+        const db = await getDb();
+        await db.collection(COLLECTION_NAME).updateOne(
+            { _id: new ObjectId(runId) },
+            { $set: { [`nodeTokenUsage.${nodeId}`]: usage } }
+        );
+    }
+
+    /**
+     * Update the run-level aggregated token usage summary.
+     */
+    async updateRunTokenUsage(runId: string, usage: TokenUsageSummary): Promise<void> {
+        if (!ObjectId.isValid(runId)) {
+            throw new Error("Invalid run ID format");
+        }
+        const db = await getDb();
+        await db.collection(COLLECTION_NAME).updateOne(
+            { _id: new ObjectId(runId) },
+            { $set: { tokenUsage: usage } }
+        );
+    }
 }
 
 export const agentGraphRunService = new AgentGraphRunService();
-

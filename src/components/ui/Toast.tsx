@@ -132,7 +132,7 @@ const typeConfig: Record<ToastType, { icon: LucideIcon; className: string }> = {
     },
     info: {
         icon: Info,
-        className: 'bg-sky-500/10 border-sky-500/30 text-sky-400',
+        className: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
     },
 };
 

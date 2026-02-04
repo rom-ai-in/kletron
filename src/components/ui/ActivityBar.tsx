@@ -37,7 +37,7 @@ export const defaultBottomItems: ActivityBarItem[] = [
 
 function getBadgeColor(variant: ActivityBarItem['badgeVariant']) {
     switch (variant) {
-        case 'info': return 'bg-sky-500';
+        case 'info': return 'bg-emerald-500';
         case 'success': return 'bg-emerald-500';
         case 'warning': return 'bg-amber-500';
         case 'error': return 'bg-rose-500';

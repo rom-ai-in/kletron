@@ -349,43 +349,49 @@ export function createNumezisCodeLauncher(options?: { skipPrelaunch?: boolean })
 
   // Wait for compilation to complete
   const waitForCompilation = async () => {
-    // Check for VS Code's actual output structure (out/vs/code/electron-main)
-    const vsCodeOutputPath = path.join(cwd, "out", "vs", "code", "electron-main");
-    const pollIntervalMs = 1000;
+    // Check for required files - both the bootstrap entry and the electron-main module
+    const outMainJs = path.join(cwd, "out", "main.js");
+    const bootstrapEsmJs = path.join(cwd, "out", "bootstrap-esm.js");
+    const vsCodeMainJs = path.join(cwd, "out", "vs", "code", "electron-main", "main.js");
+    const vsCodeNlsJs = path.join(cwd, "out", "vs", "nls.js");
+    const pollIntervalMs = 2000;
     const startTime = Date.now();
+    const maxWaitMs = 180000; // 3 minutes max
 
-    console.log(`⏳ Waiting for compilation to complete...`);
+    console.log(`⏳ Waiting for VS Code compilation to complete...`);
 
-    // First wait for the VS Code output directory to exist (max 90 seconds)
-    let outputFound = false;
-    while (Date.now() - startTime < 90000) {
-      if (fsSync.existsSync(vsCodeOutputPath)) {
-        outputFound = true;
-        console.log(`✅ out/vs/code/electron-main found.`);
-        break;
-      }
-      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
-    }
+    // Wait for BOTH the compilation complete signal AND the required files
+    while (Date.now() - startTime < maxWaitMs) {
+      const outMainExists = fsSync.existsSync(outMainJs);
+      const bootstrapExists = fsSync.existsSync(bootstrapEsmJs);
+      const mainExists = fsSync.existsSync(vsCodeMainJs);
+      const nlsExists = fsSync.existsSync(vsCodeNlsJs);
 
-    if (!outputFound) {
-      console.warn(`⚠️ VS Code output not found after 90s - IDE may not launch correctly`);
-      return false;
-    }
-
-    // Once output exists, wait up to 30 more seconds for compilation signal
-    // or wait for the client side compilation to finish
-    const afterOutputTime = Date.now();
-    while (Date.now() - afterOutputTime < 30000) {
-      if (compilationComplete) {
-        console.log(`✅ Compilation complete signal received.`);
+      // Only proceed if we got the compilation signal AND all required files exist
+      if (compilationComplete && outMainExists && bootstrapExists && mainExists && nlsExists) {
+        console.log(`✅ Compilation complete with all required files.`);
+        // Give it a bit more time to stabilize
+        await new Promise(resolve => setTimeout(resolve, 3000));
         return true;
       }
+
+      // Show progress every 10 seconds
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      if (elapsed > 0 && elapsed % 10 === 0) {
+        const status = [
+          compilationComplete ? "✓signal" : "…signal",
+          outMainExists && bootstrapExists ? "✓bootstrap" : "…bootstrap",
+          mainExists ? "✓main.js" : "…main.js",
+          nlsExists ? "✓nls.js" : "…nls.js"
+        ].join(" ");
+        console.log(`⏳ Waiting for compilation... (${elapsed}s) [${status}]`);
+      }
+
       await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
     }
 
-    // Fallback: output exists, proceed anyway
-    console.log(`✅ Proceeding with IDE launch (output exists, compilation likely complete).`);
-    return true;
+    console.warn(`⚠️ Compilation not fully complete after ${maxWaitMs / 1000}s - IDE may not launch correctly`);
+    return false;
   };
 
   // Launch the Electron IDE after compilation completes

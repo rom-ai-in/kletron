@@ -14,13 +14,16 @@ async function main() {
         await agentGraphService.deleteGraph(String(dup._id));
       }
     }
+    // Force update existing graph with latest preset definition
+    await agentGraphService.updateGraph(String(keep._id), graph);
     // eslint-disable-next-line no-console
     console.log(
       JSON.stringify(
         {
-          existingGraphId: String(keep._id),
+          updatedGraphId: String(keep._id),
           name: graph.name,
           deletedDuplicates: duplicates.length,
+          action: "UPDATED with latest preset"
         },
         null,
         2
