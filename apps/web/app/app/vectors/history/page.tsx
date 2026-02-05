@@ -66,7 +66,7 @@ export default function VectorHistoryPage() {
                         </div>
                         <div>
                             <h1 className="text-lg font-semibold text-text-primary">Indexing History</h1>
-                            <p className="text-sm text-text-muted">Audit log of vector indexing operations</p>
+                            <p className="text-sm text-text-muted">Run log of vector indexing operations</p>
                         </div>
                     </div>
                 </div>

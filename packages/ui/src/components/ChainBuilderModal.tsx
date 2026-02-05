@@ -4,7 +4,11 @@ import { useState, useEffect } from "react";
 import { Modal, Button, Skeleton, Panel, SelectableRow } from "@numezis/ui/components/design-system";
 import { ChainConfigBuilder } from "@numezis/shared/chainConfigBuilder";
 import type { AuditChain, AuditStageConfig, GraphId } from "@numezis/shared/chainTypes";
-import { graphOptions } from "@numezis/shared/graphCatalog";
+
+const campaignGraphOptions: { id: GraphId; name: string }[] = [
+    { id: "audit", name: "Audit" },
+    { id: "simple_react", name: "Simple React" },
+];
 
 interface ChainBuilderModalProps {
     open: boolean;
@@ -33,7 +37,11 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
                 const res = await fetch(`/api/campaigns/${editChainId}`);
                 if (res.ok) {
                     const data = await res.json();
-                    setChainData(data.chain);
+                    const normalizedStages = (data.chain?.stages || []).map((stage: AuditStageConfig) => ({
+                        ...stage,
+                        prompt: stage.prompt ?? "",
+                    }));
+                    setChainData({ ...data.chain, stages: normalizedStages });
                     setStep(2); // Jump to configuration
                 }
             } catch (err) {
@@ -71,6 +79,7 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
         const newStage: AuditStageConfig = {
             id: `stage-${(chainData.stages?.length || 0) + 1}`,
             name: "New Audit Stage",
+            prompt: "",
             graphId: "audit",
             llmProvider: "azure",
         };
@@ -132,6 +141,11 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
             setLoading(false);
         }
     };
+
+    const promptIssues = (chainData.stages || [])
+        .map((stage, index) => (!stage.prompt || stage.prompt.trim() === "" ? index : null))
+        .filter((index) => index !== null) as number[];
+    const hasPromptIssues = promptIssues.length > 0;
 
     const renderStep = () => {
         if (loading && editChainId && step === 1) {
@@ -206,9 +220,17 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
                                 + Add Stage
                             </Button>
                         </div>
+                        {hasPromptIssues && (
+                            <div className="rounded border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                                {promptIssues.length} stage{promptIssues.length > 1 ? "s" : ""} missing a prompt. Add a prompt to continue.
+                            </div>
+                        )}
                         <div className="space-y-3">
                             {chainData.stages?.map((stage: AuditStageConfig, idx: number) => (
-                                <Panel key={idx} className="space-y-3 p-3 text-xs border-border-subtle bg-bg-elevated/50">
+                                <Panel
+                                    key={idx}
+                                    className={`space-y-3 p-3 text-xs border-border-subtle bg-bg-elevated/50 ${(!stage.prompt || stage.prompt.trim() === "") ? "border-rose-500/30 bg-rose-500/5" : ""}`}
+                                >
                                     <div className="flex items-center justify-between gap-2">
                                         <input
                                             value={stage.name}
@@ -231,7 +253,7 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
                                                 onChange={(e) => handleUpdateStage(idx, { graphId: e.target.value as GraphId })}
                                                 className="w-full rounded border-border-subtle bg-bg-surface px-2 py-1 text-xs"
                                             >
-                                                {graphOptions.map(g => (
+                                                {campaignGraphOptions.map(g => (
                                                     <option key={g.id} value={g.id}>{g.name}</option>
                                                 ))}
                                             </select>
@@ -247,6 +269,18 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
                                                 <option value="lmstudio">LM Studio</option>
                                             </select>
                                         </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] text-text-muted uppercase mb-1">Prompt</label>
+                                        <textarea
+                                            value={stage.prompt ?? ""}
+                                            onChange={(e) => handleUpdateStage(idx, { prompt: e.target.value })}
+                                            className="w-full min-h-[84px] rounded border-border-subtle bg-bg-surface px-2 py-1 text-xs"
+                                            placeholder="Describe exactly what this stage should do..."
+                                        />
+                                        {(!stage.prompt || stage.prompt.trim() === "") && (
+                                            <div className="mt-1 text-[10px] text-rose-300">Prompt is required.</div>
+                                        )}
                                     </div>
                                 </Panel>
                             ))}
@@ -351,7 +385,7 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
                     <div className="flex gap-3">
                         {step < 4 ? (
                             <Button
-                                disabled={step === 2 && (!chainData.stages || chainData.stages.length === 0)}
+                                disabled={step === 2 && (!chainData.stages || chainData.stages.length === 0 || hasPromptIssues)}
                                 onClick={() => setStep((step + 1) as WizardStep)}
                             >
                                 Next
@@ -359,6 +393,7 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
                         ) : (
                             <Button
                                 loading={loading}
+                                disabled={hasPromptIssues}
                                 onClick={() => void handleCreate()}
                             >
                                 {editChainId ? "Update Campaign" : "Create Campaign"}

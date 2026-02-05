@@ -12,12 +12,43 @@ export type GitStatus = {
   renamed: Array<{ from: string; to: string }>;
 };
 
+export type UpdateStatus = {
+  state:
+    | "idle"
+    | "checking"
+    | "available"
+    | "not-available"
+    | "downloading"
+    | "downloaded"
+    | "error"
+    | "disabled";
+  message?: string;
+  version?: string;
+  progress?: number;
+  error?: string;
+  releaseNotes?: string;
+};
+
 const api = {
   selectWorkspace: (): Promise<WorkspaceInfo | null> => ipcRenderer.invoke("app:selectWorkspace"),
   setWorkspace: (workspacePath: string): Promise<WorkspaceInfo | null> => ipcRenderer.invoke("app:setWorkspace", workspacePath),
   getWorkspace: (): Promise<WorkspaceInfo | null> => ipcRenderer.invoke("app:getWorkspace"),
   openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke("app:openExternal", url),
   openInVSCode: (targetPath?: string): Promise<boolean> => ipcRenderer.invoke("app:openInVSCode", targetPath),
+  onAuthLink: (handler: (url: string) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, url: string) => handler(url);
+    ipcRenderer.on("auth:deepLink", listener);
+    return () => ipcRenderer.removeListener("auth:deepLink", listener);
+  },
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke("app:getVersion"),
+  getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("app:getUpdateStatus"),
+  checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke("app:checkForUpdates"),
+  restartToUpdate: (): Promise<boolean> => ipcRenderer.invoke("app:restartToUpdate"),
+  onUpdateStatus: (handler: (status: UpdateStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => handler(status);
+    ipcRenderer.on("updates:status", listener);
+    return () => ipcRenderer.removeListener("updates:status", listener);
+  },
   listFiles: (relativePath?: string, depth?: number): Promise<FileEntry[]> => ipcRenderer.invoke("fs:listFiles", relativePath, depth),
   readFile: (relativePath: string): Promise<string> => ipcRenderer.invoke("fs:readFile", relativePath),
   writeFile: (relativePath: string, content: string): Promise<void> => ipcRenderer.invoke("fs:writeFile", relativePath, content),

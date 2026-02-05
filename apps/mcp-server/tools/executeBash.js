@@ -1,5 +1,5 @@
 import path from "path";
-import minimatchPkg from "minimatch";
+import { minimatch } from "minimatch";
 import fs from "fs/promises";
 
 import { listFiles } from "./listFiles.js";
@@ -114,10 +114,9 @@ export const executeBash = {
         });
       }
 
-      const { minimatch } = minimatchPkg;
-    if (namePattern) {
-      filtered = filtered.filter((f) => minimatch(f.split("/").pop() || "", namePattern));
-    }
+      if (namePattern) {
+        filtered = filtered.filter((f) => minimatch(f.split("/").pop() || "", namePattern));
+      }
 
       return {
         ok: true,

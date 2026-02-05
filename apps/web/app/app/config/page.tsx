@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Settings, ListTree, ArrowRight, Wrench, Folder, Brain } from "lucide-react";
+import { ListTree, ArrowRight, Wrench, Folder, Brain, Layers } from "lucide-react";
 import { Panel } from "@numezis/ui/components/design-system";
 
 type LlmConfigSummary = { provider?: string } | null;
@@ -10,24 +10,10 @@ type LlmConfigSummary = { provider?: string } | null;
 export default function ConfigOverviewPage() {
   const [graphsCount, setGraphsCount] = useState<number>(0);
   const [toolsCount, setToolsCount] = useState<number>(0);
-  const [contextEnabled, setContextEnabled] = useState<boolean | null>(null);
   const [llmProvider, setLlmProvider] = useState<LlmConfigSummary>(null);
   const [embeddingProvider, setEmbeddingProvider] = useState<string | null>(null);
 
   useEffect(() => {
-    // Context (local)
-    try {
-      const raw = window.localStorage.getItem("numezis-audit-context");
-      if (!raw) {
-        setContextEnabled(null);
-      } else {
-        const parsed = JSON.parse(raw);
-        setContextEnabled(typeof parsed.enabled === "boolean" ? parsed.enabled : null);
-      }
-    } catch {
-      setContextEnabled(null);
-    }
-
     // LLM provider (server)
     const fetchProvider = async () => {
       try {
@@ -119,7 +105,7 @@ export default function ConfigOverviewPage() {
       <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
         <div>
           <h1 className="text-lg font-semibold text-text-primary">Configuration</h1>
-          <p className="text-sm text-text-muted">One place to manage Context, AI providers, and Graph flows.</p>
+          <p className="text-sm text-text-muted">One place to manage AI providers and Graph flows.</p>
         </div>
       </div>
 
@@ -133,21 +119,19 @@ export default function ConfigOverviewPage() {
             meta="Repository Settings"
           />
           <ConfigCard
-            title="Context"
-            description="Global context injected into agent runs."
-            icon={<Settings className="h-4 w-4 text-text-muted" />}
-            href="/app/config/context"
-            meta={
-              contextEnabled === null ? "Not set" : contextEnabled ? "Enabled" : "Disabled"
-            }
-          />
-          <ConfigCard
             title="AI Models"
             description="LLM providers & embedding models."
             icon={<Brain className="h-4 w-4 text-emerald-500" />}
             href="/app/config/llm"
             meta={getAiModelsMeta()}
             highlight
+          />
+          <ConfigCard
+            title="Context"
+            description="Project soul, cache, and graph debugging."
+            icon={<Layers className="h-4 w-4 text-text-muted" />}
+            href="/app/config/context"
+            meta="Audit context & knowledge graph"
           />
           <ConfigCard
             title="Graphs"

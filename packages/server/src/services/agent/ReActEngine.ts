@@ -13,13 +13,7 @@ import { getConfig } from "@numezis/server/config";
 import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
 import { getWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 import { getWorkspaceByIdUnsafe } from "@numezis/server/services/workspaceService";
-import { getDb } from "@numezis/server/lib/db";
-import { normalizeAuditContext, type AuditContext } from "@numezis/shared/documentContext";
-
-type ContextConfig = {
-    enabled: boolean;
-    context: AuditContext | null;
-};
+import { buildAuditContextPrompt } from "@numezis/server/services/auditContextService";
 
 const safeEditGate = SafeEditGate.getInstance();
 
@@ -96,23 +90,6 @@ export class ReActEngine {
         return tools;
     }
 
-    private async loadContextConfig(workspaceId?: string): Promise<ContextConfig> {
-        if (!workspaceId) return { enabled: true, context: null };
-        try {
-            const db = await getDb();
-            const doc = await db.collection("audit_context_config").findOne({ workspaceId }, { projection: { _id: 0 } });
-            if (!doc) {
-                return { enabled: true, context: null };
-            }
-            const enabled = typeof (doc as any).enabled === "boolean" ? Boolean((doc as any).enabled) : true;
-            const context = normalizeAuditContext((doc as any).context) ?? null;
-            return { enabled, context };
-        } catch (error) {
-            console.error("[ReActEngine] Failed to load context config:", error);
-            return { enabled: true, context: null };
-        }
-    }
-
     async chat(conversationId: string, userMessage: string, onUpdate?: (event: AgentEvent) => void, llmSelection?: { provider: LlmProviderType; model?: string }): Promise<string> {
         const conversationService = new ConversationService(getWorkspaceContext()?.workspaceId);
         // 1. Load conversation history
@@ -121,8 +98,6 @@ export class ReActEngine {
 
         const workspaceContext = getWorkspaceContext();
         const workspaceInfo = workspaceContext?.workspace;
-        const contextConfig = await this.loadContextConfig(workspaceContext?.workspaceId);
-
         // 2. Prepare messages for the agent
         // We map stored AgentEvents back to BaseMessages to maintain context
         const previousMessages: BaseMessage[] = conversation.messages.map(m => {
@@ -164,16 +139,11 @@ export class ReActEngine {
             ].filter(Boolean).join("\n")
             : "Workspace details unavailable.";
 
-        const contextBlock = contextConfig.enabled && contextConfig.context
-            ? `\nWORKSPACE CONTEXT CONFIG (use this as project-specific guidance):\n${JSON.stringify(contextConfig.context, null, 2)}\n`
-            : "";
-
-        const systemPrompt = `You are an expert developer assistant embedded in Numezis Code.
+        let systemPrompt = `You are an expert developer assistant embedded in Numezis Code.
 You can analyze code, browse files, and propose edits.
 
 WORKSPACE CONTEXT:
 ${workspaceSummary}
-${contextBlock}
 
 WORKFLOW:
 - When you use 'write_file' or 'str_replace_editor', the edit is queued for user review.
@@ -190,6 +160,16 @@ IMPORTANT:
 - The execute_bash tool only supports: find, grep, rg, ls, cat (safe emulation). Complex shell commands won't work.
 - For file verification, use read_file or list_files instead of bash commands.
 - Do NOT reveal chain-of-thought. Provide concise, user-facing reasoning summaries only when necessary.`;
+
+        // Inject Audit Context if enabled
+        try {
+            const auditContextPrompt = await buildAuditContextPrompt(workspaceContext?.workspaceId);
+            if (auditContextPrompt) {
+                systemPrompt = `${systemPrompt}\n\n${auditContextPrompt}`;
+            }
+        } catch (err) {
+            console.warn("[ReActEngine] Failed to load audit context:", err);
+        }
 
         let finalResponse = "";
         const metricsTotals = { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 };

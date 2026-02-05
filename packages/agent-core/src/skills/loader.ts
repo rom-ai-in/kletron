@@ -1,6 +1,8 @@
 import { promises as fs } from "fs";
 import path from "path";
 import matter from "gray-matter";
+import { getConfig } from "@numezis/server/config";
+import { getWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 import type {
     SkillDefinition,
     ResolvedSkill,
@@ -16,6 +18,14 @@ import type {
 const DEFAULT_SKILLS_DIR = ".agent/skills";
 const SKILL_FILE_NAME = "SKILL.md";
 
+async function resolveBaseDir(baseDir?: string): Promise<string> {
+    if (baseDir && baseDir.trim()) return baseDir;
+    const workspaceContext = getWorkspaceContext();
+    if (workspaceContext?.rootPath) return workspaceContext.rootPath;
+    const cfg = await getConfig();
+    return cfg.workingFolder;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SKILL LOADER
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,9 +35,10 @@ const SKILL_FILE_NAME = "SKILL.md";
  */
 export async function loadSkill(
     skillId: string,
-    baseDir: string = process.cwd()
+    baseDir?: string
 ): Promise<SkillLoadResult> {
-    const skillsDir = path.join(baseDir, DEFAULT_SKILLS_DIR);
+    const resolvedBaseDir = await resolveBaseDir(baseDir);
+    const skillsDir = path.join(resolvedBaseDir, DEFAULT_SKILLS_DIR);
     const skillPath = path.join(skillsDir, skillId, SKILL_FILE_NAME);
 
     try {
@@ -65,9 +76,10 @@ export async function loadSkill(
  * List all available skill IDs by scanning the skills directory.
  */
 export async function listSkillIds(
-    baseDir: string = process.cwd()
+    baseDir?: string
 ): Promise<string[]> {
-    const skillsDir = path.join(baseDir, DEFAULT_SKILLS_DIR);
+    const resolvedBaseDir = await resolveBaseDir(baseDir);
+    const skillsDir = path.join(resolvedBaseDir, DEFAULT_SKILLS_DIR);
 
     try {
         const entries = await fs.readdir(skillsDir, { withFileTypes: true });
@@ -99,14 +111,15 @@ export async function listSkillIds(
  * Load all skills from the skills directory.
  */
 export async function loadAllSkills(
-    baseDir: string = process.cwd()
+    baseDir?: string
 ): Promise<Map<string, SkillDefinition>> {
-    const skillIds = await listSkillIds(baseDir);
+    const resolvedBaseDir = await resolveBaseDir(baseDir);
+    const skillIds = await listSkillIds(resolvedBaseDir);
     const skills = new Map<string, SkillDefinition>();
 
     for (const id of skillIds) {
         try {
-            const { skill } = await loadSkill(id, baseDir);
+            const { skill } = await loadSkill(id, resolvedBaseDir);
             skills.set(id, skill);
         } catch (error) {
             console.warn(`[SkillLoader] Failed to load skill "${id}":`, error);

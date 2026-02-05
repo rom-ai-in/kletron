@@ -62,6 +62,7 @@ describe('ChainExecutor Integration', () => {
                 {
                     id: 'stage-1',
                     name: 'Recon',
+                    prompt: 'Recon prompt',
                     graphId: 'audit',
                     llmProvider: 'openai',
                 },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chainExecutor } from "@numezis/server/services/chainExecutor";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
 /**
  * GET /api/campaigns/[id]/report
@@ -21,13 +22,22 @@ export async function GET(
     try {
         const chainId = params.id;
 
-        const chain = await chainExecutor.getChain(chainId);
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        if (!workspace || !workspace._id) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
 
+        const chain = await chainExecutor.getChain(chainId, workspace._id.toString());
         if (!chain) {
             return NextResponse.json({ error: "Chain not found" }, { status: 404 });
         }
 
-        if (chain.status !== "COMPLETED" && chain.status !== "FAILED") {
+        const latestRun = await chainExecutor.getLatestRun(chainId, workspace._id.toString());
+        if (!latestRun) {
+            return NextResponse.json({ error: "No runs found for this campaign" }, { status: 404 });
+        }
+
+        if (latestRun.status !== "COMPLETED" && latestRun.status !== "FAILED") {
             return NextResponse.json(
                 { error: "Chain has not completed yet" },
                 { status: 400 }
@@ -36,10 +46,11 @@ export async function GET(
 
         return NextResponse.json(
             {
-                report: chain.finalReport || "",
-                findings: chain.aggregatedFindings,
-                insights: chain.crossStageInsights,
-                metadata: chain.metadata,
+                report: latestRun.finalReport || "",
+                findings: latestRun.aggregatedFindings,
+                insights: latestRun.crossStageInsights,
+                metadata: latestRun.metadata,
+                runId: latestRun._id?.toString(),
             },
             { status: 200 }
         );

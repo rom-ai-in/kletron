@@ -20,6 +20,8 @@ import { cn } from "@numezis/shared/utils/cn";
 // Helper for status icons
 const StatusIcon = ({ status }: { status: string }) => {
     switch (status) {
+        case "BLOCKED":
+            return <AlertCircle className="h-3.5 w-3.5 text-amber-400" />;
         case "RUNNING":
             return <Play className="h-3.5 w-3.5 text-blue-400 animate-pulse" />;
         case "COMPLETED":
@@ -173,6 +175,8 @@ export function CampaignListSidebar() {
                             // Ensure ID comparison works (chain._id is ObjectId from standard, activeId is string from URL)
                             const chainIdStr = chain._id?.toString() || "";
                             const isActive = chainIdStr === activeId;
+                            const isBlocked = chain.stages?.some((stage) => !stage.prompt || stage.prompt.trim() === "");
+                            const status = isBlocked ? "BLOCKED" : chain.status;
 
                             return (
                                 <button
@@ -192,7 +196,7 @@ export function CampaignListSidebar() {
                                         )}>
                                             {chain.name}
                                         </span>
-                                        <StatusIcon status={chain.status} />
+                                        <StatusIcon status={status} />
                                     </div>
                                     <div className="flex items-center justify-between text-[10px] text-text-muted">
                                         <span className="truncate max-w-[180px]">

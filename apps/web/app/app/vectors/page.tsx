@@ -9,6 +9,8 @@ import {
     Input,
     ProgressBar,
     EmptyState,
+    ErrorState,
+    Skeleton,
 } from "@numezis/ui/components/design-system";
 import {
     Database,
@@ -62,6 +64,8 @@ type SearchResult = {
 export default function VectorIndexPage() {
     const [status, setStatus] = useState<IndexStatus | null>(null);
     const [config, setConfig] = useState<any>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
     const [isSearching, setIsSearching] = useState(false);
@@ -84,30 +88,68 @@ export default function VectorIndexPage() {
     const isPartial = totalFiles > 0 && remainingFiles > 0;
 
     // Fetch initial data
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (showLoader = false) => {
+        if (showLoader) setIsLoading(true);
+        setLoadError(null);
         try {
             const [statusRes, configRes] = await Promise.all([
                 fetch("/api/vectors"),
                 fetch("/api/embedding-config")
             ]);
-            if (statusRes.ok) setStatus(await statusRes.json());
-            if (configRes.ok) setConfig(await configRes.json());
+            const errors: string[] = [];
+
+            if (statusRes.ok) {
+                setStatus(await statusRes.json());
+            } else {
+                const data = await statusRes.json().catch(() => ({}));
+                errors.push(data.error || `Failed to load vector status (${statusRes.status})`);
+            }
+
+            if (configRes.ok) {
+                setConfig(await configRes.json());
+            } else {
+                const data = await configRes.json().catch(() => ({}));
+                errors.push(data.error || `Failed to load embedding config (${configRes.status})`);
+            }
+
+            if (errors.length) {
+                setLoadError(errors.join(" • "));
+            }
         } catch (error) {
             console.error("Failed to fetch vector data", error);
+            setLoadError(error instanceof Error ? error.message : "Failed to fetch vector data");
+        } finally {
+            if (showLoader) setIsLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        void fetchData();
+        void fetchData(true);
         const interval = setInterval(() => {
             if (status?.isIndexing) void fetchStatus();
         }, 2000);
         return () => clearInterval(interval);
     }, [fetchData, status?.isIndexing]);
 
+    useEffect(() => {
+        const handleFocus = () => {
+            if (!status || loadError) {
+                void fetchData(!status && !config);
+            }
+        };
+        window.addEventListener("focus", handleFocus);
+        return () => window.removeEventListener("focus", handleFocus);
+    }, [fetchData, status, config, loadError]);
+
     const fetchStatus = async () => {
         const res = await fetch("/api/vectors");
-        if (res.ok) setStatus(await res.json());
+        if (res.ok) {
+            setStatus(await res.json());
+            if (loadError) setLoadError(null);
+        } else {
+            const data = await res.json().catch(() => ({}));
+            setLoadError(data.error || `Failed to load vector status (${res.status})`);
+        }
     };
 
     const handleStartIndexing = (force = false) => {
@@ -219,8 +261,18 @@ export default function VectorIndexPage() {
         return Settings; // Default
     };
 
+    const isInitialLoad = isLoading && !status && !config;
+
     return (
         <div className="flex h-full flex-col bg-bg-app overflow-hidden">
+            {!isLoading && loadError && !status && !config && (
+                <div className="flex-1 overflow-y-auto p-6">
+                    <ErrorState
+                        message={loadError}
+                        onRetry={() => void fetchData(true)}
+                    />
+                </div>
+            )}
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
                 <div className="flex items-center gap-3">
@@ -234,23 +286,27 @@ export default function VectorIndexPage() {
                 </div>
                 <div className="flex items-center gap-3">
                     {/* Indicator replacing config button */}
-                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-subtle ${healthStatus === 'error' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-bg-elevated'
-                        }`}>
-                        <div className={`h-2 w-2 rounded-full ${healthStatus === 'success' ? 'bg-emerald-500' :
-                            healthStatus === 'error' ? 'bg-rose-500' :
-                                healthStatus === 'loading' ? 'bg-amber-500 animate-pulse' : 'bg-zinc-500'
-                            }`} />
-                        <span className="text-xs text-text-secondary">
-                            {config?.provider ? PROVIDER_DISPLAY_NAMES[config.provider] ?? "Unknown" : "Unknown"}
-                        </span>
-                        {config?.provider && (
-                            <span className="text-xs text-text-muted border-l border-border-subtle pl-2">
-                                {config[config.provider]?.model}
+                    {isInitialLoad ? (
+                        <Skeleton className="h-8 w-48 rounded-md" />
+                    ) : (
+                        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-subtle ${healthStatus === 'error' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-bg-elevated'
+                            }`}>
+                            <div className={`h-2 w-2 rounded-full ${healthStatus === 'success' ? 'bg-emerald-500' :
+                                healthStatus === 'error' ? 'bg-rose-500' :
+                                    healthStatus === 'loading' ? 'bg-amber-500 animate-pulse' : 'bg-zinc-500'
+                                }`} />
+                            <span className="text-xs text-text-secondary">
+                                {config?.provider ? PROVIDER_DISPLAY_NAMES[config.provider] ?? "Unknown" : "Unknown"}
                             </span>
-                        )}
-                    </div>
+                            {config?.provider && (
+                                <span className="text-xs text-text-muted border-l border-border-subtle pl-2">
+                                    {config[config.provider]?.model}
+                                </span>
+                            )}
+                        </div>
+                    )}
 
-                    <Button variant="secondary" size="sm" onClick={() => { void fetchData(); recheckHealth(); }}>
+                    <Button variant="secondary" size="sm" onClick={() => { void fetchData(true); recheckHealth(); }}>
                         <RefreshCw className="mr-2 h-4 w-4" />
                         Refresh Status
                     </Button>
@@ -258,6 +314,76 @@ export default function VectorIndexPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-elegant">
+                {loadError && (
+                    <EmptyState
+                        variant="error"
+                        title="Unable to load vector data"
+                        description={loadError}
+                        action={{
+                            label: "Retry",
+                            onClick: () => void fetchData(true),
+                        }}
+                        secondaryAction={{
+                            label: "Open Config",
+                            onClick: () => window.location.assign("/app/config"),
+                        }}
+                        size="sm"
+                    />
+                )}
+                {isInitialLoad ? (
+                    <>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <SkeletonCard />
+                            <SkeletonCard />
+                            <SkeletonCard />
+                            <SkeletonCard />
+                        </div>
+
+                        <Panel className="p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="space-y-2">
+                                    <Skeleton className="h-5 w-56" />
+                                    <Skeleton className="h-4 w-72" />
+                                </div>
+                                <div className="flex gap-2">
+                                    <Skeleton className="h-9 w-32 rounded-md" />
+                                    <Skeleton className="h-9 w-32 rounded-md" />
+                                </div>
+                            </div>
+                            <Skeleton className="h-2 w-full rounded-full" />
+                            <Skeleton className="mt-3 h-3 w-1/2" />
+                        </Panel>
+
+                        <div className="flex flex-col gap-6 pb-6">
+                            <Panel className="p-4 h-[600px]">
+                                <div className="flex items-center justify-between">
+                                    <Skeleton className="h-4 w-48" />
+                                    <Skeleton className="h-4 w-24" />
+                                </div>
+                                <div className="mt-4">
+                                    <Skeleton className="h-10 w-full" />
+                                </div>
+                                <div className="mt-6 space-y-3">
+                                    <Skeleton className="h-24 w-full" />
+                                    <Skeleton className="h-24 w-full" />
+                                    <Skeleton className="h-24 w-full" />
+                                </div>
+                            </Panel>
+
+                            <Panel className="p-4 h-[300px]">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <Skeleton className="h-4 w-40" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Skeleton className="h-4 w-full" />
+                                    <Skeleton className="h-4 w-5/6" />
+                                    <Skeleton className="h-4 w-2/3" />
+                                </div>
+                            </Panel>
+                        </div>
+                    </>
+                ) : (
+                <>
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <StatusCard
@@ -309,7 +435,7 @@ export default function VectorIndexPage() {
                             title="Run History"
                             value="View Log"
                             icon={Clock}
-                            subtitle="Audit past indexing runs"
+                            subtitle="Review past indexing runs"
                             color="amber"
                             className="h-full hover:bg-bg-elevated cursor-pointer"
                         />
@@ -482,7 +608,9 @@ export default function VectorIndexPage() {
                         </div>
                     </div>
                 </div>
-            </div>
+            </>
+            )}
+        </div>
 
             {/* Confirmation Modal */}
             <Modal
@@ -540,6 +668,22 @@ function StatusCard({ title, value, icon: Icon, subtitle, progress, color, isAni
                     <div className="h-full bg-zinc-400 transition-all duration-500" style={{ width: `${progress}%` }} />
                 </div>
             )}
+        </Panel>
+    );
+}
+
+function SkeletonCard() {
+    return (
+        <Panel className="p-4 flex flex-col gap-3">
+            <div className="flex items-start justify-between">
+                <div className="space-y-2">
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-7 w-20" />
+                </div>
+                <Skeleton className="h-9 w-9 rounded-lg" />
+            </div>
+            <Skeleton className="h-3 w-40" />
+            <Skeleton className="h-1 w-full rounded-full" />
         </Panel>
     );
 }

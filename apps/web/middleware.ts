@@ -4,6 +4,13 @@ import { createServerClient } from "@supabase/ssr";
 export async function middleware(request: NextRequest) {
     const response = NextResponse.next();
 
+    const bypassAuth =
+        process.env.NUMEZIS_AUTH_BYPASS === "true" ||
+        (process.env.NODE_ENV !== "production" && process.env.NUMEZIS_AUTH_BYPASS !== "false");
+    if (bypassAuth) {
+        return response;
+    }
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 

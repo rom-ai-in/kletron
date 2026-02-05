@@ -4,6 +4,8 @@ import { runRepoAnalysis } from "@numezis/agent-core/agents/repoScannerAgent";
 import { getLlmConfig } from "@numezis/server/services/llmConfigService";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { getContextGraphStore } from "@numezis/server/context/graph/ContextGraphStore";
+import { ContextScanner } from "@numezis/server/context/graph/ContextScanner";
 
 // Ensure dynamic route
 export const dynamic = "force-dynamic";
@@ -55,6 +57,18 @@ export async function POST(req: NextRequest) {
                 const result = await runRepoAnalysis(workspaceRoot, (msg) => {
                     sendEvent({ type: "log", message: msg });
                 });
+
+                // 4b. Persist/update the server-side context graph
+                try {
+                    sendEvent({ type: "log", message: "Updating context graph..." });
+                    const store = getContextGraphStore(workspace._id.toString(), workspaceRoot);
+                    await store.load();
+                    const scanner = new ContextScanner();
+                    await scanner.scanWorkspace(workspaceRoot, store);
+                    sendEvent({ type: "log", message: `Context graph updated (${store.getAllNodes().length} nodes).` });
+                } catch (err: any) {
+                    sendEvent({ type: "log", message: `Context graph update failed: ${err?.message || "unknown error"}` });
+                }
 
                 // 5. Send Result
                 sendEvent({ type: "result", payload: result });

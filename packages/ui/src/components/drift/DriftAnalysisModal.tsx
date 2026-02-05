@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, ChevronRight, Loader2, X, ShieldAlert, ShieldCheck, ClipboardCopy } from "lucide-react";
 import { Modal, Button } from "@numezis/ui/components/design-system";
 import type { LlmConfig, LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
+import { DEFAULT_DRIFT_STAGES } from "@numezis/shared/driftStages";
 
 type DriftJobStatus = {
     status: "queued" | "running" | "success" | "error" | "cancelled";
@@ -55,10 +56,10 @@ const PROVIDER_LABELS: Record<LlmProviderType, string> = {
 const fmtPct = (n: number) => `${Math.max(0, Math.min(100, Math.round(n)))}%`;
 const DEFAULT_SYSTEM_PROMPT = `You are a Code Drift Analyzer.
 You will receive:
-- "Audit Suite": the audit stage name to evaluate.
+- "Stage": the check group name to evaluate.
 - "Git Diff": recent uncommitted changes.
 
-Determine if the diff violates or drifts from the audit suite expectations.
+Determine if the diff violates or drifts from the stage expectations.
 Respond with JSON only:
 {
   "driftDetected": boolean,
@@ -79,6 +80,7 @@ export function DriftAnalysisModal({
     const [healthStatus, setHealthStatus] = useState<"none" | "loading" | "success" | "error">("none");
     const [healthMessage, setHealthMessage] = useState<string | null>(null);
     const [systemPrompt, setSystemPrompt] = useState<string>(DEFAULT_SYSTEM_PROMPT);
+    const stageLabels = useMemo(() => DEFAULT_DRIFT_STAGES.map((stage) => stage.name), []);
 
     const [jobId, setJobId] = useState<string | null>(null);
     const [job, setJob] = useState<DriftJobStatus | null>(null);
@@ -314,14 +316,14 @@ export function DriftAnalysisModal({
 
     const footer = useMemo(() => {
         if (step === "review") {
-            const canStart = provider && healthStatus === "success";
+            const canStart = Boolean(provider) && healthStatus === "success";
             return (
                 <div className="flex items-center justify-end gap-2">
                     <Button variant="ghost" onClick={onClose}>Close</Button>
                     <Button
                         variant="primary"
                         onClick={startJob}
-                        disabled={!canStart || healthStatus === "loading" || availableProviders.length === 0}
+                        disabled={!canStart || availableProviders.length === 0}
                     >
                         Run Drift Analysis
                         <ChevronRight className="ml-2 h-4 w-4" />
@@ -368,10 +370,20 @@ export function DriftAnalysisModal({
                     <div className="rounded-lg border border-border-subtle bg-bg-elevated p-4">
                         <div className="text-sm font-medium text-text-primary mb-2">Scope</div>
                         <div className="text-xs text-text-secondary">
-                            This agent will analyze <b>all uncommitted changes (git diff)</b> against <b>16 audit suites</b> (Security, I18n, UX, Architecture, etc.).
+                            This agent will analyze <b>all uncommitted changes (git diff)</b> against <b>{stageLabels.length} check groups</b>.
                         </div>
                         <div className="mt-2 text-xs text-text-muted">
                             It will process stages sequentially and report any drift or violations detected.
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            {stageLabels.map((label) => (
+                                <span
+                                    key={label}
+                                    className="rounded-full border border-border-subtle bg-bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-muted"
+                                >
+                                    {label}
+                                </span>
+                            ))}
                         </div>
                     </div>
 

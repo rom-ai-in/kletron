@@ -37,6 +37,7 @@ import { executeBash } from "./tools/executeBash.js";
 import { outputFormat } from "./tools/outputFormat.js";
 import { writeFile } from "./tools/writeFile.js";
 import { loadSkill, listSkills } from "./tools/skillLoader.js";
+import { config } from "./config.js";
 
 const argv = process.argv.slice(2);
 const hasArg = (flag) => argv.includes(flag);
@@ -201,7 +202,7 @@ async function runSseServer({ allTools, port }) {
               name: "mcp-server",
               version: "1.0.0",
               transport: "sse",
-              defaultDir: process.env.GITHUB_MCP_DEFAULT_DIR || process.env.MCP_DEFAULT_DIR || null,
+              defaultDir: config.defaultDir ?? null,
               tools: Object.keys(allTools).length,
             },
             null,

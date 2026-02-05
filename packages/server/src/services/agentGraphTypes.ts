@@ -96,6 +96,7 @@ export type AgentGraphState = {
     nodes: Record<string, unknown>;
     goal?: string;
     constraints?: string[];
+    nonGoals?: string[];
     acceptanceCriteria?: string[];
     definitionOfDone?: string[];
     plan?: Record<string, unknown>;
@@ -109,6 +110,8 @@ export type AgentGraphState = {
     workingNotes?: string[];
     designDecisions?: Array<Record<string, unknown>>;
     openQuestions?: string[];
+    blockedReason?: string | null;
+    consecutiveErrors?: number;
     toolCalls?: Array<Record<string, unknown>>;
     terminalRuns?: Array<Record<string, unknown>>;
     fileChanges?: Array<Record<string, unknown>>;

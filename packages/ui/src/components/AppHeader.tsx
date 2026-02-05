@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { History, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Breadcrumbs, Selector, type SelectorOption } from "@numezis/ui/components/design-system";
 
 type WorkspaceSummary = {
@@ -15,30 +15,10 @@ type WorkspaceSummary = {
 };
 
 export function AppHeader() {
-  const [runningCount, setRunningCount] = useState(0);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>("");
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const router = useRouter();
-
-  useEffect(() => {
-    const fetchRunningCount = async () => {
-      try {
-        const res = await fetch("/api/runs?limit=100");
-        if (res.ok) {
-          const data = await res.json();
-          const running = data.runs?.filter((r: any) => r.status === "RUNNING").length || 0;
-          setRunningCount(running);
-        }
-      } catch (e) {
-        console.error("Failed to fetch running count", e);
-      }
-    };
-
-    void fetchRunningCount();
-    const interval = setInterval(() => void fetchRunningCount(), 10000);
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     const fetchWorkspaces = async () => {
@@ -116,18 +96,6 @@ export function AppHeader() {
               <Plus className="h-3.5 w-3.5" />
             </Link>
           </div>
-          <Link
-            href="/app/history"
-            className="relative flex items-center justify-center rounded-md p-2 text-text-secondary hover:bg-state-hover hover:text-text-primary transition-colors"
-            title="Activity"
-          >
-            <History className="h-4 w-4" />
-            {runningCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white border-2 border-bg-surface animate-pulse">
-                {runningCount}
-              </span>
-            )}
-          </Link>
         </div>
       </div>
     </header>

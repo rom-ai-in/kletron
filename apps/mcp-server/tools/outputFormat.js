@@ -4,7 +4,7 @@ export const outputFormat = {
   inputSchema: {
     type: "object",
     properties: {
-      mode: { type: "string", description: "Optional mode label (Audit/Fix/etc)." },
+      mode: { type: "string", description: "Optional mode label (Review/Fix/etc)." },
       evidence: { type: "object", description: "Arbitrary evidence payload." },
       verifications: { type: "object", description: "Arbitrary verification payload." },
       findings: { type: "object", description: "Arbitrary findings payload." },
@@ -20,4 +20,3 @@ export const outputFormat = {
     };
   },
 };
-

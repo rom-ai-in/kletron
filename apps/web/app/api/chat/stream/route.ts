@@ -1,8 +1,9 @@
 import { AgentWorkflowResult, AgentWorkflowUpdate } from "@numezis/shared/types";
 import { resolveLlmSelection } from "@numezis/server/llm";
 import { runWorkflow } from "@numezis/agent-core/workflows";
-import { normalizeAuditContext, type AuditContext } from "@numezis/shared/documentContext";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 
 const textEncoder = new TextEncoder();
 
@@ -25,14 +26,19 @@ export async function POST(request: Request) {
   const graph = typeof payload?.graph === "string" ? payload.graph.trim() : undefined;
   const provider = typeof payload?.provider === "string" ? payload.provider.trim() : undefined;
   const model = typeof payload?.model === "string" ? payload.model.trim() : undefined;
-  const auditContext = normalizeAuditContext(
-    (payload as { auditContext?: AuditContext }).auditContext
-  );
   // If provider isn't explicitly chosen, let DB-configured defaults apply.
   const llmSelection = provider ? resolveLlmSelection({ provider, model }) : undefined;
 
   if (!message) {
     return new Response(JSON.stringify({ error: "Please provide a user message in the request body." }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const workspace = await resolveWorkspaceFromRequest(request, auth.userId, payload as any);
+  if (!workspace || !workspace._id) {
+    return new Response(JSON.stringify({ error: "Workspace not configured" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
@@ -45,14 +51,16 @@ export async function POST(request: Request) {
       };
 
       try {
-        const result = await runWorkflow(message, graph, {
-          onUpdate: async (update) => {
-            sendChunk({ type: "update", payload: update });
-          },
-          ...(llmSelection ? { llmSelection } : {}),
-          auditContext,
+        await runWithWorkspaceContext(workspace, async () => {
+          const result = await runWorkflow(message, graph, {
+            onUpdate: async (update) => {
+              sendChunk({ type: "update", payload: update });
+            },
+            workspaceId: workspace._id!.toString(),
+            ...(llmSelection ? { llmSelection } : {}),
+          });
+          sendChunk({ type: "final", payload: result });
         });
-        sendChunk({ type: "final", payload: result });
       } catch (error: unknown) {
         sendChunk({
           type: "error",

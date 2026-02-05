@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@numezis/server/lib/db";
 import { type DriftJobDoc } from "@numezis/server/services/driftAnalysisWorker";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
 export async function GET(req: Request) {
     const auth = await requireAppRouteAuth(req);
@@ -21,10 +22,15 @@ export async function GET(req: Request) {
     }
 
     try {
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        if (!workspace || !workspace._id) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
+
         const db = await getDb();
         const job = await db
             .collection<DriftJobDoc>("drift_analysis_jobs")
-            .findOne({ _id: new ObjectId(jobId) });
+            .findOne({ _id: new ObjectId(jobId), workspaceId: workspace._id });
 
         if (!job) {
             return NextResponse.json({ error: "Job not found" }, { status: 404 });

@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
+import { config } from "../config.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SKILL LOADER TOOLS
@@ -11,7 +12,10 @@ const DEFAULT_SKILLS_DIR = ".agent/skills";
 const SKILL_FILE_NAME = "SKILL.md";
 
 function getSkillsDir() {
-    return path.join(process.env.MCP_DEFAULT_DIR || process.cwd(), DEFAULT_SKILLS_DIR);
+    if (!config.defaultDir) {
+        throw new Error("Repository path not configured. Set it in Configuration > Repository Settings.");
+    }
+    return path.join(config.defaultDir, DEFAULT_SKILLS_DIR);
 }
 
 /**

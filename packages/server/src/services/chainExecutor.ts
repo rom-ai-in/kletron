@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import { getDb } from "../lib/db";
 import { runWorkflow } from "@numezis/agent-core/workflows";
+import { auditService } from "./auditService";
 import type {
     AuditChain,
     ChainStatus,
@@ -13,9 +14,16 @@ import type {
     AuditStageConfig,
     AuditRun,
 } from "@numezis/shared/chainTypes";
+import type { Claim as WorkflowClaim, Task as WorkflowTask, AgentWorkflowResult } from "@numezis/shared/types";
 
 const COLLECTION_NAME = "audit_chains";
 const RUNS_COLLECTION = "audit_runs";
+
+const toObjectId = (id?: string): ObjectId | undefined => {
+    if (!id) return undefined;
+    if (!ObjectId.isValid(id)) return undefined;
+    return new ObjectId(id);
+};
 
 /**
  * ChainExecutor - Orchestrates multi-stage audit workflows
@@ -39,8 +47,14 @@ export class ChainExecutor {
     ): Promise<string> {
         const db = await getDb();
 
+        const workspaceId =
+            typeof (config as any).workspaceId === "string"
+                ? toObjectId((config as any).workspaceId)
+                : (config as any).workspaceId;
+
         const chain: AuditChain = {
             ...config,
+            ...(workspaceId ? { workspaceId } : {}),
             status: "PENDING",
             createdAt: new Date(),
             currentStageIndex: 0,
@@ -56,11 +70,17 @@ export class ChainExecutor {
     /**
      * Get chain by ID
      */
-    async getChain(chainId: string): Promise<AuditChain | null> {
+    async getChain(chainId: string, workspaceId?: string): Promise<AuditChain | null> {
         const db = await getDb();
+        const query: Record<string, unknown> = { _id: new ObjectId(chainId) };
+        if (workspaceId) {
+            const workspaceObjectId = toObjectId(workspaceId);
+            if (!workspaceObjectId) return null;
+            query.workspaceId = workspaceObjectId;
+        }
         const chain = await db
             .collection(COLLECTION_NAME)
-            .findOne({ _id: new ObjectId(chainId) });
+            .findOne(query);
 
         return chain as AuditChain | null;
     }
@@ -71,6 +91,12 @@ export class ChainExecutor {
     async listChains(filter?: ChainFilter): Promise<AuditChain[]> {
         const db = await getDb();
         const query: any = {};
+
+        if (filter?.workspaceId) {
+            const workspaceObjectId = toObjectId(filter.workspaceId);
+            if (!workspaceObjectId) return [];
+            query.workspaceId = workspaceObjectId;
+        }
 
         if (filter?.status) {
             query.status = filter.status;
@@ -102,11 +128,18 @@ export class ChainExecutor {
     async updateChainStatus(
         chainId: string,
         status: ChainStatus,
-        updates?: Partial<AuditChain>
+        updates?: Partial<AuditChain>,
+        workspaceId?: string
     ): Promise<void> {
         const db = await getDb();
+        const query: Record<string, unknown> = { _id: new ObjectId(chainId) };
+        if (workspaceId) {
+            const workspaceObjectId = toObjectId(workspaceId);
+            if (!workspaceObjectId) return;
+            query.workspaceId = workspaceObjectId;
+        }
         await db.collection(COLLECTION_NAME).updateOne(
-            { _id: new ObjectId(chainId) },
+            query,
             {
                 $set: {
                     status,
@@ -121,14 +154,22 @@ export class ChainExecutor {
      */
     async updateChain(
         chainId: string,
-        updates: Partial<AuditChain>
+        updates: Partial<AuditChain>,
+        workspaceId?: string
     ): Promise<void> {
         const db = await getDb();
         // Remove _id from updates if it exists to avoid MongoDB error
-        const { _id: _, ...updateData } = updates as any;
+        const { _id: _, workspaceId: __, ...updateData } = updates as any;
+
+        const query: Record<string, unknown> = { _id: new ObjectId(chainId) };
+        if (workspaceId) {
+            const workspaceObjectId = toObjectId(workspaceId);
+            if (!workspaceObjectId) return;
+            query.workspaceId = workspaceObjectId;
+        }
 
         await db.collection(COLLECTION_NAME).updateOne(
-            { _id: new ObjectId(chainId) },
+            query,
             { $set: updateData }
         );
     }
@@ -139,11 +180,18 @@ export class ChainExecutor {
     async updateRunStatus(
         runId: string,
         status: ChainStatus,
-        updates?: Partial<AuditRun>
+        updates?: Partial<AuditRun>,
+        workspaceId?: string
     ): Promise<void> {
         const db = await getDb();
+        const query: Record<string, unknown> = { _id: new ObjectId(runId) };
+        if (workspaceId) {
+            const workspaceObjectId = toObjectId(workspaceId);
+            if (!workspaceObjectId) return;
+            query.workspaceId = workspaceObjectId;
+        }
         await db.collection(RUNS_COLLECTION).updateOne(
-            { _id: new ObjectId(runId) },
+            query,
             {
                 $set: {
                     status,
@@ -159,18 +207,48 @@ export class ChainExecutor {
     async updateRunProgress(
         runId: string,
         stageIndex: number,
-        sessionId: string
+        sessionId: string,
+        workspaceId?: string
     ): Promise<void> {
         const db = await getDb();
+        const query: Record<string, unknown> = { _id: new ObjectId(runId) };
+        if (workspaceId) {
+            const workspaceObjectId = toObjectId(workspaceId);
+            if (!workspaceObjectId) return;
+            query.workspaceId = workspaceObjectId;
+        }
+        const updateDoc: Record<string, any> = {
+            $set: {
+                currentStageIndex: stageIndex,
+            },
+        };
+        if (sessionId) {
+            updateDoc.$set[`sessionIds.${stageIndex}`] = sessionId;
+        }
+        await db.collection<AuditRun>(RUNS_COLLECTION).updateOne(query, updateDoc);
+    }
+
+    /**
+     * Update only the current stage index (no session mutation)
+     */
+    async updateRunStageIndex(
+        runId: string,
+        stageIndex: number,
+        workspaceId?: string
+    ): Promise<void> {
+        const db = await getDb();
+        const query: Record<string, unknown> = { _id: new ObjectId(runId) };
+        if (workspaceId) {
+            const workspaceObjectId = toObjectId(workspaceId);
+            if (!workspaceObjectId) return;
+            query.workspaceId = workspaceObjectId;
+        }
         await db.collection<AuditRun>(RUNS_COLLECTION).updateOne(
-            { _id: new ObjectId(runId) },
+            query,
             {
                 $set: {
                     currentStageIndex: stageIndex,
                 },
-                $push: {
-                    sessionIds: sessionId,
-                } as any,
             }
         );
     }
@@ -178,11 +256,17 @@ export class ChainExecutor {
     /**
      * Get run by ID
      */
-    async getRun(runId: string): Promise<AuditRun | null> {
+    async getRun(runId: string, workspaceId?: string): Promise<AuditRun | null> {
         const db = await getDb();
+        const query: Record<string, unknown> = { _id: new ObjectId(runId) };
+        if (workspaceId) {
+            const workspaceObjectId = toObjectId(workspaceId);
+            if (!workspaceObjectId) return null;
+            query.workspaceId = workspaceObjectId;
+        }
         const run = await db
             .collection(RUNS_COLLECTION)
-            .findOne({ _id: new ObjectId(runId) });
+            .findOne(query);
 
         return run as AuditRun | null;
     }
@@ -190,11 +274,17 @@ export class ChainExecutor {
     /**
      * Get latest run for a chain
      */
-    async getLatestRun(chainId: string): Promise<AuditRun | null> {
+    async getLatestRun(chainId: string, workspaceId?: string): Promise<AuditRun | null> {
         const db = await getDb();
+        const query: Record<string, unknown> = { chainId: new ObjectId(chainId) };
+        if (workspaceId) {
+            const workspaceObjectId = toObjectId(workspaceId);
+            if (!workspaceObjectId) return null;
+            query.workspaceId = workspaceObjectId;
+        }
         const runs = await db
             .collection(RUNS_COLLECTION)
-            .find({ chainId: new ObjectId(chainId) })
+            .find(query)
             .sort({ startedAt: -1 })
             .limit(1)
             .toArray();
@@ -205,11 +295,17 @@ export class ChainExecutor {
     /**
      * List runs for a chain
      */
-    async listRuns(chainId: string): Promise<AuditRun[]> {
+    async listRuns(chainId: string, workspaceId?: string): Promise<AuditRun[]> {
         const db = await getDb();
+        const query: Record<string, unknown> = { chainId: new ObjectId(chainId) };
+        if (workspaceId) {
+            const workspaceObjectId = toObjectId(workspaceId);
+            if (!workspaceObjectId) return [];
+            query.workspaceId = workspaceObjectId;
+        }
         const runs = await db
             .collection(RUNS_COLLECTION)
-            .find({ chainId: new ObjectId(chainId) })
+            .find(query)
             .sort({ startedAt: -1 })
             .toArray();
 
@@ -219,13 +315,30 @@ export class ChainExecutor {
     /**
      * Start a new execution run for a campaign
      */
-    async startNewRun(chainId: string): Promise<string> {
+    async startNewRun(chainId: string, workspaceId?: string): Promise<string> {
         const db = await getDb();
-        const chain = await this.getChain(chainId);
+        const chain = await this.getChain(chainId, workspaceId);
         if (!chain) throw new Error(`Campaign ${chainId} not found`);
+
+        const workspaceObjectId = workspaceId ? toObjectId(workspaceId) : undefined;
+        if (workspaceId && !workspaceObjectId) {
+            throw new Error("Invalid workspace ID");
+        }
+        if (
+            workspaceObjectId &&
+            chain.workspaceId &&
+            chain.workspaceId.toString() !== workspaceObjectId.toString()
+        ) {
+            throw new Error("Workspace mismatch for campaign");
+        }
 
         const run: AuditRun = {
             chainId: new ObjectId(chainId),
+            ...(chain.workspaceId
+                ? { workspaceId: chain.workspaceId }
+                : workspaceObjectId
+                ? { workspaceId: workspaceObjectId }
+                : {}),
             status: "PENDING",
             startedAt: new Date(),
             currentStageIndex: 0,
@@ -259,7 +372,10 @@ export class ChainExecutor {
         let run = await this.getRun(runId);
         if (!run) throw new Error(`Run ${runId} not found`);
 
-        const chain = await this.getChain(run.chainId.toString());
+        const chain = await this.getChain(
+            run.chainId.toString(),
+            run.workspaceId?.toString()
+        );
         if (!chain) throw new Error(`Campaign ${run.chainId} not found`);
 
         // If run was cancelled before we started, don't restart it.
@@ -273,9 +389,9 @@ export class ChainExecutor {
             };
         }
 
-        await this.updateRunStatus(runId, "RUNNING");
+        await this.updateRunStatus(runId, "RUNNING", undefined, run.workspaceId?.toString());
         // Also update parent chain status
-        await this.updateChainStatus(run.chainId.toString(), "RUNNING");
+        await this.updateChainStatus(run.chainId.toString(), "RUNNING", undefined, run.workspaceId?.toString());
 
         const results: StageResult[] = [];
         const startTime = Date.now();
@@ -320,15 +436,28 @@ export class ChainExecutor {
                     stageIndex: i,
                     status: "SKIPPED",
                 });
+                await this.updateRunStageIndex(runId, i + 1, run.workspaceId?.toString());
                 continue;
             }
 
+            const context = this.buildStageContext(stage, results);
+            const userPrompt = this.buildUserPrompt(stage, context);
+            const auditSessionId = await auditService.createSession(userPrompt);
+            if (auditSessionId) {
+                await this.updateRunProgress(runId, i, auditSessionId, run.workspaceId?.toString());
+            } else {
+                await this.updateRunStageIndex(runId, i, run.workspaceId?.toString());
+            }
+
             // Execute stage
-            const stageResult = await this.executeStage(chain._id!.toString(), stage, results);
+            const stageResult = await this.executeStage(chain._id!.toString(), stage, results, {
+                userPrompt,
+                auditSessionId,
+            });
             results.push(stageResult);
 
             // Update run progress
-            await this.updateRunProgress(runId, i + 1, stageResult.sessionId);
+            await this.updateRunStageIndex(runId, i + 1, run.workspaceId?.toString());
 
             // Notify progress
             onProgress?.({
@@ -352,7 +481,8 @@ export class ChainExecutor {
                     // Fail entire run
                     await this.updateRunStatus(runId, "FAILED", {
                         endedAt: new Date(),
-                    });
+                    }, run.workspaceId?.toString());
+                    await this.updateChainStatus(run.chainId.toString(), "FAILED", undefined, run.workspaceId?.toString());
                     throw new Error(`Stage ${stage.id} failed: ${stageResult.error}`);
                 }
             }
@@ -385,10 +515,10 @@ export class ChainExecutor {
                     0
                 ),
             },
-        });
+        }, run.workspaceId?.toString());
 
         // Also update parent chain status
-        await this.updateChainStatus(chain._id!.toString(), "COMPLETED");
+        await this.updateChainStatus(chain._id!.toString(), "COMPLETED", undefined, run.workspaceId?.toString());
 
         return {
             chainId: chain._id!.toString(),
@@ -404,16 +534,16 @@ export class ChainExecutor {
     private async executeStage(
         chainId: string,
         stage: AuditStageConfig,
-        previousResults: StageResult[]
+        previousResults: StageResult[],
+        prepared?: { userPrompt?: string; auditSessionId?: string }
     ): Promise<StageResult> {
         const startTime = Date.now();
 
         try {
-            // Build context from previous stages
-            const context = this.buildStageContext(stage, previousResults);
-
-            // Build user prompt from stage name + context only
-            const userPrompt = this.buildUserPrompt(stage.name, context);
+            // Build user prompt from stage prompt + context
+            const context = prepared?.userPrompt ? null : this.buildStageContext(stage, previousResults);
+            const userPrompt = prepared?.userPrompt ?? this.buildUserPrompt(stage, context);
+            const auditSessionId = prepared?.auditSessionId || "";
 
             console.info(`[ChainExecutor] Executing stage: ${stage.name} (Graph: ${stage.graphId})`);
             console.info(`[ChainExecutor] Input: ${userPrompt.substring(0, 100)}...`);
@@ -424,15 +554,25 @@ export class ChainExecutor {
                     provider: stage.llmProvider,
                     model: stage.llmModel,
                 },
-                auditContext: context,
+                ...(auditSessionId
+                    ? {
+                          onUpdate: async (update) => {
+                              await auditService.updateSession(auditSessionId, update as Partial<AgentWorkflowResult>);
+                          },
+                      }
+                    : {}),
             });
+            if (auditSessionId) {
+                await auditService.completeSession(auditSessionId, workflowResult);
+            }
+            const sessionIdForLogs = auditSessionId || workflowResult.sessionId;
 
             // Extract findings
             const findings: Finding[] = (workflowResult.outputs?.findings || []).map(
                 (f: any) => ({
                     chainId,
                     stageId: stage.id,
-                    sessionId: workflowResult.sessionId,
+                    sessionId: sessionIdForLogs,
                     type: f.type,
                     file: f.file,
                     description: f.description,
@@ -443,22 +583,63 @@ export class ChainExecutor {
                 })
             );
 
+            const rawClaims: WorkflowClaim[] = workflowResult.outputs?.raw_claims ?? [];
+            const claims = rawClaims.map((rawClaim, index) => ({
+                id: `${stage.id}-${index}`,
+                file: rawClaim.source ?? "unknown",
+                description: rawClaim.claim,
+                severity: "INFO" as const,
+                evidence: rawClaim.evidence,
+            }));
+            const rawTasks: WorkflowTask[] = workflowResult.outputs?.tasks ?? [];
+            const tasks = rawTasks.map((task, index) => {
+                let priority: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" = "MEDIUM";
+                if (task.priority === "high") priority = "HIGH";
+                if (task.priority === "low") priority = "LOW";
+                return {
+                    id: `${stage.id}-task-${index}`,
+                    title: task.title,
+                    description: task.description ?? task.title,
+                    priority,
+                    relatedFindingIds: [],
+                };
+            });
+
             return {
                 stageId: stage.id,
                 stageName: stage.name,
-                sessionId: workflowResult.sessionId,
+                sessionId: sessionIdForLogs,
                 success: true,
                 findings,
-                claims: workflowResult.outputs?.raw_claims || [],
-                tasks: workflowResult.outputs?.tasks || [],
+                claims,
+                tasks,
                 duration: Date.now() - startTime,
             };
         } catch (error) {
             console.error(`[ChainExecutor] Stage ${stage.id} failed:`, error);
+            if (prepared?.auditSessionId) {
+                const message = error instanceof Error ? error.message : String(error);
+                const fallbackResult: AgentWorkflowResult = {
+                    sessionId: prepared.auditSessionId,
+                    timeline: [],
+                    conclusion: "Stage failed.",
+                    outputs: {
+                        context: {},
+                        target_files: [],
+                        raw_claims: [],
+                        verified_findings: [],
+                        findings: [],
+                        tasks: [],
+                        report: `ERROR: ${message}`,
+                    },
+                    eventStream: [],
+                };
+                await auditService.completeSession(prepared.auditSessionId, fallbackResult, error instanceof Error ? error : new Error(message));
+            }
             return {
                 stageId: stage.id,
                 stageName: stage.name,
-                sessionId: "",
+                sessionId: prepared?.auditSessionId ?? "",
                 success: false,
                 error: error instanceof Error ? error.message : String(error),
                 findings: [],
@@ -497,8 +678,13 @@ export class ChainExecutor {
     /**
      * Build user prompt with context
      */
-    private buildUserPrompt(stageName: string, context: any): string {
-        let prompt = stageName;
+    private buildUserPrompt(stage: AuditStageConfig, context: any): string {
+        const basePrompt = stage.prompt?.trim();
+        if (!basePrompt) {
+            throw new Error(`Stage ${stage.id} has an empty prompt`);
+        }
+
+        let prompt = basePrompt;
 
         if (context) {
             prompt += `\n\n${JSON.stringify(context, null, 2)}`;
@@ -694,29 +880,29 @@ export class ChainExecutor {
     /**
      * Pause a running chain
      */
-    async pauseChain(chainId: string): Promise<void> {
-        const latestRun = await this.getLatestRun(chainId);
+    async pauseChain(chainId: string, workspaceId?: string): Promise<void> {
+        const latestRun = await this.getLatestRun(chainId, workspaceId);
         if (latestRun && latestRun.status === "RUNNING") {
-            await this.updateRunStatus(latestRun._id!.toString(), "PAUSED");
+            await this.updateRunStatus(latestRun._id!.toString(), "PAUSED", undefined, workspaceId);
         }
-        await this.updateChainStatus(chainId, "PAUSED");
+        await this.updateChainStatus(chainId, "PAUSED", undefined, workspaceId);
     }
 
     /**
      * Resume a paused chain
      */
-    async resumeChain(chainId: string): Promise<void> {
-        const chain = await this.getChain(chainId);
+    async resumeChain(chainId: string, workspaceId?: string): Promise<void> {
+        const chain = await this.getChain(chainId, workspaceId);
         if (!chain) {
             throw new Error(`Chain ${chainId} not found`);
         }
 
-        const latestRun = await this.getLatestRun(chainId);
+        const latestRun = await this.getLatestRun(chainId, workspaceId);
         if (!latestRun) {
             throw new Error(`No run found for chain ${chainId} to resume`);
         }
 
-        await this.updateChainStatus(chainId, "RUNNING");
+        await this.updateChainStatus(chainId, "RUNNING", undefined, workspaceId);
 
         // Continue execution of the latest run
         await this.executeRun(latestRun._id!.toString());
@@ -731,17 +917,17 @@ export class ChainExecutor {
 
         await this.updateRunStatus(runId, "CANCELLED", {
             endedAt: new Date(),
-        });
+        }, run.workspaceId?.toString());
 
         // Also update parent chain status (represents latest run status)
-        await this.updateChainStatus(run.chainId.toString(), "CANCELLED");
+        await this.updateChainStatus(run.chainId.toString(), "CANCELLED", undefined, run.workspaceId?.toString());
     }
 
     /**
      * Cancel the latest run of a campaign
      */
-    async cancelChain(chainId: string): Promise<{ runId: string }> {
-        const latestRun = await this.getLatestRun(chainId);
+    async cancelChain(chainId: string, workspaceId?: string): Promise<{ runId: string }> {
+        const latestRun = await this.getLatestRun(chainId, workspaceId);
         if (!latestRun) throw new Error(`No run found for chain ${chainId} to cancel`);
         await this.cancelRun(latestRun._id!.toString());
         return { runId: latestRun._id!.toString() };
@@ -750,9 +936,15 @@ export class ChainExecutor {
     /**
      * Delete a chain
      */
-    async deleteChain(chainId: string): Promise<void> {
+    async deleteChain(chainId: string, workspaceId?: string): Promise<void> {
         const db = await getDb();
-        await db.collection(COLLECTION_NAME).deleteOne({ _id: new ObjectId(chainId) });
+        const query: Record<string, unknown> = { _id: new ObjectId(chainId) };
+        if (workspaceId) {
+            const workspaceObjectId = toObjectId(workspaceId);
+            if (!workspaceObjectId) return;
+            query.workspaceId = workspaceObjectId;
+        }
+        await db.collection(COLLECTION_NAME).deleteOne(query);
     }
 }
 

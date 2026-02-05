@@ -7,6 +7,8 @@ import type { SubscriptionResponse } from "@numezis/shared/subscriptionTypes";
 import type { Subscription as ServerSubscription } from "@numezis/server/services/subscriptionService";
 import type { Subscription as SharedSubscription } from "@numezis/shared/subscriptionTypes";
 
+export const dynamic = 'force-dynamic';
+
 function toSharedSubscription(subscription: ServerSubscription): SharedSubscription {
     return {
         ...subscription,

@@ -1,15 +1,15 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { Loader2, CheckCircle, XCircle, Brain, Terminal, Copy, Check } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Brain, Copy, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ToolOutput } from './ToolOutput';
 import { ThoughtsPanel } from './ThoughtsPanel';
 import { CodeBlock } from './CodeBlock';
-import { Selector, Modal } from '@numezis/ui/components/design-system';
+import { ChatInput, Modal, Selector } from '@numezis/ui/components/design-system';
 import { ContextVisualizer } from '../context/ContextVisualizer';
 import { graphOptions } from "@numezis/shared/graphCatalog";
 import { useLlmHealth } from '../../hooks/useLlmHealth';
-import { AgentAuditModal } from './AgentAuditModal';
+import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
 import { DurationDisplay, TokenUsageDisplay } from "@numezis/ui/components/Agent/metrics";
 
 type LlmEnvInfo = {
@@ -87,7 +87,9 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
     const [rejectingAll, setRejectingAll] = useState(false);
 
     const [llmProvider, setLlmProvider] = useState<string>('azure');
-    const [isAuditOpen, setIsAuditOpen] = useState(false); // New state for Audit Log
+    const [enabledProviders, setEnabledProviders] = useState<LlmProviderType[]>([]);
+    const [llmPrefsLoaded, setLlmPrefsLoaded] = useState(false);
+    const [enabledProvidersLoaded, setEnabledProvidersLoaded] = useState(false);
     const [selectedGraphId, setSelectedGraphId] = useState<string>(graphOptions[0]?.id || 'universal-v1');
     const [envInfo, setEnvInfo] = useState<LlmEnvInfo | null>(null);
     const [runStartedAt, setRunStartedAt] = useState<string | null>(null);
@@ -99,6 +101,7 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
         callCount: number;
         model?: string;
     } | null>(null);
+    const [streamStatus, setStreamStatus] = useState<"idle" | "streaming" | "stopped" | "error">("idle");
 
     const extractThoughtsFromContent = useCallback((content: string) => {
         if (!content) {
@@ -242,13 +245,43 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
                 if (storedGraph) {
                     setSelectedGraphId(storedGraph);
                 }
-
             } catch (e) {
                 console.error("Failed to fetch preferences", e);
+            } finally {
+                setLlmPrefsLoaded(true);
             }
         };
         fetchPreferences();
     }, []);
+
+    useEffect(() => {
+        fetch("/api/llm-config/enable")
+            .then((res) => res.json())
+            .then((data) => {
+                if (Array.isArray(data.enabledProviders)) {
+                    setEnabledProviders(data.enabledProviders);
+                } else {
+                    setEnabledProviders([]);
+                }
+            })
+            .catch((err) => {
+                console.error("Failed to fetch enabled providers", err);
+                setEnabledProviders([]);
+            })
+            .finally(() => {
+                setEnabledProvidersLoaded(true);
+            });
+    }, []);
+
+    useEffect(() => {
+        if (!enabledProvidersLoaded || enabledProviders.length === 0) return;
+        if (!enabledProviders.includes(llmProvider as LlmProviderType)) {
+            const nextProvider = enabledProviders[0];
+            if (nextProvider) {
+                handleLlmChange(nextProvider);
+            }
+        }
+    }, [enabledProvidersLoaded, enabledProviders, llmProvider]);
 
     const handleLlmChange = (provider: string) => {
         setLlmProvider(provider);
@@ -305,7 +338,7 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
             label: 'Ollama',
             sub: 'qwen2.5:14b'
         }
-    ];
+    ].filter((option) => enabledProviders.includes(option.id as LlmProviderType));
 
     const graphSelectOptions = graphOptions.map(g => ({
         id: g.id,
@@ -318,6 +351,8 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const isAtBottomRef = useRef(true);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const loadAbortRef = useRef<AbortController | null>(null);
+    const loadInFlightRef = useRef(false);
 
     const checkIsAtBottom = () => {
         if (!scrollContainerRef.current) return true;
@@ -330,33 +365,86 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
         isAtBottomRef.current = checkIsAtBottom();
     };
 
-    const loadData = async () => {
+    const loadData = useCallback(async (options?: { force?: boolean }) => {
+        if (!conversationId) return;
+        if (loadInFlightRef.current) {
+            if (!options?.force) return;
+            if (loadAbortRef.current) {
+                loadAbortRef.current.abort();
+                loadAbortRef.current = null;
+            }
+        }
+        loadInFlightRef.current = true;
+        const controller = new AbortController();
+        loadAbortRef.current = controller;
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         try {
             // Load messages
             const workspaceQuery = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : "";
-            const res = await fetch(`/api/agent/${conversationId}${workspaceQuery}`);
+            const [res, editsRes] = await Promise.all([
+                fetch(`/api/agent/${conversationId}${workspaceQuery}`, {
+                    signal: controller.signal,
+                    cache: "no-store",
+                    credentials: "include",
+                }),
+                fetch(`/api/agent/edits?conversationId=${conversationId}`, {
+                    signal: controller.signal,
+                    cache: "no-store",
+                    credentials: "include",
+                }),
+            ]);
+
             if (res.ok) {
                 const data = await res.json();
                 const nextMessages = Array.isArray(data.messages) ? data.messages.map(normalizeMessage) : [];
                 setMessages(nextMessages);
             }
 
-            // Load pending edits
-            const editsRes = await fetch(`/api/agent/edits?conversationId=${conversationId}`);
             if (editsRes.ok) {
                 const edits = await editsRes.json();
                 setPendingEdits(edits);
             }
         } catch (e) {
-            console.error("Failed to load session data", e);
+            if ((e as Error).name !== "AbortError") {
+                console.error("Failed to load session data", e);
+            }
+        } finally {
+            clearTimeout(timeoutId);
+            if (loadAbortRef.current === controller) {
+                loadAbortRef.current = null;
+            }
+            loadInFlightRef.current = false;
         }
-    };
+    }, [conversationId, workspaceId, normalizeMessage]);
 
     useEffect(() => {
-        void loadData();
-        const interval = setInterval(loadData, 3000); // Poll for updates
-        return () => clearInterval(interval);
-    }, [conversationId]);
+        let cancelled = false;
+        const tick = () => {
+            if (cancelled) return;
+            if (document.visibilityState === "hidden") return;
+            void loadData();
+        };
+
+        tick();
+        const interval = setInterval(tick, 3000); // Poll for updates
+        const onVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                tick();
+            }
+        };
+        document.addEventListener("visibilitychange", onVisibilityChange);
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+            if (loadAbortRef.current) {
+                loadAbortRef.current.abort();
+                loadAbortRef.current = null;
+            }
+            loadInFlightRef.current = false;
+        };
+    }, [loadData]);
 
     useEffect(() => {
         if (isAtBottomRef.current) {
@@ -370,6 +458,7 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
             abortControllerRef.current = null;
             setSending(false);
             setRunEndedAt(new Date().toISOString());
+            setStreamStatus("stopped");
         }
     };
 
@@ -378,6 +467,7 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
         const msg = input;
         setInput('');
         setSending(true);
+        setStreamStatus("streaming");
         const startedAt = new Date().toISOString();
         setRunStartedAt(startedAt);
         setRunEndedAt(null);
@@ -401,6 +491,14 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
 
         const controller = new AbortController();
         abortControllerRef.current = controller;
+
+        const retryStreamSync = async () => {
+            const delays = [1000, 2000, 4000];
+            for (const delay of delays) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+                await loadData({ force: true });
+            }
+        };
 
         try {
             const res = await fetch(`/api/agent/${conversationId}/chat`, {
@@ -485,13 +583,18 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
             }
 
             // Final sync to be sure
-            await loadData();
+            await loadData({ force: true });
+            setStreamStatus("idle");
         } catch (e: any) {
             if (e.name === 'AbortError') {
                 console.log("Request aborted by user");
+                setStreamStatus("stopped");
             } else {
                 console.error(e);
+                setStreamStatus("error");
                 // Keep the input if it failed?
+                await retryStreamSync();
+                setStreamStatus("idle");
             }
             setRunEndedAt(new Date().toISOString());
         } finally {
@@ -548,6 +651,7 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
         setRunStartedAt(null);
         setRunEndedAt(null);
         setTokenUsage(null);
+        setStreamStatus("idle");
     }, [conversationId]);
 
     return (
@@ -804,96 +908,73 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
                 <div ref={bottomRef} />
             </div>
 
-            {/* Input Area - Exact match from Explore page */}
-            <div className="sticky bottom-0 bg-bg-surface px-4 py-4 backdrop-blur-md border-t border-border-subtle">
+            {/* Input Area */}
+            <div className="sticky bottom-0 border-t border-border-subtle bg-bg-surface px-4 py-4 backdrop-blur-md">
                 <div className="mx-auto max-w-4xl">
-                    <div className="rounded-xl border border-border-subtle bg-bg-elevated p-3 shadow-lg transition-all focus-within:border-border-strong group">
-                        <textarea
-                            ref={textareaRef}
-                            value={input}
-                            onChange={(event) => {
-                                setInput(event.target.value);
-                            }}
-                            onKeyDown={handleKeyDown}
-                            placeholder="Ask anything (⌘L), @ to mention, / for workflows"
-                            rows={1}
-                            className="w-full resize-none border-none bg-transparent p-0 text-[13px] font-medium text-text-primary outline-none focus:ring-0 placeholder:text-text-muted/60 scrollbar-elegant"
-                            style={{
-                                minHeight: '28px',
-                                maxHeight: '160px',
-                                height: 'auto'
-                            }}
-                        />
-
-                        <div className="mt-2 flex items-center justify-between">
+                    <ChatInput
+                        ref={textareaRef}
+                        value={input}
+                        onChange={setInput}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Ask anything (⌘L), @ to mention, / for workflows"
+                        sending={sending}
+                        onSend={() => void handleSend()}
+                        onStop={handleStop}
+                        footerLeft={(
                             <div className="flex items-center gap-2">
-                                {/* Mode Indicator - Clickable to open graph info */}
-                                <div className="flex items-center gap-2">
-                                    {showContextButtons && (
-                                        <>
-                                            <button
-                                                type="button"
-                                                onClick={() => setIsGraphOpen(true)}
-                                                className="flex h-6 w-6 items-center justify-center rounded-md border border-border-subtle bg-bg-surface text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-                                                title="View Context Graph"
-                                            >
-                                                <Brain className="h-4 w-4" />
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setIsAuditOpen(true)}
-                                                className="flex h-6 w-6 items-center justify-center rounded-md border border-border-subtle bg-bg-surface text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-                                                title="View Audit Logs"
-                                            >
-                                                <Terminal className="h-4 w-4" />
-                                            </button>
-                                        </>
-                                    )}
-                                    {showGraphSelector && (
-                                        <Selector
-                                            label="GRAPH"
-                                            value={selectedGraphId}
-                                            options={graphSelectOptions}
-                                            onSelect={handleGraphChange}
-                                            direction="up"
-                                            size="sm"
-                                        />
-                                    )}
+                                {showContextButtons && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsGraphOpen(true)}
+                                        className="flex h-6 w-6 items-center justify-center rounded-md border border-border-subtle bg-bg-surface text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+                                        title="View Context Graph"
+                                    >
+                                        <Brain className="h-4 w-4" />
+                                    </button>
+                                )}
+                                {showGraphSelector && (
                                     <Selector
-                                        label="LLM"
-                                        value={llmProvider}
-                                        options={llmOptions}
-                                        onSelect={handleLlmChange}
+                                        label="GRAPH"
+                                        value={selectedGraphId}
+                                        options={graphSelectOptions}
+                                        onSelect={handleGraphChange}
                                         direction="up"
                                         size="sm"
-                                        status={llmStatus}
                                     />
-                                </div>
+                                )}
+                                <Selector
+                                    label="LLM"
+                                    value={llmProvider}
+                                    options={llmOptions}
+                                    onSelect={handleLlmChange}
+                                    direction="up"
+                                    size="sm"
+                                    status={llmStatus}
+                                    loading={!llmPrefsLoaded || !enabledProvidersLoaded}
+                                />
                             </div>
-
-                            <div className="flex items-center gap-3">
-                                {/* Sending action */}
-
-                                {/* Circular action button */}
-                                <button
-                                    type="button"
-                                    onClick={sending ? handleStop : () => void handleSend()}
-                                    disabled={!sending && !input.trim()}
-                                    className={`flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200 ${sending
-                                        ? "bg-bg-surface border border-border-strong text-rose-500 scale-110 active:scale-95"
-                                        : "bg-text-primary text-bg-surface hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed"
-                                        }`}
-                                >
-                                    {sending ? (
-                                        <div className="h-2.5 w-2.5 bg-rose-500 rounded-sm animate-pulse" />
-                                    ) : (
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-                                            <path fillRule="evenodd" d="M11.47 2.47a.75.75 0 011.06 0l7.5 7.5a.75.75 0 11-1.06 1.06l-6.22-6.22V21a.75.75 0 01-1.5 0V4.81l-6.22 6.22a.75.75 0 11-1.06-1.06l7.5-7.5z" clipRule="evenodd" />
-                                        </svg>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
+                        )}
+                    />
+                    <div className="mt-1 flex items-center justify-end text-[10px] text-text-muted">
+                        <span
+                            className={
+                                streamStatus === "streaming"
+                                    ? "text-emerald-400"
+                                    : streamStatus === "stopped"
+                                        ? "text-amber-400"
+                                        : streamStatus === "error"
+                                            ? "text-rose-400"
+                                            : "text-text-muted"
+                            }
+                        >
+                            {streamStatus === "streaming"
+                                ? "Streaming"
+                                : streamStatus === "stopped"
+                                    ? "Stopped"
+                                    : streamStatus === "error"
+                                        ? "Reconnecting"
+                                        : "Idle"}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -911,12 +992,6 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
                         <ContextVisualizer />
                     </Modal>
 
-                    {/* Audit Log Modal */}
-                    <AgentAuditModal
-                        open={isAuditOpen}
-                        onClose={() => setIsAuditOpen(false)}
-                        conversationId={conversationId}
-                    />
                 </>
             )}
 

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { chainExecutor } from "@numezis/server/services/chainExecutor";
 import { ChainConfigBuilder } from "@numezis/shared/chainConfigBuilder";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
 /**
  * Zod schema for updating a campaign
@@ -15,6 +16,7 @@ const UpdateChainSchema = z.object({
             z.object({
                 id: z.string().min(1),
                 name: z.string().min(1),
+                prompt: z.string().trim().min(1),
                 graphId: z.enum(["audit", "simple_react"]),
                 llmProvider: z.enum(["azure", "lmstudio"]),
                 llmModel: z.string().optional(),
@@ -54,13 +56,18 @@ export async function GET(
     try {
         const chainId = params.id;
 
-        const chain = await chainExecutor.getChain(chainId);
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        if (!workspace || !workspace._id) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
+
+        const chain = await chainExecutor.getChain(chainId, workspace._id.toString());
 
         if (!chain) {
             return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
         }
 
-        const latestRun = await chainExecutor.getLatestRun(chainId);
+        const latestRun = await chainExecutor.getLatestRun(chainId, workspace._id.toString());
 
         if (latestRun) {
             // Merge latest run stats/results into the chain object for UI compatibility
@@ -107,7 +114,12 @@ export async function DELETE(
     try {
         const chainId = params.id;
 
-        const chain = await chainExecutor.getChain(chainId);
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        if (!workspace || !workspace._id) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
+
+        const chain = await chainExecutor.getChain(chainId, workspace._id.toString());
 
         if (!chain) {
             return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -121,7 +133,7 @@ export async function DELETE(
             );
         }
 
-        await chainExecutor.deleteChain(chainId);
+        await chainExecutor.deleteChain(chainId, workspace._id.toString());
 
         return NextResponse.json({ deleted: true }, { status: 200 });
     } catch (error) {
@@ -164,7 +176,12 @@ export async function PUT(
 
         const { config } = validation.data;
 
-        const chain = await chainExecutor.getChain(chainId);
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, body);
+        if (!workspace || !workspace._id) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
+
+        const chain = await chainExecutor.getChain(chainId, workspace._id.toString());
 
         if (!chain) {
             return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -187,7 +204,7 @@ export async function PUT(
             );
         }
 
-        await chainExecutor.updateChain(chainId, config);
+        await chainExecutor.updateChain(chainId, config, workspace._id.toString());
 
         return NextResponse.json({ updated: true }, { status: 200 });
     } catch (error) {

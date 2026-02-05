@@ -8,7 +8,7 @@ import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { EventSource } from "eventsource";
 
-import { config, getConfig } from "@numezis/server/config";
+import { getConfig } from "@numezis/server/config";
 
 type ToolResultContent = {
   text?: string;
@@ -29,7 +29,7 @@ export class McpClient {
     }
 
     const mcpUrl = process.env.MCP_URL ?? "http://localhost:9000/sse";
-    const cfg = await getConfig();
+    await getConfig();
     const transport = mcpUrl
       ? (() => {
         // SSEClientTransport requires an EventSource implementation in Node.
@@ -43,7 +43,6 @@ export class McpClient {
           args: [serverScript, "--mcp"],
           env: {
             ...process.env,
-            MCP_DEFAULT_DIR: cfg.workingFolder,
             MCP_TRANSPORT: "stdio",
           },
         });

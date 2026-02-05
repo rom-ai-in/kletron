@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { consumeDeviceSession, getDeviceByDeviceCode } from '@numezis/server/services/ideDeviceService';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
     try {
         const deviceCode = request.nextUrl.searchParams.get('deviceCode');

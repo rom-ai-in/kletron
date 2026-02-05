@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import type { AuditChain } from "@numezis/shared/chainTypes";
+import type { AuditChain, AuditRun } from "@numezis/shared/chainTypes";
+import type { AgentEvent } from "@numezis/shared/types";
 import { Button, Panel } from "@numezis/ui/components/design-system";
 import { ChainBuilderModal } from "@numezis/ui/components/ChainBuilderModal";
 import {
@@ -23,7 +24,9 @@ import {
     AlertCircle,
     PlayCircle,
     Search,
-    MoreHorizontal
+    RefreshCw,
+    ChevronDown,
+    ChevronUp
 } from "lucide-react";
 import { cn } from "@numezis/shared/utils/cn";
 
@@ -32,12 +35,31 @@ interface ChainDetailPageProps {
 }
 
 type Tab = "overview" | "configuration" | "history";
+const POLL_INTERVAL_MS = 4000;
+
+type PromptIssue = {
+    index: number;
+    stageId: string;
+    stageName: string;
+};
+
+function getPromptIssues(chain: AuditChain): PromptIssue[] {
+    return chain.stages
+        .map((stage, index) => {
+            if (stage.prompt && stage.prompt.trim().length > 0) return null;
+            return { index, stageId: stage.id, stageName: stage.name };
+        })
+        .filter(Boolean) as PromptIssue[];
+}
 
 export default function ChainDetailPage({ params }: ChainDetailPageProps) {
     const router = useRouter();
     const [chain, setChain] = useState<AuditChain | null>(null);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
+    const [refreshError, setRefreshError] = useState("");
+    const [executeError, setExecuteError] = useState("");
     const [isEditing, setIsEditing] = useState(false);
     const [activeTab, setActiveTab] = useState<Tab>("overview");
 
@@ -45,32 +67,89 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
         void fetchChain();
     }, [params.id]);
 
-    const fetchChain = async () => {
-        setLoading(true);
-        setError("");
+    useEffect(() => {
+        if (!chain) return;
+        if (chain.status === "RUNNING" || chain.status === "PAUSED") {
+            const interval = setInterval(() => {
+                void fetchChain({ background: true });
+            }, POLL_INTERVAL_MS);
+            return () => clearInterval(interval);
+        }
+    }, [chain?.status, params.id]);
+
+    const fetchChain = async ({ background = false }: { background?: boolean } = {}) => {
+        if (background) {
+            setRefreshing(true);
+            setRefreshError("");
+        } else {
+            setLoading(true);
+            setError("");
+            setExecuteError("");
+        }
         try {
             const chainRes = await fetch(`/api/campaigns/${params.id}`);
             if (!chainRes.ok) throw new Error("Failed to load campaign");
             const chainData = await chainRes.json();
             setChain(chainData.chain);
         } catch (err: any) {
-            setError(err.message || "Unknown error");
+            if (background) {
+                setRefreshError(err.message || "Unknown error");
+            } else {
+                setError(err.message || "Unknown error");
+            }
         } finally {
-            setLoading(false);
+            if (background) {
+                setRefreshing(false);
+            } else {
+                setLoading(false);
+            }
         }
+    };
+
+    const handleOpenLatestRun = async () => {
+        try {
+            const res = await fetch(`/api/campaigns/${params.id}/runs`, { cache: "no-store" });
+            if (!res.ok) throw new Error("Failed to load runs");
+            const data = (await res.json()) as { runs: AuditRun[] };
+            const runs = Array.isArray(data.runs) ? data.runs : [];
+            if (!runs.length) {
+                return;
+            }
+            const active = runs.find((run) =>
+                run.status === "RUNNING" || run.status === "PAUSED" || run.status === "PENDING"
+            );
+            const target = active ?? runs[0];
+            const runId = target?._id ? String(target._id) : "";
+            if (runId) {
+                router.push(`/app/runs/${runId}`);
+                return;
+            }
+        } catch {
+            // ignore
+        }
+        router.push(`/app/runs?campaignId=${encodeURIComponent(params.id)}`);
     };
 
     const handleExecute = async () => {
         try {
+            setExecuteError("");
             const res = await fetch(`/api/campaigns/${params.id}/execute`, {
                 method: "PUT",
             });
-            if (!res.ok) throw new Error("Failed to start execution");
-            const data = (await res.json()) as { status?: string; runId?: string };
+            const data = (await res.json().catch(() => ({}))) as { status?: string; runId?: string; error?: string; details?: any[] };
+            if (!res.ok) {
+                const detailText = Array.isArray(data.details)
+                    ? data.details
+                        .map((d: any) => (d?.stageName ? `${d.stageName} (stage ${d.index + 1})` : d?.stageId || String(d)))
+                        .join(", ")
+                    : "";
+                const message = data.error || "Failed to start execution";
+                throw new Error(detailText ? `${message} — ${detailText}` : message);
+            }
             if (!data.runId) throw new Error("Execution started but no runId was returned");
             router.push(`/app/runs/${data.runId}`);
         } catch (err: any) {
-            alert(`Failed to start chain: ${err.message}`);
+            setExecuteError(err.message || "Failed to start campaign");
         }
     };
 
@@ -141,6 +220,20 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
         );
     }
 
+    const promptIssues = getPromptIssues(chain);
+    const isBlocked = promptIssues.length > 0;
+    const displayStatus = isBlocked ? "BLOCKED" : chain.status;
+    const totalStages = chain.stages.length;
+    const completedStages = chain.status === "COMPLETED"
+        ? totalStages
+        : Math.min(chain.currentStageIndex ?? 0, totalStages);
+    const progressPercent = totalStages > 0 ? Math.round((completedStages / totalStages) * 100) : 0;
+    const activeStageIndex = totalStages > 0 ? Math.min(chain.currentStageIndex ?? 0, totalStages - 1) : -1;
+    const activeStage = (chain.status === "RUNNING" || chain.status === "PAUSED") && activeStageIndex >= 0
+        ? chain.stages[activeStageIndex]
+        : null;
+    const blockedStageNames = promptIssues.map((issue) => issue.stageName).join(", ");
+
     return (
         <div className="flex flex-col h-full bg-bg-surface">
             <ChainBuilderModal
@@ -161,8 +254,23 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                         <p className="text-xs text-text-muted max-w-2xl">{chain.description || "No description provided."}</p>
                     </div>
                     <div className="flex items-center gap-2">
+                        {refreshing && (
+                            <div className="flex items-center gap-2 text-[10px] text-text-muted">
+                                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400/70" />
+                                Updating
+                            </div>
+                        )}
+                        {refreshError && !refreshing && (
+                            <div className="text-[10px] text-rose-300">Live update failed</div>
+                        )}
+                        {isBlocked && (
+                            <Button size="sm" variant="secondary" onClick={() => setIsEditing(true)} className="gap-2 border-amber-500/40 text-amber-200">
+                                <AlertCircle className="h-3.5 w-3.5" />
+                                Fix Prompts
+                            </Button>
+                        )}
                         {/* Start / Resume Action */}
-                        {(chain.status === "PENDING" || chain.status === "PAUSED") && (
+                        {!isBlocked && (chain.status === "PENDING" || chain.status === "PAUSED") && (
                             <Button size="sm" onClick={() => void handleExecute()} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white border-transparent">
                                 <Play className="h-3.5 w-3.5" />
                                 {chain.status === "PAUSED" ? "Resume Campaign" : "Start Campaign"}
@@ -177,7 +285,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                         )}
 
                         {/* Rerun Action */}
-                        {(chain.status === "COMPLETED" || chain.status === "FAILED" || chain.status === "CANCELLED") && (
+                        {!isBlocked && (chain.status === "COMPLETED" || chain.status === "FAILED" || chain.status === "CANCELLED") && (
                             <Button size="sm" onClick={() => void handleExecute()} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white border-transparent">
                                 <Play className="h-3.5 w-3.5" /> Rerun Analysis
                             </Button>
@@ -219,10 +327,53 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                         {/* Stats Grid */}
                         <div className="grid grid-cols-4 gap-4">
                             <StatCard label="Total Stages" value={chain.stages.length} />
-                            <StatCard label="Current Status" value={chain.status} status={chain.status} />
-                            <StatCard label="Last Run" value="-" /> {/* Placeholder for now */}
-                            <StatCard label="Success Rate" value="100%" />
+                            <StatCard label="Current Status" value={displayStatus} status={displayStatus} />
+                            <StatCard label="Last Run" value={chain.startedAt ? new Date(chain.startedAt).toLocaleString() : "-"} />
+                            <StatCard label="Progress" value={`${completedStages}/${totalStages}`} />
                         </div>
+
+                        {executeError && (
+                            <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">
+                                {executeError}
+                            </div>
+                        )}
+
+                        {isBlocked && (
+                            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
+                                <div className="flex items-start gap-3">
+                                    <AlertCircle className="h-4 w-4 text-amber-300 mt-0.5" />
+                                    <div className="flex-1">
+                                        <div className="text-sm font-semibold text-amber-200">Campaign blocked</div>
+                                        <div className="text-xs text-amber-200/80">
+                                            Missing prompts for: {blockedStageNames || "Unnamed stages"}
+                                        </div>
+                                    </div>
+                                    <Button size="sm" variant="secondary" onClick={() => setIsEditing(true)}>
+                                        Edit prompts
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+
+                        {!isBlocked && totalStages > 0 && (
+                            <div className="rounded-lg border border-border-subtle bg-bg-surface p-4">
+                                <div className="flex items-center justify-between text-xs text-text-muted">
+                                    <span>Execution Progress</span>
+                                    <span>{progressPercent}%</span>
+                                </div>
+                                <div className="mt-2 h-2 w-full rounded-full bg-bg-elevated">
+                                    <div
+                                        className="h-2 rounded-full bg-emerald-500 transition-all"
+                                        style={{ width: `${progressPercent}%` }}
+                                    />
+                                </div>
+                                {activeStage && (
+                                    <div className="mt-2 text-xs text-text-secondary">
+                                        {chain.status === "PAUSED" ? "Paused on" : "Running"}: {activeStage.name}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* Actions Panel (for export) */}
                         {chain.status === "COMPLETED" && (
@@ -275,22 +426,74 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                         {/* Stages Preview */}
                         <div className="space-y-3">
                             <div className="text-xs font-semibold uppercase tracking-wider text-text-muted ml-1">Pipeline Stages</div>
-                            {chain.stages.map((stage, idx) => (
-                                <div key={stage.id} className="group flex items-center gap-4 p-3 rounded-md border border-border-subtle bg-bg-surface hover:border-border-strong transition-colors">
-                                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-elevated text-xs font-mono text-text-muted border border-border-subtle group-hover:bg-text-primary group-hover:text-bg-base transition-colors">
-                                        {idx + 1}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-sm font-medium text-text-primary truncate">{stage.name}</div>
+                            {chain.stages.map((stage, idx) => {
+                                const promptMissing = !stage.prompt || stage.prompt.trim() === "";
+                                const failedStageIndex = Math.max(0, completedStages - 1);
+                                const isCompleted = chain.status === "COMPLETED" || idx < completedStages;
+                                const isCurrent = (chain.status === "RUNNING" || chain.status === "PAUSED") && idx === completedStages;
+
+                                let stageStatus = "PENDING";
+                                if (promptMissing) stageStatus = "BLOCKED";
+                                else if (chain.status === "FAILED" && idx === failedStageIndex) stageStatus = "FAILED";
+                                else if (chain.status === "CANCELLED" && idx === failedStageIndex) stageStatus = "CANCELLED";
+                                else if (isCompleted) stageStatus = "COMPLETED";
+                                else if (isCurrent) stageStatus = chain.status === "PAUSED" ? "PAUSED" : "RUNNING";
+
+                                const statusStyles: Record<string, string> = {
+                                    COMPLETED: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+                                    RUNNING: "bg-blue-500/10 text-blue-300 border-blue-500/20",
+                                    PAUSED: "bg-amber-500/10 text-amber-300 border-amber-500/20",
+                                    FAILED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+                                    CANCELLED: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
+                                    BLOCKED: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+                                    PENDING: "bg-bg-elevated text-text-muted border-border-subtle",
+                                };
+
+                                const indicatorClass = stageStatus === "COMPLETED"
+                                    ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                                    : stageStatus === "RUNNING"
+                                        ? "bg-blue-500/10 text-blue-300 border-blue-500/20"
+                                        : stageStatus === "PAUSED"
+                                            ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                                            : stageStatus === "FAILED"
+                                                ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                                : stageStatus === "BLOCKED"
+                                                    ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                                                    : "bg-bg-elevated text-text-muted border-border-subtle";
+
+                                return (
+                                    <div key={stage.id} className="group flex items-center gap-4 p-3 rounded-md border border-border-subtle bg-bg-surface hover:border-border-strong transition-colors">
+                                        <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-mono border transition-colors ${indicatorClass}`}>
+                                            {stageStatus === "COMPLETED" ? "✓" : idx + 1}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-sm font-medium text-text-primary truncate">{stage.name}</div>
                                         <div className="text-[11px] text-text-muted truncate font-mono mt-0.5">
                                             {stage.llmProvider}
                                         </div>
+                                        <div className={`text-[11px] truncate font-mono mt-0.5 ${promptMissing ? "text-rose-300" : "text-text-muted"}`}>
+                                            {promptMissing ? "Missing prompt" : stage.prompt}
+                                        </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-[10px] px-2 py-0.5 rounded border ${statusStyles[stageStatus] || statusStyles.PENDING}`}>
+                                                {stageStatus}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                className="text-[10px] text-text-muted bg-bg-elevated px-2 py-0.5 rounded border border-border-subtle hover:text-text-primary hover:border-border-strong transition-colors"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    void handleOpenLatestRun();
+                                                }}
+                                                title="Open current run"
+                                            >
+                                                {stage.graphId}
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className="text-[10px] text-text-muted bg-bg-elevated px-2 py-0.5 rounded border border-border-subtle">
-                                        {stage.graphId}
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -313,7 +516,12 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
 
                 {activeTab === "history" && (
                     <div className="max-w-4xl mx-auto">
-                        <ActivityList campaignId={params.id} />
+                        <ActivityList
+                            campaignId={params.id}
+                            campaignName={chain.name}
+                            isRunning={chain.status === "RUNNING" || chain.status === "PAUSED"}
+                            stages={chain.stages.map((stage) => ({ id: stage.id, name: stage.name }))}
+                        />
                     </div>
                 )}
             </div>
@@ -357,6 +565,7 @@ function StatCard({ label, value, status }: { label: string; value: string | num
     if (status === "RUNNING") valueClass = "text-xl font-medium tracking-tight text-blue-400";
     if (status === "COMPLETED") valueClass = "text-xl font-medium tracking-tight text-emerald-400";
     if (status === "FAILED") valueClass = "text-xl font-medium tracking-tight text-rose-400";
+    if (status === "BLOCKED") valueClass = "text-xl font-medium tracking-tight text-amber-400";
 
     return (
         <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface flex flex-col gap-1">
@@ -383,30 +592,156 @@ type ActivityItem = {
     link: string;
 };
 
-function ActivityList({ campaignId }: { campaignId: string }) {
+function ActivityList({
+    campaignId,
+    campaignName,
+    isRunning,
+    stages
+}: {
+    campaignId: string;
+    campaignName?: string;
+    isRunning?: boolean;
+    stages?: { id: string; name: string }[];
+}) {
     const router = useRouter();
-    const [activity, setActivity] = useState<ActivityItem[]>([]);
+    const [runs, setRuns] = useState<AuditRun[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
+    const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
+    const [logCache, setLogCache] = useState<Record<string, { events: AgentEvent[]; loading: boolean; error?: string }>>({});
 
     useEffect(() => {
         void fetchActivity();
-    }, [campaignId]);
+    }, [campaignId, campaignName]);
 
-    const fetchActivity = async () => {
-        setLoading(true);
-        setError("");
-        try {
-            const url = `/api/activity?campaignId=${campaignId}`;
-            const res = await fetch(url);
-            if (!res.ok) throw new Error("Failed to load activity history");
-            const data = (await res.json()) as { activity: ActivityItem[] };
-            setActivity(data.activity || []);
-        } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : "Unknown error");
-        } finally {
-            setLoading(false);
+    useEffect(() => {
+        if (!isRunning) return;
+        const interval = setInterval(() => {
+            void fetchActivity({ background: true });
+        }, POLL_INTERVAL_MS);
+        return () => clearInterval(interval);
+    }, [campaignId, isRunning]);
+
+    const fetchActivity = async ({ background = false }: { background?: boolean } = {}) => {
+        if (background) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+            setError("");
         }
+        try {
+            const url = `/api/campaigns/${campaignId}/runs`;
+            const res = await fetch(url, { cache: "no-store" });
+            if (!res.ok) throw new Error("Failed to load activity history");
+            const data = (await res.json()) as { runs: AuditRun[] };
+            const runs = Array.isArray(data.runs) ? data.runs : [];
+            setRuns(runs);
+        } catch (err: unknown) {
+            if (!background) {
+                setError(err instanceof Error ? err.message : "Unknown error");
+            }
+        } finally {
+            if (background) {
+                setRefreshing(false);
+            } else {
+                setLoading(false);
+            }
+        }
+    };
+
+    const mapRunToItem = (run: AuditRun): ActivityItem => {
+        const titleBase = campaignName || "Campaign";
+        const runId = run._id ? String(run._id) : "";
+        const shortId = runId ? `${runId.slice(0, 6)}…${runId.slice(-3)}` : "run";
+        const startedAt = run.startedAt ? new Date(run.startedAt).toISOString() : new Date().toISOString();
+        const endedAt = run.endedAt ? new Date(run.endedAt).toISOString() : undefined;
+        const totalFindings = run.aggregatedFindings?.length ?? 0;
+        const totalDuration = run.metadata?.totalDuration ?? (endedAt ? new Date(endedAt).getTime() - new Date(startedAt).getTime() : undefined);
+
+        return {
+            id: runId || shortId,
+            type: "CAMPAIGN",
+            title: `${titleBase} • ${shortId}`,
+            status: run.status || "PENDING",
+            startedAt,
+            endedAt,
+            conclusion: run.finalReport ? "Final report available" : undefined,
+            metadata: {
+                totalFindings,
+                totalClaims: run.metadata?.totalClaims,
+                totalVerified: run.metadata?.totalVerified,
+                totalDuration,
+            },
+            link: runId ? `/app/runs/${runId}` : "/app/runs",
+        };
+    };
+
+    const getPreviewSession = (run: AuditRun) => {
+        const stageCount = stages?.length ?? 0;
+        const safeStageCount = stageCount > 0 ? stageCount : run.sessionIds?.length ?? 0;
+        if (!safeStageCount) return { sessionId: undefined, stageName: undefined, stageIndex: undefined };
+
+        const currentIndexRaw = typeof run.currentStageIndex === "number" ? run.currentStageIndex : 0;
+        const currentIndex = Math.min(Math.max(currentIndexRaw, 0), safeStageCount - 1);
+        let candidateIndex = (run.sessionIds?.length ?? 0) > 0 ? (run.sessionIds?.length ?? 1) - 1 : undefined;
+        if (run.status === "RUNNING" || run.status === "PAUSED" || run.status === "PENDING") {
+            if (run.sessionIds?.[currentIndex]) {
+                candidateIndex = currentIndex;
+            }
+        }
+        if (candidateIndex === undefined) {
+            return { sessionId: undefined, stageName: undefined, stageIndex: undefined };
+        }
+
+        const sessionId = run.sessionIds?.[candidateIndex];
+        const stageName = stages?.[candidateIndex]?.name ?? `Stage ${candidateIndex + 1}`;
+        return { sessionId, stageName, stageIndex: candidateIndex };
+    };
+
+    const fetchLogs = async (sessionId: string) => {
+        setLogCache((prev) => ({
+            ...prev,
+            [sessionId]: { events: prev[sessionId]?.events ?? [], loading: true, error: undefined }
+        }));
+        try {
+            const res = await fetch(`/api/audits/${sessionId}`, { cache: "no-store" });
+            if (!res.ok) throw new Error("Failed to load stage logs");
+            const data = await res.json();
+            const stream = data.eventStream || data.workflowResult?.eventStream;
+            const events = Array.isArray(stream) ? (stream as AgentEvent[]) : [];
+            setLogCache((prev) => ({
+                ...prev,
+                [sessionId]: { events, loading: false }
+            }));
+        } catch (err: unknown) {
+            setLogCache((prev) => ({
+                ...prev,
+                [sessionId]: {
+                    events: prev[sessionId]?.events ?? [],
+                    loading: false,
+                    error: err instanceof Error ? err.message : "Unknown error"
+                }
+            }));
+        }
+    };
+
+    const toggleRunLogs = (runId: string, sessionId?: string) => {
+        setExpandedRuns((prev) => {
+            const next = { ...prev, [runId]: !prev[runId] };
+            return next;
+        });
+        if (sessionId && !logCache[sessionId]) {
+            void fetchLogs(sessionId);
+        }
+    };
+
+    const formatLogLine = (event: AgentEvent) => {
+        const label = event.phaseLabel || event.phaseId || event.kind.toUpperCase();
+        const content = event.content || event.toolOutput || event.toolArgs || "";
+        const snippet = content.length > 160 ? `${content.slice(0, 160)}…` : content;
+        const time = new Date(event.timestamp).toLocaleTimeString();
+        return `${time} • ${label}: ${snippet}`;
     };
 
     if (loading) {
@@ -425,7 +760,7 @@ function ActivityList({ campaignId }: { campaignId: string }) {
         );
     }
 
-    if (activity.length === 0) {
+    if (runs.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border-subtle bg-bg-surface p-20 text-center">
                 <Activity className="mb-4 h-10 w-10 text-text-muted opacity-20" />
@@ -438,82 +773,159 @@ function ActivityList({ campaignId }: { campaignId: string }) {
 
     return (
         <div className="space-y-4">
-            {activity.map((item) => (
-                <Panel
-                    key={`${item.type}-${item.id}`}
-                    className="group relative cursor-pointer overflow-hidden p-0 transition hover:border-border-strong hover:bg-state-hover"
-                    onClick={() => router.push(item.link)}
+            <div className="flex items-center justify-between">
+                <div className="text-[11px] uppercase tracking-wider text-text-muted">Runs</div>
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        void fetchActivity({ background: true });
+                    }}
+                    className="gap-2 text-[10px] h-7"
                 >
-                    <div className="flex items-stretch text-left">
-                        {/* Type indicator */}
-                        <div className={`w-1 shrink-0 ${item.type === "WORKBENCH" ? "bg-zinc-400/40" : "bg-emerald-500/40"}`} />
+                    <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+                    Refresh
+                </Button>
+            </div>
+            {runs.map((run) => {
+                const item = mapRunToItem(run);
+                const runId = run._id ? String(run._id) : item.id;
+                const preview = getPreviewSession(run);
+                const previewSessionId = preview.sessionId;
+                const cache = previewSessionId ? logCache[previewSessionId] : undefined;
+                const isExpanded = !!expandedRuns[runId];
+                const previewEvents = cache?.events ? cache.events.slice(-3) : [];
 
-                        <div className="flex flex-1 items-center gap-4 p-4 min-w-0">
-                            {/* Column 1: Icon */}
-                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${item.type === "WORKBENCH"
-                                ? "bg-zinc-400/10 border-zinc-400/10 text-zinc-300"
-                                : "bg-emerald-500/10 border-emerald-500/10 text-emerald-400"
-                                }`}>
-                                {item.type === "WORKBENCH" ? <Terminal className="h-5 w-5" /> : <Layers className="h-5 w-5" />}
-                            </div>
+                return (
+                    <Panel
+                        key={`${item.type}-${item.id}`}
+                        className="group relative cursor-pointer overflow-hidden p-0 transition hover:border-border-strong hover:bg-state-hover"
+                        onClick={() => router.push(item.link)}
+                    >
+                        <div className="flex items-stretch text-left">
+                            {/* Type indicator */}
+                            <div className={`w-1 shrink-0 ${item.type === "WORKBENCH" ? "bg-zinc-400/40" : "bg-emerald-500/40"}`} />
 
-                            {/* Column 2: Main Content */}
-                            <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                                <div className="flex items-center gap-2">
-                                    <h3
-                                        className="truncate text-sm font-semibold text-text-primary"
-                                        title={item.title}
-                                    >
-                                        {item.title}
-                                    </h3>
+                            <div className="flex flex-1 items-center gap-4 p-4 min-w-0">
+                                {/* Column 1: Icon */}
+                                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${item.type === "WORKBENCH"
+                                    ? "bg-zinc-400/10 border-zinc-400/10 text-zinc-300"
+                                    : "bg-emerald-500/10 border-emerald-500/10 text-emerald-400"
+                                    }`}>
+                                    {item.type === "WORKBENCH" ? <Terminal className="h-5 w-5" /> : <Layers className="h-5 w-5" />}
                                 </div>
 
-                                <div className="flex flex-wrap items-center gap-2">
-                                    {/* Date Chip */}
-                                    <span className="inline-flex items-center gap-1 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-muted">
-                                        <Clock className="h-3 w-3" />
-                                        {new Date(item.startedAt).toLocaleString(undefined, {
-                                            month: "short",
-                                            day: "numeric",
-                                            hour: "2-digit",
-                                            minute: "2-digit"
-                                        })}
-                                    </span>
+                                {/* Column 2: Main Content */}
+                                <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                                    <div className="flex items-center gap-2">
+                                        <h3
+                                            className="truncate text-sm font-semibold text-text-primary"
+                                            title={item.title}
+                                        >
+                                            {item.title}
+                                        </h3>
+                                    </div>
 
-                                    {/* Findings Chip */}
-                                    {item.metadata?.totalFindings !== undefined && (
-                                        <span className="inline-flex items-center gap-1 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-secondary">
-                                            <Search className="h-3 w-3" />
-                                            {item.metadata.totalFindings} findings
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {/* Date Chip */}
+                                        <span className="inline-flex items-center gap-1 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-muted">
+                                            <Clock className="h-3 w-3" />
+                                            {new Date(item.startedAt).toLocaleString(undefined, {
+                                                month: "short",
+                                                day: "numeric",
+                                                hour: "2-digit",
+                                                minute: "2-digit"
+                                            })}
                                         </span>
+
+                                        {/* Findings Chip */}
+                                        {item.metadata?.totalFindings !== undefined && (
+                                            <span className="inline-flex items-center gap-1 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-secondary">
+                                                <Search className="h-3 w-3" />
+                                                {item.metadata.totalFindings} findings
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {item.conclusion && (
+                                        <p
+                                            className="line-clamp-1 text-xs text-text-secondary"
+                                            title={item.conclusion}
+                                        >
+                                            {item.conclusion}
+                                        </p>
                                     )}
                                 </div>
 
-                                {item.conclusion && (
-                                    <p
-                                        className="line-clamp-1 text-xs text-text-secondary"
-                                        title={item.conclusion}
-                                    >
-                                        {item.conclusion}
-                                    </p>
-                                )}
-                            </div>
+                                {/* Column 3: Status & Actions */}
+                                <div className="flex shrink-0 flex-col items-end gap-2 pl-2">
+                                    <StatusBadge status={item.status} />
 
-                            {/* Column 3: Status & Actions */}
-                            <div className="flex shrink-0 flex-col items-end gap-2 pl-2">
-                                <StatusBadge status={item.status} />
-
-                                <div className="flex items-center justify-end">
-                                    <div className="h-7 w-7 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <MoreHorizontal className="h-4 w-4" />
+                                    <div className="flex items-center justify-end gap-1">
+                                        <button
+                                            className="h-7 px-2 text-[10px] text-text-muted hover:text-text-primary border border-border-subtle rounded"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                if (previewSessionId) {
+                                                    void fetchLogs(previewSessionId);
+                                                }
+                                            }}
+                                            disabled={!previewSessionId}
+                                            title={previewSessionId ? "Refresh logs" : "Logs not available yet"}
+                                        >
+                                            <RefreshCw className={cn("h-3 w-3", cache?.loading && "animate-spin")} />
+                                        </button>
+                                        <button
+                                            className="h-7 px-2 text-[10px] text-text-muted hover:text-text-primary border border-border-subtle rounded flex items-center gap-1"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                toggleRunLogs(runId, previewSessionId);
+                                            }}
+                                            disabled={!previewSessionId}
+                                        >
+                                            {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                            Logs
+                                        </button>
+                                        <ChevronRight className="h-4 w-4 text-text-muted opacity-0 transition-opacity group-hover:opacity-100" />
                                     </div>
-                                    <ChevronRight className="h-4 w-4 text-text-muted opacity-0 transition-opacity group-hover:opacity-100" />
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </Panel>
-            ))}
+
+                        <div className="border-t border-border-subtle bg-bg-elevated/10 px-4 py-2">
+                            <div className="flex items-center justify-between text-[10px] text-text-muted">
+                                <span>Latest stage: {preview.stageName || "Not started"}</span>
+                                {!previewSessionId && <span>No logs yet</span>}
+                            </div>
+
+                            {isExpanded && previewSessionId && (
+                                <div className="mt-2 space-y-2">
+                                    {cache?.loading && (
+                                        <div className="text-[10px] text-text-muted">Loading logs…</div>
+                                    )}
+                                    {cache?.error && (
+                                        <div className="text-[10px] text-rose-300">Error: {cache.error}</div>
+                                    )}
+                                    {!cache?.loading && previewEvents.length === 0 && !cache?.error && (
+                                        <div className="text-[10px] text-text-muted">No log events yet.</div>
+                                    )}
+                                    {previewEvents.map((event) => (
+                                        <div key={event.id} className="text-[11px] text-text-secondary font-mono line-clamp-1">
+                                            {formatLogLine(event)}
+                                        </div>
+                                    ))}
+                                    {cache?.events && cache.events.length > 3 && (
+                                        <div className="text-[10px] text-text-muted">
+                                            Showing last 3 events
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </Panel>
+                );
+            })}
         </div>
     );
 }

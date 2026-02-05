@@ -3,13 +3,19 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "tsx scripts/dev.ts",
     "build": "vite build && tsx scripts/build.ts",
-    "start": "electron dist-electron/main.js"
+    "start": "electron dist-electron/main.cjs",
+    "dist": "electron-builder --mac",
+    "dist:mac": "electron-builder --mac",
+    "publish:mac": "electron-builder --mac --publish always"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
+    "diff": "^5.2.0",
+    "electron-updater": "^6.3.0",
     "lucide-react": "^0.562.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -17,12 +23,72 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@electron/notarize": "^2.2.1",
     "@types/react": "^18.2.35",
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.3.1",
     "electron": "^31.2.0",
+    "electron-builder": "^24.13.3",
     "esbuild": "^0.23.0",
     "typescript": "^5.6.0",
     "vite": "^5.4.6"
+  },
+  "build": {
+    "appId": "com.numezis.desktop",
+    "productName": "Numezis Desktop",
+    "directories": {
+      "output": "dist-desktop",
+      "buildResources": "build"
+    },
+    "icon": "build/icon.icns",
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "build/icon.icns",
+        "to": "icon.icns"
+      }
+    ],
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "asar": true,
+    "protocols": [
+      {
+        "name": "Numezis Desktop",
+        "schemes": ["numezis-code"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": ["dmg", "zip"],
+      "hardenedRuntime": true,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.inherit.plist",
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "background": "build/dmg-background.png",
+      "iconSize": 120,
+      "window": {
+        "width": 700,
+        "height": 460
+      },
+      "contents": [
+        { "x": 180, "y": 230, "type": "file" },
+        { "x": 520, "y": 230, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://updates.numezis.com/desktop"
+      }
+    ],
+    "afterSign": "scripts/notarize.cjs"
   }
 }

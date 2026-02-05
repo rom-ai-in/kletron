@@ -271,6 +271,13 @@ const CURSOR_CODER_TOOLS = [
   "str_replace_editor"
 ];
 
+const CURSOR_JSON_RULES = [
+  "Return ONLY a JSON object.",
+  "No markdown, no backticks, no extra text.",
+  "Do not echo instructions or the schema.",
+  "If unsure, use empty string/array/object (or null only if specified)."
+].join("\n");
+
 export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
   const nodes: AgentGraphNode[] = [
     {
@@ -281,10 +288,10 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: [
           "You are the Intake agent.",
           "Goal: normalize the user request and extract constraints.",
-          "Inputs: state.mission (user message), state (full).",
-          "Outputs: strict JSON only. Do not include markdown or prose.",
+          "Inputs: the user mission.",
+          CURSOR_JSON_RULES,
           "",
-          "Write ONLY these keys (no extra keys):",
+          "Write ONLY these keys:",
           "{",
           "  \"goal\": string,",
           "  \"constraints\": string[],",
@@ -294,15 +301,17 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "}",
           "",
           "Guidance:",
-          "- Avoid asking the user unless absolutely necessary; put unknowns into openQuestions.",
-          "- Keep constraints concrete (language, framework, perf, security, time).",
+          "- goal: short verb phrase capturing the desired outcome.",
+          "- constraints: concrete constraints (language, framework, perf, security, time).",
+          "- openQuestions: only blockers that must be answered before planning.",
+          "- nonGoals: explicitly out-of-scope items.",
           "- Use userInput = original mission."
         ].join("\n"),
-        userPromptTemplate: "Mission:\n{{mission}}\n\nCurrent state:\n{{state}}",
+        userPromptTemplate: "Mission:\n{{mission}}",
         toolNames: [],
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_intake_output", statePath: "state", stateMerge: true }
     },
     {
       id: "spec_acceptance",
@@ -312,8 +321,8 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: [
           "You are the Spec & Acceptance agent.",
           "Goal: translate goal into acceptance criteria and definition of done.",
-          "Inputs: state.goal, state.constraints, state.openQuestions.",
-          "Outputs: strict JSON only (no markdown).",
+          "Inputs: goal, constraints, openQuestions, nonGoals.",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
@@ -321,11 +330,17 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "  \"definitionOfDone\": string[]",
           "}"
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "Goal: {{state.goal}}",
+          "Constraints: {{state.constraints}}",
+          "Open questions: {{state.openQuestions}}",
+          "Non-goals: {{state.nonGoals}}",
+          "Mission: {{mission}}"
+        ].join("\n"),
         toolNames: [],
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_spec_output", statePath: "state", stateMerge: true }
     },
     {
       id: "repo_scan",
@@ -336,7 +351,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "You are the Repo Scan agent.",
           "Goal: discover repo structure, stack, and build/test commands.",
           "Use tools to inspect config files and structure.",
-          "Outputs: strict JSON only.",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
@@ -348,11 +363,15 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "",
           "If you infer commands, label them clearly in envInfo."
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "Mission: {{mission}}",
+          "Constraints: {{state.constraints}}",
+          "Current repoSummary: {{state.repoSummary}}"
+        ].join("\n"),
         toolNames: CURSOR_CORE_TOOLS,
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_repo_scan_output", statePath: "state", stateMerge: true }
     },
     {
       id: "planner",
@@ -363,7 +382,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "You are the Planner (orchestrator).",
           "Goal: produce milestones, task queue, and risk register.",
           "Do NOT edit files; only plan.",
-          "Outputs: strict JSON only.",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
@@ -373,13 +392,23 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "  \"riskRegister\": array",
           "}",
           "",
-          "Ensure taskQueue is ordered and currentTaskId is the first task id."
+          "taskQueue format: array of { id, title, status: \"todo\" | \"done\" }.",
+          "Ensure taskQueue is ordered and currentTaskId is the first task with status \"todo\" (or \"\" if none)."
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "Goal: {{state.goal}}",
+          "Constraints: {{state.constraints}}",
+          "Acceptance criteria: {{state.acceptanceCriteria}}",
+          "Definition of done: {{state.definitionOfDone}}",
+          "Repo summary: {{state.repoSummary}}",
+          "Build commands: {{state.buildCommands}}",
+          "Constraints detected: {{state.constraintsDetected}}",
+          "Open questions: {{state.openQuestions}}"
+        ].join("\n"),
         toolNames: [],
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_planner_output", statePath: "state", stateMerge: true }
     },
     {
       id: "route_prep",
@@ -389,8 +418,8 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: [
           "You are the Task Router Prep agent.",
           "Goal: choose the next role based on state.",
-          "Do NOT use tools. Decide a single next step.",
-          "Outputs: strict JSON only.",
+          "Do NOT use tools. Decide a single next step deterministically.",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
@@ -400,19 +429,40 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "  }",
           "}",
           "",
-          "Routing rules (apply in this order):",
-          "0) If blockedReason is set OR consecutiveErrors >= 3 -> final_gate (report the blocker to user)",
-          "1) If openQuestions has items AND blockedReason is NOT set -> researcher",
-          "2) If taskQueue has items -> coder",
-          "3) If qualityGates show failures -> debugger",
-          "4) If acceptanceCriteria satisfied and review pending -> reviewer",
-          "5) Otherwise -> final_gate"
+          "Compute these booleans from state:",
+          "- hasBlocker = blockedReason is not null OR consecutiveErrors >= 3",
+          "- hasOpenQuestions = openQuestions.length > 0",
+          "- needsResearch = workingNotes is empty AND (mission or goal implies analysis, audit, review, inconsistencies, or repo logic)",
+          "- hasTasks = currentTaskId is non-empty OR taskQueue has any items",
+          "- hasGateFailures = qualityGates.failed == true OR qualityGates.status == \"fail\"",
+          "- needsReview = reviewFeedback is empty AND acceptanceCriteria has items",
+          "",
+          "Routing priority (apply in order, choose first match):",
+          "1) if hasBlocker -> final_gate",
+          "2) if hasOpenQuestions -> researcher",
+          "3) if needsResearch -> researcher",
+          "4) if hasTasks -> coder",
+          "5) if hasGateFailures -> debugger",
+          "6) if needsReview -> reviewer",
+          "7) else -> final_gate"
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "Mission: {{mission}}",
+          "Goal: {{state.goal}}",
+          "blockedReason: {{state.blockedReason}}",
+          "consecutiveErrors: {{state.consecutiveErrors}}",
+          "openQuestions: {{state.openQuestions}}",
+          "currentTaskId: {{state.currentTaskId}}",
+          "taskQueue: {{state.taskQueue}}",
+          "qualityGates: {{state.qualityGates}}",
+          "reviewFeedback: {{state.reviewFeedback}}",
+          "acceptanceCriteria: {{state.acceptanceCriteria}}",
+          "workingNotes: {{state.workingNotes}}"
+        ].join("\n"),
         toolNames: [],
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_route_output", statePath: "state", stateMerge: true }
     },
     {
       id: "task_router",
@@ -434,6 +484,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: [
           "You are the Researcher.",
           "Goal: resolve openQuestions using repository info or web tools.",
+          "If the mission is analysis or audit, produce concrete findings in workingNotes with file references.",
           "",
           "CRITICAL ERROR HANDLING:",
           "If you encounter a CONFIGURATION ERROR (e.g., 'Working folder not configured'),",
@@ -443,7 +494,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "3) Increment consecutiveErrors",
           "4) Do NOT keep retrying the same failing tools",
           "",
-          "Outputs: strict JSON only.",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
@@ -454,13 +505,18 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "}",
           "",
           "Append to existing workingNotes; remove resolved openQuestions.",
+          "Include short, source-backed findings in workingNotes (file paths, functions, or configs).",
           "If tools work successfully, set blockedReason to null and consecutiveErrors to 0."
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "Mission: {{mission}}",
+          "Open questions: {{state.openQuestions}}",
+          "Repo summary: {{state.repoSummary}}"
+        ].join("\n"),
         toolNames: CURSOR_RESEARCH_TOOLS,
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_researcher_output", statePath: "state", stateMerge: true }
     },
     {
       id: "coder",
@@ -474,19 +530,32 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "- Use tools; prefer apply_patch or minimal edits.",
           "- Update or add tests if needed.",
           "- Record edits in fileChanges and notes in workingNotes.",
-          "Outputs: strict JSON only.",
+          "- Update taskQueue: mark the current task done or remove it.",
+          "- If currentTaskId is empty, pick the first todo task in taskQueue.",
+          "- Set currentTaskId to the next todo task id (or \"\" if none).",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
           "  \"fileChanges\": array,",
-          "  \"workingNotes\": string[]",
+          "  \"workingNotes\": string[],",
+          "  \"taskQueue\": array,",
+          "  \"currentTaskId\": string",
           "}"
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "CurrentTaskId: {{state.currentTaskId}}",
+          "TaskQueue: {{state.taskQueue}}",
+          "Plan: {{state.plan}}",
+          "Constraints: {{state.constraints}}",
+          "Repo summary: {{state.repoSummary}}",
+          "Build commands: {{state.buildCommands}}",
+          "Working notes: {{state.workingNotes}}"
+        ].join("\n"),
         toolNames: CURSOR_CODER_TOOLS,
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_coder_output", statePath: "state", stateMerge: true }
     },
     {
       id: "policy_gate",
@@ -496,7 +565,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: [
           "You are the Policy Gate.",
           "Goal: review last changes for safety/risk and decide next step.",
-          "Outputs: strict JSON only.",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
@@ -507,11 +576,15 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "  }",
           "}"
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "File changes: {{state.fileChanges}}",
+          "Working notes: {{state.workingNotes}}",
+          "Constraints: {{state.constraints}}"
+        ].join("\n"),
         toolNames: ["git_diff", "search_code"],
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_policy_output", statePath: "state", stateMerge: true }
     },
     {
       id: "policy_router",
@@ -533,7 +606,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: [
           "You are the Fast Verifier.",
           "Goal: run quick checks (lint/typecheck/unit) and summarize.",
-          "Outputs: strict JSON only.",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
@@ -543,13 +616,19 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "    \"next\": \"verify_full\" | \"debugger\",",
           "    \"reason\": string",
           "  }",
-          "}"
+          "}",
+          "",
+          "qualityGates should include: { status: \"pass\" | \"fail\", failed: boolean, summary: string }."
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "Build commands: {{state.buildCommands}}",
+          "Repo summary: {{state.repoSummary}}",
+          "Constraints: {{state.constraints}}"
+        ].join("\n"),
         toolNames: ["execute_bash", "read_file"],
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_verify_fast_output", statePath: "state", stateMerge: true }
     },
     {
       id: "verify_full",
@@ -559,7 +638,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: [
           "You are the Full Verifier.",
           "Goal: run full test suite/integration and update gates.",
-          "Outputs: strict JSON only.",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
@@ -569,13 +648,20 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "    \"next\": \"reviewer\" | \"debugger\",",
           "    \"reason\": string",
           "  }",
-          "}"
+          "}",
+          "",
+          "qualityGates should include: { status: \"pass\" | \"fail\", failed: boolean, summary: string }."
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "Build commands: {{state.buildCommands}}",
+          "Repo summary: {{state.repoSummary}}",
+          "Constraints: {{state.constraints}}",
+          "Fast test results: {{state.testResults}}"
+        ].join("\n"),
         toolNames: ["execute_bash", "read_file"],
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_verify_full_output", statePath: "state", stateMerge: true }
     },
     {
       id: "verify_router",
@@ -597,24 +683,31 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: [
           "You are the Debugger.",
           "Goal: analyze failures and propose minimal fix steps.",
-          "Outputs: strict JSON only.",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
           "  \"reviewFeedback\": array,",
           "  \"taskQueue\": array,",
           "  \"workingNotes\": string[],",
+          "  \"currentTaskId\": string,",
           "  \"route\": {",
           "    \"next\": \"coder\",",
           "    \"reason\": string",
           "  }",
           "}"
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "Test results: {{state.testResults}}",
+          "Quality gates: {{state.qualityGates}}",
+          "File changes: {{state.fileChanges}}",
+          "TaskQueue: {{state.taskQueue}}",
+          "CurrentTaskId: {{state.currentTaskId}}"
+        ].join("\n"),
         toolNames: ["read_file", "search_code", "git_diff", "execute_bash"],
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_debugger_output", statePath: "state", stateMerge: true }
     },
     {
       id: "reviewer",
@@ -624,7 +717,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: [
           "You are the Reviewer.",
           "Goal: check spec, edge cases, security, and correctness.",
-          "Outputs: strict JSON only.",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
@@ -637,11 +730,18 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "  }",
           "}"
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "Acceptance criteria: {{state.acceptanceCriteria}}",
+          "Definition of done: {{state.definitionOfDone}}",
+          "Test results: {{state.testResults}}",
+          "Quality gates: {{state.qualityGates}}",
+          "File changes: {{state.fileChanges}}",
+          "Working notes: {{state.workingNotes}}"
+        ].join("\n"),
         toolNames: ["read_file", "git_diff", "search_code"],
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_reviewer_output", statePath: "state", stateMerge: true }
     },
     {
       id: "review_router",
@@ -663,7 +763,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: [
           "You are the Refactor/Docs agent.",
           "Goal: improve clarity, docs, and remove dead code with minimal risk.",
-          "Outputs: strict JSON only.",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
@@ -671,11 +771,15 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "  \"workingNotes\": string[]",
           "}"
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "Review feedback: {{state.reviewFeedback}}",
+          "File changes: {{state.fileChanges}}",
+          "Working notes: {{state.workingNotes}}"
+        ].join("\n"),
         toolNames: CURSOR_CODER_TOOLS,
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_refactor_output", statePath: "state", stateMerge: true }
     },
     {
       id: "final_gate",
@@ -685,7 +789,9 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: [
           "You are the Final Gate.",
           "Goal: enforce definitionOfDone and decide if the run is complete.",
-          "Outputs: strict JSON only.",
+          "Synthesize finalSummary from workingNotes, repoSummary, and mission context.",
+          "Do not repeat prompt instructions; focus on user-facing conclusions.",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
@@ -697,11 +803,23 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "  }",
           "}"
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "Acceptance criteria: {{state.acceptanceCriteria}}",
+          "Definition of done: {{state.definitionOfDone}}",
+          "CurrentTaskId: {{state.currentTaskId}}",
+          "TaskQueue: {{state.taskQueue}}",
+          "Open questions: {{state.openQuestions}}",
+          "Blocked reason: {{state.blockedReason}}",
+          "Review feedback: {{state.reviewFeedback}}",
+          "Test results: {{state.testResults}}",
+          "Quality gates: {{state.qualityGates}}",
+          "File changes: {{state.fileChanges}}",
+          "Working notes: {{state.workingNotes}}"
+        ].join("\n"),
         toolNames: [],
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_final_gate_output", statePath: "state", stateMerge: true }
     },
     {
       id: "final_router",
@@ -723,7 +841,8 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: [
           "You are the Done node.",
           "Goal: finalize output. No tools.",
-          "Outputs: strict JSON only.",
+          "Return the finalSummary and nextSteps as-is; do not add commentary.",
+          CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
           "{",
@@ -731,11 +850,14 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "  \"nextSteps\": string[]",
           "}"
         ].join("\n"),
-        userPromptTemplate: "Current state:\n{{state}}",
+        userPromptTemplate: [
+          "Final summary: {{state.finalSummary}}",
+          "Next steps: {{state.nextSteps}}"
+        ].join("\n"),
         toolNames: [],
         llmSelection: { provider: "azure" }
       },
-      output: { schemaId: "generic_json", statePath: "state", stateMerge: true }
+      output: { schemaId: "cursor_done_output", statePath: "state", stateMerge: true }
     }
   ];
 
@@ -794,6 +916,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
     stateDefaults: {
       goal: "",
       constraints: [],
+      nonGoals: [],
       acceptanceCriteria: [],
       definitionOfDone: [],
       plan: {},
@@ -811,7 +934,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
       terminalRuns: [],
       fileChanges: [],
       testResults: {},
-      qualityGates: {},
+      qualityGates: { status: "unknown", failed: false },
       reviewFeedback: [],
       suggestedTests: [],
       confidence: "",

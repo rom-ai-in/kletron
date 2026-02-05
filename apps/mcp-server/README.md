@@ -5,12 +5,12 @@ Local Model Context Protocol (MCP) server tailored to inspect a GitHub repositor
 ## Getting started
 
 1. Install dependencies: `npm install`
-2. Configure the default directory (see below) or pass repository paths explicitly to the tools.
+2. Configure the repository root in **Configuration > Repository Settings** (writes `config/config.json`) or pass repository paths explicitly to the tools.
 3. Start the server with:
    - `npm start` (MCP server mode, for LM Studio)
    - `npm run diagnose` (diagnostic self-test, for humans)
 
-Tip: environment variables are loaded from `.env` automatically (via `dotenv`) when running `server.js`.
+Tip: environment variables are loaded from `.env` automatically (via `dotenv`) when running `server.js` for non-repo settings (LLM keys, allowlists, etc.).
 
 ## LM Studio setup (quick)
 
@@ -30,13 +30,7 @@ Important: LM Studio spawns a process using a command + args. If you enter `npm 
 
 ## Configuration
 
-The base configuration lives in `config.js`. The only required value is `defaultDir`, which tells the tools where to work when no explicit path is provided. The file defaults to a static directory, but you can override it through environment variables without editing `config.js`:
-
-```bash
-MCP_DEFAULT_DIR=/path/to/project npm run dev
-```
-
-or use the more specific `GITHUB_MCP_DEFAULT_DIR` if you prefer.
+The base configuration lives in `config.js` and reads **only** from `config/config.json` (kept in sync by the Workspace settings UI). The required value is `workingFolder`, which tells the tools where to work when no explicit path is provided.
 
 When a tool receives a relative path, it resolves it against the configured directory and refuses to access files outside that root, preventing accidental traversal to sensitive system files.
 
@@ -72,7 +66,7 @@ Tool input schemas are described by the MCP `tools/list` response, so clients ca
 
 ## Tool cheat sheet (common arguments)
 
-These examples assume you set `GITHUB_MCP_DEFAULT_DIR`/`MCP_DEFAULT_DIR`. If not, pass an absolute repo root in `path`/`repoPath`.
+These examples assume your repo root is set in **Configuration > Repository Settings** (which writes `config/config.json`). If not, pass an absolute repo root in `path`/`repoPath`.
 
 - `read_file`: `{ "repoPath": "/abs/repo/root", "filePath": "apps/api/src/index.ts" }`
 - `read_file_range`: `{ "repoPath": "/abs/repo/root", "filePath": "apps/api/src/index.ts", "startLine": 1, "endLine": 120 }`

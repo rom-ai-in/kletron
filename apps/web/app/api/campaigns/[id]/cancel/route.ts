@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chainExecutor } from "@numezis/server/services/chainExecutor";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
 /**
  * POST /api/campaigns/[id]/cancel
@@ -21,12 +22,17 @@ export async function POST(
   try {
     const chainId = params.id;
 
-    const chain = await chainExecutor.getChain(chainId);
+    const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+    if (!workspace || !workspace._id) {
+      return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+    }
+
+    const chain = await chainExecutor.getChain(chainId, workspace._id.toString());
     if (!chain) {
       return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
     }
 
-    const latestRun = await chainExecutor.getLatestRun(chainId);
+    const latestRun = await chainExecutor.getLatestRun(chainId, workspace._id.toString());
     if (!latestRun) {
       return NextResponse.json({ error: "No run found to cancel" }, { status: 404 });
     }
@@ -45,4 +51,3 @@ export async function POST(
     return NextResponse.json({ error: "Failed to cancel campaign run" }, { status: 500 });
   }
 }
-

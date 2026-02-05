@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { DriftAnalysisWorker } from "@numezis/server/services/driftAnalysisWorker";
+import * as driftModule from "@numezis/server/services/driftAnalysisWorker";
 import * as db from "@numezis/server/lib/db";
 
 async function main() {
@@ -7,6 +7,11 @@ async function main() {
 
     // Ensure DB connection
     await db.getDb();
+
+    const DriftAnalysisWorker = (driftModule as any).DriftAnalysisWorker ?? (driftModule as any).default;
+    if (!DriftAnalysisWorker) {
+        throw new Error("DriftAnalysisWorker export not found.");
+    }
 
     const worker = new DriftAnalysisWorker({
         pollIntervalMs: 2000,

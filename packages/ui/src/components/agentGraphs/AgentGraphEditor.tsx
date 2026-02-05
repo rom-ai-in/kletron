@@ -72,11 +72,11 @@ function makeDefaultNode(idx: number) {
         label: `Node ${idx}`,
         kind: "react" as const,
         react: {
-            systemPrompt: `You are a coding assistant focused on audits, campaigns, runs, and GitHub-centric workflows.
+            systemPrompt: `You are a coding assistant focused on code changes, debugging, and GitHub-centric workflows.
 
 ## PRIMARY CAPABILITIES:
 - Inspect and modify code in the local repository.
-- Analyze diffs, runs, and campaign outputs.
+- Analyze diffs and recent changes.
 - Use Git tooling to understand history and changes.
 - Use GitHub API for repo metadata, issues, and releases.
 

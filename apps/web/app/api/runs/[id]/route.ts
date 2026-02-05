@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chainExecutor } from "@numezis/server/services/chainExecutor";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
 /**
  * GET /api/runs/[id]
@@ -20,14 +21,19 @@ export async function GET(
 
     try {
         const runId = params.id;
-        const run = await chainExecutor.getRun(runId);
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        if (!workspace || !workspace._id) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
+
+        const run = await chainExecutor.getRun(runId, workspace._id.toString());
 
         if (!run) {
             return NextResponse.json({ error: "Execution run not found" }, { status: 404 });
         }
 
         // Fetch the associated campaign configuration
-        const chain = await chainExecutor.getChain(run.chainId.toString());
+        const chain = await chainExecutor.getChain(run.chainId.toString(), workspace._id.toString());
 
         return NextResponse.json({ run, chain }, { status: 200 });
     } catch (error) {

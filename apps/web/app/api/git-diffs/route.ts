@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import path from "node:path";
 import { getDiffsForWindow } from '@numezis/server/services/gitLocalService';
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 
 export async function GET(request: Request) {
     const auth = await requireAppRouteAuth(request);
@@ -25,8 +28,29 @@ export async function GET(request: Request) {
     }
 
     try {
-        const diffs = await getDiffsForWindow(pathValue, start, end);
-        return NextResponse.json({ diffs, granularity });
+        const workspace = await resolveWorkspaceFromRequest(request, auth.userId, null);
+        if (!workspace || !workspace._id) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
+
+        const repoRoot = path.resolve(workspace.rootPath);
+        const rawPath = (pathValue ?? "").trim();
+        let relativePath = "";
+
+        if (rawPath && rawPath !== "/") {
+            const absolute = path.isAbsolute(rawPath)
+                ? path.resolve(rawPath)
+                : path.resolve(repoRoot, rawPath);
+            if (!absolute.startsWith(repoRoot)) {
+                return NextResponse.json({ error: "Path outside workspace root" }, { status: 403 });
+            }
+            relativePath = path.relative(repoRoot, absolute);
+        }
+
+        return await runWithWorkspaceContext(workspace, async () => {
+            const diffs = await getDiffsForWindow(relativePath, start, end);
+            return NextResponse.json({ diffs, granularity });
+        });
     } catch (e: any) {
         console.error('Git diff API error:', e);
         return NextResponse.json({ error: e.message }, { status: 500 });

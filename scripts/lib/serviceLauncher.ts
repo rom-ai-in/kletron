@@ -14,31 +14,33 @@ const execFileAsync = promisify(execFile);
 const CONFIG_FILE = path.resolve(process.cwd(), "config", "config.json");
 
 function getConfiguredRepoRoot(): string | undefined {
-  // 1. First, try to read from config.json (UI-configured path)
   try {
-    if (fsSync.existsSync(CONFIG_FILE)) {
-      const raw = fsSync.readFileSync(CONFIG_FILE, "utf-8");
-      const json = JSON.parse(raw);
-      if (json.mcpDefaultDir && typeof json.mcpDefaultDir === "string" && json.mcpDefaultDir.trim()) {
-        return path.resolve(json.mcpDefaultDir.trim());
+    if (!fsSync.existsSync(CONFIG_FILE)) return undefined;
+    const raw = fsSync.readFileSync(CONFIG_FILE, "utf-8");
+    const json = JSON.parse(raw);
+    if (json.mcpDefaultDir && typeof json.mcpDefaultDir === "string" && json.mcpDefaultDir.trim()) {
+      return path.resolve(json.mcpDefaultDir.trim());
+    }
+    if (json.workingFolder && typeof json.workingFolder === "string" && json.workingFolder.trim()) {
+      return path.resolve(json.workingFolder.trim());
+    }
+    if (Array.isArray(json.workspaceRoots) && json.workspaceRoots.length > 0) {
+      const first = json.workspaceRoots[0];
+      if (typeof first === "string" && first.trim()) {
+        return path.resolve(first.trim());
       }
     }
-  } catch (e) {
-    // Ignore errors, fall through to env vars
+  } catch {
+    // ignore
   }
-
-  // 2. Fall back to environment variables (for backwards compatibility during startup)
-  const configuredRaw =
-    process.env.GITHUB_MCP_DEFAULT_DIR ?? process.env.MCP_DEFAULT_DIR;
-  const configured = configuredRaw?.trim();
-  return configured ? path.resolve(configured) : undefined;
+  return undefined;
 }
 
 export function resolveTargetRepoRoot(): string {
   const resolved = getConfiguredRepoRoot();
   if (!resolved) {
     throw new Error(
-      "Repository path not configured. Please configure it in the UI at Configuration > Repository Settings, or set GITHUB_MCP_DEFAULT_DIR in .env"
+      "Repository path not configured. Please configure it in the UI at Configuration > Repository Settings."
     );
   }
   return resolved;
@@ -48,14 +50,14 @@ export async function requireTargetRepoRoot() {
   const resolved = getConfiguredRepoRoot();
   if (!resolved) {
     throw new Error(
-      "GITHUB_MCP_DEFAULT_DIR is not set. Add it to `.env` to point to your target repo (e.g. /Users/you/Desktop/numezis-1)."
+      "Repository path not configured. Please configure it in the UI at Configuration > Repository Settings."
     );
   }
 
   const stat = await fs.stat(resolved).catch(() => null);
   if (!stat?.isDirectory()) {
     throw new Error(
-      `GITHUB_MCP_DEFAULT_DIR points to a missing/non-directory path: ${resolved}`
+      `Configured repository path is missing or not a directory: ${resolved}`
     );
   }
 
@@ -200,7 +202,7 @@ export function spawnService(config: ServiceLaunchConfig): ChildProcess {
   return child;
 }
 
-export function createMcpLauncher(rootDir: string, overrides: Record<string, string> = {}) {
+export function createMcpLauncher(_rootDir: string, overrides: Record<string, string> = {}) {
   const mcpCommand = process.platform === "win32" ? "node.exe" : "node";
   const mcpArgs = [path.join("apps", "mcp-server", "server.js"), "--mcp"];
   return spawnService({
@@ -211,8 +213,6 @@ export function createMcpLauncher(rootDir: string, overrides: Record<string, str
       ...overrides,
       MCP_TRANSPORT: overrides.MCP_TRANSPORT ?? "sse",
       GITHUB_MCP_TRANSPORT: overrides.GITHUB_MCP_TRANSPORT ?? "sse",
-      MCP_DEFAULT_DIR: rootDir,
-      GITHUB_MCP_DEFAULT_DIR: rootDir,
     },
   });
 }
@@ -252,13 +252,12 @@ export function createWebLauncher(port: number = 3000) {
   });
 }
 
-export function createI18nProcessWorkerLauncher(options?: { watch?: boolean }) {
-  const command = process.platform === "win32" ? "npx.cmd" : "npx";
-  const watch = options?.watch ?? false;
+export function createDesktopLauncher() {
+  const command = process.platform === "win32" ? "npm.cmd" : "npm";
   return spawnService({
-    name: "I18n Process Worker",
+    name: "Desktop App",
     command,
-    args: watch ? ["tsx", "watch", "scripts/i18n-process-worker.ts"] : ["tsx", "scripts/i18n-process-worker.ts"],
+    args: ["--workspace", "apps/desktop", "run", "dev"],
     stdio: "pipe",
   });
 }

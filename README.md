@@ -32,7 +32,8 @@ Artifacts are written into the target repo under `.numezis/`:
    ```bash
    npm install
    ```
-2. Configure `.env` (copy from `env.example`) with your Azure OpenAI credentials and set the target repo root via `GITHUB_MCP_DEFAULT_DIR`.
+2. Configure `.env` (copy from `env.example`) with your Azure OpenAI credentials.
+   Then set the repository in **Configuration > Repository Settings** (writes `config/config.json`).
 3. Start MCP + LangGraph dev server (which now also launches the Next.js UI):
    ```bash
    npm run dev
@@ -46,8 +47,6 @@ Artifacts are written into the target repo under `.numezis/`:
    npm run dev:web
    ```
    When you already run `npm run dev`, the UI is started for you so you can just visit http://localhost:3000 to chat with the LangGraph pipeline. This command is only needed if you want the UI without the backend services.
-
-If `GITHUB_MCP_DEFAULT_DIR` is missing, `npm run dev`/`npm run dev:web` will stop with an error instead of silently using the current directory.
 
 ## Running the Agent
 
@@ -63,7 +62,7 @@ For iterative development, use `npm run dev`. It reclaims ports 9000/8080, launc
 ## Environment Variables
 
 - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION`, `AZURE_OPENAI_MODEL`, `AZURE_OPENAI_MAX_TOKENS`: Provide your Azure credentials.
-- `GITHUB_MCP_DEFAULT_DIR` (preferred) / `MCP_DEFAULT_DIR`: Root path the MCP server should service. This repo’s scripts resolve the target root from these vars and pass it to both `mcp-server` and the agent so all tool calls stay focused on that repository.
+Repository path is configured via **Configuration > Repository Settings** (syncs to `config/config.json`). It is no longer read from environment variables.
 
 ## MCP Tooling
 

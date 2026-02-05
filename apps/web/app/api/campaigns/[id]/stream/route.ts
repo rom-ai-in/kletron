@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { chainExecutor } from "@numezis/server/services/chainExecutor";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
 /**
  * GET /api/campaigns/[id]/stream
@@ -20,8 +21,14 @@ export async function GET(
 
     const chainId = params.id;
 
+    const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+    if (!workspace || !workspace._id) {
+        return new Response("Workspace not configured", { status: 400 });
+    }
+    const workspaceId = workspace._id.toString();
+
     // Verify chain exists
-    const chain = await chainExecutor.getChain(chainId);
+    const chain = await chainExecutor.getChain(chainId, workspaceId);
     if (!chain) {
         return new Response("Chain not found", { status: 404 });
     }
@@ -38,35 +45,38 @@ export async function GET(
             const pollInterval = setInterval(() => {
                 void (async () => {
                     try {
-                        const currentChain = await chainExecutor.getChain(chainId);
-
+                        const currentChain = await chainExecutor.getChain(chainId, workspaceId);
                         if (!currentChain) {
                             clearInterval(pollInterval);
                             controller.close();
                             return;
                         }
 
+                        const latestRun = await chainExecutor.getLatestRun(chainId, workspaceId);
+                        const status = latestRun?.status || currentChain.status;
+                        const currentStageIndex =
+                            latestRun?.currentStageIndex ?? currentChain.currentStageIndex;
+                        const findingsCount =
+                            latestRun?.aggregatedFindings?.length ?? currentChain.aggregatedFindings.length;
+
                         // Send progress update
                         const update = {
                             type: "progress",
                             chainId,
-                            status: currentChain.status,
-                            currentStageIndex: currentChain.currentStageIndex,
-                            findingsCount: currentChain.aggregatedFindings.length,
+                            status,
+                            currentStageIndex,
+                            findingsCount,
                         };
 
                         const event = `data: ${JSON.stringify(update)}\n\n`;
                         controller.enqueue(encoder.encode(event));
 
                         // Close stream if chain completed or failed
-                        if (
-                            currentChain.status === "COMPLETED" ||
-                            currentChain.status === "FAILED"
-                        ) {
+                        if (status === "COMPLETED" || status === "FAILED") {
                             const finalEvent = `data: ${JSON.stringify({
                                 type: "chain_complete",
                                 chainId,
-                                status: currentChain.status,
+                                status,
                             })}\n\n`;
                             controller.enqueue(encoder.encode(finalEvent));
 

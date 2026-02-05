@@ -4,6 +4,7 @@ import { z } from "zod";
 import { chainExecutor } from "@numezis/server/services/chainExecutor";
 import { ChainConfigBuilder } from "@numezis/shared/chainConfigBuilder";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
 /**
  * Zod schema for creating a chain
@@ -18,6 +19,7 @@ const CreateChainSchema = z.object({
                 z.object({
                     id: z.string().min(1),
                     name: z.string().min(1),
+                    prompt: z.string().trim().min(1),
                     graphId: z.enum(["audit", "simple_react"]),
                     llmProvider: z.enum(["azure", "lmstudio"]),
                     llmModel: z.string().optional(),
@@ -53,6 +55,11 @@ export async function GET(req: NextRequest) {
     }
 
     try {
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        if (!workspace || !workspace._id) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
+
         const searchParams = req.nextUrl.searchParams;
         const status = searchParams.get("status");
         const search = searchParams.get("search");
@@ -62,6 +69,7 @@ export async function GET(req: NextRequest) {
             status: status as any,
             search: search || undefined,
             scheduledOnly,
+            workspaceId: workspace._id.toString(),
         });
 
         return NextResponse.json({ chains }, { status: 200 });
@@ -86,6 +94,11 @@ export async function POST(req: NextRequest) {
 
     try {
         const body = await req.json();
+
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, body);
+        if (!workspace || !workspace._id) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
 
         // Validate input
         const validation = CreateChainSchema.safeParse(body);
@@ -121,7 +134,10 @@ export async function POST(req: NextRequest) {
         }
 
         // Create chain
-        const chainId = await chainExecutor.createChain(chainConfig as any);
+        const chainId = await chainExecutor.createChain({
+            ...(chainConfig as any),
+            workspaceId: workspace._id,
+        });
 
         return NextResponse.json({ chainId }, { status: 201 });
     } catch (error) {

@@ -135,7 +135,7 @@ export class TokenUsageService {
     /**
      * Query aggregated token usage for a specific run from the database.
      */
-    async getRunUsage(runId: string): Promise<TokenUsageSummary> {
+    async getRunUsage(runId: string, workspaceId?: string): Promise<TokenUsageSummary> {
         if (!ObjectId.isValid(runId)) {
             return createEmptyTokenUsageSummary();
         }
@@ -145,9 +145,13 @@ export class TokenUsageService {
 
         try {
             const db = await getDb();
+            const query: Record<string, unknown> = { runId: new ObjectId(runId) };
+            if (workspaceId && ObjectId.isValid(workspaceId)) {
+                query.workspaceId = new ObjectId(workspaceId);
+            }
             const logs = await db
                 .collection(COLLECTION_NAME)
-                .find({ runId: new ObjectId(runId) })
+                .find(query)
                 .toArray();
 
             const summary = createEmptyTokenUsageSummary();
@@ -167,7 +171,7 @@ export class TokenUsageService {
     /**
      * Query aggregated token usage for a campaign/chain from the database.
      */
-    async getCampaignUsage(chainId: string): Promise<TokenUsageSummary> {
+    async getCampaignUsage(chainId: string, workspaceId?: string): Promise<TokenUsageSummary> {
         if (!ObjectId.isValid(chainId)) {
             return createEmptyTokenUsageSummary();
         }
@@ -177,9 +181,13 @@ export class TokenUsageService {
 
         try {
             const db = await getDb();
+            const query: Record<string, unknown> = { chainId: new ObjectId(chainId) };
+            if (workspaceId && ObjectId.isValid(workspaceId)) {
+                query.workspaceId = new ObjectId(workspaceId);
+            }
             const logs = await db
                 .collection(COLLECTION_NAME)
-                .find({ chainId: new ObjectId(chainId) })
+                .find(query)
                 .toArray();
 
             const summary = createEmptyTokenUsageSummary();
@@ -222,6 +230,10 @@ export class TokenUsageService {
 
         if (filter.chainId && ObjectId.isValid(filter.chainId)) {
             query.chainId = new ObjectId(filter.chainId);
+        }
+
+        if (filter.workspaceId && ObjectId.isValid(filter.workspaceId)) {
+            query.workspaceId = new ObjectId(filter.workspaceId);
         }
 
         if (filter.provider) {
@@ -273,6 +285,10 @@ export class TokenUsageService {
 
         if (filter.runId && ObjectId.isValid(filter.runId)) {
             query.runId = new ObjectId(filter.runId);
+        }
+
+        if (filter.workspaceId && ObjectId.isValid(filter.workspaceId)) {
+            query.workspaceId = new ObjectId(filter.workspaceId);
         }
 
         const logs = await db

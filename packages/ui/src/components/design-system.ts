@@ -90,7 +90,26 @@ export { ContextMenu } from './ui/ContextMenu';
 export type { ContextMenuEntry } from './ui/ContextMenu';
 
 // =============================================================================
-// IDE COMPONENTS (VS Code style)
+// WORKSPACE COMPONENTS
+// =============================================================================
+
+export { ChatInput } from './ui/ChatInput';
+export type { ChatInputProps } from './ui/ChatInput';
+
+export { ThreadFeed } from './ui/ThreadFeed';
+export type { ThreadFeedProps, ThreadItem, ThreadStatus } from './ui/ThreadFeed';
+
+export { ToolUsePanel } from './ui/ToolUsePanel';
+export type { ToolUsePanelProps, ToolUseItem, ToolUseStatus } from './ui/ToolUsePanel';
+
+export { SettingsPanel } from './ui/SettingsPanel';
+export type { SettingsPanelProps, SettingsItem } from './ui/SettingsPanel';
+
+export { WorkspaceLayout } from './ui/WorkspaceLayout';
+export type { WorkspaceLayoutProps } from './ui/WorkspaceLayout';
+
+// =============================================================================
+// TOOLING COMPONENTS (Editor-style)
 // =============================================================================
 
 export { CommandPalette, CommandIcons } from './ui/CommandPalette';

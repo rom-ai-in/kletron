@@ -20,11 +20,6 @@ import {
   formatTokenCount,
   type TokenUsageSummary,
 } from "@numezis/ui/components/Agent/metrics";
-import {
-  formatAuditContextSummary,
-  normalizeAuditContext,
-  type AuditContext,
-} from "@numezis/shared/auditContext";
 import { AzureConfigForm, LMStudioConfigForm } from "@numezis/ui/components/LlmConfigForms";
 import { Loader2 } from "lucide-react";
 import { useLlmHealth } from "@numezis/ui/hooks/useLlmHealth";
@@ -56,31 +51,6 @@ const eventBadgeLabel: Record<AgentEventKind, string> = {
   tool: "Tool",
 };
 
-const startupPhaseOptions = [
-  "Discovery / Prototype",
-  "MVP build",
-  "MVP launch",
-  "Early traction",
-  "Scale-up",
-];
-
-const mvpLaunchPreset: AuditContext = {
-  startupPhase: "MVP launch",
-  mission: "Launch a viable product as soon as possible.",
-  primaryGoal: "Ship core user flows quickly with minimal blockers.",
-  keyObjectives: [
-    "Unblock critical user journeys",
-    "Stabilize build/deploy and core APIs",
-    "Reduce reliability bugs that block launch",
-  ],
-  nonGoals: [
-    "Scalability optimizations beyond launch needs",
-    "Large refactors or architecture rewrites",
-    "Performance tuning without user-visible impact",
-  ],
-  timeHorizon: "Next 4-6 weeks",
-  riskTolerance: "medium",
-};
 const SESSION_STORAGE_KEY = "deep-agent-active-run";
 
 type StreamChunk =
@@ -126,12 +96,6 @@ const formatJsonString = (value?: string) => {
     return value;
   }
 };
-
-const parseMultilineList = (value: string) =>
-  value
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^\s*[-*]\s*/, "").trim())
-    .filter(Boolean);
 
 import { Modal } from "@numezis/ui/components/design-system";
 import ReactMarkdown from "react-markdown";
@@ -381,10 +345,6 @@ type HeaderControlsProps = {
   lmStudioModel: string;
   onLmStudioModelChange: (value: string) => void;
   llmError: string | null;
-  auditContextEnabled: boolean;
-  onAuditContextEnabledChange: (enabled: boolean) => void;
-  auditContextSummary: string | null;
-  onConfigureAuditContext: () => void;
   isGraphInfoOpen: boolean;
   onSetGraphInfoOpen: (open: boolean) => void;
   isLlmInfoOpen: boolean;
@@ -411,10 +371,6 @@ function HeaderControls({
   lmStudioModel,
   onLmStudioModelChange,
   llmError,
-  auditContextEnabled,
-  onAuditContextEnabledChange,
-  auditContextSummary,
-  onConfigureAuditContext,
   isGraphInfoOpen,
   onSetGraphInfoOpen,
   isLlmInfoOpen,
@@ -457,8 +413,10 @@ function HeaderControls({
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Connection refused");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.success === false) {
+        throw new Error(data.error || "Connection refused");
+      }
 
       setTestResult({ success: true, message: `Success! Latency: ${data.latency}ms`, latency: data.latency });
     } catch (err) {
@@ -1271,9 +1229,6 @@ export default function HomePage() {
   const [outputs, setOutputs] = useState<AgentWorkflowResult["outputs"] | null>(null);
   const [loading, setLoading] = useState(false);
   const [messageInput, setMessageInput] = useState("");
-  const [auditContext, setAuditContext] = useState<AuditContext>({});
-  const [auditContextEnabled, setAuditContextEnabled] = useState(true);
-  const [isAuditContextDialogOpen, setIsAuditContextDialogOpen] = useState(false);
   const [llmInfo, setLlmInfo] = useState<LlmEnvInfo | null>(null);
   const [modelProvider, setModelProvider] = useState<LlmProviderType>("azure");
   const [enabledProviders, setEnabledProviders] = useState<LlmProviderType[]>(["azure", "openai", "claude", "gemini", "lmstudio", "ollama"]);
@@ -1286,7 +1241,7 @@ export default function HomePage() {
   const [selectedTool, setSelectedTool] = useState<McpToolMeta | null>(null);
   const [isToolDialogOpen, setIsToolDialogOpen] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
-  const [hasAuditStarted, setHasAuditStarted] = useState(false);
+  const [hasRunStarted, setHasRunStarted] = useState(false);
   const [isGraphInfoOpen, setIsGraphInfoOpen] = useState(false);
   const [isLlmInfoOpen, setIsLlmInfoOpen] = useState(false);
   const [detailGraph, setDetailGraph] = useState<GraphOption | null>(null);
@@ -1362,7 +1317,7 @@ export default function HomePage() {
           setSelectedGraphKey(`agent:${session.graphId}`);
         }
 
-        setHasAuditStarted(true);
+        setHasRunStarted(true);
 
         // If run is still running, start polling
         if (run.status === "RUNNING") {
@@ -1550,25 +1505,6 @@ export default function HomePage() {
     void loadLlmPreferences();
   }, []);
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem("numezis-audit-context");
-    if (!stored) return;
-    try {
-      const parsed = JSON.parse(stored) as {
-        enabled?: boolean;
-        context?: AuditContext;
-      };
-      if (typeof parsed.enabled === "boolean") {
-        setAuditContextEnabled(parsed.enabled);
-      }
-      if (parsed.context && typeof parsed.context === "object") {
-        setAuditContext(parsed.context);
-      }
-    } catch {
-      // Ignore malformed cache entries.
-    }
-  }, []);
-
   const { status: llmStatus } = useLlmHealth(modelProvider);
 
   // Fetch enabled providers from API
@@ -1626,14 +1562,6 @@ export default function HomePage() {
     }).catch(() => { /* Silently fail, localStorage is fallback */ });
   }, [selectedGraphKey, graphPrefsLoaded]);
 
-  useEffect(() => {
-    const payload = {
-      enabled: auditContextEnabled,
-      context: auditContext,
-    };
-    window.localStorage.setItem("numezis-audit-context", JSON.stringify(payload));
-  }, [auditContext, auditContextEnabled]);
-
   const handleProviderChange = useCallback(async (provider: LlmProviderType) => {
     setModelProvider(provider);
 
@@ -1672,11 +1600,6 @@ export default function HomePage() {
       setTimeout(() => setCopiedPath(null), 1500);
     });
   }, []);
-
-  const auditContextSummary = useMemo(
-    () => formatAuditContextSummary(auditContext),
-    [auditContext]
-  );
 
   const targetPathEntry = useMemo(() => {
     if (targetDir) {
@@ -1871,7 +1794,7 @@ export default function HomePage() {
 
     // Agent-graph selection: stream progress directly in Workbench (no redirect).
     if (selectedAgentGraphId) {
-      setHasAuditStarted(true);
+      setHasRunStarted(true);
       const userEvent: AgentEvent = {
         id: `user-${Date.now()}`,
         phaseId: "user",
@@ -1928,10 +1851,7 @@ export default function HomePage() {
       return;
     }
 
-    setHasAuditStarted(true);
-    const normalizedAuditContext = auditContextEnabled
-      ? normalizeAuditContext(auditContext)
-      : null;
+    setHasRunStarted(true);
     const userEvent: AgentEvent = {
       id: `user-${Date.now()}`,
       phaseId: "user",
@@ -1959,7 +1879,6 @@ export default function HomePage() {
           graph: selectedGraph.id, // Use the fallback graph ID
           provider: modelProvider,
           model: modelProvider === "lmstudio" ? lmStudioModel.trim() : undefined,
-          auditContext: normalizedAuditContext ?? undefined,
         }),
       });
       if (!response.ok) {
@@ -2135,7 +2054,7 @@ export default function HomePage() {
     thoughtLog: [],
   }));
 
-  const activeTimeline = hasAuditStarted
+  const activeTimeline = hasRunStarted
     ? timeline.length
       ? timeline
       : placeholderTimeline
@@ -2176,10 +2095,6 @@ export default function HomePage() {
           lmStudioModel={lmStudioModel}
           onLmStudioModelChange={setLmStudioModel}
           llmError={llmError}
-          auditContextEnabled={auditContextEnabled}
-          onAuditContextEnabledChange={setAuditContextEnabled}
-          auditContextSummary={auditContextSummary}
-          onConfigureAuditContext={() => setIsAuditContextDialogOpen(true)}
           isGraphInfoOpen={isGraphInfoOpen}
           onSetGraphInfoOpen={setIsGraphInfoOpen}
           isLlmInfoOpen={isLlmInfoOpen}
@@ -2433,177 +2348,6 @@ export default function HomePage() {
             </section>
           </div>
         )}
-      </Modal>
-
-      <Modal
-        open={isAuditContextDialogOpen}
-        onClose={() => setIsAuditContextDialogOpen(false)}
-        title="Audit context"
-        subtitle="Focus and goals"
-      >
-        <div className="space-y-4 text-sm text-text-secondary">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
-            <button
-              type="button"
-              className="rounded-md border border-border-subtle bg-bg-surface px-3 py-1 text-[10px] font-medium text-text-primary transition hover:bg-state-hover"
-              onClick={() => setAuditContext(mvpLaunchPreset)}
-            >
-              Use MVP launch preset
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-border-subtle bg-bg-surface px-3 py-1 text-[10px] font-medium text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-              onClick={() => setAuditContext({})}
-            >
-              Clear
-            </button>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <label className="text-[11px] text-text-muted">Startup phase</label>
-              <select
-                className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
-                value={auditContext.startupPhase ?? ""}
-                onChange={(event) =>
-                  setAuditContext((prev) => ({
-                    ...prev,
-                    startupPhase: event.target.value || undefined,
-                  }))
-                }
-              >
-                <option value="">Select phase</option>
-                {startupPhaseOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] text-text-muted">Time horizon</label>
-              <input
-                type="text"
-                className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
-                placeholder="e.g. Next 4-6 weeks"
-                value={auditContext.timeHorizon ?? ""}
-                onChange={(event) =>
-                  setAuditContext((prev) => ({
-                    ...prev,
-                    timeHorizon: event.target.value || undefined,
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-1 sm:col-span-2">
-              <label className="text-[11px] text-text-muted">Mission</label>
-              <input
-                type="text"
-                className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
-                placeholder="Describe the mission succinctly"
-                value={auditContext.mission ?? ""}
-                onChange={(event) =>
-                  setAuditContext((prev) => ({
-                    ...prev,
-                    mission: event.target.value || undefined,
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-1 sm:col-span-2">
-              <label className="text-[11px] text-text-muted">Primary goal</label>
-              <input
-                type="text"
-                className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
-                placeholder="The main objective this audit should optimize for"
-                value={auditContext.primaryGoal ?? ""}
-                onChange={(event) =>
-                  setAuditContext((prev) => ({
-                    ...prev,
-                    primaryGoal: event.target.value || undefined,
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] text-text-muted">Risk tolerance</label>
-              <select
-                className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
-                value={auditContext.riskTolerance ?? ""}
-                onChange={(event) =>
-                  setAuditContext((prev) => ({
-                    ...prev,
-                    riskTolerance: (event.target.value || undefined) as AuditContext["riskTolerance"],
-                  }))
-                }
-              >
-                <option value="">Select tolerance</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] text-text-muted">Target users</label>
-              <input
-                type="text"
-                className="w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
-                placeholder="e.g. Beta customers, internal team"
-                value={auditContext.targetUsers ?? ""}
-                onChange={(event) =>
-                  setAuditContext((prev) => ({
-                    ...prev,
-                    targetUsers: event.target.value || undefined,
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-1 sm:col-span-2">
-              <label className="text-[11px] text-text-muted">Key objectives (one per line)</label>
-              <textarea
-                className="min-h-[80px] w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
-                placeholder="List the objectives this audit must prioritize"
-                value={(auditContext.keyObjectives ?? []).join("\n")}
-                onChange={(event) =>
-                  setAuditContext((prev) => ({
-                    ...prev,
-                    keyObjectives: parseMultilineList(event.target.value),
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-1 sm:col-span-2">
-              <label className="text-[11px] text-text-muted">De-prioritize (one per line)</label>
-              <textarea
-                className="min-h-[70px] w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
-                placeholder="Out-of-scope or later items"
-                value={(auditContext.nonGoals ?? []).join("\n")}
-                onChange={(event) =>
-                  setAuditContext((prev) => ({
-                    ...prev,
-                    nonGoals: parseMultilineList(event.target.value),
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-1 sm:col-span-2">
-              <label className="text-[11px] text-text-muted">Constraints (one per line)</label>
-              <textarea
-                className="min-h-[60px] w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary outline-none transition focus:border-border-strong"
-                placeholder="Hard constraints or invariants"
-                value={(auditContext.constraints ?? []).join("\n")}
-                onChange={(event) =>
-                  setAuditContext((prev) => ({
-                    ...prev,
-                    constraints: parseMultilineList(event.target.value),
-                  }))
-                }
-              />
-            </div>
-          </div>
-          <p className="text-[11px] text-text-muted">
-            This context is appended to every audit phase input and logged in the activity stream.
-          </p>
-        </div>
       </Modal>
 
       <Modal

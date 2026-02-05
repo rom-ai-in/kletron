@@ -1,4 +1,6 @@
 import { McpClient } from "@numezis/mcp-client/client";
+import { getConfigSafe } from "@numezis/server/config";
+import { getWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 import path from "node:path";
 import fs from "node:fs";
 import { execFile } from "node:child_process";
@@ -7,35 +9,13 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 async function getWorkingFolderFallback(): Promise<string | null> {
-    const envPath =
-        process.env.WORKING_FOLDER ||
-        process.env.WORKSPACE_PATH ||
-        process.env.MCP_DEFAULT_DIR;
-    if (envPath) {
-        const resolved = path.resolve(envPath);
-        if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
-            return resolved;
-        }
-    }
-
-    try {
-        const configDir = path.resolve(process.cwd(), "config");
-        const configJsonPath = path.join(configDir, "config.json");
-        if (!fs.existsSync(configJsonPath)) return null;
-        const raw = fs.readFileSync(configJsonPath, "utf-8");
-        const data = JSON.parse(raw) as { workingFolder?: string; workspaceRoots?: string[] };
-        const candidate = data.workingFolder?.trim()
-            ? data.workingFolder
-            : Array.isArray(data.workspaceRoots) && data.workspaceRoots.length > 0
-                ? data.workspaceRoots[0]
-                : "";
-        if (!candidate) return null;
-        const resolved = path.resolve(candidate);
-        if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
-            return resolved;
-        }
-    } catch {
-        // ignore
+    const workspaceContext = getWorkspaceContext();
+    const cfg = await getConfigSafe();
+    const candidate = (workspaceContext?.rootPath ?? cfg?.workingFolder)?.trim();
+    if (!candidate) return null;
+    const resolved = path.resolve(candidate);
+    if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+        return resolved;
     }
     return null;
 }

@@ -27,7 +27,7 @@ export const mcpToolMetadata: McpToolMeta[] = [
     label: "Read file range",
     description: "Read a specific line range from a file for focused inspection.",
     file: "apps/mcp-server/tools/readFileRange.js",
-    categories: ["fs", "audit"],
+    categories: ["fs"],
   },
   {
     name: "search_code",
@@ -76,7 +76,7 @@ export const mcpToolMetadata: McpToolMeta[] = [
     label: "Git diff",
     description: "Shows diffs between refs or working tree for diagnostic comparisons.",
     file: "apps/mcp-server/tools/gitDiff.js",
-    categories: ["vcs", "audit"],
+    categories: ["vcs"],
   },
   {
     name: "git_grep",

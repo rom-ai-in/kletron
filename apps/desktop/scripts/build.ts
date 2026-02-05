@@ -7,27 +7,23 @@ const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
 const outdir = path.resolve(root, "dist-electron");
 
-const buildOptions = {
+await esbuild.build({
   bundle: true,
   platform: "node",
-  format: "esm",
+  format: "cjs",
   sourcemap: true,
   target: "node18",
   tsconfig: path.resolve(root, "tsconfig.json"),
-  external: ["electron"],
-  outdir
-} as const;
-
-await esbuild.build({
-  ...buildOptions,
-  entryPoints: [path.resolve(root, "electron", "main.ts")],
-  outfile: path.resolve(outdir, "main.js")
-});
-
-await esbuild.build({
-  ...buildOptions,
-  entryPoints: [path.resolve(root, "electron", "preload.ts")],
-  outfile: path.resolve(outdir, "preload.js")
+  external: ["electron", "electron-updater"],
+  alias: {
+    "@numezis/bridge": path.resolve(root, "..", "..", "packages", "bridge", "src", "index.ts"),
+  },
+  outExtension: { ".js": ".cjs" },
+  outdir,
+  entryPoints: [
+    path.resolve(root, "electron", "main.ts"),
+    path.resolve(root, "electron", "preload.ts")
+  ]
 });
 
 console.log("[desktop] Electron build complete.");

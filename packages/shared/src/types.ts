@@ -1,6 +1,33 @@
 import { BaseMessage } from "@langchain/core/messages";
 import type { LlmProviderType } from "./schemas/llmConfig.schema";
-import type { Finding, Claim, Task, TargetFile, AuditContext } from "./chainTypes";
+import type { DocumentContext } from "./documentContext";
+
+export type TargetFile = {
+    path: string;
+    reason?: string;
+    owner?: string;
+};
+
+export type Claim = {
+    claim: string;
+    evidence?: string;
+    source?: string;
+    confidence?: number;
+};
+
+export type Finding = {
+    title: string;
+    summary: string;
+    severity?: "low" | "medium" | "high" | "critical";
+    evidence?: string;
+};
+
+export type Task = {
+    title: string;
+    description?: string;
+    priority?: "low" | "medium" | "high";
+    status?: "todo" | "in_progress" | "done";
+};
 
 export type TimelineStatus = "pending" | "running" | "success" | "error";
 
@@ -54,7 +81,7 @@ export type AgentWorkflowResult = {
     timeline: TimelineEvent[];
     conclusion: string;
     outputs: {
-        context: AuditContext;
+        context: DocumentContext;
         target_files: TargetFile[];
         raw_claims: Claim[];
         verified_findings: Finding[];
@@ -77,7 +104,6 @@ export type AgentWorkflowUpdate = {
 export type AgentWorkflowOptions = {
     onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
     llmSelection?: { provider: LlmProviderType; model?: string };
-    auditContext?: AuditContext | null;
     workspaceId?: string;
 };
 

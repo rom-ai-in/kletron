@@ -147,7 +147,7 @@ export default function ChangesPage() {
                 </div>
             </div>
 
-            {/* Filter Area - Aligned with i18n/page.tsx Grid */}
+            {/* Filter Area */}
             <div className="shrink-0 border-b border-border-subtle bg-bg-surface px-6 py-4">
                 <div className="grid gap-3 md:grid-cols-[1.5fr_1fr_140px_160px_auto]">
                     <div className="relative">

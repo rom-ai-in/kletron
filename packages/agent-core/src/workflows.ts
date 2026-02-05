@@ -11,7 +11,7 @@ export async function runWorkflow(
 ): Promise<AgentWorkflowResult> {
   // If no graphId is provided, try to find a default "Diamond flow" one in the DB
   let graphRecord;
-  if (graphId && graphId !== "audit" && graphId !== "simple_react") {
+  if (graphId && graphId !== "simple_react") {
     graphRecord = await agentGraphService.getGraph(graphId);
   }
 

@@ -9,6 +9,113 @@ export class ChainConfigBuilder {
      */
     static readonly PRESETS: Record<string, Partial<AuditChain>> = {
         /**
+         * Default full-stack logic audit
+         * Duration: ~6 hours
+         */
+        FULL_STACK_LOGIC_AUDIT: {
+            name: "Full Stack Logic Audit (Default)",
+            description: "End-to-end audit of API, backend logic, frontend, design system, security, performance, and delivery pipelines.",
+            stages: [
+                {
+                    id: "fs-api",
+                    name: "API Contracts & Validation",
+                    prompt:
+                        "Audit the API layer for contract correctness. Check request/response validation, auth guards, error codes, pagination, idempotency, and versioning. Flag mismatches between handlers, schemas, and clients. Output findings with file paths/line numbers and severity (BLOQUANT/WARNING/INFO) plus fixes.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fs-backend-logic",
+                    name: "Backend Domain Logic",
+                    prompt:
+                        "Audit core business/domain logic. Look for invalid state transitions, missing invariants, unsafe side effects, race conditions, and inconsistent workflows. Identify functions/services that violate domain rules. Provide concrete fixes with file/line references.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fs-data",
+                    name: "Data Layer & Migrations",
+                    prompt:
+                        "Audit the data layer: schemas/models, migrations, queries, indexes, and transactions. Flag N+1 patterns, missing indexes, unsafe updates, migration risks, and data consistency gaps. Provide file/line evidence and remediation steps.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fs-security",
+                    name: "Security & Access Control",
+                    prompt:
+                        "Audit authentication/authorization, secret handling, input sanitization, and common vulnerabilities (injection, SSRF, path traversal, deserialization). Verify least-privilege and data exposure. Provide high-confidence security findings with fixes.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fs-observability",
+                    name: "Observability & Error Handling",
+                    prompt:
+                        "Audit logging, tracing, metrics, and error handling. Find swallowed errors, missing alerts, or low-signal logs. Ensure user-facing errors are actionable and internal errors are captured. Provide fixes with file/line references.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fs-performance",
+                    name: "Performance & Scalability",
+                    prompt:
+                        "Audit performance hotspots: expensive loops, heavy queries, lack of caching, unbounded concurrency, and slow I/O. Identify bottlenecks and scalability risks with concrete fixes and configuration recommendations.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fs-frontend-arch",
+                    name: "Frontend Architecture",
+                    prompt:
+                        "Audit frontend architecture: routing, component boundaries, SSR/CSR strategy, data loading, error boundaries, and code-splitting. Flag fragile patterns and opportunities to simplify or harden flows. Provide actionable fixes.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fs-ux",
+                    name: "UX/UI & Accessibility",
+                    prompt:
+                        "Audit UI/UX and accessibility: focus management, keyboard navigation, ARIA roles, contrast, empty/loading/error states. Identify inconsistent UX flows and missing user feedback. Provide improvements with file references.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fs-design-system",
+                    name: "Design System Consistency",
+                    prompt:
+                        "Audit design system usage across the app. Find duplicated styles, token misuse, inconsistent component variants, and missing design primitives. Recommend consolidations and fixes with file/line references.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fs-state",
+                    name: "State Management & Data Fetching",
+                    prompt:
+                        "Audit state management and data fetching: cache invalidation, stale data, over-fetching, and inconsistent local state. Check for misuse of global state or effects. Provide precise fixes with file references.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fs-testing",
+                    name: "Testing Strategy & Coverage",
+                    prompt:
+                        "Audit test coverage and quality: missing unit/integration/E2E tests, flaky tests, brittle mocks, and untested critical paths. Provide a prioritized list of test gaps with suggested test cases.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "fs-infra",
+                    name: "Infrastructure & CI/CD",
+                    prompt:
+                        "Audit build, deployment, CI/CD, and runtime configuration. Look for unsafe defaults, missing environment validation, brittle pipelines, or drift between environments. Provide fixes and hardening recommendations.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+            ],
+        },
+
+        /**
          * Full monorepo audit - All 16 audit suites
          * Duration: ~8 hours
          */
@@ -381,9 +488,23 @@ export class ChainConfigBuilder {
             if (!preset) {
                 throw new Error(`Unknown preset: ${input}`);
             }
-            return preset;
+            return this.ensurePresetPrompts(preset);
         }
         return input;
+    }
+
+    private static ensurePresetPrompts(preset: Partial<AuditChain>): Partial<AuditChain> {
+        if (!preset.stages) return preset;
+
+        const stages = preset.stages.map((stage) => ({
+            ...stage,
+            prompt: stage.prompt ?? stage.name ?? "",
+        }));
+
+        return {
+            ...preset,
+            stages,
+        };
     }
 
     /**
@@ -401,6 +522,10 @@ export class ChainConfigBuilder {
 
         if (!stage.name || stage.name.trim() === "") {
             errors.push("Stage name is required");
+        }
+
+        if (!stage.prompt || stage.prompt.trim() === "") {
+            errors.push("Stage prompt is required");
         }
 
         const validGraphIds: GraphId[] = ["audit", "simple_react"];
@@ -510,6 +635,7 @@ export class ChainConfigBuilder {
         if (!preset) return null;
 
         const durations: Record<string, string> = {
+            FULL_STACK_LOGIC_AUDIT: "~6 hours",
             FULL_AUDIT: "~8 hours",
             SECURITY_DEEP_DIVE: "~3 hours",
             I18N_QUALITY_CAMPAIGN: "~2 hours",

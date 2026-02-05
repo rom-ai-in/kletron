@@ -26,8 +26,7 @@ function getWorkingFolderFromConfig() {
   } catch (e) {
     console.warn(`[MCP Config] Failed to read ${configFilePath}:`, e.message);
   }
-  // Fallback to MCP_DEFAULT_DIR env var if config.json not found
-  return process.env.MCP_DEFAULT_DIR || null;
+  return null;
 }
 
 function getWorkspaceRootsFromConfig() {

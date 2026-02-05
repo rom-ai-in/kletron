@@ -160,7 +160,7 @@ export default function GDPRPage() {
                             <li>Standard Contractual Clauses (SCCs) for any sub-processors</li>
                             <li>Technical and organizational security measures (TOMs)</li>
                             <li>Sub-processor list and notification procedures</li>
-                            <li>Audit rights</li>
+                            <li>Review rights</li>
                         </ul>
                         <p className="mt-3">
                             Contact <a href="mailto:legal@numezis.com" className="text-emerald-500 hover:underline">legal@numezis.com</a> to

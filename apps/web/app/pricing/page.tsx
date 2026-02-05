@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Apple } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@numezis/ui/context/AuthContext';
 import { useSubscription } from '@numezis/ui/hooks/useSubscription';
@@ -13,7 +14,7 @@ const tiers = [
         id: 'free',
         name: 'Starter',
         price: '0',
-        description: 'Perfect for trying out Numezis Code with your own API keys.',
+        description: 'Great for trying out Numezis Code with your own API keys.',
         highlight: false,
         cta: 'Start Free',
         ctaLink: '/auth/register',
@@ -83,7 +84,7 @@ const enterpriseTier = {
         'Custom SLA agreements',
         'Dedicated success manager',
         'Volume token discounts',
-        'Audit logs & compliance',
+        'Activity logs & compliance',
         'Custom model fine-tuning',
         'Swiss data residency 🇨🇭',
     ],
@@ -254,9 +255,12 @@ export default function PricingPage() {
                         <span className="text-text-secondary">Or bring your own keys.</span>
                     </h1>
 
-                    <p className="text-base text-text-muted mb-8 max-w-xl mx-auto leading-relaxed">
+                    <p className="text-base text-text-muted mb-4 max-w-xl mx-auto leading-relaxed">
                         Choose hosted AI models with simple token pricing, or use your existing API keys.
-                        Either way, you get the full power of Numezis Code.
+                        Either way, you get an early look at Numezis Code while the macOS experience matures.
+                    </p>
+                    <p className="text-xs text-amber-400 uppercase tracking-[0.2em] mb-8">
+                        Early access preview • Expect the usual quirks while we polish the desktop app.
                     </p>
 
                     {/* Billing Toggle */}
@@ -530,17 +534,18 @@ export default function PricingPage() {
                     <h2 className="text-2xl sm:text-3xl font-semibold text-text-primary mb-4">
                         Start coding with AI <span className="text-text-secondary">today</span>
                     </h2>
-                    <p className="text-sm text-text-muted mb-8">
+                    <p className="text-sm text-text-muted mb-4">
                         Free to start with your own API keys. No credit card required.
+                    </p>
+                    <p className="text-xs text-amber-400 uppercase tracking-[0.2em] mb-6">
+                        Early access release • Mac app preview builds keep improving.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
                         <Link
                             href={downloadUrl}
                             className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-5 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
                         >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
+                            <Apple className="w-4 h-4" />
                             Download Numezis Code — Free
                         </Link>
                         <Link

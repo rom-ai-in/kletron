@@ -3,9 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Button, Panel, Skeleton } from "@numezis/ui/components/design-system";
-import { StageDetailModal } from "@numezis/ui/components/StageDetailModal";
 
 type AgentGraphDto = {
     _id?: string;
@@ -49,12 +48,6 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
     const [run, setRun] = useState<AgentGraphRunDto | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
-    const [activeNode, setActiveNode] = useState<{
-        nodeId: string;
-        nodeLabel: string;
-        sessionId?: string;
-        status: string;
-    } | null>(null);
 
     useEffect(() => {
         void loadInitial();
@@ -178,21 +171,8 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
                                                 <span className="font-mono">{nodeId}</span>
                                             </div>
                                         </div>
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            disabled={!sessionId}
-                                            onClick={() =>
-                                                setActiveNode({
-                                                    nodeId,
-                                                    nodeLabel: nodeLabelById.get(nodeId) ?? nodeId,
-                                                    sessionId,
-                                                    status,
-                                                })
-                                            }
-                                        >
-                                            <FileText className="h-4 w-4" />
-                                            Logs
+                                        <Button size="sm" variant="secondary" disabled={!sessionId}>
+                                            Session
                                         </Button>
                                     </div>
                                 );
@@ -211,15 +191,6 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
                 </div>
             </div>
 
-            <StageDetailModal
-                isOpen={Boolean(activeNode)}
-                onClose={() => setActiveNode(null)}
-                stageId={activeNode?.nodeId ?? ""}
-                stageName={activeNode?.nodeLabel ?? ""}
-                sessionId={activeNode?.sessionId}
-                status={activeNode?.status ?? ""}
-            />
         </div>
     );
 }
-

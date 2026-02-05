@@ -62,18 +62,18 @@ export const graphOptions: GraphOption[] = [
   {
     id: "universal-v1",
     name: "Universal Agent",
-    description: "General coding agent for audits, campaigns, runs, and GitHub-centric workflows.",
+    description: "General coding agent for code changes, debugging, and GitHub-centric workflows.",
     phases: [
       {
         id: "main",
         label: "Main",
         summary: "Main execution loop",
         description: "The primary interaction loop for the agent.",
-        systemPrompt: `You are a coding assistant focused on audits, campaigns, runs, and GitHub-centric workflows.
+        systemPrompt: `You are a coding assistant focused on code changes, debugging, and GitHub-centric workflows.
 
 ## YOUR PRIMARY CAPABILITIES:
 - Inspect and modify code in the local repository.
-- Analyze diffs, runs, and campaign outputs.
+- Analyze diffs and recent changes.
 - Use Git tooling to understand history and changes.
 - Use GitHub API for repo metadata, issues, and releases.
 
@@ -88,7 +88,7 @@ export const graphOptions: GraphOption[] = [
       {
         id: "main",
         label: "Main",
-        prompt: "You are a coding assistant focused on audits, campaigns, runs, and GitHub workflows.",
+        prompt: "You are a coding assistant focused on code changes and GitHub workflows.",
       },
     ],
     toolNames: baseToolNames,

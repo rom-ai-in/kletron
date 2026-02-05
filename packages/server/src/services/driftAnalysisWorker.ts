@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
 import { getDb } from "@numezis/server/lib/db";
 import { resolveResolvedLlmInfo, type LlmSelection, getChatModel } from "@numezis/server/llm";
-import { ChainConfigBuilder } from "@numezis/shared/chainConfigBuilder";
+import { DEFAULT_DRIFT_STAGES } from "@numezis/shared/driftStages";
 import { McpClient } from "@numezis/mcp-client/client";
 import { extractJsonObject } from "@numezis/server/lib/jsonExtract";
 import { z } from "zod";
@@ -9,6 +9,8 @@ import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import type { ResolvedLlmInfo } from "@numezis/server/llm";
 import { getDiffForCommit } from "@numezis/server/services/gitLocalService";
+import { getWorkspaceByIdUnsafe } from "@numezis/server/services/workspaceService";
+import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 
 export type DriftJobStatus = "queued" | "running" | "success" | "error" | "cancelled";
 
@@ -37,6 +39,7 @@ export type DriftJobDoc = {
     // Configuration
     llmSelection?: { provider?: string; model?: string };
     resolvedLlm?: ResolvedLlmInfo;
+    workspaceId?: ObjectId;
 
     // Diff context (snapshot)
     diffSnapshot?: string;
@@ -75,10 +78,10 @@ const STAGE_TIMEOUT_MS = Number(process.env.DRIFT_STAGE_TIMEOUT_MS ?? 120_000);
 
 const DEFAULT_DRIFT_SYSTEM_PROMPT = `You are a Code Drift Analyzer.
 You will receive:
-- "Audit Suite": the audit stage name to evaluate.
+- "Stage": the check group name to evaluate.
 - "Git Diff": recent uncommitted changes.
 
-Determine if the diff violates or drifts from the audit suite expectations.
+Determine if the diff violates or drifts from the stage expectations.
 Respond with JSON only:
 {
   "driftDetected": boolean,
@@ -131,7 +134,7 @@ async function analyzeStage(
     systemPrompt: string,
     llmSelection?: Partial<LlmSelection>
 ): Promise<DriftResult> {
-    const userPrompt = `Audit Suite: ${stage.name}
+    const userPrompt = `Stage: ${stage.name}
 
 Git Diff:
 ${diff.slice(0, 50000)} ${diff.length > 50000 ? "\n...(truncated)..." : ""}`;
@@ -211,6 +214,27 @@ async function processJob(job: DriftJobDoc, lockId: string, opts: Required<Drift
     const db = await getDb();
     const jobs = db.collection<DriftJobDoc>(JOBS_COLLECTION);
 
+    if (!job.workspaceId) {
+        await appendLogLine(db, job._id, "Missing workspaceId on drift job.");
+        await jobs.updateOne(
+            { _id: job._id },
+            { $set: { status: "error", error: "Workspace not configured for drift job.", finishedAt: now() } }
+        );
+        return;
+    }
+
+    const workspace = await getWorkspaceByIdUnsafe(job.workspaceId.toString());
+    if (!workspace) {
+        await appendLogLine(db, job._id, `Workspace not found: ${job.workspaceId.toString()}`);
+        await jobs.updateOne(
+            { _id: job._id },
+            { $set: { status: "error", error: "Workspace not found for drift job.", finishedAt: now() } }
+        );
+        return;
+    }
+
+    await runWithWorkspaceContext(workspace, async () => {
+
     // Resolve LLM info if not set
     if (!job.resolvedLlm) {
         // Fix: Explicitly cast or construct Partial<LlmSelection> to satisfy type check
@@ -224,13 +248,7 @@ async function processJob(job: DriftJobDoc, lockId: string, opts: Required<Drift
         await appendLogLine(db, job._id, `Resolved LLM: ${resolved.provider}/${resolved.model}`);
     }
 
-    // Get Stages (Full Audit)
-    // We use the FULL_AUDIT preset as the "all prompts" list
-    const preset = ChainConfigBuilder.PRESETS.FULL_AUDIT;
-    if (!preset || !preset.stages) {
-        throw new Error("FULL_AUDIT preset not found or empty");
-    }
-    const stages = preset.stages;
+    const stages = DEFAULT_DRIFT_STAGES;
     const total = stages.length;
     await jobs.updateOne({ _id: job._id }, { $set: { totalStages: total } });
     const systemPrompt = job.systemPrompt?.trim() || DEFAULT_DRIFT_SYSTEM_PROMPT;
@@ -302,7 +320,7 @@ async function processJob(job: DriftJobDoc, lockId: string, opts: Required<Drift
             await jobs.updateOne({ _id: job._id }, { $set: { currentStageIndex: i } });
             await appendLogLine(db, job._id, `Analyzing stage ${i + 1}/${total}: ${stage.name}...`);
 
-            let result: DriftResult;
+            let result: DriftResult | null = null;
             try {
                 // Fix: Cast llmSelection to Partial<LlmSelection>
                 const selection: Partial<LlmSelection> | undefined = job.llmSelection ? {
@@ -352,6 +370,7 @@ async function processJob(job: DriftJobDoc, lockId: string, opts: Required<Drift
     } finally {
         clearInterval(hbInterval);
     }
+    });
 }
 
 export class DriftAnalysisWorker {

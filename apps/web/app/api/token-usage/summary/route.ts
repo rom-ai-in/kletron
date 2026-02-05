@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { tokenUsageService } from "@numezis/server/services/tokenUsageService";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
 /**
  * GET /api/token-usage/summary
@@ -26,12 +27,18 @@ export async function GET(req: NextRequest) {
             });
         }
 
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        if (!workspace || !workspace._id) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
+
         const { searchParams } = new URL(req.url);
         const filter = {
             from: searchParams.get("from") ? new Date(searchParams.get("from")!) : undefined,
             to: searchParams.get("to") ? new Date(searchParams.get("to")!) : undefined,
             runId: searchParams.get("runId") ?? undefined,
             chainId: searchParams.get("chainId") ?? undefined,
+            workspaceId: workspace._id.toString(),
             provider: searchParams.get("provider") as any ?? undefined,
             model: searchParams.get("model") ?? undefined,
         };

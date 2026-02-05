@@ -8,6 +8,9 @@ export type DocumentContext = {
     targetAudience?: string;
     qualityLevel?: "draft" | "standard" | "polished";
     constraints?: string[];
+    languages?: string[];
+    frameworks?: string[];
+    hotspots?: string[];
     // Legacy fields for backwards compatibility
     startupPhase?: string;
     targetUsers?: string;
@@ -16,6 +19,7 @@ export type DocumentContext = {
 
 // Legacy alias for backwards compatibility during transition
 export type AuditContext = DocumentContext;
+
 
 const cleanText = (value?: string) => {
     if (typeof value !== "string") return undefined;
@@ -59,6 +63,7 @@ export const normalizeDocumentContext = (
 // Legacy alias
 export const normalizeAuditContext = normalizeDocumentContext;
 
+
 const limitList = (values: string[], limit = 3) => {
     if (values.length <= limit) return values;
     return [...values.slice(0, limit), "…"];
@@ -92,6 +97,7 @@ export const formatDocumentContextSummary = (
 
 // Legacy alias
 export const formatAuditContextSummary = formatDocumentContextSummary;
+
 
 export const formatDocumentContextPrompt = (
     context?: DocumentContext | null

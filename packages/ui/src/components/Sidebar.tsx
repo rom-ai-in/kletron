@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
     Settings,
-    Layers,
     Share2,
     Folder,
     Terminal,
@@ -15,6 +14,8 @@ import {
     Database,
     Globe,
     Compass,
+    Home,
+    Layers,
     ChevronLeft,
     ChevronRight,
     UserCircle,
@@ -24,6 +25,11 @@ import { useAuth } from "../context/AuthContext";
 
 
 const navItems = [
+    {
+        label: "App Overview",
+        icon: Home,
+        href: "/app",
+    },
     {
         label: "Explore",
         icon: Compass,
@@ -35,11 +41,6 @@ const navItems = [
         href: "/app/deep-agent",
     },
     {
-        label: "Campaigns",
-        icon: Layers,
-        href: "/app/campaigns",
-    },
-    {
         label: "Code Comparator",
         icon: History,
         href: "/app/changes",
@@ -48,6 +49,11 @@ const navItems = [
         label: "Agent Graphs",
         icon: Share2,
         href: "/app/agent-graphs",
+    },
+    {
+        label: "Campaigns",
+        icon: Layers,
+        href: "/app/campaigns",
     },
     {
         label: "Vector Index",

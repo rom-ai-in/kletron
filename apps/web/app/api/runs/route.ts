@@ -2,9 +2,9 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { chainExecutor } from "@numezis/server/services/chainExecutor";
 import { getDb } from "@numezis/server/lib/db";
-import { AuditRun } from "@numezis/shared/chainTypes";
 import { ObjectId } from "mongodb";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
 /**
  * GET /api/runs
@@ -20,6 +20,12 @@ export async function GET(req: NextRequest) {
     }
 
     try {
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        const workspaceId = workspace?._id?.toString();
+        if (!workspaceId) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
+
         const db = await getDb();
         const searchParams = req.nextUrl.searchParams;
         const limit = parseInt(searchParams.get("limit") || "50");
@@ -33,7 +39,12 @@ export async function GET(req: NextRequest) {
             } catch {
                 return NextResponse.json({ error: "Invalid campaignId" }, { status: 400 });
             }
+            const chain = await chainExecutor.getChain(campaignId, workspaceId);
+            if (!chain) {
+                return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+            }
         }
+        runsQuery.workspaceId = new ObjectId(workspaceId);
         const runs = await db.collection("audit_runs")
             .find(runsQuery)
             .sort({ startedAt: -1 })
@@ -42,7 +53,7 @@ export async function GET(req: NextRequest) {
 
         // Optionally, we could join with campaign names here to make the UI simpler
         const enrichedRuns = await Promise.all(runs.map(async (run) => {
-            const chain = await chainExecutor.getChain(run.chainId.toString());
+            const chain = await chainExecutor.getChain(run.chainId.toString(), workspaceId);
             return {
                 ...run,
                 chainName: chain?.name || "Unknown Campaign"

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chainExecutor } from "@numezis/server/services/chainExecutor";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 
 /**
  * POST /api/campaigns/[id]/resume
@@ -21,7 +23,13 @@ export async function POST(
     try {
         const chainId = params.id;
 
-        const chain = await chainExecutor.getChain(chainId);
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        const workspaceId = workspace?._id?.toString();
+        if (!workspace || !workspaceId) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
+
+        const chain = await chainExecutor.getChain(chainId, workspaceId);
 
         if (!chain) {
             return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -35,8 +43,10 @@ export async function POST(
         }
 
         // Resume chain in background
-        chainExecutor.resumeChain(chainId).catch((error) => {
-            console.error(`[ChainResume] Chain ${chainId} failed:`, error);
+        runWithWorkspaceContext(workspace, () => {
+            chainExecutor.resumeChain(chainId, workspaceId).catch((error) => {
+                console.error(`[ChainResume] Chain ${chainId} failed:`, error);
+            });
         });
 
         return NextResponse.json({ status: "RUNNING" }, { status: 200 });

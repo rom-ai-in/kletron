@@ -7,7 +7,7 @@ import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 import { RepoAnalysisResult, RepoGraphEdge, RepoGraphNode } from "@numezis/shared/types";
 import { getChatModel } from "@numezis/server/llm";
-import { AuditContext } from "@numezis/shared/documentContext";
+import { DocumentContext } from "@numezis/shared/documentContext";
 
 // Max depth for directory scanning to prevent overload
 const MAX_SCAN_DEPTH = 3;

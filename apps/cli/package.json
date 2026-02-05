@@ -3,10 +3,11 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "@numezis/agent-core": "workspace:*",
-    "@numezis/server": "workspace:*"
+    "@numezis/agent-core": "file:../../packages/agent-core",
+    "@numezis/server": "file:../../packages/server"
   }
 }

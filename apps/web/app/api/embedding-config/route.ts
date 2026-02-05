@@ -3,10 +3,18 @@ import { updateDefaultEmbeddingProvider, getEmbeddingConfig, resetEmbeddingToEnv
 import { EMBEDDING_PROVIDERS, EmbeddingProviderType } from "@numezis/shared/schemas/embeddingConfig.schema";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 
+function logDuration(method: string, status: number, startTime: number) {
+    const duration = Date.now() - startTime;
+    console.info(`[api/embedding-config] ${method} ${status} ${duration}ms`);
+}
+
 export async function GET(request: NextRequest) {
+    const startTime = Date.now();
+    let status = 200;
     try {
         const auth = await requireAppRouteAuth(request);
         if (!auth) {
+            status = 401;
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -40,18 +48,24 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json(maskedConfig);
     } catch (error) {
+        status = 500;
         console.error("Failed to get embedding config:", error);
         return NextResponse.json(
             { error: "Failed to get embedding configuration" },
             { status: 500 }
         );
+    } finally {
+        logDuration("GET", status, startTime);
     }
 }
 
 export async function PATCH(request: NextRequest) {
+    const startTime = Date.now();
+    let status = 200;
     try {
         const auth = await requireAppRouteAuth(request);
         if (!auth) {
+            status = 401;
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -59,6 +73,7 @@ export async function PATCH(request: NextRequest) {
         const { provider } = body;
 
         if (!provider || !EMBEDDING_PROVIDERS.includes(provider as EmbeddingProviderType)) {
+            status = 400;
             return NextResponse.json(
                 { error: `Invalid provider. Must be one of: ${EMBEDDING_PROVIDERS.join(", ")}` },
                 { status: 400 }
@@ -68,28 +83,37 @@ export async function PATCH(request: NextRequest) {
         const config = await updateDefaultEmbeddingProvider(provider as EmbeddingProviderType);
         return NextResponse.json(config);
     } catch (error) {
+        status = 500;
         console.error("Failed to switch embedding provider:", error);
         return NextResponse.json(
             { error: error instanceof Error ? error.message : "Failed to switch embedding provider" },
             { status: 500 }
         );
+    } finally {
+        logDuration("PATCH", status, startTime);
     }
 }
 
 export async function DELETE(request: NextRequest) {
+    const startTime = Date.now();
+    let status = 200;
     try {
         const auth = await requireAppRouteAuth(request);
         if (!auth) {
+            status = 401;
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const config = await resetEmbeddingToEnvConfig();
         return NextResponse.json({ success: true, config });
     } catch (error) {
+        status = 500;
         console.error("Failed to reset embedding config:", error);
         return NextResponse.json(
             { error: "Failed to reset embedding configuration" },
             { status: 500 }
         );
+    } finally {
+        logDuration("DELETE", status, startTime);
     }
 }

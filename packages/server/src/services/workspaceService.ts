@@ -336,7 +336,9 @@ export async function syncConfigJson() {
       }
     }
 
-    const activeRoot = active?.rootPath ?? existingConfig.workingFolder;
+    const activeRoot =
+      active?.rootPath ??
+      (typeof existingConfig.workingFolder === "string" ? existingConfig.workingFolder : undefined);
     const workspaceRoots = workspaceList.map((ws) => ws.rootPath);
     const rootSet = new Set<string>(workspaceRoots);
     if (activeRoot) {

@@ -20,6 +20,8 @@ export interface AuditStageConfig {
     id: string;
     /** Human-readable name */
     name: string;
+    /** Custom user prompt for this stage */
+    prompt: string;
     /** Which graph to run */
     graphId: GraphId;
     /** LLM provider to use */
@@ -191,6 +193,8 @@ export interface Insight {
 export interface AuditChain {
     /** MongoDB ObjectId */
     _id?: ObjectId;
+    /** Workspace owning this campaign */
+    workspaceId?: ObjectId;
     /** Chain name */
     name: string;
     /** Optional description */
@@ -240,6 +244,8 @@ export interface AuditChain {
 export interface AuditRun {
     /** MongoDB ObjectId */
     _id?: ObjectId;
+    /** Workspace owning this run */
+    workspaceId?: ObjectId;
     /** Reference to the campaign setup */
     chainId: ObjectId;
     /** Execution status */
@@ -351,4 +357,6 @@ export interface ChainFilter {
     search?: string;
     /** Only scheduled chains */
     scheduledOnly?: boolean;
+    /** Limit to a workspace */
+    workspaceId?: string;
 }

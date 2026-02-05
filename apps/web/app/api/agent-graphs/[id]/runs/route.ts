@@ -7,6 +7,7 @@ import { agentGraphRunService } from "@numezis/server/services/agentGraphRunServ
 import { getGraphNodeOrder, buildInitialState } from "@numezis/server/services/agentGraphRuntime";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 
 const CreateRunSchema = z.object({
     mission: z.string().optional(),
@@ -87,7 +88,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         void (async () => {
             try {
                 const { agentGraphExecutor } = await import("@numezis/server/services/agentGraphExecutor");
-                await agentGraphExecutor.executeRun(runId);
+                await runWithWorkspaceContext(workspace, async () => {
+                    await agentGraphExecutor.executeRun(runId);
+                });
             } catch (err: any) {
                 console.error(`[AgentGraphRun] Background execution failed run=${runId}`, err);
                 try {

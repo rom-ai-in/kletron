@@ -2,7 +2,7 @@ import { Collection, ObjectId } from "mongodb";
 import fs from "node:fs";
 import path from "node:path";
 import { getDatabase } from "../lib/db";
-import {
+import type {
     LlmConfig,
     AzureOpenAIConfig,
     OpenAIConfig,
@@ -11,6 +11,10 @@ import {
     LMStudioConfig,
     OllamaConfig,
     LlmProviderType,
+} from "@numezis/shared/schemas/llmConfig.schema";
+import * as LlmSchema from "@numezis/shared/schemas/llmConfig.schema";
+
+const {
     validateLlmConfig,
     AzureOpenAIConfigSchema,
     OpenAIConfigSchema,
@@ -18,7 +22,7 @@ import {
     GeminiConfigSchema,
     LMStudioConfigSchema,
     OllamaConfigSchema,
-} from "@numezis/shared/schemas/llmConfig.schema";
+} = LlmSchema;
 
 const COLLECTION_NAME = "llm_configs";
 const CONFIG_JSON_PATH = path.resolve(process.cwd(), "config", "config.json");

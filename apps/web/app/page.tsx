@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Apple } from 'lucide-react';
 import { useAuth } from '@numezis/ui/context/AuthContext';
 
 const downloadUrl = '/pricing' // Points to pricing page with download links
@@ -178,9 +179,12 @@ export default function HomePage() {
           </h1>
 
           {/* Subheadline */}
-          <p className="text-base text-text-muted mb-8 max-w-xl leading-relaxed">
+          <p className="text-base text-text-muted mb-2 max-w-xl mx-auto leading-relaxed">
             The AI coding agent that understands your entire codebase. Visual graph workflows,
             multi-repo campaigns, and zero data leaving the EU.
+          </p>
+          <p className="text-xs text-amber-400 uppercase tracking-[0.2em] mb-6">
+            Early Access • Expect rough edges while we polish the Mac experience.
           </p>
 
           {/* CTA Buttons */}
@@ -189,10 +193,8 @@ export default function HomePage() {
               href={downloadUrl}
               className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-5 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Download Numezis Code
+              <Apple className="w-4 h-4" />
+              Download Mac App
             </Link>
             <a
               href="#features"
@@ -486,7 +488,7 @@ export default function HomePage() {
                     <span className="text-red-400/80">EU Residency</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-text-muted text-[10px]">Fork</span>
+                    <span className="text-text-muted text-[10px]">Based on</span>
                     <span className="text-text-muted">VS Code</span>
                   </div>
                 </div>
@@ -610,7 +612,7 @@ export default function HomePage() {
                     <span className="text-red-400/80">EU Residency</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-text-muted text-[10px]">Fork</span>
+                    <span className="text-text-muted text-[10px]">Based on</span>
                     <span className="text-text-muted">VS Code</span>
                   </div>
                 </div>
@@ -859,19 +861,20 @@ export default function HomePage() {
           <h2 className="text-2xl sm:text-3xl font-semibold text-text-primary mb-4">
             Ready to code with <span className="text-text-secondary">true AI power</span>?
           </h2>
-          <p className="text-sm text-text-muted mb-8">
+          <p className="text-sm text-text-muted mb-4">
             Download the desktop IDE and experience the future of AI-assisted development.
             Free to start, no credit card required.
+          </p>
+          <p className="text-xs text-amber-400 uppercase tracking-[0.2em] mb-6">
+            Early Access • Built for macOS—with more polish coming soon.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href={downloadUrl}
               className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-5 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Download for Free
+              <Apple className="w-4 h-4" />
+              Download Mac App
             </Link>
             <Link
               href="/auth/register"

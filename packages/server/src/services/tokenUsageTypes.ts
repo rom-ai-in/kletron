@@ -37,6 +37,7 @@ export interface TokenUsageRecord {
     model: string;
     usage: TokenUsage;
     // Scoping
+    workspaceId?: ObjectId;
     runId?: ObjectId;
     nodeId?: string;
     chainId?: ObjectId;
@@ -94,6 +95,7 @@ export interface TokenUsageFilter {
     to?: Date;
     runId?: string;
     chainId?: string;
+    workspaceId?: string;
     provider?: LlmProviderType;
     model?: string;
 }

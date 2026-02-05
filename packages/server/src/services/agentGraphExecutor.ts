@@ -3,7 +3,6 @@ import { BaseMessage, SystemMessage } from "@langchain/core/messages";
 import type { AgentEvent, AgentEventKind, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent } from "@numezis/shared/types";
 import { streamReactAgentMessages } from "@numezis/agent-core/reactAgentRunner";
 import { allMcpTools } from "@numezis/agent-core/tools/mcpTools";
-import { auditService } from "./auditService";
 import { agentGraphRunService } from "./agentGraphRunService";
 import { agentGraphService } from "./agentGraphService";
 import type { AgentGraphNode } from "./agentGraphTypes";
@@ -17,6 +16,8 @@ import { setNestedValue } from "./agentGraphState";
 import { skillRegistry } from "@numezis/agent-core/skills/registry";
 import { tokenUsageService } from "./tokenUsageService";
 import { ObjectId } from "mongodb";
+import { getAuditContextConfig } from "@numezis/server/services/auditContextService";
+import { formatAuditContextPrompt, type AuditContext } from "@numezis/shared/documentContext";
 
 // --- Context Management Imports ---
 import { getContextGraphStore } from "@numezis/server/context/graph/ContextGraphStore";
@@ -24,7 +25,7 @@ import { ContextRanker } from "@numezis/server/context/graph/ContextRanker";
 import { getEditorStateManager } from "@numezis/server/context/graph/EditorStateManager";
 import { ContextScanner } from "@numezis/server/context/graph/ContextScanner";
 import { getWorkspaceByIdUnsafe, listAllWorkspaces } from "./workspaceService";
-import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
+import { getWorkspaceContext, runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 
 
 const cloneValue = <T>(value: T): T => {
@@ -300,6 +301,15 @@ export class AgentGraphExecutor {
             workspace.rootPath
         );
 
+        let auditContextConfig: { enabled: boolean; context: AuditContext | null } | null = null;
+        try {
+            auditContextConfig = await getAuditContextConfig(workspace._id!.toString());
+        } catch (err) {
+            console.warn("[AgentGraph] Failed to load audit context config:", err);
+        }
+        const contextInjectionEnabled = auditContextConfig?.enabled !== false;
+        const auditContext = contextInjectionEnabled ? auditContextConfig?.context ?? null : null;
+
         const graph = await agentGraphService.getGraph(run.graphId.toString());
         if (!graph) throw new Error(`Graph ${run.graphId.toString()} not found`);
 
@@ -311,6 +321,14 @@ export class AgentGraphExecutor {
 
         const state = cloneValue(run.state ?? { nodes: {} });
         if (!state.nodes) state.nodes = {};
+        if (auditContext) {
+            const existingContext = (state as any).context;
+            if (existingContext && typeof existingContext === "object" && !Array.isArray(existingContext)) {
+                (state as any).context = { ...(existingContext as Record<string, unknown>), audit: auditContext };
+            } else {
+                (state as any).context = auditContext;
+            }
+        }
         const nodeRunCounts: Record<string, number> = {
             ...(state.execution?.runsByNode ?? {}),
         };
@@ -484,10 +502,6 @@ export class AgentGraphExecutor {
             }
             await emitUpdate();
 
-            const sessionPrompt = `[AgentGraph] run=${runId} node=${node.id} label="${node.label}"`;
-            const sessionId = await auditService.createSession(sessionPrompt);
-            await agentGraphRunService.setRunNodeSessionId(runId, nodeId, sessionId);
-
             const timeline = createSessionTimeline(node);
             const eventStream: AgentEvent[] = [];
             // Use globalEventCounter to ensure unique IDs across all events in globalEventStream
@@ -514,19 +528,7 @@ export class AgentGraphExecutor {
             };
             eventStream.push(systemEvent, userEvent);
 
-            const flushUpdate = async (finalReport?: string) => {
-                if (!sessionId) return;
-                const outputs = createPlaceholderOutputs({
-                    mission: typeof state.mission === "string" ? state.mission : "",
-                    report: finalReport ?? "",
-                    meta: { runId, nodeId: node.id },
-                });
-                await auditService.updateSession(sessionId, {
-                    timeline: cloneValue(timeline),
-                    eventStream: cloneValue(eventStream),
-                    outputs: cloneValue(outputs),
-                } as any);
-
+            const flushUpdate = async () => {
                 await emitUpdate();
             };
 
@@ -569,32 +571,35 @@ export class AgentGraphExecutor {
                 // ---------------------------------------------------------
                 // 3. Smart Context Injection (New Architecture)
                 // ---------------------------------------------------------
-                // We rank context based on the rendered user prompt + editor state
-                const editorState = getEditorStateManager(workspace._id!.toString()).getCurrentState();
-                const ranker = new ContextRanker(contextGraphStore);
-                const rankedContext = await ranker.rank({
-                    userPrompt: userPrompt, // Using existing `userPrompt`
-                    editorState,
-                    limit: 15, // Retrieve top 15 most relevant
-                    tokenBudget: 30000 // Reserve budget
-                });
+                let contextBlock = "";
+                if (contextInjectionEnabled) {
+                    // We rank context based on the rendered user prompt + editor state
+                    const editorState = getEditorStateManager(workspace._id!.toString()).getCurrentState();
+                    const ranker = new ContextRanker(contextGraphStore);
+                    const rankedContext = await ranker.rank({
+                        userPrompt: userPrompt, // Using existing `userPrompt`
+                        editorState,
+                        limit: 15, // Retrieve top 15 most relevant
+                        tokenBudget: 30000 // Reserve budget
+                    });
 
-                // Format the context for the System Prompt
-                let contextBlock = `\n\n## ACTIVE CONTEXT (Auto-Detected)\n`;
-                if (editorState.activeFile) {
-                    contextBlock += `- Current File: ${editorState.activeFile}\n`;
-                }
-
-                if (rankedContext.length > 0) {
-                    contextBlock += `\nThe following files are likely relevant to your task:\n`;
-                    for (const item of rankedContext) {
-                        const rel = (item.score * 100).toFixed(0);
-                        const reasons = item.reasons.join(", ");
-                        contextBlock += `- ${item.node.id} (Relevance: ${rel}% - ${reasons})\n`;
-                        // Future: Inject snippets here if budget allows
+                    // Format the context for the System Prompt
+                    contextBlock = `\n\n## ACTIVE CONTEXT (Auto-Detected)\n`;
+                    if (editorState.activeFile) {
+                        contextBlock += `- Current File: ${editorState.activeFile}\n`;
                     }
-                } else {
-                    contextBlock += `No specific relevant files detected in context graph.\n`;
+
+                    if (rankedContext.length > 0) {
+                        contextBlock += `\nThe following files are likely relevant to your task:\n`;
+                        for (const item of rankedContext) {
+                            const rel = (item.score * 100).toFixed(0);
+                            const reasons = item.reasons.join(", ");
+                            contextBlock += `- ${item.node.id} (Relevance: ${rel}% - ${reasons})\n`;
+                            // Future: Inject snippets here if budget allows
+                        }
+                    } else {
+                        contextBlock += `No specific relevant files detected in context graph.\n`;
+                    }
                 }
 
                 // Compose final system prompt: skills prefix + base prompt + context
@@ -602,7 +607,8 @@ export class AgentGraphExecutor {
                 const baseSystemPrompt = skillPromptPrefix
                     ? `${skillPromptPrefix}\n\n---\n\n${renderedSystemPrompt}`
                     : renderedSystemPrompt;
-                const enhancedSystemPrompt = `${baseSystemPrompt}\n${contextBlock}`;
+                const auditContextPrompt = auditContext ? formatAuditContextPrompt(auditContext) : null;
+                const enhancedSystemPrompt = `${baseSystemPrompt}${contextBlock}${auditContextPrompt ? `\n\n${auditContextPrompt}` : ""}`;
 
                 // Update timeline with the ACTUAL prompt used (including context)
                 if (timeline[0]) {
@@ -639,6 +645,11 @@ export class AgentGraphExecutor {
                         timestamp: new Date().toISOString(),
                     });
                 } else {
+                    const workspaceContext = getWorkspaceContext();
+                    const workspaceObjectId =
+                        workspaceContext?.workspaceId && ObjectId.isValid(workspaceContext.workspaceId)
+                            ? new ObjectId(workspaceContext.workspaceId)
+                            : undefined;
                     const result = await streamReactAgentMessages({
                         name: `GraphNode:${node.id}`, // Using existing `node.id`
                         systemPrompt: enhancedSystemPrompt, // Use enhanced prompt
@@ -654,6 +665,7 @@ export class AgentGraphExecutor {
                                 provider: (opts?.llmSelectionOverride?.provider ?? node.react.llmSelection?.provider ?? "unknown") as any,
                                 model,
                                 usage,
+                                ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
                                 runId: new ObjectId(runId),
                                 nodeId: node.id,
                                 callType: "react_agent",
@@ -704,7 +716,7 @@ export class AgentGraphExecutor {
                 timeline[0].status = "success";
                 timeline[0].summary = "Node execution (done)";
                 timeline[0].endedAt = new Date().toISOString();
-                await flushUpdate(JSON.stringify(validated, null, 2));
+                await flushUpdate();
 
                 if (timelineEntry) {
                     timelineEntry.status = "success";
@@ -719,7 +731,7 @@ export class AgentGraphExecutor {
                 await emitUpdate();
 
                 const finalResult: AgentWorkflowResult = {
-                    sessionId,
+                    sessionId: runId,
                     timeline,
                     conclusion: "Node completed.",
                     outputs: createPlaceholderOutputs({
@@ -729,7 +741,6 @@ export class AgentGraphExecutor {
                     }),
                     eventStream,
                 };
-                await auditService.completeSession(sessionId, finalResult);
 
                 if (executionMode === "state_machine") {
                     const nextNodes = selectNextNodes(nodeId);
@@ -747,7 +758,7 @@ export class AgentGraphExecutor {
                 timeline[0].status = "error";
                 timeline[0].summary = `Failed: ${err?.message ?? "unknown error"}`;
                 timeline[0].endedAt = new Date().toISOString();
-                await flushUpdate(`ERROR: ${err?.message ?? String(err)}`);
+                await flushUpdate();
 
                 if (timelineEntry) {
                     timelineEntry.status = "error";
@@ -757,7 +768,7 @@ export class AgentGraphExecutor {
                 await emitUpdate();
 
                 const finalResult: AgentWorkflowResult = {
-                    sessionId,
+                    sessionId: runId,
                     timeline,
                     conclusion: "Node failed.",
                     outputs: createPlaceholderOutputs({
@@ -767,7 +778,6 @@ export class AgentGraphExecutor {
                     }),
                     eventStream,
                 };
-                await auditService.completeSession(sessionId, finalResult, err instanceof Error ? err : new Error(String(err)));
                 return {
                     sessionId: runId,
                     timeline: globalTimeline,

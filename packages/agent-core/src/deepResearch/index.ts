@@ -43,7 +43,6 @@ import {
   deepResearchPhaseOrder,
   type DeepResearchPhaseKey,
 } from "@numezis/shared/graphCatalog";
-import { auditService } from "@numezis/server/services/auditService.js";
 
 const defaultDeepResearchConfig = {
   allowClarification: true,
@@ -790,10 +789,6 @@ export async function runDeepResearchWorkflow(
 
   const nextEventId = () => `event-${eventCounter++}`;
 
-  // 1. Create Session
-  const sessionId = await auditService.createSession(userRequest);
-  console.info(`[DeepResearch] Started MongoDB session: ${sessionId}`);
-
   const flushUpdate = async (outputs?: AgentWorkflowResult["outputs"]) => {
     if (!options?.onUpdate) return;
     const payload: AgentWorkflowUpdate = {
@@ -802,17 +797,6 @@ export async function runDeepResearchWorkflow(
     };
     if (outputs) payload.outputs = JSON.parse(JSON.stringify(outputs));
     await options.onUpdate(payload);
-
-    // 2. Update Session (Background)
-    if (sessionId) {
-      auditService
-        .updateSession(sessionId, {
-          timeline: payload.timeline,
-          eventStream: payload.eventStream,
-          outputs: payload.outputs as any,
-        })
-        .catch((err: any) => console.error("Background update failed", err));
-    }
   };
 
   const createAgentEvent = (
@@ -968,14 +952,13 @@ export async function runDeepResearchWorkflow(
         findings: [],
       };
       const finalResult: AgentWorkflowResult = {
-        sessionId,
+        sessionId: "deep-research",
         timeline,
         conclusion: state.finalAnswer ?? "Clarification requested.",
         outputs,
         eventStream,
       };
       await flushUpdate(outputs);
-      if (sessionId) await auditService.completeSession(sessionId, finalResult);
       return finalResult;
     }
 
@@ -1035,22 +1018,15 @@ export async function runDeepResearchWorkflow(
     };
 
     const finalResult: AgentWorkflowResult = {
-      sessionId,
+      sessionId: "deep-research",
       timeline,
       conclusion,
       outputs,
       eventStream,
     };
     await flushUpdate(outputs);
-
-    if (sessionId) {
-      await auditService.completeSession(sessionId, finalResult);
-    }
     return finalResult;
   } catch (error) {
-    if (sessionId) {
-      await auditService.completeSession(sessionId, {} as any, error as Error);
-    }
     throw error;
   }
 }

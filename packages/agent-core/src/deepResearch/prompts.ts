@@ -81,7 +81,7 @@ Today's date is {date}.
 You must output a plan with clearly labeled sections. For each section, use markdown headers and bullet lists as needed.
 1. **Scope & Goals**—restate the objectives that this research must answer and highlight any architecture or domain focus that must be included.
 2. **Target Files & Domains**—enumerate every file, folder, or code area that must be inspected. For each entry explain why it matters (e.g., fires an architecture boundary, handles data flows, manages integration).
-3. **Architecture Study**—describe the system-level components, critical flows, platforms, or risks (authentication, i18n, payments, data integrity) that should be studied and monitored for this research.
+3. **Architecture Study**—describe the system-level components, critical flows, platforms, or risks (authentication, payments, data integrity) that should be studied and monitored for this research.
 4. **MCP Tool Strategy**—map specific MCP tools (repo_metrics, describe_structure, semantic_code_search, search_code, git_log, read_file, etc.) to the sub-steps where they will be used (structure, conceptual discovery, code search, diffs, deep reads).
 5. **Deliverables & Outputs**—spell out which intermediate writeups (checklists, log entries, summarized findings) will be produced before the final report.
 
@@ -253,7 +253,7 @@ Today's date is {date}.
 Produce a structured summary that covers:
 1. **Key Findings**—list every significant insight with a concise statement and reference to the files or modules that surfaced it.
 2. **Issues & Risks**—highlight any problems, missing pieces, or architectural concerns; include suggested severity (Critical/High/Medium/Low) and cite the relevant sections.
-3. **Inputs & Dependencies**—capture sources of truth, assumptions, or external contexts that affected the research (APIs, configs, enums, i18n conventions, etc.).
+3. **Inputs & Dependencies**—capture sources of truth, assumptions, or external contexts that affected the research (APIs, configs, enums, conventions, etc.).
 4. **Open Questions & Next Focus**—state what still needs to be validated or monitored in subsequent runs.
 
 Keep the summary fully comprehensive, cite the notes where appropriate, and use markdown headings for each section.
@@ -279,7 +279,7 @@ Deliver a final response with these sections:
 1. ## Executive Summary — capture the overarching conclusion.
 2. ## Findings Snapshot — reference critical findings and issues with file names or architecture contexts.
 3. ## Actionable Items — provide a numbered table that includes: Issue/Opportunity, Proposed Fix, Target Files, Estimated Effort, Priority (Critical/High/Medium/Low), and Stakeholders or Owners.
-4. ## Monitoring & Follow-up — describe how to verify progress, which MCP tools to rerun (e.g., 'npm run i18n:check-placeholder-values'), and any safety checks.
+4. ## Monitoring & Follow-up — describe how to verify progress, which MCP tools to rerun, and any safety checks.
 5. ## Sources — list the documents or files cited in the report (reuse citations from the findings summary).
 
 Emphasize activable next steps, provide enough detail for a ticket writer, and keep the tone professional and precise.

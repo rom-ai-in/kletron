@@ -145,7 +145,7 @@ export default function PrivacyPolicyPage() {
                         <p>We implement industry-standard security measures:</p>
                         <ul>
                             <li>Encryption in transit (TLS 1.3) and at rest (AES-256)</li>
-                            <li>Regular security audits and penetration testing</li>
+                            <li>Regular security reviews and penetration testing</li>
                             <li>Role-based access controls</li>
                             <li>Incident response procedures</li>
                             <li>SOC 2 Type II compliance (Enterprise)</li>

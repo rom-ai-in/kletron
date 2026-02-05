@@ -2,15 +2,15 @@ import {
   ensurePortsFree,
   createLangGraphDevServer,
   createMcpLauncher,
-  createI18nProcessWorkerLauncher,
   createDriftAnalysisWorkerLauncher,
   createTerminalWorkerLauncher,
   createWebLauncher,
+  createDesktopLauncher,
   requireTargetRepoRoot,
   waitForHttpOk,
 } from "./lib/serviceLauncher.js";
 
-const PORTS = [9000, 8080, Number(process.env.WEB_PORT ?? 3000), 3002];
+const PORTS = [9000, 8080, Number(process.env.WEB_PORT ?? 3000), 3002, 5173];
 const MCP_URL = "http://localhost:9000/sse";
 const WEB_PORT = Number(process.env.WEB_PORT ?? 3000);
 const WEB_URL = `http://localhost:${WEB_PORT}`;
@@ -35,7 +35,7 @@ async function main() {
       },
     }),
     createWebLauncher(WEB_PORT),
-    createI18nProcessWorkerLauncher({ watch: true }),
+    createDesktopLauncher(),
     createDriftAnalysisWorkerLauncher({ watch: true }),
     createTerminalWorkerLauncher({ watch: true }),
   ].filter(Boolean);

@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { getDb } from "@numezis/server/lib/db";
 import { type DriftJobDoc } from "@numezis/server/services/driftAnalysisWorker";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { ChainConfigBuilder } from "@numezis/shared/chainConfigBuilder";
+import { DEFAULT_DRIFT_STAGES } from "@numezis/shared/driftStages";
 import { getEnabledProviders, getLlmConfig } from "@numezis/server/services/llmConfigService";
 import { LLM_PROVIDERS, type LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
 export async function POST(req: Request) {
     const auth = await requireAppRouteAuth(req);
@@ -18,6 +19,11 @@ export async function POST(req: Request) {
     try {
         const body = await req.json();
         const { llmSelection, systemPrompt } = body;
+
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, body as any);
+        if (!workspace || !workspace._id) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
 
         if (llmSelection?.provider) {
             const provider = llmSelection.provider as LlmProviderType;
@@ -57,8 +63,7 @@ export async function POST(req: Request) {
         const jobs = db.collection<DriftJobDoc>("drift_analysis_jobs");
 
         const normalizedSystemPrompt = typeof systemPrompt === "string" ? systemPrompt.trim() : "";
-        const preset = ChainConfigBuilder.PRESETS.FULL_AUDIT;
-        const totalStages = Array.isArray(preset?.stages) ? preset.stages.length : 0;
+        const totalStages = DEFAULT_DRIFT_STAGES.length;
 
         const job: any = {
             status: "queued",
@@ -68,6 +73,7 @@ export async function POST(req: Request) {
             processedStages: 0,
             currentStageIndex: 0,
             results: [],
+            workspaceId: workspace._id,
             llmSelection,
             systemPrompt: normalizedSystemPrompt.length > 0 ? normalizedSystemPrompt : undefined,
         };

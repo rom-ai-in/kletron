@@ -99,8 +99,6 @@ const segmentLabels: Record<string, string> = {
   "graphs": "Graphs",
   "account": "Account",
 
-  "/i18n": "Translation Agents",
-  "/i18n/logs": "Translation Logs",
 };
 
 export function getBreadcrumbItems(pathname: string): BreadcrumbItem[] {

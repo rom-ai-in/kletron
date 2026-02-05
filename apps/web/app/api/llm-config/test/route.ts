@@ -5,6 +5,9 @@ import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 
 export const dynamic = "force-dynamic";
 
+const okError = (error: string, extra?: Record<string, unknown>) =>
+    NextResponse.json({ success: false, error, ...(extra ?? {}) }, { status: 200 });
+
 /**
  * POST /api/llm-config/test
  * Test the LLM configuration connectivity
@@ -23,10 +26,7 @@ export async function POST(req: NextRequest) {
         const { provider, config } = body;
 
         if (!provider || !config) {
-            return NextResponse.json(
-                { error: "Provider and configuration are required" },
-                { status: 400 }
-            );
+            return okError("Provider and configuration are required");
         }
 
         // Fallback to stored API key/config if missing or masked
@@ -46,17 +46,11 @@ export async function POST(req: NextRequest) {
 
         // Check if we still have a masked key after fallback
         if (effectiveApiKey?.includes("•")) {
-            return NextResponse.json(
-                { error: "Cannot use a masked API key for testing. Please re-enter your API key." },
-                { status: 400 }
-            );
+            return okError("Cannot use a masked API key for testing. Please re-enter your API key.");
         }
 
         if (provider === "azure" && !effectiveApiKey) {
-            return NextResponse.json(
-                { error: "API Key is missing for Azure OpenAI. Please ensure a valid API key is saved in the configuration." },
-                { status: 400 }
-            );
+            return okError("API Key is missing for Azure OpenAI. Please ensure a valid API key is saved in the configuration.");
         }
 
         let model;
@@ -65,10 +59,7 @@ export async function POST(req: NextRequest) {
             const { baseUrl, model: modelName } = effectiveConfig;
 
             if (!modelName) {
-                return NextResponse.json(
-                    { error: "Model name is required for LM Studio" },
-                    { status: 400 }
-                );
+                return okError("Model name is required for LM Studio");
             }
 
             const modelSettings = modelName && effectiveConfig?.modelSettings?.[modelName]
@@ -100,10 +91,7 @@ export async function POST(req: NextRequest) {
             // Use Ollama's native API for health check
             const { baseUrl, model: modelName } = effectiveConfig;
             if (!baseUrl) {
-                return NextResponse.json(
-                    { error: "Base URL is required for Ollama. Configure it in the UI." },
-                    { status: 400 }
-                );
+                return okError("Base URL is required for Ollama. Configure it in the UI.");
             }
             const cleanBaseUrl = baseUrl.replace(/\/+$/, "");
 
@@ -116,10 +104,9 @@ export async function POST(req: NextRequest) {
             });
 
             if (!tagsResponse.ok) {
-                return NextResponse.json(
-                    { error: `Ollama returned ${tagsResponse.status}: ${await tagsResponse.text()}` },
-                    { status: 500 }
-                );
+                return okError(`Ollama returned ${tagsResponse.status}: ${await tagsResponse.text()}`, {
+                    status: tagsResponse.status,
+                });
             }
 
             const tagsData = await tagsResponse.json();
@@ -129,13 +116,9 @@ export async function POST(req: NextRequest) {
             );
 
             if (modelName && !modelExists) {
-                return NextResponse.json(
-                    {
-                        error: `Model "${modelName}" not found. Available: ${availableModels.join(", ") || "none"}`,
-                        availableModels
-                    },
-                    { status: 404 }
-                );
+                return okError(`Model "${modelName}" not found. Available: ${availableModels.join(", ") || "none"}`, {
+                    availableModels,
+                });
             }
 
             const duration = Date.now() - startTime;
@@ -153,10 +136,7 @@ export async function POST(req: NextRequest) {
             const { model: modelName } = effectiveConfig;
 
             if (!effectiveApiKey) {
-                return NextResponse.json(
-                    { error: "API Key is required for OpenAI" },
-                    { status: 400 }
-                );
+                return okError("API Key is required for OpenAI");
             }
 
             model = new ChatOpenAI({
@@ -170,10 +150,7 @@ export async function POST(req: NextRequest) {
             const { model: modelName } = effectiveConfig;
 
             if (!effectiveApiKey) {
-                return NextResponse.json(
-                    { error: "API Key is required for Claude (Anthropic)" },
-                    { status: 400 }
-                );
+                return okError("API Key is required for Claude (Anthropic)");
             }
 
             const startTime = Date.now();
@@ -198,11 +175,10 @@ export async function POST(req: NextRequest) {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                return NextResponse.json({
-                    success: false,
-                    error: errorData.error?.message || `Claude API returned ${response.status}`,
+                return okError(errorData.error?.message || `Claude API returned ${response.status}`, {
                     latency: duration,
-                }, { status: response.status });
+                    status: response.status,
+                });
             }
 
             const claudeData = await response.json();
@@ -223,10 +199,7 @@ export async function POST(req: NextRequest) {
             const { model: modelName } = effectiveConfig;
 
             if (!effectiveApiKey) {
-                return NextResponse.json(
-                    { error: "API Key is required for Gemini" },
-                    { status: 400 }
-                );
+                return okError("API Key is required for Gemini");
             }
 
             const startTime = Date.now();
@@ -250,11 +223,10 @@ export async function POST(req: NextRequest) {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                return NextResponse.json({
-                    success: false,
-                    error: errorData.error?.message || `Gemini API returned ${response.status}`,
+                return okError(errorData.error?.message || `Gemini API returned ${response.status}`, {
                     latency: duration,
-                }, { status: response.status });
+                    status: response.status,
+                });
             }
 
             const geminiData = await response.json();
@@ -274,10 +246,7 @@ export async function POST(req: NextRequest) {
             const { endpoint, deployment, apiVersion, model: modelName } = effectiveConfig;
 
             if (!endpoint || !deployment) {
-                return NextResponse.json(
-                    { error: "Endpoint and Deployment are required for Azure OpenAI" },
-                    { status: 400 }
-                );
+                return okError("Endpoint and Deployment are required for Azure OpenAI");
             }
 
             model = new AzureChatOpenAI({
@@ -289,10 +258,7 @@ export async function POST(req: NextRequest) {
                 model: modelName, // Optional for Azure if deployment suffices, but good to have
             });
         } else {
-            return NextResponse.json(
-                { error: "Invalid provider" },
-                { status: 400 }
-            );
+            return okError("Invalid provider");
         }
 
         // Perform the test with a prompt that generates more tokens for accurate measurement
@@ -319,20 +285,12 @@ export async function POST(req: NextRequest) {
         console.error("LLM Connection Test Failed:", error);
 
         let errorMessage = error.message || "Failed to connect to LLM provider";
-        let status = 500;
-
         if (error.status === 404 || error.code === '404' || error.code === 'MODEL_NOT_FOUND') {
-            status = 404;
-            errorMessage = `Resource not found (404). Check if your Deployment Name exists in your Azure OpenAI resource, and if the Endpoint URL is correct.`;
+            errorMessage = "Resource not found (404). Check if your Deployment Name exists in your Azure OpenAI resource, and if the Endpoint URL is correct.";
         }
 
-        return NextResponse.json(
-            {
-                success: false,
-                error: errorMessage,
-                details: error.response?.data || error.error || "No additional details"
-            },
-            { status }
-        );
+        return okError(errorMessage, {
+            details: error.response?.data || error.error || "No additional details",
+        });
     }
 }

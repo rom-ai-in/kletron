@@ -29,6 +29,12 @@ export function useLlmHealth(provider: string) {
     const [message, setMessage] = useState<string | null>(null);
 
     const checkHealth = useCallback(async () => {
+        if (!provider) {
+            setStatus('none');
+            setMessage('No provider selected');
+            return;
+        }
+
         setStatus('loading');
         setMessage(null);
 
@@ -72,8 +78,15 @@ export function useLlmHealth(provider: string) {
             }
 
             if (!configToTest) {
-                setStatus('error');
+                setStatus('none');
                 setMessage('No configuration found');
+                return;
+            }
+
+            const hasConfiguredFlag = typeof (configToTest as { configured?: boolean }).configured === 'boolean';
+            if (hasConfiguredFlag && !(configToTest as { configured?: boolean }).configured) {
+                setStatus('none');
+                setMessage('Not configured');
                 return;
             }
 
@@ -87,14 +100,23 @@ export function useLlmHealth(provider: string) {
                 }),
             });
 
-            const data = await testRes.json();
-            if (!testRes.ok) throw new Error(data.error || "Connection refused");
+            const data = await testRes.json().catch(() => ({}));
+            if (!testRes.ok) {
+                setStatus('error');
+                setMessage(data.error || "Connection failed");
+                return;
+            }
+
+            if (data?.success === false) {
+                setStatus('error');
+                setMessage(data.error || "Connection failed");
+                return;
+            }
 
             setStatus('success');
             setMessage(`Success! Latency: ${data.latency}ms`);
 
         } catch (error) {
-            console.error("LLM Health Check Failed", error);
             setStatus('error');
             setMessage(error instanceof Error ? error.message : "Connection failed");
         }

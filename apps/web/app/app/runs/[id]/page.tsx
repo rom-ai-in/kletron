@@ -5,28 +5,142 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Panel, Button } from "@numezis/ui/components/design-system";
 import type { AuditChain, AuditRun, ChainStatus } from "@numezis/shared/chainTypes";
+import type { AgentEvent } from "@numezis/shared/types";
 import { StageDetailModal } from "@numezis/ui/components/StageDetailModal";
 
 interface RunDetailPageProps {
     params: { id: string };
 }
 
+const POLL_INTERVAL_MS = 4000;
+
 export default function RunDetailPage({ params }: RunDetailPageProps) {
     const router = useRouter();
     const [run, setRun] = useState<AuditRun | null>(null);
     const [chain, setChain] = useState<AuditChain | null>(null);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
+    const [refreshError, setRefreshError] = useState("");
     const [selectedStage, setSelectedStage] = useState<{ id: string; name: string; sessionId: string; status: string } | null>(null);
     const [isCancelling, setIsCancelling] = useState(false);
+    const [liveSessionId, setLiveSessionId] = useState<string | null>(null);
+    const [liveStageId, setLiveStageId] = useState<string | null>(null);
+    const [liveStageName, setLiveStageName] = useState<string | null>(null);
+    const [liveEvents, setLiveEvents] = useState<AgentEvent[]>([]);
+    const [liveLoading, setLiveLoading] = useState(false);
+    const [liveError, setLiveError] = useState("");
+    const [liveLastUpdated, setLiveLastUpdated] = useState<string | null>(null);
+    const [autoOpenedSessionId, setAutoOpenedSessionId] = useState<string | null>(null);
+
+    const pickLiveSession = (runData: AuditRun, chainData: AuditChain | null) => {
+        const stageCount = chainData?.stages?.length ?? 0;
+        const safeStageCount = stageCount > 0 ? stageCount : runData.sessionIds?.length ?? 0;
+        if (!safeStageCount) return { sessionId: null, stageName: null, stageId: null };
+
+        const currentIndexRaw = typeof runData.currentStageIndex === "number" ? runData.currentStageIndex : 0;
+        const currentIndex = Math.min(Math.max(currentIndexRaw, 0), safeStageCount - 1);
+        let candidateIndex = (runData.sessionIds?.length ?? 0) > 0 ? (runData.sessionIds?.length ?? 1) - 1 : undefined;
+        if (runData.status === "RUNNING" || runData.status === "PAUSED" || runData.status === "PENDING") {
+            if (runData.sessionIds?.[currentIndex]) {
+                candidateIndex = currentIndex;
+            }
+        }
+        if (candidateIndex === undefined) {
+            return { sessionId: null, stageName: null, stageId: null };
+        }
+
+        const sessionId = runData.sessionIds?.[candidateIndex] ?? null;
+        const stage = chainData?.stages?.[candidateIndex];
+        const stageName = stage?.name ?? (sessionId ? `Stage ${candidateIndex + 1}` : null);
+        const stageId = stage?.id ?? null;
+        return { sessionId, stageName, stageId };
+    };
+
+    const fetchLiveLogs = async (sessionId: string, background = false) => {
+        if (!sessionId) return;
+        if (!background) {
+            setLiveLoading(true);
+            setLiveError("");
+        }
+        try {
+            const res = await fetch(`/api/audits/${sessionId}`, { cache: "no-store" });
+            if (!res.ok) throw new Error("Failed to load stage logs");
+            const data = await res.json();
+            const stream = data.eventStream || data.workflowResult?.eventStream;
+            const events = Array.isArray(stream) ? (stream as AgentEvent[]) : [];
+            setLiveEvents(events);
+            if (data?.lastUpdated) {
+                setLiveLastUpdated(data.lastUpdated);
+            }
+        } catch (err: any) {
+            setLiveError(err?.message || "Unknown error");
+        } finally {
+            if (!background) {
+                setLiveLoading(false);
+            }
+        }
+    };
 
     useEffect(() => {
         void fetchRun();
     }, [params.id]);
 
-    const fetchRun = async () => {
-        setLoading(true);
-        setError("");
+    useEffect(() => {
+        if (!run) return;
+        if (run.status === "RUNNING" || run.status === "PENDING" || run.status === "PAUSED") {
+            const interval = setInterval(() => {
+                void fetchRun({ background: true });
+            }, POLL_INTERVAL_MS);
+            return () => clearInterval(interval);
+        }
+    }, [run?.status, params.id]);
+
+    useEffect(() => {
+        if (!run) return;
+        const { sessionId, stageName, stageId } = pickLiveSession(run, chain);
+        setLiveSessionId(sessionId);
+        setLiveStageName(stageName);
+        setLiveStageId(stageId);
+        if (sessionId) {
+            void fetchLiveLogs(sessionId);
+        } else {
+            setLiveEvents([]);
+        }
+    }, [run?.currentStageIndex, run?.status, run?.sessionIds?.length, chain?.stages?.length]);
+
+    useEffect(() => {
+        if (!liveSessionId) return;
+        if (run?.status === "RUNNING" || run?.status === "PENDING" || run?.status === "PAUSED") {
+            const interval = setInterval(() => {
+                void fetchLiveLogs(liveSessionId, true);
+            }, POLL_INTERVAL_MS);
+            return () => clearInterval(interval);
+        }
+    }, [liveSessionId, run?.status]);
+
+    useEffect(() => {
+        if (!liveSessionId) return;
+        if (autoOpenedSessionId === liveSessionId) return;
+        if (run?.status === "RUNNING" || run?.status === "PENDING" || run?.status === "PAUSED") {
+            setSelectedStage({
+                id: liveStageId || liveSessionId,
+                name: liveStageName || "Current Stage",
+                sessionId: liveSessionId,
+                status: run.status,
+            });
+            setAutoOpenedSessionId(liveSessionId);
+        }
+    }, [liveSessionId, autoOpenedSessionId, run?.status, liveStageId, liveStageName]);
+
+    const fetchRun = async ({ background = false }: { background?: boolean } = {}) => {
+        if (background) {
+            setRefreshing(true);
+            setRefreshError("");
+        } else {
+            setLoading(true);
+            setError("");
+        }
         try {
             const res = await fetch(`/api/runs/${params.id}`);
             if (!res.ok) throw new Error("Failed to load execution run");
@@ -34,9 +148,17 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
             setRun(data.run);
             setChain(data.chain);
         } catch (err: any) {
-            setError(err.message || "Unknown error");
+            if (background) {
+                setRefreshError(err.message || "Unknown error");
+            } else {
+                setError(err.message || "Unknown error");
+            }
         } finally {
-            setLoading(false);
+            if (background) {
+                setRefreshing(false);
+            } else {
+                setLoading(false);
+            }
         }
     };
 
@@ -52,7 +174,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
             const res = await fetch(`/api/runs/${params.id}/cancel`, { method: "POST" });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.error || "Failed to cancel run");
-            await fetchRun();
+            await fetchRun({ background: true });
         } catch (err: any) {
             alert(err.message || "Failed to cancel run");
         } finally {
@@ -88,6 +210,12 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                 Execution Run
                             </h1>
                             <StatusBadge status={run.status} />
+                            {refreshing && (
+                                <span className="text-[10px] text-text-muted">Updating…</span>
+                            )}
+                            {refreshError && !refreshing && (
+                                <span className="text-[10px] text-rose-400">Live update failed</span>
+                            )}
                         </div>
                         <p className="text-sm text-text-muted">
                             Campaign: <Link href={`/app/campaigns/${run.chainId.toString()}`} className="text-text-secondary hover:text-text-primary hover:underline transition-colors">{chain.name}</Link> · Started {new Date(run.startedAt).toLocaleString()}
@@ -135,8 +263,14 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                             <h2 className="mb-4 text-sm font-semibold text-text-primary">Execution Stages</h2>
                             <div className="space-y-3">
                                 {chain.stages.map((stage, index) => {
-                                    const isCompleted = index < run.currentStageIndex;
-                                    const isCurrent = index === run.currentStageIndex;
+                                    const currentIndex = Math.min(run.currentStageIndex, Math.max(chain.stages.length - 1, 0));
+                                    const isCompleted = run.status === "COMPLETED" || index < currentIndex;
+                                    const isCurrent = index === currentIndex && (run.status === "RUNNING" || run.status === "PAUSED" || run.status === "PENDING");
+                                    const stageStatus: ChainStatus = isCompleted
+                                        ? "COMPLETED"
+                                        : isCurrent
+                                        ? run.status
+                                        : "PENDING";
 
                                     const sessionId = run.sessionIds?.[index];
 
@@ -149,7 +283,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                                         id: stage.id,
                                                         name: stage.name,
                                                         sessionId,
-                                                        status: isCompleted ? "Completed" : isCurrent ? "Running" : "Pending"
+                                                        status: stageStatus
                                                     });
                                                 }
                                             }}
@@ -163,13 +297,35 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                                 {isCompleted || (run.status === "COMPLETED" && isCurrent) ? "✅" : index + 1}
                                             </div>
                                             <div className="flex-1">
-                                                <div className="flex items-center justify-between">
+                                                <div className="flex items-center justify-between gap-2">
                                                     <div className="text-sm font-medium">{stage.name}</div>
-                                                    {sessionId && (
-                                                        <span className="text-[10px] text-text-muted bg-bg-elevated px-1.5 py-0.5 rounded border border-border-subtle">
-                                                            View Logs
-                                                        </span>
-                                                    )}
+                                                    <div className="flex items-center gap-2">
+                                                        {isCurrent && sessionId && (
+                                                            <button
+                                                                type="button"
+                                                                className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-300 hover:border-emerald-400/60 hover:text-emerald-200"
+                                                                onClick={(event) => {
+                                                                    event.stopPropagation();
+                                                                    setSelectedStage({
+                                                                        id: stage.id,
+                                                                        name: stage.name,
+                                                                        sessionId,
+                                                                        status: stageStatus
+                                                                    });
+                                                                }}
+                                                                title="Open live logs"
+                                                            >
+                                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                                                                Live
+                                                            </button>
+                                                        )}
+                                                        <StatusBadge status={stageStatus} />
+                                                        {sessionId && (
+                                                            <span className="text-[10px] text-text-muted bg-bg-elevated px-1.5 py-0.5 rounded border border-border-subtle">
+                                                                Logs
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <div className="text-[10px] text-text-muted font-mono">{stage.graphId}</div>
                                             </div>
@@ -189,6 +345,80 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                 status={selectedStage.status}
                             />
                         )}
+
+                        <Panel className="p-4">
+                            <div className="flex items-center justify-between mb-3">
+                                <div>
+                                    <h2 className="text-sm font-semibold text-text-primary">Live Logs</h2>
+                                    <p className="text-xs text-text-muted">
+                                        {liveStageName ? `Current stage: ${liveStageName}` : (run.status === "RUNNING" ? "Waiting for stage logs..." : "No active stage yet")}
+                                    </p>
+                                    {liveLastUpdated && (
+                                        <p className="text-[10px] text-text-muted">
+                                            Last update: {new Date(liveLastUpdated).toLocaleTimeString()}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() => {
+                                            if (liveSessionId) {
+                                                void fetchLiveLogs(liveSessionId);
+                                            }
+                                        }}
+                                        disabled={!liveSessionId}
+                                    >
+                                        Refresh
+                                    </Button>
+                                    {liveSessionId && (
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            onClick={() => {
+                                                setSelectedStage({
+                                                    id: liveStageId || liveSessionId,
+                                                    name: liveStageName || "Current Stage",
+                                                    sessionId: liveSessionId,
+                                                    status: run.status
+                                                });
+                                            }}
+                                        >
+                                            Open Full Logs
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                            {liveLoading && (
+                                <div className="text-xs text-text-muted">Loading logs...</div>
+                            )}
+                            {liveError && (
+                                <div className="text-xs text-rose-400">Error: {liveError}</div>
+                            )}
+                            {!liveLoading && !liveError && !liveSessionId && run.status === "RUNNING" && (
+                                <div className="text-xs text-amber-300">
+                                    No session yet. If this run started before the live-logs update, cancel and restart the run.
+                                </div>
+                            )}
+                            {!liveLoading && !liveError && liveEvents.length === 0 && (
+                                <div className="text-xs text-text-muted">No events yet.</div>
+                            )}
+                            {!liveLoading && !liveError && liveEvents.length > 0 && (
+                                <div className="space-y-2">
+                                    {liveEvents.slice(-6).map((event) => (
+                                        <div key={event.id} className="text-[11px] text-text-secondary font-mono line-clamp-1">
+                                            {new Date(event.timestamp).toLocaleTimeString()} • {event.phaseLabel || event.phaseId || event.kind.toUpperCase()}: {event.kind === "tool"
+                                                ? `${event.toolName || event.name || "tool"} ${event.toolArgs ? `→ ${String(event.toolArgs).slice(0, 120)}` : ""}`
+                                                : (event.content || event.toolOutput || event.toolArgs || "")}
+                                        </div>
+                                    ))}
+                                    {liveEvents.length > 6 && (
+                                        <div className="text-[10px] text-text-muted">Showing last 6 events</div>
+                                    )}
+                                </div>
+                            )}
+                        </Panel>
 
                         {/* Final Report */}
                         {run.finalReport && (
