@@ -1,13 +1,14 @@
 # Numezis Code (TypeScript LangGraph)
 
-This repo houses a **Node/TypeScript LangGraph multi-agent pipeline** backed by the local `mcp-server` Model Context Protocol server. `npm run dev` starts both services and the local UI for running the graph.
+This repo houses a **Node/TypeScript LangGraph multi-agent pipeline** backed by a local MCP server. `npm run dev` starts the MCP server, LangGraph dev server, and the Next.js UI.
 
 ## Architecture
 
-- **4-phase pipeline** (`src/graph.ts`): Map → Audit → Plan → Report.
-- **Phase agents** (`src/agents/phases.ts`): Each phase is a single ReAct agent with a specific mission prompt and an explicit MCP tool list.
-- **Simple ReAct agent** (`src/simpleReactGraph.ts`): A one-step LangGraph ReAct agent that answers lightweight repo questions; pick the "Simple ReAct agent" graph from the UI to run it instead of the full audit pipeline.
-- **MCP Server** (`mcp-server`): The agent no longer talks directly to the filesystem. All inspection/editing actions are routed through the MCP server, so agents behave like LM Studio clients and stay contained.
+- **Agent core** (`packages/agent-core`): Workflow orchestration + agent tooling.
+- **Server services** (`packages/server`): DB/auth/LLM config, vector search, agent graph execution.
+- **Shared contracts** (`packages/shared`): Types + schemas used across UI and server.
+- **UI** (`packages/ui`) + **Web app** (`apps/web`): Next.js UI + App Router APIs.
+- **MCP Server** (`apps/mcp-server`): All inspection/editing actions are routed through the MCP server.
 
 ### Pipeline outputs (written via MCP)
 
@@ -19,11 +20,11 @@ Artifacts are written into the target repo under `.numezis/`:
 
 ### Next.js agent dashboard (Tailwind-powered)
 
-- `/app/page.tsx` renders a staged chat UI that submits to `/api/chat`.
+- `apps/web/app/page.tsx` renders a staged chat UI that submits to `/api/chat`.
 - `/api/chat` reuses the same Phase 1..4 logic and returns timeline events, meta/findings/tasks, and the final report summary.
 - The graph dropdown now exposes "Simple ReAct agent" as a quick alternative; the same graph is registered in `langgraph.json` so LangGraph can run it locally.
-- The sidebar exposes `/api/tools/*` metadata so you can click any MCP tool and see the raw `mcp-server/tools` implementation.
-- The UI now uses Tailwind CSS (see `tailwind.config.js`, `postcss.config.js`, `app/globals.css`) for the Cursor-style layout.
+- The sidebar exposes `/api/tools/*` metadata so you can click any MCP tool and see the raw `apps/mcp-server/tools` implementation.
+- The UI now uses Tailwind CSS (see `apps/web/tailwind.config.js`, `apps/web/postcss.config.js`, `apps/web/app/globals.css`) for the Cursor-style layout.
 
 ## Setup
 
@@ -54,7 +55,7 @@ If `GITHUB_MCP_DEFAULT_DIR` is missing, `npm run dev`/`npm run dev:web` will sto
 npm start
 ```
 
-`npm start` frees ports `9000` / `8080`, launches `mcp-server` (MCP tooling) on port `9000`, and then runs the interactive CLI (`src/index.ts`). Type `exit` to quit.
+`npm start` frees ports `9000` / `8080`, launches the MCP server (MCP tooling) on port `9000`, and then runs the interactive CLI (`apps/cli/src/index.ts`). Type `exit` to quit.
 
 
 For iterative development, use `npm run dev`. It reclaims ports 9000/8080, launches `mcp-server`, and starts `@langchain/langgraph-cli dev` on port 8080.
@@ -66,11 +67,11 @@ For iterative development, use `npm run dev`. It reclaims ports 9000/8080, launc
 
 ## MCP Tooling
 
-The TypeScript agent uses the MCP `tools/call` interface through `src/tools/mcpTools.ts`. Tools are exposed to the React agent as LangChain tools with `zod` schemas, ensuring all repository interactions are captive to `mcp-server`.
+The TypeScript agent uses the MCP `tools/call` interface through `packages/agent-core/src/tools/mcpTools.ts`. Tools are exposed to the React agent as LangChain tools with `zod` schemas, ensuring all repository interactions are captive to the MCP server.
 
 ## Notes
 
-- `mcp-server` is now the **only** tool provider—no more local filesystem helpers.
+- `apps/mcp-server` is the **only** tool provider—no more local filesystem helpers.
 - Old Python scripts, marketing assets, and branding logic were removed in favor of this focused TS stack.
 
 ## Troubleshooting

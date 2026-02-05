@@ -1,13 +1,12 @@
 import "dotenv/config";
-import { DriftAnalysisWorker } from "../src/services/driftAnalysisWorker";
-import { getDb } from "../src/lib/db";
-import { closeDb } from "../src/lib/db";
+import { DriftAnalysisWorker } from "@numezis/server/services/driftAnalysisWorker";
+import * as db from "@numezis/server/lib/db";
 
 async function main() {
     console.log("[DriftWorker] Starting...");
 
     // Ensure DB connection
-    await getDb();
+    await db.getDb();
 
     const worker = new DriftAnalysisWorker({
         pollIntervalMs: 2000,
@@ -18,7 +17,10 @@ async function main() {
     const shutdown = async () => {
         console.log("[DriftWorker] Stopping...");
         worker.stop();
-        await closeDb();
+        const closeFn = (db as any).closeDb ?? (db as any).closeMongoConnection;
+        if (closeFn) {
+            await closeFn();
+        }
         process.exit(0);
     };
 

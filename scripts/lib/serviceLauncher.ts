@@ -71,42 +71,71 @@ export type ServiceLaunchConfig = {
 };
 
 export async function freePort(port: number) {
-  try {
-    const { stdout } = await execFileAsync("lsof", ["-ti", `:${port}`]);
-    const pids = stdout
-      .split("\n")
-      .map((value) => value.trim())
-      .filter(Boolean);
-
-    if (!pids.length) {
-      console.log(`✅ Port ${port} already free.`);
-      return;
-    }
-
-    console.log(
-      `🧹 Killing ${pids.length} process(es) holding port ${port}: ${pids.join(", ")}`
-    );
-    for (const pid of pids) {
-      try {
-        process.kill(Number(pid), "SIGTERM");
-      } catch (error) {
-        console.warn(`⚠️ Failed to kill PID ${pid}: ${error}`);
+  const listPids = async (): Promise<string[]> => {
+    try {
+      const { stdout } = await execFileAsync("lsof", ["-ti", `:${port}`]);
+      return stdout
+        .split("\n")
+        .map((value) => value.trim())
+        .filter(Boolean);
+    } catch (error: unknown) {
+      const err = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+      const code = err.code;
+      const stdout = typeof err.stdout === "string" ? err.stdout.trim() : "";
+      const stderr = typeof err.stderr === "string" ? err.stderr.trim() : "";
+      if (String(code) === "1" || (!stdout && !stderr)) {
+        return [];
       }
+      if (err.code === "ENOENT") {
+        console.warn(`⚠️ Unable to free port ${port}: 'lsof' is not installed.`);
+        return [];
+      }
+      throw err;
     }
-  } catch (error: unknown) {
-    const err = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
-    const code = err.code;
-    const stdout = typeof err.stdout === "string" ? err.stdout.trim() : "";
-    const stderr = typeof err.stderr === "string" ? err.stderr.trim() : "";
-    if (String(code) === "1" || (!stdout && !stderr)) {
-      console.log(`✅ No process found on port ${port}.`);
+  };
+
+  const pids = await listPids();
+  if (!pids.length) {
+    console.log(`✅ Port ${port} already free.`);
+    return;
+  }
+
+  console.log(
+    `🧹 Killing ${pids.length} process(es) holding port ${port}: ${pids.join(", ")}`
+  );
+  for (const pid of pids) {
+    try {
+      process.kill(Number(pid), "SIGTERM");
+    } catch (error) {
+      console.warn(`⚠️ Failed to kill PID ${pid}: ${error}`);
+    }
+  }
+
+  const deadline = Date.now() + 3_000;
+  while (Date.now() < deadline) {
+    await delay(200);
+    const remaining = await listPids();
+    if (!remaining.length) {
+      console.log(`✅ Port ${port} is now free.`);
       return;
     }
-    if (err.code === "ENOENT") {
-      console.warn(`⚠️ Unable to free port ${port}: 'lsof' is not installed.`);
-      return;
+  }
+
+  const remaining = await listPids();
+  if (!remaining.length) {
+    console.log(`✅ Port ${port} is now free.`);
+    return;
+  }
+
+  console.warn(
+    `⚠️ Port ${port} still in use after SIGTERM. Sending SIGKILL to: ${remaining.join(", ")}`
+  );
+  for (const pid of remaining) {
+    try {
+      process.kill(Number(pid), "SIGKILL");
+    } catch (error) {
+      console.warn(`⚠️ Failed to kill PID ${pid} with SIGKILL: ${error}`);
     }
-    throw err;
   }
 }
 
@@ -173,7 +202,7 @@ export function spawnService(config: ServiceLaunchConfig): ChildProcess {
 
 export function createMcpLauncher(rootDir: string, overrides: Record<string, string> = {}) {
   const mcpCommand = process.platform === "win32" ? "node.exe" : "node";
-  const mcpArgs = [path.join("mcp-server", "server.js"), "--mcp"];
+  const mcpArgs = [path.join("apps", "mcp-server", "server.js"), "--mcp"];
   return spawnService({
     name: "MCP Server",
     command: mcpCommand,
@@ -197,8 +226,8 @@ export function createLangGraphLauncher(options: LangGraphLauncherOptions = {}) 
   const { overrides = {}, watch = false } = options;
   const langGraphCommand = process.platform === "win32" ? "npx.cmd" : "npx";
   const langGraphArgs = watch
-    ? ["tsx", "watch", "src/index.ts"]
-    : ["tsx", "src/index.ts"];
+    ? ["tsx", "watch", "apps/cli/src/index.ts"]
+    : ["tsx", "apps/cli/src/index.ts"];
   return spawnService({
     name: "LangGraph Agent",
     command: langGraphCommand,
@@ -214,7 +243,7 @@ export function createWebLauncher(port: number = 3000) {
   return spawnService({
     name: "Next.js UI",
     command,
-    args: ["run", "dev:web"],
+    args: ["--workspace", "apps/web", "run", "dev"],
     env: {
       ...process.env,
       PORT: String(port),
@@ -286,161 +315,4 @@ export function createTerminalWorkerLauncher(options?: { watch?: boolean }) {
     args: watch ? ["tsx", "watch", "scripts/terminal-worker.ts"] : ["tsx", "scripts/terminal-worker.ts"],
     stdio: "pipe",
   });
-}
-
-/**
- * Creates a launcher for Numezis Code IDE (Code-OSS fork)
- * Launches the Electron app directly using scripts/code.sh
- * Also starts `npm run watch` for hot-reload during development
- */
-export function createNumezisCodeLauncher(options?: { skipPrelaunch?: boolean }): ChildProcess | null {
-  const cwd = path.resolve(process.cwd(), "numezis-code-oss");
-
-  // Check if the directory exists
-  if (!fsSync.existsSync(cwd)) {
-    console.warn("⚠️  numezis-code-oss directory not found, skipping Code IDE launcher");
-    return null;
-  }
-
-  const skipPrelaunch = options?.skipPrelaunch ?? true;
-
-  // Start the watch process for hot reload in the background
-  const watchCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-  console.log(`🔧 Starting Numezis Code watcher: npm run watch (in ${cwd})`);
-  const watchChild = spawn(watchCommand, ["run", "watch"], {
-    cwd,
-    env: { ...process.env, FORCE_COLOR: "1" },
-    stdio: "pipe",
-  });
-
-  watchChild.on("error", (error) => {
-    console.error("❌ Numezis Code watcher error:", error);
-  });
-
-  // Track compilation complete signal from watch process
-  let compilationComplete = false;
-  let compilationError = false;
-
-  // Monitor watch output for compilation complete signal
-  if (watchChild.stdout) {
-    watchChild.stdout.on("data", (buf) => {
-      const output = buf.toString();
-      process.stdout.write(`[numezis-code:watch] ${output}`);
-      // Look for multiple possible completion signals (case insensitive, flexible matching):
-      const lowerOutput = output.toLowerCase();
-      if (
-        (lowerOutput.includes("finished compilation") && !lowerOutput.includes("extensions")) ||
-        lowerOutput.includes("watch-out") ||
-        lowerOutput.includes("finished clean-out")
-      ) {
-        compilationComplete = true;
-      }
-      // Check for compilation errors
-      if (output.includes("ERROR:") || output.includes("exited with 1")) {
-        compilationError = true;
-      }
-    });
-  }
-  if (watchChild.stderr) {
-    watchChild.stderr.on("data", (buf) => {
-      process.stderr.write(`[numezis-code:watch] ${buf.toString()}`);
-    });
-  }
-
-  // Wait for compilation to complete
-  const waitForCompilation = async () => {
-    // Check for required files - both the bootstrap entry and the electron-main module
-    const outMainJs = path.join(cwd, "out", "main.js");
-    const bootstrapEsmJs = path.join(cwd, "out", "bootstrap-esm.js");
-    const vsCodeMainJs = path.join(cwd, "out", "vs", "code", "electron-main", "main.js");
-    const vsCodeNlsJs = path.join(cwd, "out", "vs", "nls.js");
-    const pollIntervalMs = 2000;
-    const startTime = Date.now();
-    const maxWaitMs = 180000; // 3 minutes max
-
-    console.log(`⏳ Waiting for VS Code compilation to complete...`);
-
-    // Wait for BOTH the compilation complete signal AND the required files
-    while (Date.now() - startTime < maxWaitMs) {
-      const outMainExists = fsSync.existsSync(outMainJs);
-      const bootstrapExists = fsSync.existsSync(bootstrapEsmJs);
-      const mainExists = fsSync.existsSync(vsCodeMainJs);
-      const nlsExists = fsSync.existsSync(vsCodeNlsJs);
-
-      // Only proceed if we got the compilation signal AND all required files exist
-      if (compilationComplete && outMainExists && bootstrapExists && mainExists && nlsExists) {
-        console.log(`✅ Compilation complete with all required files.`);
-        // Give it a bit more time to stabilize
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        return true;
-      }
-
-      // Show progress every 10 seconds
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      if (elapsed > 0 && elapsed % 10 === 0) {
-        const status = [
-          compilationComplete ? "✓signal" : "…signal",
-          outMainExists && bootstrapExists ? "✓bootstrap" : "…bootstrap",
-          mainExists ? "✓main.js" : "…main.js",
-          nlsExists ? "✓nls.js" : "…nls.js"
-        ].join(" ");
-        console.log(`⏳ Waiting for compilation... (${elapsed}s) [${status}]`);
-      }
-
-      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
-    }
-
-    console.warn(`⚠️ Compilation not fully complete after ${maxWaitMs / 1000}s - IDE may not launch correctly`);
-    return false;
-  };
-
-  // Launch the Electron IDE after compilation completes
-  waitForCompilation().then((ready) => {
-    if (!ready) {
-      console.warn(`⚠️ Launching IDE anyway, but it may fail...`);
-    }
-
-    const scriptPath = path.join(cwd, "scripts", "code.sh");
-
-    if (!fsSync.existsSync(scriptPath)) {
-      console.warn("⚠️  scripts/code.sh not found, cannot launch IDE");
-      return;
-    }
-
-    console.log(`🚀 Launching Numezis Code IDE: ./scripts/code.sh (in ${cwd})`);
-    const ideChild = spawn("bash", [scriptPath], {
-      cwd,
-      env: {
-        ...process.env,
-        FORCE_COLOR: "1",
-        VSCODE_SKIP_PRELAUNCH: skipPrelaunch ? "1" : "",
-        NODE_ENV: "development",
-        VSCODE_DEV: "1",
-      },
-      stdio: "pipe",
-      detached: true, // Let the IDE run independently
-    });
-
-    ideChild.on("exit", (code, signal) => {
-      console.log(`⚠️ Numezis Code IDE exited (code=${code ?? "n/a"}, signal=${signal ?? "n/a"}).`);
-    });
-
-    ideChild.on("error", (error) => {
-      console.error("❌ Numezis Code IDE error:", error);
-    });
-
-    if (ideChild.stdout && ideChild.stderr) {
-      ideChild.stdout.on("data", (buf) => {
-        process.stdout.write(`[numezis-code:ide] ${buf.toString()}`);
-      });
-      ideChild.stderr.on("data", (buf) => {
-        process.stderr.write(`[numezis-code:ide] ${buf.toString()}`);
-      });
-    }
-
-    // Unref so it doesn't block the parent from exiting immediately
-    ideChild.unref();
-  });
-
-  return watchChild;
 }

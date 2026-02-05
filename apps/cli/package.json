@@ -1,0 +1,12 @@
+{
+  "name": "@numezis/cli",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@numezis/agent-core": "workspace:*",
+    "@numezis/server": "workspace:*"
+  }
+}

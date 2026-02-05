@@ -1,6 +1,6 @@
 
-import { auditService } from "../src/services/auditService";
-import { getDb, closeDb } from "../src/lib/db";
+import { auditService } from "@numezis/server/services/auditService";
+import * as db from "@numezis/server/lib/db";
 import { ObjectId } from "mongodb";
 
 async function runVerification() {
@@ -34,8 +34,8 @@ async function runVerification() {
 
     // 4. Verify Data in DB
     console.log("👉 Verifying data in MongoDB...");
-    const db = await getDb();
-    const doc = await db.collection("audit_sessions").findOne({ _id: new ObjectId(sessionId) });
+    const database = await db.getDb();
+    const doc = await database.collection("audit_sessions").findOne({ _id: new ObjectId(sessionId) });
 
     if (!doc) {
         console.error("❌ Document not found in DB!");
@@ -60,7 +60,10 @@ async function runVerification() {
     console.log("✅ All checks passed! Document verification successful.");
     console.log("📄 Document snapshot:", JSON.stringify(doc, null, 2));
 
-    await closeDb();
+    const closeFn = (db as any).closeDb ?? (db as any).closeMongoConnection;
+    if (closeFn) {
+        await closeFn();
+    }
     process.exit(0);
 }
 

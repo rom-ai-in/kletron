@@ -1,6 +1,6 @@
-import { agentGraphService } from "../src/services/agentGraphService";
-import { buildSimpleReactAgentGraph } from "../src/services/agentGraphPresets";
-import { closeDb } from "../src/lib/db";
+import { agentGraphService } from "@numezis/server/services/agentGraphService";
+import { buildSimpleReactAgentGraph } from "@numezis/server/services/agentGraphPresets";
+import * as db from "@numezis/server/lib/db";
 
 async function main() {
   const graph = buildSimpleReactAgentGraph();
@@ -35,6 +35,8 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await closeDb().catch(() => undefined);
+    const closeFn = (db as any).closeDb ?? (db as any).closeMongoConnection;
+    if (closeFn) {
+        await closeFn().catch(() => undefined);
+    }
   });
-

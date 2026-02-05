@@ -1,4 +1,4 @@
-import { I18nProcessWorker } from "../src/services/i18nProcessWorker";
+import { I18nProcessWorker } from "@numezis/server/services/i18nProcessWorker";
 
 async function main() {
   const pollIntervalMs = Number(process.env.I18N_WORKER_POLL_INTERVAL_MS ?? "1000");
@@ -31,4 +31,3 @@ main().catch((err) => {
   console.error("[I18nWorker] Fatal error:", err);
   process.exit(1);
 });
-

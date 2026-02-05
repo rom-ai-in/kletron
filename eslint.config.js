@@ -6,7 +6,7 @@ const rootPath = path.resolve(".");
 
 export default [
   {
-    ignores: ["**/.next/**", "**/dist/**", "**/node_modules/**", "**/__tests__/**"],
+    ignores: ["**/.next/**", "**/dist/**", "**/node_modules/**", "**/__tests__/**", "vendor/**"],
   },
   {
     files: ["**/*.{ts,tsx}"],
@@ -56,7 +56,7 @@ export default [
     },
   },
   {
-    files: ["scripts/**", "mcp-server/**"],
+    files: ["scripts/**", "apps/mcp-server/**"],
     rules: {
       "no-console": "off",
     },

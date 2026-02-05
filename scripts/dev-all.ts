@@ -6,7 +6,6 @@ import {
   createDriftAnalysisWorkerLauncher,
   createTerminalWorkerLauncher,
   createWebLauncher,
-  createNumezisCodeLauncher,
   requireTargetRepoRoot,
   waitForHttpOk,
 } from "./lib/serviceLauncher.js";
@@ -17,6 +16,7 @@ const WEB_PORT = Number(process.env.WEB_PORT ?? 3000);
 const WEB_URL = `http://localhost:${WEB_PORT}`;
 const MCP_HEALTH = "http://localhost:9000/health";
 const LANGGRAPH_INFO = "http://localhost:8080/info";
+const LANGGRAPH_TIMEOUT_MS = Number(process.env.LANGGRAPH_TIMEOUT_MS ?? 120_000);
 
 async function main() {
   console.log("✨ Dev workflow initializing...");
@@ -38,12 +38,11 @@ async function main() {
     createI18nProcessWorkerLauncher({ watch: true }),
     createDriftAnalysisWorkerLauncher({ watch: true }),
     createTerminalWorkerLauncher({ watch: true }),
-    createNumezisCodeLauncher(),
   ].filter(Boolean);
 
   console.log("⏳ Waiting for MCP + LangGraph dev server...");
   await waitForHttpOk(MCP_HEALTH, { timeoutMs: 20_000 });
-  await waitForHttpOk(LANGGRAPH_INFO, { timeoutMs: 30_000 });
+  await waitForHttpOk(LANGGRAPH_INFO, { timeoutMs: LANGGRAPH_TIMEOUT_MS });
   await waitForHttpOk(WEB_URL, { timeoutMs: 30_000 });
   console.log("✅ Health checks passed.");
   console.log(`🌐 Web UI ready: ${WEB_URL}`);

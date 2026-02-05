@@ -25,6 +25,13 @@ interface SkillMeta {
     requiredTools: string[];
 }
 
+interface SkillFrontmatter {
+    name?: string;
+    description?: string;
+    extends?: string[] | string;
+    requiredTools?: string[] | string;
+}
+
 async function listSkills(): Promise<void> {
     const skillsPath = path.join(process.cwd(), SKILLS_DIR);
 
@@ -38,12 +45,24 @@ async function listSkills(): Promise<void> {
             try {
                 const content = await fs.readFile(skillFile, "utf-8");
                 const meta = parseYamlFrontmatter(content);
+                const name = typeof meta.name === "string" ? meta.name : entry.name;
+                const description = typeof meta.description === "string" ? meta.description : "";
+                const extendsList = Array.isArray(meta.extends)
+                    ? meta.extends
+                    : typeof meta.extends === "string"
+                        ? [meta.extends]
+                        : [];
+                const requiredTools = Array.isArray(meta.requiredTools)
+                    ? meta.requiredTools
+                    : typeof meta.requiredTools === "string"
+                        ? [meta.requiredTools]
+                        : [];
                 skills.push({
                     id: entry.name,
-                    name: meta.name ?? entry.name,
-                    description: meta.description ?? "",
-                    extends: meta.extends ?? [],
-                    requiredTools: meta.requiredTools ?? [],
+                    name,
+                    description,
+                    extends: extendsList,
+                    requiredTools,
                 });
             } catch {
                 // Skip dirs without valid SKILL.md
@@ -104,11 +123,16 @@ async function validateSkills(): Promise<void> {
                 count++;
 
                 // Validation checks
-                if (!meta.name) warnings.push(`${entry.name}: missing 'name' in frontmatter`);
-                if (!meta.description) warnings.push(`${entry.name}: missing 'description'`);
+                if (!meta.name || typeof meta.name !== "string") warnings.push(`${entry.name}: missing 'name' in frontmatter`);
+                if (!meta.description || typeof meta.description !== "string") warnings.push(`${entry.name}: missing 'description'`);
 
                 // Check extends references exist
-                for (const ext of meta.extends ?? []) {
+                const extendsList = Array.isArray(meta.extends)
+                    ? meta.extends
+                    : typeof meta.extends === "string"
+                        ? [meta.extends]
+                        : [];
+                for (const ext of extendsList) {
                     const extPath = path.join(skillsPath, ext, SKILL_FILE);
                     try {
                         await fs.access(extPath);
@@ -193,12 +217,12 @@ Return valid JSON: \`{"result": "..."}\`
     console.log(`   Path: ${skillFile}\n`);
 }
 
-function parseYamlFrontmatter(content: string): Record<string, unknown> {
+function parseYamlFrontmatter(content: string): Partial<SkillFrontmatter> {
     const match = content.match(/^---\n([\s\S]*?)\n---/);
     if (!match) return {};
 
     const yaml = match[1];
-    const result: Record<string, unknown> = {};
+    const result: Record<string, string | string[]> = {};
 
     // Simple YAML parsing (for basic key: value and arrays)
     let currentKey = "";
@@ -235,7 +259,7 @@ function parseYamlFrontmatter(content: string): Record<string, unknown> {
         result[currentKey] = currentArray;
     }
 
-    return result;
+    return result as Partial<SkillFrontmatter>;
 }
 
 // CLI Entry Point
