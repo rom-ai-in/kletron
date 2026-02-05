@@ -823,7 +823,10 @@ export default function DesignSystemPage() {
                                                     </button>
                                                 ))}
                                             </div>
-                                            <button className="mt-3 flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-text-secondary hover:bg-state-hover hover:text-text-primary">
+                                            <button
+                                                onClick={() => setMacAppView("settings")}
+                                                className="mt-3 flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-text-secondary hover:bg-state-hover hover:text-text-primary"
+                                            >
                                                 Settings
                                             </button>
                                         </div>

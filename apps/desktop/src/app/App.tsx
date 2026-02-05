@@ -13,7 +13,6 @@ import { structuredPatch } from "diff";
 import { Button } from "@numezis/ui/components/ui/Button";
 import { Textarea } from "@numezis/ui/components/ui/Textarea";
 import { Toggle } from "@numezis/ui/components/ui/Toggle";
-import { type ThreadItem } from "@numezis/ui/components/ui/ThreadFeed";
 
 type ActiveView = "app" | "settings";
 type SettingsSectionId =
@@ -163,52 +162,6 @@ const SETTINGS_SECTIONS = [
   { id: "archived", label: "Archived threads" }
 ] as const;
 
-const DEFAULT_THREADS: ThreadItem[] = [
-  {
-    id: "thread-1",
-    title: "Fix vectors page JSX syntax",
-    subtitle: "numezis-coder-mcp",
-    meta: "4m",
-    status: "active",
-    badge: "3"
-  },
-  {
-    id: "thread-2",
-    title: "Analyze logic failure reasons",
-    meta: "41m",
-    status: "waiting"
-  },
-  {
-    id: "thread-3",
-    title: "Refactor campaign process",
-    meta: "37m",
-    status: "idle"
-  },
-  {
-    id: "thread-4",
-    title: "Polish layout and design",
-    meta: "1h",
-    status: "idle"
-  },
-  {
-    id: "thread-5",
-    title: "Run full checks and deploy",
-    meta: "2m",
-    status: "waiting"
-  },
-  {
-    id: "thread-6",
-    title: "Analyze repo for simplifications",
-    meta: "6h",
-    status: "idle"
-  },
-  {
-    id: "thread-7",
-    title: "Audit configuration defaults",
-    meta: "Yesterday",
-    status: "idle"
-  }
-];
 
 function isValidHttpUrl(value: string): boolean {
   if (!value) return false;
@@ -363,10 +316,38 @@ function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+function formatRelativeTime(iso?: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+  if (diffMinutes < 1) return "now";
+  if (diffMinutes < 60) return `${diffMinutes}m`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h`;
+  if (diffHours < 48) return "Yesterday";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatDateTime(iso?: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function deriveWorkspaceName(rootPath?: string, fallback?: string) {
+  if (fallback) return fallback;
+  if (!rootPath) return "Workspace";
+  const parts = rootPath.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || "Workspace";
+}
+
 export default function App() {
   const [activeView, setActiveView] = useState<ActiveView>("app");
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("general");
-  const [activeThreadId, setActiveThreadId] = useState<string>(DEFAULT_THREADS[0]?.id ?? "");
   const [changesExpanded, setChangesExpanded] = useState(true);
   const [selectedDiffId, setSelectedDiffId] = useState<string | null>(null);
   const [settingsToggles, setSettingsToggles] = useState({
@@ -386,10 +367,16 @@ export default function App() {
   const [loginSession, setLoginSession] = useState<LoginSession | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginPending, setLoginPending] = useState(false);
+  const [threads, setThreads] = useState<ConversationHistoryItem[]>([]);
+  const [threadsLoading, setThreadsLoading] = useState(false);
+  const [threadsError, setThreadsError] = useState<string | null>(null);
+  const [conversationLoading, setConversationLoading] = useState(false);
   const [workspace, setWorkspace] = useState<WorkspaceInfo | null>(() => {
     const raw = localStorage.getItem(WORKSPACE_STORAGE_KEY);
     return raw ? (JSON.parse(raw) as WorkspaceInfo) : null;
   });
+  const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -399,8 +386,17 @@ export default function App() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [modelLabel, setModelLabel] = useState<string>("Backend");
-  const [graphs, setGraphs] = useState<Array<{ id: string; name: string }>>([]);
+  const [modelConfig, setModelConfig] = useState<LlmConfig | null>(null);
+  const [graphs, setGraphs] = useState<AgentGraphSummary[]>([]);
+  const [graphsLoading, setGraphsLoading] = useState(false);
+  const [graphsError, setGraphsError] = useState<string | null>(null);
   const [selectedGraph, setSelectedGraph] = useState<string | null>(null);
+  const [graphRuns, setGraphRuns] = useState<AgentGraphRunSummary[]>([]);
+  const [graphRunsLoading, setGraphRunsLoading] = useState(false);
+  const [graphRunsError, setGraphRunsError] = useState<string | null>(null);
+  const [tools, setTools] = useState<ToolMetadata[]>([]);
+  const [toolsLoading, setToolsLoading] = useState(false);
+  const [toolsError, setToolsError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const streamedEventIdsRef = useRef<Set<string>>(new Set());
@@ -416,6 +412,9 @@ export default function App() {
 
   useEffect(() => {
     setConversationId(null);
+    setThreads([]);
+    setMessages([]);
+    setDiffs([]);
     streamedEventIdsRef.current = new Set();
     handledEditIdsRef.current = new Set();
     setStreamingState("idle");
@@ -523,17 +522,30 @@ export default function App() {
     const token = await getAccessToken();
     if (!token) return;
     try {
+      setGraphsLoading(true);
+      setGraphsError(null);
       const res = await fetch(`${backendUrlTrimmed}/api/agent-graphs`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to load graphs (${res.status})`);
+      }
       const data = await res.json();
-      const list = Array.isArray(data?.graphs) ? data.graphs : [];
+      const list = Array.isArray(data?.graphs) ? (data.graphs as AgentGraphSummary[]) : [];
       setGraphs(list);
-      if (!selectedGraph && list.length > 0) {
-        setSelectedGraph(list[0].id);
+      if (list.length > 0) {
+        const nextSelected = selectedGraph && list.some(graph => graph.id === selectedGraph)
+          ? selectedGraph
+          : list[0].id;
+        setSelectedGraph(nextSelected);
+      } else {
+        setSelectedGraph(null);
       }
     } catch {
-      // ignore
+      setGraphsError("Unable to load graphs.");
+    } finally {
+      setGraphsLoading(false);
     }
   }
 
@@ -547,18 +559,253 @@ export default function App() {
       if (!res.ok) return;
       const data = await res.json();
       const provider = data?.provider ?? "backend";
-      const model = data?.[provider]?.model || data?.[provider]?.deployment || "Backend";
+      const providerConfig = data?.[provider] ?? {};
+      const model = providerConfig?.model || providerConfig?.deployment || "Default";
       setModelLabel(model || "Backend");
+      setModelConfig(data ?? null);
     } catch {
       // ignore
     }
   }
 
+  async function loadWorkspaceSummary() {
+    const token = await getAccessToken();
+    if (!token) return;
+    setWorkspaceLoading(true);
+    try {
+      const res = await fetch(`${backendUrlTrimmed}/api/workspaces/active`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to load workspace (${res.status})`);
+      }
+      const data = await res.json();
+      const summary = data?.workspace ?? null;
+      setWorkspaceSummary(summary);
+      if (summary?.rootPath && (!workspace || workspace.path !== summary.rootPath)) {
+        setWorkspace({ path: summary.rootPath, name: deriveWorkspaceName(summary.rootPath, summary.name) });
+      }
+    } catch {
+      // ignore for now
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
+  async function loadThreads(preferredId?: string) {
+    const token = await getAccessToken();
+    if (!token) return;
+    setThreadsLoading(true);
+    setThreadsError(null);
+    try {
+      const res = await fetch(`${backendUrlTrimmed}/api/agent`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to load threads (${res.status})`);
+      }
+      const data = await res.json();
+      const list = Array.isArray(data) ? (data as ConversationHistoryItem[]) : [];
+      const active = list.filter((item) => item.status !== "archived");
+      setThreads(active);
+      if (preferredId && active.some((item) => item.id === preferredId)) {
+        setConversationId(preferredId);
+      } else if (!conversationId || !active.some((item) => item.id === conversationId)) {
+        setConversationId(active[0]?.id ?? null);
+      }
+    } catch (error) {
+      setThreadsError((error as Error)?.message || "Unable to load threads.");
+    } finally {
+      setThreadsLoading(false);
+    }
+  }
+
+  async function loadConversation(convoId: string) {
+    const token = await getAccessToken();
+    if (!token) return;
+    setConversationLoading(true);
+    setSendError(null);
+    setDiffs([]);
+    handledEditIdsRef.current = new Set();
+    try {
+      const res = await fetch(`${backendUrlTrimmed}/api/agent/${convoId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to load conversation (${res.status})`);
+      }
+      const data = (await res.json()) as ConversationDetail;
+      const rawMessages = Array.isArray(data?.messages) ? data.messages : [];
+      const mapped = rawMessages
+        .filter((msg) => typeof msg?.content === "string")
+        .filter((msg) => {
+          const role = String(msg.role ?? msg.kind ?? "").toLowerCase();
+          return role === "assistant" || role === "user";
+        })
+        .map((msg) => {
+          const role = String(msg.role ?? msg.kind ?? "").toLowerCase();
+          return {
+            role: role === "assistant" ? "assistant" : "user",
+            content: String(msg.content ?? "")
+          } as { role: "user" | "assistant"; content: string };
+        });
+      setMessages(mapped);
+    } catch (error) {
+      setMessages([]);
+      setSendError((error as Error)?.message || "Unable to load conversation.");
+    } finally {
+      setConversationLoading(false);
+    }
+
+    try {
+      const refreshed = await getAccessToken();
+      if (refreshed) {
+        await fetchPendingEdits(convoId, refreshed);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  async function createConversation() {
+    if (!backendReady) {
+      setSendError("Backend disconnected or invalid. Set a valid Backend URL in Settings.");
+      return;
+    }
+    const token = await getAccessToken();
+    if (!token) {
+      setSendError("You must sign in to create a thread.");
+      return;
+    }
+    setSendError(null);
+    try {
+      const res = await fetch(`${backendUrlTrimmed}/api/agent`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title: "New thread"
+        })
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to create thread (${res.status})`);
+      }
+      const data = await res.json();
+      if (data?.id) {
+        setConversationId(data.id);
+        setMessages([]);
+        setDiffs([]);
+        setStreamingMessage(null);
+        await loadThreads(data.id);
+      }
+    } catch (error) {
+      setSendError((error as Error)?.message || "Unable to create thread.");
+    }
+  }
+
+  async function loadGraphRuns(graphId: string) {
+    const token = await getAccessToken();
+    if (!token) return;
+    setGraphRunsLoading(true);
+    setGraphRunsError(null);
+    try {
+      const res = await fetch(`${backendUrlTrimmed}/api/agent-graph-runs?graphId=${encodeURIComponent(graphId)}&limit=20`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to load runs (${res.status})`);
+      }
+      const data = await res.json();
+      const list = Array.isArray(data?.runs) ? (data.runs as AgentGraphRunSummary[]) : [];
+      setGraphRuns(list);
+    } catch (error) {
+      setGraphRunsError((error as Error)?.message || "Unable to load runs.");
+      setGraphRuns([]);
+    } finally {
+      setGraphRunsLoading(false);
+    }
+  }
+
+  async function startGraphRun(graphId: string) {
+    const token = await getAccessToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${backendUrlTrimmed}/api/agent-graphs/${graphId}/runs`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({})
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to start run (${res.status})`);
+      }
+      await loadGraphRuns(graphId);
+    } catch (error) {
+      setGraphRunsError((error as Error)?.message || "Unable to start run.");
+    }
+  }
+
+  async function loadTools() {
+    const token = await getAccessToken();
+    if (!token) return;
+    setToolsLoading(true);
+    setToolsError(null);
+    try {
+      const res = await fetch(`${backendUrlTrimmed}/api/tools/list`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to load tools (${res.status})`);
+      }
+      const data = await res.json();
+      const list = Array.isArray(data) ? (data as ToolMetadata[]) : [];
+      setTools(list);
+    } catch (error) {
+      setToolsError((error as Error)?.message || "Unable to load tools.");
+      setTools([]);
+    } finally {
+      setToolsLoading(false);
+    }
+  }
+
   useEffect(() => {
-    if (!auth?.accessToken) return;
+    if (!auth?.accessToken || !backendReady) return;
+    void loadWorkspaceSummary();
+    void loadThreads();
     void loadGraphs();
     void loadModel();
-  }, [auth?.accessToken, backendUrlTrimmed]);
+    void loadTools();
+  }, [auth?.accessToken, backendUrlTrimmed, backendReady]);
+
+  useEffect(() => {
+    if (!auth?.accessToken) return;
+    if (!selectedGraph) {
+      setGraphRuns([]);
+      return;
+    }
+    void loadGraphRuns(selectedGraph);
+  }, [auth?.accessToken, selectedGraph, backendUrlTrimmed]);
+
+  useEffect(() => {
+    if (!auth?.accessToken) return;
+    if (!conversationId) {
+      setMessages([]);
+      return;
+    }
+    if (streaming) return;
+    void loadConversation(conversationId);
+  }, [auth?.accessToken, conversationId, backendUrlTrimmed, streaming]);
 
   async function fetchPendingEdits(convoId: string, token: string) {
     if (!workspace?.path) return;
@@ -762,6 +1009,9 @@ export default function App() {
     setLoginPending(false);
     setStreamingState("idle");
     setConversationId(null);
+    setThreads([]);
+    setMessages([]);
+    setDiffs([]);
     streamedEventIdsRef.current = new Set();
     handledEditIdsRef.current = new Set();
   }
@@ -827,6 +1077,7 @@ export default function App() {
         throw new Error("Failed to create session.");
       }
       setConversationId(data.id);
+      await loadThreads(data.id);
       return data.id as string;
     };
 
@@ -845,7 +1096,10 @@ export default function App() {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`
             },
-            body: JSON.stringify({ message: trimmed }),
+            body: JSON.stringify({
+              message: trimmed,
+              ...(modelConfig?.provider ? { llmProvider: modelConfig.provider } : {})
+            }),
             signal: abortRef.current?.signal
           });
 
@@ -984,6 +1238,7 @@ export default function App() {
       if (convoId) {
         await fetchPendingEdits(convoId, token);
       }
+      await loadThreads(convoId ?? undefined);
     }
   }
 
@@ -1068,29 +1323,13 @@ export default function App() {
     setDiffs(prev => prev.filter(d => d.editId !== diffId));
   }
 
-  async function checkForUpdates() {
-    try {
-      const status = await window.numezis.checkForUpdates();
-      setUpdateStatus(status);
-    } catch {
-      // ignore
-    }
-  }
-
-  async function restartToUpdate() {
-    try {
-      await window.numezis.restartToUpdate();
-    } catch {
-      // ignore
-    }
-  }
-
   const selectedDiff = selectedDiffId
     ? diffs.find((diff) => diff.editId === selectedDiffId) ?? diffs[0]
     : diffs[0];
   const selectedHunk = selectedDiff?.hunks[0];
   const selectedRows = selectedHunk ? buildDiffRows(selectedHunk) : [];
   const diffTooLarge = selectedRows.length > 160;
+  const modelMeta = modelConfig?.provider ? `${modelConfig.provider} · ${modelLabel}` : modelLabel;
 
   return (
     <div className="flex h-screen flex-col bg-bg-app text-text-primary">
@@ -1136,6 +1375,177 @@ export default function App() {
 
           <main className="flex-1 overflow-y-auto px-6 py-4">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold text-text-primary">Backend</h2>
+                <div className="border border-border-subtle bg-bg-surface divide-y divide-border-subtle">
+                  <div className="flex items-center justify-between gap-4 px-3 py-2">
+                    <div>
+                      <div className="text-sm font-medium text-text-primary">Backend URL</div>
+                      <div className="text-xs text-text-muted">Connect to your Numezis backend.</div>
+                    </div>
+                    <input
+                      value={backendUrl}
+                      onChange={(event) => setBackendUrl(event.target.value)}
+                      className="w-56 rounded-md border border-border-subtle bg-bg-app px-2 py-1 text-xs text-text-primary"
+                      placeholder="https://app.numezis.com"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-4 px-3 py-2">
+                    <div>
+                      <div className="text-sm font-medium text-text-primary">Connection status</div>
+                      <div className="text-xs text-text-muted">Reachability and auth status.</div>
+                    </div>
+                    <span className={`text-xs ${backendReady ? "text-emerald-400" : "text-rose-300"}`}>
+                      {backendReady ? "Connected" : "Disconnected"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 px-3 py-2">
+                    <div>
+                      <div className="text-sm font-medium text-text-primary">Account</div>
+                      <div className="text-xs text-text-muted">
+                        {auth?.user?.email ? auth.user.email : "Sign in to access threads and runs."}
+                      </div>
+                    </div>
+                    {auth?.accessToken ? (
+                      <Button size="xs" variant="secondary" onClick={signOut}>
+                        Sign out
+                      </Button>
+                    ) : (
+                      <Button size="xs" variant="secondary" onClick={startWebLogin} disabled={!backendUrlValid || loginPending}>
+                        {loginPending ? "Signing in..." : "Sign in"}
+                      </Button>
+                    )}
+                  </div>
+                  {loginError && (
+                    <div className="px-3 py-2 text-xs text-rose-300">{loginError}</div>
+                  )}
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold text-text-primary">Workspace</h2>
+                <div className="border border-border-subtle bg-bg-surface divide-y divide-border-subtle">
+                  <div className="flex items-center justify-between gap-4 px-3 py-2">
+                    <div>
+                      <div className="text-sm font-medium text-text-primary">Active workspace</div>
+                      <div className="text-xs text-text-muted">
+                        {workspaceSummary
+                          ? workspaceSummary.name ?? deriveWorkspaceName(workspaceSummary.rootPath)
+                          : "Not set"}
+                      </div>
+                    </div>
+                    <span className="text-xs text-text-muted">
+                      {workspaceLoading ? "Loading..." : workspaceSummary?.id ?? "No workspace"}
+                    </span>
+                  </div>
+                  <div className="px-3 py-2 text-xs text-text-muted">
+                    {workspaceSummary?.rootPath ?? workspace?.path ?? "Configure a workspace in the portal to sync threads."}
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold text-text-primary">Models</h2>
+                <div className="border border-border-subtle bg-bg-surface divide-y divide-border-subtle">
+                  <div className="flex items-center justify-between gap-4 px-3 py-2">
+                    <div>
+                      <div className="text-sm font-medium text-text-primary">Default provider</div>
+                      <div className="text-xs text-text-muted">Used for new threads.</div>
+                    </div>
+                    <span className="text-xs text-text-muted">{modelConfig?.provider ?? "Not set"}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 px-3 py-2">
+                    <div>
+                      <div className="text-sm font-medium text-text-primary">Model</div>
+                      <div className="text-xs text-text-muted">Resolved from provider configuration.</div>
+                    </div>
+                    <span className="text-xs text-text-muted">{modelLabel}</span>
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold text-text-primary">Agent graphs</h2>
+                <div className="border border-border-subtle bg-bg-surface divide-y divide-border-subtle">
+                  {graphsLoading && <div className="px-3 py-2 text-xs text-text-muted">Loading graphs...</div>}
+                  {graphsError && <div className="px-3 py-2 text-xs text-rose-300">{graphsError}</div>}
+                  {!graphsLoading && !graphsError && graphs.length === 0 && (
+                    <div className="px-3 py-2 text-xs text-text-muted">No graphs available.</div>
+                  )}
+                  {graphs.map((graph) => (
+                    <button
+                      key={graph.id}
+                      type="button"
+                      onClick={() => setSelectedGraph(graph.id)}
+                      className={`flex items-center justify-between gap-4 px-3 py-2 text-left text-xs ${
+                        selectedGraph === graph.id
+                          ? "bg-state-selected text-text-primary"
+                          : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-text-primary">{graph.name}</div>
+                        <div className="text-[11px] text-text-muted">{graph.description ?? graph.id}</div>
+                      </div>
+                      <span className="text-[10px] text-text-muted">{formatRelativeTime(graph.updatedAt)}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-text-primary">Runs</h2>
+                  {selectedGraph && (
+                    <Button size="xs" variant="secondary" onClick={() => startGraphRun(selectedGraph)}>
+                      Run graph
+                    </Button>
+                  )}
+                </div>
+                <div className="border border-border-subtle bg-bg-surface divide-y divide-border-subtle">
+                  {!selectedGraph && (
+                    <div className="px-3 py-2 text-xs text-text-muted">Select a graph to see runs.</div>
+                  )}
+                  {selectedGraph && graphRunsLoading && (
+                    <div className="px-3 py-2 text-xs text-text-muted">Loading runs...</div>
+                  )}
+                  {selectedGraph && graphRunsError && (
+                    <div className="px-3 py-2 text-xs text-rose-300">{graphRunsError}</div>
+                  )}
+                  {selectedGraph && !graphRunsLoading && !graphRunsError && graphRuns.length === 0 && (
+                    <div className="px-3 py-2 text-xs text-text-muted">No runs yet.</div>
+                  )}
+                  {selectedGraph && graphRuns.map((run) => (
+                    <div key={run.id} className="flex items-center justify-between gap-4 px-3 py-2 text-xs text-text-secondary">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-text-primary">{run.status ?? "UNKNOWN"}</div>
+                        <div className="text-[11px] text-text-muted">{run.id}</div>
+                      </div>
+                      <span className="text-[10px] text-text-muted">{formatDateTime(run.startedAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold text-text-primary">Tools</h2>
+                <div className="border border-border-subtle bg-bg-surface divide-y divide-border-subtle">
+                  {toolsLoading && <div className="px-3 py-2 text-xs text-text-muted">Loading tools...</div>}
+                  {toolsError && <div className="px-3 py-2 text-xs text-rose-300">{toolsError}</div>}
+                  {!toolsLoading && !toolsError && tools.length === 0 && (
+                    <div className="px-3 py-2 text-xs text-text-muted">No tools available.</div>
+                  )}
+                  {tools.map((tool) => (
+                    <div key={tool.name} className="flex items-center justify-between gap-4 px-3 py-2 text-xs text-text-secondary">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-text-primary">{tool.name}</div>
+                        <div className="text-[11px] text-text-muted">{tool.description ?? "No description"}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
               <section className="space-y-3">
                 <h2 className="text-sm font-semibold text-text-primary">General</h2>
                 <div className="border border-border-subtle bg-bg-surface divide-y divide-border-subtle">
@@ -1278,14 +1688,15 @@ export default function App() {
               variant="secondary"
               size="sm"
               className="w-full justify-center"
+              disabled={!backendReady || !auth?.accessToken}
               onClick={() => {
                 abortRef.current?.abort();
                 setStreaming(false);
                 setStreamingMessage(null);
-                setConversationId(null);
                 setMessages([]);
                 setDiffs([]);
                 setSendError(null);
+                void createConversation();
               }}
             >
               New thread
@@ -1295,19 +1706,39 @@ export default function App() {
               Threads
             </div>
             <div className="mt-2 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-              {DEFAULT_THREADS.map((thread) => (
+              {!auth?.accessToken && (
+                <div className="px-2 py-2 text-xs text-text-muted">Sign in to load threads.</div>
+              )}
+              {threadsLoading && (
+                <div className="px-2 py-2 text-xs text-text-muted">Loading threads...</div>
+              )}
+              {threadsError && (
+                <div className="px-2 py-2 text-xs text-rose-300">{threadsError}</div>
+              )}
+              {auth?.accessToken && !threadsLoading && !threadsError && threads.length === 0 && (
+                <div className="px-2 py-2 text-xs text-text-muted">No threads yet.</div>
+              )}
+              {threads.map((thread) => (
                 <button
                   key={thread.id}
                   type="button"
-                  onClick={() => setActiveThreadId(thread.id)}
+                  onClick={() => {
+                    if (thread.id === conversationId) return;
+                    abortRef.current?.abort();
+                    setStreaming(false);
+                    setStreamingMessage(null);
+                    setDiffs([]);
+                    setSendError(null);
+                    setConversationId(thread.id);
+                  }}
                   className={`flex items-center justify-between rounded-md px-2 py-1.5 text-left text-xs transition ${
-                    activeThreadId === thread.id
+                    conversationId === thread.id
                       ? "bg-state-selected text-text-primary"
                       : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
                   }`}
                 >
-                  <span className="truncate">{thread.title}</span>
-                  <span className="text-[10px] text-text-muted">{thread.meta}</span>
+                  <span className="truncate">{thread.title || "Untitled"}</span>
+                  <span className="text-[10px] text-text-muted">{formatRelativeTime(thread.updatedAt)}</span>
                 </button>
               ))}
             </div>
@@ -1325,9 +1756,14 @@ export default function App() {
           <main className="flex min-w-0 flex-1 flex-col">
             <div className="flex flex-1 flex-col overflow-hidden border-r border-border-subtle">
               <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
-                {messages.length === 0 && (
+                {conversationLoading && (
                   <div className="border border-border-subtle bg-bg-surface px-3 py-2 text-xs text-text-muted">
-                    Ask anything to start a thread. The agent will respond here.
+                    Loading thread...
+                  </div>
+                )}
+                {!conversationLoading && messages.length === 0 && (
+                  <div className="border border-border-subtle bg-bg-surface px-3 py-2 text-xs text-text-muted">
+                    Ask anything to start. The agent will respond here.
                   </div>
                 )}
                 {messages.map((msg, idx) => (
@@ -1376,14 +1812,19 @@ export default function App() {
                   noResize
                 />
                 <div className="mt-2 flex items-center justify-between">
-                  <span className="text-[10px] text-text-muted">{modelLabel}</span>
+                  <span className="text-[10px] text-text-muted">{modelMeta}</span>
                   {streaming ? (
                     <Button variant="secondary" size="sm" onClick={stopStreaming}>
                       <Square className="mr-2 h-4 w-4" />
                       Stop
                     </Button>
                   ) : (
-                    <Button variant="primary" size="sm" onClick={sendMessage} disabled={!input.trim() || !backendReady}>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={sendMessage}
+                      disabled={!input.trim() || !backendReady || !auth?.accessToken}
+                    >
                       <Send className="mr-2 h-4 w-4" />
                       Send
                     </Button>
