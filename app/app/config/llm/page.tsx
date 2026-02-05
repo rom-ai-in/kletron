@@ -1,8 +1,7 @@
 "use client";
 
-import { LlmConfigView } from "@/src/components/config/LlmConfigView";
+import { AiConfigView } from "@/src/components/config/AiConfigView";
 
 export default function ConfigLlmPage() {
-  return <LlmConfigView />;
+  return <AiConfigView initialTab="llm" />;
 }
-

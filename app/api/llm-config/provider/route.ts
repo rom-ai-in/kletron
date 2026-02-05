@@ -6,7 +6,7 @@ import { requireAppRouteAuth } from "@/src/lib/auth/apiAuth";
 export const dynamic = "force-dynamic";
 
 const ProviderSchema = z.object({
-    provider: z.enum(["azure", "lmstudio"]),
+    provider: z.enum(["azure", "openai", "claude", "gemini", "lmstudio", "ollama"]),
 });
 
 /**
@@ -16,7 +16,7 @@ const ProviderSchema = z.object({
 export async function PUT(request: NextRequest) {
     const auth = await requireAppRouteAuth(request);
     if (!auth) {
-        return new Response(JSON.stringify({"error": "Unauthorized"}), {
+        return new Response(JSON.stringify({ "error": "Unauthorized" }), {
             status: 401,
             headers: { "Content-Type": "application/json" },
         });

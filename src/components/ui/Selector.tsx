@@ -15,9 +15,10 @@ export type SelectorProps = {
     direction?: 'up' | 'down';
     size?: 'sm' | 'md';
     status?: 'success' | 'error' | 'loading' | 'none';
+    loading?: boolean;
 };
 
-export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSelect, direction = 'up', size = 'md', status = 'none' }) => {
+export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSelect, direction = 'up', size = 'md', status = 'none', loading = false }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -42,22 +43,30 @@ export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSel
 
     return (
         <div className="relative" ref={containerRef}>
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className={`flex items-center gap-1.5 bg-zinc-900/50 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded transition-colors group ${isSmall ? 'px-2 py-1' : 'px-3 py-1.5'}`}
-                type="button"
-            >
-                <span className={`font-bold text-zinc-600 uppercase tracking-wider ${isSmall ? 'text-[9px]' : 'text-[10px]'}`}>{label}</span>
-                <span className={`text-zinc-300 font-medium truncate max-w-[120px] ${isSmall ? 'text-[11px]' : 'text-[13px]'}`}>{selectedOption?.label || value}</span>
+            {loading ? (
+                <div className={`flex items-center gap-1.5 bg-zinc-900/50 border border-zinc-800 rounded ${isSmall ? 'px-2 py-1' : 'px-3 py-1.5'}`}>
+                    <span className={`font-bold text-zinc-600 uppercase tracking-wider ${isSmall ? 'text-[9px]' : 'text-[10px]'}`}>{label}</span>
+                    <div className={`bg-zinc-700/50 rounded animate-pulse ${isSmall ? 'w-14 h-3' : 'w-20 h-4'}`} />
+                    <ChevronDown className={`text-zinc-700 ${isSmall ? 'w-2.5 h-2.5' : 'w-3 h-3'}`} />
+                </div>
+            ) : (
+                <button
+                    onClick={() => setIsOpen(!isOpen)}
+                    className={`flex items-center gap-1.5 bg-zinc-900/50 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded transition-colors group ${isSmall ? 'px-2 py-1' : 'px-3 py-1.5'}`}
+                    type="button"
+                >
+                    <span className={`font-bold text-zinc-600 uppercase tracking-wider ${isSmall ? 'text-[9px]' : 'text-[10px]'}`}>{label}</span>
+                    <span className={`text-zinc-300 font-medium truncate max-w-[120px] ${isSmall ? 'text-[11px]' : 'text-[13px]'}`}>{selectedOption?.label || value}</span>
 
-                {status && status !== 'none' && (
-                    <div className={`w-1.5 h-1.5 rounded-full ${statusColor}`} />
-                )}
+                    {status && status !== 'none' && (
+                        <div className={`w-1.5 h-1.5 rounded-full ${statusColor}`} />
+                    )}
 
-                <ChevronDown className={`text-zinc-600 group-hover:text-zinc-400 transition-all duration-200 ${isOpen ? 'rotate-180' : ''} ${isSmall ? 'w-2.5 h-2.5' : 'w-3 h-3'}`} />
-            </button>
+                    <ChevronDown className={`text-zinc-600 group-hover:text-zinc-400 transition-all duration-200 ${isOpen ? 'rotate-180' : ''} ${isSmall ? 'w-2.5 h-2.5' : 'w-3 h-3'}`} />
+                </button>
+            )}
 
-            {isOpen && (
+            {isOpen && !loading && (
                 <div
                     className={`absolute left-0 mb-1 min-w-[180px] bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl overflow-hidden z-50 flex flex-col p-1 ${direction === 'up' ? 'bottom-full origin-bottom' : 'top-full mt-1 origin-top'
                         }`}

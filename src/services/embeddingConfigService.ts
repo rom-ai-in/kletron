@@ -256,6 +256,51 @@ export async function updateOllamaEmbeddingConfig(
 }
 
 // ============================================
+// Default Provider Configurations (placeholders)
+// ============================================
+
+function getDefaultProviderConfig(provider: EmbeddingProviderType): unknown {
+    switch (provider) {
+        case "azure":
+            return {
+                endpoint: "",
+                apiKey: "",
+                deployment: "",
+                model: "text-embedding-ada-002",
+                apiVersion: "2024-02-01",
+            };
+        case "openai":
+            return {
+                apiKey: "",
+                model: "text-embedding-3-small",
+            };
+        case "voyage":
+            return {
+                apiKey: "",
+                model: "voyage-3",
+            };
+        case "gemini":
+            return {
+                apiKey: "",
+                model: "text-embedding-004",
+            };
+        case "lmstudio":
+            return {
+                baseUrl: "http://127.0.0.1:1234",
+                model: "nomic-embed-text",
+                dimensions: 1536,
+            };
+        case "ollama":
+            return {
+                baseUrl: "http://127.0.0.1:11434",
+                model: "nomic-embed-text",
+            };
+        default:
+            return undefined;
+    }
+}
+
+// ============================================
 // Update Default Provider
 // ============================================
 
@@ -276,19 +321,42 @@ export async function updateDefaultEmbeddingProvider(
         safeCurrentConfig._id = (safeCurrentConfig._id as any).toString();
     }
 
+    // Ensure dates are proper Date objects (MongoDB may return them as strings or ISODate)
+    const createdAt = safeCurrentConfig.createdAt
+        ? (safeCurrentConfig.createdAt instanceof Date ? safeCurrentConfig.createdAt : new Date(safeCurrentConfig.createdAt as unknown as string))
+        : new Date();
+
     const updatedConfig: EmbeddingConfig = {
         ...safeCurrentConfig,
         provider,
         defaultProvider: provider,
+        createdAt,
         updatedAt: new Date(),
     };
 
     // Ensure the selected provider has at least default config
+    // Use env config if available, otherwise use placeholder defaults
     if (!updatedConfig[provider]) {
-        (updatedConfig as any)[provider] = envConfig[provider];
+        (updatedConfig as any)[provider] = envConfig[provider] ?? getDefaultProviderConfig(provider);
     }
 
-    const validatedConfig = validateEmbeddingConfig(updatedConfig);
+    // Deep conversion of null values to undefined (Zod expects undefined for optional fields, not null)
+    // MongoDB stores null for unconfigured providers and nested null values (e.g., lmstudio.apiKey: null)
+    function deepStripNulls(obj: unknown): unknown {
+        if (obj === null) return undefined;
+        if (obj instanceof Date) return obj;
+        if (Array.isArray(obj)) return obj.map(deepStripNulls);
+        if (typeof obj === 'object' && obj !== null) {
+            return Object.fromEntries(
+                Object.entries(obj).map(([key, value]) => [key, deepStripNulls(value)])
+            );
+        }
+        return obj;
+    }
+
+    const cleanedConfig = deepStripNulls(updatedConfig) as EmbeddingConfig;
+    const validatedConfig = validateEmbeddingConfig(cleanedConfig);
+
     return await saveConfig(collection, currentConfig, validatedConfig);
 }
 
@@ -312,9 +380,11 @@ async function saveConfig(
     updatedConfig: EmbeddingConfig
 ): Promise<EmbeddingConfig> {
     if (currentConfig._id) {
+        // Exclude _id from the update payload (MongoDB rejects updates to immutable _id field)
+        const { _id: _, ...configWithoutId } = updatedConfig;
         await collection.updateOne(
             { _id: new ObjectId(currentConfig._id) } as any,
-            { $set: updatedConfig }
+            { $set: configWithoutId }
         );
     } else {
         const result = await collection.insertOne({

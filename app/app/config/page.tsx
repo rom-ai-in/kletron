@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { Settings, Sparkles, ListTree, ArrowRight, Wrench, Folder, Database } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Settings, ListTree, ArrowRight, Wrench, Folder, Brain } from "lucide-react";
 import { Panel } from "@/src/components/design-system";
 
-type LlmConfigSummary = { provider?: "azure" | "lmstudio" } | null;
+type LlmConfigSummary = { provider?: string } | null;
 
 export default function ConfigOverviewPage() {
   const [graphsCount, setGraphsCount] = useState<number>(0);
@@ -84,12 +84,42 @@ export default function ConfigOverviewPage() {
     void fetchTools();
   }, []);
 
+  // Format provider names for display
+  const formatProvider = (provider: string | null | undefined) => {
+    if (!provider) return null;
+    const providerNames: Record<string, string> = {
+      azure: "Azure",
+      openai: "OpenAI",
+      claude: "Claude",
+      gemini: "Gemini",
+      lmstudio: "LM Studio",
+      ollama: "Ollama",
+      voyage: "Voyage",
+    };
+    return providerNames[provider] || provider;
+  };
+
+  // Build AI Models meta string
+  const getAiModelsMeta = () => {
+    const llm = formatProvider(llmProvider?.provider);
+    const embedding = formatProvider(embeddingProvider);
+
+    if (llm && embedding) {
+      return `LLM: ${llm} · Embed: ${embedding}`;
+    } else if (llm) {
+      return `LLM: ${llm}`;
+    } else if (embedding) {
+      return `Embed: ${embedding}`;
+    }
+    return "Not configured";
+  };
+
   return (
     <div className="flex h-full flex-col bg-bg-app overflow-hidden">
       <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
         <div>
           <h1 className="text-lg font-semibold text-text-primary">Configuration</h1>
-          <p className="text-sm text-text-muted">One place to manage Context, LLM providers, and Graph flows.</p>
+          <p className="text-sm text-text-muted">One place to manage Context, AI providers, and Graph flows.</p>
         </div>
       </div>
 
@@ -112,26 +142,12 @@ export default function ConfigOverviewPage() {
             }
           />
           <ConfigCard
-            title="LLM"
-            description="Providers, connection settings, and defaults."
-            icon={<Sparkles className="h-4 w-4 text-text-muted" />}
+            title="AI Models"
+            description="LLM providers & embedding models."
+            icon={<Brain className="h-4 w-4 text-emerald-500" />}
             href="/app/config/llm"
-            meta={
-              llmProvider?.provider
-                ? `Active: ${llmProvider.provider === "azure" ? "Azure OpenAI" : "LM Studio"}`
-                : "Unknown"
-            }
-          />
-          <ConfigCard
-            title="Embeddings"
-            description="Vector model configuration."
-            icon={<Database className="h-4 w-4 text-text-muted" />}
-            href="/app/config/embeddings"
-            meta={
-              embeddingProvider
-                ? `Active: ${embeddingProvider === "azure" ? "Azure OpenAI" : "LM Studio"}`
-                : "Unknown"
-            }
+            meta={getAiModelsMeta()}
+            highlight
           />
           <ConfigCard
             title="Graphs"
@@ -168,21 +184,23 @@ function ConfigCard({
   icon,
   href,
   meta,
+  highlight = false,
 }: {
   title: string;
   description: string;
   icon: React.ReactNode;
   href: string;
   meta: string;
+  highlight?: boolean;
 }) {
   return (
     <Link href={href} className="group">
-      <Panel className="p-4 h-full transition-colors group-hover:border-border-strong">
+      <Panel className={`p-4 h-full transition-colors group-hover:border-border-strong ${highlight ? "border-emerald-500/30" : ""}`}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               {icon}
-              <h2 className="text-sm font-semibold text-text-primary">{title}</h2>
+              <h2 className={`text-sm font-semibold ${highlight ? "text-emerald-500" : "text-text-primary"}`}>{title}</h2>
             </div>
             <p className="mt-1 text-xs text-text-secondary">{description}</p>
             <p className="mt-3 text-[11px] text-text-muted">{meta}</p>

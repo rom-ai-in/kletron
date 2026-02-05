@@ -1634,24 +1634,45 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/agent-graphs", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data) => {
-        const list = Array.isArray(data?.graphs) ? (data.graphs as AgentGraphRecord[]) : [];
+    const loadGraphs = async () => {
+      try {
+        // Fetch both graphs and user preferences in parallel
+        const [graphsRes, prefsRes] = await Promise.all([
+          fetch("/api/agent-graphs", { cache: "no-store" }),
+          fetch("/api/user-preferences").catch(() => null)
+        ]);
+
+        const graphsData = await graphsRes.json();
+        const list = Array.isArray(graphsData?.graphs) ? (graphsData.graphs as AgentGraphRecord[]) : [];
         setAgentGraphs(list);
-        // Load graph selection from localStorage or auto-select first
-        const storedGraph = window.localStorage.getItem("numezis-graph-selection");
-        if (storedGraph && list.some(g => `agent:${g._id}` === storedGraph)) {
-          setSelectedGraphKey(storedGraph);
+
+        // Try API preferences first, then localStorage, then auto-select
+        let savedGraphKey: string | null = null;
+        if (prefsRes?.ok) {
+          const prefsData = await prefsRes.json();
+          if (prefsData.success && prefsData.preferences?.selectedGraphId) {
+            savedGraphKey = prefsData.preferences.selectedGraphId;
+          }
+        }
+
+        // Fallback to localStorage
+        if (!savedGraphKey) {
+          savedGraphKey = window.localStorage.getItem("numezis-graph-selection");
+        }
+
+        // Apply saved selection or auto-select first
+        if (savedGraphKey && list.some(g => `agent:${g._id}` === savedGraphKey)) {
+          setSelectedGraphKey(savedGraphKey);
         } else if (list.length > 0 && !selectedGraphKey) {
           setSelectedGraphKey(`agent:${list[0]._id}`);
         }
         setGraphPrefsLoaded(true);
-      })
-      .catch(() => {
+      } catch {
         setAgentGraphs([]);
         setGraphPrefsLoaded(true);
-      });
+      }
+    };
+    void loadGraphs();
   }, []);
 
   useEffect(() => {
@@ -1708,21 +1729,43 @@ export default function HomePage() {
   }, [selectedPromptFile]);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem("numezis-llm-selection");
-    if (stored) {
+    const loadLlmPreferences = async () => {
       try {
-        const parsed = JSON.parse(stored) as { provider?: string; model?: string };
-        if (parsed.provider === "azure" || parsed.provider === "lmstudio") {
-          setModelProvider(parsed.provider);
-        }
-        if (typeof parsed.model === "string") {
-          setLmStudioModel(parsed.model);
+        // Try to load from user-preferences API first
+        const prefsRes = await fetch("/api/user-preferences").catch(() => null);
+        if (prefsRes?.ok) {
+          const prefsData = await prefsRes.json();
+          if (prefsData.success && prefsData.preferences?.selectedLlmProvider) {
+            const provider = prefsData.preferences.selectedLlmProvider as LlmProviderType;
+            if (["azure", "openai", "claude", "gemini", "lmstudio", "ollama"].includes(provider)) {
+              setModelProvider(provider);
+              setLlmPrefsLoaded(true);
+              return;
+            }
+          }
         }
       } catch {
-        // Ignore malformed cache entries.
+        // Fall through to localStorage
       }
-    }
-    setLlmPrefsLoaded(true);
+
+      // Fallback to localStorage
+      const stored = window.localStorage.getItem("numezis-llm-selection");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as { provider?: string; model?: string };
+          if (parsed.provider && ["azure", "openai", "claude", "gemini", "lmstudio", "ollama"].includes(parsed.provider)) {
+            setModelProvider(parsed.provider as LlmProviderType);
+          }
+          if (typeof parsed.model === "string") {
+            setLmStudioModel(parsed.model);
+          }
+        } catch {
+          // Ignore malformed cache entries.
+        }
+      }
+      setLlmPrefsLoaded(true);
+    };
+    void loadLlmPreferences();
   }, []);
 
   useEffect(() => {
@@ -1764,12 +1807,17 @@ export default function HomePage() {
       .then((data: { targetDir?: string | null; llm?: LlmEnvInfo }) => {
         setTargetDir(data.targetDir || null);
         setLlmInfo(data.llm ?? null);
+
+        // Always ensure lmStudioModel is populated from DB config if empty
+        // This fixes the issue where localStorage has provider but empty model
+        setLmStudioModel((current) => {
+          if (current && current.trim()) return current; // Keep existing value
+          return data.llm?.lmstudio?.model ?? "";
+        });
+
         if (!window.localStorage.getItem("numezis-llm-selection")) {
           const defaultProvider = (data.llm?.defaultProvider as LlmProviderType) || "azure";
           setModelProvider(defaultProvider);
-          if (defaultProvider === "lmstudio" || defaultProvider === "ollama") {
-            setLmStudioModel(data.llm?.lmstudio?.model ?? "");
-          }
         }
       })
       .catch(() => setTargetDir(null));
@@ -1788,6 +1836,12 @@ export default function HomePage() {
   useEffect(() => {
     if (!graphPrefsLoaded || !selectedGraphKey) return;
     window.localStorage.setItem("numezis-graph-selection", selectedGraphKey);
+    // Persist to user preferences for cross-session persistence (fire-and-forget)
+    fetch('/api/user-preferences', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ selectedGraphId: selectedGraphKey })
+    }).catch(() => { /* Silently fail, localStorage is fallback */ });
   }, [selectedGraphKey, graphPrefsLoaded]);
 
   useEffect(() => {
@@ -1812,6 +1866,12 @@ export default function HomePage() {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ provider })
+        }),
+        // Persist to user preferences for cross-session persistence
+        fetch('/api/user-preferences', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ selectedLlmProvider: provider })
         })
       ]);
     } catch (err) {
@@ -2474,6 +2534,7 @@ export default function HomePage() {
                               ]}
                               onSelect={setSelectedGraphKey}
                               direction="up"
+                              loading={!graphPrefsLoaded}
                             />
                             <Selector
                               label="LLM"
@@ -2489,6 +2550,7 @@ export default function HomePage() {
                               onSelect={(id) => handleProviderChange(id as LlmProviderType)}
                               direction="up"
                               status={llmStatus}
+                              loading={!llmPrefsLoaded}
                             />
                           </div>
                         </div>

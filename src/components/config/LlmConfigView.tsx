@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Sparkles, Save, RotateCcw, Monitor, Cloud, Check, Globe, Bot, Cpu, Server, Power } from "lucide-react";
+import { Sparkles, Save, RotateCcw, Monitor, Cloud, Check, Globe, Bot, Cpu, Server, Power, PowerOff, Download, Zap, Loader2, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { Panel, Button } from "@/src/components/design-system";
 import type { LlmConfig } from "@/src/schemas/llmConfig.schema";
 import { MODEL_RECOMMENDATIONS, LLM_PROVIDERS, type LlmProviderType } from "@/src/schemas/llmConfig.schema";
@@ -52,7 +52,11 @@ const PROVIDERS = [
   },
 ];
 
-export function LlmConfigView() {
+interface LlmConfigViewProps {
+  hideHeader?: boolean;
+}
+
+export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
   const [config, setConfig] = useState<LlmConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -221,30 +225,32 @@ export function LlmConfigView() {
 
   return (
     <div className="flex h-full flex-col bg-bg-app overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-text-secondary/10 text-text-secondary">
-            <Cpu className="h-5 w-5" />
+      {/* Header - hidden when embedded */}
+      {!hideHeader && (
+        <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-text-secondary/10 text-text-secondary">
+              <Cpu className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold text-text-primary">LLM Configuration</h1>
+              <p className="text-sm text-text-muted">Manage AI providers and connection settings</p>
+            </div>
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-text-primary">LLM Configuration</h1>
-            <p className="text-sm text-text-muted">Manage AI providers and connection settings</p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-text-muted hover:text-red-400"
+              onClick={handleReset}
+              disabled={resetting || saving}
+            >
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Reset Defaults
+            </Button>
           </div>
         </div>
-        <div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-text-muted hover:text-red-400"
-            onClick={handleReset}
-            disabled={resetting || saving}
-          >
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Reset Defaults
-          </Button>
-        </div>
-      </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-elegant">
         {message && (
@@ -271,10 +277,10 @@ export function LlmConfigView() {
                   key={provider.id}
                   onClick={() => isEnabled && void handleProviderChange(provider.id)}
                   className={`group relative p-4 rounded-lg border-2 transition-all ${!isEnabled
-                      ? "opacity-50 border-border-subtle bg-bg-elevated/30 cursor-not-allowed"
-                      : isActive
-                        ? "cursor-pointer border-emerald-500 bg-bg-surface"
-                        : "cursor-pointer border-border-subtle bg-bg-elevated/50 hover:border-border-strong"
+                    ? "opacity-50 border-border-subtle bg-bg-elevated/30 cursor-not-allowed"
+                    : isActive
+                      ? "cursor-pointer border-emerald-500 bg-bg-surface"
+                      : "cursor-pointer border-border-subtle bg-bg-elevated/50 hover:border-border-strong"
                     }`}
                 >
                   {/* Active indicator */}
@@ -288,10 +294,10 @@ export function LlmConfigView() {
                     onClick={(e) => void handleToggleProvider(provider.id, e)}
                     disabled={isToggling || (isActive && isEnabled)}
                     className={`absolute top-3 right-3 p-1 rounded transition-colors ${isToggling
-                        ? "animate-pulse"
-                        : isEnabled
-                          ? "text-emerald-500 hover:bg-emerald-500/10"
-                          : "text-zinc-500 hover:bg-zinc-500/10"
+                      ? "animate-pulse"
+                      : isEnabled
+                        ? "text-emerald-500 hover:bg-emerald-500/10"
+                        : "text-zinc-500 hover:bg-zinc-500/10"
                       } ${isActive && isEnabled ? "opacity-30 cursor-not-allowed" : ""}`}
                     title={isActive && isEnabled ? "Cannot disable active provider" : isEnabled ? "Disable provider" : "Enable provider"}
                   >
@@ -333,6 +339,7 @@ export function LlmConfigView() {
               icon={Cloud}
               onSubmit={(e) => void handleSaveProvider(e, "azure", azureForm)}
               saving={saving}
+              provider="azure"
               fields={[
                 { label: "Endpoint URL", key: "endpoint", type: "url", placeholder: "https://resource-name.openai.azure.com/" },
                 { label: "API Key", key: "apiKey", type: "password", placeholder: "••••••••" },
@@ -352,6 +359,7 @@ export function LlmConfigView() {
               icon={Sparkles}
               onSubmit={(e) => void handleSaveProvider(e, "openai", openaiForm)}
               saving={saving}
+              provider="openai"
               fields={[
                 { label: "API Key", key: "apiKey", type: "password", placeholder: "sk-..." },
                 { label: "Model", key: "model", placeholder: "gpt-4o", suggestions: MODEL_RECOMMENDATIONS.openai },
@@ -369,6 +377,7 @@ export function LlmConfigView() {
               icon={Bot}
               onSubmit={(e) => void handleSaveProvider(e, "claude", claudeForm)}
               saving={saving}
+              provider="claude"
               fields={[
                 { label: "API Key", key: "apiKey", type: "password", placeholder: "sk-ant-..." },
                 { label: "Model", key: "model", placeholder: "claude-sonnet-4-20250514", suggestions: MODEL_RECOMMENDATIONS.claude },
@@ -385,6 +394,7 @@ export function LlmConfigView() {
               icon={Globe}
               onSubmit={(e) => void handleSaveProvider(e, "gemini", geminiForm)}
               saving={saving}
+              provider="gemini"
               fields={[
                 { label: "API Key", key: "apiKey", type: "password", placeholder: "AIza..." },
                 { label: "Model", key: "model", placeholder: "gemini-2.5-flash", suggestions: MODEL_RECOMMENDATIONS.gemini },
@@ -396,19 +406,11 @@ export function LlmConfigView() {
 
           {/* LM Studio Form */}
           {activeProvider === "lmstudio" && (
-            <ProviderForm
-              title="LM Studio Settings"
-              icon={Monitor}
-              onSubmit={(e) => void handleSaveProvider(e, "lmstudio", lmstudioForm)}
-              saving={saving}
-              fields={[
-                { label: "Base URL", key: "baseUrl", type: "url", placeholder: "http://localhost:1234/v1" },
-                { label: "API Key (Optional)", key: "apiKey", type: "password", placeholder: "lm-studio" },
-                { label: "Model Name", key: "model", placeholder: "local-model" },
-              ]}
+            <LMStudioConfigForm
               formData={lmstudioForm}
               setFormData={setLmstudioForm}
-              hint="Make sure your LM Studio server is running and accessible."
+              onSubmit={(e) => void handleSaveProvider(e, "lmstudio", lmstudioForm)}
+              saving={saving}
             />
           )}
 
@@ -436,6 +438,16 @@ type FieldConfig = {
   suggestions?: readonly string[];
 };
 
+type TestResult = {
+  success: boolean;
+  error?: string;
+  latency?: number;
+  tokensPerSecond?: number;
+  outputTokens?: number;
+  message?: string;
+  response?: string;
+};
+
 function ProviderForm({
   title,
   icon: Icon,
@@ -445,6 +457,7 @@ function ProviderForm({
   formData,
   setFormData,
   hint,
+  provider,
 }: {
   title: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -454,7 +467,37 @@ function ProviderForm({
   formData: Record<string, string>;
   setFormData: (data: Record<string, string>) => void;
   hint?: string;
+  provider: LlmProviderType;
 }) {
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+
+    try {
+      const res = await fetch("/api/llm-config/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          config: formData,
+        }),
+      });
+
+      const result = await res.json();
+      setTestResult(result);
+    } catch (error) {
+      setTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to test connection",
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
   return (
     <Panel className="p-0 overflow-hidden">
       <div className="border-b border-border-subtle bg-bg-elevated/30 px-5 py-3">
@@ -486,16 +529,77 @@ function ProviderForm({
             </div>
           </div>
         ))}
-        <div className="pt-4 flex justify-end items-center">
+
+        {/* Test Connection Button */}
+        <div className="pt-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void handleTest()}
+            disabled={testing}
+            className="w-full"
+          >
+            {testing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Testing Connection...
+              </>
+            ) : (
+              <>
+                <Zap className="mr-2 h-4 w-4" />
+                Test Connection
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* Test Results */}
+        {testResult && (
+          <div
+            className={`rounded-lg border p-4 space-y-2 ${testResult.success
+              ? "bg-emerald-500/5 border-emerald-500/30"
+              : "bg-red-500/5 border-red-500/30"
+              }`}
+          >
+            <div className="flex items-start gap-3">
+              {testResult.success ? (
+                <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+              ) : (
+                <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-semibold ${testResult.success ? "text-emerald-500" : "text-red-500"}`}>
+                  {testResult.success ? "Connection Successful" : "Connection Failed"}
+                </p>
+                {testResult.error && (
+                  <p className="text-xs text-red-400 mt-1">{testResult.error}</p>
+                )}
+                {testResult.latency && (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted mt-1">
+                    <span>Latency: {testResult.latency}ms</span>
+                    {testResult.tokensPerSecond !== undefined && (
+                      <span>Speed: {testResult.tokensPerSecond} tok/s</span>
+                    )}
+                    {testResult.outputTokens !== undefined && (
+                      <span>({testResult.outputTokens} tokens generated)</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="pt-4 flex justify-end items-center border-t border-border-subtle">
+          {hint && (
+            <p className="flex items-center text-xs text-text-muted flex-1">
+              {hint}
+            </p>
+          )}
           <Button type="submit" variant="primary" disabled={saving}>
             <Save className="mr-2 h-4 w-4" />
             Save Changes
           </Button>
-          {hint && (
-            <p className="flex items-center text-xs text-text-muted ml-4 flex-1">
-              {hint}
-            </p>
-          )}
         </div>
       </form>
     </Panel>
@@ -503,7 +607,6 @@ function ProviderForm({
 }
 
 // Ollama-specific form with test connection
-import { Zap, AlertCircle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 type OllamaTestResult = {
   success: boolean;
@@ -717,6 +820,419 @@ function OllamaConfigForm({
         <div className="pt-4 flex justify-between items-center border-t border-border-subtle">
           <p className="text-xs text-text-muted">
             Make sure Ollama is running. Use &apos;ollama list&apos; to see available models.
+          </p>
+          <Button type="submit" variant="primary" disabled={saving}>
+            <Save className="mr-2 h-4 w-4" />
+            Save Changes
+          </Button>
+        </div>
+      </form>
+    </Panel>
+  );
+}
+
+// LM Studio configuration form with dynamic model loading
+type LMStudioTestResult = {
+  success: boolean;
+  error?: string;
+  latency?: number;
+  tokensPerSecond?: number;
+  outputTokens?: number;
+};
+
+type LMStudioModel = {
+  id: string;
+  path?: string;
+  name: string;
+  owned_by?: string;
+  loaded?: boolean;
+  instanceId?: string;
+};
+
+function LMStudioConfigForm({
+  formData,
+  setFormData,
+  onSubmit,
+  saving,
+}: {
+  formData: Record<string, string>;
+  setFormData: (data: Record<string, string>) => void;
+  onSubmit: (e: FormEvent) => void;
+  saving: boolean;
+}) {
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<LMStudioTestResult | null>(null);
+  const [availableModels, setAvailableModels] = useState<(LMStudioModel & { loaded?: boolean })[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [loadedModel, setLoadedModel] = useState<string | null>(null);
+  const [loadingModelId, setLoadingModelId] = useState<string | null>(null);
+  const [unloadingModelId, setUnloadingModelId] = useState<string | null>(null);
+
+  // Fetch available models from LM Studio
+  const fetchModels = async () => {
+    setLoadingModels(true);
+    setModelsError(null);
+    try {
+      const res = await fetch("/api/llm-config/lmstudio/models");
+      const data = await res.json();
+      if (data.error) {
+        setModelsError(data.error);
+        setAvailableModels([]);
+        setLoadedModel(null);
+      } else {
+        setAvailableModels(data.models || []);
+        setLoadedModel(data.loadedModel || null);
+      }
+    } catch (error) {
+      setModelsError(error instanceof Error ? error.message : "Failed to fetch models");
+      setAvailableModels([]);
+      setLoadedModel(null);
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+
+  // Load a model in LM Studio
+  const handleLoadModel = async (modelId: string) => {
+    setLoadingModelId(modelId);
+    try {
+      const res = await fetch("/api/llm-config/lmstudio/load", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: modelId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Refresh models list to get updated loaded status
+        await fetchModels();
+        // Auto-select the loaded model
+        setFormData({ ...formData, model: modelId });
+      } else {
+        setModelsError(data.error || "Failed to load model");
+      }
+    } catch (error) {
+      setModelsError(error instanceof Error ? error.message : "Failed to load model");
+    } finally {
+      setLoadingModelId(null);
+    }
+  };
+
+  // Unload a model from LM Studio using instance_id
+  const handleUnloadModel = async (modelId: string, instanceId?: string) => {
+    if (!instanceId) {
+      setModelsError("Cannot unload: missing instance ID. Please refresh models.");
+      return;
+    }
+    setUnloadingModelId(modelId);
+    try {
+      const res = await fetch("/api/llm-config/lmstudio/unload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instanceId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Refresh models list to get updated loaded status
+        await fetchModels();
+      } else {
+        setModelsError(data.error || "Failed to unload model");
+      }
+    } catch (error) {
+      setModelsError(error instanceof Error ? error.message : "Failed to unload model");
+    } finally {
+      setUnloadingModelId(null);
+    }
+  };
+
+  // Fetch models on mount and when baseUrl changes
+  useEffect(() => {
+    void fetchModels();
+  }, [formData.baseUrl]);
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+
+    try {
+      const res = await fetch("/api/llm-config/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: "lmstudio",
+          config: formData,
+        }),
+      });
+
+      const result = await res.json();
+      setTestResult(result);
+    } catch (error) {
+      setTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to test connection",
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <Panel className="p-0 overflow-hidden">
+      <div className="border-b border-border-subtle bg-bg-elevated/30 px-5 py-3">
+        <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
+          <Monitor className="h-4 w-4 text-cyan-500" />
+          LM Studio Settings
+        </h2>
+      </div>
+      <form onSubmit={onSubmit} className="p-5 space-y-5">
+        {/* Base URL */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-text-secondary">Base URL</label>
+          <input
+            type="url"
+            value={formData.baseUrl || ""}
+            onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
+            placeholder="http://127.0.0.1:1234/v1"
+            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+          />
+        </div>
+
+        {/* API Key */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-text-secondary">API Key (Optional)</label>
+          <input
+            type="password"
+            value={formData.apiKey || ""}
+            onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+            placeholder="lm-studio"
+            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+          />
+        </div>
+
+        {/* Model Name with dropdown */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium text-text-secondary">Model Name</label>
+            <button
+              type="button"
+              onClick={() => void fetchModels()}
+              disabled={loadingModels}
+              className="text-xs text-cyan-500 hover:text-cyan-400 flex items-center gap-1 transition-colors"
+            >
+              {loadingModels ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3 w-3" />
+              )}
+              Refresh Models
+            </button>
+          </div>
+          <input
+            type="text"
+            value={formData.model || ""}
+            onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+            placeholder="Select or type a model name"
+            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+          />
+
+          {/* Available Models */}
+          {modelsError && (
+            <div className="flex items-center gap-2 text-xs text-amber-400 mt-2">
+              <AlertCircle className="h-3 w-3" />
+              <span>{modelsError}</span>
+            </div>
+          )}
+
+          {availableModels.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs text-text-muted">
+                Available Models ({availableModels.length}):
+              </p>
+              <div className="space-y-1.5">
+                {availableModels.map((model) => {
+                  const isLoaded = model.loaded || model.id === loadedModel;
+                  const isLoading = loadingModelId === model.id;
+                  const isUnloading = unloadingModelId === model.id;
+                  const isSelected = model.id === formData.model;
+
+                  return (
+                    <div
+                      key={model.id}
+                      className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border transition-all ${isSelected
+                        ? "bg-cyan-500/10 border-cyan-500/40"
+                        : "bg-bg-elevated/50 border-border-subtle hover:border-border-default"
+                        }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {/* Status indicator */}
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isLoaded ? "bg-emerald-500" : "bg-zinc-500"
+                          }`} />
+
+                        {/* Model name - clickable to select */}
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, model: model.id })}
+                          className={`text-xs font-mono truncate text-left ${isSelected ? "text-cyan-400" : "text-text-secondary hover:text-text-primary"
+                            }`}
+                        >
+                          {model.name}
+                        </button>
+
+                        {/* Loaded badge */}
+                        {isLoaded && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 flex-shrink-0">
+                            LOADED
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Load/Unload buttons */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {isLoaded ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleUnloadModel(model.id, model.instanceId)}
+                            disabled={isUnloading}
+                            className="text-xs px-2 py-1 rounded flex items-center gap-1 bg-zinc-500/20 text-zinc-400 hover:bg-zinc-500/30 hover:text-zinc-300 transition-colors disabled:opacity-50"
+                          >
+                            {isUnloading ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <PowerOff className="h-3 w-3" />
+                            )}
+                            <span>{isUnloading ? "Unloading..." : "Unload"}</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void handleLoadModel(model.id)}
+                            disabled={isLoading}
+                            className="text-xs px-2 py-1 rounded flex items-center gap-1 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 hover:text-cyan-300 transition-colors disabled:opacity-50"
+                          >
+                            {isLoading ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Download className="h-3 w-3" />
+                            )}
+                            <span>{isLoading ? "Loading..." : "Load"}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {!loadingModels && availableModels.length === 0 && !modelsError && (
+            <div className="mt-3 space-y-3">
+              <div className="flex items-center gap-2 text-xs text-text-muted">
+                <AlertCircle className="h-3 w-3" />
+                <span>No models loaded in LM Studio. Enter a model path to load one.</span>
+              </div>
+
+              {/* Manual load section */}
+              <div className="p-3 rounded-lg border border-border-subtle bg-bg-elevated/30">
+                <p className="text-[11px] text-text-muted mb-2">
+                  Enter the model path from LM Studio (e.g., mistralai/devstral-small-2-2512):
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={formData.model || ""}
+                    onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                    placeholder="organization/model-name"
+                    className="flex-1 rounded-md border border-border-subtle bg-bg-app px-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleLoadModel(formData.model || "")}
+                    disabled={!formData.model || loadingModelId !== null}
+                    className="px-3 py-1.5 rounded-md flex items-center gap-1.5 text-xs bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 hover:text-cyan-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loadingModelId ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>Loading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-3 w-3" />
+                        <span>Load Model</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Test Connection Button */}
+        <div className="pt-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void handleTest()}
+            disabled={testing}
+            className="w-full"
+          >
+            {testing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Testing Connection...
+              </>
+            ) : (
+              <>
+                <Zap className="mr-2 h-4 w-4" />
+                Test Connection
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* Test Results */}
+        {testResult && (
+          <div
+            className={`rounded-lg border p-4 ${testResult.success
+              ? "bg-emerald-500/5 border-emerald-500/30"
+              : "bg-red-500/5 border-red-500/30"
+              }`}
+          >
+            <div className="flex items-start gap-3">
+              {testResult.success ? (
+                <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+              ) : (
+                <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-semibold ${testResult.success ? "text-emerald-500" : "text-red-500"}`}>
+                  {testResult.success ? "Connection Successful" : "Connection Failed"}
+                </p>
+                {testResult.error && (
+                  <p className="text-xs text-red-400 mt-1">{testResult.error}</p>
+                )}
+                {testResult.success && (
+                  <div className="text-xs text-text-secondary mt-1 space-y-0.5">
+                    {testResult.latency && <p>Latency: {testResult.latency}ms</p>}
+                    {testResult.tokensPerSecond && (
+                      <p>Speed: {testResult.tokensPerSecond} tok/s</p>
+                    )}
+                    {testResult.outputTokens && (
+                      <p>({testResult.outputTokens} tokens generated)</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Save Button */}
+        <div className="pt-4 flex justify-between items-center border-t border-border-subtle">
+          <p className="text-xs text-text-muted">
+            Make sure your LM Studio server is running and accessible.
           </p>
           <Button type="submit" variant="primary" disabled={saving}>
             <Save className="mr-2 h-4 w-4" />

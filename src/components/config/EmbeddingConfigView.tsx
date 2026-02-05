@@ -23,7 +23,11 @@ const PROVIDERS = [
     { id: "ollama" as const, name: "Ollama", description: "Local open-source models", icon: Bot, color: "text-rose-500", bgColor: "bg-rose-500/10" },
 ];
 
-export function EmbeddingConfigView() {
+interface EmbeddingConfigViewProps {
+    hideHeader?: boolean;
+}
+
+export function EmbeddingConfigView({ hideHeader = false }: EmbeddingConfigViewProps) {
     const [config, setConfig] = useState<EmbeddingConfig | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -122,28 +126,30 @@ export function EmbeddingConfigView() {
 
     return (
         <div className="flex h-full flex-col bg-bg-app overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
-                <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
-                        <Database className="h-5 w-5" />
+            {/* Header - hidden when embedded */}
+            {!hideHeader && (
+                <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+                            <Database className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h1 className="text-lg font-semibold text-text-primary">Embedding Configuration</h1>
+                            <p className="text-sm text-text-muted">Configure vector embedding models for semantic search</p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-lg font-semibold text-text-primary">Embedding Configuration</h1>
-                        <p className="text-sm text-text-muted">Configure vector embedding models for semantic search</p>
-                    </div>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-text-muted hover:text-red-400"
+                        onClick={handleReset}
+                        disabled={resetting || saving}
+                    >
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        Reset Defaults
+                    </Button>
                 </div>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-text-muted hover:text-red-400"
-                    onClick={handleReset}
-                    disabled={resetting || saving}
-                >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Reset Defaults
-                </Button>
-            </div>
+            )}
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-elegant">
                 {message && (

@@ -1,7 +1,7 @@
 "use client";
 
-import { EmbeddingConfigView } from "@/src/components/config/EmbeddingConfigView";
+import { AiConfigView } from "@/src/components/config/AiConfigView";
 
 export default function ConfigEmbeddingsPage() {
-    return <EmbeddingConfigView />;
+    return <AiConfigView initialTab="embedding" />;
 }

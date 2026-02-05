@@ -39,6 +39,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     const config = await getEmbeddingConfig();
     const provider = config.provider;
 
+    // Azure OpenAI
     if (provider === "azure") {
         const azure = config.azure;
         if (!azure?.endpoint || !azure?.apiKey || !azure?.deployment) {
@@ -57,7 +58,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
                 input: text,
                 model: azure.model ?? "text-embedding-ada-002",
             }),
-            signal: AbortSignal.timeout(30000), // 30s timeout
+            signal: AbortSignal.timeout(30000),
         });
 
         if (!response.ok) {
@@ -69,7 +70,140 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         const embedding = data.data[0].embedding;
         console.log(`[VectorService] Azure Embedding Dimension: ${embedding.length}`);
         return embedding;
-    } else {
+    }
+
+    // OpenAI
+    if (provider === "openai") {
+        const openai = config.openai;
+        if (!openai?.apiKey) {
+            throw new Error("OpenAI API key is required");
+        }
+
+        const response = await fetch("https://api.openai.com/v1/embeddings", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${openai.apiKey}`,
+                ...(openai.organization ? { "OpenAI-Organization": openai.organization } : {}),
+            },
+            body: JSON.stringify({
+                input: text,
+                model: openai.model ?? "text-embedding-3-small",
+            }),
+            signal: AbortSignal.timeout(30000),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error?.message ?? `OpenAI API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const embedding = data.data[0].embedding;
+        console.log(`[VectorService] OpenAI Embedding Dimension: ${embedding.length}`);
+        return embedding;
+    }
+
+    // Voyage AI
+    if (provider === "voyage") {
+        const voyage = config.voyage;
+        if (!voyage?.apiKey) {
+            throw new Error("Voyage API key is required");
+        }
+
+        const response = await fetch("https://api.voyageai.com/v1/embeddings", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${voyage.apiKey}`,
+            },
+            body: JSON.stringify({
+                input: [text],
+                model: voyage.model ?? "voyage-3",
+            }),
+            signal: AbortSignal.timeout(30000),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error?.message ?? `Voyage API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const embedding = data.data[0].embedding;
+        console.log(`[VectorService] Voyage Embedding Dimension: ${embedding.length}`);
+        return embedding;
+    }
+
+    // Google Gemini
+    if (provider === "gemini") {
+        const gemini = config.gemini;
+        if (!gemini?.apiKey) {
+            throw new Error("Gemini API key is required");
+        }
+
+        const model = gemini.model ?? "text-embedding-004";
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${gemini.apiKey}`;
+
+        const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                model: `models/${model}`,
+                content: { parts: [{ text }] },
+            }),
+            signal: AbortSignal.timeout(30000),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error?.message ?? `Gemini API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const embedding = data.embedding?.values;
+        if (!embedding) {
+            throw new Error("Gemini API returned no embedding data");
+        }
+        console.log(`[VectorService] Gemini Embedding Dimension: ${embedding.length}`);
+        return embedding;
+    }
+
+    // Ollama
+    if (provider === "ollama") {
+        const ollama = config.ollama;
+        if (!ollama?.baseUrl || !ollama?.model) {
+            throw new Error("Ollama embedding configuration is incomplete");
+        }
+
+        const url = `${ollama.baseUrl}/api/embeddings`;
+
+        const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                model: ollama.model,
+                prompt: text,
+            }),
+            signal: AbortSignal.timeout(30000),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error ?? `Ollama API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const embedding = data.embedding;
+        if (!embedding) {
+            throw new Error("Ollama API returned no embedding data");
+        }
+        console.log(`[VectorService] Ollama Embedding Dimension: ${embedding.length}`);
+        return embedding;
+    }
+
+    // LM Studio (fallback)
+    if (provider === "lmstudio") {
         const lms = config.lmstudio;
         if (!lms?.baseUrl || !lms?.model) {
             throw new Error("LM Studio embedding configuration is incomplete");
@@ -87,7 +221,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
                 input: text,
                 model: lms.model,
             }),
-            signal: AbortSignal.timeout(30000), // 30s timeout
+            signal: AbortSignal.timeout(30000),
         });
 
         if (!response.ok) {
@@ -100,6 +234,8 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         console.log(`[VectorService] LM Studio Embedding Dimension: ${embedding.length}`);
         return embedding;
     }
+
+    throw new Error(`Unsupported embedding provider: ${provider}`);
 }
 
 /**

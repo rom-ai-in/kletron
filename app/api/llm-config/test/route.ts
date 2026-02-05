@@ -160,8 +160,8 @@ export async function POST(req: NextRequest) {
                 },
                 body: JSON.stringify({
                     model: modelName || "claude-sonnet-4-20250514",
-                    max_tokens: 10,
-                    messages: [{ role: "user", content: "Hi" }],
+                    max_tokens: 50,
+                    messages: [{ role: "user", content: "Count from 1 to 10." }],
                 }),
                 signal: AbortSignal.timeout(30000),
             });
@@ -177,9 +177,15 @@ export async function POST(req: NextRequest) {
                 }, { status: response.status });
             }
 
+            const claudeData = await response.json();
+            const outputTokens = claudeData.usage?.output_tokens || 0;
+            const tokensPerSecond = duration > 0 ? Math.round((outputTokens / (duration / 1000)) * 10) / 10 : 0;
+
             return NextResponse.json({
                 success: true,
                 latency: duration,
+                tokensPerSecond,
+                outputTokens,
                 message: "Connection successful",
                 response: "Claude API ready",
             }, { status: 200 });
@@ -205,8 +211,8 @@ export async function POST(req: NextRequest) {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: "Hi" }] }],
-                        generationConfig: { maxOutputTokens: 10 },
+                        contents: [{ parts: [{ text: "Count from 1 to 10." }] }],
+                        generationConfig: { maxOutputTokens: 50 },
                     }),
                     signal: AbortSignal.timeout(30000),
                 }
@@ -223,9 +229,15 @@ export async function POST(req: NextRequest) {
                 }, { status: response.status });
             }
 
+            const geminiData = await response.json();
+            const outputTokens = geminiData.usageMetadata?.candidatesTokenCount || 0;
+            const tokensPerSecond = duration > 0 ? Math.round((outputTokens / (duration / 1000)) * 10) / 10 : 0;
+
             return NextResponse.json({
                 success: true,
                 latency: duration,
+                tokensPerSecond,
+                outputTokens,
                 message: "Connection successful",
                 response: "Gemini API ready",
             }, { status: 200 });
@@ -255,14 +267,22 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // Perform the test
+        // Perform the test with a prompt that generates more tokens for accurate measurement
         const startTime = Date.now();
-        const response = await model.invoke("Hello");
+        const response = await model.invoke("Count from 1 to 10.");
         const duration = Date.now() - startTime;
+
+        // Extract token usage from LangChain response metadata
+        const outputTokens = response.usage_metadata?.output_tokens || 0;
+        const tokensPerSecond = duration > 0 && outputTokens > 0
+            ? Math.round((outputTokens / (duration / 1000)) * 10) / 10
+            : undefined;
 
         return NextResponse.json({
             success: true,
             latency: duration,
+            ...(tokensPerSecond !== undefined && { tokensPerSecond }),
+            ...(outputTokens > 0 && { outputTokens }),
             message: "Connection successful",
             response: response.content ? response.content.toString().slice(0, 50) + "..." : "No content",
         }, { status: 200 });

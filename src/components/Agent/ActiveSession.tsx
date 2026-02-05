@@ -79,14 +79,48 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
     const { status: llmStatus } = useLlmHealth(llmProvider); // Use hook
 
     useEffect(() => {
-        const fetchEnv = async () => {
+        const fetchPreferences = async () => {
             try {
-                const res = await fetch("/api/env");
-                const data = await res.json();
-                const envLLM = data.llm as LlmEnvInfo;
+                // Fetch env info first
+                const envRes = await fetch("/api/env");
+                const envData = await envRes.json();
+                const envLLM = envData.llm as LlmEnvInfo;
                 setEnvInfo(envLLM);
 
-                // Initialize from Env or LocalStorage
+                // Try to fetch user preferences from API
+                const prefsRes = await fetch("/api/user-preferences");
+                if (prefsRes.ok) {
+                    const prefsData = await prefsRes.json();
+                    if (prefsData.success && prefsData.preferences) {
+                        const { selectedLlmProvider, selectedGraphId: savedGraphId } = prefsData.preferences;
+                        if (selectedLlmProvider) {
+                            setLlmProvider(selectedLlmProvider);
+                        } else {
+                            // Fallback to localStorage then env
+                            const stored = window.localStorage.getItem("numezis-llm-selection");
+                            if (stored) {
+                                try {
+                                    const parsed = JSON.parse(stored);
+                                    if (parsed.provider) setLlmProvider(parsed.provider);
+                                } catch { }
+                            } else {
+                                setLlmProvider(envLLM?.defaultProvider || 'azure');
+                            }
+                        }
+                        if (savedGraphId) {
+                            setSelectedGraphId(savedGraphId);
+                        } else {
+                            // Fallback to localStorage
+                            const storedGraph = window.localStorage.getItem("numezis-graph-selection");
+                            if (storedGraph) {
+                                setSelectedGraphId(storedGraph);
+                            }
+                        }
+                        return;
+                    }
+                }
+
+                // Fallback to localStorage if API fails or user not authenticated
                 const stored = window.localStorage.getItem("numezis-llm-selection");
                 if (stored) {
                     try {
@@ -103,20 +137,34 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({ conversationId, ti
                 }
 
             } catch (e) {
-                console.error("Failed to fetch env", e);
+                console.error("Failed to fetch preferences", e);
             }
         };
-        fetchEnv();
+        fetchPreferences();
     }, []);
 
     const handleLlmChange = (provider: string) => {
         setLlmProvider(provider);
+        // Save to localStorage as fallback
         window.localStorage.setItem("numezis-llm-selection", JSON.stringify({ provider, model: provider === 'azure' ? envInfo?.azure?.model : envInfo?.lmstudio?.model }));
+        // Persist to API (fire-and-forget, don't block UI)
+        fetch("/api/user-preferences", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ selectedLlmProvider: provider }),
+        }).catch(() => { /* Silently fail, localStorage is fallback */ });
     };
 
     const handleGraphChange = (graphId: string) => {
         setSelectedGraphId(graphId);
+        // Save to localStorage as fallback
         window.localStorage.setItem("numezis-graph-selection", graphId);
+        // Persist to API (fire-and-forget, don't block UI)
+        fetch("/api/user-preferences", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ selectedGraphId: graphId }),
+        }).catch(() => { /* Silently fail, localStorage is fallback */ });
     };
 
     const llmOptions = [

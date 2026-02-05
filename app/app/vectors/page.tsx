@@ -25,6 +25,15 @@ import {
 } from "lucide-react";
 import { useLlmHealth } from "@/src/hooks/useLlmHealth";
 
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+    azure: "Azure OpenAI",
+    openai: "OpenAI",
+    voyage: "Voyage AI",
+    gemini: "Google Gemini",
+    lmstudio: "LM Studio",
+    ollama: "Ollama",
+};
+
 type IndexStatus = {
     isIndexing: boolean;
     totalFiles: number;
@@ -209,7 +218,7 @@ export default function VectorIndexPage() {
                                 healthStatus === 'loading' ? 'bg-amber-500 animate-pulse' : 'bg-zinc-500'
                             }`} />
                         <span className="text-xs text-text-secondary">
-                            {config?.provider === 'azure' ? "Azure OpenAI" : config?.provider === 'lmstudio' ? "LM Studio" : "Unknown"}
+                            {config?.provider ? PROVIDER_DISPLAY_NAMES[config.provider] ?? "Unknown" : "Unknown"}
                         </span>
                         {config?.provider && (
                             <span className="text-xs text-text-muted border-l border-border-subtle pl-2">
@@ -230,7 +239,7 @@ export default function VectorIndexPage() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <StatusCard
                         title="Active Provider"
-                        value={config?.provider === 'azure' ? "Azure OpenAI" : config?.provider === 'lmstudio' ? "LM Studio" : "None"}
+                        value={config?.provider ? PROVIDER_DISPLAY_NAMES[config.provider] ?? "None" : "None"}
                         icon={getHealthIcon()}
                         subtitle={
                             healthStatus === 'error' ? (healthMessage || "Connection failed") :
