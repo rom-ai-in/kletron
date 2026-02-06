@@ -269,6 +269,7 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
     const [loadedModel, setLoadedModel] = useState<string | null>(null);
     const [loadingModels, setLoadingModels] = useState(false);
     const [modelsError, setModelsError] = useState<string | null>(null);
+    const [modelsErrorDetails, setModelsErrorDetails] = useState<string | null>(null);
     const [reloadingModel, setReloadingModel] = useState(false);
     const activeModelSettings = model ? modelSettings[model] : undefined;
 
@@ -305,6 +306,24 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
         : undefined;
     const isModelLoaded = !!(activeModelInfo?.loaded || (loadedModel && loadedModel === model));
     const modelInstanceId = activeModelInfo?.instanceId;
+
+    const formatErrorDetails = (details: unknown) => {
+        if (!details || typeof details !== "object") return null;
+        const entries = Object.entries(details as Record<string, unknown>)
+            .filter(([, value]) => value !== undefined && value !== null && value !== "");
+        if (!entries.length) return null;
+        return entries
+            .map(([key, value]) => {
+                if (typeof value === "string") return `${key}: ${value}`;
+                return `${key}: ${JSON.stringify(value)}`;
+            })
+            .join(" • ");
+    };
+
+    const setModelError = (message: string | null, details?: unknown) => {
+        setModelsError(message);
+        setModelsErrorDetails(formatErrorDetails(details));
+    };
 
     const updateModelSetting = (key: keyof LMStudioModelSettings, value: number | undefined) => {
         if (!model) return;
@@ -345,20 +364,21 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
 
     const fetchModels = async () => {
         setLoadingModels(true);
-        setModelsError(null);
+        setModelError(null);
         try {
-            const res = await fetch("/api/llm-config/lmstudio/models");
+            const res = await fetch("/api/llm-config/lmstudio/models", { cache: "no-store" });
             const data = await res.json();
             if (data.error) {
-                setModelsError(data.error);
+                setModelError(data.error, data.details);
                 setAvailableModels([]);
                 setLoadedModel(null);
             } else {
                 setAvailableModels(data.models || []);
                 setLoadedModel(data.loadedModel || null);
+                setModelError(null);
             }
         } catch (err) {
-            setModelsError(err instanceof Error ? err.message : "Failed to fetch models");
+            setModelError(err instanceof Error ? err.message : "Failed to fetch models");
             setAvailableModels([]);
             setLoadedModel(null);
         } finally {
@@ -431,10 +451,10 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
 
     const handleReloadLoadedModel = async () => {
         if (!modelInstanceId) {
-            setModelsError("Cannot reload: missing instance ID. Refresh model status first.");
+            setModelError("Cannot reload: missing instance ID. Refresh model status first.");
             return;
         }
-        setModelsError(null);
+        setModelError(null);
         setReloadingModel(true);
         try {
             if (isDirty) {
@@ -444,19 +464,32 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
                     return;
                 }
             }
-            await fetch("/api/llm-config/lmstudio/unload", {
+            const unloadRes = await fetch("/api/llm-config/lmstudio/unload", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ instanceId: modelInstanceId }),
             });
-            await fetch("/api/llm-config/lmstudio/load", {
+            const unloadData = await unloadRes.json().catch(() => ({}));
+            if (unloadData?.success === false) {
+                setModelError(unloadData.error || "Failed to unload model", unloadData.details);
+                setReloadingModel(false);
+                return;
+            }
+
+            const loadRes = await fetch("/api/llm-config/lmstudio/load", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ model }),
             });
+            const loadData = await loadRes.json().catch(() => ({}));
+            if (loadData?.success === false) {
+                setModelError(loadData.error || "Failed to load model", loadData.details);
+                setReloadingModel(false);
+                return;
+            }
             await fetchModels();
         } catch (err) {
-            setModelsError(err instanceof Error ? err.message : "Failed to reload model");
+            setModelError(err instanceof Error ? err.message : "Failed to reload model");
         } finally {
             setReloadingModel(false);
         }
@@ -506,7 +539,12 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
                     onChange={(e) => setModel(e.target.value)}
                 />
                 {modelsError && (
-                    <p className="mt-1 text-[11px] text-amber-500">{modelsError}</p>
+                    <div className="mt-1 space-y-1">
+                        <p className="text-[11px] text-amber-500">{modelsError}</p>
+                        {modelsErrorDetails && (
+                            <p className="text-[11px] text-text-muted">Details: {modelsErrorDetails}</p>
+                        )}
+                    </div>
                 )}
                 {isModelLoaded && (
                     <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-emerald-500">

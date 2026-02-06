@@ -15,12 +15,18 @@ type ToolMeta = {
 export type AgentNodeEditorValue = {
     id: string;
     label: string;
-    kind?: "react" | "router";
+    kind?: "react" | "router" | "delegate";
     react: {
         systemPrompt: string;
         userPromptTemplate: string;
         toolNames: string[];
         llmSelection?: { provider: "azure" | "lmstudio"; model?: string };
+    };
+    delegate?: {
+        mode?: "react" | "graph";
+        graphId?: string;
+        summaryPrompt?: string;
+        summaryLlmSelection?: { provider: "azure" | "lmstudio"; model?: string };
     };
     output: { schemaId: string; statePath?: string; stateMerge?: boolean };
 };
@@ -73,6 +79,7 @@ export function NodeInspector({
     }
 
     const isRouter = node.kind === "router";
+    const isDelegate = node.kind === "delegate";
 
     const toggleTool = (name: string) => {
         const current = new Set(node.react.toolNames ?? []);
@@ -115,11 +122,21 @@ export function NodeInspector({
                     </label>
                     <select
                         value={node.kind ?? "react"}
-                        onChange={(e) => onChange({ ...node, kind: e.target.value as "react" | "router" })}
+                        onChange={(e) =>
+                            onChange({
+                                ...node,
+                                kind: e.target.value as "react" | "router" | "delegate",
+                                delegate:
+                                    e.target.value === "delegate"
+                                        ? node.delegate ?? { mode: "react", summaryPrompt: "" }
+                                        : node.delegate,
+                            })
+                        }
                         className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
                     >
                         <option value="react">ReAct node</option>
                         <option value="router">Router node</option>
+                        <option value="delegate">Delegate node</option>
                     </select>
                 </div>
 
@@ -248,6 +265,65 @@ export function NodeInspector({
                     disabled={node.kind === "router"}
                 />
             </Panel>
+
+            {isDelegate && (
+                <Panel className="space-y-3 p-4">
+                    <div className="text-sm font-semibold text-text-primary">Delegate settings</div>
+                    <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                            Delegate mode
+                        </label>
+                        <select
+                            value={node.delegate?.mode ?? "react"}
+                            onChange={(e) =>
+                                onChange({
+                                    ...node,
+                                    delegate: {
+                                        ...(node.delegate ?? {}),
+                                        mode: e.target.value as "react" | "graph",
+                                    },
+                                })
+                            }
+                            className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
+                        >
+                            <option value="react">ReAct subagent</option>
+                            <option value="graph">Nested graph</option>
+                        </select>
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                            Graph ID (for nested graph)
+                        </label>
+                        <input
+                            value={node.delegate?.graphId ?? ""}
+                            onChange={(e) =>
+                                onChange({
+                                    ...node,
+                                    delegate: { ...(node.delegate ?? {}), graphId: e.target.value || undefined },
+                                })
+                            }
+                            className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
+                            placeholder="Mongo ObjectId of graph to run"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                            Summary prompt (optional)
+                        </label>
+                        <textarea
+                            value={node.delegate?.summaryPrompt ?? ""}
+                            onChange={(e) =>
+                                onChange({
+                                    ...node,
+                                    delegate: { ...(node.delegate ?? {}), summaryPrompt: e.target.value },
+                                })
+                            }
+                            className="h-28 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary"
+                            placeholder="Summarize the delegate result. Return JSON compatible with the node output schema."
+                        />
+                    </div>
+                </Panel>
+            )}
 
             <Panel className="space-y-3 p-4">
                 <div className="flex items-center justify-between gap-2">

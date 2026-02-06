@@ -116,8 +116,22 @@ type AgentGraphRecord = {
   _id?: string;
   name: string;
   description?: string;
+  category?: string;
   nodes?: Array<{ id: string; label: string; react?: { systemPrompt?: string; toolNames?: string[] }; output?: { schemaId?: string } }>;
   edges?: Array<{ id: string; source: string; target: string }>;
+};
+
+type ApprovalItem = {
+  id: string;
+  toolName: string;
+  args?: Record<string, any>;
+  status?: string;
+  createdAt?: string;
+  description?: string;
+  executedAt?: string;
+  rejectedAt?: string;
+  result?: string;
+  evictedPath?: string;
 };
 
 function TimelinePanel({ timeline, selectedEventId, onPhaseSelect, className, tokenUsage }: TimelinePanelProps) {
@@ -251,83 +265,6 @@ function PhaseItem({
   );
 }
 
-
-type ToolExplorerPanelProps = {
-  tools: McpToolMeta[];
-  usedToolNames: Set<string>;
-  openToolDialog: (toolName: McpToolMeta) => void;
-  className?: string;
-};
-
-function ToolExplorerPanel({ tools, usedToolNames, openToolDialog, className }: ToolExplorerPanelProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const filteredTools = useMemo(() => {
-    return tools
-      .filter(t => t.label.toLowerCase().includes(searchQuery.toLowerCase()) || t.name.toLowerCase().includes(searchQuery.toLowerCase()))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [tools, searchQuery]);
-
-  return (
-    <section className={`flex flex-col h-full bg-bg-surface overflow-hidden ${className}`}>
-      <div className="flex-none flex flex-col border-b border-border-subtle bg-bg-surface">
-        <div className="flex items-center justify-between px-3 py-2">
-          <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Tools</h3>
-          <span className="text-[10px] text-text-muted">
-            {usedToolNames.size} used
-          </span>
-        </div>
-        <div className="px-3 pb-2">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search tools..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded bg-bg-elevated border border-border-subtle px-2 py-1 text-[11px] text-text-primary placeholder:text-text-muted focus:border-border-strong focus:outline-none transition-colors"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-1.5 top-1.5 text-text-muted hover:text-text-primary"
-              >
-                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto scrollbar-elegant p-0">
-        <ul className="divide-y divide-border-subtle">
-          {filteredTools.map((tool) => (
-            <li key={tool.name}>
-              <button
-                type="button"
-                onClick={() => openToolDialog(tool)}
-                className="group flex w-full items-center justify-between px-3 py-2 text-left text-[12px] text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className={`w-1 h-1 rounded-full ${usedToolNames.has(tool.name) ? 'bg-emerald-400' : 'bg-transparent'}`}></div>
-                  <span className="truncate">{tool.label}</span>
-                </div>
-                {usedToolNames.has(tool.name) && (
-                  <span className="text-[10px] text-emerald-400 font-medium opacity-80">Used</span>
-                )}
-              </button>
-            </li>
-          ))}
-          {filteredTools.length === 0 && (
-            <li className="px-3 py-4 text-center text-[11px] text-text-muted italic">
-              No tools found
-            </li>
-          )}
-        </ul>
-      </div>
-    </section>
-  );
-}
 
 type GraphOption = (typeof graphOptions)[number];
 
@@ -1249,6 +1186,11 @@ export default function HomePage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [isRestoringSession, setIsRestoringSession] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState<ApprovalItem[]>([]);
+  const [approvedApprovals, setApprovedApprovals] = useState<ApprovalItem[]>([]);
+  const [rejectedApprovals, setRejectedApprovals] = useState<ApprovalItem[]>([]);
+  const [approvalsLoading, setApprovalsLoading] = useState(false);
+  const [approvalsError, setApprovalsError] = useState("");
 
   // Derived token usage from streaming outputs
   const tokenUsage = useMemo((): TokenUsageForDisplay | undefined => {
@@ -1621,6 +1563,89 @@ export default function HomePage() {
       .finally(() => setToolLoadingMap((prev) => ({ ...prev, [toolName]: false })));
   };
 
+  const fetchApprovals = useCallback(async () => {
+    if (!activeRunId) {
+      setPendingApprovals([]);
+      return;
+    }
+    setApprovalsLoading(true);
+    setApprovalsError("");
+    try {
+      const res = await fetch(`/api/agent-graph-runs/${activeRunId}/approvals`);
+      if (!res.ok) throw new Error("Failed to load approvals");
+      const data = await res.json();
+      setPendingApprovals(Array.isArray(data.pending) ? data.pending : []);
+    } catch (err: any) {
+      setApprovalsError(err.message || "Failed to load approvals");
+    } finally {
+      setApprovalsLoading(false);
+    }
+  }, [activeRunId]);
+
+  const fetchApprovalHistory = useCallback(async () => {
+    if (!activeRunId) {
+      setApprovedApprovals([]);
+      setRejectedApprovals([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/agent-graph-runs/${activeRunId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const run = data.run;
+      const granted = Array.isArray(run?.state?.approvals?.granted) ? run.state.approvals.granted : [];
+      const rejected = Array.isArray(run?.state?.approvals?.rejected) ? run.state.approvals.rejected : [];
+      setApprovedApprovals(granted);
+      setRejectedApprovals(rejected);
+    } catch {
+      // Ignore history errors
+    }
+  }, [activeRunId]);
+
+  const handleApprovalAction = useCallback(
+    async (action: "approve" | "reject" | "approve_all" | "reject_all", id?: string) => {
+      if (!activeRunId) return;
+      try {
+        const res = await fetch(`/api/agent-graph-runs/${activeRunId}/approvals`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, id }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error ?? "Failed to update approval");
+        }
+        await Promise.all([fetchApprovals(), fetchApprovalHistory()]);
+      } catch (err: any) {
+        setApprovalsError(err.message || "Approval failed");
+      }
+    },
+    [activeRunId, fetchApprovals, fetchApprovalHistory]
+  );
+
+  useEffect(() => {
+    if (!activeRunId) return;
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled) return;
+      await Promise.all([fetchApprovals(), fetchApprovalHistory()]);
+    };
+    void poll();
+    const interval = window.setInterval(poll, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeRunId, fetchApprovals, fetchApprovalHistory]);
+
+  useEffect(() => {
+    if (activeRunId) return;
+    setPendingApprovals([]);
+    setApprovedApprovals([]);
+    setRejectedApprovals([]);
+    setApprovalsError("");
+  }, [activeRunId]);
+
   useEffect(() => {
     if (eventStreamRef.current) {
       eventStreamRef.current.scrollTop = eventStreamRef.current.scrollHeight;
@@ -1719,13 +1744,44 @@ export default function HomePage() {
 
   const selectedGraphLabel = selectedAgentGraph?.name ?? selectedGraph.name;
 
-  const graphToolNames = selectedAgentGraph
-    ? Array.from(
-      new Set(
-        (selectedAgentGraph.nodes ?? []).flatMap((n) => (Array.isArray(n.react?.toolNames) ? n.react!.toolNames! : []))
-      )
-    )
-    : (selectedGraph.toolNames ?? []);
+  useEffect(() => {
+    if (!selectedAgentGraphId) return;
+    if (activeRunId) return;
+    let cancelled = false;
+    const attachToLatestRun = async () => {
+      try {
+        const res = await fetch(`/api/agent-graphs/${selectedAgentGraphId}/runs`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const runs = Array.isArray(data?.runs) ? data.runs : [];
+        const active = runs.find((run: any) => run.status === "RUNNING" || run.status === "PENDING");
+        if (!active || cancelled) return;
+        const runId = String(active._id ?? active.id ?? active.runId ?? "");
+        if (!runId) return;
+        setActiveRunId(runId);
+        try {
+          sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+            runId,
+            graphId: selectedAgentGraphId,
+            startedAt: active.startedAt ?? new Date().toISOString(),
+          }));
+        } catch {
+          // sessionStorage may be unavailable
+        }
+      } catch {
+        // Ignore attach errors
+      }
+    };
+    void attachToLatestRun();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAgentGraphId, activeRunId]);
+
+  const executedApprovals = useMemo(
+    () => [...approvedApprovals, ...rejectedApprovals],
+    [approvedApprovals, rejectedApprovals]
+  );
   const activePhaseDefinitions = useMemo(() => {
     if (timeline.length) {
       return timeline.map((event) => ({
@@ -1771,10 +1827,6 @@ export default function HomePage() {
     }));
   }, [selectedAgentGraph, selectedGraph.nodePrompts, nodePromptOverrides]);
 
-  const graphTools = useMemo(() => {
-    if (!graphToolNames.length) return tools;
-    return tools.filter((tool) => graphToolNames.includes(tool.name));
-  }, [tools, graphToolNames]);
   const azureConfigured = llmInfo?.azure?.configured ?? false;
   const lmStudioBaseUrl = llmInfo?.lmstudio?.baseUrl ?? "http://127.0.0.1:1234/v1";
 
@@ -2251,12 +2303,91 @@ export default function HomePage() {
                   tokenUsage={tokenUsage}
                 />
               </div>
-              <div className="flex-1 min-h-0">
-                <ToolExplorerPanel
-                  tools={graphTools}
-                  usedToolNames={usedToolNames}
-                  openToolDialog={openToolDialog}
-                />
+              <div className="flex-1 min-h-0 border-t border-border-subtle">
+                <section className="flex h-full flex-col bg-bg-surface">
+                  <div className="flex items-center justify-between border-b border-border-subtle px-3 py-2">
+                    <h2 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Approvals</h2>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleApprovalAction("approve_all")}
+                        disabled={!activeRunId || pendingApprovals.length === 0 || approvalsLoading}
+                        className="rounded-md border border-emerald-500/30 px-2 py-1 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-40"
+                      >
+                        Approve all
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleApprovalAction("reject_all")}
+                        disabled={!activeRunId || pendingApprovals.length === 0 || approvalsLoading}
+                        className="rounded-md border border-rose-500/30 px-2 py-1 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/10 disabled:opacity-40"
+                      >
+                        Reject all
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-elegant">
+                    {!activeRunId && (
+                      <div className="text-[11px] text-text-muted">No active run.</div>
+                    )}
+                    {activeRunId && approvalsLoading && (
+                      <div className="text-[11px] text-text-muted">Loading approvals…</div>
+                    )}
+                    {activeRunId && !approvalsLoading && approvalsError && (
+                      <div className="text-[11px] text-rose-400">{approvalsError}</div>
+                    )}
+                    {activeRunId && !approvalsLoading && !approvalsError && pendingApprovals.length === 0 && (
+                      <div className="text-[11px] text-text-muted">No pending approvals.</div>
+                    )}
+                    {activeRunId &&
+                      !approvalsLoading &&
+                      !approvalsError &&
+                      pendingApprovals.map((item) => (
+                        <div
+                          key={item.id}
+                          className="rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-xs text-text-secondary"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="font-semibold text-text-primary">{item.toolName}</div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void handleApprovalAction("reject", item.id)}
+                                className="rounded-md border border-rose-500/30 px-2 py-0.5 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/10"
+                              >
+                                Reject
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleApprovalAction("approve", item.id)}
+                                className="rounded-md border border-emerald-500/30 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/10"
+                              >
+                                Approve
+                              </button>
+                            </div>
+                          </div>
+                          <div className="mt-1 text-[10px] text-text-muted">{item.description}</div>
+                        </div>
+                      ))}
+                  </div>
+                  <div className="border-t border-border-subtle px-3 py-2">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Executed / Rejected</div>
+                    <div className="mt-2 space-y-2 max-h-40 overflow-y-auto scrollbar-elegant">
+                      {executedApprovals.length === 0 && (
+                        <div className="text-[11px] text-text-muted">No executed approvals yet.</div>
+                      )}
+                      {executedApprovals.map((item) => (
+                        <div key={item.id} className="rounded-md border border-border-subtle px-2 py-1 text-[10px] text-text-secondary">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-semibold text-text-primary">{item.toolName}</span>
+                            <span className="text-[10px] text-text-muted">{item.status}</span>
+                          </div>
+                          {item.description && <div className="mt-1 text-text-muted">{item.description}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
               </div>
             </div>
           </aside>

@@ -2,7 +2,7 @@ import type { ObjectId } from "mongodb";
 import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
 import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
 
-export type AgentGraphStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
+export type AgentGraphStatus = "PENDING" | "RUNNING" | "PAUSED" | "CANCELLED" | "COMPLETED" | "FAILED";
 
 export type AgentGraphNodeStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
 
@@ -27,7 +27,19 @@ export type AgentGraphNodeReactConfig = {
     maxToolCalls?: number;
 };
 
-export type AgentGraphNodeKind = "react" | "router";
+export type AgentGraphNodeKind = "react" | "router" | "delegate";
+
+export type AgentGraphNodeDelegateMode = "react" | "graph";
+
+export type AgentGraphNodeDelegateConfig = {
+    mode: AgentGraphNodeDelegateMode;
+    /** When mode === "graph", execute this graph id as a sub-run. */
+    graphId?: string;
+    /** Optional summarization prompt for the delegate result. */
+    summaryPrompt?: string;
+    /** Optional model override for summary. */
+    summaryLlmSelection?: AgentGraphLlmSelection;
+};
 
 export type AgentGraphNodeOutputConfig = {
     /**
@@ -51,6 +63,7 @@ export type AgentGraphNode = {
     label: string;
     kind?: AgentGraphNodeKind;
     react: AgentGraphNodeReactConfig;
+    delegate?: AgentGraphNodeDelegateConfig;
     output: AgentGraphNodeOutputConfig;
 };
 
@@ -81,6 +94,7 @@ export interface AgentGraphDefinition {
     _id?: ObjectId;
     name: string;
     description?: string;
+    category?: "deep_agent" | "graph" | "campaign" | "drift";
     createdAt: Date;
     updatedAt: Date;
     nodes: AgentGraphNode[];
@@ -119,6 +133,11 @@ export type AgentGraphState = {
     qualityGates?: Record<string, unknown>;
     reviewFeedback?: Array<Record<string, unknown>>;
     suggestedTests?: string[];
+    approvals?: {
+        pending?: Array<Record<string, unknown>>;
+        granted?: Array<Record<string, unknown>>;
+        rejected?: Array<Record<string, unknown>>;
+    };
     confidence?: unknown;
     finalSummary?: string;
     nextSteps?: string[];

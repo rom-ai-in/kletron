@@ -14,6 +14,7 @@ import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
 import { getWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 import { getWorkspaceByIdUnsafe } from "@numezis/server/services/workspaceService";
 import { buildAuditContextPrompt } from "@numezis/server/services/auditContextService";
+import { agentGraphService } from "@numezis/server/services/agentGraphService";
 
 const safeEditGate = SafeEditGate.getInstance();
 
@@ -29,8 +30,12 @@ export class ReActEngine {
         return ReActEngine.instance;
     }
 
-    // Wrap the write_file tool to intercept and propose edits
-    private getSafeTools(conversationId: string) {
+    // Wrap sensitive tools + inject task queue updates
+    private getSafeTools(
+        conversationId: string,
+        conversationService: ConversationService,
+        toolAllowlist?: string[]
+    ) {
         const safeWriteFile = tool(
             async (input: { filePath: string; content: string; repoPath?: string; overwrite?: boolean }) => {
                 // Propose the edit instead of executing
@@ -85,12 +90,79 @@ export class ReActEngine {
             }
         );
 
+        const normalizeTaskStatus = (value: string) => {
+            if (value === "todo" || value === "done" || value === "in_progress") return value;
+            return "todo";
+        };
+
+        const writeTodosTool = tool(
+            async (input: { tasks: Array<{ id?: string; title?: string; status?: string }>; currentTaskId?: string }) => {
+                const conversation = await conversationService.get(conversationId);
+                if (!conversation) throw new Error("Conversation not found");
+                const tasks = Array.isArray(input.tasks) ? input.tasks : [];
+                const normalized = tasks.map((task, index) => {
+                    const id = typeof task.id === "string" && task.id ? task.id : `task-${index + 1}`;
+                    const title = typeof task.title === "string" ? task.title : `Task ${index + 1}`;
+                    const status = normalizeTaskStatus(typeof task.status === "string" ? task.status : "todo");
+                    return { id, title, status };
+                });
+                conversation.taskQueue = normalized;
+                conversation.currentTaskId =
+                    typeof input.currentTaskId === "string" && input.currentTaskId
+                        ? input.currentTaskId
+                        : normalized.find((t) => t.status !== "done")?.id ?? "";
+                await conversationService.save(conversation);
+                return JSON.stringify(
+                    {
+                        updated: true,
+                        currentTaskId: conversation.currentTaskId ?? "",
+                        taskCount: Array.isArray(conversation.taskQueue) ? conversation.taskQueue.length : 0,
+                    },
+                    null,
+                    2
+                );
+            },
+            {
+                name: "write_todos",
+                description: "Update the task queue and current task pointer for this conversation.",
+                schema: z.object({
+                    tasks: z
+                        .array(
+                            z.object({
+                                id: z.string().optional(),
+                                title: z.string().optional(),
+                                status: z.enum(["todo", "in_progress", "done"]).optional(),
+                            })
+                        )
+                        .default([]),
+                    currentTaskId: z.string().optional(),
+                }),
+            }
+        );
+
         const safeToolNames = ["write_file", "str_replace_editor"];
-        const tools = allMcpTools.filter(t => !safeToolNames.includes(t.name)).concat([safeWriteFile, safeStrReplace]);
+        const allowlist = Array.isArray(toolAllowlist)
+            ? new Set(toolAllowlist.concat(["write_todos"]))
+            : null;
+        const baseTools = allMcpTools.filter(t => !safeToolNames.includes(t.name));
+        const filtered = allowlist
+            ? baseTools.filter((t) => allowlist.has(t.name))
+            : baseTools;
+        const tools = filtered.concat([
+            ...(allowlist ? (allowlist.has("write_file") ? [safeWriteFile] : []) : [safeWriteFile]),
+            ...(allowlist ? (allowlist.has("str_replace_editor") ? [safeStrReplace] : []) : [safeStrReplace]),
+            ...(allowlist ? (allowlist.has("write_todos") ? [writeTodosTool] : []) : [writeTodosTool]),
+        ]);
         return tools;
     }
 
-    async chat(conversationId: string, userMessage: string, onUpdate?: (event: AgentEvent) => void, llmSelection?: { provider: LlmProviderType; model?: string }): Promise<string> {
+    async chat(
+        conversationId: string,
+        userMessage: string,
+        onUpdate?: (event: AgentEvent) => void,
+        llmSelection?: { provider: LlmProviderType; model?: string },
+        graphId?: string
+    ): Promise<string> {
         const conversationService = new ConversationService(getWorkspaceContext()?.workspaceId);
         // 1. Load conversation history
         const conversation = await conversationService.get(conversationId);
@@ -127,8 +199,41 @@ export class ReActEngine {
         await conversationService.appendEvent(conversationId, newUserEvent);
         if (onUpdate) onUpdate(newUserEvent);
 
-        // 4. Run the agent
-        const tools = this.getSafeTools(conversationId);
+        // 4. Resolve graph config (default to Simple ReAct agent graph)
+        let graphSystemPrompt = "";
+        let graphToolNames: string[] | undefined = undefined;
+        let resolvedGraphId: string | undefined = undefined;
+        try {
+            if (graphId) {
+                const graph = await agentGraphService.getGraph(graphId);
+                if (graph?.nodes?.length) {
+                    graphSystemPrompt = graph.nodes[0]?.react?.systemPrompt ?? "";
+                    graphToolNames = graph.nodes[0]?.react?.toolNames ?? [];
+                    resolvedGraphId = graphId;
+                }
+            }
+            if (!graphSystemPrompt) {
+                const graphs = await agentGraphService.listGraphs({ search: "Simple ReAct" });
+                const simpleGraph = graphs.find((g) => g.name === "Simple ReAct (agent graph)") ?? graphs[0];
+                if (simpleGraph?.nodes?.length) {
+                    graphSystemPrompt = simpleGraph.nodes[0]?.react?.systemPrompt ?? "";
+                    graphToolNames = simpleGraph.nodes[0]?.react?.toolNames ?? [];
+                    resolvedGraphId = simpleGraph._id?.toString?.();
+                }
+            }
+        } catch (err) {
+            console.warn("[ReActEngine] Failed to load graph config:", err);
+        }
+
+        if (resolvedGraphId && conversation.graphId !== resolvedGraphId) {
+            const refreshed = await conversationService.get(conversationId);
+            if (refreshed) {
+                refreshed.graphId = resolvedGraphId;
+                await conversationService.save(refreshed);
+            }
+        }
+
+        const tools = this.getSafeTools(conversationId, conversationService, graphToolNames);
         const workspaceSummary = workspaceInfo
             ? [
                 `Workspace name: ${workspaceInfo.name}`,
@@ -160,6 +265,20 @@ IMPORTANT:
 - The execute_bash tool only supports: find, grep, rg, ls, cat (safe emulation). Complex shell commands won't work.
 - For file verification, use read_file or list_files instead of bash commands.
 - Do NOT reveal chain-of-thought. Provide concise, user-facing reasoning summaries only when necessary.`;
+
+        if (graphSystemPrompt) {
+            systemPrompt = `${systemPrompt}\n\nGRAPH INSTRUCTIONS:\n${graphSystemPrompt}`;
+        }
+
+        const taskQueue = Array.isArray(conversation.taskQueue) ? conversation.taskQueue : [];
+        const currentTaskId = typeof conversation.currentTaskId === "string" ? conversation.currentTaskId : "";
+        const taskContextBlock = [
+            "## PLAN & TASK QUEUE",
+            `Current task id: ${currentTaskId || "(none)"}`,
+            `Task queue: ${JSON.stringify(taskQueue, null, 2)}`,
+            "Use write_todos to create or update the task queue when the mission requires multiple steps.",
+        ].join("\n");
+        systemPrompt = `${systemPrompt}\n\n${taskContextBlock}`;
 
         // Inject Audit Context if enabled
         try {

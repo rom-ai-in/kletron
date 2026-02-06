@@ -20,12 +20,18 @@ type AgentGraphDto = {
     nodes: Array<{
         id: string;
         label: string;
-        kind?: "react" | "router";
+        kind?: "react" | "router" | "delegate";
         react: {
             systemPrompt: string;
             userPromptTemplate: string;
             toolNames: string[];
             llmSelection?: { provider: "azure" | "lmstudio"; model?: string };
+        };
+        delegate?: {
+            mode?: "react" | "graph";
+            graphId?: string;
+            summaryPrompt?: string;
+            summaryLlmSelection?: { provider: "azure" | "lmstudio"; model?: string };
         };
         output: { schemaId: string; statePath?: string; stateMerge?: boolean };
     }>;
@@ -64,6 +70,7 @@ const DEFAULT_NODE_TOOLS = [
     "str_replace_editor",
     "execute_bash",
     "output_format",
+    "write_todos",
 ];
 
 function makeDefaultNode(idx: number) {
@@ -162,6 +169,7 @@ export function AgentGraphEditor({
             label: n.label,
             kind: n.kind ?? "react",
             react: n.react,
+            delegate: n.delegate,
             output: n.output,
         } satisfies AgentNodeEditorValue;
     }, [nodes, selectedNodeId]);
@@ -186,15 +194,16 @@ export function AgentGraphEditor({
         setNodes((prev) =>
             prev.map((n) => {
                 if (n.id !== next.id) return n;
-                return {
-                    ...n,
-                    label: next.label,
-                    kind: next.kind ?? n.kind,
-                    react: next.react,
-                    output: next.output,
-                };
-            })
-        );
+        return {
+            ...n,
+            label: next.label,
+            kind: next.kind ?? n.kind,
+            react: next.react,
+            delegate: next.delegate,
+            output: next.output,
+        };
+    })
+);
     };
 
     const selectedUpstream = useMemo(() => {
@@ -552,8 +561,9 @@ export function AgentGraphEditor({
                 <Panel className="mt-4 p-3">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Notes</div>
                     <div className="mt-1 text-xs text-text-muted">
-                        - Nodes can be ReAct or Router.\n
+                        - Nodes can be ReAct, Router, or Delegate.\n
                         - Router nodes skip LLM execution and only route via edge conditions.\n
+                        - Delegate nodes run a subagent or nested graph and return a summarized result.\n
                         - Node output must be strict JSON.\n
                         - `{"{{state}}"}` injects the current run state JSON.
                     </div>

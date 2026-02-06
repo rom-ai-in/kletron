@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     if (!auth) {
         return new Response(JSON.stringify({ "error": "Unauthorized" }), {
             status: 401,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
         });
     }
 
@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
             const v1Response = await fetch(v1Url, {
                 method: "GET",
                 headers: { "Content-Type": "application/json" },
+                cache: "no-store",
                 signal: AbortSignal.timeout(5000),
             });
 
@@ -125,6 +126,7 @@ export async function GET(request: NextRequest) {
                 const v0Response = await fetch(v0Url, {
                     method: "GET",
                     headers: { "Content-Type": "application/json" },
+                    cache: "no-store",
                     signal: AbortSignal.timeout(5000),
                 });
 
@@ -157,7 +159,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             models,
             loadedModel: loadedModelId,
-        }, { status: 200 });
+        }, { status: 200, headers: { "Cache-Control": "no-store" } });
     } catch (error) {
         console.error("Error fetching LM Studio models:", error);
 
@@ -174,7 +176,7 @@ export async function GET(request: NextRequest) {
                 models: [],
                 loadedModel: null,
             },
-            { status: 200 }
+            { status: 200, headers: { "Cache-Control": "no-store" } }
         );
     }
 }

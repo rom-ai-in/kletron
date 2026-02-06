@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, History } from "lucide-react";
 import { Breadcrumbs, Selector, type SelectorOption } from "@numezis/ui/components/design-system";
 
 type WorkspaceSummary = {
@@ -96,6 +96,14 @@ export function AppHeader() {
               <Plus className="h-3.5 w-3.5" />
             </Link>
           </div>
+          <Link
+            href="/app/history"
+            className="flex items-center gap-2 rounded-md border border-border-subtle px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:bg-state-hover hover:text-text-primary transition-colors"
+            title="History"
+          >
+            <History className="h-3.5 w-3.5" />
+            History
+          </Link>
         </div>
       </div>
     </header>

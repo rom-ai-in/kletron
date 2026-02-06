@@ -17,6 +17,10 @@ export type ConversationMetadata = {
     updatedAt: string;
     status: "active" | "archived";
     summary?: string;
+    graphId?: string;
+    plan?: Record<string, unknown>;
+    taskQueue?: Array<{ id: string; title: string; status: string }>;
+    currentTaskId?: string;
 };
 
 export type Conversation = ConversationMetadata & {
@@ -164,6 +168,29 @@ export class ConversationService {
         if (!conversation) throw new Error("Conversation not found");
 
         conversation.title = title;
+        await this.save(conversation);
+    }
+
+    async updateMessage(id: string, index: number, content: string): Promise<void> {
+        const conversation = await this.get(id);
+        if (!conversation) throw new Error("Conversation not found");
+
+        if (!Number.isInteger(index) || index < 0 || index >= conversation.messages.length) {
+            throw new Error("Message index out of range");
+        }
+
+        const message = conversation.messages[index] as any;
+        if (!message || typeof message !== "object") {
+            throw new Error("Message is not editable");
+        }
+
+        const kind = typeof message.kind === "string" ? message.kind : "";
+        if (kind && kind !== "user" && kind !== "assistant") {
+            throw new Error("Only user or assistant messages can be edited");
+        }
+
+        message.content = content;
+        message.editedAt = new Date().toISOString();
         await this.save(conversation);
     }
 }

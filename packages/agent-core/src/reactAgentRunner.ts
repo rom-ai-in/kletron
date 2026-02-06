@@ -4,6 +4,7 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { getChatModel, type LlmSelection } from "@numezis/server/llm";
 import { config } from "@numezis/server/config";
 import type { TokenUsage } from "@numezis/server/services/tokenUsageTypes";
+import type { AgentWorkflowAbortReason } from "@numezis/shared/types";
 
 export type StreamReactAgentOptions = {
   name: string;
@@ -15,6 +16,12 @@ export type StreamReactAgentOptions = {
   onMessage?: (message: BaseMessage) => Promise<void> | void;
   /** Callback for each token usage update from LLM responses */
   onTokenUsage?: (usage: TokenUsage, model: string) => Promise<void> | void;
+  /** Abort signal to stop streaming mid-run */
+  abortSignal?: AbortSignal;
+  /** Optional abort reason getter (used when abortSignal triggers) */
+  getAbortReason?: () => AgentWorkflowAbortReason | null;
+  /** Optional check hook for cooperative aborts */
+  shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
 };
 
 export type StreamReactAgentResult = {
@@ -22,6 +29,16 @@ export type StreamReactAgentResult = {
   tokenUsage: TokenUsage;
   model: string;
 };
+
+export class AgentWorkflowAbortError extends Error {
+  reason: AgentWorkflowAbortReason;
+
+  constructor(reason: AgentWorkflowAbortReason) {
+    super(`Agent workflow aborted: ${reason}`);
+    this.name = "AgentWorkflowAbortError";
+    this.reason = reason;
+  }
+}
 
 /**
  * Extract token usage from a LangChain message's usage_metadata.
@@ -54,7 +71,11 @@ export async function streamReactAgentMessages(
   const inputMessages = [...(opts.extraMessages ?? []), { role: "user", content: opts.userPrompt }];
   const stream = await agent.stream(
     { messages: inputMessages },
-    { streamMode: "values", recursionLimit: config.graphRecursionLimit }
+    {
+      streamMode: "values",
+      recursionLimit: config.graphRecursionLimit,
+      signal: opts.abortSignal,
+    }
   );
 
   const seenMessageIds = new Set<string>();
@@ -75,44 +96,67 @@ export async function streamReactAgentMessages(
     return true;
   };
 
-  for await (const state of stream) {
-    if (!state || typeof state !== "object") continue;
-    lastState = state as { messages?: BaseMessage[] };
-    if (!Array.isArray(lastState.messages)) continue;
+  const checkAbort = async () => {
+    if (opts.abortSignal?.aborted) {
+      const reason = opts.getAbortReason?.() ?? "PAUSED";
+      throw new AgentWorkflowAbortError(reason);
+    }
+    if (opts.shouldAbort) {
+      const reason = await opts.shouldAbort();
+      if (reason) {
+        throw new AgentWorkflowAbortError(reason);
+      }
+    }
+  };
 
-    for (const message of lastState.messages) {
-      const idKey =
-        typeof message.id === "string"
-          ? message.id
-          : `${(message as any).role ?? "unknown"}-${typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "")}-${accumulatedMessages.length}`;
+  try {
+    for await (const state of stream) {
+      await checkAbort();
+      if (!state || typeof state !== "object") continue;
+      lastState = state as { messages?: BaseMessage[] };
+      if (!Array.isArray(lastState.messages)) continue;
 
-      // Process message for event stream
-      if (!seenMessageIds.has(idKey)) {
-        seenMessageIds.add(idKey);
-        accumulatedMessages.push(message);
-        if (opts.onMessage) {
-          if (shouldEmitToCallback(message)) {
-            await opts.onMessage(message);
+      for (const message of lastState.messages) {
+        await checkAbort();
+        const idKey =
+          typeof message.id === "string"
+            ? message.id
+            : `${(message as any).role ?? "unknown"}-${typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "")}-${accumulatedMessages.length}`;
+
+        // Process message for event stream
+        if (!seenMessageIds.has(idKey)) {
+          seenMessageIds.add(idKey);
+          accumulatedMessages.push(message);
+          if (opts.onMessage) {
+            if (shouldEmitToCallback(message)) {
+              await opts.onMessage(message);
+            }
           }
         }
-      }
 
-      // Extract token usage (only once per message)
-      if (!seenUsageIds.has(idKey)) {
-        const usage = extractTokenUsage(message);
-        if (usage && (usage.inputTokens > 0 || usage.outputTokens > 0 || usage.totalTokens > 0)) {
-          seenUsageIds.add(idKey);
+        // Extract token usage (only once per message)
+        if (!seenUsageIds.has(idKey)) {
+          const usage = extractTokenUsage(message);
+          if (usage && (usage.inputTokens > 0 || usage.outputTokens > 0 || usage.totalTokens > 0)) {
+            seenUsageIds.add(idKey);
 
-          totalUsage.inputTokens += usage.inputTokens;
-          totalUsage.outputTokens += usage.outputTokens;
-          totalUsage.totalTokens += usage.totalTokens;
+            totalUsage.inputTokens += usage.inputTokens;
+            totalUsage.outputTokens += usage.outputTokens;
+            totalUsage.totalTokens += usage.totalTokens;
 
-          if (opts.onTokenUsage) {
-            await opts.onTokenUsage(usage, modelName);
+            if (opts.onTokenUsage) {
+              await opts.onTokenUsage(usage, modelName);
+            }
           }
         }
       }
     }
+  } catch (error) {
+    if (opts.abortSignal?.aborted) {
+      const reason = opts.getAbortReason?.() ?? "PAUSED";
+      throw new AgentWorkflowAbortError(reason);
+    }
+    throw error;
   }
 
   const finalMessages = lastState?.messages ?? accumulatedMessages;

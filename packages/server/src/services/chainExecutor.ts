@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import { getDb } from "../lib/db";
 import { runWorkflow } from "@numezis/agent-core/workflows";
+import { AgentWorkflowAbortError } from "@numezis/agent-core/reactAgentRunner";
 import { auditService } from "./auditService";
 import type {
     AuditChain,
@@ -14,6 +15,7 @@ import type {
     AuditStageConfig,
     AuditRun,
 } from "@numezis/shared/chainTypes";
+import type { AgentWorkflowAbortReason } from "@numezis/shared/types";
 import type { Claim as WorkflowClaim, Task as WorkflowTask, AgentWorkflowResult } from "@numezis/shared/types";
 
 const COLLECTION_NAME = "audit_chains";
@@ -395,11 +397,33 @@ export class ChainExecutor {
 
         const results: StageResult[] = [];
         const startTime = Date.now();
+        const runWorkspaceId = run.workspaceId?.toString();
+        const shouldAbort = (() => {
+            let lastCheck = 0;
+            let cachedReason: AgentWorkflowAbortReason | null = null;
+            const CHECK_INTERVAL_MS = 500;
+            return async () => {
+                if (cachedReason) return cachedReason;
+                const now = Date.now();
+                if (now - lastCheck < CHECK_INTERVAL_MS) return null;
+                lastCheck = now;
+                const current = await this.getRun(runId, runWorkspaceId);
+                if (current?.status === "PAUSED") {
+                    cachedReason = "PAUSED";
+                    return cachedReason;
+                }
+                if (current?.status === "CANCELLED") {
+                    cachedReason = "CANCELLED";
+                    return cachedReason;
+                }
+                return null;
+            };
+        })();
 
         // Execute each stage sequentially
         for (let i = run.currentStageIndex; i < chain.stages.length; i++) {
             // Check if run was paused or cancelled (best-effort: takes effect between stages)
-            const currentRun = await this.getRun(runId);
+            const currentRun = await this.getRun(runId, runWorkspaceId);
             if (currentRun?.status === "PAUSED") {
                 console.info(`[ChainExecutor] Run ${runId} is paused. Stopping execution loop.`);
                 return {
@@ -450,10 +474,44 @@ export class ChainExecutor {
             }
 
             // Execute stage
-            const stageResult = await this.executeStage(chain._id!.toString(), stage, results, {
-                userPrompt,
-                auditSessionId,
-            });
+            let stageResult: StageResult;
+            try {
+                stageResult = await this.executeStage(chain._id!.toString(), stage, results, {
+                    userPrompt,
+                    auditSessionId,
+                    workspaceId: runWorkspaceId,
+                    shouldAbort,
+                });
+            } catch (error) {
+                if (error instanceof AgentWorkflowAbortError || (error as any)?.name === "AgentWorkflowAbortError") {
+                    const reason: AgentWorkflowAbortReason = (error as any).reason ?? "PAUSED";
+                    const status: ChainStatus = reason === "CANCELLED" ? "CANCELLED" : "PAUSED";
+                    await this.updateRunStatus(
+                        runId,
+                        status,
+                        reason === "CANCELLED" ? { endedAt: new Date() } : undefined,
+                        runWorkspaceId
+                    );
+                    await this.updateChainStatus(run.chainId.toString(), status, undefined, runWorkspaceId);
+                    return {
+                        chainId: chain._id!.toString(),
+                        success: false,
+                        stages: results,
+                        aggregation: {
+                            findings: [],
+                            insights: [],
+                            report: "",
+                            stats: {
+                                totalStages: results.length,
+                                totalFindings: results.flatMap((r) => r.findings).length,
+                                criticalCount: 0,
+                                warningCount: 0,
+                            },
+                        },
+                    };
+                }
+                throw error;
+            }
             results.push(stageResult);
 
             // Update run progress
@@ -535,7 +593,12 @@ export class ChainExecutor {
         chainId: string,
         stage: AuditStageConfig,
         previousResults: StageResult[],
-        prepared?: { userPrompt?: string; auditSessionId?: string }
+        prepared?: {
+            userPrompt?: string;
+            auditSessionId?: string;
+            workspaceId?: string;
+            shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
+        }
     ): Promise<StageResult> {
         const startTime = Date.now();
 
@@ -554,6 +617,8 @@ export class ChainExecutor {
                     provider: stage.llmProvider,
                     model: stage.llmModel,
                 },
+                workspaceId: prepared?.workspaceId,
+                shouldAbort: prepared?.shouldAbort,
                 ...(auditSessionId
                     ? {
                           onUpdate: async (update) => {
@@ -616,6 +681,9 @@ export class ChainExecutor {
                 duration: Date.now() - startTime,
             };
         } catch (error) {
+            if (error instanceof AgentWorkflowAbortError || (error as any)?.name === "AgentWorkflowAbortError") {
+                throw error;
+            }
             console.error(`[ChainExecutor] Stage ${stage.id} failed:`, error);
             if (prepared?.auditSessionId) {
                 const message = error instanceof Error ? error.message : String(error);

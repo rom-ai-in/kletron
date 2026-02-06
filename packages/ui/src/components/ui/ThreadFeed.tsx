@@ -29,6 +29,9 @@ export interface ThreadFeedProps {
   showCount?: boolean;
   showTitle?: boolean;
   className?: string;
+  itemClassName?: string;
+  emptyStateClassName?: string;
+  badgeClassName?: string;
 }
 
 const statusDot: Record<ThreadStatus, string> = {
@@ -50,6 +53,9 @@ export function ThreadFeed({
   showCount = true,
   showTitle = true,
   className,
+  itemClassName,
+  emptyStateClassName,
+  badgeClassName,
 }: ThreadFeedProps) {
   const visibleItems = maxVisible ? items.slice(0, maxVisible) : items;
   const remaining = maxVisible ? Math.max(items.length - visibleItems.length, 0) : 0;
@@ -68,7 +74,12 @@ export function ThreadFeed({
 
       <div className="flex-1 overflow-y-auto px-2 py-1.5 scrollbar-elegant">
         {visibleItems.length === 0 && (
-          <div className="rounded-lg border border-dashed border-border-subtle bg-bg-elevated/40 p-4 text-center text-[11px] text-text-muted">
+          <div
+            className={cn(
+              'rounded-lg border border-dashed border-border-subtle bg-bg-elevated/40 p-4 text-center text-[11px] text-text-muted',
+              emptyStateClassName
+            )}
+          >
             {emptyState ?? 'No threads yet.'}
           </div>
         )}
@@ -96,7 +107,8 @@ export function ThreadFeed({
                   'group w-full rounded-lg border px-3 py-2 text-left transition',
                   isActive
                     ? 'border-border-strong bg-state-selected'
-                    : 'border-border-subtle bg-bg-surface hover:bg-state-hover'
+                    : 'border-border-subtle bg-bg-surface hover:bg-state-hover',
+                  itemClassName
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -111,7 +123,12 @@ export function ThreadFeed({
                           {isPlainTitle ? <span className="truncate">{item.title}</span> : item.title}
                         </div>
                         {item.badge && (
-                          <span className="rounded-full border border-border-subtle bg-bg-elevated px-2 py-0.5 text-[9px] font-semibold text-text-muted">
+                          <span
+                            className={cn(
+                              'rounded-full border border-border-subtle bg-bg-elevated px-2 py-0.5 text-[9px] font-semibold text-text-muted',
+                              badgeClassName
+                            )}
+                          >
                             {item.badge}
                           </span>
                         )}

@@ -101,10 +101,13 @@ export type AgentWorkflowUpdate = {
     outputs?: AgentWorkflowResult["outputs"];
 };
 
+export type AgentWorkflowAbortReason = "PAUSED" | "CANCELLED";
+
 export type AgentWorkflowOptions = {
     onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
     llmSelection?: { provider: LlmProviderType; model?: string };
     workspaceId?: string;
+    shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
 };
 
 export type RepoGraphNode = {

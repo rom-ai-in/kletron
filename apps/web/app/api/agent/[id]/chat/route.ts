@@ -28,6 +28,7 @@ export async function POST(request: Request, context: { params: { id: string } }
   const payload = await request.json().catch(() => ({} as Record<string, unknown>));
   const message = (payload as any).message;
   const llmProvider = (payload as any).llmProvider;
+  const graphId = (payload as any).graphId;
 
   if (!message || typeof message !== "string") {
     return new Response(JSON.stringify({ error: "Message is required" }), {
@@ -63,7 +64,8 @@ export async function POST(request: Request, context: { params: { id: string } }
             (event: AgentEvent) => {
               send(event);
             },
-            llmSelection
+            llmSelection,
+            typeof graphId === "string" ? graphId : undefined
           );
         });
         send("[DONE]");

@@ -44,5 +44,6 @@ export async function runWorkflow(
   return agentGraphExecutor.executeRunStreaming(runId, {
     onUpdate: options?.onUpdate,
     llmSelectionOverride: options?.llmSelection,
+    shouldAbort: options?.shouldAbort,
   });
 }

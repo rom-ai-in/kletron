@@ -2,10 +2,45 @@ import type { AgentGraphDefinition, AgentGraphNode } from "./agentGraphTypes";
 
 export const simpleReactPhaseId = "simple_react";
 export const simpleReactPhaseLabel = "Agent (ReAct)";
-export const simpleReactSystemPrompt = `You are a helpful AI assistant. Use tools to answer the user's question accurately. Focus on the repository context if provided.`;
+const TOOL_PREFERENCE_GUIDANCE = [
+  "Tooling guidance:",
+  "- Prefer list_files/read_file/search_code/git_grep/semantic_code_search before execute_bash.",
+  "- Use execute_bash only when a shell pipeline is truly required.",
+  "- Avoid repeating commands; reuse prior outputs.",
+].join(" ");
+export const simpleReactSystemPrompt = [
+  "You are a helpful AI assistant.",
+  "Use tools to answer the user's question accurately. Focus on the repository context if provided.",
+  "If the request is multi-step, create and maintain a task queue using write_todos.",
+  "Update task status as you progress.",
+  TOOL_PREFERENCE_GUIDANCE,
+].join(" ");
 export const simpleReactToolNames = [
-  "list_files", "read_file", "search_code", "repo_metrics", "git_log",
-  "describe_structure", "semantic_code_search", "web_search"
+  "list_files",
+  "read_file",
+  "read_file_range",
+  "search_code",
+  "repo_metrics",
+  "dependency_info",
+  "describe_structure",
+  "git_log",
+  "git_diff",
+  "git_grep",
+  "git_blame",
+  "semantic_code_search",
+  "structural_search",
+  "symbols_list",
+  "find_symbol",
+  "go_to_definition",
+  "references",
+  "find_references",
+  "execute_bash",
+  "output_format",
+  "write_file",
+  "str_replace_editor",
+  "web_search",
+  "fetch_url",
+  "write_todos"
 ];
 
 function promptTemplateForPhase(phaseId: string) {
@@ -170,6 +205,7 @@ export function buildDiamondFlowAgentGraph(): Omit<AgentGraphDefinition, "_id" |
   return {
     name: "Diamond flow (agent graph)",
     description: "Diamond flow implemented as a DAG of ReAct nodes (phase1..phase6).",
+    category: "graph",
     nodes,
     edges,
   };
@@ -200,6 +236,7 @@ export function buildSimpleReactAgentGraph(): Omit<AgentGraphDefinition, "_id" |
   return {
     name: "Simple ReAct (agent graph)",
     description: "Single-node ReAct agent graph (equivalent to the hard-coded simple ReAct workflow).",
+    category: "graph",
     nodes,
     edges: [],
   };
@@ -227,7 +264,458 @@ export function buildPresentationGeneratorProGraph(): Omit<AgentGraphDefinition,
     ...base,
     name: "Presentation Generator Pro",
     description: "Single-node presentation generator tailored for slide-ready outputs.",
+    category: "graph",
     nodes,
+  };
+}
+
+export function buildCompleteDeepAgentGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
+  const nodes: AgentGraphNode[] = [
+    {
+      id: "complete_intake",
+      label: "Intake",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Intake agent.",
+          "Normalize the mission into a clear goal and constraints.",
+          CURSOR_JSON_RULES,
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"goal\": string,",
+          "  \"constraints\": string[],",
+          "  \"openQuestions\": string[],",
+          "  \"userInput\": string",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: "Mission:\n{{mission}}",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "cursor_intake_output", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "complete_planner",
+      label: "Planner",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Planner.",
+          "Create an actionable plan and task queue.",
+          CURSOR_JSON_RULES,
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"plan\": object,",
+          "  \"taskQueue\": array,",
+          "  \"currentTaskId\": string,",
+          "  \"riskRegister\": array",
+          "}",
+          "",
+          "Requirement: taskQueue must contain at least 3 tasks with { id, title, status }.",
+          "Set currentTaskId to the first task whose status is \"todo\"."
+        ].join("\n"),
+        userPromptTemplate: [
+          "Goal: {{state.goal}}",
+          "Constraints: {{state.constraints}}",
+          "Open questions: {{state.openQuestions}}",
+          "Mission: {{mission}}"
+        ].join("\n"),
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "cursor_planner_output", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "complete_delegate_research",
+      label: "Delegate Research",
+      kind: "delegate",
+      react: {
+        systemPrompt: [
+          "You are a deep research subagent.",
+          "Use tools to gather evidence and extract key findings.",
+          TOOL_PREFERENCE_GUIDANCE,
+          "Return JSON with summary, findings, and risks."
+        ].join("\n"),
+        userPromptTemplate: [
+          "Mission: {{mission}}",
+          "Goal: {{state.goal}}",
+          "Constraints: {{state.constraints}}",
+          "Open questions: {{state.openQuestions}}"
+        ].join("\n"),
+        toolNames: CURSOR_RESEARCH_TOOLS,
+        llmSelection: { provider: "azure" }
+      },
+      delegate: {
+        mode: "react",
+        summaryPrompt: [
+          "Summarize the delegate result.",
+          "Return strict JSON with keys:",
+          "{",
+          "  \"summary\": string,",
+          "  \"keyFindings\": string[],",
+          "  \"risks\": string[]",
+          "}"
+        ].join("\n")
+      },
+      output: { schemaId: "generic_json", statePath: "state.research", stateMerge: true }
+    },
+    {
+      id: "complete_execute",
+      label: "Executor",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Executor.",
+          "Implement the plan and update task status using write_todos when needed.",
+          TOOL_PREFERENCE_GUIDANCE,
+          CURSOR_JSON_RULES,
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"taskQueue\": array,",
+          "  \"currentTaskId\": string,",
+          "  \"workingNotes\": string[],",
+          "  \"blockedReason\": string | null",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: [
+          "Plan: {{state.plan}}",
+          "Task queue: {{state.taskQueue}}",
+          "Current task: {{state.currentTaskId}}",
+          "Research: {{state.research}}",
+          "Mission: {{mission}}"
+        ].join("\n"),
+        toolNames: CURSOR_CODER_TOOLS,
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "cursor_coder_output", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "complete_verify",
+      label: "Verifier",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Verifier.",
+          "Validate outputs against acceptance criteria and quality gates.",
+          TOOL_PREFERENCE_GUIDANCE,
+          CURSOR_JSON_RULES,
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"reviewFeedback\": array,",
+          "  \"confidence\": string | number,",
+          "  \"suggestedTests\": string[],",
+          "  \"route\": { \"next\": string, \"reason\": string }",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: [
+          "Acceptance criteria: {{state.acceptanceCriteria}}",
+          "Definition of done: {{state.definitionOfDone}}",
+          "Working notes: {{state.workingNotes}}",
+          "Mission: {{mission}}"
+        ].join("\n"),
+        toolNames: CURSOR_CORE_TOOLS,
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "cursor_reviewer_output", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "complete_finalize",
+      label: "Finalize",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Finalizer.",
+          "Produce the final summary and next steps.",
+          CURSOR_JSON_RULES,
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"finalSummary\": string,",
+          "  \"nextSteps\": string[],",
+          "  \"confidence\": string",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: [
+          "Review feedback: {{state.reviewFeedback}}",
+          "Quality gates: {{state.qualityGates}}",
+          "Mission: {{mission}}"
+        ].join("\n"),
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "cursor_done_output", statePath: "state", stateMerge: true }
+    }
+  ];
+
+  const edges = [
+    { id: "edge-complete-intake-planner", source: "complete_intake", target: "complete_planner" },
+    { id: "edge-complete-planner-delegate", source: "complete_planner", target: "complete_delegate_research" },
+    { id: "edge-complete-delegate-execute", source: "complete_delegate_research", target: "complete_execute" },
+    { id: "edge-complete-execute-verify", source: "complete_execute", target: "complete_verify" },
+    { id: "edge-complete-verify-finalize", source: "complete_verify", target: "complete_finalize" },
+  ];
+
+  return {
+    name: "Complete Deep Agent (agent graph)",
+    description: "End-to-end deep agent workflow with delegate research and task tracking.",
+    category: "deep_agent",
+    nodes,
+    edges,
+    execution: { mode: "dag" }
+  };
+}
+
+export function buildDriftAnalysisGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
+  const nodes: AgentGraphNode[] = [
+    {
+      id: "drift_intake",
+      label: "Drift Intake",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Drift Intake agent.",
+          "Clarify scope and signals for drift analysis.",
+          CURSOR_JSON_RULES,
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"goal\": string,",
+          "  \"constraints\": string[],",
+          "  \"openQuestions\": string[]",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: "Mission:\n{{mission}}",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "cursor_intake_output", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "drift_scan",
+      label: "Drift Scan",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Drift Scanner.",
+          "Inspect configuration, deployment, and runtime signals.",
+          "Return findings and evidence paths.",
+          TOOL_PREFERENCE_GUIDANCE,
+          CURSOR_JSON_RULES,
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"workingNotes\": string[],",
+          "  \"riskRegister\": array",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: [
+          "Mission: {{mission}}",
+          "Goal: {{state.goal}}",
+          "Constraints: {{state.constraints}}"
+        ].join("\n"),
+        toolNames: CURSOR_RESEARCH_TOOLS,
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "cursor_researcher_output", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "drift_delegate",
+      label: "Delegate Drift Review",
+      kind: "delegate",
+      react: {
+        systemPrompt: [
+          "You are a drift analysis subagent.",
+          "Review configs and code for environment mismatches and missing safeguards.",
+          TOOL_PREFERENCE_GUIDANCE
+        ].join("\n"),
+        userPromptTemplate: [
+          "Mission: {{mission}}",
+          "Working notes: {{state.workingNotes}}"
+        ].join("\n"),
+        toolNames: CURSOR_CORE_TOOLS,
+        llmSelection: { provider: "azure" }
+      },
+      delegate: {
+        mode: "react",
+        summaryPrompt: [
+          "Summarize drift risks and recommendations.",
+          "Return strict JSON with keys:",
+          "{",
+          "  \"summary\": string,",
+          "  \"driftFindings\": string[],",
+          "  \"recommendations\": string[]",
+          "}"
+        ].join("\n")
+      },
+      output: { schemaId: "generic_json", statePath: "state.drift", stateMerge: true }
+    },
+    {
+      id: "drift_report",
+      label: "Drift Report",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Drift Reporter.",
+          "Produce a concise report and next actions.",
+          CURSOR_JSON_RULES,
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"finalSummary\": string,",
+          "  \"nextSteps\": string[]",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: [
+          "Drift findings: {{state.drift}}",
+          "Mission: {{mission}}"
+        ].join("\n"),
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "cursor_done_output", statePath: "state", stateMerge: true }
+    }
+  ];
+
+  const edges = [
+    { id: "edge-drift-intake-scan", source: "drift_intake", target: "drift_scan" },
+    { id: "edge-drift-scan-delegate", source: "drift_scan", target: "drift_delegate" },
+    { id: "edge-drift-delegate-report", source: "drift_delegate", target: "drift_report" },
+  ];
+
+  return {
+    name: "Drift Analysis (agent graph)",
+    description: "Dedicated graph for drift analysis with delegate review.",
+    category: "drift",
+    nodes,
+    edges,
+    execution: { mode: "dag" }
+  };
+}
+
+export function buildCampaignsGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
+  const nodes: AgentGraphNode[] = [
+    {
+      id: "campaign_brief",
+      label: "Campaign Brief",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Campaign Brief agent.",
+          "Capture objective, audience, and success metrics.",
+          CURSOR_JSON_RULES,
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"goal\": string,",
+          "  \"constraints\": string[],",
+          "  \"acceptanceCriteria\": string[]",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: "Mission:\n{{mission}}",
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "cursor_spec_output", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "campaign_plan",
+      label: "Campaign Plan",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Campaign Planner.",
+          "Create stages, deliverables, and a task queue.",
+          CURSOR_JSON_RULES,
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"plan\": object,",
+          "  \"taskQueue\": array,",
+          "  \"currentTaskId\": string",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: [
+          "Goal: {{state.goal}}",
+          "Constraints: {{state.constraints}}",
+          "Acceptance criteria: {{state.acceptanceCriteria}}"
+        ].join("\n"),
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "cursor_planner_output", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "campaign_execute",
+      label: "Campaign Execution",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Campaign Executor.",
+          "Use tools to gather assets, update tasks, and produce deliverables.",
+          TOOL_PREFERENCE_GUIDANCE,
+          CURSOR_JSON_RULES,
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"taskQueue\": array,",
+          "  \"currentTaskId\": string,",
+          "  \"workingNotes\": string[]",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: [
+          "Plan: {{state.plan}}",
+          "Task queue: {{state.taskQueue}}",
+          "Mission: {{mission}}"
+        ].join("\n"),
+        toolNames: CURSOR_CORE_TOOLS,
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "cursor_coder_output", statePath: "state", stateMerge: true }
+    },
+    {
+      id: "campaign_report",
+      label: "Campaign Report",
+      kind: "react",
+      react: {
+        systemPrompt: [
+          "You are the Campaign Reporter.",
+          "Summarize deliverables, results, and next steps.",
+          CURSOR_JSON_RULES,
+          "",
+          "Write ONLY these keys:",
+          "{",
+          "  \"finalSummary\": string,",
+          "  \"nextSteps\": string[]",
+          "}"
+        ].join("\n"),
+        userPromptTemplate: [
+          "Working notes: {{state.workingNotes}}",
+          "Mission: {{mission}}"
+        ].join("\n"),
+        toolNames: [],
+        llmSelection: { provider: "azure" }
+      },
+      output: { schemaId: "cursor_done_output", statePath: "state", stateMerge: true }
+    }
+  ];
+
+  const edges = [
+    { id: "edge-campaign-brief-plan", source: "campaign_brief", target: "campaign_plan" },
+    { id: "edge-campaign-plan-execute", source: "campaign_plan", target: "campaign_execute" },
+    { id: "edge-campaign-execute-report", source: "campaign_execute", target: "campaign_report" },
+  ];
+
+  return {
+    name: "Campaigns (agent graph)",
+    description: "Campaign planning and execution graph with task tracking.",
+    category: "campaign",
+    nodes,
+    edges,
+    execution: { mode: "dag" }
   };
 }
 
@@ -256,7 +744,8 @@ const CURSOR_CORE_TOOLS = [
   "references",
   "find_references",
   "execute_bash",
-  "output_format"
+  "output_format",
+  "write_todos"
 ];
 
 const CURSOR_RESEARCH_TOOLS = [
@@ -351,6 +840,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "You are the Repo Scan agent.",
           "Goal: discover repo structure, stack, and build/test commands.",
           "Use tools to inspect config files and structure.",
+          TOOL_PREFERENCE_GUIDANCE,
           CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
@@ -485,6 +975,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "You are the Researcher.",
           "Goal: resolve openQuestions using repository info or web tools.",
           "If the mission is analysis or audit, produce concrete findings in workingNotes with file references.",
+          TOOL_PREFERENCE_GUIDANCE,
           "",
           "CRITICAL ERROR HANDLING:",
           "If you encounter a CONFIGURATION ERROR (e.g., 'Working folder not configured'),",
@@ -533,6 +1024,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "- Update taskQueue: mark the current task done or remove it.",
           "- If currentTaskId is empty, pick the first todo task in taskQueue.",
           "- Set currentTaskId to the next todo task id (or \"\" if none).",
+          TOOL_PREFERENCE_GUIDANCE,
           CURSOR_JSON_RULES,
           "",
           "Write ONLY these keys:",
@@ -905,6 +1397,7 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
     name: "Cursor-like Robust Loop (agent graph)",
     description:
       "State-machine graph with router nodes, conditional edges, and loopbacks implementing intake->plan->implement->verify->review->finalize.",
+    category: "graph",
     nodes,
     edges,
     execution: {

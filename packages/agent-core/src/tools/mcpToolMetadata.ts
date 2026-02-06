@@ -51,6 +51,13 @@ export const mcpToolMetadata: McpToolMeta[] = [
     categories: ["search", "insights"],
   },
   {
+    name: "write_todos",
+    label: "Write task queue",
+    description: "Update the in-graph task queue and current task pointer at runtime.",
+    file: "packages/server/src/services/agentGraphExecutor.ts",
+    categories: ["planning", "state"],
+  },
+  {
     name: "dependency_info",
     label: "Dependency info",
     description: "Summarize dependencies, devDependencies, and scripts for npm/yarn projects.",
@@ -186,7 +193,7 @@ export const mcpToolMetadata: McpToolMeta[] = [
   {
     name: "execute_bash",
     label: "Execute bash",
-    description: "Safe emulation of a minimal shell subset (find/grep/rg/ls/cat).",
+    description: "Safe emulation of a minimal shell subset (find/grep/rg/ls/cat). Prefer list_files/read_file/search_code/git_grep when possible and avoid repeating commands.",
     file: "apps/mcp-server/tools/executeBash.js",
     categories: ["compat", "fs"],
   },

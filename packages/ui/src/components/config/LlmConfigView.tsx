@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Sparkles, Save, RotateCcw, Monitor, Cloud, Check, Globe, Bot, Cpu, Server, Power, PowerOff, Download, Zap, Loader2, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Sparkles, Save, RotateCcw, Monitor, Cloud, Check, Globe, Bot, Cpu, Server, Power, PowerOff, Download, Zap, Loader2, CheckCircle2, XCircle, AlertCircle, List } from "lucide-react";
 import { Panel, Button } from "@numezis/ui/components/design-system";
 import type { LlmConfig, LMStudioConfig, LMStudioModelConfig } from "@numezis/shared/schemas/llmConfig.schema";
 import { MODEL_RECOMMENDATIONS, LLM_PROVIDERS, type LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
@@ -870,6 +870,7 @@ type LMStudioTestResult = {
   latency?: number;
   tokensPerSecond?: number;
   outputTokens?: number;
+  details?: Record<string, unknown>;
 };
 
 type LMStudioModel = {
@@ -907,6 +908,7 @@ function LMStudioConfigForm({
   const [availableModels, setAvailableModels] = useState<(LMStudioModel & { loaded?: boolean })[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+  const [modelsErrorDetails, setModelsErrorDetails] = useState<string | null>(null);
   const [loadedModel, setLoadedModel] = useState<string | null>(null);
   const [loadingModelId, setLoadingModelId] = useState<string | null>(null);
   const [unloadingModelId, setUnloadingModelId] = useState<string | null>(null);
@@ -983,6 +985,24 @@ function LMStudioConfigForm({
     ? new Date(lastUpdatedAt).toLocaleString()
     : null;
 
+  const formatErrorDetails = (details: unknown) => {
+    if (!details || typeof details !== "object") return null;
+    const entries = Object.entries(details as Record<string, unknown>)
+      .filter(([, value]) => value !== undefined && value !== null && value !== "");
+    if (!entries.length) return null;
+    return entries
+      .map(([key, value]) => {
+        if (typeof value === "string") return `${key}: ${value}`;
+        return `${key}: ${JSON.stringify(value)}`;
+      })
+      .join(" • ");
+  };
+
+  const setModelError = (message: string | null, details?: unknown) => {
+    setModelsError(message);
+    setModelsErrorDetails(formatErrorDetails(details));
+  };
+
   const handleContextWindowChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const raw = event.currentTarget.value;
     const parsed = event.currentTarget.valueAsNumber;
@@ -998,20 +1018,21 @@ function LMStudioConfigForm({
   // Fetch available models from LM Studio
   const fetchModels = async () => {
     setLoadingModels(true);
-    setModelsError(null);
+    setModelError(null);
     try {
-      const res = await fetch("/api/llm-config/lmstudio/models");
+      const res = await fetch("/api/llm-config/lmstudio/models", { cache: "no-store" });
       const data = await res.json();
       if (data.error) {
-        setModelsError(data.error);
+        setModelError(data.error, data.details);
         setAvailableModels([]);
         setLoadedModel(null);
       } else {
         setAvailableModels(data.models || []);
         setLoadedModel(data.loadedModel || null);
+        setModelError(null);
       }
     } catch (error) {
-      setModelsError(error instanceof Error ? error.message : "Failed to fetch models");
+      setModelError(error instanceof Error ? error.message : "Failed to fetch models");
       setAvailableModels([]);
       setLoadedModel(null);
     } finally {
@@ -1035,10 +1056,10 @@ function LMStudioConfigForm({
         // Auto-select the loaded model
         setFormData((prev) => ({ ...prev, model: modelId }));
       } else {
-        setModelsError(data.error || "Failed to load model");
+        setModelError(data.error || "Failed to load model", data.details);
       }
     } catch (error) {
-      setModelsError(error instanceof Error ? error.message : "Failed to load model");
+      setModelError(error instanceof Error ? error.message : "Failed to load model");
     } finally {
       setLoadingModelId(null);
     }
@@ -1047,7 +1068,7 @@ function LMStudioConfigForm({
   // Unload a model from LM Studio using instance_id
   const handleUnloadModel = async (modelId: string, instanceId?: string) => {
     if (!instanceId) {
-      setModelsError("Cannot unload: missing instance ID. Please refresh models.");
+      setModelError("Cannot unload: missing instance ID. Please refresh models.");
       return;
     }
     setUnloadingModelId(modelId);
@@ -1062,10 +1083,10 @@ function LMStudioConfigForm({
         // Refresh models list to get updated loaded status
         await fetchModels();
       } else {
-        setModelsError(data.error || "Failed to unload model");
+        setModelError(data.error || "Failed to unload model", data.details);
       }
     } catch (error) {
-      setModelsError(error instanceof Error ? error.message : "Failed to unload model");
+      setModelError(error instanceof Error ? error.message : "Failed to unload model");
     } finally {
       setUnloadingModelId(null);
     }
@@ -1073,10 +1094,10 @@ function LMStudioConfigForm({
 
   const handleReloadModel = async (modelId: string, instanceId?: string) => {
     if (!instanceId) {
-      setModelsError("Cannot reload: missing instance ID. Please refresh models.");
+      setModelError("Cannot reload: missing instance ID. Please refresh models.");
       return;
     }
-    setModelsError(null);
+    setModelError(null);
     setReloadingModelId(modelId);
     try {
       const shouldSave = isDirty && onSave;
@@ -1090,7 +1111,7 @@ function LMStudioConfigForm({
       await handleUnloadModel(modelId, instanceId);
       await handleLoadModel(modelId);
     } catch (error) {
-      setModelsError(error instanceof Error ? error.message : "Failed to reload model");
+      setModelError(error instanceof Error ? error.message : "Failed to reload model");
     } finally {
       setReloadingModelId(null);
     }
@@ -1237,9 +1258,16 @@ function LMStudioConfigForm({
 
           {/* Available Models */}
           {modelsError && (
-            <div className="flex items-center gap-2 text-xs text-amber-400 mt-2">
-              <AlertCircle className="h-3 w-3" />
-              <span>{modelsError}</span>
+            <div className="mt-2 space-y-1">
+              <div className="flex items-center gap-2 text-xs text-amber-400">
+                <AlertCircle className="h-3 w-3" />
+                <span>{modelsError}</span>
+              </div>
+              {modelsErrorDetails && (
+                <div className="text-[11px] text-text-muted">
+                  Details: {modelsErrorDetails}
+                </div>
+              )}
             </div>
           )}
 
@@ -1336,11 +1364,30 @@ function LMStudioConfigForm({
             </div>
           )}
 
-          {!loadingModels && availableModels.length === 0 && !modelsError && (
+          {availableModels.length === 0 && !modelsError && (
             <div className="mt-3 space-y-3">
-              <div className="flex items-center gap-2 text-xs text-text-muted">
-                <AlertCircle className="h-3 w-3" />
-                <span>No models loaded in LM Studio. Enter a model path to load one.</span>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs text-text-muted">
+                  <AlertCircle className="h-3 w-3" />
+                  <span>
+                    {loadingModels
+                      ? "Listing models from LM Studio..."
+                      : "No models listed yet. Click “List Models” to sync with LM Studio."}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void fetchModels()}
+                  disabled={loadingModels}
+                  className="text-xs text-cyan-500 hover:text-cyan-400 flex items-center gap-1 transition-colors disabled:opacity-50"
+                >
+                  {loadingModels ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <List className="h-3 w-3" />
+                  )}
+                  <span>{loadingModels ? "Listing..." : "List Models"}</span>
+                </button>
               </div>
 
               {/* Manual load section */}
@@ -1623,6 +1670,13 @@ function LMStudioConfigForm({
                 {testResult.error && (
                   <p className="text-xs text-red-400 mt-1">{testResult.error}</p>
                 )}
+                {!testResult.success &&
+                  testResult.details &&
+                  formatErrorDetails(testResult.details) && (
+                    <p className="text-[11px] text-text-muted mt-1">
+                      Details: {formatErrorDetails(testResult.details)}
+                    </p>
+                  )}
                 {testResult.success && (
                   <div className="text-xs text-text-secondary mt-1 space-y-0.5">
                     {testResult.latency && <p>Latency: {testResult.latency}ms</p>}

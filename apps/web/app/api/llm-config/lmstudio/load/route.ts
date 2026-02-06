@@ -18,9 +18,13 @@ export async function POST(request: NextRequest) {
         });
     }
 
+    const timeoutMs = 120000;
+    let loadUrl = "";
+    let modelId: string | undefined;
+
     try {
         const body = await request.json();
-        const modelId = body.model;
+        modelId = body.model;
 
         if (!modelId || typeof modelId !== "string") {
             return NextResponse.json(
@@ -36,7 +40,7 @@ export async function POST(request: NextRequest) {
         // Clean baseUrl and construct load endpoint
         // LM Studio uses /api/v1/models/load for the native API
         const cleanBaseUrl = baseUrl.replace(/\/v1\/?$/, "").replace(/\/+$/, "");
-        const loadUrl = `${cleanBaseUrl}/api/v1/models/load`;
+        loadUrl = `${cleanBaseUrl}/api/v1/models/load`;
 
         // Load the model in LM Studio
         const response = await fetch(loadUrl, {
@@ -45,13 +49,22 @@ export async function POST(request: NextRequest) {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({ model: modelId }),
-            signal: AbortSignal.timeout(120000), // 2 minute timeout for loading
+            signal: AbortSignal.timeout(timeoutMs), // 2 minute timeout for loading
         });
 
         if (!response.ok) {
             const errorText = await response.text();
             return NextResponse.json(
-                { error: `Failed to load model: ${errorText || response.statusText}`, success: false },
+                {
+                    error: `Failed to load model: ${errorText || response.statusText}`,
+                    success: false,
+                    details: {
+                        status: response.status,
+                        statusText: response.statusText,
+                        endpoint: loadUrl,
+                        model: modelId,
+                    },
+                },
                 { status: 200 }
             );
         }
@@ -72,9 +85,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
             {
                 error: isTimeout
-                    ? "Loading timed out. Large models may take longer - check LM Studio directly."
+                    ? `Loading timed out after ${timeoutMs / 1000}s. Large models may take longer - check LM Studio directly.`
                     : errorMessage,
-                success: false
+                success: false,
+                details: {
+                    name: error instanceof Error ? error.name : undefined,
+                    code: (error as { code?: string }).code,
+                    endpoint: loadUrl,
+                    timeoutMs,
+                    model: modelId,
+                },
             },
             { status: 200 }
         );

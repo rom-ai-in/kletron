@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ActiveSession } from "@numezis/ui/components/Agent/ActiveSession";
-import { ThreadFeed, WorkspaceLayout } from "@numezis/ui/components/design-system";
+import { Button, Checkbox, ThreadFeed, WorkspaceLayout } from "@numezis/ui/components/design-system";
 import type { ThreadStatus } from "@numezis/ui/components/design-system";
 import { Loader2, Plus, AlertTriangle, RefreshCw, PencilLine, Trash2, Check, X, Archive, Square, CheckSquare } from "lucide-react";
 
@@ -57,6 +58,8 @@ export default function ExplorePage() {
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [renameLoading, setRenameLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const searchParams = useSearchParams();
+  const conversationIdParam = searchParams?.get("conversationId");
 
   const activeConversations = useMemo(
     () => conversations.filter((conv) => conv.status !== "archived"),
@@ -188,7 +191,7 @@ export default function ExplorePage() {
   const resolveConversation = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const storedId = sessionStorage.getItem(STORAGE_KEY);
+    const storedId = conversationIdParam || sessionStorage.getItem(STORAGE_KEY);
     if (storedId) {
       try {
         const query = workspace?.id ? `?workspaceId=${encodeURIComponent(workspace.id)}` : "";
@@ -197,6 +200,11 @@ export default function ExplorePage() {
           const data = (await res.json()) as ConversationSummary;
           setConversationId(data.id || storedId);
           setConversationTitle(data.title || DEFAULT_TITLE);
+          try {
+            sessionStorage.setItem(STORAGE_KEY, data.id || storedId);
+          } catch {
+            // ignore sessionStorage errors
+          }
           setLoading(false);
           void fetchConversations();
           return;
@@ -206,7 +214,7 @@ export default function ExplorePage() {
       }
     }
     await createConversation();
-  }, [createConversation, fetchConversations, workspace?.id]);
+  }, [createConversation, fetchConversations, workspace?.id, conversationIdParam]);
 
   const deleteConversations = useCallback(
     async (ids: string[], permanent = true) => {
@@ -374,18 +382,21 @@ export default function ExplorePage() {
     return {
       id: conv.id,
       leading: (
-        <button
-          type="button"
+        <div
           onClick={(event) => {
             event.stopPropagation();
-            toggleSelection(conv.id);
           }}
-          className="inline-flex h-5 w-5 items-center justify-center rounded border border-border-subtle bg-bg-elevated text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-          aria-pressed={isSelected}
-          aria-label={isSelected ? "Deselect session" : "Select session"}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+          }}
         >
-          {isSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-        </button>
+          <Checkbox
+            checked={isSelected}
+            onChange={() => toggleSelection(conv.id)}
+            size="sm"
+            aria-label={isSelected ? "Deselect session" : "Select session"}
+          />
+        </div>
       ),
       title: isRenaming ? (
         <div className="flex items-center gap-1">
@@ -407,27 +418,31 @@ export default function ExplorePage() {
             className="h-6 w-full rounded-md border border-border-subtle bg-bg-elevated px-2 text-[11px] text-text-primary focus:outline-none"
             autoFocus
           />
-          <button
+          <Button
             type="button"
             onClick={(event) => {
               event.stopPropagation();
               void submitRename();
             }}
             disabled={renameLoading}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border-subtle bg-bg-elevated text-text-muted transition hover:bg-state-hover hover:text-text-primary disabled:opacity-50"
+            size="icon"
+            variant="secondary"
+            className="h-6 w-6"
           >
             <Check className="h-3 w-3" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={(event) => {
               event.stopPropagation();
               cancelRename();
             }}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border-subtle bg-bg-elevated text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
           >
             <X className="h-3 w-3" />
-          </button>
+          </Button>
         </div>
       ) : (
         <span
@@ -445,41 +460,47 @@ export default function ExplorePage() {
       status,
       actions: !isRenaming ? (
         <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
-          <button
+          <Button
             type="button"
             onClick={(event) => {
               event.stopPropagation();
               startRename(conv);
             }}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border-subtle bg-bg-elevated text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
             title="Rename session"
           >
             <PencilLine className="h-3 w-3" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={(event) => {
               event.stopPropagation();
               void deleteConversations([conv.id], false);
             }}
             disabled={bulkActionLoading}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border-subtle bg-bg-elevated text-text-muted transition hover:bg-state-hover hover:text-text-primary disabled:opacity-50"
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
             title="Archive session"
           >
             <Archive className="h-3 w-3" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={(event) => {
               event.stopPropagation();
               void deleteConversations([conv.id], true);
             }}
             disabled={bulkActionLoading}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border-subtle bg-bg-elevated text-text-muted transition hover:bg-state-hover hover:text-text-primary disabled:opacity-50"
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
             title="Delete session"
           >
             <Trash2 className="h-3 w-3" />
-          </button>
+          </Button>
         </div>
       ) : null,
     };
@@ -496,13 +517,11 @@ export default function ExplorePage() {
   ) : activeConversations.length === 0 ? (
     <div className="rounded-lg border border-dashed border-border-subtle bg-bg-elevated/40 p-4 text-center text-[11px] text-text-muted">
       No sessions yet.
-      <button
-        type="button"
-        onClick={handleNewSession}
-        className="mt-2 inline-flex items-center justify-center rounded-md border border-border-subtle bg-bg-surface px-3 py-1 text-[10px] font-semibold text-text-secondary transition hover:bg-state-hover"
-      >
-        Start a session
-      </button>
+      <div className="mt-2 flex justify-center">
+        <Button size="xs" onClick={handleNewSession}>
+          Start a session
+        </Button>
+      </div>
     </div>
   ) : null;
 
@@ -511,9 +530,14 @@ export default function ExplorePage() {
   return (
     <WorkspaceLayout
       content={(
-        <div className="flex h-full min-h-0 p-4">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-subtle bg-bg-surface shadow-sm">
-            <div className="flex-1 min-h-0">
+        <div className="flex h-full min-h-0 flex-col bg-bg-surface">
+          <div className="flex items-center justify-between border-b border-border-subtle px-3 py-2">
+            <h2 className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Explore</h2>
+            {workspace?.name ? (
+              <span className="text-[10px] text-text-muted">{workspace.name}</span>
+            ) : null}
+          </div>
+          <div className="flex-1 min-h-0">
               {loading && (
                 <div className="flex h-full items-center justify-center">
                   <div className="flex flex-col items-center gap-3 text-text-muted">
@@ -525,24 +549,25 @@ export default function ExplorePage() {
 
               {!loading && error && (
                 <div className="flex h-full items-center justify-center p-6">
-                  <div className="max-w-md rounded-2xl border border-border-subtle bg-bg-surface p-6 text-center shadow-lg">
+                  <div className="max-w-md rounded-lg border border-border-subtle bg-bg-surface p-6 text-center">
                     <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-rose-500/40 bg-rose-500/10">
                       <AlertTriangle className="h-5 w-5 text-rose-400" />
                     </div>
                     <h2 className="text-base font-semibold text-text-primary">Session unavailable</h2>
                     <p className="mt-2 text-sm text-text-muted">{error}</p>
                     <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                      <button
+                      <Button
                         type="button"
                         onClick={() => void resolveConversation()}
-                        className="rounded-md border border-border-subtle bg-bg-elevated px-4 py-2 text-xs font-semibold text-text-primary transition hover:bg-state-hover"
+                        size="sm"
+                        variant="secondary"
                       >
                         Try again
-                      </button>
+                      </Button>
                       {error.toLowerCase().includes("workspace") && (
                         <Link
                           href="/app/config/workspace"
-                          className="rounded-md border border-border-subtle bg-bg-surface px-4 py-2 text-xs font-semibold text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+                          className="inline-flex h-7 items-center justify-center rounded-md border border-border-subtle bg-bg-surface px-3 text-[11px] font-semibold text-text-muted transition hover:bg-state-hover hover:text-text-primary"
                         >
                           Workspace Settings
                         </Link>
@@ -568,11 +593,10 @@ export default function ExplorePage() {
               )}
             </div>
           </div>
-        </div>
       )}
       aside={(
-        <div className="flex h-full flex-col gap-3 overflow-y-auto p-4">
-          <div className="rounded-xl border border-border-subtle bg-bg-surface">
+        <div className="flex h-full min-h-0 flex-col p-3">
+          <div className="flex-1 overflow-hidden rounded-lg border border-border-subtle bg-bg-surface">
             <ThreadFeed
               title=""
               items={conversationsLoading || conversationsError ? [] : threadItems}
@@ -585,11 +609,12 @@ export default function ExplorePage() {
               }}
               headerAction={(
                 <div className="flex items-center gap-1">
-                  <button
+                  <Button
                     type="button"
                     onClick={selectedIds.length === activeConversations.length ? clearSelection : selectAll}
                     disabled={!activeConversations.length}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border-subtle bg-bg-elevated text-text-muted transition hover:bg-state-hover hover:text-text-primary disabled:opacity-60"
+                    size="icon"
+                    variant="secondary"
                     title={selectedIds.length === activeConversations.length ? "Clear selection" : "Select all"}
                   >
                     {selectedIds.length === activeConversations.length ? (
@@ -597,53 +622,57 @@ export default function ExplorePage() {
                     ) : (
                       <Square className="h-3.5 w-3.5" />
                     )}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     onClick={handleBulkArchive}
                     disabled={!selectedIds.length || bulkActionLoading}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border-subtle bg-bg-elevated text-text-muted transition hover:bg-state-hover hover:text-text-primary disabled:opacity-60"
+                    size="icon"
+                    variant="secondary"
                     title="Archive"
                   >
                     <Archive className="h-3.5 w-3.5" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     onClick={handleBulkDelete}
                     disabled={!selectedIds.length || bulkActionLoading}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border-subtle bg-bg-elevated text-text-muted transition hover:bg-state-hover hover:text-text-primary disabled:opacity-60"
+                    size="icon"
+                    variant="secondary"
                     title="Delete"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  </Button>
                   <div className="mx-1 h-4 w-px bg-border-subtle" />
-                  <button
+                  <Button
                     type="button"
                     onClick={handleNewSession}
                     disabled={creating}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border-subtle bg-bg-elevated text-text-muted transition hover:bg-state-hover hover:text-text-primary disabled:opacity-60"
+                    size="icon"
+                    variant="secondary"
                     title="New session"
                   >
                     {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     onClick={fetchConversations}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border-subtle bg-bg-elevated text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+                    size="icon"
+                    variant="secondary"
                     title="Refresh"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
-                  </button>
+                  </Button>
                 </div>
               )}
               footer={threadFooter}
               emptyState={threadEmptyState ?? undefined}
-              className="h-[320px]"
+              className="h-full"
             />
           </div>
         </div>
       )}
-      asideWidth="w-96"
+      asideWidth="w-[360px]"
     />
   );
 }

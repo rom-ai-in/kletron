@@ -24,6 +24,19 @@ type AgentGraphRunDto = {
     error?: string;
 };
 
+type ApprovalItem = {
+    id: string;
+    toolName: string;
+    args?: Record<string, any>;
+    status?: string;
+    createdAt?: string;
+    description?: string;
+    executedAt?: string;
+    rejectedAt?: string;
+    result?: string;
+    evictedPath?: string;
+};
+
 function StatusBadge({ status }: { status: AgentGraphRunDto["status"] | string }) {
     const styles: Record<string, string> = {
         COMPLETED: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
@@ -46,6 +59,9 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
     const router = useRouter();
     const [graph, setGraph] = useState<AgentGraphDto | null>(null);
     const [run, setRun] = useState<AgentGraphRunDto | null>(null);
+    const [pendingApprovals, setPendingApprovals] = useState<ApprovalItem[]>([]);
+    const [approvalsLoading, setApprovalsLoading] = useState(false);
+    const [approvalsError, setApprovalsError] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
@@ -57,7 +73,10 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
     useEffect(() => {
         if (!run) return;
         if (run.status !== "RUNNING" && run.status !== "PENDING") return;
-        const t = window.setInterval(() => void fetchRun(), 1500);
+        const t = window.setInterval(() => {
+            void fetchRun();
+            void fetchApprovals();
+        }, 1500);
         return () => window.clearInterval(t);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [run?.status, params.runId]);
@@ -66,7 +85,7 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
         setLoading(true);
         setError("");
         try {
-            await Promise.all([fetchGraph(), fetchRun()]);
+            await Promise.all([fetchGraph(), fetchRun(), fetchApprovals()]);
         } catch (err: any) {
             setError(err.message || "Failed to load");
         } finally {
@@ -88,6 +107,38 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
         setRun(data.run);
     };
 
+    const fetchApprovals = async () => {
+        setApprovalsLoading(true);
+        setApprovalsError("");
+        try {
+            const res = await fetch(`/api/agent-graph-runs/${params.runId}/approvals`);
+            if (!res.ok) throw new Error("Failed to load approvals");
+            const data = await res.json();
+            setPendingApprovals(Array.isArray(data.pending) ? data.pending : []);
+        } catch (err: any) {
+            setApprovalsError(err.message || "Failed to load approvals");
+        } finally {
+            setApprovalsLoading(false);
+        }
+    };
+
+    const handleApprovalAction = async (action: "approve" | "reject" | "approve_all" | "reject_all", id?: string) => {
+        try {
+            const res = await fetch(`/api/agent-graph-runs/${params.runId}/approvals`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action, id }),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data?.error ?? "Failed to update approval");
+            }
+            await Promise.all([fetchRun(), fetchApprovals()]);
+        } catch (err: any) {
+            setApprovalsError(err.message || "Approval failed");
+        }
+    };
+
     const nodeLabelById = useMemo(() => {
         const map = new Map<string, string>();
         for (const n of graph?.nodes ?? []) map.set(n.id, n.label);
@@ -98,6 +149,18 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
         const ids = run?.nodeOrder?.length ? run.nodeOrder : (graph?.nodes ?? []).map((n) => n.id);
         return ids;
     }, [run?.nodeOrder, graph?.nodes]);
+
+    const grantedApprovals: ApprovalItem[] = Array.isArray(run?.state?.approvals?.granted)
+        ? run?.state?.approvals?.granted
+        : [];
+    const rejectedApprovals: ApprovalItem[] = Array.isArray(run?.state?.approvals?.rejected)
+        ? run?.state?.approvals?.rejected
+        : [];
+    const plan = run?.state?.plan;
+    const taskQueue: Array<{ id?: string; title?: string; status?: string }> = Array.isArray(run?.state?.taskQueue)
+        ? run?.state?.taskQueue
+        : [];
+    const currentTaskId = typeof run?.state?.currentTaskId === "string" ? run?.state?.currentTaskId : "";
 
     if (loading && !run) {
         return (
@@ -189,6 +252,161 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
                         </div>
                     </Panel>
                 </div>
+
+                <Panel className="mt-4 p-4">
+                    <div className="text-sm font-semibold text-text-primary">Plan & Task Queue</div>
+                    <div className="mt-3 space-y-3">
+                        <div className="text-xs text-text-muted">Current task</div>
+                        <div className="text-sm font-mono text-text-primary">{currentTaskId || "—"}</div>
+
+                        <div className="text-xs text-text-muted">Plan</div>
+                        <pre className="max-h-[240px] overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-border-subtle bg-bg-elevated p-3 text-xs font-mono text-text-secondary scrollbar-elegant">
+                            {plan ? JSON.stringify(plan, null, 2) : "No plan yet."}
+                        </pre>
+
+                        <div className="text-xs text-text-muted">Task queue</div>
+                        {taskQueue.length ? (
+                            <div className="space-y-2">
+                                {taskQueue.map((task, index) => {
+                                    const status = task.status ?? "todo";
+                                    const isCurrent = currentTaskId && task.id === currentTaskId;
+                                    return (
+                                        <div
+                                            key={task.id ?? task.title ?? `task-${index}`}
+                                            className={`rounded-md border px-3 py-2 text-xs ${isCurrent ? "border-emerald-500/30 bg-emerald-500/10" : "border-border-subtle bg-bg-surface"}`}
+                                        >
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <div className="truncate text-sm font-medium text-text-primary">
+                                                        {task.title ?? task.id ?? "Untitled task"}
+                                                    </div>
+                                                    <div className="mt-0.5 text-[11px] text-text-muted">
+                                                        {task.id ?? "no-id"}
+                                                    </div>
+                                                </div>
+                                                <span className="rounded-md border border-border-subtle px-2 py-0.5 text-[10px] uppercase tracking-wider text-text-muted">
+                                                    {status}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="text-xs text-text-muted">No tasks yet.</div>
+                        )}
+                    </div>
+                </Panel>
+
+                <Panel className="mt-4 p-4">
+                    <div className="flex items-center justify-between">
+                        <div className="text-sm font-semibold text-text-primary">Approvals</div>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                disabled={pendingApprovals.length === 0 || approvalsLoading}
+                                onClick={() => void handleApprovalAction("approve_all")}
+                            >
+                                Approve all
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                disabled={pendingApprovals.length === 0 || approvalsLoading}
+                                onClick={() => void handleApprovalAction("reject_all")}
+                            >
+                                Reject all
+                            </Button>
+                        </div>
+                    </div>
+
+                    {approvalsError && (
+                        <div className="mt-2 text-xs text-rose-300">{approvalsError}</div>
+                    )}
+
+                    <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                        <div>
+                            <div className="text-xs font-semibold text-text-muted uppercase tracking-widest">
+                                Pending ({pendingApprovals.length})
+                            </div>
+                            <div className="mt-2 space-y-2">
+                                {pendingApprovals.length === 0 && (
+                                    <div className="text-xs text-text-muted">No pending approvals.</div>
+                                )}
+                                {pendingApprovals.map((item) => (
+                                    <div key={item.id} className="rounded-md border border-border-subtle bg-bg-surface p-3">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="text-xs font-semibold text-text-primary">
+                                                {item.toolName}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    size="xs"
+                                                    variant="secondary"
+                                                    onClick={() => void handleApprovalAction("reject", item.id)}
+                                                >
+                                                    Reject
+                                                </Button>
+                                                <Button
+                                                    size="xs"
+                                                    variant="primary"
+                                                    onClick={() => void handleApprovalAction("approve", item.id)}
+                                                >
+                                                    Approve
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        {item.description && (
+                                            <div className="mt-1 text-[11px] text-text-muted">{item.description}</div>
+                                        )}
+                                        {item.args && (
+                                            <pre className="mt-2 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded border border-border-subtle bg-bg-elevated p-2 text-[10px] font-mono text-text-secondary">
+                                                {JSON.stringify(item.args, null, 2)}
+                                            </pre>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="text-xs font-semibold text-text-muted uppercase tracking-widest">
+                                Executed / Rejected
+                            </div>
+                            <div className="mt-2 space-y-2">
+                                {grantedApprovals.map((item) => (
+                                    <div key={item.id} className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-3">
+                                        <div className="text-xs font-semibold text-emerald-300">{item.toolName}</div>
+                                        {item.executedAt && (
+                                            <div className="mt-1 text-[10px] text-emerald-300">
+                                                Executed {new Date(item.executedAt).toLocaleString()}
+                                            </div>
+                                        )}
+                                        {item.result && (
+                                            <pre className="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap break-words rounded border border-border-subtle bg-bg-elevated p-2 text-[10px] font-mono text-text-secondary">
+                                                {item.result}
+                                            </pre>
+                                        )}
+                                    </div>
+                                ))}
+                                {rejectedApprovals.map((item) => (
+                                    <div key={item.id} className="rounded-md border border-rose-500/20 bg-rose-500/5 p-3">
+                                        <div className="text-xs font-semibold text-rose-300">{item.toolName}</div>
+                                        {item.rejectedAt && (
+                                            <div className="mt-1 text-[10px] text-rose-300">
+                                                Rejected {new Date(item.rejectedAt).toLocaleString()}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                                {grantedApprovals.length === 0 && rejectedApprovals.length === 0 && (
+                                    <div className="text-xs text-text-muted">No executed approvals yet.</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </Panel>
             </div>
 
         </div>

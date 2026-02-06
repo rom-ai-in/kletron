@@ -4,6 +4,9 @@ import type { AgentGraphDefinition } from "./agentGraphTypes";
 import {
     buildCursorLikeRobustGraph,
     buildDiamondFlowAgentGraph,
+    buildCompleteDeepAgentGraph,
+    buildDriftAnalysisGraph,
+    buildCampaignsGraph,
     buildPresentationGeneratorProGraph,
     buildSimpleReactAgentGraph
 } from "./agentGraphPresets";
@@ -39,6 +42,9 @@ function ensureFallbackGraphs() {
         { id: "000000000000000000000002", graph: buildSimpleReactAgentGraph() },
         { id: "000000000000000000000003", graph: buildDiamondFlowAgentGraph() },
         { id: "000000000000000000000004", graph: buildPresentationGeneratorProGraph() },
+        { id: "000000000000000000000005", graph: buildCompleteDeepAgentGraph() },
+        { id: "000000000000000000000006", graph: buildDriftAnalysisGraph() },
+        { id: "000000000000000000000007", graph: buildCampaignsGraph() },
     ];
 
     for (const entry of entries) {

@@ -16,6 +16,7 @@ import {
     Compass,
     Home,
     Layers,
+    Clock,
     ChevronLeft,
     ChevronRight,
     UserCircle,
@@ -41,6 +42,11 @@ const navItems = [
         href: "/app/deep-agent",
     },
     {
+        label: "Campaigns",
+        icon: Layers,
+        href: "/app/campaigns",
+    },
+    {
         label: "Code Comparator",
         icon: History,
         href: "/app/changes",
@@ -51,9 +57,9 @@ const navItems = [
         href: "/app/agent-graphs",
     },
     {
-        label: "Campaigns",
-        icon: Layers,
-        href: "/app/campaigns",
+        label: "History",
+        icon: Clock,
+        href: "/app/history",
     },
     {
         label: "Vector Index",
@@ -216,6 +222,7 @@ export function Sidebar() {
                         </Link>
                     );
                 })}
+
             </nav>
 
             {/* Footer */}

@@ -52,6 +52,12 @@ interface PendingEdit {
     description?: string;
 }
 
+type AgentGraphRecord = {
+    _id?: string;
+    name: string;
+    description?: string;
+};
+
 interface ActiveSessionProps {
     conversationId: string;
     title: string;
@@ -90,7 +96,10 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
     const [enabledProviders, setEnabledProviders] = useState<LlmProviderType[]>([]);
     const [llmPrefsLoaded, setLlmPrefsLoaded] = useState(false);
     const [enabledProvidersLoaded, setEnabledProvidersLoaded] = useState(false);
-    const [selectedGraphId, setSelectedGraphId] = useState<string>(graphOptions[0]?.id || 'universal-v1');
+    const [selectedGraphId, setSelectedGraphId] = useState<string>("");
+    const [agentGraphs, setAgentGraphs] = useState<AgentGraphRecord[]>([]);
+    const [graphOptionsLoaded, setGraphOptionsLoaded] = useState(false);
+    const [savedGraphId, setSavedGraphId] = useState<string | null>(null);
     const [envInfo, setEnvInfo] = useState<LlmEnvInfo | null>(null);
     const [runStartedAt, setRunStartedAt] = useState<string | null>(null);
     const [runEndedAt, setRunEndedAt] = useState<string | null>(null);
@@ -202,7 +211,7 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
                 if (prefsRes.ok) {
                     const prefsData = await prefsRes.json();
                     if (prefsData.success && prefsData.preferences) {
-                        const { selectedLlmProvider, selectedGraphId: savedGraphId } = prefsData.preferences;
+                        const { selectedLlmProvider, selectedGraphId: prefGraphId } = prefsData.preferences;
                         if (selectedLlmProvider) {
                             setLlmProvider(selectedLlmProvider);
                         } else {
@@ -217,13 +226,13 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
                                 setLlmProvider(envLLM?.defaultProvider || 'azure');
                             }
                         }
-                        if (savedGraphId) {
-                            setSelectedGraphId(savedGraphId);
+                        if (prefGraphId) {
+                            setSavedGraphId(prefGraphId);
                         } else {
                             // Fallback to localStorage
                             const storedGraph = window.localStorage.getItem("numezis-graph-selection");
                             if (storedGraph) {
-                                setSelectedGraphId(storedGraph);
+                                setSavedGraphId(storedGraph);
                             }
                         }
                         return;
@@ -243,7 +252,7 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
 
                 const storedGraph = window.localStorage.getItem("numezis-graph-selection");
                 if (storedGraph) {
-                    setSelectedGraphId(storedGraph);
+                    setSavedGraphId(storedGraph);
                 }
             } catch (e) {
                 console.error("Failed to fetch preferences", e);
@@ -253,6 +262,50 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
         };
         fetchPreferences();
     }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadGraphs = async () => {
+            try {
+                const res = await fetch("/api/agent-graphs", { cache: "no-store" });
+                if (!res.ok) throw new Error("Failed to load graphs");
+                const data = await res.json();
+                const list = Array.isArray(data?.graphs) ? (data.graphs as AgentGraphRecord[]) : [];
+                if (!cancelled) {
+                    setAgentGraphs(list);
+                    setGraphOptionsLoaded(true);
+                }
+            } catch {
+                if (!cancelled) {
+                    setAgentGraphs([]);
+                    setGraphOptionsLoaded(true);
+                }
+            }
+        };
+        void loadGraphs();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!graphOptionsLoaded) return;
+        const hasAgentGraphs = agentGraphs.length > 0;
+        const defaultGraphId = hasAgentGraphs
+            ? (agentGraphs.find((g) => g.name === "Simple ReAct (agent graph)")?._id ||
+                agentGraphs[0]?._id ||
+                "")
+            : (graphOptions[0]?.id || "universal-v1");
+        const savedIsValid = savedGraphId
+            ? hasAgentGraphs
+                ? agentGraphs.some((g) => String(g._id) === savedGraphId)
+                : graphOptions.some((g) => g.id === savedGraphId)
+            : false;
+        const nextGraphId = savedIsValid ? savedGraphId! : defaultGraphId;
+        if (nextGraphId && nextGraphId !== selectedGraphId) {
+            setSelectedGraphId(nextGraphId);
+        }
+    }, [graphOptionsLoaded, agentGraphs, savedGraphId, selectedGraphId]);
 
     useEffect(() => {
         fetch("/api/llm-config/enable")
@@ -340,8 +393,8 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
         }
     ].filter((option) => enabledProviders.includes(option.id as LlmProviderType));
 
-    const graphSelectOptions = graphOptions.map(g => ({
-        id: g.id,
+    const graphSelectOptions = (agentGraphs.length > 0 ? agentGraphs : graphOptions).map((g: any) => ({
+        id: g._id ?? g.id,
         label: g.name,
         sub: g.description
     }));
@@ -940,6 +993,7 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
                                         onSelect={handleGraphChange}
                                         direction="up"
                                         size="sm"
+                                        loading={!graphOptionsLoaded}
                                     />
                                 )}
                                 <Selector

@@ -1,18 +1,26 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronDown,
   ChevronRight,
-  Send,
   Settings,
-  Square
+  Pencil,
+  Check,
+  X,
+  Archive,
+  Trash2,
+  Terminal as TerminalIcon
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { structuredPatch } from "diff";
 import { Button } from "@numezis/ui/components/ui/Button";
+import { ChatInput } from "@numezis/ui/components/ui/ChatInput";
 import { Textarea } from "@numezis/ui/components/ui/Textarea";
 import { Toggle } from "@numezis/ui/components/ui/Toggle";
+import { ThreadFeed } from "@numezis/ui/components/ui/ThreadFeed";
+import { ToolUsePanel, type ToolUseItem, type ToolUseStatus } from "@numezis/ui/components/ui/ToolUsePanel";
+import { Terminal } from "@numezis/ui/components/Terminal";
 
 type ActiveView = "app" | "settings";
 type SettingsSectionId =
@@ -49,13 +57,25 @@ type LoginSession = {
   startedAt: number;
 };
 
-type AgentEvent =
-  | { type: "message"; role: "assistant" | "user"; content: string }
-  | { type: "thinking"; content: string }
-  | { type: "tool_call"; toolName: string; toolId: string }
-  | { type: "tool_result"; toolId: string; result?: unknown; error?: string }
-  | { type: "diff"; editId: string; filePath: string; originalContent: string; newContent: string }
-  | { type: "error"; message: string };
+type ChatEvent = {
+  id?: string;
+  kind: "user" | "assistant" | "tool" | "system" | "error";
+  role?: "user" | "assistant" | "tool" | "system";
+  content?: string;
+  toolName?: string;
+  toolArgs?: string;
+  toolOutput?: string;
+  toolCallId?: string;
+  timestamp?: string;
+  metadata?: Record<string, unknown>;
+  thoughts?: string[];
+  messageIndex?: number | null;
+  local?: boolean;
+};
+
+type RenderItem =
+  | { type: "event"; event: ChatEvent }
+  | { type: "tools"; events: ChatEvent[] };
 
 type ServerAgentEvent = {
   id?: string;
@@ -63,9 +83,12 @@ type ServerAgentEvent = {
   role?: string;
   content?: string;
   toolName?: string;
+  toolCallId?: string;
   toolArgs?: string;
   toolOutput?: string;
   timestamp?: string;
+  metadata?: Record<string, unknown>;
+  thoughts?: string[];
 };
 
 type DiffHunk = {
@@ -119,7 +142,7 @@ type ConversationHistoryItem = {
 };
 
 type ConversationDetail = ConversationHistoryItem & {
-  messages?: Array<{ kind?: string; role?: string; content?: string }>;
+  messages?: Array<ServerAgentEvent & { kind?: string; role?: string; content?: string }>;
 };
 
 type AgentGraphSummary = {
@@ -162,6 +185,22 @@ const SETTINGS_SECTIONS = [
   { id: "archived", label: "Archived threads" }
 ] as const;
 
+const DEFAULT_BACKEND_URL = "https://app.numezis.com";
+const DEV_BACKEND_URL = "http://localhost:3000";
+
+function getDefaultBackendUrl(): string {
+  try {
+    const env = (import.meta as any)?.env;
+    if (env?.VITE_BACKEND_URL && typeof env.VITE_BACKEND_URL === "string") {
+      return env.VITE_BACKEND_URL;
+    }
+    if (env?.DEV) return DEV_BACKEND_URL;
+  } catch {
+    // ignore env parsing issues
+  }
+  return DEFAULT_BACKEND_URL;
+}
+
 
 function isValidHttpUrl(value: string): boolean {
   if (!value) return false;
@@ -171,6 +210,22 @@ function isValidHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function normalizeBackendUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) {
+    return trimmed;
+  }
+  const isLocal =
+    trimmed.startsWith("localhost") ||
+    trimmed.startsWith("127.0.0.1") ||
+    trimmed.startsWith("0.0.0.0") ||
+    trimmed.startsWith("[::1]");
+  const hasPort = /:\d+/.test(trimmed);
+  const scheme = isLocal || hasPort ? "http://" : "https://";
+  return `${scheme}${trimmed}`;
 }
 
 function loadAuth(): AuthState | null {
@@ -215,6 +270,34 @@ async function createCodeChallenge(verifier: string): Promise<string> {
 
 function normalizeContent(content: string): string {
   return content.replace(/\r\n/g, "\n");
+}
+
+const MAX_TOOL_PAYLOAD_CHARS = 8000;
+const MAX_TOOL_PREVIEW_CHARS = 160;
+
+function truncatePayload(value: string): string {
+  if (value.length <= MAX_TOOL_PAYLOAD_CHARS) return value;
+  return `${value.slice(0, MAX_TOOL_PAYLOAD_CHARS)}\n… (truncated)`;
+}
+
+function formatMaybeJson(value?: string): string {
+  if (!value) return "";
+  try {
+    const parsed = JSON.parse(value);
+    return truncatePayload(JSON.stringify(parsed, null, 2));
+  } catch {
+    return truncatePayload(value);
+  }
+}
+
+function formatToolPreview(value?: string): string {
+  if (!value) return "";
+  const formatted = formatMaybeJson(value)
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!formatted) return "";
+  if (formatted.length <= MAX_TOOL_PREVIEW_CHARS) return formatted;
+  return `${formatted.slice(0, MAX_TOOL_PREVIEW_CHARS)}…`;
 }
 
 function buildHunks(editId: string, filePath: string, baseContent: string, targetContent: string): DiffHunk[] {
@@ -346,6 +429,11 @@ function deriveWorkspaceName(rootPath?: string, fallback?: string) {
 }
 
 export default function App() {
+  const showTrafficLights = !(
+    typeof navigator !== "undefined" &&
+    navigator.userAgent.includes("Electron") &&
+    /Mac/.test(navigator.platform)
+  );
   const [activeView, setActiveView] = useState<ActiveView>("app");
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("general");
   const [changesExpanded, setChangesExpanded] = useState(true);
@@ -360,7 +448,19 @@ export default function App() {
     permissionNotifications: false
   });
   const [backendUrl, setBackendUrl] = useState<string>(() => {
-    return localStorage.getItem(BACKEND_STORAGE_KEY) || "https://app.numezis.com";
+    const stored = localStorage.getItem(BACKEND_STORAGE_KEY);
+    if (stored) {
+      try {
+        const env = (import.meta as any)?.env;
+        if (env?.DEV && stored === DEFAULT_BACKEND_URL) {
+          return DEV_BACKEND_URL;
+        }
+      } catch {
+        // ignore env parsing issues
+      }
+      return stored;
+    }
+    return getDefaultBackendUrl();
   });
   const [backendConnected, setBackendConnected] = useState(false);
   const [auth, setAuth] = useState<AuthState | null>(() => loadAuth());
@@ -378,7 +478,7 @@ export default function App() {
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [conversationEvents, setConversationEvents] = useState<ChatEvent[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamingState, setStreamingState] = useState<StreamingState>("idle");
   const [streamingMessage, setStreamingMessage] = useState<string | null>(null);
@@ -397,12 +497,23 @@ export default function App() {
   const [tools, setTools] = useState<ToolMetadata[]>([]);
   const [toolsLoading, setToolsLoading] = useState(false);
   const [toolsError, setToolsError] = useState<string | null>(null);
+  const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
+  const [editingMessageDraft, setEditingMessageDraft] = useState<string>("");
+  const [editingMessageSaving, setEditingMessageSaving] = useState(false);
+  const [editingMessageError, setEditingMessageError] = useState<string | null>(null);
+  const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
+  const [editingThreadTitle, setEditingThreadTitle] = useState<string>("");
+  const [editingThreadSaving, setEditingThreadSaving] = useState(false);
+  const [threadActionId, setThreadActionId] = useState<string | null>(null);
+  const [selectedHunkId, setSelectedHunkId] = useState<string | null>(null);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [streamHasEvents, setStreamHasEvents] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const streamedEventIdsRef = useRef<Set<string>>(new Set());
   const handledEditIdsRef = useRef<Set<string>>(new Set());
 
-  const backendUrlTrimmed = backendUrl.trim();
+  const backendUrlTrimmed = normalizeBackendUrl(backendUrl);
   const backendUrlValid = isValidHttpUrl(backendUrlTrimmed);
   const backendReady = backendUrlValid && backendConnected;
 
@@ -413,7 +524,7 @@ export default function App() {
   useEffect(() => {
     setConversationId(null);
     setThreads([]);
-    setMessages([]);
+    setConversationEvents([]);
     setDiffs([]);
     streamedEventIdsRef.current = new Set();
     handledEditIdsRef.current = new Set();
@@ -422,7 +533,7 @@ export default function App() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingMessage, diffs]);
+  }, [conversationEvents, streamingMessage, diffs]);
 
   useEffect(() => {
     if (diffs.length === 0) {
@@ -433,6 +544,19 @@ export default function App() {
       setSelectedDiffId(diffs[0].editId);
     }
   }, [diffs, selectedDiffId]);
+
+  useEffect(() => {
+    const diff = selectedDiffId
+      ? diffs.find((entry) => entry.editId === selectedDiffId)
+      : diffs[0];
+    if (!diff || diff.hunks.length === 0) {
+      setSelectedHunkId(null);
+      return;
+    }
+    if (!selectedHunkId || !diff.hunks.some((hunk) => hunk.id === selectedHunkId)) {
+      setSelectedHunkId(diff.hunks[0].id);
+    }
+  }, [diffs, selectedDiffId, selectedHunkId]);
 
   useEffect(() => {
     if (!workspace) return;
@@ -628,6 +752,9 @@ export default function App() {
     setConversationLoading(true);
     setSendError(null);
     setDiffs([]);
+    setEditingMessageIndex(null);
+    setEditingMessageDraft("");
+    setEditingMessageError(null);
     handledEditIdsRef.current = new Set();
     try {
       const res = await fetch(`${backendUrlTrimmed}/api/agent/${convoId}`, {
@@ -640,21 +767,37 @@ export default function App() {
       const data = (await res.json()) as ConversationDetail;
       const rawMessages = Array.isArray(data?.messages) ? data.messages : [];
       const mapped = rawMessages
-        .filter((msg) => typeof msg?.content === "string")
-        .filter((msg) => {
-          const role = String(msg.role ?? msg.kind ?? "").toLowerCase();
-          return role === "assistant" || role === "user";
-        })
-        .map((msg) => {
-          const role = String(msg.role ?? msg.kind ?? "").toLowerCase();
+        .map((msg, index) => {
+          const kindValue = String(msg?.kind ?? msg?.role ?? "").toLowerCase();
+          const roleValue = String(msg?.role ?? msg?.kind ?? "").toLowerCase();
+          const kind: ChatEvent["kind"] =
+            kindValue === "user" || kindValue === "assistant" || kindValue === "tool" || kindValue === "system"
+              ? (kindValue as ChatEvent["kind"])
+              : "system";
+          const content = typeof msg?.content === "string" ? msg.content : "";
           return {
-            role: role === "assistant" ? "assistant" : "user",
-            content: String(msg.content ?? "")
-          } as { role: "user" | "assistant"; content: string };
+            id: msg?.id,
+            kind,
+            role: roleValue as ChatEvent["role"],
+            content,
+            toolName: msg?.toolName,
+            toolArgs: typeof msg?.toolArgs === "string" ? msg.toolArgs : msg?.toolArgs ? JSON.stringify(msg.toolArgs) : undefined,
+            toolOutput:
+              typeof msg?.toolOutput === "string" ? msg.toolOutput : msg?.toolOutput ? JSON.stringify(msg.toolOutput) : undefined,
+            toolCallId: msg?.toolCallId,
+            timestamp: msg?.timestamp,
+            metadata: msg?.metadata,
+            thoughts: Array.isArray(msg?.thoughts) ? msg.thoughts : undefined,
+            messageIndex: index
+          } as ChatEvent;
+        })
+        .filter((event) => {
+          if (event.kind === "system" || event.kind === "tool") return true;
+          return Boolean(event.content || event.toolName);
         });
-      setMessages(mapped);
+      setConversationEvents(mapped);
     } catch (error) {
-      setMessages([]);
+      setConversationEvents([]);
       setSendError((error as Error)?.message || "Unable to load conversation.");
     } finally {
       setConversationLoading(false);
@@ -699,7 +842,7 @@ export default function App() {
       const data = await res.json();
       if (data?.id) {
         setConversationId(data.id);
-        setMessages([]);
+        setConversationEvents([]);
         setDiffs([]);
         setStreamingMessage(null);
         await loadThreads(data.id);
@@ -800,7 +943,7 @@ export default function App() {
   useEffect(() => {
     if (!auth?.accessToken) return;
     if (!conversationId) {
-      setMessages([]);
+      setConversationEvents([]);
       return;
     }
     if (streaming) return;
@@ -886,6 +1029,14 @@ export default function App() {
       setLoginSession(null);
     }
   }, [auth?.accessToken]);
+
+  useEffect(() => {
+    if (editingMessageIndex === null) return;
+    const editedEvent = conversationEvents.find((event) => event.messageIndex === editingMessageIndex);
+    if (!editedEvent) {
+      cancelEditMessage();
+    }
+  }, [editingMessageIndex, conversationEvents]);
 
   useEffect(() => {
     const unsubscribe = window.numezis.onAuthLink((url) => {
@@ -1010,10 +1161,173 @@ export default function App() {
     setStreamingState("idle");
     setConversationId(null);
     setThreads([]);
-    setMessages([]);
+    setConversationEvents([]);
     setDiffs([]);
     streamedEventIdsRef.current = new Set();
     handledEditIdsRef.current = new Set();
+  }
+
+  function startEditMessage(index: number, content: string) {
+    setEditingMessageIndex(index);
+    setEditingMessageDraft(content);
+    setEditingMessageError(null);
+  }
+
+  function cancelEditMessage() {
+    setEditingMessageIndex(null);
+    setEditingMessageDraft("");
+    setEditingMessageError(null);
+  }
+
+  async function saveEditedMessage() {
+    if (editingMessageIndex === null || !conversationId) return;
+    const nextContent = editingMessageDraft.trim();
+    if (!nextContent) {
+      setEditingMessageError("Message content cannot be empty.");
+      return;
+    }
+    setEditingMessageSaving(true);
+    setEditingMessageError(null);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Authentication expired. Please sign in again.");
+      const res = await fetch(`${backendUrlTrimmed}/api/agent/update-message`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          conversationId,
+          index: editingMessageIndex,
+          content: nextContent
+        })
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to update message (${res.status})`);
+      }
+      setConversationEvents((prev) =>
+        prev.map((msg) =>
+          msg.messageIndex === editingMessageIndex ? { ...msg, content: nextContent } : msg
+        )
+      );
+      cancelEditMessage();
+    } catch (error) {
+      setEditingMessageError((error as Error)?.message || "Unable to update message.");
+    } finally {
+      setEditingMessageSaving(false);
+    }
+  }
+
+  function startEditThread(thread: ConversationHistoryItem) {
+    setEditingThreadId(thread.id);
+    setEditingThreadTitle(thread.title || "");
+  }
+
+  function cancelEditThread() {
+    setEditingThreadId(null);
+    setEditingThreadTitle("");
+  }
+
+  async function saveEditedThreadTitle() {
+    if (!editingThreadId) return;
+    const nextTitle = editingThreadTitle.trim();
+    if (!nextTitle) return;
+    setEditingThreadSaving(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Authentication expired. Please sign in again.");
+      const res = await fetch(`${backendUrlTrimmed}/api/agent/update-title`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ conversationId: editingThreadId, title: nextTitle })
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to update title (${res.status})`);
+      }
+      setThreads((prev) =>
+        prev.map((thread) =>
+          thread.id === editingThreadId ? { ...thread, title: nextTitle } : thread
+        )
+      );
+      if (conversationId === editingThreadId) {
+        // Keep local state aligned when viewing the same thread
+        setConversationId(editingThreadId);
+      }
+      cancelEditThread();
+    } catch {
+      // Swallow; surface next time through UI state if needed
+    } finally {
+      setEditingThreadSaving(false);
+    }
+  }
+
+  async function archiveThread(threadId: string) {
+    if (!threadId) return;
+    const confirmed = window.confirm("Archive this thread?");
+    if (!confirmed) return;
+    setThreadActionId(threadId);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Authentication expired. Please sign in again.");
+      const res = await fetch(`${backendUrlTrimmed}/api/agent?id=${encodeURIComponent(threadId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to archive thread (${res.status})`);
+      }
+      setThreads((prev) => prev.filter((thread) => thread.id !== threadId));
+      if (conversationId === threadId) {
+        setConversationId(null);
+        setConversationEvents([]);
+        setDiffs([]);
+      }
+    } catch (error) {
+      setSendError((error as Error)?.message ?? "Failed to archive thread.");
+    } finally {
+      setThreadActionId(null);
+    }
+  }
+
+  async function deleteThread(threadId: string) {
+    if (!threadId) return;
+    const confirmed = window.confirm(
+      "Delete this thread permanently? This cannot be undone."
+    );
+    if (!confirmed) return;
+    setThreadActionId(threadId);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Authentication expired. Please sign in again.");
+      const res = await fetch(
+        `${backendUrlTrimmed}/api/agent?id=${encodeURIComponent(threadId)}&permanent=true`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to delete thread (${res.status})`);
+      }
+      setThreads((prev) => prev.filter((thread) => thread.id !== threadId));
+      if (conversationId === threadId) {
+        setConversationId(null);
+        setConversationEvents([]);
+        setDiffs([]);
+      }
+    } catch (error) {
+      setSendError((error as Error)?.message ?? "Failed to delete thread.");
+    } finally {
+      setThreadActionId(null);
+    }
   }
 
   async function sendMessage() {
@@ -1034,7 +1348,17 @@ export default function App() {
     setStreaming(true);
     setStreamingState("streaming");
     setStreamingMessage(null);
-    setMessages(prev => [...prev, { role: "user", content: trimmed }]);
+    setStreamHasEvents(false);
+    setConversationEvents(prev => [
+      ...prev,
+      {
+        kind: "user",
+        role: "user",
+        content: trimmed,
+        timestamp: new Date().toISOString(),
+        local: true
+      }
+    ]);
     setInput("");
 
     const token = await getAccessToken();
@@ -1045,7 +1369,6 @@ export default function App() {
       return;
     }
 
-    let latestAssistantMessage = "";
     let didAbort = false;
     let didError = false;
     let convoId: string | null = null;
@@ -1098,7 +1421,8 @@ export default function App() {
             },
             body: JSON.stringify({
               message: trimmed,
-              ...(modelConfig?.provider ? { llmProvider: modelConfig.provider } : {})
+              ...(modelConfig?.provider ? { llmProvider: modelConfig.provider } : {}),
+              ...(selectedGraph ? { graphId: selectedGraph } : {})
             }),
             signal: abortRef.current?.signal
           });
@@ -1112,30 +1436,41 @@ export default function App() {
           const decoder = new TextDecoder();
           let buffer = "";
 
-          const appendAssistantContent = (content: string, eventId?: string) => {
-            if (!content?.trim()) return;
-            if (eventId && streamedEventIdsRef.current.has(eventId)) return;
-            if (eventId) streamedEventIdsRef.current.add(eventId);
-            latestAssistantMessage = latestAssistantMessage
-              ? `${latestAssistantMessage}\n\n${content}`
-              : content;
-            setStreamingMessage(latestAssistantMessage);
+          const appendChatEvent = (chatEvent: ChatEvent, eventId?: string) => {
+            const id = eventId ?? chatEvent.id;
+            if (id && streamedEventIdsRef.current.has(id)) return;
+            if (id) streamedEventIdsRef.current.add(id);
+            setConversationEvents((prev) => [...prev, { ...chatEvent, id }]);
+            setStreamHasEvents(true);
           };
 
-          const handleServerEvent = (event: (ServerAgentEvent & Partial<AgentEvent>) | { error?: string }) => {
+          const appendAssistantContent = (content: string, eventId?: string, timestamp?: string) => {
+            if (!content?.trim()) return;
+            appendChatEvent(
+              {
+                kind: "assistant",
+                role: "assistant",
+                content,
+                timestamp
+              },
+              eventId
+            );
+          };
+
+          const handleServerEvent = (event: (ServerAgentEvent & { type?: string } & { error?: string })) => {
             receivedAnyEvent = true;
             if ("error" in event && event.error) {
               didError = true;
               setSendError(event.error);
               return;
             }
-            if ((event as AgentEvent).type === "error") {
+            if (event.type === "error" && (event as any).message) {
               didError = true;
-              setSendError((event as AgentEvent).message);
+              setSendError(String((event as any).message));
               return;
             }
-            if ((event as AgentEvent).type === "diff") {
-              const diffEvent = event as AgentEvent;
+            if (event.type === "diff") {
+              const diffEvent = event as any;
               const baseContent = normalizeContent(diffEvent.originalContent);
               const targetContent = normalizeContent(diffEvent.newContent);
               const hunks = buildHunks(diffEvent.editId, diffEvent.filePath, baseContent, targetContent);
@@ -1148,14 +1483,111 @@ export default function App() {
                   hunks
                 }]);
               }
+              setStreamHasEvents(true);
               return;
             }
-            if ((event as AgentEvent).type === "message" && (event as AgentEvent).role === "assistant") {
-              appendAssistantContent((event as AgentEvent).content, (event as any).id);
+            if (event.type === "thinking") {
+              appendChatEvent({
+                kind: "system",
+                role: "system",
+                content: "Agent is reasoning...",
+                timestamp: new Date().toISOString()
+              });
               return;
             }
-            if (event.kind === "assistant" && typeof event.content === "string") {
-              appendAssistantContent(event.content, event.id);
+            if (event.type === "tool_call") {
+              const toolArgsRaw = (event as any).args ?? (event as any).toolArgs;
+              const toolArgs =
+                typeof toolArgsRaw === "string"
+                  ? toolArgsRaw
+                  : toolArgsRaw
+                    ? JSON.stringify(toolArgsRaw)
+                    : undefined;
+              appendChatEvent({
+                kind: "assistant",
+                role: "assistant",
+                toolName: (event as any).toolName ?? "tool",
+                toolArgs,
+                toolCallId: (event as any).toolId,
+                timestamp: new Date().toISOString()
+              });
+              return;
+            }
+            if (event.type === "tool_result") {
+              const resultRaw = (event as any).result ?? (event as any).output ?? (event as any).error;
+              const toolOutput =
+                typeof resultRaw === "string" ? resultRaw : resultRaw ? JSON.stringify(resultRaw) : undefined;
+              appendChatEvent({
+                kind: "tool",
+                role: "tool",
+                toolName: (event as any).toolName ?? "tool",
+                toolOutput,
+                toolCallId: (event as any).toolId,
+                timestamp: new Date().toISOString()
+              });
+              return;
+            }
+            if (event.type === "message" && (event as any).role === "assistant") {
+              appendAssistantContent(String((event as any).content ?? ""), (event as any).id);
+              return;
+            }
+            if (event.kind === "user") {
+              // Already appended optimistically on the client.
+              setStreamHasEvents(true);
+              return;
+            }
+            if (event.kind === "assistant") {
+              if (event.toolName) {
+                const toolArgs =
+                  typeof event.toolArgs === "string"
+                    ? event.toolArgs
+                    : event.toolArgs
+                      ? JSON.stringify(event.toolArgs)
+                      : undefined;
+                appendChatEvent({
+                  kind: "assistant",
+                  role: "assistant",
+                  toolName: event.toolName,
+                  toolArgs,
+                  toolCallId: event.toolCallId,
+                  timestamp: event.timestamp,
+                  thoughts: Array.isArray(event.thoughts) ? event.thoughts : undefined
+                }, event.id);
+                return;
+              }
+              if (typeof event.content === "string") {
+                appendAssistantContent(event.content, event.id, event.timestamp);
+              }
+              return;
+            }
+            if (event.kind === "tool") {
+              const toolOutput =
+                typeof event.toolOutput === "string"
+                  ? event.toolOutput
+                  : event.toolOutput
+                    ? JSON.stringify(event.toolOutput)
+                    : typeof event.content === "string"
+                      ? event.content
+                      : undefined;
+              appendChatEvent({
+                kind: "tool",
+                role: "tool",
+                toolName: event.toolName,
+                toolOutput,
+                toolCallId: event.toolCallId,
+                timestamp: event.timestamp,
+                content: typeof event.content === "string" ? event.content : undefined
+              }, event.id);
+              return;
+            }
+            if (event.kind === "system") {
+              appendChatEvent({
+                kind: "system",
+                role: "system",
+                content: event.content,
+                metadata: event.metadata,
+                timestamp: event.timestamp
+              }, event.id);
             }
           };
 
@@ -1222,9 +1654,6 @@ export default function App() {
         didAbort = true;
       }
     } finally {
-      if (latestAssistantMessage) {
-        setMessages(prev => [...prev, { role: "assistant", content: latestAssistantMessage }]);
-      }
       if (didError) {
         setStreamingState("error");
       } else if (didAbort) {
@@ -1326,19 +1755,169 @@ export default function App() {
   const selectedDiff = selectedDiffId
     ? diffs.find((diff) => diff.editId === selectedDiffId) ?? diffs[0]
     : diffs[0];
-  const selectedHunk = selectedDiff?.hunks[0];
+  const selectedHunk = selectedDiff?.hunks.find((hunk) => hunk.id === selectedHunkId) ?? selectedDiff?.hunks[0];
   const selectedRows = selectedHunk ? buildDiffRows(selectedHunk) : [];
   const diffTooLarge = selectedRows.length > 160;
   const modelMeta = modelConfig?.provider ? `${modelConfig.provider} · ${modelLabel}` : modelLabel;
+  const activeThread = threads.find((thread) => thread.id === conversationId) ?? null;
+  const activeThreadTitle = activeThread?.title || (conversationId ? "Untitled" : "New thread");
+  const activeThreadUpdated = activeThread?.updatedAt ? formatRelativeTime(activeThread.updatedAt) : "";
+  const activeStatus = streaming ? "Running" : "Idle";
+  const messageEvents = conversationEvents.filter(
+    (event) => event.kind === "user" || (event.kind === "assistant" && !event.toolName)
+  );
+  const visibleEvents = conversationEvents;
+  const renderItems = useMemo<RenderItem[]>(() => {
+    const items: RenderItem[] = [];
+    let toolBuffer: ChatEvent[] = [];
+    const flushTools = () => {
+      if (toolBuffer.length > 0) {
+        items.push({ type: "tools", events: toolBuffer });
+        toolBuffer = [];
+      }
+    };
+
+    for (const event of visibleEvents) {
+      const isToolEvent = (event.kind === "assistant" && Boolean(event.toolName)) || event.kind === "tool";
+      if (isToolEvent) {
+        toolBuffer.push(event);
+        continue;
+      }
+      flushTools();
+      items.push({ type: "event", event });
+    }
+    flushTools();
+    return items;
+  }, [visibleEvents]);
+  const threadEmptyState = useMemo(() => {
+    if (!auth?.accessToken) {
+      return <span className="text-text-muted">Sign in to load threads.</span>;
+    }
+    if (threadsLoading) {
+      return <span className="text-text-muted">Loading threads...</span>;
+    }
+    if (threadsError) {
+      return <span className="text-rose-300">{threadsError}</span>;
+    }
+    return <span className="text-text-muted">No threads yet.</span>;
+  }, [auth?.accessToken, threadsLoading, threadsError]);
+
+  const threadItems = useMemo(() => {
+    return threads.map((thread) => {
+      const isEditing = editingThreadId === thread.id;
+      const isBusy = threadActionId === thread.id;
+      const meta = thread.updatedAt ? formatRelativeTime(thread.updatedAt) : "";
+
+      const title = isEditing ? (
+        <input
+          value={editingThreadTitle}
+          onChange={(event) => setEditingThreadTitle(event.target.value)}
+          onClick={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+          className="w-full rounded-md border border-border-subtle bg-bg-app px-2 py-1 text-xs text-text-primary"
+          placeholder="Thread title"
+        />
+      ) : (
+        <span className="truncate">{thread.title || "Untitled"}</span>
+      );
+
+      const actions = isEditing ? (
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void saveEditedThreadTitle();
+            }}
+            disabled={editingThreadSaving}
+            className="rounded-md border border-border-subtle bg-bg-elevated p-1 text-text-primary disabled:opacity-50"
+          >
+            <Check className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              cancelEditThread();
+            }}
+            className="rounded-md border border-border-subtle bg-bg-elevated p-1 text-text-secondary"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              startEditThread(thread);
+            }}
+            disabled={isBusy}
+            className="rounded-md border border-transparent p-1 text-text-muted opacity-0 transition group-hover:opacity-100 hover:border-border-subtle hover:bg-bg-elevated disabled:opacity-40"
+            title="Rename"
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void archiveThread(thread.id);
+            }}
+            disabled={isBusy}
+            className="rounded-md border border-transparent p-1 text-text-muted opacity-0 transition group-hover:opacity-100 hover:border-border-subtle hover:bg-bg-elevated disabled:opacity-40"
+            title="Archive"
+          >
+            <Archive className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void deleteThread(thread.id);
+            }}
+            disabled={isBusy}
+            className="rounded-md border border-transparent p-1 text-text-muted opacity-0 transition group-hover:opacity-100 hover:border-border-subtle hover:bg-bg-elevated disabled:opacity-40"
+            title="Delete"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
+      );
+
+      return {
+        id: thread.id,
+        title,
+        meta,
+        status: thread.status === "archived" ? "archived" : conversationId === thread.id ? "active" : "idle",
+        actions
+      };
+    });
+  }, [
+    threads,
+    conversationId,
+    editingThreadId,
+    editingThreadTitle,
+    editingThreadSaving,
+    threadActionId,
+    startEditThread,
+    saveEditedThreadTitle,
+    cancelEditThread,
+    archiveThread,
+    deleteThread
+  ]);
 
   return (
     <div className="flex h-screen flex-col bg-bg-app text-text-primary">
       <header className="flex h-10 items-center border-b border-border-subtle bg-bg-app px-3">
-        <div className="flex items-center gap-1">
-          <span className="h-3 w-3 rounded-full bg-rose-500/90" />
-          <span className="h-3 w-3 rounded-full bg-amber-500/90" />
-          <span className="h-3 w-3 rounded-full bg-emerald-500/90" />
-        </div>
+        {showTrafficLights && (
+          <div className="flex items-center gap-1">
+            <span className="h-3 w-3 rounded-full bg-rose-500/90" />
+            <span className="h-3 w-3 rounded-full bg-amber-500/90" />
+            <span className="h-3 w-3 rounded-full bg-emerald-500/90" />
+          </div>
+        )}
       </header>
 
       {activeView === "settings" ? (
@@ -1683,7 +2262,7 @@ export default function App() {
         </div>
       ) : (
         <div className="flex flex-1 overflow-hidden bg-bg-app">
-          <aside className="flex w-64 flex-col border-r border-border-subtle bg-bg-app px-2 py-3">
+          <aside className="flex w-[300px] flex-col border-r border-border-subtle bg-bg-surface px-3 py-3">
             <Button
               variant="secondary"
               size="sm"
@@ -1693,7 +2272,7 @@ export default function App() {
                 abortRef.current?.abort();
                 setStreaming(false);
                 setStreamingMessage(null);
-                setMessages([]);
+                setConversationEvents([]);
                 setDiffs([]);
                 setSendError(null);
                 void createConversation();
@@ -1702,45 +2281,25 @@ export default function App() {
               New thread
             </Button>
 
-            <div className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-              Threads
-            </div>
-            <div className="mt-2 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-              {!auth?.accessToken && (
-                <div className="px-2 py-2 text-xs text-text-muted">Sign in to load threads.</div>
-              )}
-              {threadsLoading && (
-                <div className="px-2 py-2 text-xs text-text-muted">Loading threads...</div>
-              )}
-              {threadsError && (
-                <div className="px-2 py-2 text-xs text-rose-300">{threadsError}</div>
-              )}
-              {auth?.accessToken && !threadsLoading && !threadsError && threads.length === 0 && (
-                <div className="px-2 py-2 text-xs text-text-muted">No threads yet.</div>
-              )}
-              {threads.map((thread) => (
-                <button
-                  key={thread.id}
-                  type="button"
-                  onClick={() => {
-                    if (thread.id === conversationId) return;
-                    abortRef.current?.abort();
-                    setStreaming(false);
-                    setStreamingMessage(null);
-                    setDiffs([]);
-                    setSendError(null);
-                    setConversationId(thread.id);
-                  }}
-                  className={`flex items-center justify-between rounded-md px-2 py-1.5 text-left text-xs transition ${
-                    conversationId === thread.id
-                      ? "bg-state-selected text-text-primary"
-                      : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
-                  }`}
-                >
-                  <span className="truncate">{thread.title || "Untitled"}</span>
-                  <span className="text-[10px] text-text-muted">{formatRelativeTime(thread.updatedAt)}</span>
-                </button>
-              ))}
+            <div className="mt-3 min-h-0 flex-1 overflow-hidden">
+              <ThreadFeed
+                title="Threads"
+                items={threadItems}
+                activeId={conversationId ?? undefined}
+                onSelect={(id) => {
+                  if (id === conversationId) return;
+                  abortRef.current?.abort();
+                  setStreaming(false);
+                  setStreamingMessage(null);
+                  setDiffs([]);
+                  setSendError(null);
+                  setConversationId(id);
+                }}
+                emptyState={threadEmptyState}
+                showCount
+                showTitle
+                className="h-full"
+              />
             </div>
 
             <button
@@ -1755,90 +2314,222 @@ export default function App() {
 
           <main className="flex min-w-0 flex-1 flex-col">
             <div className="flex flex-1 flex-col overflow-hidden border-r border-border-subtle">
-              <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
-                {conversationLoading && (
-                  <div className="border border-border-subtle bg-bg-surface px-3 py-2 text-xs text-text-muted">
-                    Loading thread...
-                  </div>
-                )}
-                {!conversationLoading && messages.length === 0 && (
-                  <div className="border border-border-subtle bg-bg-surface px-3 py-2 text-xs text-text-muted">
-                    Ask anything to start. The agent will respond here.
-                  </div>
-                )}
-                {messages.map((msg, idx) => (
-                  <div key={idx} className="flex gap-3 border border-border-subtle bg-bg-surface px-3 py-2 text-sm">
-                    <div className="flex h-6 w-6 items-center justify-center border border-border-subtle bg-bg-elevated text-[10px]">
-                      {msg.role === "user" ? "U" : "AI"}
-                    </div>
-                    <div className="min-w-0 flex-1 leading-relaxed">
-                      {msg.role === "assistant" ? (
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-                      ) : (
-                        msg.content
-                      )}
+              <div className="flex-1 overflow-y-auto px-3 py-3">
+                <div className="mb-3 flex items-center justify-between rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-xs">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-text-primary">{activeThreadTitle}</div>
+                    <div className="text-[10px] text-text-muted">
+                      {activeThreadUpdated ? `Updated ${activeThreadUpdated}` : "Ready"}
                     </div>
                   </div>
-                ))}
-                {streamingMessage && (
-                  <div className="flex gap-3 border border-border-subtle bg-bg-surface px-3 py-2 text-sm">
-                    <div className="flex h-6 w-6 items-center justify-center border border-border-subtle bg-bg-elevated text-[10px]">
-                      AI
-                    </div>
-                    <div className="min-w-0 flex-1 leading-relaxed">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingMessage}</ReactMarkdown>
-                    </div>
+                  <div className="flex items-center gap-2 text-[10px] text-text-muted">
+                    <span className={`h-1.5 w-1.5 rounded-full ${streaming ? "bg-emerald-400" : "bg-text-muted"}`} />
+                    <span>{activeStatus}</span>
                   </div>
-                )}
-                {sendError && (
-                  <div className="border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
-                    {sendError}
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
+                </div>
+                <div className="space-y-3">
+                  {conversationLoading && (
+                    <div className="border border-border-subtle bg-bg-surface px-3 py-2 text-xs text-text-muted">
+                      Loading thread...
+                    </div>
+                  )}
+                  {!conversationLoading && messageEvents.length === 0 && (
+                    <div className="border border-border-subtle bg-bg-surface px-3 py-2 text-xs text-text-muted">
+                      Ask anything to start. The agent will respond here.
+                    </div>
+                  )}
+                  {renderItems.map((item, idx) => {
+                    if (item.type === "tools") {
+                      const toolItems: ToolUseItem[] = item.events.map((toolEvent, toolIdx) => {
+                        const isResult = toolEvent.kind === "tool";
+                        const detail = isResult ? toolEvent.toolOutput : toolEvent.toolArgs;
+                        const preview = formatToolPreview(detail);
+                        const timeLabel = toolEvent.timestamp ? formatRelativeTime(toolEvent.timestamp) : "";
+                        let status: ToolUseStatus = "pending";
+                        if (isResult) {
+                          status = "success";
+                        } else if (streaming) {
+                          status = "running";
+                        }
+
+                        return {
+                          id: toolEvent.id ?? `${toolEvent.toolName ?? "tool"}-${toolIdx}`,
+                          name: toolEvent.toolName ?? "Tool",
+                          detail: preview || undefined,
+                          meta: timeLabel || undefined,
+                          status
+                        };
+                      });
+
+                      return (
+                        <ToolUsePanel
+                          key={`tools-${idx}`}
+                          title="Tools"
+                          items={toolItems}
+                          className="bg-bg-surface"
+                        />
+                      );
+                    }
+
+                    const event = item.event;
+                    const isUser = event.kind === "user";
+                    const isAssistantMessage = event.kind === "assistant" && !event.toolName;
+                    const isSystem = event.kind === "system";
+                    const hasMessageIndex = typeof event.messageIndex === "number";
+                    const isEditing = hasMessageIndex && event.messageIndex === editingMessageIndex;
+                    const timeLabel = event.timestamp ? formatRelativeTime(event.timestamp) : "";
+
+                    if (isSystem) {
+                      const tokenUsage =
+                        (event.metadata as any)?.type === "token_usage"
+                          ? (event.metadata as any)?.tokenUsage
+                          : undefined;
+                      return (
+                        <div key={`${event.id ?? idx}-system`} className="rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-[11px] text-text-muted">
+                          <div className="flex items-center justify-between">
+                            <span>System</span>
+                            <span>{timeLabel}</span>
+                          </div>
+                          {event.content ? <div className="mt-1 text-text-secondary">{event.content}</div> : null}
+                          {tokenUsage ? (
+                            <div className="mt-2 flex flex-wrap gap-3 text-[10px] text-text-muted">
+                              <span>Input: {tokenUsage.totalInputTokens ?? tokenUsage.inputTokens ?? "-"}</span>
+                              <span>Output: {tokenUsage.totalOutputTokens ?? tokenUsage.outputTokens ?? "-"}</span>
+                              <span>Total: {tokenUsage.totalTokens ?? "-"}</span>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    }
+
+                    if (!isUser && !isAssistantMessage) {
+                      return null;
+                    }
+
+                    return (
+                      <div key={`${event.id ?? idx}-message`} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+                        <div
+                          className={`group w-full max-w-[80%] rounded-lg border px-3 py-2 text-sm ${
+                            isUser
+                              ? "border-border-subtle bg-transparent"
+                              : "border-border-subtle bg-bg-surface"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-text-muted">
+                            <span className={isUser ? "text-amber-200" : "text-emerald-200"}>
+                              {isUser ? "User" : "Agent"}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              {timeLabel ? <span>{timeLabel}</span> : null}
+                              {conversationId && !streaming && hasMessageIndex && (
+                                <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
+                                  {isEditing ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={saveEditedMessage}
+                                        disabled={editingMessageSaving}
+                                        className="rounded-md border border-border-subtle bg-bg-elevated p-1 text-text-primary disabled:opacity-50"
+                                      >
+                                        <Check className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={cancelEditMessage}
+                                        className="rounded-md border border-border-subtle bg-bg-elevated p-1 text-text-secondary"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (!hasMessageIndex || typeof event.content !== "string") return;
+                                        startEditMessage(event.messageIndex, event.content);
+                                      }}
+                                      className="rounded-md border border-transparent p-1 text-text-muted hover:border-border-subtle hover:bg-bg-elevated"
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="mt-1 min-w-0 leading-relaxed">
+                            {isEditing ? (
+                              <Textarea
+                                value={editingMessageDraft}
+                                onChange={(event) => setEditingMessageDraft(event.target.value)}
+                                disabled={editingMessageSaving}
+                                noResize
+                              />
+                            ) : isAssistantMessage ? (
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{event.content ?? ""}</ReactMarkdown>
+                            ) : (
+                              event.content
+                            )}
+                          </div>
+                          {isEditing && editingMessageError && (
+                            <div className="mt-1 text-[10px] text-rose-300">{editingMessageError}</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {streaming && !streamHasEvents && (
+                    <div className="flex justify-start">
+                      <div className="w-full max-w-[80%] rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm">
+                        <div className="text-[10px] uppercase tracking-wider text-emerald-200">Agent</div>
+                        <div className="mt-1 min-w-0 text-text-muted">Working on it...</div>
+                      </div>
+                    </div>
+                  )}
+                  {sendError && (
+                    <div className="border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                      {sendError}
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
               </div>
               <div className="border-t border-border-subtle bg-bg-surface px-3 py-3">
-                <Textarea
-                  placeholder="Ask for follow-up changes"
+                <ChatInput
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={setInput}
+                  onSend={sendMessage}
+                  onStop={stopStreaming}
+                  sending={streaming}
+                  disabled={streaming || !backendReady || !auth?.accessToken}
+                  placeholder="Ask for follow-up changes"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       void sendMessage();
                     }
                   }}
-                  disabled={streaming}
-                  noResize
-                />
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-[10px] text-text-muted">{modelMeta}</span>
-                  {streaming ? (
-                    <Button variant="secondary" size="sm" onClick={stopStreaming}>
-                      <Square className="mr-2 h-4 w-4" />
-                      Stop
-                    </Button>
-                  ) : (
+                  footerLeft={(
                     <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={sendMessage}
-                      disabled={!input.trim() || !backendReady || !auth?.accessToken}
+                      variant="secondary"
+                      size="xs"
+                      onClick={() => setTerminalOpen((prev) => !prev)}
+                      className="gap-2"
                     >
-                      <Send className="mr-2 h-4 w-4" />
-                      Send
+                      <TerminalIcon className="h-3.5 w-3.5" />
+                      {terminalOpen ? "Hide Terminal" : "Terminal"}
                     </Button>
                   )}
-                </div>
+                  footerRight={<span className="text-[10px] text-text-muted">{modelMeta}</span>}
+                />
               </div>
             </div>
 
-            <div className="h-40 border-t border-border-subtle bg-bg-surface px-3 py-2 font-mono text-[11px] text-text-secondary">
-              <div className="text-text-muted">$ npm run dev</div>
-              <div>Running on http://localhost:3000</div>
-              <div className="text-text-muted">Watching 1 file...</div>
-              <div>Compiled successfully</div>
-            </div>
+            {terminalOpen && (
+              <div className="h-56 border-t border-border-subtle bg-bg-surface">
+                <Terminal />
+              </div>
+            )}
           </main>
 
           <aside className="flex w-[320px] flex-col border-l border-border-subtle bg-bg-app">
@@ -1884,27 +2575,129 @@ export default function App() {
                 <div className="flex h-full items-center justify-center text-xs text-text-muted">
                   Select a file to preview.
                 </div>
-              ) : diffTooLarge ? (
-                <div className="flex h-full items-center justify-center text-xs text-text-muted">
-                  Diff is too large to display.
-                </div>
               ) : (
                 <div className="h-full overflow-y-auto px-2 py-2">
-                  <div className="text-xs font-semibold text-text-primary">{selectedDiff.filePath}</div>
-                  <div className="mt-2 border border-border-subtle">
-                    {selectedRows.map((row, index) => (
-                      <div key={index} className={`diff-row ${row.type}`}>
-                        <div className="diff-gutter">{row.leftNumber ?? ""}</div>
-                        <div className="diff-cell text-text-primary">
-                          {row.leftText || ""}
-                        </div>
-                        <div className="diff-gutter">{row.rightNumber ?? ""}</div>
-                        <div className="diff-cell text-text-primary">
-                          {row.rightText || ""}
-                        </div>
-                      </div>
-                    ))}
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-semibold text-text-primary">{selectedDiff.filePath}</div>
+                      <div className="text-[10px] text-text-muted">{selectedDiff.hunks.length} changes</div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="xs"
+                        variant="secondary"
+                        onClick={() => applyAllDiff(selectedDiff.editId)}
+                        disabled={!workspace}
+                      >
+                        Accept all
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => rejectAllDiff(selectedDiff.editId)}
+                      >
+                        Reject all
+                      </Button>
+                    </div>
                   </div>
+
+                  <div className="mt-2 space-y-1">
+                    {selectedDiff.hunks.map((hunk, index) => {
+                      const isActive = hunk.id === selectedHunk?.id;
+                      return (
+                        <div
+                          key={hunk.id}
+                          className={`flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-[10px] ${
+                            isActive
+                              ? "border-border-strong bg-state-selected text-text-primary"
+                              : "border-border-subtle bg-bg-surface text-text-muted"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setSelectedHunkId(hunk.id)}
+                            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                          >
+                            <span className="truncate">Change {index + 1}</span>
+                            <span className="text-[9px] text-text-muted">
+                              +{hunk.newLines} / -{hunk.oldLines}
+                            </span>
+                          </button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="xs"
+                              variant="secondary"
+                              onClick={() => applyHunk(selectedDiff.editId, hunk.id)}
+                              disabled={!workspace}
+                            >
+                              Accept
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => rejectHunk(selectedDiff.editId, hunk.id)}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {diffTooLarge ? (
+                    <div className="mt-3 flex items-center justify-center text-xs text-text-muted">
+                      Diff is too large to display.
+                    </div>
+                  ) : selectedHunk ? (
+                    <div className="mt-3 border border-border-subtle">
+                      {selectedRows.map((row, index) => {
+                        const leftCellClass =
+                          row.type === "remove" ? "diff-cell-remove" : row.type === "add" ? "diff-cell-empty" : "";
+                        const rightCellClass =
+                          row.type === "add" ? "diff-cell-add" : row.type === "remove" ? "diff-cell-empty" : "";
+                        const leftGutterClass = row.type === "remove" ? "diff-gutter-remove" : "diff-gutter";
+                        const rightGutterClass = row.type === "add" ? "diff-gutter-add" : "diff-gutter";
+                        const leftSign =
+                          row.type === "remove" ? "-" : row.type === "context" ? " " : "";
+                        const rightSign =
+                          row.type === "add" ? "+" : row.type === "context" ? " " : "";
+
+                        return (
+                          <div key={index} className={`diff-row ${row.type}`}>
+                            <div className={leftGutterClass}>{row.leftNumber ?? ""}</div>
+                            <div className={`diff-cell text-text-primary ${leftCellClass}`}>
+                              <div className="diff-cell-content">
+                                <span
+                                  className={`diff-sign ${
+                                    row.type === "remove" ? "diff-sign-remove" : "diff-sign-context"
+                                  }`}
+                                >
+                                  {leftSign}
+                                </span>
+                                <span className="diff-text">{row.leftText || ""}</span>
+                              </div>
+                            </div>
+                            <div className={rightGutterClass}>{row.rightNumber ?? ""}</div>
+                            <div className={`diff-cell text-text-primary ${rightCellClass}`}>
+                              <div className="diff-cell-content">
+                                <span
+                                  className={`diff-sign ${
+                                    row.type === "add" ? "diff-sign-add" : "diff-sign-context"
+                                  }`}
+                                >
+                                  {rightSign}
+                                </span>
+                                <span className="diff-text">{row.rightText || ""}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="mt-3 text-xs text-text-muted">Select a change to preview.</div>
+                  )}
                 </div>
               )}
             </div>

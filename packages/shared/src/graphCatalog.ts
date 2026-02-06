@@ -47,6 +47,7 @@ const baseToolNames = [
   "str_replace_editor",
   "execute_bash",
   "output_format",
+  "write_todos",
 ];
 
 export type GraphOption = {

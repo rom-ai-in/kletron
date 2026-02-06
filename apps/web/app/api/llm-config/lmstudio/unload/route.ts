@@ -18,9 +18,13 @@ export async function POST(request: NextRequest) {
         });
     }
 
+    const timeoutMs = 30000;
+    let unloadUrl = "";
+    let instanceId: string | undefined;
+
     try {
         const body = await request.json();
-        const instanceId = body.instanceId;
+        instanceId = body.instanceId;
 
         if (!instanceId || typeof instanceId !== "string") {
             return NextResponse.json(
@@ -35,7 +39,7 @@ export async function POST(request: NextRequest) {
 
         // Clean baseUrl and construct unload endpoint
         const cleanBaseUrl = baseUrl.replace(/\/v1\/?$/, "").replace(/\/+$/, "");
-        const unloadUrl = `${cleanBaseUrl}/api/v1/models/unload`;
+        unloadUrl = `${cleanBaseUrl}/api/v1/models/unload`;
 
         // Unload the model from LM Studio using instance_id
         const response = await fetch(unloadUrl, {
@@ -44,13 +48,22 @@ export async function POST(request: NextRequest) {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({ instance_id: instanceId }),
-            signal: AbortSignal.timeout(30000), // 30 second timeout
+            signal: AbortSignal.timeout(timeoutMs), // 30 second timeout
         });
 
         if (!response.ok) {
             const errorText = await response.text();
             return NextResponse.json(
-                { error: `Failed to unload model: ${errorText || response.statusText}`, success: false },
+                {
+                    error: `Failed to unload model: ${errorText || response.statusText}`,
+                    success: false,
+                    details: {
+                        status: response.status,
+                        statusText: response.statusText,
+                        endpoint: unloadUrl,
+                        instanceId,
+                    },
+                },
                 { status: 200 }
             );
         }
@@ -66,11 +79,21 @@ export async function POST(request: NextRequest) {
         console.error("Error unloading LM Studio model:", error);
 
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const isTimeout = errorMessage.includes("timeout") || errorMessage.includes("aborted");
 
         return NextResponse.json(
             {
-                error: errorMessage,
-                success: false
+                error: isTimeout
+                    ? `Unloading timed out after ${timeoutMs / 1000}s. Check LM Studio directly.`
+                    : errorMessage,
+                success: false,
+                details: {
+                    name: error instanceof Error ? error.name : undefined,
+                    code: (error as { code?: string }).code,
+                    endpoint: unloadUrl,
+                    timeoutMs,
+                    instanceId,
+                },
             },
             { status: 200 }
         );
