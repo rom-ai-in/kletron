@@ -16,7 +16,7 @@ export type LlmSelection = {
 const normalizeProvider = (value?: string): LlmProvider | undefined => {
   if (!value) return undefined;
   const normalized = value.trim().toLowerCase();
-  const validProviders: LlmProvider[] = ["azure", "openai", "claude", "gemini", "lmstudio", "ollama"];
+  const validProviders: LlmProvider[] = ["azure", "openai", "claude", "gemini", "lmstudio", "ollama", "vllm"];
   return validProviders.includes(normalized as LlmProvider) ? (normalized as LlmProvider) : undefined;
 };
 
@@ -58,6 +58,7 @@ export type ResolvedLlmInfo = {
   gemini?: Record<string, never>;
   lmstudio?: { baseUrl?: string };
   ollama?: { baseUrl?: string };
+  vllm?: { baseUrl?: string };
 };
 
 export type ChatModelOverrides = {
@@ -128,6 +129,14 @@ export async function resolveResolvedLlmInfo(selection?: Partial<LlmSelection>):
         provider: "ollama",
         model: selection?.model ?? ollamaConfig?.model,
         ollama: { baseUrl: ollamaConfig?.baseUrl },
+      };
+    }
+    case "vllm": {
+      const vllmConfig = runtimeConfig.vllm;
+      return {
+        provider: "vllm",
+        model: selection?.model ?? vllmConfig?.model,
+        vllm: { baseUrl: vllmConfig?.baseUrl },
       };
     }
     default:
@@ -295,6 +304,64 @@ export async function getChatModel(selection?: Partial<LlmSelection>, overrides?
         model,
         baseUrl: ollamaConfig.baseUrl,
         temperature,
+      });
+    }
+
+    case "vllm": {
+      const vllmConfig = runtimeConfig.vllm;
+      const model = selection?.model ?? vllmConfig?.model;
+      if (!model) {
+        throw new Error(
+          "vLLM model name is required. Configure a model in the UI or provide a model in the request."
+        );
+      }
+      if (!vllmConfig?.baseUrl) {
+        throw new Error("vLLM base URL is required. Configure it in the UI.");
+      }
+      // Ensure the OpenAI-compatible endpoint has /v1
+      const vllmOpenAIBaseUrl = vllmConfig.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "") + "/v1";
+      const modelSettings = vllmConfig?.modelSettings?.[model];
+      const resolvedTemperature =
+        overrideTemperature ??
+        (typeof modelSettings?.temperature === "number" ? modelSettings.temperature : 1);
+      const resolvedMaxTokens =
+        typeof overrides?.maxTokens === "number" ? overrides.maxTokens : modelSettings?.maxTokens;
+      const resolvedTopP =
+        typeof overrides?.topP === "number" ? overrides.topP : modelSettings?.topP;
+      const resolvedPresencePenalty =
+        typeof overrides?.presencePenalty === "number"
+          ? overrides.presencePenalty
+          : modelSettings?.presencePenalty;
+      const resolvedFrequencyPenalty =
+        typeof overrides?.frequencyPenalty === "number"
+          ? overrides.frequencyPenalty
+          : modelSettings?.frequencyPenalty;
+      const resolvedTopK =
+        typeof overrides?.topK === "number" ? overrides.topK : modelSettings?.topK;
+      const resolvedRepeatPenalty =
+        typeof overrides?.repeatPenalty === "number"
+          ? overrides.repeatPenalty
+          : modelSettings?.repeatPenalty;
+
+      const modelKwargs: Record<string, unknown> = {};
+      if (typeof resolvedTopK === "number") {
+        modelKwargs.top_k = resolvedTopK;
+      }
+      if (typeof resolvedRepeatPenalty === "number") {
+        modelKwargs.repeat_penalty = resolvedRepeatPenalty;
+      }
+      return new ChatOpenAI({
+        model,
+        apiKey: vllmConfig?.apiKey ?? "vllm",
+        configuration: {
+          baseURL: vllmOpenAIBaseUrl,
+        },
+        temperature: resolvedTemperature,
+        ...(typeof resolvedMaxTokens === "number" ? { maxTokens: resolvedMaxTokens } : {}),
+        ...(typeof resolvedTopP === "number" ? { topP: resolvedTopP } : {}),
+        ...(typeof resolvedPresencePenalty === "number" ? { presencePenalty: resolvedPresencePenalty } : {}),
+        ...(typeof resolvedFrequencyPenalty === "number" ? { frequencyPenalty: resolvedFrequencyPenalty } : {}),
+        ...(Object.keys(modelKwargs).length ? { modelKwargs } : {}),
       });
     }
 

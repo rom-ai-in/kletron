@@ -230,8 +230,13 @@ const lmstudioModel = process.env.LMSTUDIO_MODEL ?? "";
 const ollamaBaseUrl = process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434";
 const ollamaModel = process.env.OLLAMA_MODEL ?? "llama3.2";
 
+// vLLM
+const vllmBaseUrl = process.env.VLLM_BASE_URL ?? "http://127.0.0.1:8000";
+const vllmApiKey = process.env.VLLM_API_KEY;
+const vllmModel = process.env.VLLM_MODEL ?? "";
+
 // Default provider
-const VALID_PROVIDERS = ["azure", "openai", "claude", "gemini", "lmstudio", "ollama"];
+const VALID_PROVIDERS = ["azure", "openai", "claude", "gemini", "lmstudio", "ollama", "vllm"];
 const defaultProviderRaw = process.env.LLM_DEFAULT_PROVIDER;
 const isDefaultProviderValid = VALID_PROVIDERS.includes(defaultProviderRaw ?? "");
 const defaultProvider =
@@ -304,6 +309,11 @@ export const config = {
   ollama: {
     baseUrl: ollamaBaseUrl,
     model: ollamaModel,
+  },
+  vllm: {
+    baseUrl: vllmBaseUrl,
+    apiKey: vllmApiKey,
+    model: vllmModel,
   },
   graphRecursionLimit,
   mongo: {

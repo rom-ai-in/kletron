@@ -6,7 +6,7 @@ import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 export const dynamic = "force-dynamic";
 
 const ProviderSchema = z.object({
-    provider: z.enum(["azure", "openai", "claude", "gemini", "lmstudio", "ollama"]),
+    provider: z.enum(["azure", "openai", "claude", "gemini", "lmstudio", "ollama", "vllm"]),
 });
 
 /**

@@ -10,6 +10,7 @@ import type {
     GeminiConfig,
     LMStudioConfig,
     OllamaConfig,
+    VLLMConfig,
     LlmProviderType,
 } from "@numezis/shared/schemas/llmConfig.schema";
 import * as LlmSchema from "@numezis/shared/schemas/llmConfig.schema";
@@ -22,6 +23,7 @@ const {
     GeminiConfigSchema,
     LMStudioConfigSchema,
     OllamaConfigSchema,
+    VLLMConfigSchema,
 } = LlmSchema;
 
 const COLLECTION_NAME = "llm_configs";
@@ -35,6 +37,7 @@ const DEFAULT_ENABLED_PROVIDERS: LlmProviderType[] = [
     "gemini",
     "lmstudio",
     "ollama",
+    "vllm",
 ];
 
 function getDefaultConfig(): LlmConfig {
@@ -249,6 +252,22 @@ export async function updateOllamaConfig(
     ollamaConfig: OllamaConfig
 ): Promise<LlmConfig> {
     return updateProviderConfig("ollama", ollamaConfig, OllamaConfigSchema);
+}
+
+/**
+ * Update vLLM configuration
+ */
+export async function updateVLLMConfig(
+    vllmConfig: VLLMConfig
+): Promise<LlmConfig> {
+    const currentConfig = await getLlmConfig();
+    const configToSave = {
+        ...currentConfig.vllm,
+        ...vllmConfig,
+        modelSettings: vllmConfig.modelSettings ?? currentConfig.vllm?.modelSettings,
+        apiKey: preserveApiKey(vllmConfig.apiKey, currentConfig.vllm?.apiKey),
+    };
+    return updateProviderConfig("vllm", configToSave, VLLMConfigSchema);
 }
 
 /**

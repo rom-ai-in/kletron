@@ -52,11 +52,29 @@ export const OllamaConfigSchema = z.object({
     model: z.string().min(1).describe("Model name (e.g., llama3.2, mistral, codellama)"),
 });
 
+export const VLLMModelConfigSchema = z.object({
+    contextWindow: z.number().int().positive().optional().describe("Context window size (tokens)"),
+    maxTokens: z.number().int().positive().optional().describe("Max output tokens"),
+    temperature: z.number().min(0).max(5).optional().describe("Sampling temperature"),
+    topP: z.number().min(0).max(1).optional().describe("Nucleus sampling (top-p)"),
+    topK: z.number().int().min(0).optional().describe("Top-k sampling"),
+    repeatPenalty: z.number().min(0).optional().describe("Repeat penalty"),
+    presencePenalty: z.number().min(-2).max(2).optional().describe("Presence penalty"),
+    frequencyPenalty: z.number().min(-2).max(2).optional().describe("Frequency penalty"),
+});
+
+export const VLLMConfigSchema = z.object({
+    baseUrl: z.string().url().describe("vLLM server base URL (e.g., http://127.0.0.1:8000)"),
+    apiKey: z.string().optional().describe("vLLM API key (optional)"),
+    model: z.string().min(1).describe("Model name (HuggingFace model ID)"),
+    modelSettings: z.record(VLLMModelConfigSchema).optional().describe("Per-model settings"),
+});
+
 // ============================================================================
 // Provider types
 // ============================================================================
 
-export const LLM_PROVIDERS = ["azure", "openai", "claude", "gemini", "lmstudio", "ollama"] as const;
+export const LLM_PROVIDERS = ["azure", "openai", "claude", "gemini", "lmstudio", "ollama", "vllm"] as const;
 export type LlmProviderType = (typeof LLM_PROVIDERS)[number];
 
 // ============================================================================
@@ -72,6 +90,7 @@ export const LlmConfigSchema = z.object({
     gemini: GeminiConfigSchema.optional(),
     lmstudio: LMStudioConfigSchema.optional(),
     ollama: OllamaConfigSchema.optional(),
+    vllm: VLLMConfigSchema.optional(),
     defaultProvider: z.enum(LLM_PROVIDERS).describe("Default provider to use"),
     enabledProviders: z.array(z.enum(LLM_PROVIDERS)).optional().describe("List of enabled providers (default: all)"),
     createdAt: z.date().optional(),
@@ -89,6 +108,8 @@ export type GeminiConfig = z.infer<typeof GeminiConfigSchema>;
 export type LMStudioModelConfig = z.infer<typeof LMStudioModelConfigSchema>;
 export type LMStudioConfig = z.infer<typeof LMStudioConfigSchema>;
 export type OllamaConfig = z.infer<typeof OllamaConfigSchema>;
+export type VLLMModelConfig = z.infer<typeof VLLMModelConfigSchema>;
+export type VLLMConfig = z.infer<typeof VLLMConfigSchema>;
 export type LlmConfig = z.infer<typeof LlmConfigSchema>;
 
 // ============================================================================
@@ -123,6 +144,10 @@ export function validateOllamaConfig(data: unknown): OllamaConfig {
     return OllamaConfigSchema.parse(data);
 }
 
+export function validateVLLMConfig(data: unknown): VLLMConfig {
+    return VLLMConfigSchema.parse(data);
+}
+
 // ============================================================================
 // Model recommendations (latest models as of Feb 2026)
 // ============================================================================
@@ -134,4 +159,5 @@ export const MODEL_RECOMMENDATIONS = {
     gemini: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-pro"],
     lmstudio: ["local-model"],
     ollama: ["llama3.2", "llama3.1", "mistral", "codellama", "deepseek-coder"],
+    vllm: ["nvidia/nemotron-3-nano", "mistralai/Mistral-Small-24B", "Qwen/Qwen3-32B", "deepseek-ai/deepseek-coder-33b", "meta-llama/Llama-3.1-8B-Instruct"],
 } as const;

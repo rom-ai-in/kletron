@@ -55,7 +55,81 @@ export async function POST(req: NextRequest) {
 
         let model;
 
-        if (provider === "lmstudio") {
+        if (provider === "vllm") {
+            const { baseUrl, model: modelName } = effectiveConfig;
+
+            if (!baseUrl) {
+                return okError("Base URL is required for vLLM. Configure it in the UI.");
+            }
+
+            // Normalize: strip trailing slashes, strip /v1 if present
+            const cleanBaseUrl = (baseUrl as string).replace(/\/+$/, "").replace(/\/v1$/, "");
+
+            // 1. Health check via /api/status first
+            const startTime = Date.now();
+            try {
+                const statusResponse = await fetch(`${cleanBaseUrl}/api/status`, {
+                    method: "GET",
+                    signal: AbortSignal.timeout(5000),
+                });
+                if (!statusResponse.ok) {
+                    return okError(`vLLM server returned ${statusResponse.status} on /api/status. Is the server running?`);
+                }
+            } catch (err) {
+                // /api/status may not exist in vanilla vLLM – try /v1/models instead
+                try {
+                    const modelsResponse = await fetch(`${cleanBaseUrl}/v1/models`, {
+                        method: "GET",
+                        signal: AbortSignal.timeout(5000),
+                    });
+                    if (!modelsResponse.ok) {
+                        return okError(`Cannot reach vLLM server at ${cleanBaseUrl}. Make sure it is running.`);
+                    }
+                } catch {
+                    return okError(`Cannot connect to vLLM at ${cleanBaseUrl}. Make sure the server is running and accessible.`);
+                }
+            }
+
+            if (!modelName) {
+                // No model specified – just report server is reachable
+                const duration = Date.now() - startTime;
+                return NextResponse.json({
+                    success: true,
+                    latency: duration,
+                    message: "Connection successful",
+                    response: "vLLM server is reachable (no model selected for inference test)",
+                }, { status: 200 });
+            }
+
+            // 2. Full inference test via OpenAI-compatible API
+            const vllmOpenAIBaseUrl = `${cleanBaseUrl}/v1`;
+
+            const modelSettings = modelName && effectiveConfig?.modelSettings?.[modelName]
+                ? effectiveConfig.modelSettings[modelName]
+                : undefined;
+
+            const modelKwargs: Record<string, unknown> = {};
+            if (typeof modelSettings?.topK === "number") {
+                modelKwargs.top_k = modelSettings.topK;
+            }
+            if (typeof modelSettings?.repeatPenalty === "number") {
+                modelKwargs.repeat_penalty = modelSettings.repeatPenalty;
+            }
+
+            model = new ChatOpenAI({
+                model: modelName,
+                apiKey: effectiveApiKey || "vllm",
+                configuration: {
+                    baseURL: vllmOpenAIBaseUrl,
+                },
+                temperature: typeof modelSettings?.temperature === "number" ? modelSettings.temperature : 1,
+                ...(typeof modelSettings?.maxTokens === "number" ? { maxTokens: modelSettings.maxTokens } : {}),
+                ...(typeof modelSettings?.topP === "number" ? { topP: modelSettings.topP } : {}),
+                ...(typeof modelSettings?.presencePenalty === "number" ? { presencePenalty: modelSettings.presencePenalty } : {}),
+                ...(typeof modelSettings?.frequencyPenalty === "number" ? { frequencyPenalty: modelSettings.frequencyPenalty } : {}),
+                ...(Object.keys(modelKwargs).length ? { modelKwargs } : {}),
+            });
+        } else if (provider === "lmstudio") {
             const { baseUrl, model: modelName } = effectiveConfig;
 
             if (!modelName) {

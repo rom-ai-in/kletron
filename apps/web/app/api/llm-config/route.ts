@@ -55,6 +55,12 @@ export async function GET(request: NextRequest) {
                 }
                 : undefined,
             ollama: config.ollama ?? undefined,
+            vllm: config.vllm
+                ? {
+                    ...config.vllm,
+                    apiKey: config.vllm.apiKey ? "••••••••" : "",
+                }
+                : undefined,
         };
 
         return NextResponse.json(sanitizedConfig, { status: 200 });
