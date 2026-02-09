@@ -38,6 +38,18 @@ export const durationMs = {
     slowest: 1000,
 } as const;
 
+// Raw CSS values (for CSS generation)
+export const rawDuration = {
+    fast: '0.15s',
+    normal: '0.3s',
+    slow: '0.5s',
+} as const;
+
+export const rawEasing = {
+    default: 'cubic-bezier(0.4, 0, 0.2, 1)',
+    bounce: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+} as const;
+
 // =============================================================================
 // EASING FUNCTIONS
 // =============================================================================

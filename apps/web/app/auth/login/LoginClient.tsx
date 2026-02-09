@@ -1,11 +1,12 @@
 'use client';
 // app/auth/login/page.tsx
-// Login page - aligned with app branding
+// Login page - aligned with app branding, using design system components
 import React, { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@numezis/ui/context/AuthContext';
 import { getRememberMePreference } from '@numezis/ui/lib/supabase/supabaseClient';
+import { Input, PasswordInput, Button, Checkbox } from '@numezis/ui/components/design-system';
 
 export default function LoginClient() {
     const [email, setEmail] = useState('');
@@ -105,14 +106,14 @@ export default function LoginClient() {
                 <div className="bg-bg-surface border border-border-subtle rounded-lg p-6">
                     <form onSubmit={handleSubmit} className="space-y-4">
                         {error && (
-                            <div className="bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
-                                <p className="text-xs text-red-400">{error}</p>
+                            <div className="bg-status-error-bg border border-status-error-border rounded px-3 py-2">
+                                <p className="text-xs text-status-error-text">{error}</p>
                                 {isEmailNotConfirmed && (
                                     <button
                                         type="button"
                                         onClick={handleResendConfirmation}
                                         disabled={resendLoading}
-                                        className="mt-2 text-xs text-blue-400 hover:text-blue-300 underline disabled:opacity-50"
+                                        className="mt-2 text-xs text-status-info-text hover:text-status-info-text underline disabled:opacity-50"
                                     >
                                         {resendLoading ? 'Sending...' : 'Resend confirmation email'}
                                     </button>
@@ -121,8 +122,8 @@ export default function LoginClient() {
                         )}
 
                         {resendSuccess && (
-                            <div className="bg-green-500/10 border border-green-500/20 rounded px-3 py-2">
-                                <p className="text-xs text-green-400">Confirmation email sent! Check your inbox.</p>
+                            <div className="bg-status-success-bg border border-status-success-border rounded px-3 py-2">
+                                <p className="text-xs text-status-success-text">Confirmation email sent! Check your inbox.</p>
                             </div>
                         )}
 
@@ -130,14 +131,14 @@ export default function LoginClient() {
                             <label htmlFor="email" className="block text-xs font-medium text-text-secondary mb-1.5">
                                 Email
                             </label>
-                            <input
+                            <Input
                                 id="email"
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
-                                className="w-full px-3 py-2 bg-bg-elevated border border-border-subtle rounded text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-border-strong transition-colors"
                                 placeholder="you@example.com"
+                                fullWidth
                             />
                         </div>
 
@@ -145,27 +146,23 @@ export default function LoginClient() {
                             <label htmlFor="password" className="block text-xs font-medium text-text-secondary mb-1.5">
                                 Password
                             </label>
-                            <input
+                            <PasswordInput
                                 id="password"
-                                type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
-                                className="w-full px-3 py-2 bg-bg-elevated border border-border-subtle rounded text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-border-strong transition-colors"
                                 placeholder="••••••••"
+                                fullWidth
                             />
                         </div>
 
                         <div className="flex items-center justify-between">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={rememberMe}
-                                    onChange={(e) => setRememberMe(e.target.checked)}
-                                    className="w-4 h-4 rounded border-border-subtle bg-bg-elevated text-blue-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
-                                />
-                                <span className="text-xs text-text-secondary">Remember me</span>
-                            </label>
+                            <Checkbox
+                                checked={rememberMe}
+                                onChange={setRememberMe}
+                                size="sm"
+                                label="Remember me"
+                            />
                             <Link
                                 href="/auth/reset-password"
                                 className="text-xs text-text-muted hover:text-text-secondary transition-colors"
@@ -174,20 +171,14 @@ export default function LoginClient() {
                             </Link>
                         </div>
 
-                        <button
+                        <Button
                             type="submit"
                             disabled={loading}
-                            className="w-full py-2 px-4 bg-bg-elevated hover:bg-state-hover border border-border-subtle hover:border-border-strong disabled:opacity-50 disabled:cursor-not-allowed text-sm text-text-primary font-medium rounded transition-all flex items-center justify-center gap-2"
+                            loading={loading}
+                            fullWidth
                         >
-                            {loading ? (
-                                <>
-                                    <div className="w-3.5 h-3.5 border-2 border-text-muted border-t-text-primary rounded-full animate-spin" />
-                                    <span>Signing in...</span>
-                                </>
-                            ) : (
-                                'Sign In'
-                            )}
-                        </button>
+                            {loading ? 'Signing in...' : 'Sign In'}
+                        </Button>
                     </form>
                 </div>
 

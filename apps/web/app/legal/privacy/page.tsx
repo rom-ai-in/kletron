@@ -1,22 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { MarketingHeader, MarketingFooter } from '@numezis/ui/components/design-system';
 
 export default function PrivacyPolicyPage() {
     return (
         <div className="min-h-screen w-full bg-bg-app">
-            {/* Header */}
-            <header className="fixed top-0 left-0 right-0 z-50 border-b border-border-subtle bg-bg-app/80 backdrop-blur-lg">
-                <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-                    <Link href="/" className="flex items-center gap-2.5">
-                        <span className="text-xl">🧠</span>
-                        <span className="text-sm font-semibold text-text-primary">Numezis Code</span>
-                    </Link>
-                    <Link href="/" className="text-sm text-text-muted hover:text-text-primary transition-colors">
-                        ← Back to Home
-                    </Link>
-                </div>
-            </header>
+            <MarketingHeader LinkComponent={Link} />
 
             {/* Content */}
             <main className="pt-24 pb-16 px-6">
@@ -24,9 +14,9 @@ export default function PrivacyPolicyPage() {
                     <div className="mb-8">
                         <p className="text-xs text-text-muted mb-2">Last updated: February 2, 2026</p>
                         <h1 className="text-3xl font-bold text-text-primary mb-4">Privacy Policy</h1>
-                        <div className="p-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 mb-6">
+                        <div className="p-4 rounded-lg border border-status-success-border bg-status-success-bg mb-6">
                             <p className="text-sm text-text-secondary">
-                                <span className="text-emerald-500 font-medium">🇨🇭 Swiss-Grade Privacy:</span> Numezis Technologies SA
+                                <span className="text-status-success-text font-medium">🇨🇭 Swiss-Grade Privacy:</span> Numezis Technologies SA
                                 is a Swiss company. Your data is processed under Swiss and EU data protection laws —
                                 among the strictest in the world.
                             </p>
@@ -39,7 +29,7 @@ export default function PrivacyPolicyPage() {
                             <p className="text-text-secondary">
                                 <strong>Numezis Technologies SA</strong><br />
                                 Geneva, Switzerland<br />
-                                <a href="mailto:privacy@numezis.com" className="text-emerald-500 hover:underline">privacy@numezis.com</a>
+                                <a href="mailto:privacy@numezis.com" className="text-status-success-text hover:underline">privacy@numezis.com</a>
                             </p>
                         </div>
                     </Section>
@@ -62,9 +52,9 @@ export default function PrivacyPolicyPage() {
                         </ul>
 
                         <h3 className="text-sm font-semibold text-text-primary mt-4 mb-2">2.3 Code and Content</h3>
-                        <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 mt-2">
+                        <div className="p-3 rounded-lg border border-status-warning-border bg-status-warning-bg mt-2">
                             <p className="text-sm text-text-secondary">
-                                <strong className="text-amber-500">Important:</strong> We process your code only to provide the Service.
+                                <strong className="text-status-warning-text">Important:</strong> We process your code only to provide the Service.
                                 We do NOT use your code to train AI models. We do NOT share your code with third parties
                                 except your chosen AI provider (for BYOK users) or our hosted AI infrastructure.
                             </p>
@@ -100,9 +90,9 @@ export default function PrivacyPolicyPage() {
                             <li><strong>Payment:</strong> Stripe (for billing — PCI-DSS compliant)</li>
                             <li><strong>Analytics:</strong> Privacy-focused analytics (no cross-site tracking)</li>
                         </ul>
-                        <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 mt-3">
+                        <div className="p-3 rounded-lg border border-status-success-border bg-status-success-bg mt-3">
                             <p className="text-sm text-text-secondary">
-                                <strong className="text-emerald-500">No US Data Transfers:</strong> We do not transfer personal data
+                                <strong className="text-status-success-text">No US Data Transfers:</strong> We do not transfer personal data
                                 to the United States. All our infrastructure is EU/Swiss-based.
                             </p>
                         </div>
@@ -137,7 +127,7 @@ export default function PrivacyPolicyPage() {
                             ))}
                         </div>
                         <p className="mt-3">
-                            To exercise these rights, email <a href="mailto:privacy@numezis.com" className="text-emerald-500 hover:underline">privacy@numezis.com</a>.
+                            To exercise these rights, email <a href="mailto:privacy@numezis.com" className="text-status-success-text hover:underline">privacy@numezis.com</a>.
                         </p>
                     </Section>
 
@@ -155,7 +145,7 @@ export default function PrivacyPolicyPage() {
                     <Section title="9. Cookies">
                         <p>
                             We use essential cookies for authentication and security.
-                            See our <Link href="/legal/cookies" className="text-emerald-500 hover:underline">Cookie Policy</Link> for details.
+                            See our <Link href="/legal/cookies" className="text-status-success-text hover:underline">Cookie Policy</Link> for details.
                         </p>
                     </Section>
 
@@ -172,7 +162,7 @@ export default function PrivacyPolicyPage() {
                             <p className="text-text-secondary text-sm">
                                 <strong>Data Protection Officer</strong><br />
                                 Numezis Technologies SA<br />
-                                <a href="mailto:dpo@numezis.com" className="text-emerald-500 hover:underline">dpo@numezis.com</a>
+                                <a href="mailto:dpo@numezis.com" className="text-status-success-text hover:underline">dpo@numezis.com</a>
                             </p>
                         </div>
                         <p className="mt-3">
@@ -183,16 +173,7 @@ export default function PrivacyPolicyPage() {
                 </article>
             </main>
 
-            {/* Footer */}
-            <footer className="py-8 px-6 border-t border-border-subtle">
-                <div className="max-w-4xl mx-auto flex flex-wrap gap-4 justify-center text-xs text-text-muted">
-                    <Link href="/legal/terms" className="hover:text-text-primary">Terms of Service</Link>
-                    <Link href="/legal/privacy" className="hover:text-text-primary">Privacy Policy</Link>
-                    <Link href="/legal/gdpr" className="hover:text-text-primary">GDPR</Link>
-                    <Link href="/legal/cookies" className="hover:text-text-primary">Cookie Policy</Link>
-                    <Link href="/legal/imprint" className="hover:text-text-primary">Imprint</Link>
-                </div>
-            </footer>
+            <MarketingFooter LinkComponent={Link} />
         </div>
     );
 }

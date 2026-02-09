@@ -5,6 +5,7 @@ import { Apple } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@numezis/ui/context/AuthContext';
 import { useSubscription } from '@numezis/ui/hooks/useSubscription';
+import { MarketingHeader, MarketingFooter } from '@numezis/ui/components/design-system';
 
 const downloadUrl = '/auth/register' // Download after account creation
 
@@ -188,30 +189,25 @@ export default function PricingPage() {
     return (
         <div className="min-h-screen w-full bg-bg-app">
             {/* Navigation Header */}
-            <header className="fixed top-0 left-0 right-0 z-50 border-b border-border-subtle bg-bg-app/80 backdrop-blur-lg">
-                <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-                    {/* Logo */}
-                    <Link href="/" className="flex items-center gap-2.5">
-                        <span className="text-xl">🧠</span>
-                        <span className="text-sm font-semibold text-text-primary">Numezis Code</span>
-                    </Link>
-
-                    {/* Nav Links */}
-                    <div className="hidden sm:flex items-center gap-6">
-                        <Link href="/#features" className="text-sm text-text-muted hover:text-text-primary transition-colors">
-                            Features
-                        </Link>
-                        <Link href="/pricing" className="text-sm text-text-primary font-medium">
-                            Pricing
-                        </Link>
-                    </div>
-
-                    {/* Auth Buttons */}
+            <MarketingHeader
+                LinkComponent={Link}
+                navLinks={[
+                    { href: '/#features', label: 'Features' },
+                    { href: '/enterprise', label: 'Enterprise' },
+                    { href: '/pricing', label: 'Pricing' },
+                ]}
+                rightSlot={
                     <div className="flex items-center gap-3">
                         {loading ? (
                             <div className="w-6 h-6 border-2 border-border-subtle border-t-text-secondary rounded-full animate-spin" />
                         ) : user ? (
                             <>
+                                <Link
+                                    href="/app/explore"
+                                    className="text-sm text-text-secondary hover:text-text-primary transition-colors"
+                                >
+                                    Dashboard
+                                </Link>
                                 <Link
                                     href="/app/explore"
                                     className="inline-flex items-center gap-2 rounded-md bg-bg-elevated hover:bg-state-hover border border-border-subtle px-3 py-1.5 text-sm font-medium text-text-primary transition-colors"
@@ -236,8 +232,8 @@ export default function PricingPage() {
                             </>
                         )}
                     </div>
-                </div>
-            </header>
+                }
+            />
 
             {/* Hero Section */}
             <section className="relative pt-32 pb-16 px-6">
@@ -245,7 +241,7 @@ export default function PricingPage() {
 
                 <div className="relative z-10 max-w-4xl mx-auto text-center">
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border-subtle bg-bg-surface mb-6 text-xs text-text-muted">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
                         Simple, transparent pricing
                     </div>
 
@@ -259,7 +255,7 @@ export default function PricingPage() {
                         Choose hosted AI models with simple token pricing, or use your existing API keys.
                         Either way, you get an early look at Numezis Code while the macOS experience matures.
                     </p>
-                    <p className="text-xs text-amber-400 uppercase tracking-[0.2em] mb-8">
+                    <p className="text-xs text-status-warning-text uppercase tracking-[0.2em] mb-8">
                         Early access preview • Expect the usual quirks while we polish the desktop app.
                     </p>
 
@@ -282,7 +278,7 @@ export default function PricingPage() {
                                 }`}
                         >
                             Yearly
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-status-success-bg text-status-success-text border border-status-success-border">
                                 -20%
                             </span>
                         </button>
@@ -298,14 +294,14 @@ export default function PricingPage() {
                             <div
                                 key={tier.id}
                                 className={`relative p-6 rounded-lg border bg-bg-surface transition-all ${tier.highlight
-                                    ? 'border-emerald-500/40 ring-1 ring-emerald-500/20'
+                                    ? 'border-status-success-border ring-1 ring-status-success-border'
                                     : 'border-border-subtle hover:border-border-strong'
                                     }`}
                             >
                                 {/* Badge */}
                                 {tier.badge && (
                                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                                        <span className="px-3 py-1 rounded-full text-[10px] font-medium bg-emerald-500 text-white">
+                                        <span className="px-3 py-1 rounded-full text-[10px] font-medium bg-status-success text-white">
                                             {tier.badge}
                                         </span>
                                     </div>
@@ -344,7 +340,7 @@ export default function PricingPage() {
                                     {tier.features.map((feature, idx) => (
                                         <li key={idx} className="flex items-start gap-2.5">
                                             {feature.included ? (
-                                                <svg className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <svg className="w-4 h-4 text-status-success-text shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                                 </svg>
                                             ) : (
@@ -372,7 +368,7 @@ export default function PricingPage() {
                             <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-3">
                                     <h3 className="text-xl font-semibold text-text-primary">{enterpriseTier.name}</h3>
-                                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-status-success-bg text-status-success-text border border-status-success-border">
                                         🇨🇭 Swiss-Grade
                                     </span>
                                 </div>
@@ -381,7 +377,7 @@ export default function PricingPage() {
                                 <div className="grid sm:grid-cols-2 gap-2">
                                     {enterpriseTier.features.map((feature, idx) => (
                                         <div key={idx} className="flex items-center gap-2">
-                                            <svg className="w-4 h-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <svg className="w-4 h-4 text-status-success-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                             </svg>
                                             <span className="text-xs text-text-secondary">{feature}</span>
@@ -432,15 +428,15 @@ export default function PricingPage() {
                             </p>
                             <div className="space-y-2">
                                 <div className="flex items-center gap-2 text-xs text-text-secondary">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
                                     OpenAI, Azure OpenAI, Anthropic, Google
                                 </div>
                                 <div className="flex items-center gap-2 text-xs text-text-secondary">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
                                     Local models: Ollama, LM Studio
                                 </div>
                                 <div className="flex items-center gap-2 text-xs text-text-secondary">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
                                     Full control over your AI spend
                                 </div>
                             </div>
@@ -462,15 +458,15 @@ export default function PricingPage() {
                             </p>
                             <div className="space-y-2">
                                 <div className="flex items-center gap-2 text-xs text-text-secondary">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
                                     Pre-tuned for coding tasks
                                 </div>
                                 <div className="flex items-center gap-2 text-xs text-text-secondary">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
                                     100% EU data residency
                                 </div>
                                 <div className="flex items-center gap-2 text-xs text-text-secondary">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
                                     Simple token-based pricing
                                 </div>
                             </div>
@@ -537,7 +533,7 @@ export default function PricingPage() {
                     <p className="text-sm text-text-muted mb-4">
                         Free to start with your own API keys. No credit card required.
                     </p>
-                    <p className="text-xs text-amber-400 uppercase tracking-[0.2em] mb-6">
+                    <p className="text-xs text-status-warning-text uppercase tracking-[0.2em] mb-6">
                         Early access release • Mac app preview builds keep improving.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -559,28 +555,7 @@ export default function PricingPage() {
             </section>
 
             {/* Footer */}
-            <footer className="py-12 px-6 border-t border-border-subtle">
-                <div className="max-w-5xl mx-auto">
-                    <div className="flex flex-col sm:flex-row items-start justify-between gap-8 mb-8">
-                        <div className="flex items-center gap-2">
-                            <span className="text-base">🧠</span>
-                            <span className="text-sm text-text-primary font-medium">Numezis Code</span>
-                        </div>
-                        <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-text-muted">
-                            <Link href="/pricing" className="hover:text-text-primary transition-colors">Pricing</Link>
-                            <Link href="/legal/terms" className="hover:text-text-primary transition-colors">Terms of Service</Link>
-                            <Link href="/legal/privacy" className="hover:text-text-primary transition-colors">Privacy Policy</Link>
-                            <Link href="/legal/gdpr" className="hover:text-text-primary transition-colors">GDPR</Link>
-                            <Link href="/legal/cookies" className="hover:text-text-primary transition-colors">Cookies</Link>
-                            <Link href="/legal/imprint" className="hover:text-text-primary transition-colors">Imprint</Link>
-                        </div>
-                    </div>
-                    <div className="pt-6 border-t border-border-subtle/50 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-text-muted">
-                        <span>© 2026 Numezis Technologies SA. All rights reserved.</span>
-                        <span>🇨🇭 Made in Switzerland • 🇪🇺 GDPR Compliant</span>
-                    </div>
-                </div>
-            </footer>
+            <MarketingFooter LinkComponent={Link} />
         </div>
     )
 }

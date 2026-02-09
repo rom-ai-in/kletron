@@ -2,12 +2,11 @@
 
 import { useState } from 'react';
 import { useAuth } from '@numezis/ui/context/AuthContext';
+import { PasswordInput, Button, Badge } from '@numezis/ui/components/design-system';
 import {
     KeyRound,
     Smartphone,
     Shield,
-    Eye,
-    EyeOff,
     AlertTriangle,
     Globe,
     Clock,
@@ -27,7 +26,6 @@ interface Session {
 export default function SecurityPage() {
     const { updatePassword } = useAuth();
 
-    const [showPassword, setShowPassword] = useState(false);
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [passwordStatus, setPasswordStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
@@ -107,16 +105,16 @@ export default function SecurityPage() {
 
                 <form onSubmit={handlePasswordSubmit} className="space-y-4">
                     {passwordStatus === 'error' && (
-                        <div className="flex items-center gap-2 p-3 rounded-md bg-red-500/10 border border-red-500/20">
-                            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-                            <p className="text-xs text-red-400">{passwordError}</p>
+                        <div className="flex items-center gap-2 p-3 rounded-md bg-status-error-bg border border-status-error-border">
+                            <AlertTriangle className="w-4 h-4 text-status-error-text shrink-0" />
+                            <p className="text-xs text-status-error-text">{passwordError}</p>
                         </div>
                     )}
 
                     {passwordStatus === 'success' && (
-                        <div className="flex items-center gap-2 p-3 rounded-md bg-emerald-500/10 border border-emerald-500/20">
-                            <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                            <p className="text-xs text-emerald-400">Password updated successfully</p>
+                        <div className="flex items-center gap-2 p-3 rounded-md bg-status-success-bg border border-status-success-border">
+                            <Check className="w-4 h-4 text-status-success-text shrink-0" />
+                            <p className="text-xs text-status-success-text">Password updated successfully</p>
                         </div>
                     )}
 
@@ -124,33 +122,22 @@ export default function SecurityPage() {
                         <label className="block text-xs font-medium text-text-secondary mb-1.5">
                             New Password
                         </label>
-                        <div className="relative">
-                            <input
-                                type={showPassword ? 'text' : 'password'}
-                                value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
-                                className="w-full px-3 py-2.5 pr-10 rounded-md border border-border-subtle bg-bg-elevated text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40"
-                                placeholder="••••••••"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary"
-                            >
-                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
-                        </div>
+                        <PasswordInput
+                            fullWidth
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="••••••••"
+                        />
                     </div>
 
                     <div>
                         <label className="block text-xs font-medium text-text-secondary mb-1.5">
                             Confirm New Password
                         </label>
-                        <input
-                            type="password"
+                        <PasswordInput
+                            fullWidth
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="w-full px-3 py-2.5 rounded-md border border-border-subtle bg-bg-elevated text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40"
                             placeholder="••••••••"
                         />
                     </div>
@@ -164,13 +151,14 @@ export default function SecurityPage() {
                         </ul>
                     </div>
 
-                    <button
+                    <Button
                         type="submit"
+                        className="w-full"
+                        loading={passwordStatus === 'saving'}
                         disabled={passwordStatus === 'saving' || !newPassword || !confirmPassword}
-                        className="px-4 py-2 rounded-md text-sm font-medium bg-text-primary text-bg-app hover:bg-text-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {passwordStatus === 'saving' ? 'Updating...' : 'Update Password'}
-                    </button>
+                    </Button>
                 </form>
             </div>
 
@@ -186,9 +174,9 @@ export default function SecurityPage() {
                             <p className="text-xs text-text-muted">Add an extra layer of security</p>
                         </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                    <Badge variant="default" size="sm">
                         Coming Soon
-                    </span>
+                    </Badge>
                 </div>
 
                 <p className="mt-4 text-sm text-text-secondary">
@@ -209,12 +197,13 @@ export default function SecurityPage() {
                             <p className="text-xs text-text-muted">Devices where you're logged in</p>
                         </div>
                     </div>
-                    <button
+                    <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={handleRevokeAllSessions}
-                        className="text-xs text-red-400 hover:text-red-300 transition-colors"
                     >
                         Sign out all devices
-                    </button>
+                    </Button>
                 </div>
 
                 <div className="space-y-3">
@@ -237,9 +226,9 @@ export default function SecurityPage() {
                                     <div className="flex items-center gap-2">
                                         <p className="text-sm font-medium text-text-primary">{session.device}</p>
                                         {session.current && (
-                                            <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-500/10 text-emerald-500">
+                                            <Badge variant="default" size="sm">
                                                 Current
-                                            </span>
+                                            </Badge>
                                         )}
                                     </div>
                                     <p className="text-[11px] text-text-muted">{session.browser} • {session.location}</p>
@@ -250,13 +239,14 @@ export default function SecurityPage() {
                                 </div>
                             </div>
                             {!session.current && (
-                                <button
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
                                     onClick={() => handleRevokeSession(session.id)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-red-400 hover:bg-red-500/10 transition-colors"
                                 >
                                     <LogOut className="w-3.5 h-3.5" />
                                     Sign out
-                                </button>
+                                </Button>
                             )}
                         </div>
                     ))}

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState } from 'react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 
 // =============================================================================
 // TABS CONTEXT
@@ -137,7 +137,7 @@ export function TabTrigger({ value, children, className, ...props }: TabTriggerP
                 variant === 'underline' && [
                     'px-1 py-2 text-sm border-b-2 -mb-px',
                     isActive
-                        ? 'border-emerald-500 text-text-primary'
+                        ? 'border-status-success-border text-text-primary'
                         : 'border-transparent text-text-secondary hover:text-text-primary hover:border-border-strong',
                 ],
 

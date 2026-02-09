@@ -4,7 +4,7 @@ import { ConversationList } from './ConversationList';
 import { ActiveSession } from './ActiveSession';
 import { X } from 'lucide-react';
 
-interface AgentDrawerProps {
+export interface AgentDrawerProps {
     isOpen: boolean;
     onClose: () => void;
 }
@@ -132,7 +132,7 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = ({ isOpen, onClose }) => 
                         </p>
                         <button
                             onClick={() => setIsCreating(true)}
-                            className="mt-6 px-4 py-2 bg-primary-main hover:bg-primary-hover text-white rounded-md text-sm font-medium transition-colors"
+                            className="mt-6 px-4 py-2 bg-primary-main hover:bg-primary-hover text-text-primary rounded-md text-sm font-medium transition-colors"
                         >
                             Start New Session
                         </button>
@@ -163,7 +163,7 @@ export const AgentDrawer: React.FC<AgentDrawerProps> = ({ isOpen, onClose }) => 
                                 <button
                                     onClick={handleCreate}
                                     disabled={!newTopic.trim()}
-                                    className="px-4 py-1.5 bg-primary-main hover:bg-primary-hover text-white rounded text-sm disabled:opacity-50"
+                                    className="px-4 py-1.5 bg-primary-main hover:bg-primary-hover text-text-primary rounded text-sm disabled:opacity-50"
                                 >
                                     Launch
                                 </button>

@@ -102,7 +102,7 @@ export default function VectorHistoryPage() {
                                     className={`w-full flex items-center justify-between p-4 text-left transition hover:bg-bg-elevated ${selectedRun?._id === run._id ? 'bg-bg-elevated border-l-2 border-l-zinc-400' : 'border-l-2 border-l-transparent'}`}
                                 >
                                     <div className="flex items-center gap-4">
-                                        <div className={`p-2 rounded-full ${run.status === 'success' ? 'bg-emerald-500/10 text-emerald-500' : run.status === 'partial_error' ? 'bg-zinc-500/10 text-zinc-400' : 'bg-rose-500/10 text-rose-500'}`}>
+                                        <div className={`p-2 rounded-full ${run.status === 'success' ? 'bg-status-success-bg text-status-success-text' : run.status === 'partial_error' ? 'bg-zinc-500/10 text-zinc-400' : 'bg-status-error-bg text-status-error-text'}`}>
                                             {run.status === 'success' ? <CheckCircle2 className="h-4 w-4" /> :
                                                 run.status === 'partial_error' ? <AlertCircle className="h-4 w-4" /> :
                                                     <XCircle className="h-4 w-4" />}
@@ -152,7 +152,7 @@ export default function VectorHistoryPage() {
                         <div className="p-4 border-b border-border-subtle grid grid-cols-2 gap-4">
                             <div>
                                 <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1">Status</div>
-                                <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium ${selectedRun.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' : selectedRun.status === 'partial_error' ? 'bg-zinc-500/10 text-zinc-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                                <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium ${selectedRun.status === 'success' ? 'bg-status-success-bg text-status-success-text' : selectedRun.status === 'partial_error' ? 'bg-zinc-500/10 text-zinc-400' : 'bg-status-error-bg text-status-error-text'}`}>
                                     {selectedRun.status === 'success' ? <CheckCircle2 className="h-3.5 w-3.5" /> : selectedRun.status === 'partial_error' ? <AlertCircle className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
                                     <span className="capitalize">{selectedRun.status.replace('_', ' ')}</span>
                                 </div>
@@ -201,7 +201,7 @@ export default function VectorHistoryPage() {
                                 {selectedRun.errors && selectedRun.errors.length > 0 ? (
                                     <div className="space-y-2">
                                         {selectedRun.errors.map((error, i) => (
-                                            <div key={i} className="p-2 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20 break-words">
+                                            <div key={i} className="p-2 rounded bg-status-error-bg text-status-error-text border border-status-error-border break-words">
                                                 {error}
                                             </div>
                                         ))}

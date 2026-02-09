@@ -51,6 +51,7 @@ import {
     SelectableRow,
     ContextMenu,
     Breadcrumbs,
+    BreadcrumbOverridesProvider,
 } from "@numezis/ui/components/design-system";
 
 import { DocCard, DocCode, DocRules, DocSection } from "../../components/DocBlocks";
@@ -381,7 +382,9 @@ export default function DesignSystemComponentsPage() {
                         </div>
                     )}
                 >
-                    <Breadcrumbs />
+                    <BreadcrumbOverridesProvider>
+                        <Breadcrumbs />
+                    </BreadcrumbOverridesProvider>
                 </DocCard>
                 <DocCode
                     code={`<BreadcrumbOverridesProvider>

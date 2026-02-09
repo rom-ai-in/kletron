@@ -37,10 +37,10 @@ export const defaultBottomItems: ActivityBarItem[] = [
 
 function getBadgeColor(variant: ActivityBarItem['badgeVariant']) {
     switch (variant) {
-        case 'info': return 'bg-emerald-500';
-        case 'success': return 'bg-emerald-500';
-        case 'warning': return 'bg-amber-500';
-        case 'error': return 'bg-rose-500';
+        case 'info': return 'bg-status-info';
+        case 'success': return 'bg-status-success';
+        case 'warning': return 'bg-status-warning';
+        case 'error': return 'bg-status-error';
         default: return 'bg-[var(--activitybar-badge-bg)]';
     }
 }
@@ -88,7 +88,7 @@ export function ActivityBar({
                 )}
 
                 {/* Tooltip on hover */}
-                <div className="absolute left-full ml-2 px-2 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs text-zinc-200 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                <div className="absolute left-full ml-2 px-2 py-1 rounded bg-bg-surface border border-border-subtle text-xs text-text-primary whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
                     {item.label}
                 </div>
             </div>

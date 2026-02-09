@@ -1,79 +1,830 @@
-# Numezis Code (TypeScript LangGraph)
+# Numezis Code
 
-This repo houses a **Node/TypeScript LangGraph multi-agent pipeline** backed by a local MCP server. `npm run dev` starts the MCP server, LangGraph dev server, and the Next.js UI.
+**A TypeScript LangGraph multi-agent pipeline for AI-powered code analysis and generation, backed by a local MCP (Model Context Protocol) server.**
 
-## Architecture
+Numezis Code provides multiple interfaces — a Next.js web dashboard, an Electron desktop app, and an interactive CLI — to orchestrate AI agents that can inspect, analyze, and modify codebases through a rich set of developer tools.
 
-- **Agent core** (`packages/agent-core`): Workflow orchestration + agent tooling.
-- **Server services** (`packages/server`): DB/auth/LLM config, vector search, agent graph execution.
-- **Shared contracts** (`packages/shared`): Types + schemas used across UI and server.
-- **UI** (`packages/ui`) + **Web app** (`apps/web`): Next.js UI + App Router APIs.
-- **MCP Server** (`apps/mcp-server`): All inspection/editing actions are routed through the MCP server.
+---
 
-### Pipeline outputs (written via MCP)
+## Table of Contents
 
-Artifacts are written into the target repo under `.numezis/`:
+- [Architecture Overview](#architecture-overview)
+- [Monorepo Structure](#monorepo-structure)
+  - [Applications](#applications)
+  - [Shared Packages](#shared-packages)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Configuration](#configuration)
+  - [Running the Project](#running-the-project)
+- [Applications](#applications-in-depth)
+  - [Web App (apps/web)](#web-app-appsweb)
+  - [Desktop App (apps/desktop)](#desktop-app-appsdesktop)
+  - [MCP Server (apps/mcp-server)](#mcp-server-appsmcp-server)
+  - [CLI (apps/cli)](#cli-appscli)
+- [Packages](#packages-in-depth)
+  - [agent-core](#agent-core)
+  - [server](#server)
+  - [shared](#shared)
+  - [ui](#ui)
+  - [mcp-client](#mcp-client)
+  - [bridge](#bridge)
+- [MCP Tools Reference](#mcp-tools-reference)
+- [Agent Workflows](#agent-workflows)
+- [API Routes Reference](#api-routes-reference)
+- [Environment Variables](#environment-variables)
+- [Scripts Reference](#scripts-reference)
+- [Contributing](#contributing)
+- [Troubleshooting](#troubleshooting)
 
-- `.numezis/meta.json`
-- `.numezis/tasks.json`
-- `.numezis/report.md`
+---
 
-### Next.js agent dashboard (Tailwind-powered)
+## Architecture Overview
 
-- `apps/web/app/page.tsx` renders a staged chat UI that submits to `/api/chat`.
-- `/api/chat` reuses the same Phase 1..4 logic and returns timeline events, meta/findings/tasks, and the final report summary.
-- The graph dropdown now exposes "Simple ReAct agent" as a quick alternative; the same graph is registered in `langgraph.json` so LangGraph can run it locally.
-- The sidebar exposes `/api/tools/*` metadata so you can click any MCP tool and see the raw `apps/mcp-server/tools` implementation.
-- The UI now uses Tailwind CSS (see `apps/web/tailwind.config.js`, `apps/web/postcss.config.js`, `apps/web/app/globals.css`) for the Cursor-style layout.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        User Interfaces                          │
+│  ┌──────────┐    ┌───────────────┐    ┌──────────────────────┐  │
+│  │   CLI    │    │  Web (Next.js)│    │ Desktop (Electron)   │  │
+│  └────┬─────┘    └───────┬───────┘    └──────────┬───────────┘  │
+│       │                  │                       │              │
+├───────┴──────────────────┴───────────────────────┴──────────────┤
+│                     Shared Packages                             │
+│  ┌────────────┐  ┌────────┐  ┌────────┐  ┌────┐  ┌──────────┐  │
+│  │ agent-core │  │ server │  │ shared │  │ ui │  │mcp-client│  │
+│  └─────┬──────┘  └───┬────┘  └────────┘  └────┘  └────┬─────┘  │
+│        │             │                                 │        │
+├────────┴─────────────┴─────────────────────────────────┴────────┤
+│                      MCP Server (port 9000)                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────────┐  │
+│  │File Tools│  │Git Tools │  │Code Tools│  │Web/GitHub Tools│  │
+│  └──────────┘  └──────────┘  └──────────┘  └────────────────┘  │
+├─────────────────────────────────────────────────────────────────┤
+│                    External Services                            │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐   │
+│  │ Supabase │  │  Stripe  │  │ LLM APIs │  │ GitHub API    │   │
+│  │ (DB/Auth)│  │(Billing) │  │(AI/Embed)│  │               │   │
+│  └──────────┘  └──────────┘  └──────────┘  └───────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-## Setup
+The system follows a layered architecture:
 
-1. Install Node dependencies:
-   ```bash
-   npm install
-   ```
-2. Configure `.env` (copy from `env.example`) with your Azure OpenAI credentials.
-   Then set the repository in **Configuration > Repository Settings** (writes `config/config.json`).
-3. Start MCP + LangGraph dev server (which now also launches the Next.js UI):
-   ```bash
-   npm run dev
-   ```
-   This reclaims ports `9000` (MCP) and `8080` (LangGraph dev), launches both services, and waits for readiness.
-   MCP runs over SSE at `http://localhost:9000/sse` (the LangGraph graph connects via `MCP_URL`).
-   The command also spins up `npm run dev:web` automatically and waits for `http://localhost:3000` to respond before reporting success.
+1. **User Interfaces** — Three ways to interact: web dashboard, desktop app, or CLI.
+2. **Shared Packages** — Common logic for agent execution, backend services, types, and UI components.
+3. **MCP Server** — The single tool provider. All file, git, and code operations go through MCP.
+4. **External Services** — Supabase (database/auth), Stripe (billing), LLM providers, and GitHub.
 
-4. (Optional) Start the Next.js UI separately if you need to keep it running alone:
-   ```bash
-   npm run dev:web
-   ```
-   When you already run `npm run dev`, the UI is started for you so you can just visit http://localhost:3000 to chat with the LangGraph pipeline. This command is only needed if you want the UI without the backend services.
+---
 
-## Running the Agent
+## Monorepo Structure
+
+This project uses **npm workspaces** to manage a TypeScript monorepo.
+
+```
+numezis-coder-mcp/
+├── apps/
+│   ├── web/              # Next.js 14 web dashboard
+│   ├── desktop/          # Electron macOS desktop app
+│   ├── mcp-server/       # MCP tool server
+│   └── cli/              # Interactive CLI
+├── packages/
+│   ├── agent-core/       # LangGraph agent execution engine
+│   ├── server/           # Backend services (DB, auth, LLM, billing)
+│   ├── shared/           # Shared types and Zod schemas
+│   ├── ui/               # React component library
+│   ├── mcp-client/       # MCP protocol client
+│   └── bridge/           # Workspace file/git utilities
+├── docs/                 # Additional documentation
+├── scripts/              # Dev/build orchestration scripts
+├── langgraph.json        # LangGraph configuration
+├── tsconfig.base.json    # Shared TypeScript config
+└── package.json          # Root workspace config
+```
+
+### Applications
+
+| App | Description | Tech Stack | Port |
+|-----|-------------|------------|------|
+| **`apps/web`** | Next.js web dashboard with chat UI, agent graphs, config management | Next.js 14, React 18, Tailwind CSS | 3000 |
+| **`apps/desktop`** | Electron desktop app for macOS with auto-updates | Electron 31, React 18, Vite, Tailwind CSS | — |
+| **`apps/mcp-server`** | Local MCP server providing 28 developer tools | Node.js, MCP SDK, ast-grep, TypeScript API | 9000 |
+| **`apps/cli`** | Interactive command-line REPL for agent workflows | Node.js, TypeScript | — |
+
+### Shared Packages
+
+| Package | Description |
+|---------|-------------|
+| **`packages/agent-core`** | LangGraph ReAct agent runner, deep research workflow, repo scanner agent, MCP tool wrappers, skills system |
+| **`packages/server`** | Backend services: Supabase DB, auth, LLM config, vector/embedding, token usage, Stripe billing |
+| **`packages/shared`** | Shared TypeScript types, Zod schemas, graph catalog, chain config builders |
+| **`packages/ui`** | 50+ React components: agent panels, graph editor, config views, design system |
+| **`packages/mcp-client`** | MCP client singleton supporting SSE and stdio transports |
+| **`packages/bridge`** | Workspace utilities: file I/O, git operations, path resolution |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Node.js** >= 20
+- **npm** >= 9 (for workspace support)
+- **Git**
+- **macOS** (for the desktop app; web/CLI work on any platform)
+
+### Installation
+
+```bash
+git clone <repo-url> numezis-coder-mcp
+cd numezis-coder-mcp
+npm install
+```
+
+### Configuration
+
+1. **Environment variables** — Copy `env.example` to `.env` and fill in your credentials (see [Environment Variables](#environment-variables)).
+
+2. **Repository settings** — Set the target repository path in **Configuration > Repository Settings** within the web UI. This writes to `config/config.json` (root) and `apps/web/config/config.json`.
+
+3. **LLM provider** — Configure your preferred LLM provider (Azure OpenAI, OpenAI, Anthropic, Google Gemini, Ollama, or LM Studio) through the web UI at `/app/config/llm`.
+
+4. **Embeddings** — Configure embeddings for vector search at `/app/config/embeddings`.
+
+### Running the Project
+
+| Command | What it does |
+|---------|-------------|
+| `npm run dev` | Starts MCP server (9000), LangGraph dev server (8080), and Next.js UI (3000) |
+| `npm run dev:web` | Starts only the Next.js web app on port 3000 |
+| `npm run dev:desktop` | Starts the Electron desktop app in dev mode |
+| `npm start` | Starts the MCP server and interactive CLI |
+
+The default development workflow:
+
+```bash
+npm run dev
+# Open http://localhost:3000 in your browser
+```
+
+---
+
+## Applications In-Depth
+
+### Web App (`apps/web`)
+
+The web app is a **Next.js 14 App Router** application serving as the primary dashboard for interacting with the AI agent pipeline.
+
+#### Key Features
+
+- **Chat interface** — Conversational UI for interacting with AI agents
+- **Agent graphs** — Visual editor for creating and managing multi-step agent workflows
+- **Deep agent** — Advanced multi-phase research workflows
+- **Campaigns** — Batch execution of agent workflows across targets
+- **Vector search** — Semantic code search powered by embeddings
+- **Context management** — Configure what context the agents receive
+- **Drift detection** — Detect code drift and changes
+- **Configuration hub** — Manage LLM providers, embeddings, tools, and workspaces
+- **Design system** — Built-in component documentation
+
+#### Page Routes
+
+| Route | Description |
+|-------|-------------|
+| `/` | Landing/marketing page |
+| `/auth/*` | Authentication (login, register, reset password, IDE auth) |
+| `/app/` | Main dashboard |
+| `/app/explore` | Explore view |
+| `/app/workbench` | Interactive workbench |
+| `/app/deep-agent` | Deep research agent interface |
+| `/app/context` | Context management |
+| `/app/llm-config` | LLM configuration (alternate route) |
+| `/app/history` | Execution history |
+| `/app/runs/[id]` | Run details |
+| `/app/changes` | Code changes view |
+| `/app/vectors` | Vector search interface |
+| `/app/campaigns` | Campaign management |
+| `/app/agent-graphs` | Agent graph editor |
+| `/app/config/*` | Configuration (AI, LLM, embeddings, context, tools, graphs, workspace) |
+| `/app/account/*` | Account management (billing, notifications, privacy, security) |
+| `/design-system` | Design system documentation (with sub-tabs: components, patterns, foundation, agent, portal, mac-app) |
+| `/design-system/ide` | IDE-specific design system |
+| `/pricing` | Pricing page |
+| `/legal/*` | Legal pages (terms, privacy, GDPR, cookies) |
+
+#### Authentication
+
+- **Provider**: Supabase Auth (server-side)
+- **Middleware**: Protects `/app/*` routes, redirects unauthenticated users to `/auth/login` with a `redirect` query param
+- **CORS**: Configurable allowlist for `/api/*` routes via `NUMEZIS_CORS_ALLOWLIST` (defaults to localhost origins in dev)
+- **IDE auth**: Supports device-based auth flow for IDE extensions via `/auth/ide-*` routes
+- **Dev bypass**: Auth is bypassed in non-production by default. Set `NUMEZIS_AUTH_BYPASS=false` to enforce auth in dev, or `=true` to explicitly bypass. API routes handle their own auth internally.
+
+#### Styling
+
+- **Tailwind CSS** with a custom design token system
+- **CSS variables** for theming: `--bg-app`, `--bg-surface`, `--bg-elevated`, `--text-primary`, `--border-subtle`, etc.
+- **Dark mode** optimized (Cursor/VS Code-inspired aesthetic)
+
+---
+
+### Desktop App (`apps/desktop`)
+
+A **macOS Electron desktop application** providing a native-like experience for interacting with Numezis Code.
+
+#### Key Features
+
+- **Chat interface** — Agent conversation UI (mirrors web app)
+- **Workspace management** — Native folder picker for selecting workspaces
+- **File system access** — Direct read/write to workspace files
+- **Git integration** — Status, commit, branch, and clone operations
+- **Auto-updates** — Automatic update checking and installation from `updates.numezis.com`
+- **Deep linking** — `numezis-code://` protocol handler for auth callbacks and navigation
+- **VS Code integration** — Open files/folders directly in VS Code
+
+#### Build Configuration
+
+| Property | Value |
+|----------|-------|
+| App ID | `com.numezis.desktop` |
+| Product Name | Numezis Desktop |
+| Category | Developer Tools |
+| Targets | DMG, ZIP |
+| Hardened Runtime | Enabled |
+| Notarization | Post-sign via `scripts/notarize.cjs` |
+| Auto-update URL | `https://updates.numezis.com/desktop` |
+
+#### IPC API
+
+The desktop app exposes a `numezis` API to the renderer process via Electron's `contextBridge`:
+
+- **Workspace**: `selectWorkspace`, `setWorkspace`, `getWorkspace`
+- **App**: `openExternal`, `openInVSCode`, `getVersion`
+- **Updates**: `getUpdateStatus`, `checkForUpdates`, `restartToUpdate`
+- **File System**: `listFiles`, `readFile`, `writeFile`, `applyFileChange`
+- **Git**: `status`, `commit`, `createBranch`, `checkout`, `clone`
+
+#### Building for Distribution
+
+```bash
+npm run build:desktop    # Build the app
+cd apps/desktop
+npm run dist:mac         # Create DMG for macOS
+npm run publish:mac      # Build and publish update
+```
+
+---
+
+### MCP Server (`apps/mcp-server`)
+
+The MCP server is the **single tool provider** for all repository operations. It exposes 28 tools via the Model Context Protocol, accessible over SSE (HTTP) or stdio.
+
+#### Transport Modes
+
+| Mode | Endpoint | Use Case |
+|------|----------|----------|
+| **SSE** | `http://localhost:9000/sse` | Web app, agents |
+| **Stdio** | Standard input/output | LM Studio, external tools |
+
+#### Security Features
+
+- Path validation — all operations are confined to the configured workspace root
+- Dotfile protection — writes to dotfiles are blocked (except `.gitignore`, `.npmignore`)
+- File size limits — 256KB max for write operations
+- URL allowlist — `fetch_url` only accesses domains in `fetchAllowlist`
+
+#### Configuration
+
+The server reads the root-level `config/config.json` (via `apps/mcp-server/config.js`) for:
+- `workingFolder` — default repository root
+- `workspaceRoots` — array of allowed workspace directories
+- `fetchAllowlist` — allowed domains for URL fetching
+
+---
+
+### CLI (`apps/cli`)
+
+An interactive command-line REPL for running agent workflows directly from the terminal.
 
 ```bash
 npm start
+# Starts MCP server + interactive CLI
+# Type your prompt, press Enter to execute
+# Type "exit" to quit
 ```
 
-`npm start` frees ports `9000` / `8080`, launches the MCP server (MCP tooling) on port `9000`, and then runs the interactive CLI (`apps/cli/src/index.ts`). Type `exit` to quit.
+The CLI uses `@numezis/agent-core` for workflow execution and `@numezis/server` for backend services.
 
+---
 
-For iterative development, use `npm run dev`. It reclaims ports 9000/8080, launches `mcp-server`, and starts `@langchain/langgraph-cli dev` on port 8080.
+## Packages In-Depth
+
+### agent-core
+
+The agent execution engine built on **LangChain** and **LangGraph**.
+
+#### Components
+
+| Module | Purpose |
+|--------|---------|
+| `reactAgentRunner.ts` | Core streaming ReAct agent executor with token tracking |
+| `simpleReactGraph.ts` | Simple single-phase LangGraph workflow |
+| `workflows.ts` | Workflow orchestration using agent graph services |
+| `tools/mcpTools.ts` | LangChain tool wrappers for all MCP server tools |
+| `agents/repoScannerAgent.ts` | Repository analysis agent (structure, tech stack, "project soul") |
+| `skills/` | Skills system — loader, registry, types |
+| `deepResearch/` | Multi-phase deep research workflow |
+
+#### Key Exports
+
+- `streamReactAgentMessages()` — Streams ReAct agent execution with abort support and token usage tracking
+- `runWorkflow()` — Executes agent graphs loaded from database
+- `allMcpTools` — Array of LangChain-compatible tools wrapping all MCP server tools
+
+---
+
+### server
+
+Backend services providing database access, authentication, LLM configuration, and business logic.
+
+#### Services (30+ modules)
+
+| Category | Services |
+|----------|----------|
+| **Agent** | ReActEngine, ConversationService, SafeEditGate |
+| **Agent Graphs** | Execution, runtime, state management |
+| **Audit** | Chain executor, context, drift analysis |
+| **Infrastructure** | Vector, embedding, indexing, token usage tracking |
+| **Business** | Subscription, Stripe, workspace, user management |
+| **Config** | LLM provider abstraction, MongoDB persistence |
+
+#### LLM Providers Supported
+
+Valid providers (defined in `packages/server/src/llm.ts`):
+
+| Provider ID | Implementation | Description |
+|-------------|---------------|-------------|
+| `azure` | `AzureChatOpenAI` | Azure OpenAI Service |
+| `openai` | `ChatOpenAI` | OpenAI API |
+| `claude` | `ChatAnthropic` | Anthropic Claude |
+| `gemini` | `ChatGoogleGenerativeAI` | Google Gemini |
+| `lmstudio` | `ChatOpenAI` (custom baseURL) | LM Studio local server |
+| `ollama` | `ChatOllama` | Ollama local models |
+
+---
+
+### shared
+
+Shared TypeScript types and Zod schemas used across all packages.
+
+- `AgentWorkflowResult`, `AgentWorkflowUpdate` — workflow execution types
+- `TimelineEvent`, `AgentEvent` — event streaming types
+- `AuditChain`, `AuditStageConfig` — multi-stage chain types
+- `Finding`, `Claim`, `Task` — audit domain types
+- `graphCatalog` — predefined graph configurations
+- LLM and embedding configuration schemas
+
+---
+
+### ui
+
+A React component library with 50+ components organized into:
+
+| Category | Components |
+|----------|------------|
+| **Agent** | Agent panel, conversation, tool logs, metrics display |
+| **Agent Graphs** | Graph editor, visualization, node configuration |
+| **Config** | AI settings, LLM config, embedding config views |
+| **Context** | Context visualization, tracing |
+| **Drift** | Drift analysis UI |
+| **Design System** | Buttons, modals, tabs, inputs, cards, badges, etc. |
+| **Hooks** | Ghost text, LLM health, subscription status |
+| **Tokens** | Design tokens for colors, typography, spacing |
+
+---
+
+### mcp-client
+
+A singleton MCP client supporting both SSE and stdio transports.
+
+- `McpClient.getInstance()` — gets or creates the client instance
+- `callTool(name, args)` — calls an MCP tool by name
+- `listTools()` — lists all available MCP tools
+- Auto-initializes vector indexing services on connection
+- `semantic_code_search` is intercepted at the client level and routed to the vector service directly (bypasses MCP)
+
+**Transport selection:**
+- If `MCP_URL` is set → uses SSE transport (connects to the URL)
+- Otherwise → uses stdio transport (spawns `apps/mcp-server/server.js --mcp` as a child process)
+
+---
+
+### bridge
+
+Workspace utilities for file system and Git operations.
+
+**Workspace:**
+- `getWorkspaceName(path)` — extract workspace name
+- `resolveWorkspacePath(workspace, target)` — resolve a path within a workspace
+- `getWorkspaceInfo(path)` — workspace metadata
+
+**File System:**
+- `listFiles(workspace, relativePath, depth, limit)` — list files (default depth: 2, limit: 500)
+- `readFile(workspace, relativePath)` — read file contents
+- `writeFile(workspace, relativePath, content)` — write file
+- `applyFileChange(workspace, relativePath, newContent)` — apply file change
+
+**Git:**
+- `getGitStatus(workspace)` — git status information
+- `gitCommitAll(workspace, message)` — commit all changes
+- `gitCreateBranch(workspace, branchName)` — create a branch
+- `gitCheckout(workspace, branchName)` — checkout a branch
+- `gitCloneRepo(repoUrl, targetRoot?, branch?)` — clone a repository
+
+---
+
+## MCP Tools Reference
+
+The MCP server exposes **28 tools** organized by category. All tools are registered in `buildAllTools()` in `apps/mcp-server/server.js`.
+
+### File Operations (4 tools)
+
+| Tool | Description |
+|------|-------------|
+| `list_files` | List repository files with configurable depth |
+| `read_file` | Read entire file contents |
+| `read_file_range` | Read specific line range from a file |
+| `write_file` | Write file with security checks (blocks dotfiles, 256KB limit) |
+
+### Code Search & Navigation (8 tools)
+
+| Tool | Description |
+|------|-------------|
+| `search_code` | Text/regex search across the repository |
+| `structural_search` | AST pattern matching via ast-grep (TS/JS/Python) |
+| `symbols_list` | List top-level symbols from TS/JS files (AST-based) |
+| `find_symbol` | Find symbols by name substring |
+| `go_to_definition` | TypeScript/JavaScript definition lookup |
+| `references` | Find all references to a symbol |
+| `locate_ui_feature` | Multi-query search for UI/UX features |
+| `bootstrap_context` | Load high-signal project context files (README, package.json, architecture docs) |
+
+### Git Operations (4 tools)
+
+| Tool | Description |
+|------|-------------|
+| `git_log` | List recent commits (optionally filtered by file) |
+| `git_diff` | Show diff between refs or staged changes |
+| `git_grep` | Search tracked files using git grep |
+| `git_blame` | Show blame for file/line range |
+
+### Repository Analysis (3 tools)
+
+| Tool | Description |
+|------|-------------|
+| `repo_metrics` | Compute language/file counts and sizes |
+| `describe_structure` | Summarize repository structure (packages, folders, entrypoints) |
+| `dependency_info` | Summarize npm/yarn dependencies and scripts |
+
+### Web & External APIs (3 tools)
+
+| Tool | Description |
+|------|-------------|
+| `web_search` | Web search via Tavily API (requires `TAVILY_API_KEY`) |
+| `fetch_url` | Fetch URL content (HTTPS only, allowlisted domains) |
+| `github_api` | Query GitHub REST API (issues, PRs, releases) |
+
+### Utility (1 tool)
+
+| Tool | Description |
+|------|-------------|
+| `todo_search` | Find TODO/FIXME/HACK markers in code |
+
+### Skills System (2 tools)
+
+| Tool | Description |
+|------|-------------|
+| `load_skill` | Load a skill from `.agent/skills/` directory |
+| `list_skills` | List available agent skills |
+
+### Compatibility Shims (3 tools)
+
+| Tool | Description |
+|------|-------------|
+| `str_replace_editor` | Read-only compatibility shim for editor operations |
+| `execute_bash` | Safe emulation of minimal shell subset (find/grep/rg/ls/cat) |
+| `output_format` | Compatibility shim for output formatting |
+
+> **Note:** `semantic_code_search` is not an MCP server tool — it is handled at the `@numezis/mcp-client` level, which uses the vector service directly to bypass MCP for semantic search operations.
+
+---
+
+## Agent Workflows
+
+### Simple ReAct Agent
+
+A single-phase ReAct (Reasoning + Acting) agent with access to all MCP tools. Best for straightforward tasks like code inspection, search, and simple edits.
+
+- **System prompt:** `"You are a helpful AI assistant."`
+- **Tools:** All MCP tools (`allMcpTools`)
+- **State:** `messages`, `userRequest`, `finalAnswer`
+
+```
+START → simple_react → END
+```
+
+### Deep Research Workflow
+
+A multi-phase research workflow using a supervisor-researcher pattern for complex analysis tasks.
+
+```
+START → clarify_with_user → write_research_brief → plan_research → research_supervisor → summarize_findings → final_action_report → END
+```
+
+| Node | Function | Description |
+|------|----------|-------------|
+| `clarify_with_user` | `clarifyWithUser` | Optional clarification with the user |
+| `write_research_brief` | `writeResearchBrief` | Generate research brief from user request |
+| `plan_research` | `planResearch` | Create a structured research plan |
+| `research_supervisor` | Supervisor subgraph | Coordinates multiple researcher sub-agents using `conductResearchTool` |
+| `summarize_findings` | `summarizeFindings` | Aggregate and summarize all findings |
+| `final_action_report` | `generateActionReport` | Generate final actionable report |
+
+**Default configuration** (from `defaultDeepResearchConfig`):
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `allowClarification` | `true` | Whether the clarify phase is enabled |
+| `maxStructuredOutputRetries` | `3` | Max retries for structured LLM output |
+| `maxResearcherIterations` | `4` | Max supervisor iterations |
+| `maxReactToolCalls` | `6` | Max tool calls per researcher sub-agent |
+| `maxConcurrentResearchUnits` | `3` | Max parallel researcher sub-agents |
+
+### Audit Chains
+
+Multi-stage audit workflows that can be configured with:
+- Presets: `FULL_AUDIT`, `SECURITY_DEEP_DIVE`, `I18N_QUALITY_CHAIN`
+- Custom chains with conditional stage skipping
+- Retry logic with fallback LLM providers
+- Cron-based scheduled execution
+
+### Pipeline Outputs
+
+Agent artifacts are written into the target repo under `.numezis/`:
+- `.numezis/meta.json` — metadata and findings
+- `.numezis/tasks.json` — generated tasks
+- `.numezis/report.md` — analysis report
+
+---
+
+## API Routes Reference
+
+The web app exposes **128 API routes**. Here are the key categories:
+
+| Category | Base Path | Key Endpoints |
+|----------|-----------|---------------|
+| **Auth** | `/api/auth/` | `signin`, `signout`, `register`, `me`, `profile`, `api-tokens`, `api-tokens/[id]`, `ide-auth`, `ide-session`, `ide-refresh`, `ide-device/*`, `validate-token`, `reset-password`, `update-password` |
+| **Agent** | `/api/agent/` | `run`, `[id]`, `[id]/chat`, `edits`, `approve`, `reject`, `apply/[runId]`, `diff/[runId]`, `status/[runId]`, `generate-title`, `update-title`, `update-message` |
+| **Agent Graphs** | `/api/agent-graphs/` | CRUD, `[id]/runs`, `[id]/stream` |
+| **Agent Graph Runs** | `/api/agent-graph-runs/` | `[runId]`, `[runId]/nodes`, `[runId]/approvals` |
+| **Chat** | `/api/chat/` | `route`, `stream` |
+| **Campaigns** | `/api/campaigns/` | CRUD, `[id]/execute`, `[id]/pause`, `[id]/resume`, `[id]/cancel`, `[id]/stream`, `[id]/report`, `[id]/runs` |
+| **LLM Config** | `/api/llm-config/` | `provider`, `enable`, `test`, `azure`, `openai`, `claude`, `gemini`, `ollama`, `ollama/test`, `lmstudio`, `lmstudio/models`, `lmstudio/load`, `lmstudio/unload` |
+| **Embeddings** | `/api/embedding-config/` | Config + `test` + per-provider: `azure`, `openai`, `gemini`, `ollama`, `lmstudio`, `voyage` |
+| **Vectors** | `/api/vectors/` | `index`, `search`, `history`, `reindex`, `clear` |
+| **Workspaces** | `/api/workspaces/` | CRUD, `active`, `[id]`, `[id]/select` |
+| **File System** | `/api/fs/` | `read`, `write`, `delete`, `rename`, `mkdir`, `tree`, `search`, `document` |
+| **Editor** | `/api/editor/` | `file/read`, `file/write`, `file/tree`, `state/subscribe` |
+| **Git** | `/api/git/` | `commit-message`, `pr-description` |
+| **Git Diffs** | `/api/git-diffs` | Git diff viewer |
+| **GitHub** | `/api/github/` | `repos`, `clone` |
+| **Tools** | `/api/tools/` | `list`, `[name]`, `execute` |
+| **Runs** | `/api/runs/` | List, `[id]`, `[id]/cancel` |
+| **Run History** | `/api/history/runs` | Run history |
+| **Drift** | `/api/drift/` | `start`, `status`, `results`, `cancel` |
+| **Token Usage** | `/api/token-usage/` | `summary`, `run/[id]`, `campaign/[id]` |
+| **Billing** | `/api/stripe/` | `checkout`, `portal`, `subscription`, `webhook` |
+| **Skills** | `/api/skills/` | List, `[skillId]` |
+| **Audits** | `/api/audits/` | List, `[id]` |
+| **Config** | `/api/config`, `/api/context-config` | App + context configuration |
+| **Repo** | `/api/repo-scan`, `/api/repo/tree` | Repository scanning and tree |
+| **Completions** | `/api/completions` | Code completions |
+| **Validation** | `/api/validation/` | `folder`, `git` |
+| **Preferences** | `/api/user-preferences` | User preferences |
+| **Health** | `/api/health` | Health check |
+
+---
 
 ## Environment Variables
 
-- `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION`, `AZURE_OPENAI_MODEL`, `AZURE_OPENAI_MAX_TOKENS`: Provide your Azure credentials.
-Repository path is configured via **Configuration > Repository Settings** (syncs to `config/config.json`). It is no longer read from environment variables.
+Copy `env.example` to `.env` and fill in your values. See below for all supported variables.
 
-## MCP Tooling
+### Azure OpenAI (default LLM provider)
 
-The TypeScript agent uses the MCP `tools/call` interface through `packages/agent-core/src/tools/mcpTools.ts`. Tools are exposed to the React agent as LangChain tools with `zod` schemas, ensuring all repository interactions are captive to the MCP server.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AZURE_OPENAI_API_KEY` | Yes | Azure OpenAI API key |
+| `AZURE_OPENAI_ENDPOINT` | Yes | Azure OpenAI endpoint URL |
+| `AZURE_OPENAI_DEPLOYMENT` | Yes | Azure OpenAI deployment name |
+| `AZURE_OPENAI_API_VERSION` | Yes | Azure OpenAI API version |
+| `AZURE_OPENAI_MODEL` | Yes | Azure OpenAI model name |
+| `AZURE_OPENAI_MAX_TOKENS` | No | Max tokens per request |
 
-## Notes
+### LM Studio (local models)
 
-- `apps/mcp-server` is the **only** tool provider—no more local filesystem helpers.
-- Old Python scripts, marketing assets, and branding logic were removed in favor of this focused TS stack.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `LMSTUDIO_BASE_URL` | No | LM Studio server URL (default: `http://127.0.0.1:1234/v1`) |
+| `LMSTUDIO_MODEL` | No | Local model name |
+| `LMSTUDIO_API_KEY` | No | API key (default: `lm-studio`) |
+
+### Other LLM Providers
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `LLM_DEFAULT_PROVIDER` | No | Default provider: `azure`, `openai`, `claude`, `gemini`, `lmstudio`, `ollama` |
+| `ANTHROPIC_API_KEY` | No | Anthropic API key (for Claude models) |
+| `GOOGLE_API_KEY` | No | Google GenAI API key (for Gemini models) |
+| `OPENAI_API_KEY` | No | OpenAI API key |
+
+### Supabase (Auth & Database)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anonymous/publishable key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key (server-side, keep secret) |
+
+### MCP & Agent
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `MCP_URL` | No | MCP server URL (default: `http://localhost:9000/sse`) |
+| `MCP_PORT` | No | MCP server port (default: `9000`) |
+| `LANGGRAPH_API_KEY` | No | LangGraph API key |
+| `GRAPH_RECURSION_LIMIT` | No | Override LangGraph recursion limit (default: `50`) |
+| `TOOL_RESULT_EVICT_CHARS` | No | Evict large tool outputs to `.numezis/agent-cache` (chars threshold) |
+| `TOOL_RESULT_PREVIEW_CHARS` | No | Preview chars to keep inline when evicted |
+
+### LangSmith (Tracing)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `LANGSMITH_TRACING` | No | Enable LangSmith tracing (`true`/`false`) |
+| `LANGSMITH_ENDPOINT` | No | LangSmith API endpoint |
+| `LANGSMITH_API_KEY` | No | LangSmith API key |
+| `LANGSMITH_PROJECT` | No | LangSmith project name |
+
+### MongoDB (Config Persistence)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `MONGODB_URI` | No | MongoDB connection URI |
+| `MONGODB_USER` | No | MongoDB username |
+| `MONGODB_PASS` | No | MongoDB password |
+
+### GitHub
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GITHUB_TOKEN` | No | GitHub token for repo listing and cloning private repos |
+| `NUMEZIS_REPOS_DIR` | No | Directory where GitHub repos are cloned |
+
+### Stripe (Billing)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `STRIPE_SECRET_KEY` | No | Stripe secret key |
+| `STRIPE_PUBLISHABLE_KEY` | No | Stripe publishable key |
+| `STRIPE_WEBHOOK_SECRET` | No | Stripe webhook secret |
+| `STRIPE_PRICE_PRO_MONTHLY` | No | Stripe Price ID for Pro monthly |
+| `STRIPE_PRICE_PRO_YEARLY` | No | Stripe Price ID for Pro yearly |
+| `STRIPE_PRICE_TEAM_MONTHLY` | No | Stripe Price ID for Team monthly |
+| `STRIPE_PRICE_TEAM_YEARLY` | No | Stripe Price ID for Team yearly |
+
+### Web Search
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TAVILY_API_KEY` | No | Tavily API key (enables `web_search` MCP tool) |
+
+### Development & Misc
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NUMEZIS_AUTH_BYPASS` | No | `true` to bypass auth, `false` to enforce (defaults to bypass in non-production) |
+| `NUMEZIS_CORS_ALLOWLIST` | No | Comma-separated allowed origins for `/api/*` CORS (defaults to localhost in dev) |
+| `NEXT_PUBLIC_SKIP_AUTH` | No | Skip auth on the client side |
+| `DESIGN_SYSTEM_CODE` | No | Password for design system access |
+| `NEXT_PUBLIC_DESIGN_SYSTEM_PROTECT` | No | `false` to disable design system password protection |
+
+---
+
+## Scripts Reference
+
+### Root Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start all services (MCP + LangGraph + Web UI) |
+| `npm run dev:web` | Start only the Next.js web app |
+| `npm run dev:desktop` | Start the Electron desktop app |
+| `npm start` | Start MCP server + interactive CLI |
+| `npm run build` | Build the web app (with context check) |
+| `npm run build:web` | Build the web app (with context check) |
+| `npm run build:desktop` | Build the Electron desktop app |
+| `npm run start:web` | Start the web app in production mode |
+| `npm run start:desktop` | Start the desktop app |
+| `npm run lint` | Run ESLint |
+| `npm run typecheck` | Run TypeScript type checking |
+| `npm run test:unit` | Run unit tests (Vitest) |
+| `npm run test` | Run typecheck + unit tests |
+
+### Port Allocation
+
+| Port | Service |
+|------|---------|
+| 3000 | Next.js web app |
+| 8080 | LangGraph dev server |
+| 9000 | MCP server (SSE) |
+
+---
+
+## Contributing
+
+See `CONTRIBUTING.md` for full guidelines. Quick summary:
+
+| Area | Location |
+|------|----------|
+| UI components / hooks | `packages/ui` |
+| Shared types & schemas | `packages/shared` |
+| Server logic (DB, auth, vector, LLM) | `packages/server` |
+| Agent graphs / tools / workflows | `packages/agent-core` |
+| MCP client wrapper | `packages/mcp-client` |
+| Next.js routes & pages | `apps/web` |
+| CLI | `apps/cli` |
+| MCP server tools | `apps/mcp-server` |
+
+**Key rules:**
+- UI code must not import runtime server modules (types-only imports are fine).
+- The `shared` package stays pure — no filesystem, network, or DB code.
+- Prefer importing from `@numezis/*` aliases instead of deep relative paths.
+
+---
 
 ## Troubleshooting
 
-- If the ReAct agent fails to reach MCP, restart via `npm start` so `scripts/start-all.ts` can re-launch `mcp-server` on port `9000` (it also checks for stuck processes using `lsof`).
-- When updating dependencies or LangGraph versions, re-run `npm install` and restart both the MCP server and `npm start`.
+### MCP Server Connection Issues
+
+If the ReAct agent fails to reach the MCP server:
+
+```bash
+npm start
+# scripts/start-all.ts will re-launch mcp-server on port 9000
+# It also checks for stuck processes using lsof
+```
+
+### Port Conflicts
+
+The dev script automatically attempts to reclaim ports 9000 and 8080. If you still have conflicts:
+
+```bash
+lsof -ti:9000 | xargs kill -9
+lsof -ti:8080 | xargs kill -9
+```
+
+### Dependency Updates
+
+After updating dependencies or LangGraph versions:
+
+```bash
+npm install
+# Restart both MCP server and dev
+npm run dev
+```
+
+### Desktop App Build Issues
+
+For macOS notarization issues, ensure you have:
+- A valid Apple Developer certificate
+- `APPLE_ID` and `APPLE_ID_PASSWORD` environment variables set
+- Xcode Command Line Tools installed
+
+---
+
+## Additional Documentation
+
+| Document | Path | Description |
+|----------|------|-------------|
+| Architecture | `docs/architecture.md` | Detailed architecture overview |
+| Context Configuration | `docs/context-configuration.md` | Context graph configuration |
+| Design System | `docs/DESIGN_SYSTEM.md` | UI design system guidelines |
+| VS Code Protocol | `docs/vscode-protocol.md` | VS Code extension backend protocol |
+| VS Code UI | `docs/vscode-ui.md` | VS Code extension UI design |
+| Audit Chains | `.agent/workflows/create-audit-chain.md` | How to create audit chains |
+
+---
+
+## License
+
+Private — All rights reserved.

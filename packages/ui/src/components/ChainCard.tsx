@@ -97,7 +97,7 @@ export function ChainCard({ chain, onView, onEdit, onPause, onStop, onDelete }: 
                 <div className="mt-3">
                     <div className="h-1.5 overflow-hidden rounded-full bg-bg-elevated">
                         <div
-                            className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all duration-500 ease-out"
+                            className="h-full bg-gradient-to-r from-status-success to-status-info transition-all duration-500 ease-out"
                             style={{ width: `${progress}%` }}
                         />
                     </div>
@@ -109,12 +109,12 @@ export function ChainCard({ chain, onView, onEdit, onPause, onStop, onDelete }: 
 
 function ChainStatusBadge({ status }: { status: ChainStatus }) {
     const styles: Record<ChainStatus, string> = {
-        COMPLETED: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-        FAILED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
-        RUNNING: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+        COMPLETED: "bg-status-success-bg text-status-success-text border-status-success-border",
+        FAILED: "bg-status-error-bg text-status-error-text border-status-error-border",
+        RUNNING: "bg-status-success-bg text-status-success-text border-status-success-border",
         PENDING: "bg-bg-elevated text-text-muted border-border-subtle",
-        PAUSED: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-        CANCELLED: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
+        PAUSED: "bg-status-warning-bg text-status-warning-text border-status-warning-border",
+        CANCELLED: "bg-text-muted/10 text-text-secondary border-border-subtle",
     };
 
     return (

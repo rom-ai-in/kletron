@@ -41,21 +41,21 @@ function getChipIcon(variant: ChipVariant): React.ReactNode {
 function getChipStyles(variant: ChipVariant): string {
     switch (variant) {
         case 'file':
-            return 'bg-zinc-500/10 text-zinc-300 border-zinc-500/30';
+            return 'bg-text-muted/10 text-text-secondary border-border-subtle';
         case 'folder':
-            return 'bg-amber-500/10 text-amber-300 border-amber-500/30';
+            return 'bg-status-warning-bg text-status-warning-text border-status-warning-border';
         case 'agent':
-            return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
+            return 'bg-status-success-bg text-status-success-text border-status-success-border';
         case 'model':
-            return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
+            return 'bg-status-success-bg text-status-success-text border-status-success-border';
         case 'tag':
-            return 'bg-rose-500/10 text-rose-300 border-rose-500/30';
+            return 'bg-status-error-bg text-status-error-text border-status-error-border';
         case 'mention':
-            return 'bg-zinc-500/10 text-zinc-300 border-zinc-500/30';
+            return 'bg-text-muted/10 text-text-secondary border-border-subtle';
         case 'link':
-            return 'bg-zinc-500/10 text-zinc-300 border-zinc-500/30';
+            return 'bg-text-muted/10 text-text-secondary border-border-subtle';
         default:
-            return 'bg-zinc-800 text-zinc-300 border-zinc-700';
+            return 'bg-bg-elevated text-text-secondary border-border-subtle';
     }
 }
 
@@ -99,7 +99,7 @@ export function ContextChips({
                                     e.stopPropagation();
                                     onDismiss(chip.id);
                                 }}
-                                className="flex-shrink-0 ml-0.5 p-0.5 rounded-full hover:bg-white/10 transition-colors"
+                                className="flex-shrink-0 ml-0.5 p-0.5 rounded-full hover:bg-state-active transition-colors"
                             >
                                 <X className="w-2.5 h-2.5" />
                             </button>

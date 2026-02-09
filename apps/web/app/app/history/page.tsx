@@ -42,13 +42,13 @@ const typeOptions: Array<{ id: FilterType; label: string }> = [
 const statusOptions = ["all", "RUNNING", "COMPLETED", "FAILED", "CANCELLED", "PAUSED", "PENDING", "active", "archived"] as const;
 
 const statusStyles: Record<string, string> = {
-  RUNNING: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  COMPLETED: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  FAILED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+  RUNNING: "bg-status-warning-bg text-status-warning-text border-status-warning-border",
+  COMPLETED: "bg-status-success-bg text-status-success-text border-status-success-border",
+  FAILED: "bg-status-error-bg text-status-error-text border-status-error-border",
   CANCELLED: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
-  PAUSED: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  PAUSED: "bg-status-info-bg text-status-info-text border-status-info-border",
   PENDING: "bg-zinc-400/10 text-zinc-300 border-zinc-400/20",
-  active: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  active: "bg-status-success-bg text-status-success-text border-status-success-border",
   archived: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
 };
 

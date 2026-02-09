@@ -1,22 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { MarketingHeader, MarketingFooter } from '@numezis/ui/components/design-system';
 
 export default function CookiePolicyPage() {
     return (
         <div className="min-h-screen w-full bg-bg-app">
-            {/* Header */}
-            <header className="fixed top-0 left-0 right-0 z-50 border-b border-border-subtle bg-bg-app/80 backdrop-blur-lg">
-                <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-                    <Link href="/" className="flex items-center gap-2.5">
-                        <span className="text-xl">🧠</span>
-                        <span className="text-sm font-semibold text-text-primary">Numezis Code</span>
-                    </Link>
-                    <Link href="/" className="text-sm text-text-muted hover:text-text-primary transition-colors">
-                        ← Back to Home
-                    </Link>
-                </div>
-            </header>
+            <MarketingHeader LinkComponent={Link} />
 
             {/* Content */}
             <main className="pt-24 pb-16 px-6">
@@ -42,7 +32,7 @@ export default function CookiePolicyPage() {
                             {/* Essential Cookies */}
                             <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-status-success-bg text-status-success-text border border-status-success-border">
                                         Required
                                     </span>
                                     <h3 className="text-sm font-semibold text-text-primary">Essential Cookies</h3>
@@ -84,7 +74,7 @@ export default function CookiePolicyPage() {
                             {/* Functional Cookies */}
                             <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-status-info-bg text-status-info-text border border-status-info-border">
                                         Optional
                                     </span>
                                     <h3 className="text-sm font-semibold text-text-primary">Functional Cookies</h3>
@@ -120,7 +110,7 @@ export default function CookiePolicyPage() {
                             {/* Analytics Cookies */}
                             <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-status-warning-bg text-status-warning-text border border-status-warning-border">
                                         Consent Required
                                     </span>
                                     <h3 className="text-sm font-semibold text-text-primary">Analytics Cookies</h3>
@@ -171,9 +161,9 @@ export default function CookiePolicyPage() {
                             <li><strong>Our cookie banner:</strong> Manage consent for optional cookies when you first visit</li>
                             <li><strong>Account settings:</strong> Toggle analytics preferences (coming soon)</li>
                         </ul>
-                        <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 mt-3">
+                        <div className="p-3 rounded-lg border border-status-warning-border bg-status-warning-bg mt-3">
                             <p className="text-xs text-text-secondary">
-                                <strong className="text-amber-500">Note:</strong> Disabling essential cookies may prevent you from
+                                <strong className="text-status-warning-text">Note:</strong> Disabling essential cookies may prevent you from
                                 logging in or using core features.
                             </p>
                         </div>
@@ -196,22 +186,13 @@ export default function CookiePolicyPage() {
                     <Section title="Contact">
                         <p>
                             For questions about our cookie practices, contact us at{' '}
-                            <a href="mailto:privacy@numezis.com" className="text-emerald-500 hover:underline">privacy@numezis.com</a>.
+                            <a href="mailto:privacy@numezis.com" className="text-status-success-text hover:underline">privacy@numezis.com</a>.
                         </p>
                     </Section>
                 </article>
             </main>
 
-            {/* Footer */}
-            <footer className="py-8 px-6 border-t border-border-subtle">
-                <div className="max-w-4xl mx-auto flex flex-wrap gap-4 justify-center text-xs text-text-muted">
-                    <Link href="/legal/terms" className="hover:text-text-primary">Terms of Service</Link>
-                    <Link href="/legal/privacy" className="hover:text-text-primary">Privacy Policy</Link>
-                    <Link href="/legal/gdpr" className="hover:text-text-primary">GDPR</Link>
-                    <Link href="/legal/cookies" className="hover:text-text-primary">Cookie Policy</Link>
-                    <Link href="/legal/imprint" className="hover:text-text-primary">Imprint</Link>
-                </div>
-            </footer>
+            <MarketingFooter LinkComponent={Link} />
         </div>
     );
 }

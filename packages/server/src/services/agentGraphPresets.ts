@@ -1442,6 +1442,166 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SPECIALIZED AGENT GRAPHS (Coder, Explorer, Planner)
+// Single-node ReAct graphs with tailored tool allowlists and system prompts
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CODER_AGENT_TOOLS = [
+  ...CURSOR_CORE_TOOLS,
+  "write_file",
+  "str_replace_editor",
+];
+
+const EXPLORER_AGENT_TOOLS = [
+  ...CURSOR_RESEARCH_TOOLS,
+  "todo_search",
+  "bootstrap_context",
+  "github_api",
+];
+
+const PLANNER_AGENT_TOOLS = [
+  "list_files",
+  "read_file",
+  "read_file_range",
+  "search_code",
+  "structural_search",
+  "symbols_list",
+  "find_symbol",
+  "go_to_definition",
+  "references",
+  "find_references",
+  "repo_metrics",
+  "dependency_info",
+  "describe_structure",
+  "git_log",
+  "git_diff",
+  "git_grep",
+  "semantic_code_search",
+  "write_todos",
+  "output_format",
+];
+
+const CODER_SYSTEM_PROMPT = [
+  "You are a Coder agent specialized in implementing code changes.",
+  "Your role is to execute tasks from the task queue, write and edit code with minimal diffs, and update task status.",
+  "Focus on: reading code to understand context, then making precise edits.",
+  "Always update task status using write_todos as you progress.",
+  "When writing code, follow existing patterns and conventions found in the repository.",
+  "If the request is multi-step, create and maintain a task queue using write_todos.",
+  TOOL_PREFERENCE_GUIDANCE,
+].join(" ");
+
+const EXPLORER_SYSTEM_PROMPT = [
+  "You are an Explorer agent specialized in codebase discovery and analysis.",
+  "Your role is to investigate code, identify patterns, rules, conventions, and architectural decisions.",
+  "Always provide concrete evidence: cite file paths, line numbers, function names, and code snippets.",
+  "When answering questions, back every claim with specific references from the codebase.",
+  "Discover and report: project structure, dependencies, coding patterns, naming conventions, design guidelines, and potential issues.",
+  "Never modify files. Your output is knowledge, not code changes.",
+  TOOL_PREFERENCE_GUIDANCE,
+].join(" ");
+
+const PLANNER_SYSTEM_PROMPT = [
+  "You are a Planner agent specialized in analyzing requests and producing detailed implementation plans.",
+  "Your role is to: understand the user's request, analyze the relevant codebase, and produce a clear actionable plan.",
+  "Always use write_todos to create a structured task list with specific, ordered tasks.",
+  "Each task should reference concrete files, functions, or modules that need to be changed.",
+  "Assess complexity, identify dependencies between tasks, and flag risks.",
+  "Do NOT edit files or execute commands. Your output is a plan, not an implementation.",
+  TOOL_PREFERENCE_GUIDANCE,
+].join(" ");
+
+export function buildCoderAgentGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
+  const nodes: AgentGraphNode[] = [
+    {
+      id: "coder_react",
+      label: "Coder Agent",
+      react: {
+        systemPrompt: CODER_SYSTEM_PROMPT,
+        userPromptTemplate: [
+          "Mission / question is in `state.mission`.",
+          "Current state:",
+          "{{state}}",
+          "",
+          "Answer by outputting a strict JSON object (generic JSON).",
+        ].join("\n"),
+        toolNames: CODER_AGENT_TOOLS,
+        llmSelection: { provider: "azure" },
+      },
+      output: { schemaId: "generic_json" },
+    },
+  ];
+
+  return {
+    name: "Coder Agent (agent graph)",
+    description: "Specialized agent focused on executing tasks, analyzing code, and writing/editing files.",
+    category: "graph",
+    nodes,
+    edges: [],
+  };
+}
+
+export function buildExplorerAgentGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
+  const nodes: AgentGraphNode[] = [
+    {
+      id: "explorer_react",
+      label: "Explorer Agent",
+      react: {
+        systemPrompt: EXPLORER_SYSTEM_PROMPT,
+        userPromptTemplate: [
+          "Mission / question is in `state.mission`.",
+          "Current state:",
+          "{{state}}",
+          "",
+          "Answer by outputting a strict JSON object (generic JSON).",
+        ].join("\n"),
+        toolNames: EXPLORER_AGENT_TOOLS,
+        llmSelection: { provider: "azure" },
+      },
+      output: { schemaId: "generic_json" },
+    },
+  ];
+
+  return {
+    name: "Explorer Agent (agent graph)",
+    description: "Specialized agent focused on discovering code, identifying patterns, rules, and guidelines with concrete evidence.",
+    category: "graph",
+    nodes,
+    edges: [],
+  };
+}
+
+export function buildPlannerAgentGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
+  const nodes: AgentGraphNode[] = [
+    {
+      id: "planner_react",
+      label: "Planner Agent",
+      react: {
+        systemPrompt: PLANNER_SYSTEM_PROMPT,
+        userPromptTemplate: [
+          "Mission / question is in `state.mission`.",
+          "Current state:",
+          "{{state}}",
+          "",
+          "Answer by outputting a strict JSON object (generic JSON).",
+        ].join("\n"),
+        toolNames: PLANNER_AGENT_TOOLS,
+        llmSelection: { provider: "azure" },
+      },
+      output: { schemaId: "generic_json" },
+    },
+  ];
+
+  return {
+    name: "Planner Agent (agent graph)",
+    description: "Specialized agent focused on preparing detailed plans and task lists by analyzing code and understanding requests.",
+    category: "graph",
+    nodes,
+    edges: [],
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PRESENTATION GENERATOR PRO GRAPH
 // 6-phase pipeline: research → offer_analysis → structure → enrich → create → verify
 // ─────────────────────────────────────────────────────────────────────────────

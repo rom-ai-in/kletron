@@ -121,7 +121,7 @@ export default function ConfigOverviewPage() {
           <ConfigCard
             title="AI Models"
             description="LLM providers & embedding models."
-            icon={<Brain className="h-4 w-4 text-emerald-500" />}
+            icon={<Brain className="h-4 w-4 text-status-success-text" />}
             href="/app/config/llm"
             meta={getAiModelsMeta()}
             highlight
@@ -179,12 +179,12 @@ function ConfigCard({
 }) {
   return (
     <Link href={href} className="group">
-      <Panel className={`p-4 h-full transition-colors group-hover:border-border-strong ${highlight ? "border-emerald-500/30" : ""}`}>
+      <Panel className={`p-4 h-full transition-colors group-hover:border-border-strong ${highlight ? "border-status-success-border" : ""}`}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               {icon}
-              <h2 className={`text-sm font-semibold ${highlight ? "text-emerald-500" : "text-text-primary"}`}>{title}</h2>
+              <h2 className={`text-sm font-semibold ${highlight ? "text-status-success-text" : "text-text-primary"}`}>{title}</h2>
             </div>
             <p className="mt-1 text-xs text-text-secondary">{description}</p>
             <p className="mt-3 text-[11px] text-text-muted">{meta}</p>

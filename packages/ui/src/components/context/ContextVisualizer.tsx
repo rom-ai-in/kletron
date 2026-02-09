@@ -23,12 +23,12 @@ const getNodeIcon = (type: ContextNode['type']) => {
 
 const getNodeColor = (type: ContextNode['type']) => {
     switch (type) {
-        case 'file': return "text-cyan-400 bg-cyan-400/10 border-cyan-500/20";
+        case 'file': return "text-status-info-text bg-status-info-bg border-status-info-border";
         case 'agent': return "text-purple-400 bg-purple-400/10 border-purple-500/20";
-        case 'diff': return "text-amber-400 bg-amber-400/10 border-amber-500/20";
-        case 'conversation': return "text-blue-400 bg-blue-400/10 border-blue-500/20";
-        case 'symbol': return "text-emerald-400 bg-emerald-400/10 border-emerald-500/20";
-        default: return "text-zinc-400 bg-zinc-400/10 border-zinc-500/20";
+        case 'diff': return "text-status-warning-text bg-status-warning-bg border-status-warning-border";
+        case 'conversation': return "text-status-info-text bg-status-info-bg border-status-info-border";
+        case 'symbol': return "text-status-success-text bg-status-success-bg border-status-success-border";
+        default: return "text-text-muted bg-text-muted/10 border-border-subtle";
     }
 };
 
@@ -121,7 +121,7 @@ const FilterButton = ({ active, label, onClick, count }: { active: boolean, labe
             }`}
     >
         {label}
-        <span className={`text-[9px] px-1 rounded-full ${active ? 'bg-primary-main text-white' : 'bg-zinc-800 text-zinc-500'}`}>
+        <span className={`text-[9px] px-1 rounded-full ${active ? 'bg-primary-main text-text-primary' : 'bg-bg-elevated text-text-muted'}`}>
             {count}
         </span>
     </button>

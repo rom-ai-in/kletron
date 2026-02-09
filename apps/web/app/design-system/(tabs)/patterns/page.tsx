@@ -59,8 +59,8 @@ export default function DesignSystemPatternsPage() {
                             </CardHeader>
                         <CardContent>
                             <div className="flex items-center gap-3 mb-3">
-                                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                                    <Zap className="w-5 h-5 text-emerald-400" />
+                                <div className="w-10 h-10 rounded-lg bg-status-success-bg border border-status-success-border flex items-center justify-center">
+                                    <Zap className="w-5 h-5 text-status-success-text" />
                                 </div>
                                 <div>
                                     <p className="text-xs text-text-secondary">Automation</p>

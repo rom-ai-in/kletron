@@ -60,7 +60,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({ onSelect }) => {
                 <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-text-muted" />
                     <input
-                        className="w-full bg-bg-elevated border border-border-strong rounded-md py-2 pl-9 pr-3 text-sm focus:outline-none focus:border-zinc-500 placeholder-text-muted transition-colors"
+                        className="w-full bg-bg-elevated border border-border-strong rounded-md py-2 pl-9 pr-3 text-sm focus:outline-none focus:border-border-strong placeholder-text-muted transition-colors"
                         placeholder={searchType === 'content' ? "Find in files..." : "Go to file..."}
                         value={query}
                         onChange={e => setQuery(e.target.value)}
@@ -71,7 +71,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({ onSelect }) => {
                     <button
                         onClick={() => setSearchType('content')}
                         className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded text-xs font-medium transition-colors ${searchType === 'content'
-                            ? 'bg-zinc-700 text-white'
+                            ? 'bg-state-active text-text-primary'
                             : 'bg-bg-elevated text-text-muted hover:text-text-primary hover:bg-state-hover'
                             }`}
                     >
@@ -81,7 +81,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({ onSelect }) => {
                     <button
                         onClick={() => setSearchType('file')}
                         className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded text-xs font-medium transition-colors ${searchType === 'file'
-                            ? 'bg-zinc-700 text-white'
+                            ? 'bg-state-active text-text-primary'
                             : 'bg-bg-elevated text-text-muted hover:text-text-primary hover:bg-state-hover'
                             }`}
                     >
@@ -111,13 +111,13 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({ onSelect }) => {
                             >
                                 <div className="flex items-center gap-2 text-text-primary overflow-hidden">
                                     <File size={12} className="text-text-muted shrink-0" />
-                                    <span className="truncate font-medium text-xs text-sky-500" title={r.file}>
+                                    <span className="truncate font-medium text-xs text-status-info-text" title={r.file}>
                                         {r.file}
                                     </span>
                                 </div>
                                 {r.matchType === 'content' && (
                                     <div className="mt-1 pl-5 text-xs text-text-secondary truncate font-mono opacity-80 group-hover:opacity-100">
-                                        <span className="text-zinc-500 mr-2 inline-block w-6 text-right select-none border-r border-zinc-700 pr-1">{r.line}</span>
+                                        <span className="text-text-muted mr-2 inline-block w-6 text-right select-none border-r border-border-subtle pr-1">{r.line}</span>
                                         {r.text}
                                     </div>
                                 )}

@@ -335,7 +335,7 @@ export function AgentGraphEditor({
                             className="mt-2 w-[520px] max-w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-secondary"
                             placeholder="Description (optional)"
                         />
-                        {saveError && <div className="mt-2 text-xs text-rose-400">{saveError}</div>}
+                        {saveError && <div className="mt-2 text-xs text-status-error-text">{saveError}</div>}
                     </div>
                     <div className="flex gap-2">
                         <Button variant="secondary" onClick={handleAddNode}>
@@ -355,7 +355,7 @@ export function AgentGraphEditor({
                                     key={node.id}
                                     onClick={() => setSelectedNodeId(node.id)}
                                     className={`w-full text-left rounded-lg border p-4 transition ${isSelected
-                                        ? "border-emerald-500/50 bg-emerald-500/5"
+                                        ? "border-status-success-border bg-status-success-bg"
                                         : "border-border-subtle bg-bg-surface hover:bg-state-hover"
                                         }`}
                                 >
@@ -385,7 +385,7 @@ export function AgentGraphEditor({
                                             </div>
                                         </div>
                                         {isSelected && (
-                                            <span className="rounded border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-300">
+                                            <span className="rounded border border-status-success-border bg-status-success-bg px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-status-success-text">
                                                 selected
                                             </span>
                                         )}
@@ -504,7 +504,7 @@ export function AgentGraphEditor({
                             className="h-28 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary"
                             placeholder='{"goal":"...","constraints":["..."]}'
                         />
-                        {stateDefaultsError && <div className="text-xs text-rose-400">{stateDefaultsError}</div>}
+                        {stateDefaultsError && <div className="text-xs text-status-error-text">{stateDefaultsError}</div>}
                     </div>
                 </Panel>
 

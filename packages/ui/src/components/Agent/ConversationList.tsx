@@ -14,7 +14,7 @@ interface PendingEdit {
     conversationId: string;
 }
 
-interface ConversationListProps {
+export interface ConversationListProps {
     onSelect: (id: string, title: string) => void;
     currentId?: string;
     onNew: () => void;
@@ -93,10 +93,10 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
 
     const getStatus = (conv: ConversationMetadata) => {
         if (pendingEditCounts[conv.id])
-            return { label: 'Waiting', color: 'text-amber-400', bgColor: 'bg-amber-500/20', borderColor: 'border-amber-500/40', icon: AlertCircle };
+            return { label: 'Waiting', color: 'text-status-warning-text', bgColor: 'bg-status-warning-bg', borderColor: 'border-status-warning-border', icon: AlertCircle };
         if (conv.lastRole === 'user' || conv.lastRole === 'tool')
-            return { label: 'Working', color: 'text-emerald-400', bgColor: 'bg-emerald-500/20', borderColor: 'border-emerald-500/40', icon: PlayCircle };
-        return { label: 'Idle', color: 'text-zinc-500', bgColor: 'bg-zinc-700/20', borderColor: 'border-zinc-700/40', icon: CheckCircle2 };
+            return { label: 'Working', color: 'text-status-success-text', bgColor: 'bg-status-success-bg', borderColor: 'border-status-success-border', icon: PlayCircle };
+        return { label: 'Idle', color: 'text-text-muted', bgColor: 'bg-text-muted/10', borderColor: 'border-border-subtle', icon: CheckCircle2 };
     };
 
     const activeConvs = conversations.filter(c => c.status !== 'archived');
@@ -137,7 +137,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
         return (
             <div
                 onClick={() => !isEditing && onSelect(conv.id, conv.title)}
-                className={`group flex flex-col p-3 border-b border-zinc-800 cursor-pointer transition-all hover:bg-zinc-800/60 relative ${isActive ? 'bg-emerald-500/10 border-l-2 border-l-emerald-500' : ''
+                className={`group flex flex-col p-3 border-b border-border-subtle cursor-pointer transition-all hover:bg-bg-elevated/60 relative ${isActive ? 'bg-status-success-bg border-l-2 border-l-status-success' : ''
                     }`}
             >
                 <div className="flex items-start justify-between w-full mb-1.5">
@@ -149,13 +149,13 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
                                 onChange={(e) => setEditingTitle(e.target.value)}
                                 onBlur={(e) => handleTitleSave(e, conv.id)}
                                 autoFocus
-                                className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-0.5 text-[13px] font-semibold text-zinc-100 outline-none focus:border-emerald-500"
+                                className="w-full bg-bg-elevated border border-border-strong rounded px-2 py-0.5 text-[13px] font-semibold text-text-primary outline-none focus:border-status-success"
                                 onClick={(e) => e.stopPropagation()}
                             />
                         </form>
                     ) : (
                         <span
-                            className="text-[13px] font-semibold text-zinc-100 truncate pr-6 leading-tight cursor-text hover:text-emerald-300"
+                            className="text-[13px] font-semibold text-text-primary truncate pr-6 leading-tight cursor-text hover:text-status-success-text"
                             onClick={(e) => handleTitleEdit(e, conv)}
                             title="Click to edit"
                         >
@@ -166,7 +166,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
                         {!isEditing && conv.status !== 'archived' && (
                             <button
                                 onClick={(e) => handleTitleEdit(e, conv)}
-                                className="p-1 hover:bg-zinc-700 rounded border border-zinc-600 text-zinc-400 hover:text-zinc-200 transition-all"
+                                className="p-1 hover:bg-state-active rounded border border-border-strong text-text-muted hover:text-text-primary transition-all"
                                 title="Edit title"
                             >
                                 <Pencil className="w-3 h-3" />
@@ -175,7 +175,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
                         {conv.status !== 'archived' ? (
                             <button
                                 onClick={(e) => handleArchive(e, conv.id)}
-                                className="p-1 hover:bg-zinc-700 rounded border border-zinc-600 text-zinc-400 hover:text-zinc-200 transition-all"
+                                className="p-1 hover:bg-state-active rounded border border-border-strong text-text-muted hover:text-text-primary transition-all"
                                 title="Archive"
                             >
                                 <Archive className="w-3 h-3" />
@@ -183,7 +183,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
                         ) : (
                             <button
                                 onClick={(e) => handleDelete(e, conv.id)}
-                                className="p-1 hover:bg-red-900/40 rounded border border-red-900/50 text-red-500 hover:text-red-400 transition-all"
+                                className="p-1 hover:bg-status-error-bg rounded border border-status-error-border text-status-error-text hover:text-status-error-text transition-all"
                                 title="Delete Permanently"
                             >
                                 <Trash2 className="w-3 h-3" />
@@ -196,7 +196,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
                         <StatusIcon className="w-2.5 h-2.5" />
                         {status.label}
                     </span>
-                    <span className="flex items-center gap-1 text-zinc-500 text-[10px] font-medium">
+                    <span className="flex items-center gap-1 text-text-muted text-[10px] font-medium">
                         <Clock className="w-2.5 h-2.5" />
                         {formatDate(conv.updatedAt)}
                     </span>
@@ -206,12 +206,12 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
     };
 
     return (
-        <div className="flex flex-col h-full bg-bg-surface border-r border-zinc-800">
+        <div className="flex flex-col h-full bg-bg-surface border-r border-border-subtle">
             {/* List Content */}
             <div className="flex-1 overflow-y-auto scrollbar-elegant">
                 {loading && conversations.length === 0 ? (
                     <div className="flex justify-center p-3">
-                        <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />
+                        <Loader2 className="w-3 h-3 animate-spin text-status-success-text" />
                     </div>
                 ) : (
                     <div className="flex flex-col">
@@ -220,25 +220,25 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
                         ))}
 
                         {activeConvs.length === 0 && (
-                            <div className="p-6 text-[9px] text-zinc-500 text-center italic">
+                            <div className="p-6 text-[9px] text-text-muted text-center italic">
                                 No active conversations.<br />
-                                <span className="text-zinc-600">Click + to start.</span>
+                                <span className="text-text-muted">Click + to start.</span>
                             </div>
                         )}
 
                         {/* Archive Section */}
                         {archivedConvs.length > 0 && (
-                            <div className="mt-1 border-t border-zinc-800">
+                            <div className="mt-1 border-t border-border-subtle">
                                 <button
                                     onClick={() => setIsArchiveOpen(!isArchiveOpen)}
-                                    className="w-full flex items-center gap-1.5 p-2 text-[9px] font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 transition-all border-b border-zinc-800/50"
+                                    className="w-full flex items-center gap-1.5 p-2 text-[9px] font-bold text-text-muted hover:text-text-primary hover:bg-bg-elevated/40 transition-all border-b border-border-subtle/50"
                                 >
                                     {isArchiveOpen ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
                                     <Archive className="w-2.5 h-2.5" />
                                     Archived ({archivedConvs.length})
                                 </button>
                                 {isArchiveOpen && (
-                                    <div className="bg-zinc-900/30">
+                                    <div className="bg-bg-app/30">
                                         {archivedConvs.map(conv => (
                                             <ConversationItem key={conv.id} conv={conv} />
                                         ))}
@@ -250,10 +250,10 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
                 )}
             </div>
 
-            <div className="p-1.5 border-t border-zinc-800 bg-zinc-900/40">
+            <div className="p-1.5 border-t border-border-subtle bg-bg-app/40">
                 <button
                     onClick={fetchData}
-                    className="w-full text-[8px] font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-200 py-1.5 hover:bg-zinc-800/50 rounded transition-all"
+                    className="w-full text-[8px] font-semibold uppercase tracking-wider text-text-muted hover:text-text-primary py-1.5 hover:bg-bg-elevated/50 rounded transition-all"
                 >
                     Refresh
                 </button>

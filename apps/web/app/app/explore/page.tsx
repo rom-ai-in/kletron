@@ -550,8 +550,8 @@ export default function ExplorePage() {
               {!loading && error && (
                 <div className="flex h-full items-center justify-center p-6">
                   <div className="max-w-md rounded-lg border border-border-subtle bg-bg-surface p-6 text-center">
-                    <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-rose-500/40 bg-rose-500/10">
-                      <AlertTriangle className="h-5 w-5 text-rose-400" />
+                    <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-status-error-border bg-status-error-bg">
+                      <AlertTriangle className="h-5 w-5 text-status-error-text" />
                     </div>
                     <h2 className="text-base font-semibold text-text-primary">Session unavailable</h2>
                     <p className="mt-2 text-sm text-text-muted">{error}</p>

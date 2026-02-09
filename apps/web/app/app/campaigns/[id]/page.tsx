@@ -211,7 +211,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
     if (error || !chain) {
         return (
             <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg-surface">
-                <p className="text-sm text-rose-400">Error: {error || "Chain not found"}</p>
+                <p className="text-sm text-status-error-text">Error: {error || "Chain not found"}</p>
                 <Button variant="secondary" onClick={() => router.push("/app/campaigns")} className="gap-2">
                     <ArrowLeft className="h-4 w-4" />
                     Back to List
@@ -256,22 +256,22 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                     <div className="flex items-center gap-2">
                         {refreshing && (
                             <div className="flex items-center gap-2 text-[10px] text-text-muted">
-                                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400/70" />
+                                <span className="h-2 w-2 animate-pulse rounded-full bg-status-success" />
                                 Updating
                             </div>
                         )}
                         {refreshError && !refreshing && (
-                            <div className="text-[10px] text-rose-300">Live update failed</div>
+                            <div className="text-[10px] text-status-error-text">Live update failed</div>
                         )}
                         {isBlocked && (
-                            <Button size="sm" variant="secondary" onClick={() => setIsEditing(true)} className="gap-2 border-amber-500/40 text-amber-200">
+                            <Button size="sm" variant="secondary" onClick={() => setIsEditing(true)} className="gap-2 border-status-warning-border text-status-warning-text">
                                 <AlertCircle className="h-3.5 w-3.5" />
                                 Fix Prompts
                             </Button>
                         )}
                         {/* Start / Resume Action */}
                         {!isBlocked && (chain.status === "PENDING" || chain.status === "PAUSED") && (
-                            <Button size="sm" onClick={() => void handleExecute()} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white border-transparent">
+                            <Button size="sm" onClick={() => void handleExecute()} className="gap-2 bg-status-success hover:bg-status-success text-white border-transparent">
                                 <Play className="h-3.5 w-3.5" />
                                 {chain.status === "PAUSED" ? "Resume Campaign" : "Start Campaign"}
                             </Button>
@@ -280,13 +280,13 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                         {/* Pause Action */}
                         {chain.status === "RUNNING" && (
                             <Button size="sm" variant="secondary" onClick={() => void handlePause()} className="gap-2">
-                                <Pause className="h-3.5 w-3.5 text-amber-500" /> Pause
+                                <Pause className="h-3.5 w-3.5 text-status-warning-text" /> Pause
                             </Button>
                         )}
 
                         {/* Rerun Action */}
                         {!isBlocked && (chain.status === "COMPLETED" || chain.status === "FAILED" || chain.status === "CANCELLED") && (
-                            <Button size="sm" onClick={() => void handleExecute()} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white border-transparent">
+                            <Button size="sm" onClick={() => void handleExecute()} className="gap-2 bg-status-success hover:bg-status-success text-white border-transparent">
                                 <Play className="h-3.5 w-3.5" /> Rerun Analysis
                             </Button>
                         )}
@@ -333,18 +333,18 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                         </div>
 
                         {executeError && (
-                            <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">
+                            <div className="rounded-lg border border-status-error-border bg-status-error-bg p-3 text-xs text-status-error-text">
                                 {executeError}
                             </div>
                         )}
 
                         {isBlocked && (
-                            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
+                            <div className="rounded-lg border border-status-warning-border bg-status-warning-bg p-4">
                                 <div className="flex items-start gap-3">
-                                    <AlertCircle className="h-4 w-4 text-amber-300 mt-0.5" />
+                                    <AlertCircle className="h-4 w-4 text-status-warning-text mt-0.5" />
                                     <div className="flex-1">
-                                        <div className="text-sm font-semibold text-amber-200">Campaign blocked</div>
-                                        <div className="text-xs text-amber-200/80">
+                                        <div className="text-sm font-semibold text-status-warning-text">Campaign blocked</div>
+                                        <div className="text-xs text-status-warning-text">
                                             Missing prompts for: {blockedStageNames || "Unnamed stages"}
                                         </div>
                                     </div>
@@ -363,7 +363,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                                 </div>
                                 <div className="mt-2 h-2 w-full rounded-full bg-bg-elevated">
                                     <div
-                                        className="h-2 rounded-full bg-emerald-500 transition-all"
+                                        className="h-2 rounded-full bg-status-success transition-all"
                                         style={{ width: `${progressPercent}%` }}
                                     />
                                 </div>
@@ -393,7 +393,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                         {/* Findings Summary */}
                         {chain.status === "COMPLETED" && (!chain.aggregatedFindings || chain.aggregatedFindings.length === 0) && (
                             <div className="rounded-lg border border-border-subtle bg-bg-surface p-6 flex flex-col items-center text-center text-text-muted">
-                                <CheckCircle2 className="h-8 w-8 text-emerald-500 mb-2 opacity-50" />
+                                <CheckCircle2 className="h-8 w-8 text-status-success-text mb-2 opacity-50" />
                                 <span className="text-sm font-medium text-text-primary">No findings detected</span>
                                 <span className="text-xs">The audit completed successfully with no issues found.</span>
                             </div>
@@ -410,8 +410,8 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                                         <div key={i} className="p-3 flex gap-3 text-sm hover:bg-bg-elevated/10 transition-colors">
                                             <div className={cn(
                                                 "mt-0.5 h-1.5 w-1.5 rounded-full flex-shrink-0",
-                                                finding.type === "BLOQUANT" ? "bg-rose-500" :
-                                                    finding.type === "WARNING" ? "bg-amber-500" : "bg-blue-400"
+                                                finding.type === "BLOQUANT" ? "bg-status-error" :
+                                                    finding.type === "WARNING" ? "bg-status-warning" : "bg-status-info"
                                             )} />
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-text-primary font-medium truncate">{finding.description}</p>
@@ -440,25 +440,25 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                                 else if (isCurrent) stageStatus = chain.status === "PAUSED" ? "PAUSED" : "RUNNING";
 
                                 const statusStyles: Record<string, string> = {
-                                    COMPLETED: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-                                    RUNNING: "bg-blue-500/10 text-blue-300 border-blue-500/20",
-                                    PAUSED: "bg-amber-500/10 text-amber-300 border-amber-500/20",
-                                    FAILED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+                                    COMPLETED: "bg-status-success-bg text-status-success-text border-status-success-border",
+                                    RUNNING: "bg-status-info-bg text-status-info-text border-status-info-border",
+                                    PAUSED: "bg-status-warning-bg text-status-warning-text border-status-warning-border",
+                                    FAILED: "bg-status-error-bg text-status-error-text border-status-error-border",
                                     CANCELLED: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
-                                    BLOCKED: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+                                    BLOCKED: "bg-status-warning-bg text-status-warning-text border-status-warning-border",
                                     PENDING: "bg-bg-elevated text-text-muted border-border-subtle",
                                 };
 
                                 const indicatorClass = stageStatus === "COMPLETED"
-                                    ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                                    ? "bg-status-success-bg text-status-success-text border-status-success-border"
                                     : stageStatus === "RUNNING"
-                                        ? "bg-blue-500/10 text-blue-300 border-blue-500/20"
+                                        ? "bg-status-info-bg text-status-info-text border-status-info-border"
                                         : stageStatus === "PAUSED"
-                                            ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                                            ? "bg-status-warning-bg text-status-warning-text border-status-warning-border"
                                             : stageStatus === "FAILED"
-                                                ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                                ? "bg-status-error-bg text-status-error-text border-status-error-border"
                                                 : stageStatus === "BLOCKED"
-                                                    ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                                                    ? "bg-status-warning-bg text-status-warning-text border-status-warning-border"
                                                     : "bg-bg-elevated text-text-muted border-border-subtle";
 
                                 return (
@@ -471,7 +471,7 @@ export default function ChainDetailPage({ params }: ChainDetailPageProps) {
                                         <div className="text-[11px] text-text-muted truncate font-mono mt-0.5">
                                             {stage.llmProvider}
                                         </div>
-                                        <div className={`text-[11px] truncate font-mono mt-0.5 ${promptMissing ? "text-rose-300" : "text-text-muted"}`}>
+                                        <div className={`text-[11px] truncate font-mono mt-0.5 ${promptMissing ? "text-status-error-text" : "text-text-muted"}`}>
                                             {promptMissing ? "Missing prompt" : stage.prompt}
                                         </div>
                                         </div>
@@ -562,10 +562,10 @@ function TabButton({
 function StatCard({ label, value, status }: { label: string; value: string | number; status?: string }) {
     // Reduced font size from 2xl to lg/xl and used medium weight for cleaner look
     let valueClass = "text-xl font-medium tracking-tight text-text-primary";
-    if (status === "RUNNING") valueClass = "text-xl font-medium tracking-tight text-blue-400";
-    if (status === "COMPLETED") valueClass = "text-xl font-medium tracking-tight text-emerald-400";
-    if (status === "FAILED") valueClass = "text-xl font-medium tracking-tight text-rose-400";
-    if (status === "BLOCKED") valueClass = "text-xl font-medium tracking-tight text-amber-400";
+    if (status === "RUNNING") valueClass = "text-xl font-medium tracking-tight text-status-info-text";
+    if (status === "COMPLETED") valueClass = "text-xl font-medium tracking-tight text-status-success-text";
+    if (status === "FAILED") valueClass = "text-xl font-medium tracking-tight text-status-error-text";
+    if (status === "BLOCKED") valueClass = "text-xl font-medium tracking-tight text-status-warning-text";
 
     return (
         <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface flex flex-col gap-1">
@@ -754,7 +754,7 @@ function ActivityList({
 
     if (error) {
         return (
-            <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-4 text-center text-sm text-rose-300">
+            <div className="rounded-lg border border-status-error-border bg-status-error-bg p-4 text-center text-sm text-status-error-text">
                 Error: {error}
             </div>
         );
@@ -805,13 +805,13 @@ function ActivityList({
                     >
                         <div className="flex items-stretch text-left">
                             {/* Type indicator */}
-                            <div className={`w-1 shrink-0 ${item.type === "WORKBENCH" ? "bg-zinc-400/40" : "bg-emerald-500/40"}`} />
+                            <div className={`w-1 shrink-0 ${item.type === "WORKBENCH" ? "bg-zinc-400/40" : "bg-status-success-bg"}`} />
 
                             <div className="flex flex-1 items-center gap-4 p-4 min-w-0">
                                 {/* Column 1: Icon */}
                                 <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${item.type === "WORKBENCH"
                                     ? "bg-zinc-400/10 border-zinc-400/10 text-zinc-300"
-                                    : "bg-emerald-500/10 border-emerald-500/10 text-emerald-400"
+                                    : "bg-status-success-bg border-status-success-border text-status-success-text"
                                     }`}>
                                     {item.type === "WORKBENCH" ? <Terminal className="h-5 w-5" /> : <Layers className="h-5 w-5" />}
                                 </div>
@@ -905,7 +905,7 @@ function ActivityList({
                                         <div className="text-[10px] text-text-muted">Loading logs…</div>
                                     )}
                                     {cache?.error && (
-                                        <div className="text-[10px] text-rose-300">Error: {cache.error}</div>
+                                        <div className="text-[10px] text-status-error-text">Error: {cache.error}</div>
                                     )}
                                     {!cache?.loading && previewEvents.length === 0 && !cache?.error && (
                                         <div className="text-[10px] text-text-muted">No log events yet.</div>
@@ -932,8 +932,8 @@ function ActivityList({
 
 function StatusBadge({ status }: { status: ActivityItem["status"] }) {
     const styles: Record<ActivityItem["status"], { bg: string; text: string; icon: any }> = {
-        COMPLETED: { bg: "bg-emerald-500/10", text: "text-emerald-400", icon: CheckCircle2 },
-        FAILED: { bg: "bg-rose-500/10", text: "text-rose-400", icon: AlertCircle },
+        COMPLETED: { bg: "bg-status-success-bg", text: "text-status-success-text", icon: CheckCircle2 },
+        FAILED: { bg: "bg-status-error-bg", text: "text-status-error-text", icon: AlertCircle },
         RUNNING: { bg: "bg-zinc-400/10", text: "text-zinc-300", icon: PlayCircle },
         PENDING: { bg: "bg-bg-elevated", text: "text-text-muted", icon: Clock },
         PAUSED: { bg: "bg-zinc-500/10", text: "text-zinc-400", icon: Clock },

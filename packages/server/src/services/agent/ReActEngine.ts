@@ -148,7 +148,7 @@ export class ReActEngine {
         const filtered = allowlist
             ? baseTools.filter((t) => allowlist.has(t.name))
             : baseTools;
-        const tools = filtered.concat([
+        const tools = (filtered as any[]).concat([
             ...(allowlist ? (allowlist.has("write_file") ? [safeWriteFile] : []) : [safeWriteFile]),
             ...(allowlist ? (allowlist.has("str_replace_editor") ? [safeStrReplace] : []) : [safeStrReplace]),
             ...(allowlist ? (allowlist.has("write_todos") ? [writeTodosTool] : []) : [writeTodosTool]),

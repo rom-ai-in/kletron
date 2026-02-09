@@ -37,12 +37,12 @@ export const Terminal: React.FC = () => {
             lineHeight: 1.2,
             scrollback: 5000,
             theme: {
-                background: '#09090b', // zinc-950 (Hardcoded for terminal)
-                foreground: '#e4e4e7', // zinc-200
-                cursor: '#a1a1aa',     // zinc-400 (more visible)
-                cursorAccent: '#09090b',
-                selectionBackground: 'rgba(56, 189, 248, 0.3)', // sky-400 selection
-                selectionForeground: '#ffffff',
+                background: 'var(--bg-app)',
+                foreground: 'var(--text-primary)',
+                cursor: 'var(--text-secondary)',
+                cursorAccent: 'var(--bg-app)',
+                selectionBackground: 'var(--agent-running-border)',
+                selectionForeground: 'var(--text-primary)',
             }
         });
 
@@ -123,12 +123,12 @@ export const Terminal: React.FC = () => {
         if (!terminalRef.current) return;
         // Keep terminal dark for consistent terminal feel
         terminalRef.current.options.theme = {
-            background: '#09090b',
-            foreground: '#e4e4e7',
-            cursor: '#a1a1aa',
-            cursorAccent: '#09090b',
-            selectionBackground: 'rgba(56, 189, 248, 0.3)',
-            selectionForeground: '#ffffff',
+            background: 'var(--bg-app)',
+            foreground: 'var(--text-primary)',
+            cursor: 'var(--text-secondary)',
+            cursorAccent: 'var(--bg-app)',
+            selectionBackground: 'var(--agent-running-border)',
+            selectionForeground: 'var(--text-primary)',
         };
     }, [theme]);
 

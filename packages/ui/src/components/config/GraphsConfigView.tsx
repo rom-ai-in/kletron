@@ -110,7 +110,7 @@ export function GraphsConfigView() {
             <Panel className="p-0 overflow-hidden">
               <div className="border-b border-border-subtle bg-bg-elevated/30 px-5 py-3">
                 <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-                  <ListTree className="h-4 w-4 text-emerald-500" />
+                  <ListTree className="h-4 w-4 text-status-success-text" />
                   Nodes
                 </h3>
               </div>
@@ -137,7 +137,7 @@ export function GraphsConfigView() {
             <Panel className="p-0 overflow-hidden">
               <div className="border-b border-border-subtle bg-bg-elevated/30 px-5 py-3">
                 <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-                  <Wrench className="h-4 w-4 text-emerald-500" />
+                  <Wrench className="h-4 w-4 text-status-success-text" />
                   Edges
                 </h3>
               </div>

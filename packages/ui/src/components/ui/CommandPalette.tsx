@@ -130,12 +130,12 @@ export function CommandPalette({
 
             {/* Palette */}
             <div
-                className="relative w-full max-w-xl rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden"
+                className="relative w-full max-w-xl rounded-xl border border-border-subtle bg-bg-surface shadow-2xl overflow-hidden"
                 onClick={e => e.stopPropagation()}
             >
                 {/* Search Input */}
-                <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800">
-                    <Search className="w-5 h-5 text-zinc-500" />
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-border-subtle">
+                    <Search className="w-5 h-5 text-text-muted" />
                     <input
                         ref={inputRef}
                         type="text"
@@ -145,11 +145,11 @@ export function CommandPalette({
                             setSelectedIndex(0);
                         }}
                         placeholder={placeholder}
-                        className="flex-1 bg-transparent text-sm text-zinc-100 placeholder-zinc-500 outline-none"
+                        className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none"
                     />
-                    <div className="flex items-center gap-1 px-2 py-1 rounded bg-zinc-800 border border-zinc-700">
-                        <Command className="w-3 h-3 text-zinc-500" />
-                        <span className="text-[10px] text-zinc-500">K</span>
+                    <div className="flex items-center gap-1 px-2 py-1 rounded bg-bg-elevated border border-border-subtle">
+                        <Command className="w-3 h-3 text-text-muted" />
+                        <span className="text-[10px] text-text-muted">K</span>
                     </div>
                 </div>
 
@@ -157,7 +157,7 @@ export function CommandPalette({
                 <div ref={listRef} className="max-h-80 overflow-y-auto py-2 scrollbar-elegant">
                     {Object.entries(groupedCommands).map(([category, items]) => (
                         <div key={category}>
-                            <div className="px-4 py-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                            <div className="px-4 py-1.5 text-[10px] font-medium uppercase tracking-wider text-text-muted">
                                 {category}
                             </div>
                             {items.map((cmd) => {
@@ -167,21 +167,21 @@ export function CommandPalette({
                                         key={cmd.id}
                                         data-index={currentIndex}
                                         className={`flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors ${currentIndex === selectedIndex
-                                                ? 'bg-zinc-800 text-zinc-100'
-                                                : 'text-zinc-300 hover:bg-zinc-800/50'
+                                                ? 'bg-bg-elevated text-text-primary'
+                                                : 'text-text-primary hover:bg-state-hover'
                                             }`}
                                         onClick={() => handleSelect(cmd)}
                                         onMouseEnter={() => setSelectedIndex(currentIndex)}
                                     >
-                                        {cmd.icon || <ChevronRight className="w-4 h-4 text-zinc-500" />}
+                                        {cmd.icon || <ChevronRight className="w-4 h-4 text-text-muted" />}
                                         <div className="flex-1 min-w-0">
                                             <div className="text-sm truncate">{cmd.label}</div>
                                             {cmd.description && (
-                                                <div className="text-xs text-zinc-500 truncate">{cmd.description}</div>
+                                                <div className="text-xs text-text-muted truncate">{cmd.description}</div>
                                             )}
                                         </div>
                                         {cmd.shortcut && (
-                                            <div className="text-[10px] text-zinc-500 font-mono">{cmd.shortcut}</div>
+                                            <div className="text-[10px] text-text-muted font-mono">{cmd.shortcut}</div>
                                         )}
                                     </div>
                                 );
@@ -190,14 +190,14 @@ export function CommandPalette({
                     ))}
 
                     {filteredCommands.length === 0 && (
-                        <div className="px-4 py-8 text-center text-sm text-zinc-500">
+                        <div className="px-4 py-8 text-center text-sm text-text-muted">
                             No commands found
                         </div>
                     )}
                 </div>
 
                 {/* Footer hint */}
-                <div className="flex items-center justify-between px-4 py-2 border-t border-zinc-800 text-[10px] text-zinc-500">
+                <div className="flex items-center justify-between px-4 py-2 border-t border-border-subtle text-[10px] text-text-muted">
                     <div className="flex items-center gap-4">
                         <span>↑↓ Navigate</span>
                         <span>↵ Select</span>
@@ -212,9 +212,9 @@ export function CommandPalette({
 
 // Default command icons for common actions
 export const CommandIcons = {
-    file: <FileCode className="w-4 h-4 text-zinc-400" />,
-    settings: <Settings className="w-4 h-4 text-zinc-400" />,
-    terminal: <Terminal className="w-4 h-4 text-zinc-400" />,
-    git: <GitBranch className="w-4 h-4 text-zinc-400" />,
-    folder: <Folder className="w-4 h-4 text-zinc-400" />,
+    file: <FileCode className="w-4 h-4 text-text-secondary" />,
+    settings: <Settings className="w-4 h-4 text-text-secondary" />,
+    terminal: <Terminal className="w-4 h-4 text-text-secondary" />,
+    git: <GitBranch className="w-4 h-4 text-text-secondary" />,
+    folder: <Folder className="w-4 h-4 text-text-secondary" />,
 };

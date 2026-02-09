@@ -70,7 +70,7 @@ function getStatusIcon(status: ToolStatus): React.ReactNode {
             return <Loader2 className="w-3 h-3 text-[var(--agent-running)] animate-spin" />;
         case 'pending':
         default:
-            return <div className="w-3 h-3 rounded-full border border-zinc-500" />;
+            return <div className="w-3 h-3 rounded-full border border-border-strong" />;
     }
 }
 
@@ -128,18 +128,18 @@ export function ToolLog({
                     {tools.map((tool) => (
                         <div
                             key={tool.id}
-                            className="flex items-center gap-2 py-1.5 px-2 rounded bg-zinc-800/50 text-[10px]"
+                            className="flex items-center gap-2 py-1.5 px-2 rounded bg-bg-elevated/50 text-[10px]"
                         >
                             {getToolIcon(tool.name)}
 
-                            <span className="text-zinc-300 font-medium">{tool.name}</span>
+                            <span className="text-text-secondary font-medium">{tool.name}</span>
 
                             {tool.args && (
-                                <span className="flex-1 text-zinc-500 truncate">{tool.args}</span>
+                                <span className="flex-1 text-text-muted truncate">{tool.args}</span>
                             )}
 
                             {tool.duration !== undefined && (
-                                <span className="text-zinc-600">{tool.duration}ms</span>
+                                <span className="text-text-muted">{tool.duration}ms</span>
                             )}
 
                             <span className="ml-auto">

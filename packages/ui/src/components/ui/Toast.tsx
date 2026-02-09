@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 import { CheckCircle2, XCircle, AlertCircle, Info, X, type LucideIcon } from 'lucide-react';
 
 // =============================================================================
@@ -120,19 +120,19 @@ export function ToastProvider({
 const typeConfig: Record<ToastType, { icon: LucideIcon; className: string }> = {
     success: {
         icon: CheckCircle2,
-        className: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
+        className: 'bg-status-success-bg border-status-success-border text-status-success-text',
     },
     error: {
         icon: XCircle,
-        className: 'bg-rose-500/10 border-rose-500/30 text-rose-400',
+        className: 'bg-status-error-bg border-status-error-border text-status-error-text',
     },
     warning: {
         icon: AlertCircle,
-        className: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+        className: 'bg-status-warning-bg border-status-warning-border text-status-warning-text',
     },
     info: {
         icon: Info,
-        className: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
+        className: 'bg-status-info-bg border-status-info-border text-status-info-text',
     },
 };
 
@@ -169,7 +169,7 @@ function ToastItem({ toast, onDismiss }: ToastItemProps) {
                             toast.action?.onClick();
                             onDismiss();
                         }}
-                        className="text-xs font-medium text-emerald-400 hover:text-emerald-300 mt-2"
+                        className="text-xs font-medium text-status-success-text hover:text-status-success-text mt-2"
                     >
                         {toast.action.label}
                     </button>
@@ -201,6 +201,7 @@ export function useToast() {
 
     return {
         toast: addToast,
+        addToast,
         dismiss: removeToast,
         success: (title: string, description?: string) =>
             addToast({ type: 'success', title, description }),

@@ -10,6 +10,8 @@ import {
   gitCloneRepo,
   gitCommitAll,
   gitCreateBranch,
+  gitListBranches,
+  gitDiff,
   listFiles,
   readFile,
   writeFile
@@ -402,4 +404,14 @@ ipcMain.handle("git:clone", async (_event, repoUrl: string, branch?: string) => 
   const result = await gitCloneRepo(repoUrl, undefined, branch);
   currentWorkspacePath = result.repoPath;
   return result.workspace;
+});
+
+ipcMain.handle("git:listBranches", async () => {
+  if (!currentWorkspacePath) throw new Error("Workspace not set");
+  return gitListBranches(currentWorkspacePath);
+});
+
+ipcMain.handle("git:diff", async (_event, filePath?: string) => {
+  if (!currentWorkspacePath) throw new Error("Workspace not set");
+  return gitDiff(currentWorkspacePath, filePath);
 });

@@ -10,6 +10,7 @@ import {
     Check,
     AlertCircle
 } from 'lucide-react';
+import { Button, Switch } from '@numezis/ui/components/design-system';
 
 interface NotificationSetting {
     id: string;
@@ -110,26 +111,24 @@ export default function NotificationsPage() {
                     }`}
             >
                 <div className="flex items-start gap-3">
-                    <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${setting.enabled ? 'bg-emerald-500/10' : 'bg-bg-elevated'
+                    <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${setting.enabled ? 'bg-status-success-bg' : 'bg-bg-elevated'
                         }`}>
-                        <Icon className={`w-4 h-4 ${setting.enabled ? 'text-emerald-500' : 'text-text-muted'}`} />
+                        <Icon className={`w-4 h-4 ${setting.enabled ? 'text-status-success-text' : 'text-text-muted'}`} />
                     </div>
                     <div>
                         <p className="text-sm font-medium text-text-primary">{setting.title}</p>
                         <p className="text-[11px] text-text-muted">{setting.description}</p>
                     </div>
                 </div>
-                <button
-                    onClick={() => toggleSetting(setting.id)}
+                <Switch
+                    checked={setting.enabled}
+                    onChange={(checked) => {
+                        if (!isLocked) {
+                            toggleSetting(setting.id);
+                        }
+                    }}
                     disabled={isLocked}
-                    className={`relative w-11 h-6 rounded-full transition-colors ${isLocked ? 'cursor-not-allowed' : 'cursor-pointer'
-                        } ${setting.enabled ? 'bg-emerald-500' : 'bg-bg-elevated border border-border-subtle'}`}
-                >
-                    <span
-                        className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${setting.enabled ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                    />
-                </button>
+                />
             </div>
         );
     };
@@ -186,15 +185,16 @@ export default function NotificationsPage() {
 
             {/* Save Button */}
             <div className="flex items-center gap-3 pt-4">
-                <button
+                <Button
                     onClick={handleSave}
                     disabled={saving}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-text-primary text-bg-app hover:bg-text-secondary transition-colors disabled:opacity-50"
+                    loading={saving}
+                    className="w-full"
                 >
-                    {saving ? 'Saving...' : 'Save Preferences'}
-                </button>
+                    Save Preferences
+                </Button>
                 {saved && (
-                    <div className="flex items-center gap-1.5 text-emerald-500 text-xs">
+                    <div className="flex items-center gap-1.5 text-status-success-text text-xs">
                         <Check className="w-4 h-4" />
                         Preferences saved
                     </div>
@@ -205,16 +205,18 @@ export default function NotificationsPage() {
             <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
                 <p className="text-xs text-text-secondary">
                     <strong className="text-text-primary">Want to unsubscribe from all marketing?</strong>{' '}
-                    <button
+                    <Button
                         onClick={() => {
                             setSettings(settings.map(s =>
                                 s.category === 'marketing' ? { ...s, enabled: false } : s
                             ));
                         }}
-                        className="text-emerald-500 hover:underline"
+                        variant="secondary"
+                        size="sm"
+                        className="text-status-success-text hover:underline"
                     >
                         Click here to disable all marketing emails
-                    </button>
+                    </Button>
                 </p>
             </div>
         </div>

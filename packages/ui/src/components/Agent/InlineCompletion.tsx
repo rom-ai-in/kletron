@@ -25,7 +25,7 @@ export function InlineCompletion({
 
     return (
         <span
-            className={`text-zinc-500 italic pointer-events-none select-none ${className}`}
+            className={`text-text-muted italic pointer-events-none select-none ${className}`}
             data-testid="inline-completion"
         >
             {text}
@@ -116,7 +116,7 @@ export function MultiLineCompletion({
 
     return (
         <div
-            className={`font-mono text-zinc-500 italic pointer-events-none select-none ${className}`}
+            className={`font-mono text-text-muted italic pointer-events-none select-none ${className}`}
             data-testid="multiline-completion"
         >
             {lines.map((line, i) => (

@@ -542,7 +542,7 @@ export default function AppDashboardPage() {
                 className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-muted transition hover:border-border-strong hover:text-text-primary"
               >
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className={`h-4 w-4 ${item.done ? "text-emerald-400" : "text-text-muted"}`} />
+                  <CheckCircle2 className={`h-4 w-4 ${item.done ? "text-status-success-text" : "text-text-muted"}`} />
                   <span>{item.label}</span>
                 </div>
                 <Badge variant={item.done ? "success" : "default"}>{item.done ? "Done" : "Todo"}</Badge>
@@ -657,7 +657,7 @@ export default function AppDashboardPage() {
                 </div>
               )}
               {repoScanError && (
-                <p className="mt-2 text-xs text-rose-400">{repoScanError}</p>
+                <p className="mt-2 text-xs text-status-error-text">{repoScanError}</p>
               )}
             </div>
           </div>

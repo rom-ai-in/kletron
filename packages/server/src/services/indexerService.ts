@@ -93,11 +93,29 @@ export function getIndexStatus(workspaceId: string, repoPath: string): IndexStat
     return { ...currentStatus };
 }
 
+// --- TTL cache for refreshIndexStatus ---
+const REFRESH_CACHE_TTL_MS = 30_000; // 30 seconds
+const refreshCacheKey = Symbol.for("numezis.indexer.refreshCache");
+if (!(globalThis as any)[refreshCacheKey]) {
+    (globalThis as any)[refreshCacheKey] = new Map<string, { data: IndexStatus; ts: number }>();
+}
+const refreshCache: Map<string, { data: IndexStatus; ts: number }> = (globalThis as any)[refreshCacheKey];
+
 /**
- * Refresh indexing status with disk/DB reconciliation (used when not indexing)
+ * Invalidate the refresh cache for a workspace (call after indexing / clear).
+ */
+export function invalidateRefreshCache(workspaceId: string): void {
+    refreshCache.delete(workspaceId);
+}
+
+/**
+ * Refresh indexing status with disk/DB reconciliation (used when not indexing).
+ * Results are cached for 30 s to avoid repeated filesystem scans.
  */
 export async function refreshIndexStatus(workspaceId: string, repoPath: string): Promise<IndexStatus> {
     const currentStatus = getStatus(workspaceId, repoPath);
+
+    // While indexing, always return live status (no cache)
     if (currentStatus.isIndexing) {
         return { ...currentStatus };
     }
@@ -109,6 +127,12 @@ export async function refreshIndexStatus(workspaceId: string, repoPath: string):
 
     if (!shouldRecompute) {
         return { ...currentStatus };
+    }
+
+    // Return cached result if still fresh
+    const cached = refreshCache.get(workspaceId);
+    if (cached && Date.now() - cached.ts < REFRESH_CACHE_TTL_MS) {
+        return { ...cached.data };
     }
 
     // Always compute total files from disk so UI can show totals even if DB is unavailable.
@@ -162,7 +186,11 @@ export async function refreshIndexStatus(workspaceId: string, repoPath: string):
         // If DB is unavailable, keep indexedFiles as-is (likely 0)
     }
 
-    return { ...currentStatus };
+    // Store in cache
+    const snapshot = { ...currentStatus };
+    refreshCache.set(workspaceId, { data: snapshot, ts: Date.now() });
+
+    return snapshot;
 }
 
 /**
@@ -215,6 +243,9 @@ export async function startIndexing(
     if (currentStatus.isIndexing) {
         throw new Error("Indexing is already in progress");
     }
+
+    // Invalidate cached refresh so next status poll gets live data
+    invalidateRefreshCache(workspaceId);
 
     const resume = options.resume ?? true;
 
@@ -406,5 +437,7 @@ export async function startIndexing(
 
         currentStatus.isIndexing = false;
         currentStatus.currentFile = undefined;
+        // Invalidate cache so the next status request gets fresh data
+        invalidateRefreshCache(workspaceId);
     }
 }

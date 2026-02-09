@@ -1,4 +1,5 @@
-@import "./tokens.css";
+@import '@numezis/ui/styles/tokens.css';
+@import '@numezis/ui/styles/scrollbar.css';
 
 @tailwind base;
 @tailwind components;
@@ -35,11 +36,11 @@
   }
 
   .diff-row.add {
-    @apply bg-emerald-500/5;
+    @apply bg-status-success-bg;
   }
 
   .diff-row.remove {
-    @apply bg-rose-500/5;
+    @apply bg-status-error-bg;
   }
 
   .diff-gutter {
@@ -47,11 +48,11 @@
   }
 
   .diff-gutter-add {
-    @apply text-emerald-300 text-right pr-2 select-none;
+    @apply text-status-success-text text-right pr-2 select-none;
   }
 
   .diff-gutter-remove {
-    @apply text-rose-300 text-right pr-2 select-none;
+    @apply text-status-error-text text-right pr-2 select-none;
   }
 
   .diff-cell {
@@ -67,11 +68,11 @@
   }
 
   .diff-sign-add {
-    @apply text-emerald-300;
+    @apply text-status-success-text;
   }
 
   .diff-sign-remove {
-    @apply text-rose-300;
+    @apply text-status-error-text;
   }
 
   .diff-sign-context {
@@ -83,11 +84,11 @@
   }
 
   .diff-cell-add {
-    @apply bg-emerald-500/15 text-emerald-50 border-l-2 border-emerald-400/50;
+    @apply bg-status-success-bg text-status-success-text border-l-2 border-status-success-border;
   }
 
   .diff-cell-remove {
-    @apply bg-rose-500/15 text-rose-100 border-l-2 border-rose-400/50;
+    @apply bg-status-error-bg text-status-error-text border-l-2 border-status-error-border;
   }
 
   .diff-cell-empty {

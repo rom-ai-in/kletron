@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 
 export interface SettingsItem {
   id: string;

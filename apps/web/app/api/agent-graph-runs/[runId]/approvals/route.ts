@@ -179,7 +179,7 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
         const resolvedArgs = resolveArgs(toolName, edit.args ?? {}, workspace.rootPath);
         const raw = await client.callTool(toolName, resolvedArgs as any);
         const evicted = await maybeEvictResult(workspace.rootPath, params.runId, toolName, raw);
-        return { executed: true, result: evicted.content, evictedPath: evicted.evictedPath };
+        return { executed: true, result: evicted.content, evictedPath: evicted.evictedPath ?? undefined };
     };
 
     try {

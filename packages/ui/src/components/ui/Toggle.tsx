@@ -1,7 +1,7 @@
 'use client';
 
 import React, { forwardRef } from 'react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 
 // =============================================================================
 // TOGGLE / SWITCH COMPONENT
@@ -86,7 +86,7 @@ export const Toggle = forwardRef<HTMLButtonElement, ToggleProps>(
                     'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-app',
                     styles.track,
                     isChecked
-                        ? 'bg-emerald-500 focus:ring-emerald-500/50'
+                        ? 'bg-status-success focus:ring-status-success-border'
                         : 'bg-bg-elevated focus:ring-focus-ring',
                     disabled && 'opacity-50 cursor-not-allowed',
                     className

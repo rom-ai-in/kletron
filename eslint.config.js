@@ -61,4 +61,32 @@ export default [
       "no-console": "off",
     },
   },
+  // ─── Design System Enforcement ────────────────────────────────────────────
+  // Prevent raw HTML elements and hardcoded Tailwind colors in app code.
+  // Design system components (packages/) are excluded — they legitimately use raw HTML.
+  {
+    files: ["apps/**/*.{tsx}"],
+    ignores: ["apps/web/app/design-system/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "warn",
+        {
+          selector: "JSXOpeningElement[name.name='button']",
+          message: "Use <Button> from @numezis/ui instead of raw <button>.",
+        },
+        {
+          selector: "JSXOpeningElement[name.name='input']",
+          message: "Use <Input> or <PasswordInput> from @numezis/ui instead of raw <input>.",
+        },
+        {
+          selector: "JSXOpeningElement[name.name='select']",
+          message: "Use <Selector> from @numezis/ui instead of raw <select>.",
+        },
+        {
+          selector: "Literal[value=/(?:^|\\s)(?:bg|text|border|ring|from|via|to|divide|placeholder|decoration)-(?:red|green|blue|amber|emerald|rose|orange|yellow|purple|pink|teal|cyan|lime|indigo|violet|fuchsia|sky)-\\d/]",
+          message: "Use semantic design tokens (e.g., status-success-text, status-error-bg) instead of raw Tailwind color classes.",
+        },
+      ],
+    },
+  },
 ];

@@ -134,7 +134,7 @@ export default function AgentGraphDetailClient({ params }: { params: { id: strin
     }
 
     if (error) {
-        return <div className="p-6 text-rose-400">Error: {error}</div>;
+        return <div className="p-6 text-status-error-text">Error: {error}</div>;
     }
 
     if (!graph) return null;
@@ -177,7 +177,7 @@ export default function AgentGraphDetailClient({ params }: { params: { id: strin
                                 <div className="text-[11px] text-text-muted">Loading history…</div>
                             )}
                             {!recentRunsLoading && recentRunsError && (
-                                <div className="text-[11px] text-rose-400">{recentRunsError}</div>
+                                <div className="text-[11px] text-status-error-text">{recentRunsError}</div>
                             )}
                             {!recentRunsLoading && !recentRunsError && recentRuns.length === 0 && (
                                 <div className="text-[11px] text-text-muted">No runs yet.</div>

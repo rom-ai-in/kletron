@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 import { Clock } from 'lucide-react';
 
 export type ThreadStatus = 'active' | 'waiting' | 'idle' | 'archived';
@@ -35,10 +35,10 @@ export interface ThreadFeedProps {
 }
 
 const statusDot: Record<ThreadStatus, string> = {
-  active: 'bg-emerald-400',
-  waiting: 'bg-amber-400',
-  idle: 'bg-zinc-500',
-  archived: 'bg-zinc-600',
+  active: 'bg-status-success',
+  waiting: 'bg-status-warning',
+  idle: 'bg-text-muted',
+  archived: 'bg-text-muted',
 };
 
 export function ThreadFeed({

@@ -64,7 +64,7 @@ export default function DesignSystemLayout({ children }: { children: ReactNode }
                         </div>
 
                         {error && (
-                            <p className="text-xs text-rose-400 text-center">{error}</p>
+                            <p className="text-xs text-status-error-text text-center">{error}</p>
                         )}
 
                         <button

@@ -210,7 +210,7 @@ export default function ChangesPage() {
             {/* Content Area */}
             <div className="flex-1 p-6 pb-10 overflow-y-auto scrollbar-elegant">
                 {error && (
-                    <div className="mb-6 rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-xs text-red-500 flex items-start gap-3">
+                    <div className="mb-6 rounded-lg border border-status-error-border bg-status-error-bg p-4 text-xs text-status-error-text flex items-start gap-3">
                         <AlertTriangle className="h-4 w-4 shrink-0" />
                         <div>
                             <p className="font-semibold mb-1">Service Error</p>
@@ -269,14 +269,14 @@ function DiffItem({ diff }: { diff: DiffChunk }) {
                 className="flex items-start gap-4 p-4 cursor-pointer select-none"
                 onClick={() => setIsExpanded(!isExpanded)}
             >
-                <div className={`mt-1 flex h-8 w-8 items-center justify-center rounded-lg shrink-0 transition-colors ${diff.isWorkingTree ? 'bg-zinc-500/20 text-zinc-400' : isExpanded ? 'bg-emerald-500/20 text-emerald-400' : 'bg-bg-elevated text-text-muted'}`}>
+                <div className={`mt-1 flex h-8 w-8 items-center justify-center rounded-lg shrink-0 transition-colors ${diff.isWorkingTree ? 'bg-zinc-500/20 text-zinc-400' : isExpanded ? 'bg-status-success-bg text-status-success-text' : 'bg-bg-elevated text-text-muted'}`}>
                     <GitCommit className="h-4 w-4" />
                 </div>
 
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-3 text-[10px] font-mono text-text-muted">
-                            <span className={`${diff.isWorkingTree ? 'text-zinc-400 bg-zinc-500/10' : 'text-emerald-500 bg-emerald-500/10'} font-bold px-1.5 py-0.5 rounded uppercase tracking-wider`}>
+                            <span className={`${diff.isWorkingTree ? 'text-zinc-400 bg-zinc-500/10' : 'text-status-success-text bg-status-success-bg'} font-bold px-1.5 py-0.5 rounded uppercase tracking-wider`}>
                                 {diff.sha.slice(0, 7)}
                             </span>
                             <span className="flex items-center gap-1 text-text-secondary">
@@ -293,7 +293,7 @@ function DiffItem({ diff }: { diff: DiffChunk }) {
                         </div>
                     </div>
 
-                    <p className={`text-sm font-medium leading-relaxed transition-colors ${diff.isWorkingTree ? 'text-amber-200' : isExpanded ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}`}>
+                    <p className={`text-sm font-medium leading-relaxed transition-colors ${diff.isWorkingTree ? 'text-status-warning-text' : isExpanded ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}`}>
                         {diff.message}
                     </p>
 
@@ -317,9 +317,9 @@ function DiffItem({ diff }: { diff: DiffChunk }) {
                                     const isHeader = line.startsWith('diff') || line.startsWith('---') || line.startsWith('+++') || line.startsWith('@@');
 
                                     let colorClass = 'text-text-muted opacity-70';
-                                    if (isAdded) colorClass = 'bg-emerald-500/10 text-emerald-400 font-medium px-1';
-                                    if (isRemoved) colorClass = 'bg-rose-500/10 text-rose-400 font-medium px-1';
-                                    if (isHeader) colorClass = 'text-sky-400 font-bold opacity-100';
+                                    if (isAdded) colorClass = 'bg-status-success-bg text-status-success-text font-medium px-1';
+                                    if (isRemoved) colorClass = 'bg-status-error-bg text-status-error-text font-medium px-1';
+                                    if (isHeader) colorClass = 'text-status-info-text font-bold opacity-100';
 
                                     return (
                                         <div

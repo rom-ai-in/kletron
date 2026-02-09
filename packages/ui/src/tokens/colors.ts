@@ -31,9 +31,9 @@ export const surfaces = {
 // =============================================================================
 
 export const borders = {
-    /** rgba(255, 255, 255, 0.08) - Subtle separators */
+    /** rgba(255, 255, 255, 0.05) - Subtle separators */
     subtle: 'var(--border-subtle)',
-    /** rgba(255, 255, 255, 0.16) - Emphasized borders */
+    /** rgba(255, 255, 255, 0.10) - Emphasized borders */
     strong: 'var(--border-strong)',
 } as const;
 
@@ -216,32 +216,144 @@ export const rawColors = {
     bgSurface: '#18181b',
     bgElevated: '#27272a',
 
-    // IDE (2026-dark.json canonical values)
-    editorBackground: '#121314',
-    sidebarBackground: '#191A1B',
-    activityBarBackground: '#191A1B',
-    statusBarBackground: '#191A1B',
-
-    // Brand
-    accent: '#3994BC',
-    accentHover: '#3E9BC4',
-
-    // Agent
-    thinking: '#8b5cf6',
-    tool: '#f59e0b',
-    success: '#22c55e',
-    error: '#f43f5e',
-    running: '#0ea5e9',
-
-    // Git
-    added: '#73c991',
-    modified: '#e5ba7d',
-    deleted: '#f48771',
+    // Borders
+    borderSubtle: 'rgba(255, 255, 255, 0.05)',
+    borderStrong: 'rgba(255, 255, 255, 0.10)',
 
     // Text
     primary: '#e4e4e7',
     secondary: '#a1a1aa',
     muted: '#71717a',
+
+    // States
+    stateHover: 'rgba(255, 255, 255, 0.03)',
+    stateActive: 'rgba(255, 255, 255, 0.06)',
+    stateSelected: '#1e1e21',
+    focusRing: 'rgba(161, 161, 170, 0.25)',
+
+    // Chain
+    chainRunning: '#0ea5e9',
+    chainCompleted: '#10b981',
+    chainFailed: '#ef4444',
+    chainPaused: '#f59e0b',
+
+    // IDE (2026-dark.json canonical values)
+    editorBackground: '#121314',
+    editorForeground: '#BBBEBF',
+    editorLineNumber: '#858889',
+    editorLineNumberActive: '#BBBEBF',
+    editorSelection: '#3994BC33',
+    editorLineHighlight: '#242526',
+    sidebarBackground: '#191A1B',
+    sidebarForeground: '#bfbfbf',
+    sidebarBorder: '#2A2B2CFF',
+    sidebarTitle: '#bfbfbf',
+    sidebarSectionHeaderBg: '#191A1B',
+    sidebarSectionHeaderBorder: '#2A2B2CFF',
+    activityBarBackground: '#191A1B',
+    activityBarForeground: '#bfbfbf',
+    activityBarInactive: '#888888',
+    activityBarBorder: '#2A2B2CFF',
+    activityBarActiveBorder: '#bfbfbf',
+    activityBarBadgeBg: '#3994BC',
+    activityBarBadgeFg: '#FFFFFF',
+    titleBarBackground: '#191A1B',
+    titleBarForeground: '#bfbfbf',
+    titleBarInactiveBg: '#191A1B',
+    titleBarInactiveFg: '#888888',
+    titleBarBorder: '#2A2B2CFF',
+    tabActiveBackground: '#121314',
+    tabActiveForeground: '#bfbfbf',
+    tabInactiveBackground: '#191A1B',
+    tabInactiveForeground: '#888888',
+    tabBorder: '#2A2B2CFF',
+    tabActiveBorderTop: '#3994BC',
+    editorGroupHeaderTabsBg: '#191A1B',
+    editorGroupHeaderTabsBorder: '#2A2B2CFF',
+    statusBarBackground: '#191A1B',
+    statusBarForeground: '#888888',
+    statusBarBorder: '#2A2B2CFF',
+    statusBarDebuggingBg: '#3994BC',
+    statusBarDebuggingFg: '#FFFFFF',
+    statusBarItemProminentBg: '#3994BC',
+    statusBarItemProminentFg: '#FFFFFF',
+    statusBarItemHoverBg: '#262728',
+    panelBackground: '#191A1B',
+    panelBorder: '#2A2B2CFF',
+    panelTitleActiveBorder: '#3994BC',
+    panelTitleActiveFg: '#bfbfbf',
+    panelTitleInactiveFg: '#888888',
+    inputBackground: '#191A1B',
+    inputBorder: '#333536FF',
+    inputForeground: '#bfbfbf',
+    inputPlaceholder: '#777777',
+    quickInputBackground: '#202122',
+    quickInputForeground: '#bfbfbf',
+    quickInputFocus: '#3994BC26',
+    buttonBackground: '#3994BC',
+    buttonForeground: '#FFFFFF',
+    buttonHover: '#3E9BC4',
+    buttonBorder: '#2A2B2CFF',
+    badgeBackground: '#3994BC',
+    badgeForeground: '#FFFFFF',
+    listActiveSelection: '#3994BC55',
+    listActiveSelectionFg: '#bfbfbf',
+    listHoverBackground: '#262728',
+    listHoverForeground: '#bfbfbf',
+    listInactiveSelection: '#2C2D2E',
+    gitAdded: '#73c991',
+    gitModified: '#e5ba7d',
+    gitDeleted: '#f48771',
+    diffInserted: '#72C89233',
+    diffRemoved: '#F2877233',
+    gutterAdded: '#72C892',
+    gutterDeleted: '#F28772',
+    notificationsBg: '#202122',
+    notificationsFg: '#bfbfbf',
+    notificationsBorder: '#2A2B2CFF',
+
+    // Brand
+    accent: '#3994BC',
+    accentHover: '#3E9BC4',
+    accentMuted: '#3994BC26',
+
+    // Agent
+    thinking: '#8b5cf6',
+    thinkingBg: 'rgba(139, 92, 246, 0.1)',
+    thinkingBorder: 'rgba(167, 139, 250, 0.4)',
+    thinkingText: '#c4b5fd',
+    tool: '#f59e0b',
+    toolBg: 'rgba(245, 158, 11, 0.1)',
+    toolBorder: 'rgba(251, 191, 36, 0.4)',
+    toolText: '#fcd34d',
+    success: '#22c55e',
+    successBg: 'rgba(34, 197, 94, 0.1)',
+    successBorder: 'rgba(34, 197, 94, 0.4)',
+    error: '#f43f5e',
+    errorBg: 'rgba(244, 63, 94, 0.1)',
+    errorBorder: 'rgba(244, 63, 94, 0.4)',
+    running: '#0ea5e9',
+    runningBg: 'rgba(14, 165, 233, 0.1)',
+    runningBorder: 'rgba(56, 189, 248, 0.4)',
+    pending: '#71717a',
+    pendingBg: 'rgba(113, 113, 122, 0.1)',
+    pendingBorder: 'rgba(113, 113, 122, 0.4)',
+
+    // Status (semantic aliases for UI states)
+    statusSuccessText: '#6ee7b7',
+    statusErrorText: '#fda4af',
+    statusWarningText: '#fcd34d',
+    statusInfoText: '#7dd3fc',
+
+    // Diff-specific colors
+    diffAddFg: '#73c991',
+    diffAddBg: 'rgba(114, 200, 146, 0.12)',
+    diffAddBorder: 'rgba(114, 200, 146, 0.3)',
+    diffAddGutter: '#72C892',
+    diffRemoveFg: '#f48771',
+    diffRemoveBg: 'rgba(242, 135, 114, 0.12)',
+    diffRemoveBorder: 'rgba(242, 135, 114, 0.3)',
+    diffRemoveGutter: '#F28772',
 } as const;
 
 // =============================================================================

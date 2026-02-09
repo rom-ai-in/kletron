@@ -1,5 +1,60 @@
 {
   "name": "@numezis/ui",
   "private": true,
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./tokens": {
+      "import": "./src/tokens/index.ts",
+      "types": "./src/tokens/index.ts"
+    },
+    "./tokens/*": {
+      "import": "./src/tokens/*",
+      "types": "./src/tokens/*"
+    },
+    "./components/*": {
+      "import": "./src/components/*",
+      "types": "./src/components/*"
+    },
+    "./hooks/*": {
+      "import": "./src/hooks/*",
+      "types": "./src/hooks/*"
+    },
+    "./context/*": {
+      "import": "./src/context/*",
+      "types": "./src/context/*"
+    },
+    "./dist/tokens.css": "./src/styles/tokens.css",
+    "./styles/*": {
+      "import": "./src/styles/*",
+      "types": "./src/styles/*"
+    },
+    "./types": {
+      "import": "./src/types.ts",
+      "types": "./src/types.ts"
+    },
+    "./tailwind-preset": {
+      "import": "./src/tailwind-preset.ts",
+      "types": "./src/tailwind-preset.ts"
+    }
+  },
+  "scripts": {
+    "generate:tokens": "tsx scripts/generate-css.ts",
+    "build": "tsup && npm run generate:tokens",
+    "dev": "tsup --watch"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.3"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "monaco-editor": "^0.55.1"
+  }
 }

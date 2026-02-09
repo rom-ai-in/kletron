@@ -7,9 +7,16 @@
  * @example
  * import { colors, spacing, typography, motion } from '@numezis/ui/tokens';
  * 
- * // Access specific values
- * const bg = colors.surfaces.bgSurface;
- * const pad = spacing.base;
+ * // Access specific color values
+ * const bg = colors.bgSurface;       // CSS var: var(--bg-surface)
+ * const border = colors.subtle;      // CSS var: var(--border-subtle)
+ * const textColor = colors.text.primary; // CSS var: var(--text-primary)
+ * 
+ * // Spacing values
+ * const pad = spacing.base;          // '1rem' (16px)
+ * const gap = spacing.sm;            // '0.5rem' (8px)
+ * 
+ * // Typography
  * const font = typography.fontFamily.mono;
  */
 
@@ -26,7 +33,7 @@ export type { RadiusToken } from './radius';
 export { typography, fontFamily, fontSize, fontWeight, lineHeight, letterSpacing, textStyles } from './typography';
 export type { FontFamily, FontSize, FontWeight, LineHeight, TextStyle } from './typography';
 
-export { motion, duration, durationMs, easing, transitions, keyframes } from './motion';
+export { motion, duration, durationMs, rawDuration, rawEasing, easing, transitions, keyframes } from './motion';
 export type { Duration, Easing, Transition } from './motion';
 
 export { shadows, glows, componentShadows } from './shadows';

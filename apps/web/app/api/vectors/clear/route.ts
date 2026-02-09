@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { clearVectors } from "@numezis/server/services/vectorService";
+import { invalidateRefreshCache } from "@numezis/server/services/indexerService";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
@@ -18,6 +19,7 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
         await clearVectors(workspace.rootPath);
+        invalidateRefreshCache(workspace._id.toString());
         return NextResponse.json({
             success: true,
             message: "All vectors cleared for current repository"

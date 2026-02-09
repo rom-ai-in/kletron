@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 
 // =============================================================================
 // AVATAR COMPONENT
@@ -86,10 +86,10 @@ export function Avatar({
     const initials = getInitials(name, email);
 
     const statusColors = {
-        online: 'bg-emerald-500',
-        offline: 'bg-zinc-500',
-        busy: 'bg-rose-500',
-        away: 'bg-amber-500',
+        online: 'bg-status-success',
+        offline: 'bg-text-muted',
+        busy: 'bg-status-error',
+        away: 'bg-status-warning',
     };
 
     const statusSizes: Record<AvatarSize, string> = {

@@ -77,7 +77,7 @@ function ActivityBarIcon({ icon: Icon, label, active, badge, onClick }: {
             {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-white rounded-r" />}
             <Icon className="w-6 h-6" />
             {badge !== undefined && badge > 0 && (
-                <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[10px] font-medium text-white bg-sky-500 rounded-full">
+                <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[10px] font-medium text-white bg-status-info rounded-full">
                     {badge}
                 </span>
             )}
@@ -87,8 +87,8 @@ function ActivityBarIcon({ icon: Icon, label, active, badge, onClick }: {
 
 function ConversationItem({ conv, active, onClick }: { conv: typeof mockConversations[0]; active: boolean; onClick: () => void }) {
     const statusConfig = {
-        waiting: { label: "Waiting", color: "text-amber-400", bg: "bg-amber-500/20", border: "border-amber-500/40", icon: AlertCircle },
-        working: { label: "Working", color: "text-sky-400", bg: "bg-sky-500/20", border: "border-sky-500/40", icon: PlayCircle },
+        waiting: { label: "Waiting", color: "text-status-warning-text", bg: "bg-status-warning-bg", border: "border-status-warning-border", icon: AlertCircle },
+        working: { label: "Working", color: "text-status-info-text", bg: "bg-status-info-bg", border: "border-status-info-border", icon: PlayCircle },
         idle: { label: "Idle", color: "text-zinc-500", bg: "bg-zinc-700/20", border: "border-zinc-700/40", icon: CheckCircle2 },
     };
     const status = statusConfig[conv.status as keyof typeof statusConfig];
@@ -98,12 +98,12 @@ function ConversationItem({ conv, active, onClick }: { conv: typeof mockConversa
         <div
             onClick={onClick}
             className={`group p-3 border-b border-zinc-800 cursor-pointer transition-all hover:bg-zinc-800/60
-                ${active ? 'bg-sky-500/10 border-l-2 border-l-sky-500' : ''}`}
+                ${active ? 'bg-status-info-bg border-l-2 border-l-status-info' : ''}`}
         >
             <div className="flex items-start justify-between mb-1.5">
                 <span className="text-[13px] font-semibold text-zinc-100 truncate pr-4">{conv.title}</span>
                 {conv.pendingEdits > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-warning-bg text-status-warning-text border border-status-warning-border">
                         {conv.pendingEdits} pending
                     </span>
                 )}
@@ -139,8 +139,8 @@ function FileTreeItem({ node, depth = 0 }: { node: any; depth?: number }) {
                 </span>
                 <span className="w-4 h-4 flex items-center justify-center">
                     {isFolder
-                        ? (expanded ? <FolderOpen className="w-4 h-4 text-amber-400" /> : <Folder className="w-4 h-4 text-amber-400" />)
-                        : <FileCode className="w-4 h-4 text-sky-400" />
+                        ? (expanded ? <FolderOpen className="w-4 h-4 text-status-warning-text" /> : <Folder className="w-4 h-4 text-status-warning-text" />)
+                        : <FileCode className="w-4 h-4 text-status-info-text" />
                     }
                 </span>
                 <span className="text-xs truncate">{node.name}</span>
@@ -154,8 +154,8 @@ function FileTreeItem({ node, depth = 0 }: { node: any; depth?: number }) {
 
 function PlanStep({ step, index }: { step: typeof mockPlan[0]; index: number }) {
     const statusConfig = {
-        completed: { icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/20" },
-        pending: { icon: Loader2, color: "text-sky-400", bg: "bg-sky-500/20", spin: true },
+        completed: { icon: CheckCircle2, color: "text-status-success-text", bg: "bg-status-success-bg" },
+        pending: { icon: Loader2, color: "text-status-info-text", bg: "bg-status-info-bg", spin: true },
         upcoming: { icon: Clock, color: "text-zinc-500", bg: "bg-zinc-700/20" },
     };
     const config = statusConfig[step.status as keyof typeof statusConfig];
@@ -178,19 +178,19 @@ function PlanStep({ step, index }: { step: typeof mockPlan[0]; index: number }) 
 function ThinkingBubble({ content, isActive }: { content: string; isActive?: boolean }) {
     const [expanded, setExpanded] = useState(false);
     return (
-        <div className="rounded-lg border border-violet-500/40 bg-violet-500/10 overflow-hidden">
+        <div className="rounded-lg border border-agent-thinking-border bg-agent-thinking-bg overflow-hidden">
             <button
                 onClick={() => setExpanded(!expanded)}
                 className="w-full flex items-center gap-2 px-3 py-2 text-left"
             >
-                <Brain className={`w-4 h-4 text-violet-400 ${isActive ? 'animate-pulse' : ''}`} />
-                <span className="flex-1 text-xs font-medium text-violet-300">Thinking...</span>
-                {isActive && <Loader2 className="w-3 h-3 text-violet-400 animate-spin" />}
-                {expanded ? <ChevronDown className="w-3 h-3 text-violet-300" /> : <ChevronRight className="w-3 h-3 text-violet-300" />}
+                <Brain className={`w-4 h-4 text-agent-thinking-text ${isActive ? 'animate-pulse' : ''}`} />
+                <span className="flex-1 text-xs font-medium text-agent-thinking-text">Thinking...</span>
+                {isActive && <Loader2 className="w-3 h-3 text-agent-thinking-text animate-spin" />}
+                {expanded ? <ChevronDown className="w-3 h-3 text-agent-thinking-text" /> : <ChevronRight className="w-3 h-3 text-agent-thinking-text" />}
             </button>
             {expanded && (
-                <div className="px-3 pb-2 border-t border-violet-500/20 pt-2">
-                    <p className="text-[11px] text-violet-300/70">{content}</p>
+                <div className="px-3 pb-2 border-t border-agent-thinking-border pt-2">
+                    <p className="text-[11px] text-agent-thinking-text/70">{content}</p>
                 </div>
             )}
         </div>
@@ -199,17 +199,17 @@ function ThinkingBubble({ content, isActive }: { content: string; isActive?: boo
 
 function ToolCallItem({ tool }: { tool: typeof mockMessages[2] }) {
     const statusConfig = {
-        success: { icon: CheckCircle2, color: "text-emerald-400" },
-        pending: { icon: Loader2, color: "text-amber-400", spin: true },
-        error: { icon: XCircle, color: "text-rose-400" },
+        success: { icon: CheckCircle2, color: "text-status-success-text" },
+        pending: { icon: Loader2, color: "text-status-warning-text", spin: true },
+        error: { icon: XCircle, color: "text-status-error-text" },
     };
     const config = statusConfig[(tool as any).status as keyof typeof statusConfig] || statusConfig.pending;
     const Icon = config.icon;
 
     return (
-        <div className="flex items-center gap-2 py-1.5 px-2 rounded bg-amber-500/10 border border-amber-500/30 text-[10px]">
-            <Wrench className="w-3 h-3 text-amber-400" />
-            <span className="text-amber-300 font-medium">{(tool as any).name}</span>
+        <div className="flex items-center gap-2 py-1.5 px-2 rounded bg-status-warning-bg border border-status-warning-border text-[10px]">
+            <Wrench className="w-3 h-3 text-status-warning-text" />
+            <span className="text-status-warning-text font-medium">{(tool as any).name}</span>
             <span className="flex-1 text-zinc-500 truncate">{(tool as any).args}</span>
             <Icon className={`w-3 h-3 ${config.color} ${(config as any).spin ? 'animate-spin' : ''}`} />
         </div>
@@ -227,7 +227,7 @@ function DiffApprovalCard({ edit, onApprove, onReject }: {
                 <div className="flex items-center gap-2">
                     <FileCode className="w-4 h-4 text-zinc-400" />
                     <span className="text-sm font-medium text-zinc-200">{edit.filename}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${edit.isNew ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-700 text-zinc-400'
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${edit.isNew ? 'bg-status-success-bg text-status-success-text' : 'bg-zinc-700 text-zinc-400'
                         }`}>
                         {edit.isNew ? 'NEW' : `+${edit.additions} -${edit.deletions}`}
                     </span>
@@ -235,14 +235,14 @@ function DiffApprovalCard({ edit, onApprove, onReject }: {
                 <div className="flex items-center gap-1.5">
                     <button
                         onClick={onApprove}
-                        className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors"
+                        className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-status-success-bg text-status-success-text border border-status-success-border hover:bg-status-success-bg transition-colors"
                     >
                         <Check className="w-3 h-3" />
                         Accept
                     </button>
                     <button
                         onClick={onReject}
-                        className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 transition-colors"
+                        className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-status-error-bg text-status-error-text border border-status-error-border hover:bg-status-error-bg transition-colors"
                     >
                         <X className="w-3 h-3" />
                         Reject
@@ -252,8 +252,8 @@ function DiffApprovalCard({ edit, onApprove, onReject }: {
             {/* Diff preview */}
             <div className="p-3 font-mono text-[11px] leading-relaxed">
                 <div className="text-zinc-500">// Preview of changes...</div>
-                <div className="text-emerald-400 bg-emerald-500/10 px-1 -mx-1">+ import {"{"} verifyToken {"}"} from &apos;./jwt&apos;;</div>
-                <div className="text-emerald-400 bg-emerald-500/10 px-1 -mx-1">+ export const config = {"{"} matcher: [&apos;/api/:path*&apos;] {"}"}</div>
+                <div className="text-status-success-text bg-status-success-bg px-1 -mx-1">+ import {"{"} verifyToken {"}"} from &apos;./jwt&apos;;</div>
+                <div className="text-status-success-text bg-status-success-bg px-1 -mx-1">+ export const config = {"{"} matcher: [&apos;/api/:path*&apos;] {"}"}</div>
             </div>
         </div>
     );
@@ -280,22 +280,22 @@ export default function FullIDELayout() {
     };
 
     return (
-        <div className="h-screen flex flex-col bg-[#1e1e1e] text-zinc-300 font-sans overflow-hidden">
+        <div className="h-screen flex flex-col bg-[var(--vscode-editor-background)] text-zinc-300 font-sans overflow-hidden">
             {/* Title Bar */}
-            <div className="h-8 flex items-center justify-between px-4 bg-[#323233] border-b border-zinc-700">
+            <div className="h-8 flex items-center justify-between px-4 bg-[var(--vscode-input-border)] border-b border-zinc-700">
                 <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-zinc-300">Numezis Code</span>
                     <span className="text-[10px] text-zinc-500">— numezis-coder-mcp</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Connected</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-status-success-bg text-status-success-text border border-status-success-border">Connected</span>
                 </div>
             </div>
 
             {/* Main Content */}
             <div className="flex-1 flex overflow-hidden">
                 {/* Activity Bar */}
-                <div className="w-12 flex flex-col items-center bg-[#333333] border-r border-zinc-700">
+                <div className="w-12 flex flex-col items-center bg-[var(--vscode-input-border)] border-r border-zinc-700">
                     <div className="flex-1 pt-1">
                         <ActivityBarIcon icon={Files} label="Explorer" active={activePanel === "explorer"} onClick={() => setActivePanel("explorer")} />
                         <ActivityBarIcon icon={Search} label="Search" active={activePanel === "search"} onClick={() => setActivePanel("search")} />
@@ -309,7 +309,7 @@ export default function FullIDELayout() {
                 </div>
 
                 {/* Primary Sidebar (File Explorer / Conversations) */}
-                <div className="w-60 flex flex-col bg-[#252526] border-r border-zinc-700">
+                <div className="w-60 flex flex-col bg-[var(--vscode-editor-lineHighlightBackground)] border-r border-zinc-700">
                     {activePanel === "ai" ? (
                         <>
                             <div className="h-8 flex items-center justify-between px-3 border-b border-zinc-700">
@@ -344,15 +344,15 @@ export default function FullIDELayout() {
                 </div>
 
                 {/* Editor Area */}
-                <div className="flex-1 flex flex-col bg-[#1e1e1e] min-w-0">
+                <div className="flex-1 flex flex-col bg-[var(--vscode-editor-background)] min-w-0">
                     {/* Editor Tabs */}
-                    <div className="h-9 flex items-stretch bg-[#2d2d30] border-b border-[#252526]">
-                        <div className="flex items-center gap-2 px-3 bg-[#1e1e1e] border-r border-[#252526] min-w-[120px]">
-                            <FileCode className="w-4 h-4 text-sky-400" />
+                    <div className="h-9 flex items-stretch bg-[var(--vscode-sideBar-border)] border-b border-[var(--vscode-editor-lineHighlightBackground)]">
+                        <div className="flex items-center gap-2 px-3 bg-[var(--vscode-editor-background)] border-r border-[var(--vscode-editor-lineHighlightBackground)] min-w-[120px]">
+                            <FileCode className="w-4 h-4 text-status-info-text" />
                             <span className="text-xs text-zinc-300">middleware.ts</span>
-                            <span className="w-2 h-2 rounded-full bg-amber-400 ml-auto" title="Modified" />
+                            <span className="w-2 h-2 rounded-full bg-status-warning ml-auto" title="Modified" />
                         </div>
-                        <div className="flex items-center gap-2 px-3 border-r border-[#252526] min-w-[100px] text-zinc-500 hover:bg-zinc-800/50 cursor-pointer">
+                        <div className="flex items-center gap-2 px-3 border-r border-[var(--vscode-editor-lineHighlightBackground)] min-w-[100px] text-zinc-500 hover:bg-zinc-800/50 cursor-pointer">
                             <FileCode className="w-4 h-4 text-zinc-500" />
                             <span className="text-xs">jwt.ts</span>
                         </div>
@@ -368,7 +368,7 @@ export default function FullIDELayout() {
                                     <div className="flex items-center gap-2">
                                         <button
                                             onClick={handleApproveAll}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20"
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-status-success-bg text-status-success-text border border-status-success-border hover:bg-status-success-bg"
                                         >
                                             <Check className="w-3.5 h-3.5" />
                                             Approve All ({pendingEdits.length})
@@ -386,12 +386,12 @@ export default function FullIDELayout() {
                             </div>
                         ) : (
                             <div className="text-zinc-500">
-                                <div>1  <span className="text-violet-400">import</span> {"{"} NextResponse {"}"} <span className="text-violet-400">from</span> <span className="text-emerald-400">&apos;next/server&apos;</span></div>
-                                <div>2  <span className="text-violet-400">import</span> {"{"} verifyToken {"}"} <span className="text-violet-400">from</span> <span className="text-emerald-400">&apos;./lib/jwt&apos;</span></div>
+                                <div>1  <span className="text-agent-thinking-text">import</span> {"{"} NextResponse {"}"} <span className="text-agent-thinking-text">from</span> <span className="text-status-success-text">&apos;next/server&apos;</span></div>
+                                <div>2  <span className="text-agent-thinking-text">import</span> {"{"} verifyToken {"}"} <span className="text-agent-thinking-text">from</span> <span className="text-status-success-text">&apos;./lib/jwt&apos;</span></div>
                                 <div>3  </div>
-                                <div>4  <span className="text-violet-400">export function</span> <span className="text-sky-400">middleware</span>(request) {"{"}</div>
+                                <div>4  <span className="text-agent-thinking-text">export function</span> <span className="text-status-info-text">middleware</span>(request) {"{"}</div>
                                 <div>5    <span className="text-zinc-400">// Authentication middleware</span></div>
-                                <div>6    <span className="text-violet-400">const</span> token = request.headers.get(<span className="text-emerald-400">&apos;authorization&apos;</span>)</div>
+                                <div>6    <span className="text-agent-thinking-text">const</span> token = request.headers.get(<span className="text-status-success-text">&apos;authorization&apos;</span>)</div>
                                 <div>7    ...</div>
                                 <div>8  {"}"}</div>
                             </div>
@@ -400,7 +400,7 @@ export default function FullIDELayout() {
                 </div>
 
                 {/* Right Panel - Chat / Plan */}
-                <div className="w-96 flex flex-col bg-[#252526] border-l border-zinc-700">
+                <div className="w-96 flex flex-col bg-[var(--vscode-editor-lineHighlightBackground)] border-l border-zinc-700">
                     {/* Panel Tabs */}
                     <div className="h-8 flex items-center gap-1 px-2 border-b border-zinc-700">
                         {[
@@ -453,7 +453,7 @@ export default function FullIDELayout() {
 
                             {/* Input */}
                             <div className="p-3 border-t border-zinc-700">
-                                <div className="rounded-2xl border border-zinc-700 p-3 bg-[#3c3c3c]">
+                                <div className="rounded-2xl border border-zinc-700 p-3 bg-[var(--vscode-input-border)]">
                                     <textarea
                                         value={input}
                                         onChange={e => setInput(e.target.value)}
@@ -472,7 +472,7 @@ export default function FullIDELayout() {
                                                 <span className="text-zinc-300">gpt-4o</span>
                                             </div>
                                         </div>
-                                        <button className="w-7 h-7 flex items-center justify-center rounded-full bg-sky-500 hover:bg-sky-400 transition-colors">
+                                        <button className="w-7 h-7 flex items-center justify-center rounded-full bg-status-info hover:opacity-90 transition-colors">
                                             <ArrowUp className="w-4 h-4 text-white" />
                                         </button>
                                     </div>
@@ -507,7 +507,7 @@ export default function FullIDELayout() {
             </div>
 
             {/* Status Bar */}
-            <div className="h-[22px] flex items-center justify-between px-2 bg-[#007acc] text-white text-[11px]">
+            <div className="h-[22px] flex items-center justify-between px-2 bg-[var(--vscode-statusBar-debuggingBackground)] text-white text-[11px]">
                 <div className="flex items-center gap-3">
                     <span className="flex items-center gap-1">
                         <GitBranch className="w-3.5 h-3.5" />

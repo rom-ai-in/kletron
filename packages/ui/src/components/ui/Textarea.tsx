@@ -1,7 +1,7 @@
 'use client';
 
 import React, { forwardRef } from 'react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 
 // =============================================================================
 // TEXTAREA COMPONENT
@@ -77,8 +77,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
                         noResize ? 'resize-none' : 'resize-y',
 
                         // States
-                        error && 'border-rose-500/50 focus:border-rose-500 focus:ring-rose-500/20',
-                        success && 'border-emerald-500/50 focus:border-emerald-500 focus:ring-emerald-500/20',
+                        error && 'border-status-error-border focus:border-status-error-border focus:ring-status-error-border',
+                        success && 'border-status-success-border focus:border-status-success-border focus:ring-status-success-border',
 
                         className
                     )}
@@ -88,7 +88,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
                 {(errorMessage || showCharCount) && (
                     <div className="flex items-center justify-between mt-1.5 gap-2">
                         {errorMessage ? (
-                            <p className="text-xs text-rose-400">{errorMessage}</p>
+                            <p className="text-xs text-status-error-text">{errorMessage}</p>
                         ) : (
                             <span />
                         )}
@@ -96,7 +96,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
                         {showCharCount && (
                             <span className={cn(
                                 'text-[10px] tabular-nums',
-                                maxLength && charCount >= maxLength ? 'text-rose-400' : 'text-text-muted'
+                                maxLength && charCount >= maxLength ? 'text-status-error-text' : 'text-text-muted'
                             )}>
                                 {charCount}{maxLength ? `/${maxLength}` : ''}
                             </span>

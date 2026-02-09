@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { X, Copy, Check, Terminal } from 'lucide-react';
 import { Modal } from '@numezis/ui/components/design-system';
 
-interface AgentAuditModalProps {
+export interface AgentAuditModalProps {
     open: boolean;
     onClose: () => void;
     conversationId: string;
@@ -52,9 +52,9 @@ export const AgentAuditModal: React.FC<AgentAuditModalProps> = ({ open, onClose,
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-auto bg-[#0d1117] p-4 font-mono text-xs">
-                    {loading && <div className="text-blue-400">Loading audit trace...</div>}
-                    {error && <div className="text-red-400">Error: {error}</div>}
+                <div className="flex-1 overflow-auto bg-bg-app p-4 font-mono text-xs">
+                    {loading && <div className="text-status-info-text">Loading audit trace...</div>}
+                    {error && <div className="text-status-error-text">Error: {error}</div>}
 
                     {!loading && !error && data && (
                         <pre className="text-gray-300 whitespace-pre-wrap break-all">

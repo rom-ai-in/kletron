@@ -1,66 +1,80 @@
-import { useState, useEffect, useCallback } from 'react';
-import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
-
-type LlmEnvInfo = {
-    defaultProvider?: LlmProviderType;
-    azure?: {
-        configured: boolean;
-        endpoint?: string | null;
-        deployment?: string | null;
-        model?: string | null;
-        apiVersion?: string | null;
-    };
-    lmstudio?: {
-        configured: boolean;
-        baseUrl?: string | null;
-        model?: string | null;
-    };
-    ollama?: {
-        configured: boolean;
-        baseUrl?: string | null;
-        model?: string | null;
-    };
-};
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 type HealthStatus = 'success' | 'error' | 'loading' | 'none';
 
-export function useLlmHealth(provider: string) {
-    const [status, setStatus] = useState<HealthStatus>('none');
-    const [message, setMessage] = useState<string | null>(null);
+// Module-level cache shared across all hook instances.
+// Key = provider name, Value = { status, message, ts }.
+const healthCache = new Map<string, { status: HealthStatus; message: string | null; ts: number }>();
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
-    const checkHealth = useCallback(async () => {
+/**
+ * Lightweight LLM health check hook.
+ *
+ * Instead of making a real LLM inference call on every page load,
+ * it fetches the stored config and verifies that the provider is
+ * configured (has required fields). Results are cached for 2 minutes.
+ *
+ * Call `recheck()` to force a fresh check (bypasses cache).
+ */
+export function useLlmHealth(provider: string) {
+    const [status, setStatus] = useState<HealthStatus>(() => {
+        const cached = provider ? healthCache.get(provider) : undefined;
+        if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.status;
+        return 'none';
+    });
+    const [message, setMessage] = useState<string | null>(() => {
+        const cached = provider ? healthCache.get(provider) : undefined;
+        if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.message;
+        return null;
+    });
+
+    // Track the latest provider to avoid stale updates
+    const providerRef = useRef(provider);
+    providerRef.current = provider;
+
+    const checkHealth = useCallback(async (bypassCache = false) => {
         if (!provider) {
             setStatus('none');
             setMessage('No provider selected');
             return;
         }
 
+        // Return cached result if still fresh (unless bypassed)
+        if (!bypassCache) {
+            const cached = healthCache.get(provider);
+            if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+                setStatus(cached.status);
+                setMessage(cached.message);
+                return;
+            }
+        }
+
         setStatus('loading');
         setMessage(null);
 
         try {
-            // 1. Fetch current effective configuration
-            const [envRes, dbRes] = await Promise.all([
-                fetch("/api/env"),
-                fetch("/api/llm-config")
-            ]);
+            // Fetch current LLM configuration (single lightweight request)
+            const configRes = await fetch("/api/llm-config");
 
-            const envData = await envRes.json();
-            const dbData = dbRes.ok ? await dbRes.json() : {};
-            const envInfo = envData.llm as LlmEnvInfo;
+            if (!configRes.ok) {
+                finish(provider, 'error', 'Failed to fetch LLM configuration');
+                return;
+            }
 
-            // Determine config to test based on provider
+            const dbData = await configRes.json();
+
+            // Determine config for this provider
             let configToTest: Record<string, unknown> | undefined;
 
             switch (provider) {
                 case 'azure':
-                    configToTest = dbData?.azure ?? envInfo?.azure;
+                    configToTest = dbData?.azure;
                     break;
                 case 'lmstudio':
-                    configToTest = dbData?.lmstudio ?? envInfo?.lmstudio;
+                    configToTest = dbData?.lmstudio;
                     break;
                 case 'ollama':
-                    configToTest = dbData?.ollama ?? envInfo?.ollama;
+                    configToTest = dbData?.ollama;
                     break;
                 case 'openai':
                     configToTest = dbData?.openai;
@@ -72,60 +86,68 @@ export function useLlmHealth(provider: string) {
                     configToTest = dbData?.gemini;
                     break;
                 default:
-                    setStatus('error');
-                    setMessage(`Unknown provider: ${provider}`);
+                    finish(provider, 'error', `Unknown provider: ${provider}`);
                     return;
             }
 
             if (!configToTest) {
-                setStatus('none');
-                setMessage('No configuration found');
+                finish(provider, 'none', 'No configuration found');
                 return;
             }
 
+            // Check the "configured" flag if present
             const hasConfiguredFlag = typeof (configToTest as { configured?: boolean }).configured === 'boolean';
             if (hasConfiguredFlag && !(configToTest as { configured?: boolean }).configured) {
-                setStatus('none');
-                setMessage('Not configured');
+                finish(provider, 'none', 'Not configured');
                 return;
             }
 
-            // 2. Test the connection
-            const testRes = await fetch("/api/llm-config/test", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    provider,
-                    config: configToTest,
-                }),
-            });
+            // Lightweight validation: check that required fields exist
+            const hasApiKey = !!(configToTest as any).apiKey;
+            const hasBaseUrl = !!(configToTest as any).baseUrl;
+            const hasEndpoint = !!(configToTest as any).endpoint;
 
-            const data = await testRes.json().catch(() => ({}));
-            if (!testRes.ok) {
-                setStatus('error');
-                setMessage(data.error || "Connection failed");
+            const needsKey = ['azure', 'openai', 'claude', 'gemini'].includes(provider);
+            const needsUrl = ['lmstudio', 'ollama'].includes(provider);
+
+            if (needsKey && !hasApiKey) {
+                finish(provider, 'error', 'API key not configured');
                 return;
             }
 
-            if (data?.success === false) {
-                setStatus('error');
-                setMessage(data.error || "Connection failed");
+            if (needsUrl && !hasBaseUrl && !hasEndpoint) {
+                finish(provider, 'error', 'Base URL not configured');
                 return;
             }
 
-            setStatus('success');
-            setMessage(`Success! Latency: ${data.latency}ms`);
+            // All checks passed — mark as healthy
+            const model = (configToTest as any).model || (configToTest as any).deployment || '';
+            finish(provider, 'success', model ? `Ready (${model})` : 'Configured');
 
         } catch (error) {
-            setStatus('error');
-            setMessage(error instanceof Error ? error.message : "Connection failed");
+            finish(provider, 'error', error instanceof Error ? error.message : 'Connection failed');
         }
     }, [provider]);
 
-    // Initial check on mount or provider change
+    /** Persist result in cache and update state (only if provider hasn't changed). */
+    function finish(forProvider: string, s: HealthStatus, m: string | null) {
+        healthCache.set(forProvider, { status: s, message: m, ts: Date.now() });
+        // Only update state if the provider hasn't changed while we were async
+        if (providerRef.current === forProvider) {
+            setStatus(s);
+            setMessage(m);
+        }
+    }
+
+    // Check on mount or when provider changes
     useEffect(() => {
         checkHealth();
     }, [checkHealth]);
 
-    return { status, message, recheck: checkHealth };
+    /** Force a fresh health check (bypasses cache). */
+    const recheck = useCallback(() => {
+        void checkHealth(true);
+    }, [checkHealth]);
+
+    return { status, message, recheck };
 }

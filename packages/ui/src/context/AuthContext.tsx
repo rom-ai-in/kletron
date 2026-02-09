@@ -1,7 +1,7 @@
 'use client';
 // src/context/AuthContext.tsx
 // React context provider for authentication state management
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { clearSessionStorage, getSupabaseClient, resetSupabaseClient, setRememberMePreference } from '@numezis/ui/lib/supabase/supabaseClient';
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 import type { UserProfile, UserContext as UserContextType } from '@numezis/shared/supabase/types';
@@ -36,8 +36,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const [supabase, setSupabase] = useState(() => getSupabaseClient());
 
+    // Track in-flight and already-fetched user IDs to prevent duplicate calls
+    const fetchingRef = useRef<string | null>(null);
+    const fetchedRef = useRef<string | null>(null);
+
     // Fetch user profile from MongoDB via API
-    const fetchProfile = useCallback(async (_userId: string) => {
+    const fetchProfile = useCallback(async (userId: string) => {
+        // Deduplicate: skip if already fetched for this user or a fetch is in-flight
+        if (fetchedRef.current === userId || fetchingRef.current === userId) return;
+        fetchingRef.current = userId;
         try {
             const response = await fetch('/api/auth/me');
             if (!response.ok) {
@@ -54,9 +61,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     created_at: data.profile.createdAt,
                     updated_at: data.profile.updatedAt,
                 });
+                fetchedRef.current = userId;
             }
         } catch (err) {
             console.error('Error fetching profile:', err);
+        } finally {
+            fetchingRef.current = null;
         }
     }, []);
 
@@ -197,6 +207,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (error) {
                 return { success: false, error: error.message };
             }
+
+            // Reset dedup refs so re-login triggers a fresh fetch
+            fetchedRef.current = null;
+            fetchingRef.current = null;
 
             clearSessionStorage();
             return { success: true };

@@ -27,14 +27,14 @@ export default function DesignSystemShell({ children }: { children: ReactNode })
                         <div>
                             <h1 className="text-lg font-semibold text-text-primary">Numezis Design System</h1>
                             <p className="text-xs text-text-muted">Cursor-Level UI Reference • v4.0</p>
-                            <p className="text-[10px] text-amber-400 uppercase tracking-[0.2em] mt-1">
+                            <p className="text-[10px] text-status-warning-text uppercase tracking-[0.2em] mt-1">
                                 Mac App preview—expect the UI to evolve.
                             </p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <span className="px-2 py-1 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 text-xs">Custom Mac App</span>
-                        <span className="px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs">v4.0</span>
+                        <span className="px-2 py-1 rounded bg-agent-thinking-bg text-agent-thinking-text border border-agent-thinking-border text-xs">Custom Mac App</span>
+                        <span className="px-2 py-1 rounded bg-status-success-bg text-status-success-text border border-status-success-border text-xs">v4.0</span>
                     </div>
                 </div>
             </header>

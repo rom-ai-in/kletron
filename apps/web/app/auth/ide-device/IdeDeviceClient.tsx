@@ -99,13 +99,13 @@ export default function IdeDeviceClient() {
                     </div>
 
                     {error && (
-                        <div className="bg-red-500/10 border border-red-500/20 rounded px-3 py-2 text-xs text-red-400">
+                        <div className="bg-status-error-bg border border-status-error-border rounded px-3 py-2 text-xs text-status-error-text">
                             {error}
                         </div>
                     )}
 
                     {status === 'success' ? (
-                        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded px-3 py-2 text-xs text-emerald-400">
+                        <div className="bg-status-success-bg border border-status-success-border rounded px-3 py-2 text-xs text-status-success-text">
                             Success! You can return to Numezis Code.
                         </div>
                     ) : (

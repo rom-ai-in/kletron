@@ -13,10 +13,13 @@
     "publish:mac": "electron-builder --mac --publish always"
   },
   "dependencies": {
+    "@numezis/ui": "*",
+    "@monaco-editor/react": "^4.7.0",
     "clsx": "^2.1.1",
     "diff": "^5.2.0",
     "electron-updater": "^6.3.0",
     "lucide-react": "^0.562.0",
+    "monaco-editor": "^0.55.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
@@ -60,12 +63,17 @@
     "protocols": [
       {
         "name": "Numezis Desktop",
-        "schemes": ["numezis-code"]
+        "schemes": [
+          "numezis-code"
+        ]
       }
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "hardenedRuntime": true,
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.inherit.plist",
@@ -79,8 +87,17 @@
         "height": 460
       },
       "contents": [
-        { "x": 180, "y": 230, "type": "file" },
-        { "x": 520, "y": 230, "type": "link", "path": "/Applications" }
+        {
+          "x": 180,
+          "y": 230,
+          "type": "file"
+        },
+        {
+          "x": 520,
+          "y": 230,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     },
     "publish": [

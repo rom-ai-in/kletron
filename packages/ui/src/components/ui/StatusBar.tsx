@@ -49,7 +49,7 @@ export function StatusBar({
                     <GitBranch className="w-3.5 h-3.5" />
                     <span>{branch}</span>
                     {syncStatus === 'syncing' && <Loader2 className="w-3 h-3 animate-spin" />}
-                    {syncStatus === 'synced' && <Check className="w-3 h-3 text-emerald-400" />}
+                    {syncStatus === 'synced' && <Check className="w-3 h-3 text-status-success-text" />}
                 </span>
             ),
         });
@@ -63,11 +63,11 @@ export function StatusBar({
             content: (
                 <span className="flex items-center gap-2">
                     <span className="flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                        <AlertCircle className="w-3.5 h-3.5 text-status-error-text" />
                         <span>{problems.errors}</span>
                     </span>
                     <span className="flex items-center gap-1">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                        <AlertTriangle className="w-3.5 h-3.5 text-status-warning-text" />
                         <span>{problems.warnings}</span>
                     </span>
                 </span>
@@ -81,7 +81,7 @@ export function StatusBar({
             align: 'right',
             priority: 1,
             content: (
-                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/10">
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-state-active">
                     <span className="text-[10px]">🤖</span>
                     <span>{llmModel}</span>
                 </span>
@@ -124,14 +124,14 @@ export function StatusBar({
 
     return (
         <div
-            className={`flex items-center justify-between h-[22px] px-2 text-[11px] bg-[var(--statusbar-bg)] text-[var(--statusbar-fg)] ${className}`}
+            className={`flex items-center justify-between h-[22px] px-2 text-[11px] border-t border-[var(--statusbar-border,var(--vscode-statusBar-border))] bg-[var(--statusbar-bg,var(--vscode-statusBar-background))] text-[var(--statusbar-fg,var(--vscode-statusBar-foreground))] ${className}`}
         >
             {/* Left side */}
             <div className="flex items-center gap-3">
                 {leftItems.map(item => (
                     <div
                         key={item.id}
-                        className={`flex items-center ${item.onClick ? 'cursor-pointer hover:bg-white/10 px-1 rounded' : ''}`}
+                        className={`flex items-center ${item.onClick ? 'cursor-pointer hover:bg-state-active px-1 rounded' : ''}`}
                         onClick={item.onClick}
                         title={item.tooltip}
                     >
@@ -145,7 +145,7 @@ export function StatusBar({
                 {rightItems.map(item => (
                     <div
                         key={item.id}
-                        className={`flex items-center ${item.onClick ? 'cursor-pointer hover:bg-white/10 px-1 rounded' : ''}`}
+                        className={`flex items-center ${item.onClick ? 'cursor-pointer hover:bg-state-active px-1 rounded' : ''}`}
                         onClick={item.onClick}
                         title={item.tooltip}
                     >

@@ -39,8 +39,8 @@ type ApprovalItem = {
 
 function StatusBadge({ status }: { status: AgentGraphRunDto["status"] | string }) {
     const styles: Record<string, string> = {
-        COMPLETED: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-        FAILED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+        COMPLETED: "bg-status-success-bg text-status-success-text border-status-success-border",
+        FAILED: "bg-status-error-bg text-status-error-text border-status-error-border",
         RUNNING: "bg-zinc-400/10 text-zinc-300 border-zinc-400/20",
         PENDING: "bg-bg-elevated text-text-muted border-border-subtle",
     };
@@ -173,7 +173,7 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
     }
 
     if (error) {
-        return <div className="p-6 text-rose-400">Error: {error}</div>;
+        return <div className="p-6 text-status-error-text">Error: {error}</div>;
     }
 
     if (!graph || !run) return null;
@@ -207,9 +207,9 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
 
             <div className="flex-1 min-h-0 overflow-y-auto scrollbar-elegant p-6">
                 {run.error && (
-                    <Panel className="mb-4 border-rose-500/20 bg-rose-500/10 p-4">
-                        <div className="text-sm font-semibold text-rose-300">Run failed</div>
-                        <div className="mt-1 text-xs text-rose-300">{run.error}</div>
+                    <Panel className="mb-4 border-status-error-border bg-status-error-bg p-4">
+                        <div className="text-sm font-semibold text-status-error-text">Run failed</div>
+                        <div className="mt-1 text-xs text-status-error-text">{run.error}</div>
                     </Panel>
                 )}
 
@@ -273,7 +273,7 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
                                     return (
                                         <div
                                             key={task.id ?? task.title ?? `task-${index}`}
-                                            className={`rounded-md border px-3 py-2 text-xs ${isCurrent ? "border-emerald-500/30 bg-emerald-500/10" : "border-border-subtle bg-bg-surface"}`}
+                                            className={`rounded-md border px-3 py-2 text-xs ${isCurrent ? "border-status-success-border bg-status-success-bg" : "border-border-subtle bg-bg-surface"}`}
                                         >
                                             <div className="flex items-center justify-between gap-3">
                                                 <div className="min-w-0">
@@ -322,7 +322,7 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
                     </div>
 
                     {approvalsError && (
-                        <div className="mt-2 text-xs text-rose-300">{approvalsError}</div>
+                        <div className="mt-2 text-xs text-status-error-text">{approvalsError}</div>
                     )}
 
                     <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -376,10 +376,10 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
                             </div>
                             <div className="mt-2 space-y-2">
                                 {grantedApprovals.map((item) => (
-                                    <div key={item.id} className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-3">
-                                        <div className="text-xs font-semibold text-emerald-300">{item.toolName}</div>
+                                    <div key={item.id} className="rounded-md border border-status-success-border bg-status-success-bg p-3">
+                                        <div className="text-xs font-semibold text-status-success-text">{item.toolName}</div>
                                         {item.executedAt && (
-                                            <div className="mt-1 text-[10px] text-emerald-300">
+                                            <div className="mt-1 text-[10px] text-status-success-text">
                                                 Executed {new Date(item.executedAt).toLocaleString()}
                                             </div>
                                         )}
@@ -391,10 +391,10 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
                                     </div>
                                 ))}
                                 {rejectedApprovals.map((item) => (
-                                    <div key={item.id} className="rounded-md border border-rose-500/20 bg-rose-500/5 p-3">
-                                        <div className="text-xs font-semibold text-rose-300">{item.toolName}</div>
+                                    <div key={item.id} className="rounded-md border border-status-error-border bg-status-error-bg p-3">
+                                        <div className="text-xs font-semibold text-status-error-text">{item.toolName}</div>
                                         {item.rejectedAt && (
-                                            <div className="mt-1 text-[10px] text-rose-300">
+                                            <div className="mt-1 text-[10px] text-status-error-text">
                                                 Rejected {new Date(item.rejectedAt).toLocaleString()}
                                             </div>
                                         )}

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 import { type LucideIcon } from 'lucide-react';
 
 // =============================================================================
@@ -49,7 +49,7 @@ export function Card({
                 variantStyles[variant],
                 paddingStyles[padding],
                 interactive && 'cursor-pointer hover:border-border-strong hover:bg-state-hover',
-                selected && 'border-emerald-500/50 bg-emerald-500/5',
+                selected && 'border-status-success-border bg-status-success-bg',
                 className
             )}
             {...props}
@@ -168,8 +168,8 @@ export function StatCard({ title, value, change, icon: Icon, className }: StatCa
                     <span className={cn(
                         'text-[10px] px-1.5 py-0.5 rounded font-medium',
                         change.positive
-                            ? 'bg-emerald-500/10 text-emerald-400'
-                            : 'bg-rose-500/10 text-rose-400'
+                            ? 'bg-status-success-bg text-status-success-text'
+                            : 'bg-status-error-bg text-status-error-text'
                     )}>
                         {change.value}
                     </span>
@@ -200,7 +200,7 @@ export function FeatureCard({
     title,
     description,
     icon: Icon,
-    iconColor = 'text-emerald-400',
+    iconColor = 'text-status-success-text',
     action,
     className,
 }: FeatureCardProps) {
@@ -208,7 +208,7 @@ export function FeatureCard({
         <Card interactive className={className}>
             <CardHeader
                 icon={Icon}
-                iconClassName={cn('bg-emerald-500/10 border-emerald-500/20', iconColor)}
+                iconClassName={cn('bg-status-success-bg border-status-success-border', iconColor)}
                 title={title}
                 subtitle={description}
                 action={action}

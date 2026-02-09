@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 
 // =============================================================================
 // TOOLTIP COMPONENT

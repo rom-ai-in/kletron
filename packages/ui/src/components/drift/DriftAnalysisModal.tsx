@@ -361,8 +361,8 @@ export function DriftAnalysisModal({
             {step === "review" && (
                 <div className="space-y-4">
                     {jobError && (
-                        <div className="flex items-start gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-xs text-rose-300 whitespace-pre-wrap">
-                            <AlertTriangle className="mt-0.5 h-4 w-4 text-rose-400" />
+                        <div className="flex items-start gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-xs text-status-error-text whitespace-pre-wrap">
+                            <AlertTriangle className="mt-0.5 h-4 w-4 text-status-error-text" />
                             <span>{jobError}</span>
                         </div>
                     )}
@@ -413,12 +413,12 @@ export function DriftAnalysisModal({
                                 </span>
                             )}
                             {healthStatus === "success" && (
-                                <span className="inline-flex items-center gap-1 text-emerald-400">
+                                <span className="inline-flex items-center gap-1 text-status-success-text">
                                     <Check className="h-3 w-3" /> {healthMessage ?? "Connected"}
                                 </span>
                             )}
                             {healthStatus === "error" && (
-                                <span className="inline-flex items-center gap-1 text-rose-400">
+                                <span className="inline-flex items-center gap-1 text-status-error-text">
                                     <X className="h-3 w-3" /> {healthMessage ?? "Connection failed"}
                                 </span>
                             )}
@@ -462,7 +462,7 @@ export function DriftAnalysisModal({
                         </div>
                         <div className="mt-3 h-2 w-full overflow-hidden rounded bg-black/20">
                             <div
-                                className={`${job ? "bg-emerald-500/60" : "w-1/3 animate-pulse bg-emerald-500/40"} h-full transition-all duration-300`}
+                                className={`${job ? "bg-status-success/60" : "w-1/3 animate-pulse bg-status-success/40"} h-full transition-all duration-300`}
                                 style={
                                     job && job.totalStages
                                         ? { width: fmtPct((job.processedStages / job.totalStages) * 100) }
@@ -543,11 +543,11 @@ export function DriftAnalysisModal({
                                                 <div className="text-[10px] text-text-muted font-mono">{r.stageId}</div>
                                             </div>
                                             {r.driftDetected ? (
-                                                <span className="flex items-center gap-1 rounded bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-400">
+                                                <span className="flex items-center gap-1 rounded bg-status-error-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-status-error-text">
                                                     <ShieldAlert className="h-3 w-3" /> Drift
                                                 </span>
                                             ) : (
-                                                <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                                                <span className="flex items-center gap-1 rounded bg-status-success-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-status-success-text">
                                                     <ShieldCheck className="h-3 w-3" /> Pass
                                                 </span>
                                             )}

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Apple } from 'lucide-react';
 import { useAuth } from '@numezis/ui/context/AuthContext';
+import { MarketingHeader, MarketingFooter } from '@numezis/ui/components/design-system';
 
 const downloadUrl = '/pricing' // Points to pricing page with download links
 
@@ -96,25 +97,9 @@ export default function HomePage() {
   return (
     <div className="min-h-screen w-full bg-bg-app">
       {/* Navigation Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 border-b border-border-subtle bg-bg-app/80 backdrop-blur-lg">
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5">
-            <span className="text-xl">🧠</span>
-            <span className="text-sm font-semibold text-text-primary">Numezis Code</span>
-          </Link>
-
-          {/* Nav Links */}
-          <div className="hidden sm:flex items-center gap-6">
-            <Link href="/#features" className="text-sm text-text-muted hover:text-text-primary transition-colors">
-              Features
-            </Link>
-            <Link href="/pricing" className="text-sm text-text-muted hover:text-text-primary transition-colors">
-              Pricing
-            </Link>
-          </div>
-
-          {/* Auth Buttons */}
+      <MarketingHeader
+        LinkComponent={Link}
+        rightSlot={
           <div className="flex items-center gap-3">
             {loading ? (
               <div className="w-6 h-6 border-2 border-border-subtle border-t-text-secondary rounded-full animate-spin" />
@@ -150,8 +135,8 @@ export default function HomePage() {
               </>
             )}
           </div>
-        </div>
-      </header>
+        }
+      />
 
       {/* Hero Section */}
       <section className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-14">
@@ -167,7 +152,7 @@ export default function HomePage() {
 
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border-subtle bg-bg-surface mb-6 text-xs text-text-muted">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
             Available for macOS, Windows & Linux
           </div>
 
@@ -183,7 +168,7 @@ export default function HomePage() {
             The AI coding agent that understands your entire codebase. Visual graph workflows,
             multi-repo campaigns, and zero data leaving the EU.
           </p>
-          <p className="text-xs text-amber-400 uppercase tracking-[0.2em] mb-6">
+          <p className="text-xs text-status-warning-text uppercase tracking-[0.2em] mb-6">
             Early Access • Expect rough edges while we polish the Mac experience.
           </p>
 
@@ -209,9 +194,9 @@ export default function HomePage() {
             {/* Browser chrome */}
             <div className="flex items-center gap-2 px-3 py-2 bg-bg-elevated border-b border-border-subtle">
               <div className="flex gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
-                <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
-                <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
+                <span className="w-2.5 h-2.5 rounded-full bg-status-error/60" />
+                <span className="w-2.5 h-2.5 rounded-full bg-status-warning/60" />
+                <span className="w-2.5 h-2.5 rounded-full bg-status-success/60" />
               </div>
               <div className="flex-1 text-center">
                 <span className="text-[10px] text-text-muted font-mono">Numezis Code — AI-Powered IDE</span>
@@ -245,7 +230,7 @@ export default function HomePage() {
               </div>
               <div className="flex gap-3 text-text-muted">
                 <span className="w-4 text-right opacity-50">7</span>
-                <span className="text-emerald-500/80">✓ 23 files analyzed • 4 refactoring suggestions ready<span className="inline-block w-1.5 h-3 bg-text-muted ml-1 animate-cursor" /></span>
+                <span className="text-status-success-text/80">✓ 23 files analyzed • 4 refactoring suggestions ready<span className="inline-block w-1.5 h-3 bg-text-muted ml-1 animate-cursor" /></span>
               </div>
             </div>
           </div>
@@ -287,7 +272,7 @@ export default function HomePage() {
             {features.map((feature) => (
               <div
                 key={feature.id}
-                className={`p-5 rounded-lg border border-border-subtle bg-bg-surface hover:bg-bg-elevated transition-colors ${feature.highlight ? 'ring-1 ring-emerald-500/20' : ''}`}
+                className={`p-5 rounded-lg border border-border-subtle bg-bg-surface hover:bg-bg-elevated transition-colors ${feature.highlight ? 'ring-1 ring-status-success-border' : ''}`}
               >
                 <div className="flex items-start gap-4">
                   <div className="shrink-0 w-8 h-8 rounded-md bg-bg-elevated border border-border-subtle flex items-center justify-center text-text-muted">
@@ -297,7 +282,7 @@ export default function HomePage() {
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="text-sm font-semibold text-text-primary">{feature.title}</h3>
                       {feature.highlight && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-status-success-bg text-status-success-text border border-status-success-border">
                           Key
                         </span>
                       )}
@@ -421,16 +406,16 @@ export default function HomePage() {
           {/* Comparison Cards */}
           <div className="grid lg:grid-cols-5 gap-4">
             {/* Numezis Column - Highlighted */}
-            <div className="lg:col-span-1 p-5 rounded-xl border-2 border-emerald-500/30 bg-emerald-500/5 relative">
+            <div className="lg:col-span-1 p-5 rounded-xl border-2 border-status-success-border bg-status-success-bg relative">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500 text-white">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-status-success text-white">
                   Recommended
                 </span>
               </div>
               <div className="text-center mb-4 pt-2">
                 <span className="text-3xl">🧠</span>
                 <h3 className="text-sm font-bold text-text-primary mt-2">Numezis Code</h3>
-                <p className="text-[10px] text-emerald-500 font-medium">European • Swiss HQ</p>
+                <p className="text-[10px] text-status-success-text font-medium">European • Swiss HQ</p>
               </div>
               <div className="space-y-2.5">
                 {[
@@ -444,7 +429,7 @@ export default function HomePage() {
                   'Full Desktop IDE',
                 ].map((feature) => (
                   <div key={feature} className="flex items-center gap-2 text-xs">
-                    <span className="text-emerald-500 text-sm">✓</span>
+                    <span className="text-status-success-text text-sm">✓</span>
                     <span className="text-text-secondary">{feature}</span>
                   </div>
                 ))}
@@ -459,8 +444,8 @@ export default function HomePage() {
                   <div className="w-8 h-8 rounded-md mx-auto mb-2 flex items-center justify-center">
                     {/* Cursor Logo */}
                     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-                      <rect width="24" height="24" rx="6" fill="#18181B" />
-                      <path d="M7 6L17 12L7 18V6Z" fill="#A1A1AA" />
+                      <rect width="24" height="24" rx="6" fill="var(--bg-surface)" />
+                      <path d="M7 6L17 12L7 18V6Z" fill="var(--text-secondary)" />
                     </svg>
                   </div>
                   <h3 className="text-xs font-semibold text-text-primary">Cursor</h3>
@@ -476,7 +461,7 @@ export default function HomePage() {
                     <span className="text-text-muted line-through">Campaigns</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-emerald-500">✓</span>
+                    <span className="text-status-success-text">✓</span>
                     <span className="text-text-secondary">Deep Agents</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
@@ -484,8 +469,8 @@ export default function HomePage() {
                     <span className="text-text-muted line-through">Local LLM</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-red-400">✗</span>
-                    <span className="text-red-400/80">EU Residency</span>
+<span className="text-status-error-text">✗</span>
+                                    <span className="text-status-error-text/80">EU Residency</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
                     <span className="text-text-muted text-[10px]">Based on</span>
@@ -500,7 +485,7 @@ export default function HomePage() {
                   <div className="w-8 h-8 rounded-md mx-auto mb-2 flex items-center justify-center">
                     {/* GitHub Copilot Logo */}
                     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                      <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.866-.013-1.7-2.782.603-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.268 2.75 1.026A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.026 2.747-1.026.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z" fill="#71717A" />
+                      <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.866-.013-1.7-2.782.603-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.268 2.75 1.026A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.026 2.747-1.026.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z" fill="var(--text-muted)" />
                     </svg>
                   </div>
                   <h3 className="text-xs font-semibold text-text-primary">Copilot</h3>
@@ -516,7 +501,7 @@ export default function HomePage() {
                     <span className="text-text-muted line-through">Campaigns</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-amber-500">~</span>
+                    <span className="text-status-warning-text">~</span>
                     <span className="text-text-secondary">Deep Agents</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
@@ -524,11 +509,11 @@ export default function HomePage() {
                     <span className="text-text-muted line-through">Local LLM</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-red-400">✗</span>
-                    <span className="text-red-400/80">EU Residency</span>
+<span className="text-status-error-text">✗</span>
+                                    <span className="text-status-error-text/80">EU Residency</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-emerald-500">✓</span>
+                    <span className="text-status-success-text">✓</span>
                     <span className="text-text-secondary">VS Code</span>
                   </div>
                 </div>
@@ -540,9 +525,9 @@ export default function HomePage() {
                   <div className="w-8 h-8 rounded-md mx-auto mb-2 flex items-center justify-center">
                     {/* Cline Logo - Terminal style */}
                     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-                      <rect width="24" height="24" rx="6" fill="#18181B" />
-                      <path d="M7 8L11 12L7 16" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="M13 16H17" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" />
+                      <rect width="24" height="24" rx="6" fill="var(--bg-surface)" />
+                      <path d="M7 8L11 12L7 16" stroke="var(--status-success)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M13 16H17" stroke="var(--status-success)" strokeWidth="2" strokeLinecap="round" />
                     </svg>
                   </div>
                   <h3 className="text-xs font-semibold text-text-primary">Cline</h3>
@@ -558,19 +543,19 @@ export default function HomePage() {
                     <span className="text-text-muted line-through">Campaigns</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-emerald-500">✓</span>
+                    <span className="text-status-success-text">✓</span>
                     <span className="text-text-secondary">Deep Agents</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-emerald-500">✓</span>
+                    <span className="text-status-success-text">✓</span>
                     <span className="text-text-secondary">Local LLM</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-red-400">✗</span>
-                    <span className="text-red-400/80">EU Residency</span>
+<span className="text-status-error-text">✗</span>
+                                    <span className="text-status-error-text/80">EU Residency</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-emerald-500">✓</span>
+                    <span className="text-status-success-text">✓</span>
                     <span className="text-text-secondary">VS Code</span>
                   </div>
                 </div>
@@ -582,7 +567,7 @@ export default function HomePage() {
                   <div className="w-8 h-8 rounded-md mx-auto mb-2 flex items-center justify-center">
                     {/* Windsurf/Codeium Logo - Wave style */}
                     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-                      <rect width="24" height="24" rx="6" fill="#0EA5E9" />
+                      <rect width="24" height="24" rx="6" fill="var(--status-info)" />
                       <path d="M5 12C5 12 8 8 12 12C16 16 19 12 19 12" stroke="white" strokeWidth="2" strokeLinecap="round" />
                       <path d="M5 16C5 16 8 12 12 16C16 20 19 16 19 16" stroke="white" strokeWidth="2" strokeLinecap="round" opacity="0.6" />
                     </svg>
@@ -600,7 +585,7 @@ export default function HomePage() {
                     <span className="text-text-muted line-through">Campaigns</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-emerald-500">✓</span>
+                    <span className="text-status-success-text">✓</span>
                     <span className="text-text-secondary">Deep Agents</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
@@ -608,8 +593,8 @@ export default function HomePage() {
                     <span className="text-text-muted line-through">Local LLM</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-red-400">✗</span>
-                    <span className="text-red-400/80">EU Residency</span>
+<span className="text-status-error-text">✗</span>
+                                    <span className="text-status-error-text/80">EU Residency</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
                     <span className="text-text-muted text-[10px]">Based on</span>
@@ -623,10 +608,10 @@ export default function HomePage() {
           {/* Bottom Note */}
           <div className="mt-8 text-center">
             <p className="text-xs text-text-muted">
-              <span className="text-emerald-500">✓</span> Full support •
-              <span className="text-amber-500 ml-2">~</span> Partial •
+              <span className="text-status-success-text">✓</span> Full support •
+              <span className="text-status-warning-text ml-2">~</span> Partial •
               <span className="text-text-muted ml-2">✗</span> Not available •
-              <span className="text-red-400 ml-2">✗</span> Compliance risk
+              <span className="text-status-error-text ml-2">✗</span> Compliance risk
             </p>
           </div>
         </div>
@@ -847,7 +832,7 @@ export default function HomePage() {
           <div className="flex flex-wrap justify-center gap-6 text-text-muted">
             {['Swiss Startups', 'German Enterprise', 'French Scale-ups', 'Nordic Tech'].map((segment) => (
               <div key={segment} className="flex items-center gap-1.5 text-xs">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/60" />
+                <span className="w-1.5 h-1.5 rounded-full bg-status-success/60" />
                 {segment}
               </div>
             ))}
@@ -865,7 +850,7 @@ export default function HomePage() {
             Download the desktop IDE and experience the future of AI-assisted development.
             Free to start, no credit card required.
           </p>
-          <p className="text-xs text-amber-400 uppercase tracking-[0.2em] mb-6">
+          <p className="text-xs text-status-warning-text uppercase tracking-[0.2em] mb-6">
             Early Access • Built for macOS—with more polish coming soon.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -887,28 +872,7 @@ export default function HomePage() {
       </section>
 
       {/* Footer */}
-      <footer className="py-12 px-6 border-t border-border-subtle">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex flex-col sm:flex-row items-start justify-between gap-8 mb-8">
-            <div className="flex items-center gap-2">
-              <span className="text-base">🧠</span>
-              <span className="text-sm text-text-primary font-medium">Numezis Code</span>
-            </div>
-            <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-text-muted">
-              <Link href="/pricing" className="hover:text-text-primary transition-colors">Pricing</Link>
-              <Link href="/legal/terms" className="hover:text-text-primary transition-colors">Terms of Service</Link>
-              <Link href="/legal/privacy" className="hover:text-text-primary transition-colors">Privacy Policy</Link>
-              <Link href="/legal/gdpr" className="hover:text-text-primary transition-colors">GDPR</Link>
-              <Link href="/legal/cookies" className="hover:text-text-primary transition-colors">Cookies</Link>
-              <Link href="/legal/imprint" className="hover:text-text-primary transition-colors">Imprint</Link>
-            </div>
-          </div>
-          <div className="pt-6 border-t border-border-subtle/50 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-text-muted">
-            <span>© 2026 Numezis Technologies SA. All rights reserved.</span>
-            <span>🇨🇭 Made in Switzerland • 🇪🇺 GDPR Compliant</span>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter LinkComponent={Link} />
     </div>
   )
 }

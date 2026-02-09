@@ -96,9 +96,9 @@ export default function DesignSystemAgentPage() {
                     <DocCard title="Status Icons">
                         <div className="flex flex-wrap gap-2">
                             {[
-                                { status: "success", icon: CheckCircle2, color: "text-emerald-400" },
-                                { status: "running", icon: Loader2, color: "text-sky-400", spin: true },
-                                { status: "error", icon: XCircle, color: "text-rose-400" },
+                                { status: "success", icon: CheckCircle2, color: "text-status-success-text" },
+                                { status: "running", icon: Loader2, color: "text-status-info-text", spin: true },
+                                { status: "error", icon: XCircle, color: "text-status-error-text" },
                             ].map((s) => (
                                 <div key={s.status} className="flex items-center gap-2 px-2 py-1 rounded bg-zinc-800 text-[10px]">
                                     <s.icon className={`w-3 h-3 ${s.color} ${s.spin ? "animate-spin" : ""}`} />

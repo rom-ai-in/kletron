@@ -15,12 +15,12 @@ import {
 } from "@numezis/ui/components/EmbeddingConfigForms";
 
 const PROVIDERS = [
-    { id: "azure" as const, name: "Azure OpenAI", description: "Enterprise-grade embeddings", icon: Cloud, color: "text-blue-500", bgColor: "bg-blue-500/10" },
-    { id: "openai" as const, name: "OpenAI", description: "text-embedding-3-small/large", icon: Sparkles, color: "text-emerald-500", bgColor: "bg-emerald-500/10" },
+    { id: "azure" as const, name: "Azure OpenAI", description: "Enterprise-grade embeddings", icon: Cloud, color: "text-status-info-text", bgColor: "bg-status-info-bg" },
+    { id: "openai" as const, name: "OpenAI", description: "text-embedding-3-small/large", icon: Sparkles, color: "text-status-success-text", bgColor: "bg-status-success-bg" },
     { id: "voyage" as const, name: "Voyage AI", description: "State-of-the-art embeddings", icon: Ship, color: "text-purple-500", bgColor: "bg-purple-500/10" },
-    { id: "gemini" as const, name: "Google Gemini", description: "text-embedding-004", icon: Gem, color: "text-amber-500", bgColor: "bg-amber-500/10" },
-    { id: "lmstudio" as const, name: "LM Studio", description: "Local embeddings via localhost", icon: Monitor, color: "text-cyan-500", bgColor: "bg-cyan-500/10" },
-    { id: "ollama" as const, name: "Ollama", description: "Local open-source models", icon: Bot, color: "text-rose-500", bgColor: "bg-rose-500/10" },
+    { id: "gemini" as const, name: "Google Gemini", description: "text-embedding-004", icon: Gem, color: "text-status-warning-text", bgColor: "bg-status-warning-bg" },
+    { id: "lmstudio" as const, name: "LM Studio", description: "Local embeddings via localhost", icon: Monitor, color: "text-status-info-text", bgColor: "bg-status-info-bg" },
+    { id: "ollama" as const, name: "Ollama", description: "Local open-source models", icon: Bot, color: "text-status-error-text", bgColor: "bg-status-error-bg" },
 ];
 
 interface EmbeddingConfigViewProps {
@@ -130,7 +130,7 @@ export function EmbeddingConfigView({ hideHeader = false }: EmbeddingConfigViewP
             {!hideHeader && (
                 <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
                     <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-status-success-bg text-status-success-text">
                             <Database className="h-5 w-5" />
                         </div>
                         <div>
@@ -141,7 +141,7 @@ export function EmbeddingConfigView({ hideHeader = false }: EmbeddingConfigViewP
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="text-text-muted hover:text-red-400"
+                        className="text-text-muted hover:text-status-error-text"
                         onClick={handleReset}
                         disabled={resetting || saving}
                     >
@@ -153,7 +153,7 @@ export function EmbeddingConfigView({ hideHeader = false }: EmbeddingConfigViewP
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-elegant">
                 {message && (
-                    <div className={`p-3 rounded-md text-sm ${message.type === "success" ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-red-500/10 text-red-500 border border-red-500/20"}`}>
+                    <div className={`p-3 rounded-md text-sm ${message.type === "success" ? "bg-status-success-bg text-status-success-text border border-status-success-border" : "bg-status-error-bg text-status-error-text border border-status-error-border"}`}>
                         {message.text}
                     </div>
                 )}
@@ -171,10 +171,10 @@ export function EmbeddingConfigView({ hideHeader = false }: EmbeddingConfigViewP
                                 <div
                                     key={provider.id}
                                     onClick={() => void handleProviderChange(provider.id)}
-                                    className={`cursor-pointer group relative p-4 rounded-lg border-2 transition-all ${isActive ? `border-emerald-500 bg-bg-surface` : "border-border-subtle bg-bg-elevated/50 hover:border-border-strong"}`}
+                                    className={`cursor-pointer group relative p-4 rounded-lg border-2 transition-all ${isActive ? `border-status-success bg-bg-surface` : "border-border-subtle bg-bg-elevated/50 hover:border-border-strong"}`}
                                 >
                                     {isActive && (
-                                        <div className="absolute top-3 right-3 text-emerald-500">
+                                        <div className="absolute top-3 right-3 text-status-success-text">
                                             <Check className="h-4 w-4" />
                                         </div>
                                     )}

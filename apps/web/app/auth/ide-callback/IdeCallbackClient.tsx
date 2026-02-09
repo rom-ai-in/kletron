@@ -150,7 +150,7 @@ export default function IdeCallbackClient() {
             <div className="max-w-md w-full bg-bg-surface border border-border-subtle rounded-lg p-8 text-center">
                 {state === 'loading' && (
                     <>
-                        <div className="w-12 h-12 mx-auto mb-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                        <div className="w-12 h-12 mx-auto mb-4 border-2 border-status-success-border border-t-transparent rounded-full animate-spin" />
                         <h1 className="text-xl font-semibold text-text-primary mb-2">
                             Connecting to Numezis Code...
                         </h1>
@@ -162,8 +162,8 @@ export default function IdeCallbackClient() {
 
                 {state === 'success' && (
                     <>
-                        <div className="w-12 h-12 mx-auto mb-4 bg-emerald-500/20 rounded-full flex items-center justify-center">
-                            <svg className="w-6 h-6 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <div className="w-12 h-12 mx-auto mb-4 bg-status-success-bg rounded-full flex items-center justify-center">
+                            <svg className="w-6 h-6 text-status-success-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                         </div>
@@ -209,8 +209,8 @@ export default function IdeCallbackClient() {
 
                 {state === 'error' && (
                     <>
-                        <div className="w-12 h-12 mx-auto mb-4 bg-red-500/20 rounded-full flex items-center justify-center">
-                            <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <div className="w-12 h-12 mx-auto mb-4 bg-status-error-bg rounded-full flex items-center justify-center">
+                            <svg className="w-6 h-6 text-status-error-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </div>

@@ -85,7 +85,7 @@ export function AzureEmbeddingConfigForm({ initialConfig, onSave, onCancel }: Az
                     <PasswordInput value={apiKey} onChange={setApiKey} show={showApiKey} onToggle={() => setShowApiKey(!showApiKey)} required={!initialConfig?.apiKey} />
                 </div>
             </div>
-            {error && <p className="text-xs text-rose-400">{error}</p>}
+            {error && <p className="text-xs text-status-error-text">{error}</p>}
             <FormButtons onCancel={onCancel} testState={testState} onTest={handleTestConnection} isSaving={isSaving} />
         </form>
     );
@@ -150,7 +150,7 @@ export function OpenAIEmbeddingConfigForm({ initialConfig, onSave, onCancel }: O
                     <input type="text" className={inputClass} placeholder="org-xxx" value={organization} onChange={(e) => setOrganization(e.target.value)} />
                 </div>
             </div>
-            {error && <p className="text-xs text-rose-400">{error}</p>}
+            {error && <p className="text-xs text-status-error-text">{error}</p>}
             <FormButtons onCancel={onCancel} testState={testState} onTest={handleTestConnection} isSaving={isSaving} />
         </form>
     );
@@ -214,7 +214,7 @@ export function VoyageEmbeddingConfigForm({ initialConfig, onSave, onCancel }: V
                 </div>
             </div>
             <p className="text-xs text-text-muted">Voyage AI is Anthropic's recommended embedding provider for Claude.</p>
-            {error && <p className="text-xs text-rose-400">{error}</p>}
+            {error && <p className="text-xs text-status-error-text">{error}</p>}
             <FormButtons onCancel={onCancel} testState={testState} onTest={handleTestConnection} isSaving={isSaving} />
         </form>
     );
@@ -280,7 +280,7 @@ export function GeminiEmbeddingConfigForm({ initialConfig, onSave, onCancel }: G
                     </select>
                 </div>
             </div>
-            {error && <p className="text-xs text-rose-400">{error}</p>}
+            {error && <p className="text-xs text-status-error-text">{error}</p>}
             <FormButtons onCancel={onCancel} testState={testState} onTest={handleTestConnection} isSaving={isSaving} />
         </form>
     );
@@ -340,7 +340,7 @@ export function LMStudioEmbeddingConfigForm({ initialConfig, onSave, onCancel }:
                     <PasswordInput value={apiKey} onChange={setApiKey} show={showApiKey} onToggle={() => setShowApiKey(!showApiKey)} placeholder="lm-studio" />
                 </div>
             </div>
-            {error && <p className="text-xs text-rose-400">{error}</p>}
+            {error && <p className="text-xs text-status-error-text">{error}</p>}
             <FormButtons onCancel={onCancel} testState={testState} onTest={handleTestConnection} isSaving={isSaving} />
         </form>
     );
@@ -390,7 +390,7 @@ export function OllamaEmbeddingConfigForm({ initialConfig, onSave, onCancel }: O
                 </div>
             </div>
             <p className="text-xs text-text-muted">Make sure the embedding model is pulled: <code className="bg-bg-surface px-1 rounded">ollama pull {model}</code></p>
-            {error && <p className="text-xs text-rose-400">{error}</p>}
+            {error && <p className="text-xs text-status-error-text">{error}</p>}
             <FormButtons onCancel={onCancel} testState={testState} onTest={handleTestConnection} isSaving={isSaving} />
         </form>
     );
@@ -468,10 +468,10 @@ function FormButtons({ onCancel, testState, onTest, isSaving }: {
         <div className="flex justify-end gap-2 pt-2 flex-wrap">
             <button type="button" onClick={onCancel} disabled={isSaving} className="rounded-md border border-border-subtle bg-bg-surface px-4 py-2 text-sm font-medium text-text-secondary hover:bg-state-hover transition disabled:opacity-50">Cancel</button>
             <button type="button" onClick={onTest} disabled={isSaving || testState.status === "testing"} className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary hover:bg-state-hover transition disabled:opacity-50">
-                {testState.status === "testing" ? <Loader2 className="h-4 w-4 animate-spin" /> : testState.status === "success" ? <Check className="h-4 w-4 text-emerald-500" /> : testState.status === "error" ? <AlertCircle className="h-4 w-4 text-rose-500" /> : null}
+                {testState.status === "testing" ? <Loader2 className="h-4 w-4 animate-spin" /> : testState.status === "success" ? <Check className="h-4 w-4 text-status-success-text" /> : testState.status === "error" ? <AlertCircle className="h-4 w-4 text-status-error-text" /> : null}
                 {testState.status === "testing" ? "Testing..." : "Test Connection"}
             </button>
-            {testState.message && <span className={`text-xs my-auto ${testState.status === "success" ? "text-emerald-500" : "text-rose-500"}`}>{testState.message}</span>}
+            {testState.message && <span className={`text-xs my-auto ${testState.status === "success" ? "text-status-success-text" : "text-status-error-text"}`}>{testState.message}</span>}
             <button type="submit" disabled={isSaving} className="rounded-md border border-border-strong bg-bg-elevated px-4 py-2 text-sm font-medium text-text-primary hover:bg-state-hover transition disabled:opacity-50">{isSaving ? "Saving..." : "Save Configuration"}</button>
         </div>
     );

@@ -26,7 +26,7 @@ export const ToolOutput: React.FC<ToolOutputProps> = ({ output, isError }) => {
     return (
         <div className="relative group">
             <div className="p-2 overflow-x-auto max-h-[400px] overflow-y-auto bg-bg-elevated border border-border-subtle rounded-md">
-                <pre className={`whitespace-pre-wrap break-all font-mono text-[10px] ${isError ? 'text-rose-400' : 'text-text-secondary'}`}>
+                <pre className={`whitespace-pre-wrap break-all font-mono text-[10px] ${isError ? 'text-status-error-text' : 'text-text-secondary'}`}>
                     {output}
                 </pre>
             </div>
@@ -39,7 +39,7 @@ export const ToolOutput: React.FC<ToolOutputProps> = ({ output, isError }) => {
                 className="absolute top-2 right-2 p-1.5 bg-bg-surface/80 hover:bg-state-hover rounded opacity-0 group-hover:opacity-100 transition-opacity text-text-muted hover:text-text-primary border border-border-subtle"
                 title="Copy output"
             >
-                {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                {copied ? <Check size={12} className="text-status-success-text" /> : <Copy size={12} />}
             </button>
         </div>
     );

@@ -3,17 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@numezis/ui/context/AuthContext';
-import {
-    Button,
-    Input,
-    PasswordInput,
-    Card,
-    CardHeader,
-    CardContent,
-    Badge,
-    LoadingState,
-    EmptyState
-} from '@numezis/ui/components/design-system';
+import { Input, PasswordInput, Button, Card, CardHeader, CardContent } from '@numezis/ui/components/design-system';
 import { Copy, Key, Shield, User, LogOut, Plus, X } from 'lucide-react';
 interface ApiTokenInfo {
     id: string;
@@ -169,21 +159,22 @@ export default function AccountPage() {
     const tokenHint = useMemo(() => {
         if (!newToken) return null;
         return (
-            <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
-                <p className="text-xs font-semibold text-emerald-200">Token generated (copy it now)</p>
+            <div className="mt-4 rounded-lg border border-status-success-border bg-status-success-bg p-4">
+                <p className="text-xs font-semibold text-status-success-text">Token generated (copy it now)</p>
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                     <code className="flex-1 rounded bg-bg-elevated px-3 py-2 text-xs text-text-primary break-all">
                         {newToken}
                     </code>
-                    <button
+                    <Button
                         type="button"
                         onClick={handleCopyToken}
-                        className="rounded border border-emerald-500/40 px-3 py-2 text-xs text-emerald-200 hover:bg-emerald-500/10"
+                        variant="secondary"
+                        size="sm"
                     >
                         {copied ? 'Copied' : 'Copy'}
-                    </button>
+                    </Button>
                 </div>
-                <p className="mt-2 text-[11px] text-emerald-100/80">
+                <p className="mt-2 text-[11px] text-status-success-text/80">
                     This token will not be shown again. Paste it in the Numezis Code IDE.
                 </p>
             </div>
@@ -204,25 +195,25 @@ export default function AccountPage() {
                     <p className="mt-1 text-xs text-text-muted">Update your main information.</p>
                     <form onSubmit={handleProfileSubmit} className="mt-4 space-y-4">
                         {profileStatus === 'error' && (
-                            <div className="rounded border border-red-500/20 bg-red-500/10 px-3 py-2">
-                                <p className="text-xs text-red-400">{profileError}</p>
+                            <div className="rounded border border-status-error-border bg-status-error-bg px-3 py-2">
+                                <p className="text-xs text-status-error-text">{profileError}</p>
                             </div>
                         )}
                         {profileStatus === 'success' && (
-                            <div className="rounded border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
-                                <p className="text-xs text-emerald-300">Profile updated</p>
+                            <div className="rounded border border-status-success-border bg-status-success-bg px-3 py-2">
+                                <p className="text-xs text-status-success-text">Profile updated</p>
                             </div>
                         )}
                         <div>
                             <label htmlFor="fullName" className="block text-xs font-medium text-text-secondary mb-1.5">
                                 Full Name
                             </label>
-                            <input
+                            <Input
                                 id="fullName"
                                 type="text"
                                 value={fullName}
                                 onChange={(e) => setFullName(e.target.value)}
-                                className="w-full rounded border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-border-strong focus:outline-none"
+                                fullWidth
                                 placeholder="Your name"
                             />
                         </div>
@@ -232,13 +223,13 @@ export default function AccountPage() {
                                 {user?.email || '—'}
                             </div>
                         </div>
-                        <button
+                        <Button
                             type="submit"
-                            disabled={profileStatus === 'saving'}
-                            className="inline-flex items-center justify-center rounded border border-border-subtle bg-bg-elevated px-4 py-2 text-xs font-medium text-text-primary transition hover:bg-state-hover disabled:opacity-60"
+                            className="w-full"
+                            loading={profileStatus === 'saving'}
                         >
                             {profileStatus === 'saving' ? 'Saving…' : 'Save'}
-                        </button>
+                        </Button>
                     </form>
                 </section>
 
@@ -248,25 +239,24 @@ export default function AccountPage() {
                     <p className="mt-1 text-xs text-text-muted">Change your password.</p>
                     <form onSubmit={handlePasswordSubmit} className="mt-4 space-y-4">
                         {passwordStatus === 'error' && (
-                            <div className="rounded border border-red-500/20 bg-red-500/10 px-3 py-2">
-                                <p className="text-xs text-red-400">{passwordError}</p>
+                            <div className="rounded border border-status-error-border bg-status-error-bg px-3 py-2">
+                                <p className="text-xs text-status-error-text">{passwordError}</p>
                             </div>
                         )}
                         {passwordStatus === 'success' && (
-                            <div className="rounded border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
-                                <p className="text-xs text-emerald-300">Password updated</p>
+                            <div className="rounded border border-status-success-border bg-status-success-bg px-3 py-2">
+                                <p className="text-xs text-status-success-text">Password updated</p>
                             </div>
                         )}
                         <div>
                             <label htmlFor="newPassword" className="block text-xs font-medium text-text-secondary mb-1.5">
                                 New Password
                             </label>
-                            <input
+                            <PasswordInput
                                 id="newPassword"
-                                type="password"
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
-                                className="w-full rounded border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-border-strong focus:outline-none"
+                                fullWidth
                                 placeholder="••••••••"
                             />
                         </div>
@@ -274,22 +264,21 @@ export default function AccountPage() {
                             <label htmlFor="confirmPassword" className="block text-xs font-medium text-text-secondary mb-1.5">
                                 Confirm Password
                             </label>
-                            <input
+                            <PasswordInput
                                 id="confirmPassword"
-                                type="password"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
-                                className="w-full rounded border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-border-strong focus:outline-none"
+                                fullWidth
                                 placeholder="••••••••"
                             />
                         </div>
-                        <button
+                        <Button
                             type="submit"
-                            disabled={passwordStatus === 'saving'}
-                            className="inline-flex items-center justify-center rounded border border-border-subtle bg-bg-elevated px-4 py-2 text-xs font-medium text-text-primary transition hover:bg-state-hover disabled:opacity-60"
+                            className="w-full"
+                            loading={passwordStatus === 'saving'}
                         >
                             {passwordStatus === 'saving' ? 'Updating…' : 'Update Password'}
-                        </button>
+                        </Button>
                     </form>
                 </section>
 
@@ -307,26 +296,27 @@ export default function AccountPage() {
                     </div>
 
                     <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-                        <input
+                        <Input
                             type="text"
                             value={tokenLabel}
                             onChange={(e) => setTokenLabel(e.target.value)}
-                            className="flex-1 rounded border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-border-strong focus:outline-none"
+                            fullWidth
                             placeholder="Token name"
                         />
-                        <button
+                        <Button
                             type="button"
                             onClick={handleCreateToken}
-                            disabled={creatingToken}
-                            className="inline-flex items-center justify-center rounded border border-border-subtle bg-bg-elevated px-4 py-2 text-xs font-medium text-text-primary transition hover:bg-state-hover disabled:opacity-60"
+                            variant="secondary"
+                            size="sm"
+                            loading={creatingToken}
                         >
                             {creatingToken ? 'Creating…' : 'Create Token'}
-                        </button>
+                        </Button>
                     </div>
 
                     {tokenError && (
-                        <div className="mt-4 rounded border border-red-500/20 bg-red-500/10 px-3 py-2">
-                            <p className="text-xs text-red-400">{tokenError}</p>
+                        <div className="mt-4 rounded border border-status-error-border bg-status-error-bg px-3 py-2">
+                            <p className="text-xs text-status-error-text">{tokenError}</p>
                         </div>
                     )}
 
@@ -352,13 +342,14 @@ export default function AccountPage() {
                                                 {token.last_used_at ? ` last used ${new Date(token.last_used_at).toLocaleDateString('en-US')}` : ' never used'}
                                             </p>
                                         </div>
-                                        <button
+                                        <Button
                                             type="button"
                                             onClick={() => handleRevokeToken(token.id)}
-                                            className="rounded border border-red-500/30 px-3 py-1 text-[11px] text-red-300 hover:bg-red-500/10"
+                                            variant="secondary"
+                                            size="sm"
                                         >
                                             Revoke
-                                        </button>
+                                        </Button>
                                     </div>
                                 ))
                             )}
@@ -373,13 +364,14 @@ export default function AccountPage() {
                             <h2 className="text-sm font-semibold text-text-primary">Sign Out</h2>
                             <p className="mt-1 text-xs text-text-muted">End your session on this device.</p>
                         </div>
-                        <button
+                        <Button
                             type="button"
                             onClick={handleSignOut}
-                            className="inline-flex items-center justify-center rounded border border-border-subtle bg-bg-elevated px-4 py-2 text-xs font-medium text-text-primary transition hover:bg-state-hover"
+                            variant="secondary"
+                            size="sm"
                         >
                             Sign Out
-                        </button>
+                        </Button>
                     </div>
                 </section>
             </div>

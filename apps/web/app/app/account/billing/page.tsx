@@ -15,6 +15,7 @@ import {
     AlertCircle
 } from 'lucide-react';
 import { useSubscription } from '@numezis/ui/hooks/useSubscription';
+import { Button, Badge, ProgressBar } from '@numezis/ui/components/design-system';
 
 // Plan display configurations
 const planConfigs = {
@@ -109,10 +110,10 @@ export default function BillingPage() {
         <div className="space-y-6">
             {/* Success Message */}
             {showSuccess && (
-                <div className="p-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10">
+                <div className="p-4 rounded-lg border border-status-success-border bg-status-success-bg">
                     <div className="flex items-center gap-2">
-                        <Check className="w-5 h-5 text-emerald-500" />
-                        <p className="text-sm text-emerald-400 font-medium">
+                        <Check className="w-5 h-5 text-status-success-text" />
+                        <p className="text-sm text-status-success-text font-medium">
                             Payment successful! Your subscription is now active.
                         </p>
                     </div>
@@ -121,10 +122,10 @@ export default function BillingPage() {
 
             {/* Error Message */}
             {error && (
-                <div className="p-4 rounded-lg border border-red-500/30 bg-red-500/10">
+                <div className="p-4 rounded-lg border border-status-error-border bg-status-error-bg">
                     <div className="flex items-center gap-2">
-                        <AlertCircle className="w-5 h-5 text-red-500" />
-                        <p className="text-sm text-red-400">{error}</p>
+                        <AlertCircle className="w-5 h-5 text-status-error-text" />
+                        <p className="text-sm text-status-error-text">{error}</p>
                     </div>
                 </div>
             )}
@@ -136,12 +137,12 @@ export default function BillingPage() {
                         <div className="flex items-center gap-2 mb-1">
                             <h2 className="text-lg font-semibold text-text-primary">{currentPlan.name}</h2>
                             <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${subscription?.status === 'active'
-                                ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                                ? 'bg-status-success-bg text-status-success-text border border-status-success-border'
                                 : subscription?.status === 'past_due'
-                                    ? 'bg-orange-500/10 text-orange-500 border border-orange-500/20'
+                                    ? 'bg-status-warning-bg text-status-warning-text border border-status-warning-border'
                                     : subscription?.cancelAtPeriodEnd
-                                        ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20'
-                                        : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                                        ? 'bg-status-warning-bg text-status-warning-text border border-status-warning-border'
+                                        : 'bg-status-success-bg text-status-success-text border border-status-success-border'
                                 }`}>
                                 {subscription?.cancelAtPeriodEnd
                                     ? 'Cancels Soon'
@@ -166,7 +167,7 @@ export default function BillingPage() {
                 <div className="grid sm:grid-cols-2 gap-2 mb-6">
                     {currentPlan.features.map((feature) => (
                         <div key={feature} className="flex items-center gap-2 text-xs text-text-secondary">
-                            <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                            <Check className="w-3.5 h-3.5 text-status-success-text shrink-0" />
                             {feature}
                         </div>
                     ))}
@@ -183,18 +184,14 @@ export default function BillingPage() {
                         </Link>
                     ) : (
                         <>
-                            <button
+                            <Button
                                 onClick={handleManageBilling}
                                 disabled={portalLoading}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-text-primary text-bg-app hover:bg-text-secondary transition-colors disabled:opacity-50"
+                                loading={portalLoading}
                             >
-                                {portalLoading ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <CreditCard className="w-4 h-4" />
-                                )}
+                                <CreditCard className="w-4 h-4" />
                                 Manage Billing
-                            </button>
+                            </Button>
                             <Link
                                 href="/pricing"
                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-bg-elevated border border-border-subtle text-text-primary hover:bg-state-hover transition-colors"
@@ -206,15 +203,15 @@ export default function BillingPage() {
                 </div>
 
                 {portalError && (
-                    <p className="mt-3 text-xs text-red-400">{portalError}</p>
+                    <p className="mt-3 text-xs text-status-error-text">{portalError}</p>
                 )}
             </div>
 
             {/* Token Usage */}
             <div className="p-6 rounded-lg border border-border-subtle bg-bg-surface">
                 <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                        <Zap className="w-5 h-5 text-emerald-400" />
+                    <div className="w-10 h-10 rounded-lg bg-status-success-bg border border-status-success-border flex items-center justify-center">
+                        <Zap className="w-5 h-5 text-status-success-text" />
                     </div>
                     <div>
                         <h3 className="text-sm font-semibold text-text-primary">AI Token Usage</h3>
@@ -233,7 +230,7 @@ export default function BillingPage() {
                         </p>
                         <Link
                             href="/pricing"
-                            className="inline-flex items-center gap-1 text-xs text-emerald-500 hover:text-emerald-400 mt-3"
+                            className="inline-flex items-center gap-1 text-xs text-status-success-text hover:text-status-success-text mt-3"
                         >
                             View Pro benefits
                             <ExternalLink className="w-3 h-3" />
@@ -252,7 +249,7 @@ export default function BillingPage() {
                             </div>
                             <div className="h-2 rounded-full bg-bg-elevated overflow-hidden">
                                 <div
-                                    className="h-full rounded-full bg-emerald-500 transition-all"
+                                    className="h-full rounded-full bg-status-success transition-all"
                                     style={{ width: `${tokenUsage.percentage}%` }}
                                 />
                             </div>
@@ -290,14 +287,16 @@ export default function BillingPage() {
                             <p className="text-sm text-text-secondary">
                                 Manage your payment methods in the Stripe billing portal.
                             </p>
-                            <button
+                            <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={handleManageBilling}
                                 disabled={portalLoading}
-                                className="mt-3 text-xs text-emerald-500 hover:text-emerald-400 inline-flex items-center gap-1"
+                                className="mt-3"
                             >
                                 {portalLoading ? 'Loading...' : 'Update payment method'}
                                 <ExternalLink className="w-3 h-3" />
-                            </button>
+                            </Button>
                         </div>
                     </div>
 
@@ -312,14 +311,16 @@ export default function BillingPage() {
                             <p className="text-sm text-text-secondary">
                                 View and download invoices in the Stripe billing portal.
                             </p>
-                            <button
+                            <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={handleManageBilling}
                                 disabled={portalLoading}
-                                className="mt-3 text-xs text-emerald-500 hover:text-emerald-400 inline-flex items-center gap-1"
+                                className="mt-3"
                             >
                                 {portalLoading ? 'Loading...' : 'View all invoices'}
                                 <ExternalLink className="w-3 h-3" />
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 </>
@@ -330,7 +331,7 @@ export default function BillingPage() {
                 <p className="text-xs text-text-secondary">
                     <strong className="text-text-primary">Billing questions?</strong>{' '}
                     Contact us at{' '}
-                    <a href="mailto:billing@numezis.com" className="text-emerald-500 hover:underline">billing@numezis.com</a>
+                    <a href="mailto:billing@numezis.com" className="text-status-success-text hover:underline">billing@numezis.com</a>
                 </p>
             </div>
         </div>

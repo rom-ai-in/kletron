@@ -1,22 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { MarketingHeader, MarketingFooter } from '@numezis/ui/components/design-system';
 
 export default function TermsOfServicePage() {
     return (
         <div className="min-h-screen w-full bg-bg-app">
-            {/* Header */}
-            <header className="fixed top-0 left-0 right-0 z-50 border-b border-border-subtle bg-bg-app/80 backdrop-blur-lg">
-                <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-                    <Link href="/" className="flex items-center gap-2.5">
-                        <span className="text-xl">🧠</span>
-                        <span className="text-sm font-semibold text-text-primary">Numezis Code</span>
-                    </Link>
-                    <Link href="/" className="text-sm text-text-muted hover:text-text-primary transition-colors">
-                        ← Back to Home
-                    </Link>
-                </div>
-            </header>
+            <MarketingHeader LinkComponent={Link} />
 
             {/* Content */}
             <main className="pt-24 pb-16 px-6">
@@ -70,7 +60,7 @@ export default function TermsOfServicePage() {
                     <Section title="4. Subscription Plans and Payment">
                         <p>
                             <strong>4.1 Plans:</strong> We offer multiple subscription tiers (Starter, Pro, Team, Enterprise)
-                            with different features and pricing as described on our <Link href="/pricing" className="text-emerald-500 hover:underline">Pricing page</Link>.
+                            with different features and pricing as described on our <Link href="/pricing" className="text-status-success-text hover:underline">Pricing page</Link>.
                         </p>
                         <p>
                             <strong>4.2 BYOK Model:</strong> You may use your own API keys from third-party AI providers.
@@ -120,8 +110,8 @@ export default function TermsOfServicePage() {
 
                     <Section title="7. Data Processing">
                         <p>
-                            Your use of the Service is also governed by our <Link href="/legal/privacy" className="text-emerald-500 hover:underline">Privacy Policy</Link> and
-                            <Link href="/legal/gdpr" className="text-emerald-500 hover:underline ml-1">GDPR Compliance</Link> documentation.
+                            Your use of the Service is also governed by our <Link href="/legal/privacy" className="text-status-success-text hover:underline">Privacy Policy</Link> and
+                            <Link href="/legal/gdpr" className="text-status-success-text hover:underline ml-1">GDPR Compliance</Link> documentation.
                         </p>
                         <p>
                             <strong>Key guarantees:</strong>
@@ -188,23 +178,14 @@ export default function TermsOfServicePage() {
                                 <strong>Numezis Technologies SA</strong><br />
                                 Legal Department<br />
                                 Geneva, Switzerland<br />
-                                <a href="mailto:legal@numezis.com" className="text-emerald-500 hover:underline">legal@numezis.com</a>
+                                <a href="mailto:legal@numezis.com" className="text-status-success-text hover:underline">legal@numezis.com</a>
                             </p>
                         </div>
                     </Section>
                 </article>
             </main>
 
-            {/* Footer */}
-            <footer className="py-8 px-6 border-t border-border-subtle">
-                <div className="max-w-4xl mx-auto flex flex-wrap gap-4 justify-center text-xs text-text-muted">
-                    <Link href="/legal/terms" className="hover:text-text-primary">Terms of Service</Link>
-                    <Link href="/legal/privacy" className="hover:text-text-primary">Privacy Policy</Link>
-                    <Link href="/legal/gdpr" className="hover:text-text-primary">GDPR</Link>
-                    <Link href="/legal/cookies" className="hover:text-text-primary">Cookie Policy</Link>
-                    <Link href="/legal/imprint" className="hover:text-text-primary">Imprint</Link>
-                </div>
-            </footer>
+            <MarketingFooter LinkComponent={Link} />
         </div>
     );
 }

@@ -2,16 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import {
-    Panel,
-    Button,
-    Modal,
-    Input,
-    ProgressBar,
-    EmptyState,
-    ErrorState,
-    Skeleton,
-} from "@numezis/ui/components/design-system";
+import { Panel } from "@numezis/ui/components/ui/Panel";
+import { Button } from "@numezis/ui/components/ui/Button";
+import { Modal } from "@numezis/ui/components/ui/Modal";
+import { EmptyState, ErrorState } from "@numezis/ui/components/ui/EmptyState";
+import { Skeleton } from "@numezis/ui/components/ui/Skeleton";
 import {
     Database,
     Settings,
@@ -276,7 +271,7 @@ export default function VectorIndexPage() {
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
                 <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-status-success-bg text-status-success-text">
                         <Database className="h-5 w-5" />
                     </div>
                     <div>
@@ -289,11 +284,11 @@ export default function VectorIndexPage() {
                     {isInitialLoad ? (
                         <Skeleton className="h-8 w-48 rounded-md" />
                     ) : (
-                        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-subtle ${healthStatus === 'error' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-bg-elevated'
+                        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-subtle ${healthStatus === 'error' ? 'bg-status-error-bg border-status-error-border' : 'bg-bg-elevated'
                             }`}>
-                            <div className={`h-2 w-2 rounded-full ${healthStatus === 'success' ? 'bg-emerald-500' :
-                                healthStatus === 'error' ? 'bg-rose-500' :
-                                    healthStatus === 'loading' ? 'bg-amber-500 animate-pulse' : 'bg-zinc-500'
+                            <div className={`h-2 w-2 rounded-full ${healthStatus === 'success' ? 'bg-status-success' :
+                                healthStatus === 'error' ? 'bg-status-error' :
+                                    healthStatus === 'loading' ? 'bg-status-warning animate-pulse' : 'bg-zinc-500'
                                 }`} />
                             <span className="text-xs text-text-secondary">
                                 {config?.provider ? PROVIDER_DISPLAY_NAMES[config.provider] ?? "Unknown" : "Unknown"}
@@ -452,7 +447,7 @@ export default function VectorIndexPage() {
                         <div className="flex gap-2">
                             {isPartial && (
                                 <Button
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white"
+                                    className="bg-status-success hover:bg-status-success text-white"
                                     onClick={() => void handleContinueIndexing()}
                                     disabled={status?.isIndexing || isActionLoading}
                                 >
@@ -472,7 +467,7 @@ export default function VectorIndexPage() {
                                     </Button>
                                     <Button
                                         variant="secondary"
-                                        className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                                        className="text-status-error-text hover:text-status-error-text hover:bg-status-error-bg"
                                         onClick={() => void handleClearIndex()}
                                         disabled={status.isIndexing || isActionLoading}
                                     >
@@ -482,7 +477,7 @@ export default function VectorIndexPage() {
                                 </>
                             ) : (
                                 <Button
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white"
+                                    className="bg-status-success hover:bg-status-success text-white"
                                     onClick={() => void handleStartIndexing()}
                                     disabled={status?.isIndexing || isActionLoading}
                                 >
@@ -501,7 +496,7 @@ export default function VectorIndexPage() {
                             </div>
                             <div className="h-1.5 w-full bg-bg-app rounded-full overflow-hidden">
                                 <div
-                                    className="h-full bg-emerald-500 transition-all duration-500"
+                                    className="h-full bg-status-success transition-all duration-500"
                                     style={{ width: `${progressPercent}%` }}
                                 />
                             </div>
@@ -529,7 +524,7 @@ export default function VectorIndexPage() {
                                 <input
                                     type="text"
                                     placeholder="Enter natural language query (e.g. 'auth logic')"
-                                    className="flex-1 rounded-md border border-border-subtle bg-bg-elevated px-3 py-1.5 text-sm text-text-primary outline-none focus:border-emerald-500/50"
+                                    className="flex-1 rounded-md border border-border-subtle bg-bg-elevated px-3 py-1.5 text-sm text-text-primary outline-none focus:border-status-success-border"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
@@ -541,7 +536,7 @@ export default function VectorIndexPage() {
                                         max="50"
                                         value={topK}
                                         onChange={(e) => setTopK(parseInt(e.target.value) || 1)}
-                                        className="w-12 rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-xs text-text-primary outline-none focus:border-emerald-500/50"
+                                        className="w-12 rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-xs text-text-primary outline-none focus:border-status-success-border"
                                     />
                                 </div>
                                 <Button type="submit" size="sm" disabled={isSearching || !status?.totalChunks}>
@@ -551,7 +546,7 @@ export default function VectorIndexPage() {
                         </div>
                         <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-elegant bg-bg-app/20 min-h-0">
                             {searchError && (
-                                <div className="p-4 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-start gap-3">
+                                <div className="p-4 rounded-lg bg-status-error-bg border border-status-error-border text-status-error-text flex items-start gap-3">
                                     <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                                     <div className="text-xs">
                                         <p className="font-semibold mb-1">Search Error</p>
@@ -566,20 +561,20 @@ export default function VectorIndexPage() {
                                 </div>
                             )}
                             {searchResults.map((result, idx) => (
-                                <div key={idx} className="group rounded-lg border border-border-subtle bg-bg-elevated/40 p-4 hover:border-emerald-500/30 transition shadow-sm">
+                                <div key={idx} className="group rounded-lg border border-border-subtle bg-bg-elevated/40 p-4 hover:border-status-success-border transition shadow-sm">
                                     <div className="flex justify-between items-start mb-3">
                                         <div className="flex items-center gap-2">
-                                            <FileCode className="h-4 w-4 text-sky-400" />
+                                            <FileCode className="h-4 w-4 text-status-info-text" />
                                             <span className="text-xs font-mono text-text-primary truncate">{result.filePath}:{result.startLine}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <div className="h-1.5 w-24 bg-bg-app rounded-full overflow-hidden mr-1">
                                                 <div
-                                                    className="h-full bg-emerald-500"
+                                                    className="h-full bg-status-success"
                                                     style={{ width: `${result.score * 100}%` }}
                                                 />
                                             </div>
-                                            <span className="text-xs font-bold text-emerald-400">{(result.score * 100).toFixed(1)}%</span>
+                                            <span className="text-xs font-bold text-status-success-text">{(result.score * 100).toFixed(1)}%</span>
                                         </div>
                                     </div>
                                     <pre className="text-xs leading-relaxed text-text-secondary bg-bg-app p-3 rounded border border-border-subtle overflow-auto whitespace-pre font-mono max-h-[400px]">
@@ -602,7 +597,7 @@ export default function VectorIndexPage() {
                             )}
                             {status?.errors.map((error, idx) => (
                                 <div key={idx} className="p-2 border-b border-border-subtle last:border-0 hover:bg-white/5 transition">
-                                    <p className="text-xs text-rose-400 leading-normal">{error}</p>
+                                    <p className="text-xs text-status-error-text leading-normal">{error}</p>
                                 </div>
                             ))}
                         </div>
@@ -625,7 +620,7 @@ export default function VectorIndexPage() {
                         </Button>
                         <Button
                             variant="primary"
-                            className={confirmDialog?.title === "Clear Vectors" ? "bg-rose-600 hover:bg-rose-500" : ""}
+                            className={confirmDialog?.title === "Clear Vectors" ? "bg-status-error hover:bg-status-error" : ""}
                             onClick={() => confirmDialog?.action()}
                         >
                             Confirm
@@ -643,11 +638,11 @@ export default function VectorIndexPage() {
 
 function StatusCard({ title, value, icon: Icon, subtitle, progress, color, isAnimated, className }: any) {
     const colors: any = {
-        emerald: "text-emerald-500 bg-emerald-500/10",
+        emerald: "text-status-success-text bg-status-success-bg",
         sky: "text-zinc-400 bg-zinc-400/10",
         indigo: "text-zinc-400 bg-zinc-400/10",
         amber: "text-zinc-400 bg-zinc-400/10",
-        blue: "text-blue-400 bg-blue-400/10",
+        blue: "text-status-info-text bg-status-info-bg",
         zinc: "text-text-muted bg-bg-elevated"
     };
 

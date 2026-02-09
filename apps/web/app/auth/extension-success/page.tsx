@@ -57,7 +57,7 @@ export default function ExtensionSuccessPage() {
         return (
             <div className="min-h-screen flex items-center justify-center bg-bg-app">
                 <div className="flex flex-col items-center gap-4">
-                    <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                    <div className="w-8 h-8 border-2 border-status-success-border border-t-transparent rounded-full animate-spin" />
                     <p className="text-sm text-text-muted">Checking session...</p>
                 </div>
             </div>
@@ -68,7 +68,7 @@ export default function ExtensionSuccessPage() {
         return (
             <div className="min-h-screen flex items-center justify-center bg-bg-app">
                 <div className="flex flex-col items-center gap-4">
-                    <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                    <div className="w-8 h-8 border-2 border-status-success-border border-t-transparent rounded-full animate-spin" />
                     <p className="text-sm text-text-muted">Generating token...</p>
                 </div>
             </div>
@@ -79,8 +79,8 @@ export default function ExtensionSuccessPage() {
         return (
             <div className="min-h-screen flex items-center justify-center bg-bg-app px-4">
                 <div className="w-full max-w-sm text-center">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 mb-6">
-                        <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-status-error-bg border border-status-error-border mb-6">
+                        <svg className="w-8 h-8 text-status-error-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </div>
@@ -101,8 +101,8 @@ export default function ExtensionSuccessPage() {
         <div className="min-h-screen flex items-center justify-center bg-bg-app px-4">
             <div className="w-full max-w-md">
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 border border-green-500/20 mb-6">
-                        <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-status-success-bg border border-status-success-border mb-6">
+                        <svg className="w-8 h-8 text-status-success-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                     </div>
@@ -123,7 +123,7 @@ export default function ExtensionSuccessPage() {
                     </div>
                     <button
                         onClick={handleCopy}
-                        className="mt-4 w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded transition-colors flex items-center justify-center gap-2"
+                        className="mt-4 w-full py-2.5 px-4 bg-status-success hover:bg-status-success text-white text-sm font-medium rounded transition-colors flex items-center justify-center gap-2"
                     >
                         {copied ? (
                             <>

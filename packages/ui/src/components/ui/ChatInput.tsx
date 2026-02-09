@@ -2,7 +2,7 @@
 
 import React, { forwardRef, useEffect, useRef } from 'react';
 import { ArrowUp, Square } from 'lucide-react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 
 export interface ChatInputProps
   extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange' | 'value'> {
@@ -101,7 +101,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   className={cn(
                     'flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200',
                     sending
-                      ? 'bg-bg-surface border border-border-strong text-rose-500 scale-110 active:scale-95'
+                      ? 'bg-bg-surface border border-border-subtle text-status-error-text scale-110 active:scale-95'
                       : 'bg-text-primary text-bg-surface hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed'
                   )}
                   aria-label={sending ? 'Stop generation' : 'Send message'}

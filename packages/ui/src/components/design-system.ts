@@ -13,12 +13,16 @@ export type { Tokens, SpacingToken, RadiusToken, FontFamily, FontSize, Shadow, Z
 // CORE UI COMPONENTS
 // =============================================================================
 
-// Button
-export { Button } from './ui/Button';
+// Shared types
+export type { Size, CompactSize, ButtonSize, Variant, StatusVariant, Emphasis, ComponentBaseProps, InteractiveComponentProps } from '../types';
+export { LAYOUT, FONT_SIZES } from '../types';
+
+// Button (with CVA variants)
+export { Button, buttonVariants } from './ui/Button';
 export type { ButtonProps } from './ui/Button';
 
-// Badge
-export { Badge, StatusBadge, LoadingBadge } from './ui/Badge';
+// Badge (with CVA variants)
+export { Badge, StatusBadge, LoadingBadge, badgeVariants } from './ui/Badge';
 export type { BadgeProps, BadgeVariant, BadgeSize, StatusBadgeProps, StatusType } from './ui/Badge';
 
 // Input
@@ -81,6 +85,10 @@ export { Skeleton } from './ui/Skeleton';
 // Selector
 export { Selector } from './ui/Selector';
 export type { SelectorOption } from './ui/Selector';
+
+// FolderTreePicker
+export { FolderTreePicker } from './ui/FolderTreePicker';
+export type { FolderTreePickerProps } from './ui/FolderTreePicker';
 
 // SelectableRow
 export { SelectableRow } from './ui/SelectableRow';
@@ -146,9 +154,116 @@ export type { ContextChip, ContextChipsProps, ChipVariant } from './Agent/Contex
 export { InlineCompletion, MultiLineCompletion, useInlineCompletion } from './Agent/InlineCompletion';
 export type { InlineCompletionProps, MultiLineCompletionProps, UseInlineCompletionOptions, UseInlineCompletionResult } from './Agent/InlineCompletion';
 
+// Chat Agent Primitives (Explore + Deep Agent)
+export { CodeBlock } from './Agent/CodeBlock';
+export { ToolOutput } from './Agent/ToolOutput';
+export { ThoughtsPanel } from './Agent/ThoughtsPanel';
+export { TokenUsageDisplay, DurationDisplay, formatTokenCount, formatDuration } from './Agent/metrics';
+export type { TokenUsageSummary } from './Agent/metrics';
+
+// Chat Message Components
+export { MessageBubble, SystemMessage, CopyButton } from './Agent/ChatMessage';
+export type { MessageBubbleProps, MessageRole, SystemMessageProps, CopyButtonProps } from './Agent/ChatMessage';
+
+// Markdown Renderer
+export { MarkdownRenderer } from './Agent/MarkdownRenderer';
+export type { MarkdownRendererProps } from './Agent/MarkdownRenderer';
+
+// Tool Invocation (unified tool call display)
+export { ToolInvocation, ToolInvocationIcon } from './Agent/ToolInvocation';
+export type { ToolInvocationProps } from './Agent/ToolInvocation';
+
+// Message List (scrollable chat container with auto-scroll + tool pairing)
+export { MessageList, groupEvents } from './Agent/MessageList';
+export type { MessageListProps, ChatEvent, RenderItem } from './Agent/MessageList';
+
+// Agent Task Queue (sidebar task list from agent graph runs)
+export { AgentTaskQueue } from './Agent/AgentTaskQueue';
+export type { AgentTaskQueueProps, AgentTask, AgentTaskStatus } from './Agent/AgentTaskQueue';
+
+// Agent Panel (side panel for agent interactions)
+export { AgentPanel } from './Agent/AgentPanel';
+export type { AgentPanelProps } from './Agent/AgentPanel';
+
+// Agent Drawer (full-screen drawer for agent sessions)
+export { AgentDrawer } from './Agent/AgentDrawer';
+export type { AgentDrawerProps } from './Agent/AgentDrawer';
+
+// Conversation List (sidebar conversation history)
+export { ConversationList } from './Agent/ConversationList';
+export type { ConversationListProps } from './Agent/ConversationList';
+
+// Agent Audit Modal (audit trail viewer)
+export { AgentAuditModal } from './Agent/AgentAuditModal';
+export type { AgentAuditModalProps } from './Agent/AgentAuditModal';
+
+// Active Session (live agent chat session)
+export { ActiveSession } from './Agent/ActiveSession';
+export type { ActiveSessionProps } from './Agent/ActiveSession';
+
+// Agent Session Hooks (extracted business logic)
+export { useAgentSession } from '../hooks/useAgentSession';
+export type { UseAgentSessionReturn } from '../hooks/useAgentSession';
+export { useAgentStream, normalizeMessage } from '../hooks/useAgentStream';
+export type { Message, StreamStatus, UseAgentStreamOptions, UseAgentStreamReturn } from '../hooks/useAgentStream';
+export { useAgentEdits } from '../hooks/useAgentEdits';
+export type { PendingEdit, UseAgentEditsOptions, UseAgentEditsReturn } from '../hooks/useAgentEdits';
+
+// =============================================================================
+// EDITOR COMPONENTS (Monaco-based)
+// =============================================================================
+
+export { CodeEditor, detectLanguage } from './ui/CodeEditor';
+export type { CodeEditorProps, LineHighlight } from './ui/CodeEditor';
+
+export { DiffEditor } from './ui/DiffEditor';
+export type { DiffEditorProps } from './ui/DiffEditor';
+
+// =============================================================================
+// FILE BROWSER
+// =============================================================================
+
+export { FileBrowser } from './ui/FileBrowser';
+export type { FileBrowserProps, FileEntry as FileBrowserEntry } from './ui/FileBrowser';
+
+// =============================================================================
+// GIT COMPONENTS
+// =============================================================================
+
+export { GitPanel, GitStatusBar, GitBranchSelector, GitChangedFiles, GitCommitForm } from './ui/GitPanel';
+export type { GitPanelProps, GitStatusData } from './ui/GitPanel';
+
+// =============================================================================
+// LLM SELECTOR
+// =============================================================================
+
+export { LLMSelector } from './ui/LLMSelector';
+export type { LLMSelectorProps, LLMProvider } from './ui/LLMSelector';
+
+// =============================================================================
+// SETTINGS COMPONENTS
+// =============================================================================
+
+export { MCPServerConfig } from './ui/MCPServerConfig';
+export type { MCPServerConfigProps, MCPServer, MCPServerInput } from './ui/MCPServerConfig';
+
+export { EnvironmentConfig } from './ui/EnvironmentConfig';
+export type { EnvironmentConfigProps, EnvVariable } from './ui/EnvironmentConfig';
+
+export { WorktreeManager } from './ui/WorktreeManager';
+export type { WorktreeManagerProps, Worktree } from './ui/WorktreeManager';
+
 // =============================================================================
 // LAYOUT COMPONENTS
 // =============================================================================
 
 export { Breadcrumbs } from './ui/Breadcrumbs';
 export { BreadcrumbOverridesProvider, useBreadcrumbOverrides } from './ui/BreadcrumbOverridesProvider';
+
+// Marketing Layout
+export { MarketingHeader, MarketingFooter } from './ui/MarketingLayout';
+
+// Platform Components
+export { TrafficLights } from './ui/TrafficLights';
+export type { TrafficLightsProps } from './ui/TrafficLights';
+export type { MarketingHeaderProps, MarketingFooterProps, MarketingNavLink, MarketingFooterLink } from './ui/MarketingLayout';

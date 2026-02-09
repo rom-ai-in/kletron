@@ -193,7 +193,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
     if (error || !run || !chain) {
         return (
             <div className="flex h-full flex-col items-center justify-center p-12 text-center">
-                <div className="mb-4 text-rose-400">Error: {error || "Run not found"}</div>
+                <div className="mb-4 text-status-error-text">Error: {error || "Run not found"}</div>
                 <Button onClick={() => router.push("/app/runs")} variant="secondary">Back to Runs</Button>
             </div>
         );
@@ -214,7 +214,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                 <span className="text-[10px] text-text-muted">Updating…</span>
                             )}
                             {refreshError && !refreshing && (
-                                <span className="text-[10px] text-rose-400">Live update failed</span>
+                                <span className="text-[10px] text-status-error-text">Live update failed</span>
                             )}
                         </div>
                         <p className="text-sm text-text-muted">
@@ -303,7 +303,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                                         {isCurrent && sessionId && (
                                                             <button
                                                                 type="button"
-                                                                className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-300 hover:border-emerald-400/60 hover:text-emerald-200"
+                                                                className="inline-flex items-center gap-1 rounded border border-status-success-border bg-status-success-bg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-status-success-text hover:border-status-success-border hover:text-status-success-text"
                                                                 onClick={(event) => {
                                                                     event.stopPropagation();
                                                                     setSelectedStage({
@@ -315,7 +315,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                                                 }}
                                                                 title="Open live logs"
                                                             >
-                                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                                                                <span className="h-1.5 w-1.5 rounded-full bg-status-success animate-pulse" />
                                                                 Live
                                                             </button>
                                                         )}
@@ -394,10 +394,10 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                 <div className="text-xs text-text-muted">Loading logs...</div>
                             )}
                             {liveError && (
-                                <div className="text-xs text-rose-400">Error: {liveError}</div>
+                                <div className="text-xs text-status-error-text">Error: {liveError}</div>
                             )}
                             {!liveLoading && !liveError && !liveSessionId && run.status === "RUNNING" && (
-                                <div className="text-xs text-amber-300">
+                                <div className="text-xs text-status-warning-text">
                                     No session yet. If this run started before the live-logs update, cancel and restart the run.
                                 </div>
                             )}
@@ -441,7 +441,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                         <div key={idx} className="rounded-lg border border-border-subtle bg-bg-surface p-3">
                                             <div className="flex items-start justify-between">
                                                 <h3 className="text-sm font-medium">{finding.type} Finding</h3>
-                                                <span className={`rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase ${finding.type === "BLOQUANT" ? "bg-rose-500/10 text-rose-400" :
+                                                <span className={`rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase ${finding.type === "BLOQUANT" ? "bg-status-error-bg text-status-error-text" :
                                                     finding.type === "WARNING" ? "bg-zinc-500/10 text-zinc-400" :
                                                         "bg-zinc-400/10 text-zinc-300"
                                                     }`}>
@@ -532,8 +532,8 @@ function StatBox({ label, value }: { label: string; value: string | number }) {
 
 function StatusBadge({ status }: { status: ChainStatus }) {
     const styles: Record<ChainStatus, string> = {
-        COMPLETED: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-        FAILED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+        COMPLETED: "bg-status-success-bg text-status-success-text border-status-success-border",
+        FAILED: "bg-status-error-bg text-status-error-text border-status-error-border",
         RUNNING: "bg-zinc-400/10 text-zinc-300 border-zinc-400/20",
         PENDING: "bg-bg-elevated text-text-muted border-border-subtle",
         PAUSED: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",

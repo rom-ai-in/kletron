@@ -86,7 +86,7 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
                 )}
 
                 {error && (
-                    <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-4 text-center text-sm text-rose-300">
+                    <div className="rounded-lg border border-status-error-border bg-status-error-bg p-4 text-center text-sm text-status-error-text">
                         Error: {error}
                     </div>
                 )}
@@ -165,11 +165,11 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
 
 function StatusBadge({ status }: { status: string }) {
     const styles = {
-        COMPLETED: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-        FAILED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+        COMPLETED: "bg-status-success-bg text-status-success-text border-status-success-border",
+        FAILED: "bg-status-error-bg text-status-error-text border-status-error-border",
         RUNNING: "bg-bg-elevated text-text-primary border-border-strong",
         PENDING: "bg-bg-elevated text-text-muted border-border-subtle",
-        CANCELLED: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
+        CANCELLED: "bg-text-muted/10 text-text-secondary border-border-subtle",
     };
 
     const className = styles[status as keyof typeof styles] || "bg-bg-elevated text-text-muted border-border-subtle";

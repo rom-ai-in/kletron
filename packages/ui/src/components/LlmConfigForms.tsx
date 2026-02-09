@@ -174,7 +174,7 @@ export function AzureConfigForm({ initialConfig, onSave, onCancel }: AzureConfig
             </div>
 
             {error && (
-                <p className="text-xs text-rose-400 mt-2">{error}</p>
+                <p className="text-xs text-status-error-text mt-2">{error}</p>
             )}
 
             <div className="flex justify-end gap-2 pt-2">
@@ -195,14 +195,14 @@ export function AzureConfigForm({ initialConfig, onSave, onCancel }: AzureConfig
                     {testStatus === "testing" ? (
                         <Loader2 className="h-4 w-4 animate-spin text-text-muted" />
                     ) : testStatus === "success" ? (
-                        <Check className="h-4 w-4 text-emerald-500" />
+                        <Check className="h-4 w-4 text-status-success-text" />
                     ) : testStatus === "error" ? (
-                        <AlertCircle className="h-4 w-4 text-rose-500" />
+                        <AlertCircle className="h-4 w-4 text-status-error-text" />
                     ) : null}
                     {testStatus === "testing" ? "Testing..." : "Test Connection"}
                 </button>
                 {testMessage && testStatus !== "idle" && (
-                    <span className={`text-xs my-auto ${testStatus === "success" ? "text-emerald-500" : "text-rose-500"}`}>
+                    <span className={`text-xs my-auto ${testStatus === "success" ? "text-status-success-text" : "text-status-error-text"}`}>
                         {testMessage}
                     </span>
                 )}
@@ -540,14 +540,14 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
                 />
                 {modelsError && (
                     <div className="mt-1 space-y-1">
-                        <p className="text-[11px] text-amber-500">{modelsError}</p>
+                        <p className="text-[11px] text-status-warning-text">{modelsError}</p>
                         {modelsErrorDetails && (
                             <p className="text-[11px] text-text-muted">Details: {modelsErrorDetails}</p>
                         )}
                     </div>
                 )}
                 {isModelLoaded && (
-                    <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-emerald-500">
+                    <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-status-success-text">
                         <span>Loaded in LM Studio</span>
                         {activeModelInfo?.maxContextLength && (
                             <span className="text-text-muted">
@@ -691,7 +691,7 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
                         {activeModelSettings?.contextWindow &&
                             activeModelSettings?.maxTokens &&
                             activeModelSettings.maxTokens >= activeModelSettings.contextWindow && (
-                                <div className="flex items-center gap-2 text-[11px] text-amber-500 mt-1">
+                                <div className="flex items-center gap-2 text-[11px] text-status-warning-text mt-1">
                                     <AlertCircle className="h-3 w-3" />
                                     <span>Max output tokens should be less than the context window.</span>
                                 </div>
@@ -724,7 +724,7 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
             </div>
 
             {error && (
-                <p className="text-xs text-rose-400 mt-2">{error}</p>
+                <p className="text-xs text-status-error-text mt-2">{error}</p>
             )}
 
             <div className="flex justify-end gap-2 pt-2">
@@ -745,14 +745,14 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
                     {testStatus === "testing" ? (
                         <Loader2 className="h-4 w-4 animate-spin text-text-muted" />
                     ) : testStatus === "success" ? (
-                        <Check className="h-4 w-4 text-emerald-500" />
+                        <Check className="h-4 w-4 text-status-success-text" />
                     ) : testStatus === "error" ? (
-                        <AlertCircle className="h-4 w-4 text-rose-500" />
+                        <AlertCircle className="h-4 w-4 text-status-error-text" />
                     ) : null}
                     {testStatus === "testing" ? "Testing..." : "Test Connection"}
                 </button>
                 {testMessage && testStatus !== "idle" && (
-                    <span className={`text-xs my-auto ${testStatus === "success" ? "text-emerald-500" : "text-rose-500"}`}>
+                    <span className={`text-xs my-auto ${testStatus === "success" ? "text-status-success-text" : "text-status-error-text"}`}>
                         {testMessage}
                     </span>
                 )}

@@ -232,7 +232,7 @@ export default function ToolsConfigPage() {
                     </div>
 
                     {testError && (
-                        <div className="rounded-md border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300 flex items-start gap-2">
+                        <div className="rounded-md border border-status-error-border bg-status-error-bg p-3 text-xs text-status-error-text flex items-start gap-2">
                             <AlertCircle className="h-4 w-4 shrink-0" />
                             <span className="whitespace-pre-wrap font-mono">{testError}</span>
                         </div>

@@ -253,7 +253,7 @@ export function Sidebar() {
                                     className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-text-muted transition hover:bg-state-hover hover:text-text-primary"
                                     title="Copy Path"
                                 >
-                                    {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                                    {copied ? <Check className="h-3 w-3 text-status-success-text" /> : <Copy className="h-3 w-3" />}
                                 </button>
                             </div>
                         )}
@@ -273,7 +273,7 @@ export function Sidebar() {
                     {authLoading ? (
                         <div className="h-8 w-8 shrink-0 rounded-full bg-bg-elevated animate-pulse" />
                     ) : (
-                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr ${avatarGradient} text-white text-xs font-semibold shadow-sm`}>
+                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr ${avatarGradient} text-text-primary text-xs font-semibold shadow-sm`}>
                             {initials}
                         </div>
                     )}
@@ -310,7 +310,7 @@ export function Sidebar() {
                     <button
                         onClick={handleSignOut}
                         title="Se déconnecter"
-                        className="mt-2 flex w-full items-center justify-center rounded-lg p-2 text-text-muted transition hover:bg-red-500/10 hover:text-red-400"
+                        className="mt-2 flex w-full items-center justify-center rounded-lg p-2 text-text-muted transition hover:bg-status-error-bg hover:text-status-error-text"
                     >
                         <LogOut className="h-4 w-4" />
                     </button>

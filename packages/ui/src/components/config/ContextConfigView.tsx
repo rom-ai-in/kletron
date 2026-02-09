@@ -77,7 +77,7 @@ function RepoStatsCard({ data, isScanning, onScan }: RepoStatsCardProps) {
     <Panel className="p-4 border border-border-subtle bg-bg-elevated/50">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400">
+          <div className="p-1.5 rounded-md bg-status-success-bg text-status-success-text">
             <Scan size={14} />
           </div>
           <h3 className="text-sm font-semibold text-text-primary">Repository Analysis</h3>
@@ -109,7 +109,7 @@ function RepoStatsCard({ data, isScanning, onScan }: RepoStatsCardProps) {
             icon={FileCode}
             label="Nodes"
             value={data.nodes.length}
-            color="text-cyan-400"
+            color="text-status-info-text"
           />
           <StatBlock
             icon={GitBranch}
@@ -121,13 +121,13 @@ function RepoStatsCard({ data, isScanning, onScan }: RepoStatsCardProps) {
             icon={Zap}
             label="Tech Stack"
             value={data.structureContext?.techStack?.length || 0}
-            color="text-amber-400"
+            color="text-status-warning-text"
           />
           <StatBlock
             icon={Activity}
             label="Invariants"
             value={data.structureContext?.invariants?.length || 0}
-            color="text-emerald-400"
+            color="text-status-success-text"
           />
         </div>
       ) : (
@@ -177,10 +177,10 @@ function CacheStatusCard({
   const hasCache = !!cacheMetadata;
 
   return (
-    <Panel className={`p-4 border ${isStale ? "border-amber-500/30 bg-amber-500/5" : "border-border-subtle bg-bg-elevated/50"}`}>
+    <Panel className={`p-4 border ${isStale ? "border-status-warning-border bg-status-warning-bg" : "border-border-subtle bg-bg-elevated/50"}`}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className={`p-1.5 rounded-md ${isStale ? "bg-amber-500/10 text-amber-400" : "bg-cyan-500/10 text-cyan-400"}`}>
+          <div className={`p-1.5 rounded-md ${isStale ? "bg-status-warning-bg text-status-warning-text" : "bg-status-info-bg text-status-info-text"}`}>
             <FolderOpen size={14} />
           </div>
           <h3 className="text-sm font-semibold text-text-primary">Cache Status</h3>
@@ -201,7 +201,7 @@ function CacheStatusCard({
                 size="sm"
                 variant="ghost"
                 onClick={onClear}
-                className="h-7 text-xs gap-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                className="h-7 text-xs gap-1.5 text-status-error-text hover:text-status-error-text hover:bg-status-error-bg"
               >
                 <Trash2 size={12} />
                 Clear
@@ -232,15 +232,15 @@ function CacheStatusCard({
 
       {/* Stale Warning */}
       {isStale && (
-        <div className="mb-3 p-2 rounded-md bg-amber-500/10 border border-amber-500/20">
+        <div className="mb-3 p-2 rounded-md bg-status-warning-bg border border-status-warning-border">
           <div className="flex items-start gap-2">
-            <AlertCircle size={14} className="text-amber-400 mt-0.5 shrink-0" />
+            <AlertCircle size={14} className="text-status-warning-text mt-0.5 shrink-0" />
             <div>
-              <p className="text-xs font-medium text-amber-300">Cache is outdated</p>
-              <p className="text-[10px] text-amber-400/80 mt-0.5">
+              <p className="text-xs font-medium text-status-warning-text">Cache is outdated</p>
+              <p className="text-[10px] text-status-warning-text/80 mt-0.5">
                 Last scanned: <span className="font-mono">{cacheMetadata.scannedPath}</span>
               </p>
-              <p className="text-[10px] text-amber-400/80">
+              <p className="text-[10px] text-status-warning-text/80">
                 Current folder: <span className="font-mono">{currentWorkingFolder}</span>
               </p>
             </div>
@@ -283,7 +283,7 @@ function CacheViewerModal({ cacheMetadata, onClose }: { cacheMetadata: CacheMeta
       <div className="bg-bg-surface border border-border-subtle rounded-lg w-full max-w-3xl max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
           <div className="flex items-center gap-2">
-            <Eye size={16} className="text-cyan-400" />
+            <Eye size={16} className="text-status-info-text" />
             <h3 className="text-sm font-semibold text-text-primary">Cache Contents</h3>
           </div>
           <button
@@ -355,14 +355,14 @@ function ScanConsole({ logs, isActive }: { logs: string[]; isActive: boolean }) 
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm p-6 font-mono text-xs flex flex-col animate-in fade-in duration-300">
-      <div className="flex items-center gap-2 text-emerald-400 mb-4 border-b border-white/10 pb-3">
+      <div className="flex items-center gap-2 text-status-success-text mb-4 border-b border-white/10 pb-3">
         <Terminal className="w-5 h-5" />
         <span className="font-bold text-sm">DEEP SCAN IN PROGRESS...</span>
       </div>
       <div className="flex-1 overflow-y-auto scrollbar-none space-y-1">
         {logs.map((log, i) => (
-          <div key={i} className="text-zinc-300 flex gap-2">
-            <span className="text-zinc-600 select-none">{">"}</span>
+          <div key={i} className="text-text-secondary flex gap-2">
+            <span className="text-text-muted select-none">{">"}</span>
             <span>{log}</span>
           </div>
         ))}
@@ -612,7 +612,7 @@ export function ContextConfigView() {
                 }
               }}
               className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${auditContextEnabled
-                ? "bg-emerald-500"
+                ? "bg-status-success"
                 : "bg-bg-elevated border border-border-subtle"
                 }`}
             >
@@ -622,7 +622,7 @@ export function ContextConfigView() {
               />
             </button>
           </div>
-          {isSaved && <span className="text-xs font-medium text-emerald-500">Saved</span>}
+          {isSaved && <span className="text-xs font-medium text-status-success-text">Saved</span>}
         </div>
       </div>
 
@@ -650,9 +650,9 @@ export function ContextConfigView() {
       {/* Error Banner */}
       {error && (
         <div className="mx-6 mt-4">
-          <Panel className="p-3 border border-rose-500/30 bg-rose-500/10 text-rose-300 text-sm">
+          <Panel className="p-3 border border-status-error-border bg-status-error-bg text-status-error-text text-sm">
             <div className="flex items-start gap-2">
-              <AlertCircle className="mt-0.5 h-4 w-4 text-rose-400" />
+              <AlertCircle className="mt-0.5 h-4 w-4 text-status-error-text" />
               <span>{error}</span>
             </div>
           </Panel>
@@ -667,12 +667,12 @@ export function ContextConfigView() {
             <div className="max-w-4xl mx-auto space-y-6">
               {/* Status Card */}
               <Panel
-                className={`p-4 border-l-4 ${auditContextEnabled ? "border-l-emerald-500" : "border-l-text-muted"
+                className={`p-4 border-l-4 ${auditContextEnabled ? "border-l-status-success" : "border-l-text-muted"
                   }`}
               >
                 <div className="flex items-start gap-3">
                   {auditContextEnabled ? (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-0.5" />
+                    <CheckCircle2 className="h-5 w-5 text-status-success-text mt-0.5" />
                   ) : (
                     <AlertCircle className="h-5 w-5 text-text-muted mt-0.5" />
                   )}

@@ -78,7 +78,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }
     return (
         <div
             ref={menuRef}
-            className="fixed z-50 min-w-[160px] py-1 bg-zinc-800 border border-zinc-700 rounded-md shadow-xl"
+            role="menu"
+            aria-label="Context menu"
+            className="fixed z-50 min-w-[160px] py-1 bg-bg-elevated border border-border-subtle rounded-md shadow-xl"
             style={{ left: x, top: y }}
         >
             {items.map((item, index) => {
@@ -86,7 +88,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }
                     return (
                         <div
                             key={`sep-${index}`}
-                            className="my-1 border-t border-zinc-700"
+                            role="separator"
+                            className="my-1 border-t border-border-subtle"
                         />
                     );
                 }
@@ -95,14 +98,16 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }
                 return (
                     <button
                         key={index}
+                        role="menuitem"
+                        aria-disabled={menuItem.disabled}
                         className={`
                             w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left
                             transition-colors
                             ${menuItem.disabled
-                                ? 'text-zinc-500 cursor-not-allowed'
+                                ? 'text-text-muted cursor-not-allowed'
                                 : menuItem.danger
-                                    ? 'text-red-400 hover:bg-red-900/30'
-                                    : 'text-zinc-200 hover:bg-zinc-700'
+                                    ? 'text-status-error-text hover:bg-status-error-bg'
+                                    : 'text-text-primary hover:bg-state-hover'
                             }
                         `}
                         onClick={() => {
@@ -114,7 +119,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }
                         disabled={menuItem.disabled}
                     >
                         {menuItem.icon && (
-                            <span className="w-4 h-4 flex items-center justify-center opacity-70">
+                            <span className="w-4 h-4 flex items-center justify-center opacity-70" aria-hidden="true">
                                 {menuItem.icon}
                             </span>
                         )}

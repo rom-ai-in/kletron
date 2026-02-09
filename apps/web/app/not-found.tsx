@@ -14,7 +14,7 @@ export default function NotFound() {
                 {/* Error code with style */}
                 <div className="mb-6">
                     <h1 className="text-7xl font-bold text-text-primary mb-2 tracking-tighter">404</h1>
-                    <div className="h-1 w-16 mx-auto bg-gradient-to-r from-emerald-500 to-blue-500 rounded-full" />
+                    <div className="h-1 w-16 mx-auto bg-gradient-to-r from-status-success to-status-info rounded-full" />
                 </div>
 
                 {/* Fun message */}
@@ -35,15 +35,15 @@ export default function NotFound() {
                     </div>
                     <ul className="space-y-1.5 text-xs text-text-secondary">
                         <li className="flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-status-warning" />
                             The page has moved to /app/*
                         </li>
                         <li className="flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-status-warning" />
                             You typed the URL incorrectly
                         </li>
                         <li className="flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-status-warning" />
                             The page doesn't exist anymore
                         </li>
                     </ul>

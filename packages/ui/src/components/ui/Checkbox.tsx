@@ -1,7 +1,7 @@
 'use client';
 
 import React, { forwardRef, createContext, useContext } from 'react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 import { Check, Minus } from 'lucide-react';
 
 // =============================================================================
@@ -91,9 +91,9 @@ export const Checkbox = forwardRef<HTMLButtonElement, CheckboxProps>(
                     'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-app',
                     styles.box,
                     isChecked || indeterminate
-                        ? 'bg-emerald-500 border-emerald-500 focus:ring-emerald-500/50'
+                        ? 'bg-status-success border-status-success-border focus:ring-status-success-border'
                         : 'bg-transparent border-border-strong hover:border-text-muted focus:ring-focus-ring',
-                    error && !isChecked && 'border-rose-500',
+                    error && !isChecked && 'border-status-error-border',
                     disabled && 'opacity-50 cursor-not-allowed',
                     className
                 )}

@@ -25,7 +25,7 @@ export function addTokenUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
 /**
  * Call type for categorizing token usage
  */
-export type TokenUsageCallType = "react_agent" | "chain_stage" | "embedding" | "other";
+export type TokenUsageCallType = "react_agent" | "chain_stage" | "embedding" | "delegate_agent" | "delegate_summary" | "other";
 
 /**
  * Individual token usage record for granular logging

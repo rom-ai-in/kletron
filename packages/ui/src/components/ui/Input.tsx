@@ -1,7 +1,7 @@
 'use client';
 
 import React, { forwardRef } from 'react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 import { Search, AlertCircle, Check, X, Eye, EyeOff, type LucideIcon } from 'lucide-react';
 
 // =============================================================================
@@ -117,8 +117,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                             ],
 
                             // States
-                            error && 'border-rose-500/50 focus:border-rose-500 focus:ring-rose-500/20',
-                            success && 'border-emerald-500/50 focus:border-emerald-500 focus:ring-emerald-500/20',
+                            error && 'border-status-error-border focus:border-status-error-border focus:ring-status-error-border',
+                            success && 'border-status-success-border focus:border-status-success-border focus:ring-status-success-border',
 
                             // Icon padding
                             LeftIcon && 'pl-9',
@@ -147,19 +147,19 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 
                     {error && !showClear && !RightIcon && (
                         <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                            <AlertCircle className={cn(iconSizes[size], 'text-rose-400')} />
+                            <AlertCircle className={cn(iconSizes[size], 'text-status-error-text')} />
                         </div>
                     )}
 
                     {success && !showClear && !RightIcon && !error && (
                         <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                            <Check className={cn(iconSizes[size], 'text-emerald-400')} />
+                            <Check className={cn(iconSizes[size], 'text-status-success-text')} />
                         </div>
                     )}
                 </div>
 
                 {errorMessage && (
-                    <p className="mt-1.5 text-xs text-rose-400 flex items-center gap-1">
+                    <p className="mt-1.5 text-xs text-status-error-text flex items-center gap-1">
                         <AlertCircle className="w-3 h-3" />
                         {errorMessage}
                     </p>

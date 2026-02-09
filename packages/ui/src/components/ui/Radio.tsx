@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, forwardRef } from 'react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 
 // =============================================================================
 // RADIO COMPONENT
@@ -151,7 +151,7 @@ export const Radio = forwardRef<HTMLButtonElement, RadioProps>(
                     'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-app',
                     styles.outer,
                     isChecked
-                        ? 'border-emerald-500 focus:ring-emerald-500/50'
+                        ? 'border-status-success-border focus:ring-status-success-border'
                         : 'border-border-strong hover:border-text-muted focus:ring-focus-ring',
                     disabled && 'opacity-50 cursor-not-allowed',
                     className
@@ -159,7 +159,7 @@ export const Radio = forwardRef<HTMLButtonElement, RadioProps>(
                 {...props}
             >
                 {isChecked && (
-                    <span className={cn('rounded-full bg-emerald-500', styles.inner)} />
+                    <span className={cn('rounded-full bg-status-success', styles.inner)} />
                 )}
             </button>
         );

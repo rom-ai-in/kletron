@@ -30,11 +30,11 @@ function getTabIcon(filename: string): React.ReactNode {
         case 'tsx':
         case 'js':
         case 'jsx':
-            return <FileCode className="w-4 h-4 text-sky-400" />;
+            return <FileCode className="w-4 h-4 text-status-info-text" />;
         case 'json':
-            return <FileJson className="w-4 h-4 text-amber-400" />;
+            return <FileJson className="w-4 h-4 text-status-warning-text" />;
         default:
-            return <FileText className="w-4 h-4 text-zinc-400" />;
+            return <FileText className="w-4 h-4 text-text-secondary" />;
     }
 }
 
@@ -64,8 +64,8 @@ export function EditorTabs({
                         key={tab.id}
                         className={`flex items-center gap-2 px-3 min-w-[120px] max-w-[200px] cursor-pointer transition-colors border-r border-[var(--tab-border)] group
               ${isActive
-                                ? 'bg-[var(--tab-active-bg)] text-zinc-100'
-                                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+                                ? 'bg-[var(--tab-active-bg)] text-text-primary'
+                                : 'text-text-secondary hover:text-text-primary hover:bg-state-hover'
                             }
               ${tab.isPinned ? 'italic' : ''}
             `}
@@ -97,7 +97,7 @@ export function EditorTabs({
                                 />
                             ) : null}
                             <X
-                                className={`w-3 h-3 text-zinc-500 hover:text-zinc-200 transition-colors
+                                className={`w-3 h-3 text-text-muted hover:text-text-primary transition-colors
                   ${tab.isModified ? 'hidden group-hover:block' : 'opacity-0 group-hover:opacity-100'}
                 `}
                             />

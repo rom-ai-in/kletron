@@ -34,27 +34,27 @@ function getFileIcon(filename: string): React.ReactNode {
         case 'tsx':
         case 'js':
         case 'jsx':
-            return <FileCode className="w-4 h-4 text-sky-400" />;
+            return <FileCode className="w-4 h-4 text-status-info-text" />;
         case 'json':
-            return <FileJson className="w-4 h-4 text-amber-400" />;
+            return <FileJson className="w-4 h-4 text-status-warning-text" />;
         case 'md':
         case 'txt':
-            return <FileText className="w-4 h-4 text-zinc-400" />;
+            return <FileText className="w-4 h-4 text-text-secondary" />;
         case 'png':
         case 'jpg':
         case 'jpeg':
         case 'gif':
         case 'svg':
-            return <FileImage className="w-4 h-4 text-emerald-400" />;
+            return <FileImage className="w-4 h-4 text-status-success-text" />;
         case 'css':
         case 'scss':
             return <FileCode className="w-4 h-4 text-violet-400" />;
         case 'config':
         case 'yaml':
         case 'yml':
-            return <Cog className="w-4 h-4 text-zinc-500" />;
+            return <Cog className="w-4 h-4 text-text-muted" />;
         default:
-            return <File className="w-4 h-4 text-zinc-400" />;
+            return <File className="w-4 h-4 text-text-secondary" />;
     }
 }
 
@@ -100,20 +100,30 @@ function TreeNodeItem({
     return (
         <>
             <div
+                role="treeitem"
+                aria-selected={isSelected}
+                aria-expanded={isFolder ? isExpanded : undefined}
+                tabIndex={0}
                 className={`flex items-center gap-1 py-1 cursor-pointer transition-colors group ${isSelected
-                        ? 'bg-zinc-800 text-zinc-100'
-                        : 'text-zinc-300 hover:bg-zinc-800/50'
+                        ? 'bg-state-active text-text-primary'
+                        : 'text-text-primary hover:bg-state-hover'
                     }`}
                 style={{ paddingLeft }}
                 onClick={handleClick}
                 onContextMenu={handleContextMenu}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleClick(e as any);
+                    }
+                }}
             >
                 {/* Expand/Collapse chevron */}
                 <span className="w-4 h-4 flex items-center justify-center">
                     {isFolder && (
                         isExpanded
-                            ? <ChevronDown className="w-3 h-3 text-zinc-500" />
-                            : <ChevronRight className="w-3 h-3 text-zinc-500" />
+                            ? <ChevronDown className="w-3 h-3 text-text-muted" />
+                            : <ChevronRight className="w-3 h-3 text-text-muted" />
                     )}
                 </span>
 
@@ -122,8 +132,8 @@ function TreeNodeItem({
                     {node.icon || (
                         isFolder
                             ? (isExpanded
-                                ? <FolderOpen className="w-4 h-4 text-amber-400" />
-                                : <Folder className="w-4 h-4 text-amber-400" />)
+                                ? <FolderOpen className="w-4 h-4 text-status-warning-text" />
+                                : <Folder className="w-4 h-4 text-status-warning-text" />)
                             : getFileIcon(node.name)
                     )}
                 </span>
@@ -134,7 +144,7 @@ function TreeNodeItem({
 
             {/* Children */}
             {isFolder && isExpanded && node.children && (
-                <div>
+                <div role="group">
                     {node.children.map(child => (
                         <TreeNodeItem
                             key={child.id}
@@ -194,7 +204,7 @@ export function FileTree({
     }, [onSelect]);
 
     return (
-        <div className={`py-1 overflow-y-auto scrollbar-elegant ${className}`}>
+        <div role="tree" aria-label="File tree" className={`py-1 overflow-y-auto scrollbar-elegant ${className}`}>
             {nodes.map(node => (
                 <TreeNodeItem
                     key={node.id}

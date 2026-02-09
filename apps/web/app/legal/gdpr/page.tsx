@@ -1,246 +1,346 @@
 'use client';
 
+import { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import {
+    CreditCard,
+    Zap,
+    FileText,
+    ExternalLink,
+    ArrowUpRight,
+    Check,
+    TrendingUp,
+    Loader2,
+    AlertCircle
+} from 'lucide-react';
+import { useSubscription } from '@numezis/ui/hooks/useSubscription';
 
-export default function GDPRPage() {
+// Plan display configurations
+const planConfigs = {
+    free: {
+        name: 'Starter',
+        price: 0,
+        period: 'Free forever',
+        features: [
+            'Bring Your Own Key (BYOK)',
+            '1 workspace',
+            '3 agent graphs',
+            '10K files semantic index',
+        ],
+    },
+    pro: {
+        name: 'Pro',
+        price: 19,
+        period: 'per month',
+        features: [
+            'Everything in Starter',
+            '5 workspaces',
+            'Unlimited agent graphs',
+            '100K files semantic index',
+            '500K hosted tokens/month',
+            'Priority support',
+        ],
+    },
+    team: {
+        name: 'Team',
+        price: 49,
+        period: 'per user/month',
+        features: [
+            'Everything in Pro',
+            'Unlimited workspaces',
+            'Unlimited semantic index',
+            '1M hosted tokens/user/month',
+            'Team collaboration',
+            'Admin dashboard',
+        ],
+    },
+};
+
+export default function BillingPage() {
     return (
-        <div className="min-h-screen w-full bg-bg-app">
-            {/* Header */}
-            <header className="fixed top-0 left-0 right-0 z-50 border-b border-border-subtle bg-bg-app/80 backdrop-blur-lg">
-                <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-                    <Link href="/" className="flex items-center gap-2.5">
-                        <span className="text-xl">🧠</span>
-                        <span className="text-sm font-semibold text-text-primary">Numezis Code</span>
-                    </Link>
-                    <Link href="/" className="text-sm text-text-muted hover:text-text-primary transition-colors">
-                        ← Back to Home
-                    </Link>
-                </div>
-            </header>
-
-            {/* Content */}
-            <main className="pt-24 pb-16 px-6">
-                <article className="max-w-3xl mx-auto">
-                    <div className="mb-8">
-                        <p className="text-xs text-text-muted mb-2">Last updated: February 2, 2026</p>
-                        <h1 className="text-3xl font-bold text-text-primary mb-4">GDPR Compliance</h1>
-                        <p className="text-sm text-text-muted">
-                            Numezis Technologies SA is committed to full compliance with the General Data Protection Regulation (GDPR)
-                            and the Swiss Federal Act on Data Protection (FADP).
-                        </p>
-                    </div>
-
-                    {/* Commitment Banner */}
-                    <div className="p-6 rounded-xl border border-blue-500/30 bg-gradient-to-br from-blue-500/5 to-emerald-500/5 mb-8">
-                        <div className="flex items-start gap-4">
-                            <span className="text-3xl">🇪🇺</span>
-                            <div>
-                                <h2 className="text-lg font-semibold text-text-primary mb-2">Our European Commitment</h2>
-                                <ul className="text-sm text-text-secondary space-y-1">
-                                    <li>✓ Swiss company — not subject to US jurisdiction</li>
-                                    <li>✓ All data processed within EU/Switzerland</li>
-                                    <li>✓ No CLOUD Act, no FISA 702 exposure</li>
-                                    <li>✓ GDPR-compliant by design, not as an afterthought</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                    <Section title="Data Processing Overview">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-xs border-collapse">
-                                <thead>
-                                    <tr className="border-b border-border-subtle">
-                                        <th className="text-left py-2 text-text-muted font-medium">Data Category</th>
-                                        <th className="text-left py-2 text-text-muted font-medium">Purpose</th>
-                                        <th className="text-left py-2 text-text-muted font-medium">Legal Basis</th>
-                                        <th className="text-left py-2 text-text-muted font-medium">Retention</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="text-text-secondary">
-                                    <tr className="border-b border-border-subtle/50">
-                                        <td className="py-2">Email, Name</td>
-                                        <td className="py-2">Account management</td>
-                                        <td className="py-2">Contract</td>
-                                        <td className="py-2">Account lifetime + 30 days</td>
-                                    </tr>
-                                    <tr className="border-b border-border-subtle/50">
-                                        <td className="py-2">Payment info</td>
-                                        <td className="py-2">Billing</td>
-                                        <td className="py-2">Contract</td>
-                                        <td className="py-2">10 years (legal)</td>
-                                    </tr>
-                                    <tr className="border-b border-border-subtle/50">
-                                        <td className="py-2">Code/Content</td>
-                                        <td className="py-2">AI processing</td>
-                                        <td className="py-2">Contract</td>
-                                        <td className="py-2">Transient only</td>
-                                    </tr>
-                                    <tr className="border-b border-border-subtle/50">
-                                        <td className="py-2">Usage metrics</td>
-                                        <td className="py-2">Service improvement</td>
-                                        <td className="py-2">Legitimate interest</td>
-                                        <td className="py-2">90 days</td>
-                                    </tr>
-                                    <tr>
-                                        <td className="py-2">Marketing emails</td>
-                                        <td className="py-2">Product updates</td>
-                                        <td className="py-2">Consent</td>
-                                        <td className="py-2">Until withdrawn</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </Section>
-
-                    <Section title="Your GDPR Rights">
-                        <p>
-                            As a data subject, you have the following rights under GDPR Articles 15-22:
-                        </p>
-                        <div className="grid gap-3 mt-4">
-                            {[
-                                {
-                                    article: 'Art. 15',
-                                    title: 'Right of Access',
-                                    desc: 'Request a copy of all personal data we hold about you',
-                                    action: 'Request via account settings or email',
-                                },
-                                {
-                                    article: 'Art. 16',
-                                    title: 'Right to Rectification',
-                                    desc: 'Correct inaccurate or incomplete data',
-                                    action: 'Update in account settings',
-                                },
-                                {
-                                    article: 'Art. 17',
-                                    title: 'Right to Erasure',
-                                    desc: 'Request deletion of your data ("right to be forgotten")',
-                                    action: 'Delete account or request via email',
-                                },
-                                {
-                                    article: 'Art. 18',
-                                    title: 'Right to Restriction',
-                                    desc: 'Limit processing while disputes are resolved',
-                                    action: 'Request via email',
-                                },
-                                {
-                                    article: 'Art. 20',
-                                    title: 'Right to Portability',
-                                    desc: 'Export your data in a machine-readable format',
-                                    action: 'Export from account settings',
-                                },
-                                {
-                                    article: 'Art. 21',
-                                    title: 'Right to Object',
-                                    desc: 'Object to processing based on legitimate interests',
-                                    action: 'Request via email',
-                                },
-                            ].map((right) => (
-                                <div key={right.article} className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div>
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-bg-elevated text-text-muted">{right.article}</span>
-                                                <h3 className="text-sm font-medium text-text-primary">{right.title}</h3>
-                                            </div>
-                                            <p className="text-xs text-text-muted">{right.desc}</p>
-                                        </div>
-                                        <span className="text-[10px] text-emerald-500 whitespace-nowrap">{right.action}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </Section>
-
-                    <Section title="Data Processing Agreements">
-                        <p>
-                            For Enterprise customers, we offer a comprehensive Data Processing Agreement (DPA) that includes:
-                        </p>
-                        <ul>
-                            <li>Standard Contractual Clauses (SCCs) for any sub-processors</li>
-                            <li>Technical and organizational security measures (TOMs)</li>
-                            <li>Sub-processor list and notification procedures</li>
-                            <li>Review rights</li>
-                        </ul>
-                        <p className="mt-3">
-                            Contact <a href="mailto:legal@numezis.com" className="text-emerald-500 hover:underline">legal@numezis.com</a> to
-                            request a DPA.
-                        </p>
-                    </Section>
-
-                    <Section title="Sub-Processors">
-                        <p>We use the following sub-processors to deliver our Service:</p>
-                        <div className="mt-3 space-y-2">
-                            {[
-                                { name: 'Supabase', purpose: 'Authentication', location: 'EU (Frankfurt)' },
-                                { name: 'MongoDB Atlas', purpose: 'Database', location: 'EU (Ireland)' },
-                                { name: 'Azure', purpose: 'AI infrastructure', location: 'EU (West Europe)' },
-                                { name: 'Stripe', purpose: 'Payment processing', location: 'EU (Dublin)' },
-                            ].map((sp) => (
-                                <div key={sp.name} className="flex items-center justify-between p-3 rounded-lg border border-border-subtle bg-bg-surface text-xs">
-                                    <span className="text-text-primary font-medium">{sp.name}</span>
-                                    <span className="text-text-muted">{sp.purpose}</span>
-                                    <span className="text-emerald-500">{sp.location}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </Section>
-
-                    <Section title="Data Breach Notification">
-                        <p>
-                            In the event of a personal data breach that poses a risk to your rights,
-                            we will notify you within 72 hours in accordance with GDPR Article 33.
-                        </p>
-                    </Section>
-
-                    <Section title="Contact Our DPO">
-                        <p>For GDPR-related inquiries, contact our Data Protection Officer:</p>
-                        <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface mt-3">
-                            <p className="text-text-secondary text-sm">
-                                <strong>Data Protection Officer</strong><br />
-                                Numezis Technologies SA<br />
-                                Geneva, Switzerland<br />
-                                <a href="mailto:dpo@numezis.com" className="text-emerald-500 hover:underline">dpo@numezis.com</a>
-                            </p>
-                        </div>
-                    </Section>
-
-                    <Section title="Supervisory Authority">
-                        <p>You may lodge a complaint with:</p>
-                        <ul>
-                            <li>
-                                <strong>Switzerland:</strong> Federal Data Protection and Information Commissioner (FDPIC)<br />
-                                <a href="https://www.edoeb.admin.ch" className="text-emerald-500 hover:underline" target="_blank" rel="noopener noreferrer">edoeb.admin.ch</a>
-                            </li>
-                            <li className="mt-2">
-                                <strong>EU:</strong> Your local Data Protection Authority
-                            </li>
-                        </ul>
-                    </Section>
-                </article>
-            </main>
-
-            {/* Footer */}
-            <footer className="py-8 px-6 border-t border-border-subtle">
-                <div className="max-w-4xl mx-auto flex flex-wrap gap-4 justify-center text-xs text-text-muted">
-                    <Link href="/legal/terms" className="hover:text-text-primary">Terms of Service</Link>
-                    <Link href="/legal/privacy" className="hover:text-text-primary">Privacy Policy</Link>
-                    <Link href="/legal/gdpr" className="hover:text-text-primary">GDPR</Link>
-                    <Link href="/legal/cookies" className="hover:text-text-primary">Cookie Policy</Link>
-                    <Link href="/legal/imprint" className="hover:text-text-primary">Imprint</Link>
-                </div>
-            </footer>
-        </div>
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-text-muted">Loading...</div>}>
+            <BillingPageContent />
+        </Suspense>
     );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-    return (
-        <section className="mb-8">
-            <h2 className="text-lg font-semibold text-text-primary mb-3">{title}</h2>
-            <div className="text-sm text-text-secondary space-y-3 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:space-y-1">
-                {children}
+function BillingPageContent() {
+    const searchParams = useSearchParams();
+    const { subscription, planId, planLimits, loading, error, redirectToPortal, refresh, isFree, isPro } = useSubscription();
+    const [portalLoading, setPortalLoading] = useState(false);
+    const [portalError, setPortalError] = useState<string | null>(null);
+    const [showSuccess, setShowSuccess] = useState(false);
+
+    // Check for success/cancel query params
+    useEffect(() => {
+        if (searchParams?.get('success') === 'true') {
+            setShowSuccess(true);
+            // Refresh subscription data
+            refresh();
+            // Clear success message after 5 seconds
+            setTimeout(() => setShowSuccess(false), 5000);
+        }
+    }, [searchParams, refresh]);
+
+    const currentPlan = planConfigs[planId] || planConfigs.free;
+
+    const handleManageBilling = async () => {
+        setPortalLoading(true);
+        setPortalError(null);
+
+        try {
+            await redirectToPortal();
+        } catch (err) {
+            console.error('Portal error:', err);
+            setPortalError(err instanceof Error ? err.message : 'Failed to open billing portal');
+            setPortalLoading(false);
+        }
+    };
+
+    // Calculate token usage (placeholder - would come from actual usage tracking)
+    const tokenUsage = {
+        used: 0,
+        limit: planLimits.hostedTokensPerMonth,
+        percentage: planLimits.hostedTokensPerMonth > 0 ? 0 : 0,
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-6 h-6 animate-spin text-text-muted" />
             </div>
-        </section>
+        );
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* Success Message */}
+            {showSuccess && (
+                <div className="p-4 rounded-lg border border-status-success-border bg-status-success-bg">
+                    <div className="flex items-center gap-2">
+                        <Check className="w-5 h-5 text-status-success-text" />
+                        <p className="text-sm text-status-success-text font-medium">
+                            Payment successful! Your subscription is now active.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Error Message */}
+            {error && (
+                <div className="p-4 rounded-lg border border-status-error-border bg-status-error-bg">
+                    <div className="flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5 text-status-error-text" />
+                        <p className="text-sm text-status-error-text">{error}</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Current Plan */}
+            <div className="p-6 rounded-lg border border-border-subtle bg-bg-surface">
+                <div className="flex items-start justify-between mb-6">
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <h2 className="text-lg font-semibold text-text-primary">{currentPlan.name}</h2>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${subscription?.status === 'active'
+                                ? 'bg-status-success-bg text-status-success-text border border-status-success-border'
+                                : subscription?.status === 'past_due'
+                                    ? 'bg-status-warning-bg text-status-warning-text border border-status-warning-border'
+                                    : subscription?.cancelAtPeriodEnd
+                                        ? 'bg-status-warning-bg text-status-warning-text border border-status-warning-border'
+                                        : 'bg-status-success-bg text-status-success-text border border-status-success-border'
+                                }`}>
+                                {subscription?.cancelAtPeriodEnd
+                                    ? 'Cancels Soon'
+                                    : subscription?.status === 'past_due'
+                                        ? 'Past Due'
+                                        : 'Active'}
+                            </span>
+                        </div>
+                        <p className="text-sm text-text-muted">{currentPlan.period}</p>
+                        {subscription?.currentPeriodEnd && (
+                            <p className="text-xs text-text-muted mt-1">
+                                {subscription.cancelAtPeriodEnd ? 'Expires' : 'Renews'}: {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+                            </p>
+                        )}
+                    </div>
+                    <div className="text-right">
+                        <p className="text-2xl font-bold text-text-primary">€{currentPlan.price}</p>
+                        <p className="text-xs text-text-muted">/month</p>
+                    </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-2 mb-6">
+                    {currentPlan.features.map((feature) => (
+                        <div key={feature} className="flex items-center gap-2 text-xs text-text-secondary">
+                            <Check className="w-3.5 h-3.5 text-status-success-text shrink-0" />
+                            {feature}
+                        </div>
+                    ))}
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                    {isFree ? (
+                        <Link
+                            href="/pricing"
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-text-primary text-bg-app hover:bg-text-secondary transition-colors"
+                        >
+                            <ArrowUpRight className="w-4 h-4" />
+                            Upgrade Plan
+                        </Link>
+                    ) : (
+                        <>
+                            <button
+                                onClick={handleManageBilling}
+                                disabled={portalLoading}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-text-primary text-bg-app hover:bg-text-secondary transition-colors disabled:opacity-50"
+                            >
+                                {portalLoading ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <CreditCard className="w-4 h-4" />
+                                )}
+                                Manage Billing
+                            </button>
+                            <Link
+                                href="/pricing"
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-bg-elevated border border-border-subtle text-text-primary hover:bg-state-hover transition-colors"
+                            >
+                                Change Plan
+                            </Link>
+                        </>
+                    )}
+                </div>
+
+                {portalError && (
+                    <p className="mt-3 text-xs text-status-error-text">{portalError}</p>
+                )}
+            </div>
+
+            {/* Token Usage */}
+            <div className="p-6 rounded-lg border border-border-subtle bg-bg-surface">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-lg bg-status-success-bg border border-status-success-border flex items-center justify-center">
+                        <Zap className="w-5 h-5 text-status-success-text" />
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-semibold text-text-primary">AI Token Usage</h3>
+                        <p className="text-xs text-text-muted">This billing period</p>
+                    </div>
+                </div>
+
+                {isFree ? (
+                    <div className="p-4 rounded-md bg-bg-elevated border border-border-subtle">
+                        <p className="text-sm text-text-secondary mb-2">
+                            You&apos;re using <strong>Bring Your Own Key (BYOK)</strong> mode.
+                        </p>
+                        <p className="text-xs text-text-muted">
+                            Token usage is billed directly by your AI provider (OpenAI, Azure, etc.).
+                            Upgrade to Pro to get 500K hosted tokens/month included.
+                        </p>
+                        <Link
+                            href="/pricing"
+                            className="inline-flex items-center gap-1 text-xs text-status-success-text hover:text-status-success-text mt-3"
+                        >
+                            View Pro benefits
+                            <ExternalLink className="w-3 h-3" />
+                        </Link>
+                    </div>
+                ) : (
+                    <>
+                        <div className="mb-4">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs text-text-muted">
+                                    {tokenUsage.used.toLocaleString()} / {tokenUsage.limit.toLocaleString()} tokens
+                                </span>
+                                <span className="text-xs font-medium text-text-secondary">
+                                    {tokenUsage.percentage}%
+                                </span>
+                            </div>
+                            <div className="h-2 rounded-full bg-bg-elevated overflow-hidden">
+                                <div
+                                    className="h-full rounded-full bg-status-success transition-all"
+                                    style={{ width: `${tokenUsage.percentage}%` }}
+                                />
+                            </div>
+                        </div>
+                        <p className="text-[11px] text-text-muted">
+                            Overage pricing: €0.002 per 1K tokens after your monthly allowance.
+                        </p>
+                    </>
+                )}
+            </div>
+
+            {/* Usage Trends */}
+            <div className="p-6 rounded-lg border border-border-subtle bg-bg-surface">
+                <div className="flex items-center gap-3 mb-4">
+                    <TrendingUp className="w-5 h-5 text-text-muted" />
+                    <h3 className="text-sm font-semibold text-text-primary">Usage Trends</h3>
+                </div>
+
+                <div className="h-32 flex items-center justify-center border border-dashed border-border-subtle rounded-md">
+                    <p className="text-xs text-text-muted">Usage analytics coming soon</p>
+                </div>
+            </div>
+
+            {/* Payment Method & Invoices - Only show for paid plans */}
+            {!isFree && (
+                <>
+                    {/* Payment Method */}
+                    <div className="p-6 rounded-lg border border-border-subtle bg-bg-surface">
+                        <div className="flex items-center gap-3 mb-4">
+                            <CreditCard className="w-5 h-5 text-text-muted" />
+                            <h3 className="text-sm font-semibold text-text-primary">Payment Method</h3>
+                        </div>
+
+                        <div className="p-4 rounded-md bg-bg-elevated border border-border-subtle">
+                            <p className="text-sm text-text-secondary">
+                                Manage your payment methods in the Stripe billing portal.
+                            </p>
+                            <button
+                                onClick={handleManageBilling}
+                                disabled={portalLoading}
+                                className="mt-3 text-xs text-status-success-text hover:text-status-success-text inline-flex items-center gap-1"
+                            >
+                                {portalLoading ? 'Loading...' : 'Update payment method'}
+                                <ExternalLink className="w-3 h-3" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Invoices */}
+                    <div className="p-6 rounded-lg border border-border-subtle bg-bg-surface">
+                        <div className="flex items-center gap-3 mb-4">
+                            <FileText className="w-5 h-5 text-text-muted" />
+                            <h3 className="text-sm font-semibold text-text-primary">Invoices</h3>
+                        </div>
+
+                        <div className="p-4 rounded-md bg-bg-elevated border border-border-subtle">
+                            <p className="text-sm text-text-secondary">
+                                View and download invoices in the Stripe billing portal.
+                            </p>
+                            <button
+                                onClick={handleManageBilling}
+                                disabled={portalLoading}
+                                className="mt-3 text-xs text-status-success-text hover:text-status-success-text inline-flex items-center gap-1"
+                            >
+                                {portalLoading ? 'Loading...' : 'View all invoices'}
+                                <ExternalLink className="w-3 h-3" />
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Billing Contact */}
+            <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
+                <p className="text-xs text-text-secondary">
+                    <strong className="text-text-primary">Billing questions?</strong>{' '}
+                    Contact us at{' '}
+                    <a href="mailto:billing@numezis.com" className="text-status-success-text hover:underline">billing@numezis.com</a>
+                </p>
+            </div>
+        </div>
     );
 }

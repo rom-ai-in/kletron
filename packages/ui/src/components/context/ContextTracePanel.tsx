@@ -97,7 +97,7 @@ export function ContextTracePanel() {
             <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-elegant bg-bg-app/50">
                 {/* Message Display */}
                 {message && (
-                    <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-status-warning-bg border border-status-warning-border text-status-warning-text text-xs">
                         <AlertCircle size={14} className="shrink-0 mt-0.5" />
                         <span>{message}</span>
                     </div>
@@ -120,7 +120,7 @@ export function ContextTracePanel() {
                     >
                         <div className="flex justify-between items-start mb-2">
                             <div className="flex items-center gap-2 min-w-0">
-                                <div className="p-1 rounded bg-cyan-500/10 text-cyan-400 shrink-0">
+                                <div className="p-1 rounded bg-status-info-bg text-status-info-text shrink-0">
                                     {item.node.type === "symbol" ? <Hash size={12} /> : <FileText size={12} />}
                                 </div>
                                 <span
@@ -132,10 +132,10 @@ export function ContextTracePanel() {
                             </div>
                             <span
                                 className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ${item.score >= 0.7
-                                    ? "bg-emerald-500/20 text-emerald-400"
+                                    ? "bg-status-success-bg text-status-success-text"
                                     : item.score >= 0.4
-                                        ? "bg-amber-500/20 text-amber-400"
-                                        : "bg-zinc-700 text-zinc-400"
+                                        ? "bg-status-warning-bg text-status-warning-text"
+                                        : "bg-bg-elevated text-text-muted"
                                     }`}
                             >
                                 {(item.score * 100).toFixed(0)}%

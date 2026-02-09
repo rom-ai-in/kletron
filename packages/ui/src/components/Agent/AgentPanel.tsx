@@ -4,7 +4,7 @@ import { ConversationList } from './ConversationList';
 import { ActiveSession } from './ActiveSession';
 import { Plus, MessageSquare, ArrowLeft } from 'lucide-react';
 
-interface AgentPanelProps {
+export interface AgentPanelProps {
     onClose?: () => void; // Optional now
 }
 
@@ -92,7 +92,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = () => {
     const NewChatButton = (
         <button
             onClick={() => handleCreate()}
-            className="flex items-center gap-1.5 px-2 py-1 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 rounded text-[11px] font-medium transition-colors"
+            className="flex items-center gap-1.5 px-2 py-1 hover:bg-bg-elevated text-text-muted hover:text-text-primary rounded text-[11px] font-medium transition-colors"
             title="Start New Chat"
         >
             <Plus className="w-4 h-4" />
@@ -102,11 +102,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = () => {
     // If active conversation, show chat. Otherwise show list.
     if (activeConversationId) {
         return (
-            <div className="flex flex-col h-full bg-bg-surface font-sans border-l border-zinc-800">
-                <div className="h-8 min-h-[32px] border-b border-zinc-800 flex items-center px-2 justify-between bg-zinc-900/60">
+            <div className="flex flex-col h-full bg-bg-surface font-sans border-l border-border-subtle">
+                <div className="h-8 min-h-[32px] border-b border-border-subtle flex items-center px-2 justify-between bg-bg-app/60">
                     <button
                         onClick={() => setActiveConversationId(null)}
-                        className="flex items-center gap-1 text-[11px] font-semibold text-zinc-400 hover:text-zinc-100 transition-all px-2 py-0.5 hover:bg-zinc-800 rounded border border-transparent hover:border-zinc-700"
+                        className="flex items-center gap-1 text-[11px] font-semibold text-text-muted hover:text-text-primary transition-all px-2 py-0.5 hover:bg-bg-elevated rounded border border-transparent hover:border-border-subtle"
                     >
                         <ArrowLeft className="w-3 h-3" /> Back
                     </button>
@@ -131,9 +131,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = () => {
     }
 
     return (
-        <div className="flex flex-col h-full bg-bg-surface font-sans border-l border-zinc-800">
+        <div className="flex flex-col h-full bg-bg-surface font-sans border-l border-border-subtle">
             {/* Header */}
-            <div className="h-8 min-h-[32px] border-b border-zinc-800 flex items-center px-2 justify-end bg-zinc-900/60">
+            <div className="h-8 min-h-[32px] border-b border-border-subtle flex items-center px-2 justify-end bg-bg-app/60">
                 {NewChatButton}
             </div>
 

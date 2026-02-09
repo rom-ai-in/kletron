@@ -270,7 +270,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="text-text-muted hover:text-red-400"
+              className="text-text-muted hover:text-status-error-text"
               onClick={handleReset}
               disabled={resetting || saving}
             >
@@ -284,7 +284,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
       <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-elegant">
         {message && (
           <div
-            className={`p-3 rounded-md text-sm ${message.type === "success" ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-red-500/10 text-red-500 border border-red-500/20"}`}
+            className={`p-3 rounded-md text-sm ${message.type === "success" ? "bg-status-success-bg text-status-success-text border border-status-success-border" : "bg-status-error-bg text-status-error-text border border-status-error-border"}`}
           >
             {message.text}
           </div>
@@ -308,13 +308,13 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
                   className={`group relative p-4 rounded-lg border-2 transition-all ${!isEnabled
                     ? "opacity-50 border-border-subtle bg-bg-elevated/30 cursor-not-allowed"
                     : isActive
-                      ? "cursor-pointer border-emerald-500 bg-bg-surface"
+                      ? "cursor-pointer border-status-success-border bg-bg-surface"
                       : "cursor-pointer border-border-subtle bg-bg-elevated/50 hover:border-border-strong"
                     }`}
                 >
                   {/* Active indicator */}
                   {isActive && (
-                    <div className="absolute top-3 right-10 text-emerald-500">
+                    <div className="absolute top-3 right-10 text-status-success-text">
                       <Check className="h-4 w-4" />
                     </div>
                   )}
@@ -325,8 +325,8 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
                     className={`absolute top-3 right-3 p-1 rounded transition-colors ${isToggling
                       ? "animate-pulse"
                       : isEnabled
-                        ? "text-emerald-500 hover:bg-emerald-500/10"
-                        : "text-zinc-500 hover:bg-zinc-500/10"
+                        ? "text-status-success-text hover:bg-status-success-bg"
+                        : "text-text-muted hover:bg-text-muted/10"
                       } ${isActive && isEnabled ? "opacity-30 cursor-not-allowed" : ""}`}
                     title={isActive && isEnabled ? "Cannot disable active provider" : isEnabled ? "Disable provider" : "Enable provider"}
                   >
@@ -335,7 +335,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
                   <div className="flex items-start gap-4">
                     <div
                       className={`p-2 rounded-md transition-colors ${isActive
-                        ? "bg-emerald-500/10 text-emerald-500"
+                        ? "bg-status-success-bg text-status-success-text"
                         : "bg-bg-elevated text-text-muted group-hover:text-text-primary"
                         }`}
                     >
@@ -534,7 +534,7 @@ function ProviderForm({
     <Panel className="p-0 overflow-hidden">
       <div className="border-b border-border-subtle bg-bg-elevated/30 px-5 py-3">
         <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-          <Icon className="h-4 w-4 text-emerald-500" />
+          <Icon className="h-4 w-4 text-status-success-text" />
           {title}
         </h2>
       </div>
@@ -548,7 +548,7 @@ function ProviderForm({
                 value={formData[field.key] || ""}
                 onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
                 placeholder={field.placeholder}
-                className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 transition-all"
+                className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-success-border focus:outline-none focus:ring-1 focus:ring-status-success-border transition-all"
                 list={field.suggestions ? `${field.key}-suggestions` : undefined}
               />
               {field.suggestions && (
@@ -589,22 +589,22 @@ function ProviderForm({
         {testResult && (
           <div
             className={`rounded-lg border p-4 space-y-2 ${testResult.success
-              ? "bg-emerald-500/5 border-emerald-500/30"
-              : "bg-red-500/5 border-red-500/30"
+              ? "bg-status-success-bg border-status-success-border"
+              : "bg-status-error-bg border-status-error-border"
               }`}
           >
             <div className="flex items-start gap-3">
               {testResult.success ? (
-                <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                <CheckCircle2 className="h-5 w-5 text-status-success-text flex-shrink-0 mt-0.5" />
               ) : (
-                <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <XCircle className="h-5 w-5 text-status-error-text flex-shrink-0 mt-0.5" />
               )}
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-semibold ${testResult.success ? "text-emerald-500" : "text-red-500"}`}>
+                <p className={`text-sm font-semibold ${testResult.success ? "text-status-success-text" : "text-status-error-text"}`}>
                   {testResult.success ? "Connection Successful" : "Connection Failed"}
                 </p>
                 {testResult.error && (
-                  <p className="text-xs text-red-400 mt-1">{testResult.error}</p>
+                  <p className="text-xs text-status-error-text mt-1">{testResult.error}</p>
                 )}
                 {testResult.latency && (
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted mt-1">
@@ -706,7 +706,7 @@ function OllamaConfigForm({
     <Panel className="p-0 overflow-hidden">
       <div className="border-b border-border-subtle bg-bg-elevated/30 px-5 py-3">
         <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-          <Server className="h-4 w-4 text-pink-500" />
+          <Server className="h-4 w-4 text-brand-accent" />
           Ollama Settings
         </h2>
       </div>
@@ -719,7 +719,7 @@ function OllamaConfigForm({
             value={formData.baseUrl || ""}
             onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
             placeholder="http://localhost:11434"
-            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-pink-500 focus:outline-none focus:ring-1 focus:ring-pink-500/20 transition-all"
+            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-brand-accent focus:outline-none focus:ring-1 focus:ring-brand-accentMuted transition-all"
           />
         </div>
 
@@ -731,7 +731,7 @@ function OllamaConfigForm({
             value={formData.model || ""}
             onChange={(e) => setFormData({ ...formData, model: e.target.value })}
             placeholder="llama3.2"
-            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-pink-500 focus:outline-none focus:ring-1 focus:ring-pink-500/20 transition-all"
+            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-brand-accent focus:outline-none focus:ring-1 focus:ring-brand-accentMuted transition-all"
             list="ollama-model-suggestions"
           />
           <datalist id="ollama-model-suggestions">
@@ -768,23 +768,23 @@ function OllamaConfigForm({
         {testResult && (
           <div
             className={`rounded-lg border p-4 space-y-3 ${testResult.success
-              ? "bg-emerald-500/5 border-emerald-500/30"
-              : "bg-red-500/5 border-red-500/30"
+              ? "bg-status-success-bg border-status-success-border"
+              : "bg-status-error-bg border-status-error-border"
               }`}
           >
             {/* Status Header */}
             <div className="flex items-start gap-3">
               {testResult.success ? (
-                <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                <CheckCircle2 className="h-5 w-5 text-status-success-text flex-shrink-0 mt-0.5" />
               ) : (
-                <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <XCircle className="h-5 w-5 text-status-error-text flex-shrink-0 mt-0.5" />
               )}
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-semibold ${testResult.success ? "text-emerald-500" : "text-red-500"}`}>
+                <p className={`text-sm font-semibold ${testResult.success ? "text-status-success-text" : "text-status-error-text"}`}>
                   {testResult.success ? "Connection Successful" : "Connection Failed"}
                 </p>
                 {testResult.error && (
-                  <p className="text-xs text-red-400 mt-1">{testResult.error}</p>
+                  <p className="text-xs text-status-error-text mt-1">{testResult.error}</p>
                 )}
               </div>
             </div>
@@ -808,7 +808,7 @@ function OllamaConfigForm({
               {testResult.details.requestedModel && (
                 <div>
                   <span className="text-text-muted">Requested Model:</span>
-                  <p className={`font-mono ${testResult.details.modelFound ? "text-emerald-500" : "text-red-400"}`}>
+                  <p className={`font-mono ${testResult.details.modelFound ? "text-status-success-text" : "text-status-error-text"}`}>
                     {testResult.details.requestedModel}
                     {testResult.details.modelFound ? " ✓" : " ✗"}
                   </p>
@@ -827,8 +827,8 @@ function OllamaConfigForm({
                       type="button"
                       onClick={() => setFormData({ ...formData, model })}
                       className={`px-2 py-0.5 rounded text-[11px] font-mono transition-all ${model === formData.model
-                        ? "bg-pink-500/20 text-pink-400 border border-pink-500/40"
-                        : "bg-bg-elevated text-text-secondary border border-border-subtle hover:border-pink-500/40 hover:text-pink-400"
+                        ? "bg-brand-accentMuted text-brand-accent border border-brand-accent"
+                        : "bg-bg-elevated text-text-secondary border border-border-subtle hover:border-brand-accent hover:text-brand-accent"
                         }`}
                     >
                       {model}
@@ -840,7 +840,7 @@ function OllamaConfigForm({
 
             {/* No models warning */}
             {testResult.connectionStatus === "connected" && testResult.details.availableModels.length === 0 && (
-              <div className="flex items-center gap-2 text-xs text-amber-400 border-t border-border-subtle pt-3">
+              <div className="flex items-center gap-2 text-xs text-status-warning-text border-t border-border-subtle pt-3">
                 <AlertCircle className="h-4 w-4" />
                 <span>No models installed. Run &apos;ollama pull llama3.2&apos; to download a model.</span>
               </div>
@@ -1152,12 +1152,12 @@ function LMStudioConfigForm({
     <Panel className="p-0 overflow-hidden">
       <div className="border-b border-border-subtle bg-bg-elevated/30 px-5 py-3">
         <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-          <Monitor className="h-4 w-4 text-cyan-500" />
+          <Monitor className="h-4 w-4 text-status-info-text" />
           LM Studio Settings
         </h2>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
           {isDirty ? (
-            <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-amber-400">
+            <span className="rounded-full border border-status-warning-border bg-status-warning-bg px-2 py-0.5 text-status-warning-text">
               Unsaved changes
             </span>
           ) : (
@@ -1180,7 +1180,7 @@ function LMStudioConfigForm({
             value={formData.baseUrl || ""}
             onChange={(e) => setFormData((prev) => ({ ...prev, baseUrl: e.target.value }))}
             placeholder="http://127.0.0.1:1234/v1"
-            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all"
           />
         </div>
 
@@ -1192,7 +1192,7 @@ function LMStudioConfigForm({
             value={formData.apiKey || ""}
             onChange={(e) => setFormData((prev) => ({ ...prev, apiKey: e.target.value }))}
             placeholder="lm-studio"
-            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all"
           />
         </div>
 
@@ -1204,7 +1204,7 @@ function LMStudioConfigForm({
               type="button"
               onClick={() => void fetchModels()}
               disabled={loadingModels}
-              className="text-xs text-cyan-500 hover:text-cyan-400 flex items-center gap-1 transition-colors"
+              className="text-xs text-status-info-text hover:text-status-info-text flex items-center gap-1 transition-colors"
             >
               {loadingModels ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -1219,7 +1219,7 @@ function LMStudioConfigForm({
             value={formData.model || ""}
             onChange={(e) => setFormData((prev) => ({ ...prev, model: e.target.value }))}
             placeholder="Select or type a model name"
-            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+            className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all"
           />
           {selectedModelInfo && (
             <div className="flex flex-wrap gap-2 text-[11px] text-text-muted">
@@ -1244,7 +1244,7 @@ function LMStudioConfigForm({
                 </span>
               )}
               {selectedModelInfo.loaded && (
-                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-400">
+                <span className="rounded-full border border-status-success-border bg-status-success-bg px-2 py-0.5 text-status-success-text">
                   loaded
                 </span>
               )}
@@ -1259,7 +1259,7 @@ function LMStudioConfigForm({
           {/* Available Models */}
           {modelsError && (
             <div className="mt-2 space-y-1">
-              <div className="flex items-center gap-2 text-xs text-amber-400">
+              <div className="flex items-center gap-2 text-xs text-status-warning-text">
                 <AlertCircle className="h-3 w-3" />
                 <span>{modelsError}</span>
               </div>
@@ -1288,20 +1288,20 @@ function LMStudioConfigForm({
                     <div
                       key={model.id}
                       className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border transition-all ${isSelected
-                        ? "bg-cyan-500/10 border-cyan-500/40"
+                        ? "bg-status-info-bg border-status-info-border"
                         : "bg-bg-elevated/50 border-border-subtle hover:border-border-default"
                         }`}
                     >
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         {/* Status indicator */}
-                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isLoaded ? "bg-emerald-500" : "bg-zinc-500"
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isLoaded ? "bg-status-success" : "bg-text-muted"
                           }`} />
 
                         {/* Model name - clickable to select */}
                         <button
                           type="button"
                           onClick={() => setFormData((prev) => ({ ...prev, model: model.id }))}
-                          className={`text-xs font-mono truncate text-left ${isSelected ? "text-cyan-400" : "text-text-secondary hover:text-text-primary"
+                          className={`text-xs font-mono truncate text-left ${isSelected ? "text-status-info-text" : "text-text-secondary hover:text-text-primary"
                             }`}
                         >
                           {model.name}
@@ -1309,12 +1309,12 @@ function LMStudioConfigForm({
 
                         {/* Loaded badge */}
                         {isLoaded && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 flex-shrink-0">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-success-bg text-status-success-text flex-shrink-0">
                             LOADED
                           </span>
                         )}
                         {isConfigured && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 flex-shrink-0">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-info-bg text-status-info-text flex-shrink-0">
                             CONFIG
                           </span>
                         )}
@@ -1332,7 +1332,7 @@ function LMStudioConfigForm({
                             type="button"
                             onClick={() => void handleUnloadModel(model.id, model.instanceId)}
                             disabled={isUnloading}
-                            className="text-xs px-2 py-1 rounded flex items-center gap-1 bg-zinc-500/20 text-zinc-400 hover:bg-zinc-500/30 hover:text-zinc-300 transition-colors disabled:opacity-50"
+                            className="text-xs px-2 py-1 rounded flex items-center gap-1 bg-text-muted/20 text-text-muted hover:bg-text-muted/30 transition-colors disabled:opacity-50"
                           >
                             {isUnloading ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -1346,7 +1346,7 @@ function LMStudioConfigForm({
                             type="button"
                             onClick={() => void handleLoadModel(model.id)}
                             disabled={isLoading}
-                            className="text-xs px-2 py-1 rounded flex items-center gap-1 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 hover:text-cyan-300 transition-colors disabled:opacity-50"
+                            className="text-xs px-2 py-1 rounded flex items-center gap-1 bg-status-info-bg text-status-info-text hover:bg-status-info-bg hover:text-status-info-text transition-colors disabled:opacity-50"
                           >
                             {isLoading ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -1379,7 +1379,7 @@ function LMStudioConfigForm({
                   type="button"
                   onClick={() => void fetchModels()}
                   disabled={loadingModels}
-                  className="text-xs text-cyan-500 hover:text-cyan-400 flex items-center gap-1 transition-colors disabled:opacity-50"
+                  className="text-xs text-status-info-text hover:text-status-info-text flex items-center gap-1 transition-colors disabled:opacity-50"
                 >
                   {loadingModels ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -1401,13 +1401,13 @@ function LMStudioConfigForm({
                     value={formData.model || ""}
                     onChange={(e) => setFormData((prev) => ({ ...prev, model: e.target.value }))}
                     placeholder="organization/model-name"
-                    className="flex-1 rounded-md border border-border-subtle bg-bg-app px-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-mono"
+                    className="flex-1 rounded-md border border-border-subtle bg-bg-app px-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all font-mono"
                   />
                   <button
                     type="button"
                     onClick={() => void handleLoadModel(formData.model || "")}
                     disabled={!formData.model || loadingModelId !== null}
-                    className="px-3 py-1.5 rounded-md flex items-center gap-1.5 text-xs bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 hover:text-cyan-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 rounded-md flex items-center gap-1.5 text-xs bg-status-info-bg text-status-info-text hover:bg-status-info-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loadingModelId ? (
                       <>
@@ -1453,7 +1453,7 @@ function LMStudioConfigForm({
                     type="button"
                     onClick={() => void handleReloadModel(activeModelId, selectedModelInstanceId)}
                     disabled={saving || reloadingModelId === activeModelId}
-                    className="px-2 py-1 rounded border border-cyan-500/40 text-cyan-400 hover:border-cyan-500 hover:text-cyan-300 transition-colors disabled:opacity-50"
+                    className="px-2 py-1 rounded border border-status-info-border text-status-info-text hover:border-status-info-border transition-colors disabled:opacity-50"
                   >
                     {reloadingModelId === activeModelId
                       ? "Reloading..."
@@ -1476,7 +1476,7 @@ function LMStudioConfigForm({
                   <button
                     type="button"
                     onClick={() => updateModelSetting("contextWindow", detectedContext)}
-                    className="px-2 py-1 rounded border border-cyan-500/40 text-cyan-400 hover:border-cyan-500 hover:text-cyan-300 transition-colors"
+                    className="px-2 py-1 rounded border border-status-info-border text-status-info-text hover:border-status-info-border transition-colors"
                   >
                     Use detected
                   </button>
@@ -1495,7 +1495,7 @@ function LMStudioConfigForm({
                         step={contextStep}
                         value={activeModelSettings?.contextWindow ?? contextMax}
                         onChange={handleContextWindowChange}
-                        className="w-full accent-cyan-500"
+                        className="w-full accent-status-info"
                       />
                       <div className="flex items-center gap-3">
                         <input
@@ -1505,7 +1505,7 @@ function LMStudioConfigForm({
                           value={activeModelSettings?.contextWindow ?? ""}
                           onChange={handleContextWindowChange}
                           placeholder={contextMax.toString()}
-                          className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                          className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all"
                         />
                         <span className="text-[10px] text-text-muted whitespace-nowrap">
                           max {contextMax.toLocaleString()}
@@ -1519,7 +1519,7 @@ function LMStudioConfigForm({
                       value={activeModelSettings?.contextWindow ?? ""}
                       onChange={handleContextWindowChange}
                       placeholder="8192"
-                      className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                      className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all"
                     />
                   )}
                 </div>
@@ -1531,7 +1531,7 @@ function LMStudioConfigForm({
                     value={activeModelSettings?.maxTokens ?? ""}
                     onChange={handleNumberChange("maxTokens")}
                     placeholder="2048"
-                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1544,7 +1544,7 @@ function LMStudioConfigForm({
                     value={activeModelSettings?.temperature ?? ""}
                     onChange={handleNumberChange("temperature")}
                     placeholder="0.7"
-                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1557,7 +1557,7 @@ function LMStudioConfigForm({
                     value={activeModelSettings?.topP ?? ""}
                     onChange={handleNumberChange("topP")}
                     placeholder="0.95"
-                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1569,7 +1569,7 @@ function LMStudioConfigForm({
                     value={activeModelSettings?.topK ?? ""}
                     onChange={handleNumberChange("topK")}
                     placeholder="50"
-                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1581,7 +1581,7 @@ function LMStudioConfigForm({
                     value={activeModelSettings?.repeatPenalty ?? ""}
                     onChange={handleNumberChange("repeatPenalty")}
                     placeholder="1.05"
-                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1594,7 +1594,7 @@ function LMStudioConfigForm({
                     value={activeModelSettings?.presencePenalty ?? ""}
                     onChange={handleNumberChange("presencePenalty")}
                     placeholder="0"
-                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1607,7 +1607,7 @@ function LMStudioConfigForm({
                     value={activeModelSettings?.frequencyPenalty ?? ""}
                     onChange={handleNumberChange("frequencyPenalty")}
                     placeholder="0"
-                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all"
                   />
                 </div>
               </div>
@@ -1615,7 +1615,7 @@ function LMStudioConfigForm({
               {activeModelSettings?.contextWindow &&
                 activeModelSettings?.maxTokens &&
                 activeModelSettings.maxTokens >= activeModelSettings.contextWindow && (
-                  <div className="flex items-center gap-2 text-xs text-amber-400">
+                  <div className="flex items-center gap-2 text-xs text-status-warning-text">
                     <AlertCircle className="h-3 w-3" />
                     <span>
                       Max output tokens should be less than the context window to leave room for prompts.
@@ -1653,22 +1653,22 @@ function LMStudioConfigForm({
         {testResult && (
           <div
             className={`rounded-lg border p-4 ${testResult.success
-              ? "bg-emerald-500/5 border-emerald-500/30"
-              : "bg-red-500/5 border-red-500/30"
+              ? "bg-status-success-bg border-status-success-border"
+              : "bg-status-error-bg border-status-error-border"
               }`}
           >
             <div className="flex items-start gap-3">
               {testResult.success ? (
-                <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                <CheckCircle2 className="h-5 w-5 text-status-success-text flex-shrink-0 mt-0.5" />
               ) : (
-                <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <XCircle className="h-5 w-5 text-status-error-text flex-shrink-0 mt-0.5" />
               )}
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-semibold ${testResult.success ? "text-emerald-500" : "text-red-500"}`}>
+                <p className={`text-sm font-semibold ${testResult.success ? "text-status-success-text" : "text-status-error-text"}`}>
                   {testResult.success ? "Connection Successful" : "Connection Failed"}
                 </p>
                 {testResult.error && (
-                  <p className="text-xs text-red-400 mt-1">{testResult.error}</p>
+                  <p className="text-xs text-status-error-text mt-1">{testResult.error}</p>
                 )}
                 {!testResult.success &&
                   testResult.details &&

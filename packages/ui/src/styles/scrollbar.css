@@ -1,0 +1,57 @@
+/**
+ * Numezis Design System - Shared Scrollbar Styles
+ *
+ * Import this file to get consistent dark-theme scrollbar styling.
+ *
+ * @example
+ * @import '@numezis/ui/styles/scrollbar.css';
+ */
+
+/* ── Default Scrollbars (dark theme) ────────────────────────── */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* ── Thin scrollbars for side panels ────────────────────────── */
+aside ::-webkit-scrollbar,
+.thin-scrollbar ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+/* ── Elegant scrollbar utility class ────────────────────────── */
+.scrollbar-elegant::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.scrollbar-elegant::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.scrollbar-elegant::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 3px;
+}
+
+.scrollbar-elegant::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.10);
+}

@@ -14,6 +14,7 @@ import {
     ExternalLink,
     Check
 } from 'lucide-react';
+import { Input, Button } from '@numezis/ui/components/design-system';
 
 export default function PrivacyDataPage() {
     const { user } = useAuth();
@@ -56,8 +57,8 @@ export default function PrivacyDataPage() {
             {/* GDPR Rights Overview */}
             <div className="p-6 rounded-lg border border-border-subtle bg-bg-surface">
                 <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                        <Shield className="w-5 h-5 text-emerald-500" />
+                    <div className="w-10 h-10 rounded-lg bg-status-success-bg border border-status-success-border flex items-center justify-center">
+                        <Shield className="w-5 h-5 text-status-success-text" />
                     </div>
                     <div>
                         <h2 className="text-lg font-semibold text-text-primary">Your Data Rights</h2>
@@ -90,7 +91,7 @@ export default function PrivacyDataPage() {
                 <div className="mt-4 pt-4 border-t border-border-subtle">
                     <Link
                         href="/legal/gdpr"
-                        className="inline-flex items-center gap-1.5 text-xs text-emerald-500 hover:text-emerald-400 transition-colors"
+                        className="inline-flex items-center gap-1.5 text-xs text-status-success-text hover:text-status-success-text transition-colors"
                     >
                         Read our full GDPR compliance statement
                         <ExternalLink className="w-3 h-3" />
@@ -149,10 +150,11 @@ export default function PrivacyDataPage() {
                 </p>
 
                 <div className="flex items-center gap-3">
-                    <button
+                    <Button
                         onClick={handleExportData}
                         disabled={exportStatus === 'loading'}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-bg-elevated border border-border-subtle text-text-primary hover:bg-state-hover transition-colors disabled:opacity-50"
+                        variant="secondary"
+                        size="sm"
                     >
                         {exportStatus === 'loading' ? (
                             <>
@@ -161,7 +163,7 @@ export default function PrivacyDataPage() {
                             </>
                         ) : exportStatus === 'done' ? (
                             <>
-                                <Check className="w-4 h-4 text-emerald-500" />
+                                <Check className="w-4 h-4 text-status-success-text" />
                                 Downloaded
                             </>
                         ) : (
@@ -170,7 +172,7 @@ export default function PrivacyDataPage() {
                                 Download My Data
                             </>
                         )}
-                    </button>
+                    </Button>
                 </div>
 
                 <p className="text-[11px] text-text-muted mt-3">
@@ -180,13 +182,13 @@ export default function PrivacyDataPage() {
             </div>
 
             {/* Delete Account */}
-            <div className="p-6 rounded-lg border border-red-500/30 bg-red-500/5">
+            <div className="p-6 rounded-lg border border-status-error-border bg-status-error-bg">
                 <div className="flex items-start gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
-                        <AlertTriangle className="w-5 h-5 text-red-400" />
+                    <div className="w-10 h-10 rounded-lg bg-status-error-bg border border-status-error-border flex items-center justify-center shrink-0">
+                        <AlertTriangle className="w-5 h-5 text-status-error-text" />
                     </div>
                     <div>
-                        <h3 className="text-sm font-semibold text-red-400">Delete Account</h3>
+                        <h3 className="text-sm font-semibold text-status-error-text">Delete Account</h3>
                         <p className="text-xs text-text-muted mt-1">
                             Permanently delete your Numezis Code account and all associated data.
                         </p>
@@ -194,18 +196,19 @@ export default function PrivacyDataPage() {
                 </div>
 
                 {!deleteConfirm ? (
-                    <button
+                    <Button
                         onClick={() => setDeleteConfirm(true)}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+                        variant="secondary"
+                        size="sm"
                     >
                         <Trash2 className="w-4 h-4" />
                         Delete My Account
-                    </button>
+                    </Button>
                 ) : (
                     <div className="space-y-4">
-                        <div className="p-4 rounded-md bg-red-500/10 border border-red-500/20">
-                            <p className="text-xs text-red-300 font-medium mb-2">⚠️ This action cannot be undone</p>
-                            <ul className="text-[11px] text-red-200/80 space-y-1">
+                        <div className="p-4 rounded-md bg-status-error-bg border border-status-error-border">
+                            <p className="text-xs text-status-error-text font-medium mb-2">⚠️ This action cannot be undone</p>
+                            <ul className="text-[11px] text-status-error-text/80 space-y-1">
                                 <li>• All your data will be permanently deleted</li>
                                 <li>• Your agent graphs and configurations will be lost</li>
                                 <li>• API tokens will be revoked immediately</li>
@@ -215,35 +218,36 @@ export default function PrivacyDataPage() {
 
                         <div>
                             <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                                Type <span className="font-mono text-red-400">DELETE</span> to confirm
+                                Type <span className="font-mono text-status-error-text">DELETE</span> to confirm
                             </label>
-                            <input
-                                type="text"
+                            <Input
+                                fullWidth
                                 value={deleteInput}
                                 onChange={(e) => setDeleteInput(e.target.value)}
-                                className="w-full px-3 py-2 rounded-md border border-red-500/30 bg-bg-elevated text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-red-500/20"
                                 placeholder="DELETE"
                             />
                         </div>
 
                         <div className="flex items-center gap-3">
-                            <button
+                            <Button
                                 onClick={handleDeleteAccount}
                                 disabled={deleteInput !== 'DELETE'}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                variant="secondary"
+                                size="sm"
                             >
                                 <Trash2 className="w-4 h-4" />
                                 Permanently Delete Account
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                                 onClick={() => {
                                     setDeleteConfirm(false);
                                     setDeleteInput('');
                                 }}
-                                className="px-4 py-2 rounded-md text-sm text-text-secondary hover:text-text-primary transition-colors"
+                                variant="ghost"
+                                size="sm"
                             >
                                 Cancel
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 )}
@@ -254,7 +258,7 @@ export default function PrivacyDataPage() {
                 <p className="text-xs text-text-secondary">
                     <strong className="text-text-primary">Questions about your data?</strong>{' '}
                     Contact our Data Protection Officer at{' '}
-                    <a href="mailto:dpo@numezis.com" className="text-emerald-500 hover:underline">dpo@numezis.com</a>
+                    <a href="mailto:dpo@numezis.com" className="text-status-success-text hover:underline">dpo@numezis.com</a>
                 </p>
             </div>
         </div>

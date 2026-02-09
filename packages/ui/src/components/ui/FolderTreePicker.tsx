@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Folder, ChevronRight, ChevronDown, Search, FolderOpen, Loader2, X } from "lucide-react";
 
-interface FolderTreePickerProps {
+export interface FolderTreePickerProps {
     value: string;
     onChange: (path: string) => void;
     placeholder?: string;
@@ -129,12 +129,12 @@ export function FolderTreePicker({ value, onChange, placeholder }: FolderTreePic
         return (
             <div key={item.path}>
                 <div
-                    className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-white/5 rounded-md group transition-colors ${value === item.path + "/" ? "bg-emerald-500/10 text-emerald-400" : "text-text-secondary"}`}
+                    className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-state-hover rounded-md group transition-colors ${value === item.path + "/" ? "bg-status-success-bg text-status-success-text" : "text-text-secondary"}`}
                     style={{ paddingLeft: `${depth * 1.25 + 0.5}rem` }}
                     onClick={() => handleSelect(item.path)}
                 >
                     <div
-                        className="p-0.5 hover:bg-white/10 rounded transition-colors"
+                        className="p-0.5 hover:bg-state-active rounded transition-colors"
                         onClick={(e) => toggleNode(item, e)}
                     >
                         {item.isLoading ? (
@@ -165,7 +165,7 @@ export function FolderTreePicker({ value, onChange, placeholder }: FolderTreePic
             >
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted group-hover:text-text-secondary transition-colors" />
                 <div className="w-full flex items-center justify-between rounded-md border border-border-subtle bg-bg-elevated pl-10 pr-3 py-2 text-sm text-text-primary transition-all hover:border-border-strong group-focus-within:border-border-strong font-mono">
-                    <span className={value === "" || value === "/" ? "text-emerald-400 font-bold" : value ? "text-text-primary" : "text-text-muted"}>
+                    <span className={value === "" || value === "/" ? "text-status-success-text font-bold" : value ? "text-text-primary" : "text-text-muted"}>
                         {value === "" || value === "/" ? "/ (Root)" : value || placeholder || "Select folder..."}
                     </span>
                     <ChevronDown className={`h-4 w-4 text-text-muted transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
@@ -173,8 +173,8 @@ export function FolderTreePicker({ value, onChange, placeholder }: FolderTreePic
             </div>
 
             {isOpen && (
-                <div className="absolute top-[calc(100%+4px)] left-0 z-50 w-full min-w-[300px] max-h-[400px] overflow-hidden rounded-lg border border-border-strong bg-[#1c1c21] shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in duration-200">
-                    <div className="p-2 border-b border-border-subtle bg-white/5 flex items-center gap-2">
+                <div className="absolute top-[calc(100%+4px)] left-0 z-50 w-full min-w-[300px] max-h-[400px] overflow-hidden rounded-lg border border-border-strong bg-bg-elevated shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in duration-200">
+                    <div className="p-2 border-b border-border-subtle bg-state-hover flex items-center gap-2">
                         <Search className="h-3.5 w-3.5 text-text-muted" />
                         <input
                             autoFocus
@@ -184,14 +184,14 @@ export function FolderTreePicker({ value, onChange, placeholder }: FolderTreePic
                             onChange={(e) => setSearch(e.target.value)}
                         />
                         {search && (
-                            <button onClick={() => setSearch("")} className="p-1 hover:bg-white/10 rounded">
+                            <button onClick={() => setSearch("")} className="p-1 hover:bg-state-active rounded">
                                 <X className="h-3 w-3 text-text-muted" />
                             </button>
                         )}
                     </div>
                     <div className="p-2 overflow-y-auto max-h-[350px] scrollbar-elegant">
                         <div
-                            className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-white/5 rounded-md text-text-secondary transition-colors mb-1 ${value === "" || value === "/" ? "bg-emerald-500/10 text-emerald-400" : ""}`}
+                            className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-state-hover rounded-md text-text-secondary transition-colors mb-1 ${value === "" || value === "/" ? "bg-status-success-bg text-status-success-text" : ""}`}
                             onClick={() => handleSelect("")}
                         >
                             <Folder className="h-4 w-4" />

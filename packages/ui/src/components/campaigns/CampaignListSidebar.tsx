@@ -21,13 +21,13 @@ import { cn } from "@numezis/shared/utils/cn";
 const StatusIcon = ({ status }: { status: string }) => {
     switch (status) {
         case "BLOCKED":
-            return <AlertCircle className="h-3.5 w-3.5 text-amber-400" />;
+            return <AlertCircle className="h-3.5 w-3.5 text-status-warning-text" />;
         case "RUNNING":
-            return <Play className="h-3.5 w-3.5 text-blue-400 animate-pulse" />;
+            return <Play className="h-3.5 w-3.5 text-status-info-text animate-pulse" />;
         case "COMPLETED":
-            return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />;
+            return <CheckCircle2 className="h-3.5 w-3.5 text-status-success-text" />;
         case "FAILED":
-            return <XCircle className="h-3.5 w-3.5 text-rose-400" />;
+            return <XCircle className="h-3.5 w-3.5 text-status-error-text" />;
         case "PENDING":
         default:
             return <Clock className="h-3.5 w-3.5 text-text-muted" />;
@@ -106,7 +106,7 @@ export function CampaignListSidebar() {
                     </div>
                     <Button
                         size="icon"
-                        className="h-8 w-8 bg-blue-600 hover:bg-blue-700 text-white border-transparent"
+                        className="h-8 w-8 bg-status-info hover:bg-status-info text-text-primary border-transparent"
                         onClick={handleCreate}
                         title="New Campaign"
                     >
@@ -145,7 +145,7 @@ export function CampaignListSidebar() {
                             )}
                             title="Running"
                         >
-                            <Play className="h-3 w-3 text-blue-400" />
+                            <Play className="h-3 w-3 text-status-info-text" />
                         </button>
                         <button
                             onClick={() => setFilter("completed")}
@@ -155,7 +155,7 @@ export function CampaignListSidebar() {
                             )}
                             title="Completed"
                         >
-                            <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                            <CheckCircle2 className="h-3 w-3 text-status-success-text" />
                         </button>
                     </div>
                 </div>

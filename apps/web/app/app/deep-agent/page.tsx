@@ -227,7 +227,7 @@ function PhaseItem({
         </span>
         <div className="flex items-center gap-1.5">
           {event.tokenUsage && event.tokenUsage.totalTokens > 0 && (
-            <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-emerald-400" title={`${event.tokenUsage.inputTokens} in + ${event.tokenUsage.outputTokens} out`}>
+            <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-status-success-text" title={`${event.tokenUsage.inputTokens} in + ${event.tokenUsage.outputTokens} out`}>
               <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -235,16 +235,16 @@ function PhaseItem({
             </span>
           )}
           {elapsed && (
-            <span className={`text-[10px] font-mono ${event.status === "running" ? "text-amber-400" : event.status === "success" ? "text-emerald-400" : event.status === "error" ? "text-rose-400" : "text-text-muted"}`}>
+            <span className={`text-[10px] font-mono ${event.status === "running" ? "text-status-warning-text" : event.status === "success" ? "text-status-success-text" : event.status === "error" ? "text-status-error-text" : "text-text-muted"}`}>
               {elapsed}
             </span>
           )}
           {event.status !== "pending" && (
             <div className={`h-1.5 w-1.5 rounded-full ${event.status === "success"
-              ? "bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.4)]"
+              ? "bg-status-success shadow-[0_0_4px_var(--status-success-border)]"
               : event.status === "error"
-                ? "bg-rose-400"
-                : "bg-amber-400 animate-pulse"
+                ? "bg-status-error"
+                : "bg-status-warning animate-pulse"
               }`} />
           )}
         </div>
@@ -258,7 +258,7 @@ function PhaseItem({
 
       {event.status === "running" && (
         <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-bg-elevated/50">
-          <div className="h-full w-full bg-emerald-500/50 animate-progress-loader origin-left" />
+          <div className="h-full w-full bg-status-success animate-progress-loader origin-left" />
         </div>
       )}
     </button>
@@ -545,7 +545,7 @@ function HeaderControls({
                   <p className="text-xs text-text-muted">API Key: <span className="font-mono">••••••••</span></p>
                 </div>
               </div>
-              {llmError && <p className="text-xs text-rose-400">{llmError}</p>}
+              {llmError && <p className="text-xs text-status-error-text">{llmError}</p>}
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => setIsEditingLlm(true)}
@@ -568,7 +568,7 @@ function HeaderControls({
                 </button>
               </div>
               {testResult && (
-                <div className={`mt-3 rounded-md border p-3 text-xs ${testResult.success ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400' : 'border-rose-500/20 bg-rose-500/5 text-rose-400'}`}>
+                <div className={`mt-3 rounded-md border p-3 text-xs ${testResult.success ? 'border-status-success-border bg-status-success-bg text-status-success-text' : 'border-status-error-border bg-status-error-bg text-status-error-text'}`}>
                   <p className="font-semibold flex items-center gap-2">
                     {testResult.success ? (
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -599,7 +599,7 @@ function HeaderControls({
                   onChange={(event) => onLmStudioModelChange(event.target.value)}
                 />
               </div>
-              {llmError && <p className="text-xs text-rose-400">{llmError}</p>}
+              {llmError && <p className="text-xs text-status-error-text">{llmError}</p>}
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => setIsEditingLlm(true)}
@@ -622,7 +622,7 @@ function HeaderControls({
                 </button>
               </div>
               {testResult && (
-                <div className={`mt-3 rounded-md border p-3 text-xs ${testResult.success ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400' : 'border-rose-500/20 bg-rose-500/5 text-rose-400'}`}>
+                <div className={`mt-3 rounded-md border p-3 text-xs ${testResult.success ? 'border-status-success-border bg-status-success-bg text-status-success-text' : 'border-status-error-border bg-status-error-bg text-status-error-text'}`}>
                   <p className="font-semibold flex items-center gap-2">
                     {testResult.success ? (
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -929,7 +929,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
         {isToolEvent && event.toolNote && event.toolNote.trim().length > 0 && (
           <section>
             <p className="text-[11px] text-text-muted">Assistant message</p>
-            <pre className="mt-2 max-h-32 overflow-y-auto rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] leading-relaxed text-amber-100 whitespace-pre-wrap break-words scrollbar-elegant">
+            <pre className="mt-2 max-h-32 overflow-y-auto rounded-lg border border-status-warning-border bg-status-warning-bg p-3 text-[12px] leading-relaxed text-status-warning-text whitespace-pre-wrap break-words scrollbar-elegant">
               {event.toolNote}
             </pre>
           </section>
@@ -1036,7 +1036,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
                         </pre>
                       </div>
                     ) : (
-                      <code className="bg-bg-elevated px-1 py-0.5 rounded text-sky-300 font-mono text-[90%]" {...props}>
+                      <code className="bg-bg-elevated px-1 py-0.5 rounded text-status-info-text font-mono text-[90%]" {...props}>
                         {children}
                       </code>
                     )
@@ -1045,7 +1045,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
                   h2({ children }: any) { return <h2 className="text-base font-bold text-text-primary mt-3 mb-2">{children}</h2> },
                   h3({ children }: any) { return <h3 className="text-sm font-bold text-text-primary mt-2 mb-1">{children}</h3> },
                   a({ children, href }: any) {
-                    return <a href={href} className="text-emerald-400 hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>
+                    return <a href={href} className="text-status-success-text hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>
                   },
                 }}
               >
@@ -1089,9 +1089,9 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
                       <div className="bg-bg-elevated border border-border-subtle rounded-md my-6 overflow-hidden not-prose">
                         <div className="bg-bg-app px-3 py-1.5 border-b border-border-subtle flex items-center gap-2">
                           <div className="flex gap-1.5">
-                            <div className="w-2.5 h-2.5 rounded-full bg-rose-500/20 border border-rose-500/50"></div>
-                            <div className="w-2.5 h-2.5 rounded-full bg-amber-500/20 border border-amber-500/50"></div>
-                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/20 border border-emerald-500/50"></div>
+                            <div className="w-2.5 h-2.5 rounded-full bg-status-error-bg border border-status-error-border"></div>
+                            <div className="w-2.5 h-2.5 rounded-full bg-status-warning-bg border border-status-warning-border"></div>
+                            <div className="w-2.5 h-2.5 rounded-full bg-status-success-bg border border-status-success-border"></div>
                           </div>
                         </div>
                         <pre className="p-4 overflow-x-auto text-sm font-mono !bg-transparent !m-0">
@@ -1101,7 +1101,7 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
                         </pre>
                       </div>
                     ) : (
-                      <code className="bg-bg-elevated px-1.5 py-0.5 rounded text-sky-300 font-mono text-[90%]" {...props}>
+                      <code className="bg-bg-elevated px-1.5 py-0.5 rounded text-status-info-text font-mono text-[90%]" {...props}>
                         {children}
                       </code>
                     )
@@ -1128,17 +1128,17 @@ function EventCard({ event, toolMeta, openToolDialog }: EventCardProps) {
                     return <td className="px-6 py-4">{children}</td>
                   },
                   a({ children, href }) {
-                    return <a href={href} className="text-emerald-400 hover:text-emerald-300 hover:underline transition-colors no-underline font-medium" target="_blank" rel="noopener noreferrer">{children}</a>
+                    return <a href={href} className="text-status-success-text hover:text-status-success-text hover:underline transition-colors no-underline font-medium" target="_blank" rel="noopener noreferrer">{children}</a>
                   },
                   blockquote({ children }) {
-                    return <blockquote className="border-l-4 border-emerald-500/30 pl-6 py-2 italic text-text-muted my-8 bg-emerald-500/5 rounded-r-lg not-prose">{children}</blockquote>
+                    return <blockquote className="border-l-4 border-status-success-border pl-6 py-2 italic text-text-muted my-8 bg-status-success-bg rounded-r-lg not-prose">{children}</blockquote>
                   },
                   h1({ children }) { return <h1 className="text-3xl font-bold text-text-primary mt-12 mb-6 pb-4 border-b border-border-subtle">{children}</h1> },
-                  h2({ children }) { return <h2 className="text-2xl font-bold text-text-primary mt-10 mb-4 flex items-center gap-3"><span className="text-emerald-500">#</span> {children}</h2> },
+                  h2({ children }) { return <h2 className="text-2xl font-bold text-text-primary mt-10 mb-4 flex items-center gap-3"><span className="text-status-success-text">#</span> {children}</h2> },
                   h3({ children }) { return <h3 className="text-xl font-bold text-text-primary mt-8 mb-3">{children}</h3> },
                   hr() { return <hr className="border-border-subtle my-10" /> },
-                  ul({ children }) { return <ul className="list-disc pl-6 space-y-2 my-4 marker:text-emerald-500/60">{children}</ul> },
-                  ol({ children }) { return <ol className="list-decimal pl-6 space-y-2 my-4 marker:text-emerald-500/60">{children}</ol> },
+                  ul({ children }) { return <ul className="list-disc pl-6 space-y-2 my-4 marker:text-status-success-text">{children}</ul> },
+                  ol({ children }) { return <ol className="list-decimal pl-6 space-y-2 my-4 marker:text-status-success-text">{children}</ol> },
                   p({ children }) { return <p className="leading-7 my-4 text-text-secondary text-[15px]">{children}</p> }
                 }}
               >
@@ -2267,12 +2267,12 @@ export default function HomePage() {
                             onClick={loading ? handleStop : handleSendMessage}
                             disabled={!loading && !canSendMessage}
                             className={`flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200 ${loading
-                              ? "bg-bg-surface border border-border-strong text-rose-500 scale-110 active:scale-95"
+                              ? "bg-bg-surface border border-border-strong text-status-error-text scale-110 active:scale-95"
                               : "bg-text-primary text-bg-surface hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed"
                               }`}
                           >
                             {loading ? (
-                              <div className="h-2.5 w-2.5 bg-rose-500 rounded-sm animate-pulse" />
+                              <div className="h-2.5 w-2.5 bg-status-error rounded-sm animate-pulse" />
                             ) : (
                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
                                 <path fillRule="evenodd" d="M11.47 2.47a.75.75 0 011.06 0l7.5 7.5a.75.75 0 11-1.06 1.06l-6.22-6.22V21a.75.75 0 01-1.5 0V4.81l-6.22 6.22a.75.75 0 11-1.06-1.06l7.5-7.5z" clipRule="evenodd" />
@@ -2312,7 +2312,7 @@ export default function HomePage() {
                         type="button"
                         onClick={() => void handleApprovalAction("approve_all")}
                         disabled={!activeRunId || pendingApprovals.length === 0 || approvalsLoading}
-                        className="rounded-md border border-emerald-500/30 px-2 py-1 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-40"
+                        className="rounded-md border border-status-success-border px-2 py-1 text-[10px] font-semibold text-status-success-text hover:bg-status-success-bg disabled:opacity-40"
                       >
                         Approve all
                       </button>
@@ -2320,7 +2320,7 @@ export default function HomePage() {
                         type="button"
                         onClick={() => void handleApprovalAction("reject_all")}
                         disabled={!activeRunId || pendingApprovals.length === 0 || approvalsLoading}
-                        className="rounded-md border border-rose-500/30 px-2 py-1 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/10 disabled:opacity-40"
+                        className="rounded-md border border-status-error-border px-2 py-1 text-[10px] font-semibold text-status-error-text hover:bg-status-error-bg disabled:opacity-40"
                       >
                         Reject all
                       </button>
@@ -2334,7 +2334,7 @@ export default function HomePage() {
                       <div className="text-[11px] text-text-muted">Loading approvals…</div>
                     )}
                     {activeRunId && !approvalsLoading && approvalsError && (
-                      <div className="text-[11px] text-rose-400">{approvalsError}</div>
+                      <div className="text-[11px] text-status-error-text">{approvalsError}</div>
                     )}
                     {activeRunId && !approvalsLoading && !approvalsError && pendingApprovals.length === 0 && (
                       <div className="text-[11px] text-text-muted">No pending approvals.</div>
@@ -2353,14 +2353,14 @@ export default function HomePage() {
                               <button
                                 type="button"
                                 onClick={() => void handleApprovalAction("reject", item.id)}
-                                className="rounded-md border border-rose-500/30 px-2 py-0.5 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/10"
+                                className="rounded-md border border-status-error-border px-2 py-0.5 text-[10px] font-semibold text-status-error-text hover:bg-status-error-bg"
                               >
                                 Reject
                               </button>
                               <button
                                 type="button"
                                 onClick={() => void handleApprovalAction("approve", item.id)}
-                                className="rounded-md border border-emerald-500/30 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/10"
+                                className="rounded-md border border-status-success-border px-2 py-0.5 text-[10px] font-semibold text-status-success-text hover:bg-status-success-bg"
                               >
                                 Approve
                               </button>
@@ -2450,7 +2450,7 @@ export default function HomePage() {
                     >
                       <span className="font-semibold text-text-primary">{tool.label}</span>
                       <span
-                        className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-medium ${used ? "border-emerald-500/40 text-emerald-400" : "border-border-subtle text-text-muted"
+                        className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-medium ${used ? "border-status-success-border text-status-success-text" : "border-border-subtle text-text-muted"
                           }`}
                       >
                         {used ? "used" : "avail"}

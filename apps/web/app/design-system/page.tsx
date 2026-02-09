@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TAB_ID_SET, type TabId } from "./config";
 
 const DEFAULT_TAB_ID = "foundation";
 
-export default function DesignSystemIndexPage() {
+function DesignSystemRedirect() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -18,4 +18,12 @@ export default function DesignSystemIndexPage() {
     }, [router, searchParams]);
 
     return null;
+}
+
+export default function DesignSystemIndexPage() {
+    return (
+        <Suspense fallback={null}>
+            <DesignSystemRedirect />
+        </Suspense>
+    );
 }

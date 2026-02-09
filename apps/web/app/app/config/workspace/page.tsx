@@ -336,7 +336,7 @@ export default function WorkspaceConfigPage() {
                 <div className="mx-auto max-w-3xl space-y-6">
                     {message && (
                         <div
-                            className={`p-3 rounded-md text-sm ${message.type === "success" ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-red-500/10 text-red-500 border border-red-500/20"}`}
+                            className={`p-3 rounded-md text-sm ${message.type === "success" ? "bg-status-success-bg text-status-success-text border border-status-success-border" : "bg-status-error-bg text-status-error-text border border-status-error-border"}`}
                         >
                             {message.text}
                         </div>
@@ -345,7 +345,7 @@ export default function WorkspaceConfigPage() {
                     <Panel className="p-0 overflow-hidden">
                         <div className="border-b border-border-subtle bg-bg-elevated/30 px-5 py-3 flex items-center justify-between">
                             <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-                                <Folder className="h-4 w-4 text-emerald-500" />
+                                <Folder className="h-4 w-4 text-status-success-text" />
                                 Workspaces
                             </h2>
                             <Button
@@ -367,7 +367,7 @@ export default function WorkspaceConfigPage() {
                                     <div
                                         key={workspace.id}
                                         className={`flex items-center justify-between rounded-md border px-3 py-2 ${
-                                            isActive ? "border-emerald-500/40 bg-emerald-500/5" : "border-border-subtle"
+                                            isActive ? "border-status-success-border bg-status-success-bg" : "border-border-subtle"
                                         }`}
                                     >
                                         <div className="min-w-0">
@@ -378,7 +378,7 @@ export default function WorkspaceConfigPage() {
                                         </div>
                                         <div className="flex items-center gap-2">
                                             {isActive ? (
-                                                <span className="text-xs text-emerald-400">Active</span>
+                                                <span className="text-xs text-status-success-text">Active</span>
                                             ) : (
                                                 <Button
                                                     variant="secondary"
@@ -398,7 +398,7 @@ export default function WorkspaceConfigPage() {
                     <Panel className="p-0 overflow-hidden">
                         <div className="border-b border-border-subtle bg-bg-elevated/30 px-5 py-3">
                             <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-                                <Folder className="h-4 w-4 text-emerald-500" />
+                                <Folder className="h-4 w-4 text-status-success-text" />
                                 Working Folder Settings
                             </h2>
                         </div>
@@ -418,7 +418,7 @@ export default function WorkspaceConfigPage() {
                                             setGitValidation({ valid: false, checked: false });
                                         }}
                                         placeholder="/absolute/path/to/folder"
-                                        className="flex-1 rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 transition-all"
+                                        className="flex-1 rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-success-border focus:outline-none focus:ring-1 focus:ring-status-success-border transition-all"
                                     />
                                     <Button
                                         variant="secondary"
@@ -431,35 +431,35 @@ export default function WorkspaceConfigPage() {
 
                                 {/* Validation Feedback */}
                                 {validation.checked && (
-                                    <div className={`mt-3 rounded-md p-3 text-sm border ${validation.valid ? "bg-emerald-500/5 border-emerald-500/20" : "bg-red-500/5 border-red-500/20"}`}>
+                                    <div className={`mt-3 rounded-md p-3 text-sm border ${validation.valid ? "bg-status-success-bg border-status-success-border" : "bg-status-error-bg border-status-error-border"}`}>
                                         <div className="flex items-center gap-2 mb-1">
                                             {validation.valid ? (
-                                                <Check className="h-4 w-4 text-emerald-500" />
+                                                <Check className="h-4 w-4 text-status-success-text" />
                                             ) : (
-                                                <AlertCircle className="h-4 w-4 text-red-500" />
+                                                <AlertCircle className="h-4 w-4 text-status-error-text" />
                                             )}
-                                            <span className={`font-semibold ${validation.valid ? "text-emerald-600" : "text-red-600"}`}>
+                                            <span className={`font-semibold ${validation.valid ? "text-status-success-text" : "text-status-error-text"}`}>
                                                 {validation.valid ? "Valid Working Folder" : "Validation Failed"}
                                             </span>
                                         </div>
 
                                         {!validation.valid && validation.error && (
-                                            <p className="text-red-500 text-xs ml-6">{validation.error}</p>
+                                            <p className="text-status-error-text text-xs ml-6">{validation.error}</p>
                                         )}
                                     </div>
                                 )}
 
                                 {validation.checked && validation.valid && (
-                                    <div className={`mt-3 rounded-md p-3 text-sm border ${gitValidation.valid ? "bg-emerald-500/5 border-emerald-500/20" : "bg-zinc-500/5 border-zinc-500/20"}`}>
+                                    <div className={`mt-3 rounded-md p-3 text-sm border ${gitValidation.valid ? "bg-status-success-bg border-status-success-border" : "bg-zinc-500/5 border-zinc-500/20"}`}>
                                         <div className="flex items-center gap-2 mb-1">
                                             {gitValidating ? (
-                                                <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
+                                                <Loader2 className="h-4 w-4 animate-spin text-status-success-text" />
                                             ) : gitValidation.valid ? (
-                                                <Check className="h-4 w-4 text-emerald-500" />
+                                                <Check className="h-4 w-4 text-status-success-text" />
                                             ) : (
                                                 <AlertCircle className="h-4 w-4 text-zinc-400" />
                                             )}
-                                            <span className={`font-semibold ${gitValidation.valid ? "text-emerald-600" : "text-zinc-400"}`}>
+                                            <span className={`font-semibold ${gitValidation.valid ? "text-status-success-text" : "text-zinc-400"}`}>
                                                 {gitValidating ? "Checking GitHub repo..." : gitValidation.valid ? "Approved" : "No GitHub repo detected"}
                                             </span>
                                         </div>
@@ -502,7 +502,7 @@ export default function WorkspaceConfigPage() {
                     <Panel className="p-0 overflow-hidden">
                         <div className="border-b border-border-subtle bg-bg-elevated/30 px-5 py-3">
                             <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-                                <Github className="h-4 w-4 text-emerald-500" />
+                                <Github className="h-4 w-4 text-status-success-text" />
                                 GitHub Repository Selector
                             </h2>
                         </div>
@@ -526,7 +526,7 @@ export default function WorkspaceConfigPage() {
                                         value={ghSearch}
                                         onChange={(e) => setGhSearch(e.target.value)}
                                         placeholder="Filter repositories..."
-                                        className="flex-1 rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 transition-all"
+                                        className="flex-1 rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-success-border focus:outline-none focus:ring-1 focus:ring-status-success-border transition-all"
                                     />
                                     <Button
                                         variant="secondary"
@@ -538,7 +538,7 @@ export default function WorkspaceConfigPage() {
                                 </div>
 
                                 <select
-                                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none"
+                                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary focus:border-status-success-border focus:outline-none"
                                     value={selectedRepoFullName}
                                     onChange={(e) => setSelectedRepoFullName(e.target.value)}
                                     disabled={ghLoading || ghRepos.length === 0}
@@ -561,7 +561,7 @@ export default function WorkspaceConfigPage() {
                                     value={customRepoInput}
                                     onChange={(e) => setCustomRepoInput(e.target.value)}
                                     placeholder="https://github.com/owner/repo or owner/repo"
-                                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 transition-all"
+                                    className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-success-border focus:outline-none focus:ring-1 focus:ring-status-success-border transition-all"
                                 />
                             </div>
 

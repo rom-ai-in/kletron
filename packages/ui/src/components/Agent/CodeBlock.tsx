@@ -56,7 +56,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ inline, className, childre
                     className="p-1 hover:bg-state-hover rounded transition-colors text-text-muted hover:text-text-primary opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Copy code"
                 >
-                    {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                    {copied ? <Check size={12} className="text-status-success-text" /> : <Copy size={12} />}
                 </button>
             </div>
 

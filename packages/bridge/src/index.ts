@@ -132,6 +132,20 @@ export type CloneResult = {
   workspace: WorkspaceInfo;
 };
 
+export async function gitListBranches(workspacePath: string): Promise<string[]> {
+  const git = getGit(workspacePath);
+  const result = await git.branchLocal();
+  return result.all;
+}
+
+export async function gitDiff(workspacePath: string, filePath?: string): Promise<string> {
+  const git = getGit(workspacePath);
+  if (filePath) {
+    return git.diff(["--", filePath]);
+  }
+  return git.diff();
+}
+
 export async function gitCloneRepo(repoUrl: string, targetRoot?: string, branch?: string): Promise<CloneResult> {
   const root = targetRoot || path.join(os.homedir(), "numezis-repos");
   const repoName = repoUrl.split("/").pop()?.replace(/\.git$/i, "") || "repo";

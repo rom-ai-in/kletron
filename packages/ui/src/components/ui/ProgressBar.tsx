@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 
 // =============================================================================
 // PROGRESS BAR COMPONENT
@@ -18,19 +18,19 @@ const sizeStyles: Record<ProgressSize, string> = {
 };
 
 const variantStyles: Record<ProgressVariant, string> = {
-    default: 'bg-emerald-500',
-    success: 'bg-emerald-500',
-    warning: 'bg-amber-500',
-    error: 'bg-rose-500',
-    info: 'bg-emerald-500',
+    default: 'bg-status-success',
+    success: 'bg-status-success',
+    warning: 'bg-status-warning',
+    error: 'bg-status-error',
+    info: 'bg-status-success',
 };
 
 const trackStyles: Record<ProgressVariant, string> = {
     default: 'bg-bg-elevated',
-    success: 'bg-emerald-500/20',
-    warning: 'bg-amber-500/20',
-    error: 'bg-rose-500/20',
-    info: 'bg-emerald-500/20',
+    success: 'bg-status-success-bg',
+    warning: 'bg-status-warning-bg',
+    error: 'bg-status-error-bg',
+    info: 'bg-status-success-bg',
 };
 
 export interface ProgressBarProps {
@@ -153,11 +153,11 @@ export function CircularProgress({
     const offset = circumference - (percentage / 100) * circumference;
 
     const colorMap: Record<ProgressVariant, string> = {
-        default: '#10b981',
-        success: '#10b981',
-        warning: '#f59e0b',
-        error: '#f43f5e',
-        info: '#10b981',
+        default: 'var(--status-success)',
+        success: 'var(--status-success)',
+        warning: 'var(--status-warning)',
+        error: 'var(--status-error)',
+        info: 'var(--status-success)',
     };
 
     return (

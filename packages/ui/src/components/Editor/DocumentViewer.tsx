@@ -99,7 +99,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ filePath }) => {
                 <a
                     href={documentUrl}
                     download={fileName}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs transition-colors flex-shrink-0"
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-status-success hover:bg-status-success text-text-primary rounded text-xs transition-colors flex-shrink-0"
                 >
                     <Download className="w-3 h-3" />
                     Download
@@ -115,8 +115,8 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ filePath }) => {
                     </div>
                 ) : error ? (
                     <div className="h-full flex flex-col items-center justify-center text-text-muted p-4">
-                        <AlertCircle className="w-8 h-8 mb-3 text-red-400" />
-                        <p className="text-sm text-red-400 text-center max-w-md">{error}</p>
+                        <AlertCircle className="w-8 h-8 mb-3 text-status-error-text" />
+                        <p className="text-sm text-status-error-text text-center max-w-md">{error}</p>
                     </div>
                 ) : (
                     <div

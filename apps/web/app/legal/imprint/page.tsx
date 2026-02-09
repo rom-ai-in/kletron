@@ -1,22 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { MarketingHeader, MarketingFooter } from '@numezis/ui/components/design-system';
 
 export default function ImprintPage() {
     return (
         <div className="min-h-screen w-full bg-bg-app">
-            {/* Header */}
-            <header className="fixed top-0 left-0 right-0 z-50 border-b border-border-subtle bg-bg-app/80 backdrop-blur-lg">
-                <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-                    <Link href="/" className="flex items-center gap-2.5">
-                        <span className="text-xl">🧠</span>
-                        <span className="text-sm font-semibold text-text-primary">Numezis Code</span>
-                    </Link>
-                    <Link href="/" className="text-sm text-text-muted hover:text-text-primary transition-colors">
-                        ← Back to Home
-                    </Link>
-                </div>
-            </header>
+            <MarketingHeader LinkComponent={Link} />
 
             {/* Content */}
             <main className="pt-24 pb-16 px-6">
@@ -65,25 +55,25 @@ export default function ImprintPage() {
                             <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
                                 <h3 className="text-xs font-medium text-text-muted mb-2 uppercase tracking-wider">General Inquiries</h3>
                                 <p className="text-sm text-text-secondary">
-                                    <a href="mailto:hello@numezis.com" className="text-emerald-500 hover:underline">hello@numezis.com</a>
+                                    <a href="mailto:hello@numezis.com" className="text-status-success-text hover:underline">hello@numezis.com</a>
                                 </p>
                             </div>
                             <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
                                 <h3 className="text-xs font-medium text-text-muted mb-2 uppercase tracking-wider">Support</h3>
                                 <p className="text-sm text-text-secondary">
-                                    <a href="mailto:support@numezis.com" className="text-emerald-500 hover:underline">support@numezis.com</a>
+                                    <a href="mailto:support@numezis.com" className="text-status-success-text hover:underline">support@numezis.com</a>
                                 </p>
                             </div>
                             <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
                                 <h3 className="text-xs font-medium text-text-muted mb-2 uppercase tracking-wider">Legal Department</h3>
                                 <p className="text-sm text-text-secondary">
-                                    <a href="mailto:legal@numezis.com" className="text-emerald-500 hover:underline">legal@numezis.com</a>
+                                    <a href="mailto:legal@numezis.com" className="text-status-success-text hover:underline">legal@numezis.com</a>
                                 </p>
                             </div>
                             <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
                                 <h3 className="text-xs font-medium text-text-muted mb-2 uppercase tracking-wider">Data Protection</h3>
                                 <p className="text-sm text-text-secondary">
-                                    <a href="mailto:dpo@numezis.com" className="text-emerald-500 hover:underline">dpo@numezis.com</a>
+                                    <a href="mailto:dpo@numezis.com" className="text-status-success-text hover:underline">dpo@numezis.com</a>
                                 </p>
                             </div>
                         </div>
@@ -115,7 +105,7 @@ export default function ImprintPage() {
                                     href="https://ec.europa.eu/consumers/odr"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-emerald-500 hover:underline"
+                                    className="text-status-success-text hover:underline"
                                 >
                                     ec.europa.eu/consumers/odr
                                 </a>
@@ -155,7 +145,7 @@ export default function ImprintPage() {
                                 <strong>Numezis EU Representative</strong><br />
                                 [To be appointed]<br />
                                 Dublin, Ireland<br />
-                                <a href="mailto:eu-representative@numezis.com" className="text-emerald-500 hover:underline">
+                                <a href="mailto:eu-representative@numezis.com" className="text-status-success-text hover:underline">
                                     eu-representative@numezis.com
                                 </a>
                             </p>
@@ -164,16 +154,7 @@ export default function ImprintPage() {
                 </article>
             </main>
 
-            {/* Footer */}
-            <footer className="py-8 px-6 border-t border-border-subtle">
-                <div className="max-w-4xl mx-auto flex flex-wrap gap-4 justify-center text-xs text-text-muted">
-                    <Link href="/legal/terms" className="hover:text-text-primary">Terms of Service</Link>
-                    <Link href="/legal/privacy" className="hover:text-text-primary">Privacy Policy</Link>
-                    <Link href="/legal/gdpr" className="hover:text-text-primary">GDPR</Link>
-                    <Link href="/legal/cookies" className="hover:text-text-primary">Cookie Policy</Link>
-                    <Link href="/legal/imprint" className="hover:text-text-primary">Imprint</Link>
-                </div>
-            </footer>
+            <MarketingFooter LinkComponent={Link} />
         </div>
     );
 }

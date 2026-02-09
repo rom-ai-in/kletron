@@ -20,8 +20,8 @@ export interface AuditStageConfig {
     id: string;
     /** Human-readable name */
     name: string;
-    /** Custom user prompt for this stage */
-    prompt: string;
+    /** Custom user prompt for this stage (optional for presets that load prompts at runtime) */
+    prompt?: string;
     /** Which graph to run */
     graphId: GraphId;
     /** LLM provider to use */

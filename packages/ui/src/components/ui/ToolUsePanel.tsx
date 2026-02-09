@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
 import { Circle, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 
 export type ToolUseStatus = 'running' | 'success' | 'error' | 'pending';
@@ -23,11 +23,11 @@ export interface ToolUsePanelProps {
 const statusIcon = (status?: ToolUseStatus) => {
   switch (status) {
     case 'success':
-      return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />;
+      return <CheckCircle2 className="h-3.5 w-3.5 text-status-success-text" />;
     case 'error':
-      return <XCircle className="h-3.5 w-3.5 text-rose-400" />;
+      return <XCircle className="h-3.5 w-3.5 text-status-error-text" />;
     case 'running':
-      return <Loader2 className="h-3.5 w-3.5 text-sky-400 animate-spin" />;
+      return <Loader2 className="h-3.5 w-3.5 text-status-info-text animate-spin" />;
     case 'pending':
     default:
       return <Circle className="h-2.5 w-2.5 text-text-muted" />;

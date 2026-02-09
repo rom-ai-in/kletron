@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { cn } from '@numezis/server/lib/utils';
+import { cn } from '../../lib/utils';
+import { cva, type VariantProps } from 'class-variance-authority';
 import {
     CheckCircle2,
     XCircle,
@@ -14,11 +15,44 @@ import {
 } from 'lucide-react';
 
 // =============================================================================
-// BADGE VARIANTS
+// CVA BADGE VARIANTS
 // =============================================================================
+
+const badgeVariants = cva(
+    'inline-flex items-center font-bold tracking-wider border',
+    {
+        variants: {
+            variant: {
+                default: 'bg-text-muted/10 text-text-secondary border-border-subtle',
+                outline: 'bg-transparent text-text-secondary border-border-strong',
+                success: 'bg-status-success-bg text-status-success-text border-status-success-border',
+                error: 'bg-status-error-bg text-status-error-text border-status-error-border',
+                warning: 'bg-status-warning-bg text-status-warning-text border-status-warning-border',
+                info: 'bg-status-info-bg text-status-info-text border-status-info-border',
+                pending: 'bg-status-warning-bg text-status-warning-text border-status-warning-border',
+                running: 'bg-status-success-bg text-status-success-text border-status-success-border',
+                paused: 'bg-text-muted/10 text-text-secondary border-border-subtle',
+                completed: 'bg-status-success-bg text-status-success-text border-status-success-border',
+                failed: 'bg-status-error-bg text-status-error-text border-status-error-border',
+            },
+            size: {
+                xs: 'px-1.5 py-0.5 text-[9px] gap-1',
+                sm: 'px-2 py-0.5 text-[10px] gap-1',
+                md: 'px-2.5 py-1 text-xs gap-1.5',
+            },
+        },
+        defaultVariants: {
+            variant: 'default',
+            size: 'sm',
+        },
+    }
+);
+
+export { badgeVariants };
 
 export type BadgeVariant =
     | 'default'
+    | 'outline'
     | 'success'
     | 'error'
     | 'warning'
@@ -31,21 +65,9 @@ export type BadgeVariant =
 
 export type BadgeSize = 'xs' | 'sm' | 'md';
 
-const variantStyles: Record<BadgeVariant, string> = {
-    default: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20',
-    success: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    error: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-    warning: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    info: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    pending: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    running: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    paused: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20',
-    completed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    failed: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-};
-
 const variantIcons: Record<BadgeVariant, LucideIcon | null> = {
     default: null,
+    outline: null,
     success: CheckCircle2,
     error: XCircle,
     warning: AlertCircle,
@@ -55,12 +77,6 @@ const variantIcons: Record<BadgeVariant, LucideIcon | null> = {
     paused: Pause,
     completed: CheckCircle2,
     failed: XCircle,
-};
-
-const sizeStyles: Record<BadgeSize, string> = {
-    xs: 'px-1.5 py-0.5 text-[9px] gap-1',
-    sm: 'px-2 py-0.5 text-[10px] gap-1',
-    md: 'px-2.5 py-1 text-xs gap-1.5',
 };
 
 const iconSizes: Record<BadgeSize, string> = {
@@ -107,9 +123,7 @@ export function Badge({
     return (
         <span
             className={cn(
-                'inline-flex items-center font-bold tracking-wider border',
-                variantStyles[variant],
-                sizeStyles[size],
+                badgeVariants({ variant, size }),
                 pill ? 'rounded-full' : 'rounded-md',
                 uppercase && 'uppercase',
                 className

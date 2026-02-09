@@ -33,7 +33,7 @@ export const ThoughtsPanel: React.FC<ThoughtsPanelProps> = ({ thoughts = [], isR
                 <div className="px-2 pb-2 space-y-1">
                     {cleanedThoughts.map((step, idx) => (
                         <div key={idx} className="flex gap-3 text-[10px] group">
-                            <div className="flex-shrink-0 mt-0.5 text-emerald-400/70">
+                            <div className="flex-shrink-0 mt-0.5 text-status-success-text opacity-70">
                                 <CheckCircle2 size={12} />
                             </div>
                             <div className="text-text-secondary leading-tight font-mono">

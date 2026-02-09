@@ -106,7 +106,7 @@ export function StageDetailModal({
                         className="ml-auto mb-1 flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-text-muted hover:bg-bg-elevated hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Copy to clipboard"
                     >
-                        {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copied ? <Check className="h-3.5 w-3.5 text-status-success-text" /> : <Copy className="h-3.5 w-3.5" />}
                         <span className="hidden sm:inline">Copy All</span>
                     </button>
                 </div>
@@ -135,7 +135,7 @@ export function StageDetailModal({
 
                     {error && (
                         <div className="absolute inset-0 flex items-center justify-center p-6">
-                            <div className="text-center text-rose-400">Error: {error}</div>
+                            <div className="text-center text-status-error-text">Error: {error}</div>
                         </div>
                     )}
 
@@ -174,10 +174,10 @@ function EventLogItem({ event }: { event: AgentEvent }) {
     const contentPreview = event.content?.slice(0, 150) + (event.content?.length > 150 ? "..." : "");
 
     return (
-        <div className={`rounded-lg border bg-bg-surface p-3 transition ${isError ? "border-rose-500/30 bg-rose-500/5" : "border-border-subtle"}`}>
+        <div className={`rounded-lg border bg-bg-surface p-3 transition ${isError ? "border-status-error-border bg-status-error-bg" : "border-border-subtle"}`}>
             <div className="flex items-start gap-3">
                 <div className={`mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded text-[10px] uppercase font-bold ${event.kind === "user" ? "bg-text-primary text-bg-surface" :
-                    event.kind === "assistant" ? "bg-emerald-500/10 text-emerald-400" :
+                    event.kind === "assistant" ? "bg-status-success-bg text-status-success-text" :
                         event.kind === "tool" ? "bg-bg-elevated text-text-muted border border-border-subtle" :
                             "bg-bg-elevated text-text-muted"
                     }`}>

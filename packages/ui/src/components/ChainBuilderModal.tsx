@@ -221,7 +221,7 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
                             </Button>
                         </div>
                         {hasPromptIssues && (
-                            <div className="rounded border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                            <div className="rounded border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text">
                                 {promptIssues.length} stage{promptIssues.length > 1 ? "s" : ""} missing a prompt. Add a prompt to continue.
                             </div>
                         )}
@@ -229,7 +229,7 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
                             {chainData.stages?.map((stage: AuditStageConfig, idx: number) => (
                                 <Panel
                                     key={idx}
-                                    className={`space-y-3 p-3 text-xs border-border-subtle bg-bg-elevated/50 ${(!stage.prompt || stage.prompt.trim() === "") ? "border-rose-500/30 bg-rose-500/5" : ""}`}
+                                    className={`space-y-3 p-3 text-xs border-border-subtle bg-bg-elevated/50 ${(!stage.prompt || stage.prompt.trim() === "") ? "border-status-error-border bg-status-error-bg" : ""}`}
                                 >
                                     <div className="flex items-center justify-between gap-2">
                                         <input
@@ -240,7 +240,7 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
                                         />
                                         <button
                                             onClick={() => handleRemoveStage(idx)}
-                                            className="text-text-muted hover:text-rose-400"
+                                            className="text-text-muted hover:text-status-error-text"
                                         >
                                             Remove
                                         </button>
@@ -279,7 +279,7 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
                                             placeholder="Describe exactly what this stage should do..."
                                         />
                                         {(!stage.prompt || stage.prompt.trim() === "") && (
-                                            <div className="mt-1 text-[10px] text-rose-300">Prompt is required.</div>
+                                            <div className="mt-1 text-[10px] text-status-error-text">Prompt is required.</div>
                                         )}
                                     </div>
                                 </Panel>
@@ -352,7 +352,7 @@ export function ChainBuilderModal({ open, onClose, onCreated, editChainId }: Cha
                         </div>
 
                         {error && (
-                            <div className="rounded border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">
+                            <div className="rounded border border-status-error-border bg-status-error-bg p-3 text-xs text-status-error-text">
                                 {error}
                             </div>
                         )}

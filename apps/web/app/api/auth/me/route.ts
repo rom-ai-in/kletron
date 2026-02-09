@@ -5,12 +5,31 @@ import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { getSupabaseAdminClient } from "@numezis/server/lib/supabase/supabaseAdmin";
 import * as userProfileService from '@numezis/server/services/userProfileService';
 
+// UUID v4 regex for validating user IDs before calling Supabase
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(request: Request) {
     const auth = await requireAppRouteAuth(request);
     if (!auth) {
-        return new Response(JSON.stringify({ "error": "Unauthorized" }), {
-            status: 401,
-            headers: { "Content-Type": "application/json" },
+        return NextResponse.json(
+            { success: false, message: 'Unauthorized', user: null, profile: null, context: [] },
+            { status: 401 }
+        );
+    }
+
+    // ── Dev bypass: return a mock user when the userId is not a real UUID ───
+    if (!UUID_RE.test(auth.userId)) {
+        return NextResponse.json({
+            success: true,
+            user: { id: auth.userId, email: 'dev@localhost' },
+            profile: {
+                id: auth.userId,
+                fullName: 'Dev User',
+                email: 'dev@localhost',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            },
+            context: [],
         });
     }
 
