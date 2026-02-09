@@ -13,7 +13,7 @@ import {
     LoadingState,
     ErrorState,
 } from "@numezis/ui/components/design-system";
-import type { AuditRun, ChainStatus } from "@numezis/shared/chainTypes";
+import type { AutomationRun, AutomationStatus } from "@numezis/shared/automationTypes";
 import { PlayCircle } from "lucide-react";
 
 type FilterStatus = "all" | "running" | "completed" | "failed" | "cancelled";
@@ -21,52 +21,52 @@ type FilterStatus = "all" | "running" | "completed" | "failed" | "cancelled";
 function RunsPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const [runs, setRuns] = useState<(AuditRun & { chainName: string })[]>([]);
+    const [runs, setRuns] = useState<(AutomationRun & { automationName: string })[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [filter, setFilter] = useState<FilterStatus>("all");
-    const campaignId = searchParams?.get("campaignId");
-    const [campaignName, setCampaignName] = useState<string | null>(null);
+    const automationId = searchParams?.get("automationId");
+    const [automationName, setAutomationName] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!campaignId) {
-            setCampaignName(null);
+        if (!automationId) {
+            setAutomationName(null);
             return;
         }
         let cancelled = false;
-        void fetch(`/api/campaigns/${campaignId}`)
+        void fetch(`/api/automations/${automationId}`)
             .then(async (res) => {
                 if (!res.ok) return null;
-                const data = (await res.json()) as { chain?: { name?: string } };
-                return data.chain?.name || null;
+                const data = (await res.json()) as { automation?: { name?: string } };
+                return data.automation?.name || null;
             })
             .then((name) => {
-                if (!cancelled) setCampaignName(name);
+                if (!cancelled) setAutomationName(name);
             })
             .catch(() => {
-                if (!cancelled) setCampaignName(null);
+                if (!cancelled) setAutomationName(null);
             });
         return () => {
             cancelled = true;
         };
-    }, [campaignId]);
+    }, [automationId]);
 
     useEffect(() => {
         void fetchRuns();
-    }, [campaignId]);
+    }, [automationId]);
 
     const fetchRuns = async () => {
         setLoading(true);
         setError("");
         try {
             const qs = new URLSearchParams();
-            if (campaignId) qs.set("campaignId", campaignId);
+            if (automationId) qs.set("automationId", automationId);
             const url = `/api/runs${qs.toString() ? `?${qs.toString()}` : ""}`;
 
             const res = await fetch(url);
             if (!res.ok) throw new Error("Failed to load execution runs");
-            const data = (await res.json()) as { runs: (AuditRun & { chainName: string })[] };
+            const data = (await res.json()) as { runs: (AutomationRun & { automationName: string })[] };
             setRuns(data.runs || []);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "Unknown error");
@@ -83,7 +83,7 @@ function RunsPageContent() {
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
-            const matchesName = run.chainName.toLowerCase().includes(query);
+            const matchesName = run.automationName.toLowerCase().includes(query);
             const matchesId = run._id?.toString().toLowerCase().includes(query);
             if (!matchesName && !matchesId) return false;
         }
@@ -102,29 +102,29 @@ function RunsPageContent() {
                     <div>
                         <h1 className="text-lg font-semibold text-text-primary">Execution Runs</h1>
                         <p className="text-sm text-text-muted">
-                            {campaignId ? (
+                            {automationId ? (
                                 <>
                                     Filtered to{" "}
                                     <span className="text-text-secondary font-medium">
-                                        {campaignName || "Campaign"}
+                                        {automationName || "Automation"}
                                     </span>{" "}
                                     <span className="font-mono text-text-muted">
-                                        ({campaignId.slice(0, 6)}…{campaignId.slice(-3)})
+                                        ({automationId.slice(0, 6)}…{automationId.slice(-3)})
                                     </span>
                                 </>
                             ) : (
-                                "History of all campaign execution sessions"
+                                "History of all automation execution sessions"
                             )}
                         </p>
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    {campaignId && (
+                    {automationId && (
                         <>
-                            <Button onClick={() => router.push(`/app/campaigns/${campaignId}`)} variant="secondary" size="sm">
-                                View campaign
+                            <Button onClick={() => router.push(`/app/automations/${automationId}`)} variant="secondary" size="sm">
+                                View Automation
                             </Button>
-                            <Button onClick={() => router.push(`/app/history?type=campaign&campaignId=${encodeURIComponent(campaignId)}`)} variant="secondary" size="sm">
+                            <Button onClick={() => router.push(`/app/history?type=automation&automationId=${encodeURIComponent(automationId)}`)} variant="secondary" size="sm">
                                 Back to Activity
                             </Button>
                         </>
@@ -138,7 +138,7 @@ function RunsPageContent() {
             {/* Filters */}
             <div className="flex items-center gap-4 border-b border-border-subtle bg-bg-surface px-6 py-3">
                 <SearchInput
-                    placeholder="Search runs by campaign or ID..."
+                    placeholder="Search runs by automation or ID..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onClear={() => setSearchQuery("")}
@@ -172,7 +172,7 @@ function RunsPageContent() {
                 {!loading && !error && (
                     <div className="space-y-4">
                         <div className="grid grid-cols-6 gap-4 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                            <div className="col-span-2">Campaign & Run ID</div>
+                            <div className="col-span-2">Automation & Run ID</div>
                             <div>Status</div>
                             <div>Started</div>
                             <div>Findings</div>
@@ -187,7 +187,7 @@ function RunsPageContent() {
                             >
                                 <div className="grid grid-cols-6 gap-4 items-center">
                                     <div className="col-span-2 text-left">
-                                        <div className="text-sm font-semibold text-text-primary">{run.chainName}</div>
+                                        <div className="text-sm font-semibold text-text-primary">{run.automationName}</div>
                                         <div className="text-[10px] font-mono text-text-muted truncate">RUNID: {run._id?.toString()}</div>
                                     </div>
                                     <div className="text-left">
@@ -213,10 +213,10 @@ function RunsPageContent() {
                                             variant="secondary"
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                router.push(`/app/campaigns/${run.chainId}`);
+                                                router.push(`/app/automations/${run.chainId}`);
                                             }}
                                         >
-                                            View Campaign
+                                            View Automation
                                         </Button>
                                     </div>
                                 </div>
@@ -227,7 +227,7 @@ function RunsPageContent() {
                             <EmptyState
                                 variant={searchQuery ? "search" : "no-data"}
                                 title={searchQuery ? "No runs match your search" : "No execution runs found"}
-                                description={searchQuery ? "Try adjusting your search criteria." : "Execute a campaign to see runs here."}
+                                description={searchQuery ? "Try adjusting your search criteria." : "Execute an automation to see runs here."}
                             />
                         )}
                     </div>
@@ -259,8 +259,8 @@ function FilterButton({
     );
 }
 
-function StatusBadge({ status }: { status: ChainStatus }) {
-    const variantMap: Record<ChainStatus, "completed" | "failed" | "running" | "pending" | "paused" | "default"> = {
+function StatusBadge({ status }: { status: AutomationStatus }) {
+    const variantMap: Record<AutomationStatus, "completed" | "failed" | "running" | "pending" | "paused" | "default"> = {
         COMPLETED: "completed",
         FAILED: "failed",
         RUNNING: "running",

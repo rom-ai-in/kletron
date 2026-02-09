@@ -59,7 +59,11 @@ const api = {
   gitCheckout: (branch: string): Promise<void> => ipcRenderer.invoke("git:checkout", branch),
   gitClone: (repoUrl: string, branch?: string): Promise<WorkspaceInfo> => ipcRenderer.invoke("git:clone", repoUrl, branch),
   gitListBranches: (): Promise<string[]> => ipcRenderer.invoke("git:listBranches"),
-  gitDiff: (filePath?: string): Promise<string> => ipcRenderer.invoke("git:diff", filePath)
+  gitDiff: (filePath?: string): Promise<string> => ipcRenderer.invoke("git:diff", filePath),
+  // Command Center
+  pickFile: (): Promise<string[]> => ipcRenderer.invoke("app:pickFile"),
+  captureScreenshot: (): Promise<string | null> => ipcRenderer.invoke("app:captureScreenshot"),
+  popOutThread: (threadId: string, title: string): Promise<number> => ipcRenderer.invoke("app:popOutThread", { threadId, title }),
 };
 
 contextBridge.exposeInMainWorld("numezis", api);

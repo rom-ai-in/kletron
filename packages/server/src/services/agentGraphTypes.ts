@@ -1,6 +1,7 @@
 import type { ObjectId } from "mongodb";
 import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
 import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
+import type { AgentEvent } from "@numezis/shared/types";
 
 export type AgentGraphStatus = "PENDING" | "RUNNING" | "PAUSED" | "CANCELLED" | "COMPLETED" | "FAILED";
 
@@ -94,7 +95,7 @@ export interface AgentGraphDefinition {
     _id?: ObjectId;
     name: string;
     description?: string;
-    category?: "deep_agent" | "graph" | "campaign" | "drift";
+    category?: "deep_agent" | "graph" | "automation" | "drift";
     createdAt: Date;
     updatedAt: Date;
     nodes: AgentGraphNode[];
@@ -152,6 +153,8 @@ export type AgentGraphState = {
         history?: string[];
         lastNodeId?: string;
     };
+    /** Accumulated conversation history for multi-turn sessions. */
+    conversationHistory?: AgentEvent[];
 };
 
 export interface AgentGraphRun {
@@ -170,4 +173,10 @@ export interface AgentGraphRun {
     tokenUsage?: TokenUsageSummary;
     state: AgentGraphState;
     error?: string;
+    /** Session title (auto-generated or user-set). */
+    title?: string;
+    /** Whether this session has been archived. */
+    archived?: boolean;
+    /** Number of multi-turn conversation turns. */
+    conversationTurns?: number;
 }

@@ -3,7 +3,7 @@ import React from "react";
 interface PanelProps extends React.HTMLAttributes<HTMLDivElement> {
     title?: string;
     headerAction?: React.ReactNode;
-    variant?: "default" | "elevated" | "outlined";
+    variant?: "default" | "elevated" | "outlined" | "glass";
 }
 
 export function Panel({ className = "", title, headerAction, variant = "default", children, ...props }: PanelProps) {
@@ -11,6 +11,7 @@ export function Panel({ className = "", title, headerAction, variant = "default"
         default: "bg-bg-surface border-border-subtle",
         elevated: "bg-bg-elevated border-border-strong shadow-lg",
         outlined: "bg-transparent border-2 border-border-strong",
+        glass: "glass-card",
     };
 
     return (

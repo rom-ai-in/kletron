@@ -69,6 +69,10 @@ export {
     ThoughtsPanel,
     TokenUsageDisplay, DurationDisplay, formatTokenCount, formatDuration,
 
+    // Timeline (extracted from deep-agent)
+    TimelinePanel, PhaseItem,
+    EventCard,
+
     // Monaco editors
     CodeEditor, detectLanguage,
     DiffEditor,
@@ -91,3 +95,38 @@ export {
     Breadcrumbs,
     BreadcrumbOverridesProvider, useBreadcrumbOverrides,
 } from './components/design-system';
+
+// Command Center components
+export {
+    TitleBar,
+    ProjectSidebar,
+    ConversationTabs,
+    ConversationCenter,
+    InputBar,
+    ProjectUtilitySidebar,
+    InlineDiffReview,
+    SlashCommandMenu,
+    MultimodalMenu,
+    ReviewQueue,
+    SkillsManager,
+    AutomationsDashboard,
+    AgentGraphSelector,
+    ReplayConfirmDialog,
+} from './components/CommandCenter';
+
+export type {
+    TitleBarProps, GitDiffStats,
+    ProjectSidebarProps, SidebarProject, SidebarThread,
+    ConversationTabsProps, ConversationTabItem,
+    ConversationCenterProps,
+    InputBarProps,
+    ProjectUtilitySidebarProps, PendingDiffItem, FileLink, GitSidebarData,
+    InlineDiffReviewProps, InlineDiff,
+    SlashCommandMenuProps, SlashCommandItem,
+    MultimodalMenuProps,
+    ReviewQueueProps, ReviewQueueItem,
+    SkillsManagerProps, SkillItem,
+    AutomationsDashboardProps, AutomationItem,
+    AgentGraphSelectorProps, AgentGraph,
+    ReplayConfirmDialogProps, ReplayImpact, FileChange,
+} from './components/CommandCenter';

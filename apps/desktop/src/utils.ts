@@ -20,7 +20,9 @@ export const SETTINGS_SECTIONS = [
   { id: "configuration", label: "Configuration" },
   { id: "personalization", label: "Personalization" },
   { id: "mcp", label: "MCP servers" },
-  { id: "git", label: "Git" },
+  { id: "skills", label: "Skills" },
+  { id: "automations", label: "Automations" },
+  { id: "graphs", label: "Agent Graphs" },
   { id: "environments", label: "Environments" },
   { id: "worktrees", label: "Worktrees" },
   { id: "archived", label: "Archived threads" },
@@ -222,10 +224,14 @@ export function formatDateTime(iso?: string | null): string {
 }
 
 export function deriveWorkspaceName(rootPath?: string, fallback?: string) {
+  // Always prefer the folder name from the path over generic backend names
+  if (rootPath) {
+    const parts = rootPath.split(/[\\/]/).filter(Boolean);
+    const folderName = parts[parts.length - 1];
+    if (folderName) return folderName;
+  }
   if (fallback) return fallback;
-  if (!rootPath) return "Workspace";
-  const parts = rootPath.split(/[\\/]/).filter(Boolean);
-  return parts[parts.length - 1] || "Workspace";
+  return "Workspace";
 }
 
 // ─── Language Detection ──────────────────────────────────────────────────────

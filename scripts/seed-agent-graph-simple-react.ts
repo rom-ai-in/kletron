@@ -12,10 +12,16 @@ async function main() {
     for (const dup of duplicates) {
       if (dup._id) await agentGraphService.deleteGraph(String(dup._id));
     }
+    // Update existing graph with latest configuration (nodes, edges, description)
+    await agentGraphService.updateGraph(String(keep._id), {
+      nodes: graph.nodes,
+      edges: graph.edges,
+      description: graph.description,
+    });
     // eslint-disable-next-line no-console
     console.log(
       JSON.stringify(
-        { existingGraphId: String(keep._id), name: graph.name, deletedDuplicates: duplicates.length },
+        { updatedGraphId: String(keep._id), name: graph.name, deletedDuplicates: duplicates.length },
         null,
         2
       )

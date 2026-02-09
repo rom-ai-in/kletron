@@ -27,7 +27,7 @@ function warnDbUnavailable(error: unknown) {
  * Supports:
  * - Per-call logging to MongoDB
  * - In-memory accumulation during run execution
- * - Aggregated queries by run, campaign, time period
+ * - Aggregated queries by run, automation, time period
  */
 export class TokenUsageService {
     /**
@@ -169,9 +169,9 @@ export class TokenUsageService {
     }
 
     /**
-     * Query aggregated token usage for a campaign/chain from the database.
+     * Query aggregated token usage for an automation from the database.
      */
-    async getCampaignUsage(chainId: string, workspaceId?: string): Promise<TokenUsageSummary> {
+    async getAutomationUsage(chainId: string, workspaceId?: string): Promise<TokenUsageSummary> {
         if (!ObjectId.isValid(chainId)) {
             return createEmptyTokenUsageSummary();
         }

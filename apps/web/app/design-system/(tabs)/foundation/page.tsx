@@ -9,6 +9,9 @@ import {
     brand,
     agent,
     rawColors,
+    glassSurfaces,
+    glassBorders,
+    glassBlur,
     spacing,
     componentSpacing,
     gaps,
@@ -77,6 +80,71 @@ import { colors, spacing, typography } from "@numezis/ui/tokens";
 
 // Inline (last resort)
 <div style={{ background: "var(--bg-surface)", color: "var(--text-primary)" }} />`}
+                />
+            </DocSection>
+
+            <DocSection
+                title="Glass / Frosted Surfaces"
+                description="Semi-transparent surfaces for macOS vibrancy and CSS backdrop-filter. Use .glass-* utility classes or bg-glass-* Tailwind classes."
+            >
+                <div className="grid gap-6 lg:grid-cols-2">
+                    <TokenGroup title="Glass Surfaces" tokens={glassSurfaces} swatch="bg" />
+                    <TokenGroup title="Glass Borders" tokens={glassBorders} swatch="border" />
+                    <TokenGroup title="Glass Blur" tokens={glassBlur} />
+                </div>
+                <DocCard title="Glass Utility Classes">
+                    <div className="glass-demo-bg rounded-xl p-6">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="glass-sidebar rounded-lg p-4 h-24 flex items-center justify-center">
+                                <span className="text-xs text-text-secondary">.glass-sidebar</span>
+                            </div>
+                            <div className="glass-titlebar rounded-lg p-4 h-24 flex items-center justify-center">
+                                <span className="text-xs text-text-secondary">.glass-titlebar</span>
+                            </div>
+                            <div className="glass-elevated rounded-lg p-4 h-24 flex items-center justify-center">
+                                <span className="text-xs text-text-secondary">.glass-elevated</span>
+                            </div>
+                            <div className="glass-card rounded-lg p-4 h-24 flex items-center justify-center">
+                                <span className="text-xs text-text-secondary">.glass-card</span>
+                            </div>
+                            <div className="glass-input rounded-lg p-4 h-24 flex items-center justify-center">
+                                <span className="text-xs text-text-secondary">.glass-input</span>
+                            </div>
+                            <div className="glass-selected rounded-lg p-4 h-24 flex items-center justify-center">
+                                <span className="text-xs text-text-secondary">.glass-selected</span>
+                            </div>
+                        </div>
+                    </div>
+                </DocCard>
+                <DocRules
+                    rules={[
+                        "Use .glass-sidebar for left/right sidebars — most transparent, with xl blur.",
+                        "Use .glass-titlebar for title bars and tab bars — slightly more transparent than sidebar.",
+                        "Use .glass-elevated for modals, dropdowns, and popovers — stronger border and shadow.",
+                        "Use .glass-card for content cards — subtle background with hover transition.",
+                        "Use .glass-input for text fields and selectors — minimal background with focus ring.",
+                        "Use .glass-selected for active items — brand accent tint.",
+                        "On macOS desktop, Electron vibrancy provides the OS-level blur; CSS glass utilities layer on top.",
+                        "On web/non-macOS, backdrop-filter provides the blur effect with CSS-only fallback.",
+                    ]}
+                />
+                <DocCode
+                    code={`// Glass utility classes
+<aside className="glass-sidebar">...</aside>
+<header className="glass-titlebar">...</header>
+<div className="glass-elevated">Modal content</div>
+<div className="glass-card">Card content</div>
+
+// Tailwind color tokens
+<div className="bg-glass-sidebar border-glass-border">...</div>
+
+// Electron vibrancy (main.ts)
+mainWindow = new BrowserWindow({
+  transparent: true,
+  backgroundColor: "#00000000",
+  vibrancy: "sidebar",
+  visualEffectState: "active",
+});`}
                 />
             </DocSection>
 

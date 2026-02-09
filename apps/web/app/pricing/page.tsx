@@ -26,7 +26,7 @@ const tiers = [
             { text: '10K files semantic index', included: true },
             { text: 'Community support', included: true },
             { text: 'Hosted AI models', included: false },
-            { text: 'Advanced campaigns', included: false },
+            { text: 'Advanced automations', included: false },
             { text: 'Priority support', included: false },
         ],
         badge: null,
@@ -45,7 +45,7 @@ const tiers = [
             { text: 'Unlimited agent graphs', included: true },
             { text: '100K files semantic index', included: true },
             { text: 'BYOK + 500K hosted tokens/mo', included: true, tooltip: 'Use our hosted models or your own — your choice' },
-            { text: 'Advanced campaigns', included: true },
+            { text: 'Advanced automations', included: true },
             { text: 'Anti-drift detection', included: true },
             { text: 'Priority email support', included: true },
         ],
@@ -140,7 +140,7 @@ export default function PricingPage() {
         // Free tier - just go to register
         if (tierId === 'free') {
             if (user) {
-                window.location.href = '/app/explore';
+                window.location.href = '/app/agent';
             } else {
                 window.location.href = '/auth/register';
             }
@@ -203,13 +203,13 @@ export default function PricingPage() {
                         ) : user ? (
                             <>
                                 <Link
-                                    href="/app/explore"
+                                    href="/app/agent"
                                     className="text-sm text-text-secondary hover:text-text-primary transition-colors"
                                 >
                                     Dashboard
                                 </Link>
                                 <Link
-                                    href="/app/explore"
+                                    href="/app/agent"
                                     className="inline-flex items-center gap-2 rounded-md bg-bg-elevated hover:bg-state-hover border border-border-subtle px-3 py-1.5 text-sm font-medium text-text-primary transition-colors"
                                 >
                                     Open App →

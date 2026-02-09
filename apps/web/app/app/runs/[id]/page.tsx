@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Panel, Button } from "@numezis/ui/components/design-system";
-import type { AuditChain, AuditRun, ChainStatus } from "@numezis/shared/chainTypes";
+import type { AutomationDefinition, AutomationRun, AutomationStatus } from "@numezis/shared/automationTypes";
 import type { AgentEvent } from "@numezis/shared/types";
 import { StageDetailModal } from "@numezis/ui/components/StageDetailModal";
 
@@ -16,8 +16,8 @@ const POLL_INTERVAL_MS = 4000;
 
 export default function RunDetailPage({ params }: RunDetailPageProps) {
     const router = useRouter();
-    const [run, setRun] = useState<AuditRun | null>(null);
-    const [chain, setChain] = useState<AuditChain | null>(null);
+    const [run, setRun] = useState<AutomationRun | null>(null);
+    const [automation, setAutomation] = useState<AutomationDefinition | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
@@ -33,8 +33,8 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
     const [liveLastUpdated, setLiveLastUpdated] = useState<string | null>(null);
     const [autoOpenedSessionId, setAutoOpenedSessionId] = useState<string | null>(null);
 
-    const pickLiveSession = (runData: AuditRun, chainData: AuditChain | null) => {
-        const stageCount = chainData?.stages?.length ?? 0;
+    const pickLiveSession = (runData: AutomationRun, automationData: AutomationDefinition | null) => {
+        const stageCount = automationData?.stages?.length ?? 0;
         const safeStageCount = stageCount > 0 ? stageCount : runData.sessionIds?.length ?? 0;
         if (!safeStageCount) return { sessionId: null, stageName: null, stageId: null };
 
@@ -51,7 +51,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
         }
 
         const sessionId = runData.sessionIds?.[candidateIndex] ?? null;
-        const stage = chainData?.stages?.[candidateIndex];
+        const stage = automationData?.stages?.[candidateIndex];
         const stageName = stage?.name ?? (sessionId ? `Stage ${candidateIndex + 1}` : null);
         const stageId = stage?.id ?? null;
         return { sessionId, stageName, stageId };
@@ -98,7 +98,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
 
     useEffect(() => {
         if (!run) return;
-        const { sessionId, stageName, stageId } = pickLiveSession(run, chain);
+        const { sessionId, stageName, stageId } = pickLiveSession(run, automation);
         setLiveSessionId(sessionId);
         setLiveStageName(stageName);
         setLiveStageId(stageId);
@@ -107,7 +107,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
         } else {
             setLiveEvents([]);
         }
-    }, [run?.currentStageIndex, run?.status, run?.sessionIds?.length, chain?.stages?.length]);
+    }, [run?.currentStageIndex, run?.status, run?.sessionIds?.length, automation?.stages?.length]);
 
     useEffect(() => {
         if (!liveSessionId) return;
@@ -146,7 +146,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
             if (!res.ok) throw new Error("Failed to load execution run");
             const data = await res.json();
             setRun(data.run);
-            setChain(data.chain);
+            setAutomation(data.automation);
         } catch (err: any) {
             if (background) {
                 setRefreshError(err.message || "Unknown error");
@@ -190,7 +190,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
         );
     }
 
-    if (error || !run || !chain) {
+    if (error || !run || !automation) {
         return (
             <div className="flex h-full flex-col items-center justify-center p-12 text-center">
                 <div className="mb-4 text-status-error-text">Error: {error || "Run not found"}</div>
@@ -218,15 +218,15 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                             )}
                         </div>
                         <p className="text-sm text-text-muted">
-                            Campaign: <Link href={`/app/campaigns/${run.chainId.toString()}`} className="text-text-secondary hover:text-text-primary hover:underline transition-colors">{chain.name}</Link> · Started {new Date(run.startedAt).toLocaleString()}
+                            Automation: <Link href={`/app/automations/${run.chainId.toString()}`} className="text-text-secondary hover:text-text-primary hover:underline transition-colors">{automation.name}</Link> · Started {new Date(run.startedAt).toLocaleString()}
                         </p>
                     </div>
                     <div className="flex gap-2">
                         <Button
                             variant="secondary"
-                            onClick={() => router.push(`/app/campaigns/${run.chainId}`)}
+                            onClick={() => router.push(`/app/automations/${run.chainId}`)}
                         >
-                            View Campaign Config
+                            View Automation Config
                         </Button>
                         {(run.status === "RUNNING" || run.status === "PAUSED" || run.status === "PENDING") && (
                             <Button
@@ -262,11 +262,11 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                         <Panel className="p-4">
                             <h2 className="mb-4 text-sm font-semibold text-text-primary">Execution Stages</h2>
                             <div className="space-y-3">
-                                {chain.stages.map((stage, index) => {
-                                    const currentIndex = Math.min(run.currentStageIndex, Math.max(chain.stages.length - 1, 0));
+                                {automation.stages.map((stage, index) => {
+                                    const currentIndex = Math.min(run.currentStageIndex, Math.max(automation.stages.length - 1, 0));
                                     const isCompleted = run.status === "COMPLETED" || index < currentIndex;
                                     const isCurrent = index === currentIndex && (run.status === "RUNNING" || run.status === "PAUSED" || run.status === "PENDING");
-                                    const stageStatus: ChainStatus = isCompleted
+                                    const stageStatus: AutomationStatus = isCompleted
                                         ? "COMPLETED"
                                         : isCurrent
                                         ? run.status
@@ -486,9 +486,9 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                     <span className="font-mono text-text-secondary">{run._id?.toString()}</span>
                                 </div>
                                 <div className="flex justify-between items-center">
-                                    <span className="text-text-muted">Campaign ID</span>
+                                    <span className="text-text-muted">Automation ID</span>
                                     <Link
-                                        href={`/app/campaigns/${run.chainId.toString()}`}
+                                        href={`/app/automations/${run.chainId.toString()}`}
                                         className="font-mono text-text-secondary hover:text-text-primary hover:underline decoration-text-muted/50 underline-offset-2 transition-colors"
                                     >
                                         {run.chainId.toString()}
@@ -506,7 +506,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                 )}
                                 <div className="flex justify-between">
                                     <span className="text-text-muted">Total Stages</span>
-                                    <span className="text-text-secondary">{chain.stages.length}</span>
+                                    <span className="text-text-secondary">{automation.stages.length}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-text-muted">Last Active Stage</span>
@@ -530,8 +530,8 @@ function StatBox({ label, value }: { label: string; value: string | number }) {
     );
 }
 
-function StatusBadge({ status }: { status: ChainStatus }) {
-    const styles: Record<ChainStatus, string> = {
+function StatusBadge({ status }: { status: AutomationStatus }) {
+    const styles: Record<AutomationStatus, string> = {
         COMPLETED: "bg-status-success-bg text-status-success-text border-status-success-border",
         FAILED: "bg-status-error-bg text-status-error-text border-status-error-border",
         RUNNING: "bg-zinc-400/10 text-zinc-300 border-zinc-400/20",

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { tokenUsageService } from "@numezis/server/services/tokenUsageService";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
-import { chainExecutor } from "@numezis/server/services/chainExecutor";
+import { automationExecutor } from "@numezis/server/services/automationExecutor";
 
 /**
  * GET /api/token-usage/run/[id]
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
 
-        const run = await chainExecutor.getRun(params.id, workspace._id.toString());
+        const run = await automationExecutor.getRun(params.id, workspace._id.toString());
         if (!run) {
             return NextResponse.json({ error: "Execution run not found" }, { status: 404 });
         }

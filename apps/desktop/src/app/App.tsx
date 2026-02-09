@@ -1,41 +1,47 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import {
-  ChevronLeft, ChevronDown, ChevronRight, Settings, Pencil, Check, X,
-  Archive, Trash2, Terminal as TerminalIcon, MessageSquare, ListTodo,
-  Files, Search, GitBranch, Brain, FileCode,
+  ChevronLeft, Settings, Brain, Zap, Eye, User,
+  Wrench, GitBranch, Paperclip, ChevronUp, ChevronDown, TerminalSquare,
 } from "lucide-react";
 
 // Design system components
 import {
   Button,
-  ChatInput,
-  Textarea,
   Toggle,
-  ThreadFeed,
   LLMSelector,
   MCPServerConfig,
   EnvironmentConfig,
   WorktreeManager,
-  ToolInvocation,
-  MarkdownRenderer,
-  TrafficLights,
-  ActivityBar,
-  FileBrowser,
-  CodeEditor,
-  DiffEditor,
-  EditorTabs,
-  CommandPalette,
-  StatusBar,
-  GitPanel,
   ContextChips,
   createFileChip,
-  ThinkingBubble,
 } from "@numezis/ui/components/design-system";
-import type { EditorTab } from "@numezis/ui/components/design-system";
-import type { ActivityBarItem } from "@numezis/ui/components/design-system";
-import type { CommandItem } from "@numezis/ui/components/design-system";
 import type { ContextChip } from "@numezis/ui/components/design-system";
+
+// Terminal component
 import { Terminal } from "@numezis/ui/components/Terminal";
+
+// Command Center components
+import { TitleBar } from "@numezis/ui/components/CommandCenter/TitleBar";
+import { ProjectSidebar } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
+import type { SidebarProject } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
+import { ConversationTabs } from "@numezis/ui/components/CommandCenter/ConversationTabs";
+import type { ConversationTabItem } from "@numezis/ui/components/CommandCenter/ConversationTabs";
+import { ConversationCenter } from "@numezis/ui/components/CommandCenter/ConversationCenter";
+import { InputBar } from "@numezis/ui/components/CommandCenter/InputBar";
+import { MessageQueue } from "@numezis/ui/components/CommandCenter/MessageQueue";
+import { ProjectUtilitySidebar } from "@numezis/ui/components/CommandCenter/ProjectUtilitySidebar";
+import type { PendingDiffItem, FileLink, GitSidebarData } from "@numezis/ui/components/CommandCenter/ProjectUtilitySidebar";
+import { InlineDiffReview } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
+import type { InlineDiff } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
+import { SlashCommandMenu } from "@numezis/ui/components/CommandCenter/SlashCommandMenu";
+import type { SlashCommandItem } from "@numezis/ui/components/CommandCenter/SlashCommandMenu";
+import { MultimodalMenu } from "@numezis/ui/components/CommandCenter/MultimodalMenu";
+import { SkillsManager } from "@numezis/ui/components/CommandCenter/SkillsManager";
+import { AutomationsDashboard } from "@numezis/ui/components/CommandCenter/AutomationsDashboard";
+import { AgentGraphSelector } from "@numezis/ui/components/CommandCenter/AgentGraphSelector";
+import type { AgentGraph } from "@numezis/ui/components/CommandCenter/AgentGraphSelector";
+import { ReplayConfirmDialog } from "@numezis/ui/components/CommandCenter/ReplayConfirmDialog";
+import type { ReplayImpact } from "@numezis/ui/components/CommandCenter/ReplayConfirmDialog";
 
 // Hooks
 import { useAuth } from "../hooks/useAuth";
@@ -46,19 +52,13 @@ import { useConversation } from "../hooks/useConversation";
 import { useDiffs } from "../hooks/useDiffs";
 import { useModels } from "../hooks/useModels";
 import { useGit } from "../hooks/useGit";
-import { useFileExplorer } from "../hooks/useFileExplorer";
-
-// Panels
-import { SearchPanel } from "./panels/SearchPanel";
-import { TodoPanel } from "./panels/TodoPanel";
-import type { TodoItem } from "./panels/TodoPanel";
+import { useProjects } from "../hooks/useProjects";
+import { usePersonality } from "../hooks/usePersonality";
+import { useSkills } from "../hooks/useSkills";
 
 // Utils & types
-import type { MCPServer, EnvVariable, Worktree } from "../types";
+import type { MCPServer, EnvVariable, Worktree, ConversationTab, Automation, QueuedMessage } from "../types";
 import { SETTINGS_SECTIONS, formatRelativeTime } from "../utils";
-
-// ─── Side panel type ─────────────────────────────────────────────────────────
-type SidePanel = "explorer" | "search" | "git" | "todo" | "chat";
 
 export default function App() {
   // ═══════════════════════════════════════════════════════════════════════════
@@ -98,23 +98,30 @@ export default function App() {
     models.selectedGraphName, threads.loadThreads, diffs.setDiffs
   );
   const git = useGit(workspace.workspace?.path ?? null, backendUrlTrimmed, auth.getAccessToken);
-  const fileExplorer = useFileExplorer(workspace.workspace?.path ?? null);
+  const projectsHook = useProjects(workspace.workspace?.path, workspace.workspace?.name);
+  const personality = usePersonality();
+  const skillsHook = useSkills(backendUrlTrimmed, backendReady, auth.getAccessToken);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // UI STATE
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const [sidePanel, setSidePanel] = useState<SidePanel>("explorer");
-  const [sidePanelVisible, setSidePanelVisible] = useState(true);
-  const [chatPanelOpen, setChatPanelOpen] = useState(true);
-  const [terminalOpen, setTerminalOpen] = useState(false);
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [viewingDiff, setViewingDiff] = useState<{ editId: string; filePath: string; original: string; modified: string } | null>(null);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [rightSidebarVisible, setRightSidebarVisible] = useState(true);
+  const [terminalVisible, setTerminalVisible] = useState(false);
+  const [openTabs, setOpenTabs] = useState<ConversationTab[]>([]);
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
   const [envVariables, setEnvVariables] = useState<EnvVariable[]>([]);
   const [worktrees, setWorktrees] = useState<Worktree[]>([]);
-  const [todos, setTodos] = useState<TodoItem[]>([]);
   const [contextChips, setContextChips] = useState<ContextChip[]>([]);
+  const [multimodalOpen, setMultimodalOpen] = useState(false);
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
+  const [automations, setAutomations] = useState<Automation[]>([]);
+  const [replayImpact, setReplayImpact] = useState<ReplayImpact | null>(null);
+  const [replayDialogOpen, setReplayDialogOpen] = useState(false);
+  const [replayLoading, setReplayLoading] = useState(false);
+  const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // KEYBOARD SHORTCUTS
@@ -125,31 +132,49 @@ export default function App() {
       const isMod = e.metaKey || e.ctrlKey;
       if (!isMod) return;
 
-      if (e.key === "j" && !e.shiftKey) { e.preventDefault(); setTerminalOpen((p) => !p); }
-      if (e.key === "b" && !e.shiftKey) { e.preventDefault(); setSidePanelVisible((p) => !p); }
-      if (e.key === "p" && !e.shiftKey) { e.preventDefault(); setCommandPaletteOpen(true); }
-      if (e.key === "p" && e.shiftKey) { e.preventDefault(); setCommandPaletteOpen(true); }
-      if (e.key === "\\" && !e.shiftKey) { e.preventDefault(); setChatPanelOpen((p) => !p); }
-      if (e.key === "e" && !e.shiftKey && !e.altKey) {
-        // Cmd+E: focus explorer
+      if (e.key === "b" && !e.shiftKey) {
         e.preventDefault();
-        setSidePanel("explorer");
-        setSidePanelVisible(true);
+        setSidebarVisible((p) => !p);
       }
-      if (e.key === "s" && !e.shiftKey) {
-        // Cmd+S: save active file
-        if (fileExplorer.activeFile && fileExplorer.activeFile.content !== fileExplorer.activeFile.originalContent) {
-          e.preventDefault();
-          void fileExplorer.saveFile(fileExplorer.activeFile.path);
+      if (e.key === "n" && !e.shiftKey) {
+        e.preventDefault();
+        // Create new thread in active project
+        if (projectsHook.activeProjectId) {
+          handleNewThreadInProject(projectsHook.activeProjectId);
         }
+      }
+      if (e.key === "w" && !e.shiftKey) {
+        e.preventDefault();
+        if (threads.conversationId) {
+          handleTabClose(threads.conversationId);
+        }
+      }
+      // Add new project: Cmd+O
+      if (e.key === "o" && !e.shiftKey) {
+        e.preventDefault();
+        handleAddProject();
+      }
+      // Toggle terminal: Cmd+J
+      if (e.key === "j" && !e.shiftKey) {
+        e.preventDefault();
+        setTerminalVisible((p) => !p);
+      }
+      // Switch tabs: Cmd+Shift+[ and Cmd+Shift+]
+      if (e.key === "[" && e.shiftKey) {
+        e.preventDefault();
+        switchTab(-1);
+      }
+      if (e.key === "]" && e.shiftKey) {
+        e.preventDefault();
+        switchTab(1);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [fileExplorer.activeFile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [threads.conversationId, openTabs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // DATA LOADING EFFECTS (unchanged)
+  // DATA LOADING
   // ═══════════════════════════════════════════════════════════════════════════
 
   const dataLoadedKeyRef = useRef<string | null>(null);
@@ -163,16 +188,8 @@ export default function App() {
     void models.loadGraphs();
     void models.loadModel();
     void models.loadTools();
+    void skillsHook.loadSkills();
   }, [auth.auth?.accessToken, backendUrlTrimmed, backendReady]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const graphRunsLoadedRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!auth.auth?.accessToken || !models.selectedGraph) return;
-    const key = `${backendUrlTrimmed}::${models.selectedGraph}`;
-    if (graphRunsLoadedRef.current === key) return;
-    graphRunsLoadedRef.current = key;
-    void models.loadGraphRuns(models.selectedGraph);
-  }, [auth.auth?.accessToken, models.selectedGraph, backendUrlTrimmed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const conversationLoadedRef = useRef<string | null>(null);
   useEffect(() => {
@@ -190,7 +207,6 @@ export default function App() {
     if (resetKeyRef.current === key) return;
     resetKeyRef.current = key;
     dataLoadedKeyRef.current = null;
-    graphRunsLoadedRef.current = null;
     conversationLoadedRef.current = null;
     threads.resetThreads();
     conversation.resetConversation();
@@ -198,154 +214,396 @@ export default function App() {
   }, [backendUrlTrimmed, workspace.workspace?.path]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // DERIVED STATE & MEMOS
+  // DERIVED DATA
   // ═══════════════════════════════════════════════════════════════════════════
 
   const activeThread = threads.threads.find((t) => t.id === threads.conversationId) ?? null;
   const activeThreadTitle = activeThread?.title || (threads.conversationId ? "Untitled" : "New thread");
 
-  // Thread Items for the thread list
-  const threadItems = useMemo(() => {
-    return threads.threads.map((thread) => {
-      const isEditing = threads.editingThreadId === thread.id;
-      const isBusy = threads.threadActionId === thread.id;
-      const meta = thread.updatedAt ? formatRelativeTime(thread.updatedAt) : "";
-      const title = isEditing ? (
-        <input value={threads.editingThreadTitle} onChange={(e) => threads.setEditingThreadTitle(e.target.value)} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} className="w-full rounded-md border border-border-subtle bg-bg-app px-2 py-1 text-xs text-text-primary" placeholder="Thread title" />
-      ) : (<span className="truncate">{thread.title || "Untitled"}</span>);
-      const actions = isEditing ? (
-        <div className="flex items-center gap-1">
-          <button type="button" onClick={(e) => { e.stopPropagation(); void threads.saveEditedThreadTitle(); }} disabled={threads.editingThreadSaving} className="rounded-md border border-border-subtle bg-bg-elevated p-1 text-text-primary disabled:opacity-50"><Check className="h-3 w-3" /></button>
-          <button type="button" onClick={(e) => { e.stopPropagation(); threads.cancelEditThread(); }} className="rounded-md border border-border-subtle bg-bg-elevated p-1 text-text-secondary"><X className="h-3 w-3" /></button>
-        </div>
-      ) : (
-        <div className="flex items-center gap-1">
-          <button type="button" onClick={(e) => { e.stopPropagation(); threads.startEditThread(thread); }} disabled={isBusy} className="rounded-md border border-transparent p-1 text-text-muted opacity-0 transition group-hover:opacity-100 hover:border-border-subtle hover:bg-bg-elevated disabled:opacity-40" title="Rename"><Pencil className="h-3 w-3" /></button>
-          <button type="button" onClick={(e) => { e.stopPropagation(); void threads.archiveThread(thread.id); }} disabled={isBusy} className="rounded-md border border-transparent p-1 text-text-muted opacity-0 transition group-hover:opacity-100 hover:border-border-subtle hover:bg-bg-elevated disabled:opacity-40" title="Archive"><Archive className="h-3 w-3" /></button>
-          <button type="button" onClick={(e) => { e.stopPropagation(); void threads.deleteThread(thread.id); }} disabled={isBusy} className="rounded-md border border-transparent p-1 text-text-muted opacity-0 transition group-hover:opacity-100 hover:border-border-subtle hover:bg-bg-elevated disabled:opacity-40" title="Delete"><Trash2 className="h-3 w-3" /></button>
-        </div>
-      );
-      const threadStatus = thread.status === "archived" ? "archived" as const : threads.conversationId === thread.id ? "active" as const : "idle" as const;
-      return { id: thread.id, title, meta, status: threadStatus, actions };
-    });
-  }, [threads.threads, threads.conversationId, threads.editingThreadId, threads.editingThreadTitle, threads.editingThreadSaving, threads.threadActionId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Editor tabs
-  const editorTabs: EditorTab[] = useMemo(() => {
-    const tabs: EditorTab[] = fileExplorer.openFiles.map((f) => ({
-      id: f.path,
-      filename: f.filename,
-      filepath: f.path,
-      isModified: f.content !== f.originalContent,
+  // Build sidebar project data
+  const sidebarProjects: SidebarProject[] = useMemo(() => {
+    if (projectsHook.projects.length === 0) {
+      // Fallback: single "default" project with all threads
+      return [{
+        id: "default",
+        name: workspace.workspace?.path?.split("/").pop() || workspace.workspace?.name || "Workspace",
+        threads: threads.threads.map((t) => ({
+          id: t.id,
+          title: t.title || "Untitled",
+          updatedAt: t.updatedAt,
+          liveStatus: t.status === "archived" ? "idle" as const
+            : threads.conversationId === t.id && conversation.streaming ? "running" as const
+            : "idle" as const,
+        })),
+      }];
+    }
+    return projectsHook.projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      threads: threads.threads
+        .filter((t) => project.threads.includes(t.id))
+        .map((t) => ({
+          id: t.id,
+          title: t.title || "Untitled",
+          updatedAt: t.updatedAt,
+          liveStatus: t.status === "archived" ? "idle" as const
+            : threads.conversationId === t.id && conversation.streaming ? "running" as const
+            : "idle" as const,
+        })),
     }));
-    if (viewingDiff) {
-      tabs.push({
-        id: `diff:${viewingDiff.editId}`,
-        filename: `${viewingDiff.filePath.split("/").pop() ?? "diff"} (changes)`,
-        filepath: viewingDiff.filePath,
-        isModified: false,
-      });
+  }, [projectsHook.projects, threads.threads, threads.conversationId, conversation.streaming, workspace.workspace?.path, workspace.workspace?.name]);
+
+  // Build conversation tabs from open threads
+  const tabItems: ConversationTabItem[] = useMemo(() => {
+    return openTabs.map((tab) => ({
+      id: tab.id,
+      title: tab.title,
+      isPinned: tab.isPinned,
+      liveStatus: threads.conversationId === tab.id && conversation.streaming ? "running" : undefined,
+    }));
+  }, [openTabs, threads.conversationId, conversation.streaming]);
+
+  // Build pending diffs for right sidebar
+  const pendingDiffItems: PendingDiffItem[] = useMemo(() => {
+    return diffs.diffs.map((d) => ({
+      editId: d.editId,
+      filePath: d.filePath,
+    }));
+  }, [diffs.diffs]);
+
+  // Build file links from conversation events (tool calls that touched files)
+  const fileLinks: FileLink[] = useMemo(() => {
+    const files = new Map<string, FileLink>();
+    for (const event of conversation.conversationEvents) {
+      if (event.toolName && event.toolArgs) {
+        try {
+          const args = JSON.parse(event.toolArgs);
+          const path = args.filePath ?? args.path ?? args.file;
+          if (typeof path === "string" && path) {
+            const filename = path.split("/").pop() || path;
+            files.set(path, {
+              path,
+              label: filename,
+              type: event.toolName.includes("read") ? "read"
+                : event.toolName.includes("write") || event.toolName.includes("edit") ? "write"
+                : "search",
+            });
+          }
+        } catch {
+          // ignore
+        }
+      }
     }
-    return tabs;
-  }, [fileExplorer.openFiles, viewingDiff]);
+    return Array.from(files.values());
+  }, [conversation.conversationEvents]);
 
-  const activeTabId = viewingDiff ? `diff:${viewingDiff.editId}` : fileExplorer.activeFileId;
+  // Build inline diffs for conversation center
+  const inlineDiffs: InlineDiff[] = useMemo(() => {
+    return diffs.diffs.map((d) => ({
+      editId: d.editId,
+      filePath: d.filePath,
+      hunks: d.hunks,
+    }));
+  }, [diffs.diffs]);
 
-  // Activity bar items
-  const activityItems: ActivityBarItem[] = useMemo(() => [
-    { id: "explorer", icon: <Files className="w-5 h-5" />, label: "Explorer" },
-    { id: "search", icon: <Search className="w-5 h-5" />, label: "Search" },
-    { id: "git", icon: <GitBranch className="w-5 h-5" />, label: "Source Control", badge: git.totalChanges > 0 ? git.totalChanges : undefined },
-    { id: "todo", icon: <ListTodo className="w-5 h-5" />, label: "Tasks", badge: todos.filter((t) => !t.done).length || undefined },
-    { id: "chat", icon: <MessageSquare className="w-5 h-5" />, label: "Threads" },
-  ], [git.totalChanges, todos]);
+  // Build git sidebar data
+  const gitSidebarData: GitSidebarData | null = useMemo(() => {
+    if (!git.gitStatus && !git.gitLoading) return null;
+    return {
+      branch: git.gitStatus?.branch,
+      ahead: git.gitStatus?.ahead,
+      behind: git.gitStatus?.behind,
+      totalChanges: git.totalChanges,
+      modified: git.gitStatus?.modified,
+      created: git.gitStatus?.created,
+      deleted: git.gitStatus?.deleted,
+      commitMessage: git.commitMessage,
+      committing: git.committing,
+      generatingMessage: git.generatingMessage,
+      loading: git.gitLoading,
+      error: git.gitError,
+    };
+  }, [git.gitStatus, git.totalChanges, git.commitMessage, git.committing, git.generatingMessage, git.gitLoading, git.gitError]);
 
-  const activityBottomItems: ActivityBarItem[] = useMemo(() => [
-    { id: "settings", icon: <Settings className="w-5 h-5" />, label: "Settings" },
-  ], []);
+  // Build agent graph items for selector
+  const agentGraphItems: AgentGraph[] = useMemo(() => {
+    return models.graphs.map((g) => ({
+      id: g.id,
+      name: g.name,
+      description: g.description,
+    }));
+  }, [models.graphs]);
 
-  // Command palette commands
-  const commands: CommandItem[] = useMemo(() => [
-    { id: "new-thread", label: "New Thread", category: "AI", shortcut: "⌘N", icon: <MessageSquare className="w-4 h-4 text-text-secondary" />, action: () => { conversation.abortRef.current?.abort(); conversation.resetConversation(); diffs.resetDiffs(); void threads.createConversation(models.selectedGraph, models.selectedGraphName); } },
-    { id: "toggle-terminal", label: "Toggle Terminal", category: "View", shortcut: "⌘J", icon: <TerminalIcon className="w-4 h-4 text-text-secondary" />, action: () => setTerminalOpen((p) => !p) },
-    { id: "toggle-sidebar", label: "Toggle Sidebar", category: "View", shortcut: "⌘B", action: () => setSidePanelVisible((p) => !p) },
-    { id: "toggle-chat", label: "Toggle Chat Panel", category: "View", shortcut: "⌘\\", action: () => setChatPanelOpen((p) => !p) },
-    { id: "open-settings", label: "Open Settings", category: "Preferences", shortcut: "⌘,", icon: <Settings className="w-4 h-4 text-text-secondary" />, action: () => settings.setActiveView("settings") },
-    { id: "explorer", label: "Show Explorer", category: "View", shortcut: "⌘E", icon: <Files className="w-4 h-4 text-text-secondary" />, action: () => { setSidePanel("explorer"); setSidePanelVisible(true); } },
-    { id: "show-search", label: "Search Files", category: "View", icon: <Search className="w-4 h-4 text-text-secondary" />, action: () => { setSidePanel("search"); setSidePanelVisible(true); } },
-    { id: "show-git", label: "Source Control", category: "View", icon: <GitBranch className="w-4 h-4 text-text-secondary" />, action: () => { setSidePanel("git"); setSidePanelVisible(true); } },
-    { id: "show-tasks", label: "Tasks / Planning", category: "View", icon: <ListTodo className="w-4 h-4 text-text-secondary" />, action: () => { setSidePanel("todo"); setSidePanelVisible(true); } },
-    ...fileExplorer.openFiles.map((f) => ({
-      id: `open:${f.path}`,
-      label: f.filename,
-      description: f.path,
-      category: "Open Files",
-      icon: <FileCode className="w-4 h-4 text-text-secondary" />,
-      action: () => { setViewingDiff(null); fileExplorer.setActiveFileId(f.path); },
-    })),
-  ], [models.selectedGraph, models.selectedGraphName, fileExplorer.openFiles]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Context chips: auto-attach active file
-  useEffect(() => {
-    if (fileExplorer.activeFile && !contextChips.find((c) => c.id === fileExplorer.activeFile!.path)) {
-      setContextChips((prev) => [
-        ...prev.filter((c) => c.variant !== "file"),
-        createFileChip(fileExplorer.activeFile!.filename, fileExplorer.activeFile!.path),
-      ]);
-    }
-  }, [fileExplorer.activeFileId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Slash commands
+  const slashCommands: SlashCommandItem[] = useMemo(() => [
+    { id: "plan", label: "plan", description: "Toggle Plan Mode (read-only proposals)", icon: <Eye className="h-3.5 w-3.5" />, action: () => setPlanMode((p) => !p) },
+    { id: "personality-pragmatic", label: "personality pragmatic", description: "Terse, execution-focused style", icon: <Zap className="h-3.5 w-3.5" />, category: "Personality", action: () => personality.setPersonality("pragmatic") },
+    { id: "personality-empathetic", label: "personality empathetic", description: "Conversational, explanatory style", icon: <User className="h-3.5 w-3.5" />, category: "Personality", action: () => personality.setPersonality("empathetic") },
+    { id: "skills", label: "skills", description: "Open Skills settings", icon: <Wrench className="h-3.5 w-3.5" />, action: () => { settings.setActiveView("settings"); settings.setActiveSettingsSection("skills"); } },
+    { id: "worktree", label: "worktree", description: "Manage Git worktrees", icon: <GitBranch className="h-3.5 w-3.5" />, action: () => { settings.setActiveView("settings"); settings.setActiveSettingsSection("worktrees"); } },
+  ], [personality, settings]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // HANDLERS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  function handleActivityClick(item: ActivityBarItem) {
-    if (item.id === "settings") {
-      settings.setActiveView("settings");
+  function handleNewThreadInProject(projectId: string) {
+    conversation.abortRef.current?.abort();
+    conversation.resetConversation();
+    diffs.resetDiffs();
+    // Clear the current conversation so the next sendMessage creates a fresh session
+    threads.setConversationId(null);
+    // Set the target project as active
+    projectsHook.setActiveProjectId(projectId);
+  }
+
+  async function handleAddProject() {
+    try {
+      const result = await (window as any).numezis?.selectWorkspace?.();
+      if (!result) return; // user cancelled the dialog
+      const folderPath: string = result.path;
+      const folderName: string = result.name || folderPath.split("/").pop() || "Project";
+      projectsHook.addProject(folderName, folderPath);
+    } catch {
+      // ignore — user cancelled or Electron API unavailable
+    }
+  }
+
+  function handleThreadSelect(threadId: string) {
+    if (threadId === threads.conversationId) return;
+    conversation.abortRef.current?.abort();
+    conversation.resetConversation();
+    diffs.resetDiffs();
+    threads.setConversationId(threadId);
+
+    // Add to open tabs if not already there
+    const thread = threads.threads.find((t) => t.id === threadId);
+    setOpenTabs((prev) => {
+      if (prev.some((t) => t.id === threadId)) return prev;
+      return [...prev, { id: threadId, title: thread?.title || "Untitled" }];
+    });
+  }
+
+  function handleTabClose(tabId: string) {
+    setOpenTabs((prev) => prev.filter((t) => t.id !== tabId));
+    if (threads.conversationId === tabId) {
+      const remaining = openTabs.filter((t) => t.id !== tabId);
+      if (remaining.length > 0) {
+        handleThreadSelect(remaining[remaining.length - 1].id);
+      } else {
+        threads.setConversationId(null);
+        conversation.resetConversation();
+        diffs.resetDiffs();
+      }
+    }
+  }
+
+  function switchTab(direction: number) {
+    if (openTabs.length < 2 || !threads.conversationId) return;
+    const idx = openTabs.findIndex((t) => t.id === threads.conversationId);
+    const nextIdx = (idx + direction + openTabs.length) % openTabs.length;
+    handleThreadSelect(openTabs[nextIdx].id);
+  }
+
+  function handleSendMessage() {
+    const text = conversation.input.trim();
+    if (!text) return;
+
+    // If agent is streaming, queue the message instead of blocking
+    if (conversation.streaming) {
+      setMessageQueue((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() },
+      ]);
+      conversation.setInput("");
       return;
     }
-    const panel = item.id as SidePanel;
-    if (sidePanel === panel && sidePanelVisible) {
-      setSidePanelVisible(false);
-    } else {
-      setSidePanel(panel);
-      setSidePanelVisible(true);
+
+    void conversation.sendMessage({
+      personalityPrefix: personality.getSystemPromptPrefix(),
+      planMode,
+    });
+  }
+
+  /** Send a specific text directly (used by queue dequeue). */
+  function sendTextDirectly(text: string) {
+    void conversation.sendMessage({
+      personalityPrefix: personality.getSystemPromptPrefix(),
+      planMode,
+      text,
+    });
+  }
+
+  // ── Message Queue handlers ────────────────────────────────────────────────
+
+  function handleQueueEdit(id: string, newText: string) {
+    setMessageQueue((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, text: newText } : m))
+    );
+  }
+
+  function handleQueueMoveUp(id: string) {
+    setMessageQueue((prev) => {
+      const idx = prev.findIndex((m) => m.id === id);
+      if (idx <= 0) return prev;
+      const next = [...prev];
+      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+      return next;
+    });
+  }
+
+  function handleQueueDelete(id: string) {
+    setMessageQueue((prev) => prev.filter((m) => m.id !== id));
+  }
+
+  /** Dequeue and send the first queued message. */
+  function dequeueAndSend() {
+    const next = messageQueue[0];
+    if (!next) return;
+    setMessageQueue((prev) => prev.slice(1));
+    sendTextDirectly(next.text);
+  }
+
+  /** Force-send: stop current stream, then send the next queued message.
+   *  Uses a short timeout to let React flush the streaming=false state update. */
+  function handleQueueForceSend() {
+    conversation.stopStreaming();
+    setTimeout(() => dequeueAndSend(), 120);
+  }
+
+  // Auto-dequeue: when streaming finishes and there are queued messages, send the next one
+  const prevStreamingRef = useRef(false);
+  useEffect(() => {
+    const wasStreaming = prevStreamingRef.current;
+    prevStreamingRef.current = conversation.streaming;
+
+    // Only trigger on streaming → idle transition
+    if (wasStreaming && !conversation.streaming && messageQueue.length > 0) {
+      // Small delay lets React fully settle before we start a new send
+      setTimeout(() => dequeueAndSend(), 50);
+    }
+  }, [conversation.streaming, messageQueue.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleInputKeyDown(e: React.KeyboardEvent) {
+    // Detect slash command
+    if (conversation.input === "" && e.key === "/") {
+      setSlashMenuOpen(true);
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
   }
 
-  function handleTabSelect(tab: EditorTab) {
-    if (tab.id.startsWith("diff:")) {
-      const editId = tab.id.replace("diff:", "");
-      const d = diffs.diffs.find((df) => df.editId === editId);
-      if (d) setViewingDiff({ editId: d.editId, filePath: d.filePath, original: d.baseContent, modified: d.targetContent });
-    } else {
-      setViewingDiff(null);
-      fileExplorer.setActiveFileId(tab.id);
+  // Close slash menu when input changes away from /
+  useEffect(() => {
+    if (!conversation.input.startsWith("/")) {
+      setSlashMenuOpen(false);
     }
+  }, [conversation.input]);
+
+  function handleRequestIteration(editId: string, comment: string) {
+    const diff = diffs.diffs.find((d) => d.editId === editId);
+    const prefix = diff ? `Regarding changes to ${diff.filePath}: ` : "";
+    conversation.setInput(`${prefix}${comment}`);
   }
 
-  function handleTabClose(tab: EditorTab) {
-    if (tab.id.startsWith("diff:")) {
-      setViewingDiff(null);
-    } else {
-      fileExplorer.closeFile(tab.id);
+  // ── Replay (edit & resend) flow ─────────────────────────────────────────────
+  function handleResendEdit() {
+    if (conversation.editingMessageIndex === null) return;
+    const draft = conversation.editingMessageDraft.trim();
+    if (!draft) return;
+
+    // Find the original content of the message being edited
+    const originalEvent = conversation.conversationEvents.find(
+      (e) => e.messageIndex === conversation.editingMessageIndex
+    );
+    const originalContent = originalEvent?.content ?? "";
+
+    // Compute what will be lost
+    const impact = conversation.computeReplayImpact(
+      conversation.editingMessageIndex,
+      originalContent,
+      draft
+    );
+
+    // If there's nothing after this message (it's the last user message), just replay directly
+    if (impact.messagesRemoved === 0 && impact.toolCallsRemoved === 0 && impact.fileChanges.length === 0) {
+      void executeReplay();
+      return;
     }
+
+    // Show confirmation dialog
+    setReplayImpact(impact);
+    setReplayDialogOpen(true);
   }
 
-  function openDiffInEditor(editId: string) {
-    const d = diffs.diffs.find((df) => df.editId === editId);
-    if (d) setViewingDiff({ editId: d.editId, filePath: d.filePath, original: d.baseContent, modified: d.targetContent });
+  async function executeReplay() {
+    if (conversation.editingMessageIndex === null) return;
+    const draft = conversation.editingMessageDraft.trim();
+    if (!draft) return;
+
+    setReplayLoading(true);
+    setReplayDialogOpen(false);
+
+    await conversation.replayFromMessage(
+      conversation.editingMessageIndex,
+      draft,
+      { personalityPrefix: personality.getSystemPromptPrefix(), planMode }
+    );
+
+    setReplayImpact(null);
+    setReplayLoading(false);
+
+    // The replayFromMessage sets input — now trigger send
+    // We need a small delay for state to propagate, then auto-send
+    setTimeout(() => {
+      conversation.sendMessage({ personalityPrefix: personality.getSystemPromptPrefix(), planMode });
+    }, 50);
   }
 
-  function handleTodoAdd(text: string) {
-    setTodos((p) => [...p, { id: crypto.randomUUID(), text, done: false, source: "user" }]);
+  function cancelReplay() {
+    setReplayDialogOpen(false);
+    setReplayImpact(null);
   }
-  function handleTodoToggle(id: string) {
-    setTodos((p) => p.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
-  }
-  function handleTodoRemove(id: string) {
-    setTodos((p) => p.filter((t) => t.id !== id));
-  }
+
+  // Auto-add new conversation to tabs
+  useEffect(() => {
+    if (!threads.conversationId) return;
+    setOpenTabs((prev) => {
+      if (prev.some((t) => t.id === threads.conversationId)) {
+        // Update title
+        const thread = threads.threads.find((t) => t.id === threads.conversationId);
+        if (thread) {
+          return prev.map((t) => t.id === threads.conversationId ? { ...t, title: thread.title || "Untitled" } : t);
+        }
+        return prev;
+      }
+      const thread = threads.threads.find((t) => t.id === threads.conversationId);
+      return [...prev, { id: threads.conversationId!, title: thread?.title || "Untitled" }];
+    });
+  }, [threads.conversationId, threads.threads]);
+
+  // Auto-assign new conversations to the active project
+  const prevConvoIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const convoId = threads.conversationId;
+    if (!convoId || convoId === prevConvoIdRef.current) return;
+    prevConvoIdRef.current = convoId;
+
+    // Check if this thread already belongs to a project
+    const alreadyAssigned = projectsHook.projects.some((p) =>
+      p.threads.includes(convoId)
+    );
+    if (alreadyAssigned) return;
+
+    // Assign to the active project (or the first project as fallback)
+    const targetProjectId = projectsHook.activeProjectId ?? projectsHook.projects[0]?.id;
+    if (targetProjectId) {
+      projectsHook.assignThread(targetProjectId, convoId);
+    }
+  }, [threads.conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SETTINGS VIEW
@@ -353,56 +611,236 @@ export default function App() {
 
   if (settings.activeView === "settings") {
     return (
-      <div className="flex h-screen flex-col bg-bg-app text-text-primary">
-        <header className="flex h-10 items-center border-b border-border-subtle bg-bg-surface/80 px-4 app-region-drag">
-          <TrafficLights />
-          <span className="ml-4 text-xs font-medium text-text-secondary">Settings</span>
+      <div className="flex h-screen flex-col text-text-primary">
+        <header className="flex h-10 items-center glass-titlebar px-4 pl-[76px] app-region-drag">
+          <span className="text-xs font-medium text-text-secondary">Settings</span>
         </header>
         <div className="flex flex-1 overflow-hidden">
-          <aside className="flex w-60 flex-col border-r border-border-subtle bg-bg-app px-2 py-3">
-            <button type="button" onClick={() => settings.setActiveView("app")} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-text-secondary hover:bg-state-hover hover:text-text-primary"><ChevronLeft className="h-3.5 w-3.5" /> Back to app</button>
+          <aside className="flex w-60 flex-col glass-sidebar px-2 py-3">
+            <button type="button" onClick={() => settings.setActiveView("app")} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-text-secondary hover:bg-state-hover hover:text-text-primary">
+              <ChevronLeft className="h-3.5 w-3.5" /> Back to app
+            </button>
             <div className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Settings</div>
             <div className="mt-2 flex flex-col gap-1">
               {SETTINGS_SECTIONS.map((section) => (
-                <button key={section.id} type="button" onClick={() => settings.setActiveSettingsSection(section.id)} className={`flex w-full items-center rounded-md px-2 py-1.5 text-xs font-medium transition ${settings.activeSettingsSection === section.id ? "bg-state-selected text-text-primary" : "text-text-secondary hover:bg-state-hover hover:text-text-primary"}`}>{section.label}</button>
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => settings.setActiveSettingsSection(section.id)}
+                  className={`flex w-full items-center rounded-md px-2 py-1.5 text-xs font-medium transition ${
+                    settings.activeSettingsSection === section.id
+                      ? "bg-state-selected text-text-primary"
+                      : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
+                  }`}
+                >
+                  {section.label}
+                </button>
               ))}
             </div>
           </aside>
           <main className="flex-1 overflow-y-auto px-6 py-4 scrollbar-elegant">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+              {/* Configuration */}
               {(settings.activeSettingsSection === "configuration" || settings.activeSettingsSection === "general") && (
                 <>
                   <section className="space-y-3">
                     <h2 className="text-sm font-semibold text-text-primary">Backend</h2>
-                    <div className="border border-border-subtle bg-bg-surface divide-y divide-border-subtle rounded-md">
-                      <div className="flex items-center justify-between gap-4 px-3 py-2"><div><div className="text-sm font-medium text-text-primary">Backend URL</div><div className="text-xs text-text-muted">Connect to your Numezis backend.</div></div><input value={settings.backendUrl} onChange={(e) => settings.setBackendUrl(e.target.value)} className="w-56 rounded-md border border-border-subtle bg-bg-app px-2 py-1 text-xs text-text-primary" placeholder="https://app.numezis.com" /></div>
-                      <div className="flex items-center justify-between gap-4 px-3 py-2"><div className="text-sm font-medium text-text-primary">Connection status</div><span className={`flex items-center gap-1.5 text-xs ${backendReady ? "text-status-success-text" : "text-status-error-text"}`}><span className={`h-1.5 w-1.5 rounded-full ${backendReady ? "bg-status-success" : "bg-status-error"}`} />{backendReady ? "Connected" : "Disconnected"}</span></div>
-                      <div className="flex items-center justify-between gap-4 px-3 py-2"><div><div className="text-sm font-medium text-text-primary">Account</div><div className="text-xs text-text-muted">{auth.auth?.user?.email || "Sign in to access threads and runs."}</div></div><div className="flex items-center gap-2">{auth.auth?.accessToken ? (<Button size="xs" variant="secondary" onClick={auth.signOut}>Sign out</Button>) : (<><Button size="xs" variant="secondary" onClick={auth.startWebLogin} disabled={!backendUrlValid || auth.loginPending}>{auth.loginPending ? "Signing in..." : "Sign in"}</Button><Button size="xs" variant="ghost" onClick={auth.startWebRegister} disabled={!backendUrlValid || auth.loginPending}>Create account</Button></>)}</div></div>
+                    <div className="glass-card divide-y divide-border-subtle rounded-md">
+                      <div className="flex items-center justify-between gap-4 px-3 py-2">
+                        <div><div className="text-sm font-medium text-text-primary">Backend URL</div><div className="text-xs text-text-muted">Connect to your Numezis backend.</div></div>
+                        <input value={settings.backendUrl} onChange={(e) => settings.setBackendUrl(e.target.value)} className="w-56 rounded-md border border-border-subtle bg-bg-app px-2 py-1 text-xs text-text-primary" placeholder="https://app.numezis.com" />
+                      </div>
+                      <div className="flex items-center justify-between gap-4 px-3 py-2">
+                        <div className="text-sm font-medium text-text-primary">Connection status</div>
+                        <span className={`flex items-center gap-1.5 text-xs ${backendReady ? "text-status-success-text" : "text-status-error-text"}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${backendReady ? "bg-status-success" : "bg-status-error"}`} />
+                          {backendReady ? "Connected" : "Disconnected"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 px-3 py-2">
+                        <div><div className="text-sm font-medium text-text-primary">Account</div><div className="text-xs text-text-muted">{auth.auth?.user?.email || "Sign in to access threads."}</div></div>
+                        <div className="flex items-center gap-2">
+                          {auth.auth?.accessToken ? (
+                            <Button size="xs" variant="secondary" onClick={auth.signOut}>Sign out</Button>
+                          ) : (
+                            <>
+                              <Button size="xs" variant="secondary" onClick={auth.startWebLogin} disabled={!backendUrlValid || auth.loginPending}>{auth.loginPending ? "Signing in..." : "Sign in"}</Button>
+                              <Button size="xs" variant="ghost" onClick={auth.startWebRegister} disabled={!backendUrlValid || auth.loginPending}>Create account</Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
                       {auth.loginError && <div className="px-3 py-2 text-xs text-status-error-text">{auth.loginError}</div>}
                     </div>
                   </section>
-                  <section className="space-y-3"><h2 className="text-sm font-semibold text-text-primary">Models</h2><LLMSelector providers={models.providers} selectedProvider={models.selectedProvider} selectedModel={models.selectedModel} onProviderChange={models.changeProvider} onModelChange={models.setSelectedModel} /></section>
                   <section className="space-y-3">
-                    <h2 className="text-sm font-semibold text-text-primary">Agent graphs</h2>
-                    <div className="border border-border-subtle bg-bg-surface divide-y divide-border-subtle rounded-md">
-                      {models.graphsLoading && <div className="px-3 py-2 text-xs text-text-muted">Loading graphs...</div>}
-                      {models.graphsError && <div className="px-3 py-2 text-xs text-status-error-text">{models.graphsError}</div>}
-                      {!models.graphsLoading && !models.graphsError && models.graphs.length === 0 && <div className="px-3 py-2 text-xs text-text-muted">No graphs available.</div>}
-                      {models.graphs.map((graph) => (<button key={graph.id} type="button" onClick={() => models.setSelectedGraph(graph.id)} className={`flex w-full items-center justify-between gap-4 px-3 py-2 text-left text-xs ${models.selectedGraph === graph.id ? "bg-state-selected text-text-primary" : "text-text-secondary hover:bg-state-hover"}`}><div className="min-w-0"><div className="truncate text-sm font-medium text-text-primary">{graph.name}</div><div className="text-[11px] text-text-muted">{graph.description ?? graph.id}</div></div><span className="text-[10px] text-text-muted">{formatRelativeTime(graph.updatedAt)}</span></button>))}
-                    </div>
+                    <h2 className="text-sm font-semibold text-text-primary">Models</h2>
+                    <LLMSelector providers={models.providers} selectedProvider={models.selectedProvider} selectedModel={models.selectedModel} onProviderChange={models.changeProvider} onModelChange={models.changeModel} />
                   </section>
-                  <section className="space-y-3"><h2 className="text-sm font-semibold text-text-primary">Tools</h2><div className="border border-border-subtle bg-bg-surface divide-y divide-border-subtle rounded-md">{models.toolsLoading && <div className="px-3 py-2 text-xs text-text-muted">Loading tools...</div>}{!models.toolsLoading && models.tools.length === 0 && <div className="px-3 py-2 text-xs text-text-muted">No tools available.</div>}{models.tools.map((tool) => (<div key={tool.name} className="px-3 py-2 text-xs text-text-secondary"><div className="text-sm font-medium text-text-primary">{tool.name}</div><div className="text-[11px] text-text-muted">{tool.description ?? "No description"}</div></div>))}</div></section>
                 </>
               )}
+              {/* General */}
               {settings.activeSettingsSection === "general" && (
-                <section className="space-y-3"><h2 className="text-sm font-semibold text-text-primary">General</h2><div className="border border-border-subtle bg-bg-surface divide-y divide-border-subtle rounded-md"><div className="flex items-center justify-between gap-4 px-3 py-2"><div><div className="text-sm font-medium text-text-primary">Prevent sleep while running</div><div className="text-xs text-text-muted">Keep your computer awake while the agent runs.</div></div><Toggle size="sm" checked={settings.settingsToggles.preventSleep} onChange={(c) => settings.setSettingsToggles((p) => ({ ...p, preventSleep: c }))} /></div><div className="flex items-center justify-between gap-4 px-3 py-2"><div><div className="text-sm font-medium text-text-primary">Require ⌘+Enter to send</div><div className="text-xs text-text-muted">Multiline prompts require ⌘+Enter to send.</div></div><Toggle size="sm" checked={settings.settingsToggles.requireCmdEnter} onChange={(c) => settings.setSettingsToggles((p) => ({ ...p, requireCmdEnter: c }))} /></div></div></section>
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-text-primary">General</h2>
+                  <div className="glass-card divide-y divide-border-subtle rounded-md">
+                    <div className="flex items-center justify-between gap-4 px-3 py-2">
+                      <div><div className="text-sm font-medium text-text-primary">Prevent sleep while running</div><div className="text-xs text-text-muted">Keep your computer awake while the agent runs.</div></div>
+                      <Toggle size="sm" checked={settings.settingsToggles.preventSleep} onChange={(c) => settings.setSettingsToggles((p) => ({ ...p, preventSleep: c }))} />
+                    </div>
+                    <div className="flex items-center justify-between gap-4 px-3 py-2">
+                      <div><div className="text-sm font-medium text-text-primary">Require Cmd+Enter to send</div><div className="text-xs text-text-muted">Multiline prompts require Cmd+Enter to send.</div></div>
+                      <Toggle size="sm" checked={settings.settingsToggles.requireCmdEnter} onChange={(c) => settings.setSettingsToggles((p) => ({ ...p, requireCmdEnter: c }))} />
+                    </div>
+                  </div>
+                </section>
               )}
-              {settings.activeSettingsSection === "personalization" && (<section className="space-y-3"><h2 className="text-sm font-semibold text-text-primary">Appearance</h2><div className="border border-border-subtle bg-bg-surface divide-y divide-border-subtle rounded-md"><div className="flex items-center justify-between gap-4 px-3 py-2"><div><div className="text-sm font-medium text-text-primary">Compact density</div><div className="text-xs text-text-muted">Reduce padding across the interface.</div></div><Toggle size="sm" checked={settings.settingsToggles.compactDensity} onChange={(c) => settings.setSettingsToggles((p) => ({ ...p, compactDensity: c }))} /></div><div className="flex items-center justify-between gap-4 px-3 py-2"><div><div className="text-sm font-medium text-text-primary">Opaque background</div><div className="text-xs text-text-muted">Reduce translucency for focus.</div></div><Toggle size="sm" checked={settings.settingsToggles.opaqueBackground} onChange={(c) => settings.setSettingsToggles((p) => ({ ...p, opaqueBackground: c }))} /></div></div></section>)}
-              {settings.activeSettingsSection === "mcp" && (<section className="space-y-3"><h2 className="text-sm font-semibold text-text-primary">MCP Servers</h2><MCPServerConfig servers={mcpServers} onAdd={(s) => setMcpServers((p) => [...p, { ...s, id: crypto.randomUUID(), enabled: true, status: "disconnected" }])} onRemove={(id) => setMcpServers((p) => p.filter((s) => s.id !== id))} onToggle={(id, enabled) => setMcpServers((p) => p.map((s) => (s.id === id ? { ...s, enabled } : s)))} /></section>)}
-              {settings.activeSettingsSection === "git" && (<section className="space-y-3"><h2 className="text-sm font-semibold text-text-primary">Git</h2><div className="border border-border-subtle bg-bg-surface divide-y divide-border-subtle rounded-md"><div className="flex items-center justify-between gap-4 px-3 py-2"><div className="text-sm font-medium text-text-primary">Current branch</div><span className="text-xs text-text-muted">{git.gitStatus?.branch ?? "N/A"}</span></div><div className="flex items-center justify-between gap-4 px-3 py-2"><div className="text-sm font-medium text-text-primary">Changes</div><span className="text-xs text-text-muted">{git.totalChanges} file(s)</span></div></div></section>)}
-              {settings.activeSettingsSection === "environments" && (<section className="space-y-3"><h2 className="text-sm font-semibold text-text-primary">Environment Variables</h2><EnvironmentConfig variables={envVariables} onAdd={(v) => setEnvVariables((p) => [...p, v])} onRemove={(key) => setEnvVariables((p) => p.filter((v) => v.key !== key))} onEdit={(key, value) => setEnvVariables((p) => p.map((v) => (v.key === key ? { ...v, value } : v)))} /></section>)}
-              {settings.activeSettingsSection === "worktrees" && (<section className="space-y-3"><h2 className="text-sm font-semibold text-text-primary">Worktrees</h2><WorktreeManager worktrees={worktrees} activeWorktree={workspace.workspace?.path} onAdd={(path, branch) => setWorktrees((p) => [...p, { path, branch, isMain: false }])} onRemove={(path) => setWorktrees((p) => p.filter((w) => w.path !== path))} onSwitch={(path) => workspace.setWorkspace({ path, name: path.split("/").pop() || path })} /></section>)}
-              {settings.activeSettingsSection === "archived" && (<section className="space-y-3"><h2 className="text-sm font-semibold text-text-primary">Archived Threads</h2><div className="border border-border-subtle bg-bg-surface px-3 py-4 text-xs text-text-muted text-center rounded-md">Archived threads can be viewed and restored from the web portal.</div></section>)}
+              {/* Personalization */}
+              {settings.activeSettingsSection === "personalization" && (
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-text-primary">Appearance & Personality</h2>
+                  <div className="glass-card divide-y divide-border-subtle rounded-md">
+                    <div className="flex items-center justify-between gap-4 px-3 py-2">
+                      <div><div className="text-sm font-medium text-text-primary">Compact density</div><div className="text-xs text-text-muted">Reduce padding across the interface.</div></div>
+                      <Toggle size="sm" checked={settings.settingsToggles.compactDensity} onChange={(c) => settings.setSettingsToggles((p) => ({ ...p, compactDensity: c }))} />
+                    </div>
+                    <div className="flex items-center justify-between gap-4 px-3 py-2">
+                      <div><div className="text-sm font-medium text-text-primary">Personality mode</div><div className="text-xs text-text-muted">Controls the agent's communication style.</div></div>
+                      <div className="flex items-center gap-1 rounded-md border border-border-subtle bg-bg-app p-0.5">
+                        <button type="button" onClick={() => personality.setPersonality("pragmatic")} className={`px-2 py-1 rounded text-xs transition ${personality.personality === "pragmatic" ? "bg-state-selected text-text-primary" : "text-text-muted hover:text-text-primary"}`}>Pragmatic</button>
+                        <button type="button" onClick={() => personality.setPersonality("empathetic")} className={`px-2 py-1 rounded text-xs transition ${personality.personality === "empathetic" ? "bg-state-selected text-text-primary" : "text-text-muted hover:text-text-primary"}`}>Empathetic</button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+              {/* MCP */}
+              {settings.activeSettingsSection === "mcp" && (
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-text-primary">MCP Servers</h2>
+                  <MCPServerConfig
+                    servers={mcpServers}
+                    onAdd={(s) => setMcpServers((p) => [...p, { ...s, id: crypto.randomUUID(), enabled: true, status: "disconnected" }])}
+                    onRemove={(id) => setMcpServers((p) => p.filter((s) => s.id !== id))}
+                    onToggle={(id, enabled) => setMcpServers((p) => p.map((s) => (s.id === id ? { ...s, enabled } : s)))}
+                  />
+                </section>
+              )}
+              {/* Skills */}
+              {settings.activeSettingsSection === "skills" && (
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-text-primary">Skills</h2>
+                  <p className="text-xs text-text-muted">Skills extend the agent's capabilities by connecting to external tools and platforms.</p>
+                  <SkillsManager
+                    skills={skillsHook.skills}
+                    onAdd={skillsHook.addSkill}
+                    onRemove={skillsHook.removeSkill}
+                    onToggle={skillsHook.toggleSkill}
+                  />
+                </section>
+              )}
+              {/* Automations */}
+              {settings.activeSettingsSection === "automations" && (
+                <section className="space-y-3">
+                  <AutomationsDashboard
+                    automations={automations}
+                    onAdd={(name, description, schedule) => setAutomations((p) => [...p, { id: crypto.randomUUID(), name, description, schedule, status: "active" }])}
+                    onRemove={(id) => setAutomations((p) => p.filter((a) => a.id !== id))}
+                    onToggle={(id) => setAutomations((p) => p.map((a) => a.id === id ? { ...a, status: a.status === "active" ? "paused" : "active" } : a))}
+                  />
+                </section>
+              )}
+              {/* Agent Graphs */}
+              {settings.activeSettingsSection === "graphs" && (
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-text-primary">Agent Graphs</h2>
+                  <p className="text-xs text-text-muted">
+                    Agent graphs define different workflows for the AI. Select a graph when starting a conversation to guide the agent's behavior.
+                  </p>
+                  {models.graphsLoading && (
+                    <div className="glass-card rounded-md px-3 py-4 text-xs text-text-muted text-center animate-pulse">
+                      Loading graphs...
+                    </div>
+                  )}
+                  {models.graphsError && (
+                    <div className="border border-status-error-bg bg-status-error-bg/10 rounded-md px-3 py-2 text-xs text-status-error-text">
+                      {models.graphsError}
+                    </div>
+                  )}
+                  {!models.graphsLoading && models.graphs.length === 0 && !models.graphsError && (
+                    <div className="glass-card rounded-md px-3 py-4 text-xs text-text-muted text-center">
+                      No agent graphs available. Configure them in the web portal.
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    {models.graphs.map((graph) => (
+                      <div
+                        key={graph.id}
+                        className={`rounded-md px-3 py-2.5 transition-colors cursor-pointer ${
+                          models.selectedGraph === graph.id
+                            ? "glass-selected"
+                            : "glass-card"
+                        }`}
+                        onClick={() => models.setSelectedGraph(graph.id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Brain className="h-4 w-4 text-text-muted" />
+                            <span className="text-sm font-medium text-text-primary">{graph.name}</span>
+                          </div>
+                          {models.selectedGraph === graph.id && (
+                            <span className="text-[10px] text-status-success-text font-medium">Active</span>
+                          )}
+                        </div>
+                        {graph.description && (
+                          <p className="mt-1 text-xs text-text-muted pl-6">{graph.description}</p>
+                        )}
+                        {graph.updatedAt && (
+                          <p className="mt-0.5 text-[10px] text-text-muted pl-6">Updated {formatRelativeTime(graph.updatedAt)}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <Button size="sm" variant="secondary" onClick={() => models.loadGraphs()} disabled={models.graphsLoading}>
+                    Reload Graphs
+                  </Button>
+                </section>
+              )}
+              {/* Environments */}
+              {settings.activeSettingsSection === "environments" && (
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-text-primary">Environment Variables</h2>
+                  <EnvironmentConfig
+                    variables={envVariables}
+                    onAdd={(v) => setEnvVariables((p) => [...p, v])}
+                    onRemove={(key) => setEnvVariables((p) => p.filter((v) => v.key !== key))}
+                    onEdit={(key, value) => setEnvVariables((p) => p.map((v) => (v.key === key ? { ...v, value } : v)))}
+                  />
+                </section>
+              )}
+              {/* Worktrees */}
+              {settings.activeSettingsSection === "worktrees" && (
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-text-primary">Worktrees</h2>
+                  <p className="text-xs text-text-muted">Each agent can operate in an isolated worktree to prevent merge conflicts.</p>
+                  <WorktreeManager
+                    worktrees={worktrees}
+                    activeWorktree={workspace.workspace?.path}
+                    onAdd={(path, branch) => setWorktrees((p) => [...p, { path, branch, isMain: false }])}
+                    onRemove={(path) => setWorktrees((p) => p.filter((w) => w.path !== path))}
+                    onSwitch={(path) => workspace.setWorkspace({ path, name: path.split("/").pop() || path })}
+                  />
+                </section>
+              )}
+              {/* Archived */}
+              {settings.activeSettingsSection === "archived" && (
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-text-primary">Archived Threads</h2>
+                  <div className="glass-card px-3 py-4 text-xs text-text-muted text-center rounded-md">
+                    Archived threads can be viewed and restored from the web portal.
+                  </div>
+                </section>
+              )}
             </div>
           </main>
         </div>
@@ -411,183 +849,208 @@ export default function App() {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // MAIN IDE VIEW
+  // COMMAND CENTER VIEW
   // ═══════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="flex h-screen flex-col bg-bg-app text-text-primary">
+    <div className="flex h-screen flex-col text-text-primary">
       {/* ── Title Bar ── */}
-      <header className="flex h-10 items-center justify-between border-b border-border-subtle bg-bg-surface/80 px-4 app-region-drag">
-        <div className="flex items-center gap-3">
-          <TrafficLights className="app-region-no-drag" />
-          <div className="text-[11px] font-semibold uppercase tracking-widest text-text-muted">
-            {workspace.workspace?.name || "Numezis Desktop"}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 app-region-no-drag">
-          <button type="button" onClick={() => setCommandPaletteOpen(true)} className="rounded-md border border-border-subtle bg-bg-app px-3 py-1 text-[10px] text-text-muted hover:text-text-primary hover:bg-bg-elevated transition-colors flex items-center gap-2" title="Command Palette (⌘P)">
-            <Search className="h-3 w-3" /> <span>Search…</span> <kbd className="text-[9px] ml-1 opacity-60">⌘P</kbd>
-          </button>
-          <Button
-            size="xs"
-            disabled={!backendReady || !auth.auth?.accessToken}
-            onClick={() => {
-              conversation.abortRef.current?.abort();
-              conversation.resetConversation();
-              diffs.resetDiffs();
-              void threads.createConversation(models.selectedGraph, models.selectedGraphName);
-            }}
-          >
-            New thread
-          </Button>
-        </div>
-      </header>
+      <TitleBar
+        workspaceName={workspace.workspace?.path?.split("/").pop() || workspace.workspace?.name || "Numezis Desktop"}
+        showTrafficLights={false}
+        onOpen={() => {
+          try { (window as any).numezis?.openInVSCode?.(); } catch { /* ignore */ }
+        }}
+        onCommit={() => {
+          // Focus the right sidebar git section
+          setRightSidebarVisible(true);
+        }}
+        onToggleTerminal={() => setTerminalVisible((p) => !p)}
+        gitDiffStats={git.gitStatus ? {
+          additions: git.gitStatus.created.length + git.gitStatus.modified.length,
+          deletions: git.gitStatus.deleted.length,
+        } : undefined}
+      />
 
-      {/* ── Main Body ── */}
+      {/* ── Three-Pane Body ── */}
       <div className="flex flex-1 min-h-0">
-        {/* Activity Bar */}
-        <ActivityBar
-          items={activityItems}
-          activeItemId={sidePanelVisible ? sidePanel : undefined}
-          onItemClick={handleActivityClick}
-          bottomItems={activityBottomItems}
-        />
-
-        {/* Primary Sidebar */}
-        {sidePanelVisible && (
-          <div className="w-[260px] flex-shrink-0 border-r border-border-subtle bg-bg-surface flex flex-col overflow-hidden">
-            {/* Sidebar Header */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                {sidePanel === "explorer" ? "Explorer" : sidePanel === "search" ? "Search" : sidePanel === "git" ? "Source Control" : sidePanel === "todo" ? "Tasks" : "Threads"}
-              </span>
-            </div>
-
-            {/* Sidebar Content */}
-            <div className="flex-1 min-h-0 overflow-hidden">
-              {sidePanel === "explorer" && (
-                <FileBrowser
-                  files={fileExplorer.files}
-                  selectedPath={fileExplorer.selectedPath}
-                  expandedPaths={fileExplorer.expandedPaths}
-                  onFileSelect={(path) => fileExplorer.setSelectedPath(path)}
-                  onFileOpen={(path) => { setViewingDiff(null); void fileExplorer.openFile(path); }}
-                  onDirectoryToggle={(path) => void fileExplorer.toggleDirectory(path)}
-                  onCollapseAll={fileExplorer.collapseAll}
-                  onRefresh={fileExplorer.refreshFiles}
-                  loading={fileExplorer.loading}
-                />
-              )}
-              {sidePanel === "search" && (
-                <SearchPanel files={fileExplorer.files} onFileOpen={(path) => { setViewingDiff(null); void fileExplorer.openFile(path); }} />
-              )}
-              {sidePanel === "git" && (
-                <GitPanel
-                  status={git.gitStatus}
-                  branches={git.branches}
-                  loading={git.gitLoading}
-                  commitMessage={git.commitMessage}
-                  onCommitMessageChange={git.setCommitMessage}
-                  onCommit={git.commit}
-                  onBranchSwitch={git.switchBranch}
-                  onBranchCreate={git.createBranch}
-                  onRefresh={git.refreshStatus}
-                  onGenerateMessage={git.generateCommitMessage}
-                  committing={git.committing}
-                  generatingMessage={git.generatingMessage}
-                  onFileClick={(path) => { setViewingDiff(null); void fileExplorer.openFile(path); }}
-                />
-              )}
-              {sidePanel === "todo" && (
-                <TodoPanel items={todos} onAdd={handleTodoAdd} onToggle={handleTodoToggle} onRemove={handleTodoRemove} />
-              )}
-              {sidePanel === "chat" && (
-                <ThreadFeed
-                  title="Threads"
-                  items={threadItems}
-                  activeId={threads.conversationId ?? undefined}
-                  onSelect={(id) => {
-                    if (id === threads.conversationId) return;
-                    conversation.abortRef.current?.abort();
-                    conversation.resetConversation();
-                    diffs.resetDiffs();
-                    threads.setConversationId(id);
-                  }}
-                  emptyState={
-                    !auth.auth?.accessToken
-                      ? <span className="text-text-muted">Sign in to load threads.</span>
-                      : threads.threadsLoading
-                        ? <span className="text-text-muted">Loading...</span>
-                        : <span className="text-text-muted">No threads yet.</span>
-                  }
-                  showCount
-                />
-              )}
-            </div>
-          </div>
+        {/* Left Sidebar: Project Navigation */}
+        {sidebarVisible && (
+          <ProjectSidebar
+            projects={sidebarProjects}
+            activeThreadId={threads.conversationId}
+            activeProjectId={projectsHook.activeProjectId}
+            onThreadSelect={handleThreadSelect}
+            onNewThreadInProject={handleNewThreadInProject}
+            onAddProject={handleAddProject}
+            onSettings={() => settings.setActiveView("settings")}
+            onRenameThread={(threadId, newTitle) => {
+              threads.startEditThread({ id: threadId, title: newTitle });
+              threads.setEditingThreadTitle(newTitle);
+              void threads.saveEditedThreadTitle();
+            }}
+            onArchiveThread={(threadId) => void threads.archiveThread(threadId)}
+            onDeleteThread={(threadId) => void threads.deleteThread(threadId)}
+            onRemoveProject={(projectId) => projectsHook.removeProject(projectId)}
+          />
         )}
 
-        {/* ── Editor Area ── */}
+        {/* Center: Conversation Workspace */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Editor Tabs */}
-          {editorTabs.length > 0 && (
-            <EditorTabs
-              tabs={editorTabs}
-              activeTabId={activeTabId ?? undefined}
-              onTabSelect={handleTabSelect}
-              onTabClose={handleTabClose}
-            />
-          )}
+          {/* Conversation Tabs */}
+          <ConversationTabs
+            tabs={tabItems}
+            activeTabId={threads.conversationId}
+            onTabSelect={handleThreadSelect}
+            onTabClose={handleTabClose}
+          />
 
-          {/* Editor Content */}
-          <div className="flex-1 min-h-0">
-            {viewingDiff ? (
-              <DiffEditor
-                original={viewingDiff.original}
-                modified={viewingDiff.modified}
-                filename={viewingDiff.filePath}
-                onAccept={() => { diffs.applyAllDiff(viewingDiff.editId); setViewingDiff(null); }}
-                onReject={() => { diffs.rejectAllDiff(viewingDiff.editId); setViewingDiff(null); }}
-              />
-            ) : fileExplorer.activeFile ? (
-              fileExplorer.activeFile.language === "binary" ? (
-                <div className="flex h-full items-center justify-center text-xs text-text-muted">Binary file — cannot be displayed in the editor.</div>
-              ) : (
-                <CodeEditor
-                  value={fileExplorer.activeFile.content}
-                  filename={fileExplorer.activeFile.filename}
-                  onChange={(value) => fileExplorer.updateFileContent(fileExplorer.activeFile!.path, value)}
-                  onSave={(value) => {
-                    fileExplorer.updateFileContent(fileExplorer.activeFile!.path, value);
-                    void fileExplorer.saveFile(fileExplorer.activeFile!.path);
+          {/* Conversation Messages */}
+          <ConversationCenter
+            renderItems={conversation.renderItems}
+            streaming={conversation.streaming}
+            streamHasEvents={conversation.streamHasEvents}
+            streamingText={conversation.streamingText}
+            sendError={conversation.sendError}
+            conversationLoading={conversation.conversationLoading}
+            conversationId={threads.conversationId}
+            threadTitle={activeThreadTitle}
+            threadUpdatedAt={activeThread?.updatedAt ? formatRelativeTime(activeThread.updatedAt) : undefined}
+            editingMessageIndex={conversation.editingMessageIndex}
+            editingMessageDraft={conversation.editingMessageDraft}
+            editingMessageSaving={conversation.editingMessageSaving}
+            editingMessageError={conversation.editingMessageError}
+            onStartEdit={conversation.startEditMessage}
+            onResendEdit={handleResendEdit}
+            onCancelEdit={conversation.cancelEditMessage}
+            onEditDraftChange={conversation.setEditingMessageDraft}
+            diffReview={
+              inlineDiffs.length > 0 ? (
+                <InlineDiffReview
+                  diffs={inlineDiffs}
+                  onAccept={(editId) => diffs.applyAllDiff(editId)}
+                  onReject={(editId) => diffs.rejectAllDiff(editId)}
+                  onOpenInIDE={(filePath) => {
+                    try { (window as any).numezis?.openInVSCode?.(filePath); } catch { /* ignore */ }
                   }}
-                  minimap={false}
+                  onRequestIteration={handleRequestIteration}
                 />
-              )
-            ) : (
-              /* Welcome Screen */
-              <div className="flex h-full flex-col items-center justify-center gap-4 text-text-muted">
-                <Brain className="w-10 h-10 opacity-30" />
-                <div className="text-center">
-                  <div className="text-sm font-medium text-text-secondary">Numezis Desktop</div>
-                  <div className="text-xs mt-1">Open a file from the explorer or start a conversation</div>
-                </div>
-                <div className="flex flex-col gap-1 text-[11px] mt-2">
-                  <span><kbd className="px-1.5 py-0.5 rounded bg-bg-elevated border border-border-subtle text-[10px]">⌘P</kbd> Command Palette</span>
-                  <span><kbd className="px-1.5 py-0.5 rounded bg-bg-elevated border border-border-subtle text-[10px]">⌘B</kbd> Toggle Sidebar</span>
-                  <span><kbd className="px-1.5 py-0.5 rounded bg-bg-elevated border border-border-subtle text-[10px]">⌘J</kbd> Toggle Terminal</span>
-                  <span><kbd className="px-1.5 py-0.5 rounded bg-bg-elevated border border-border-subtle text-[10px]">⌘\</kbd> Toggle Chat</span>
-                </div>
-              </div>
-            )}
+              ) : undefined
+            }
+          />
+
+          {/* Input Bar */}
+          <div className="relative">
+            {/* Slash command menu */}
+            <SlashCommandMenu
+              open={slashMenuOpen}
+              onClose={() => setSlashMenuOpen(false)}
+              commands={slashCommands}
+              filter={conversation.input}
+            />
+            {/* Multimodal menu */}
+            <MultimodalMenu
+              open={multimodalOpen}
+              onClose={() => setMultimodalOpen(false)}
+              onIncludeFile={async () => {
+                try {
+                  const paths = await (window as any).numezis?.pickFile?.();
+                  if (Array.isArray(paths)) {
+                    for (const p of paths) {
+                      const filename = p.split("/").pop() || p;
+                      setContextChips((prev) => [...prev, createFileChip(filename, p)]);
+                    }
+                  }
+                } catch { /* ignore */ }
+              }}
+              onTakeScreenshot={async () => {
+                try {
+                  await (window as any).numezis?.captureScreenshot?.();
+                } catch { /* ignore */ }
+              }}
+            />
+            {/* Queued messages (visible when agent is busy) */}
+            <MessageQueue
+              messages={messageQueue}
+              onEdit={handleQueueEdit}
+              onMoveUp={handleQueueMoveUp}
+              onDelete={handleQueueDelete}
+              onForceSend={handleQueueForceSend}
+              streaming={conversation.streaming}
+            />
+            <InputBar
+              value={conversation.input}
+              onChange={conversation.setInput}
+              onSend={handleSendMessage}
+              onStop={conversation.stopStreaming}
+              sending={conversation.streaming}
+              disabled={!backendReady || !auth.auth?.accessToken}
+              placeholder={
+                conversation.streaming
+                  ? "Add a follow-up (queued until agent finishes)..."
+                  : planMode
+                    ? "Describe what you want to plan..."
+                    : "Describe what you want to build..."
+              }
+              onKeyDown={handleInputKeyDown}
+              contextChips={contextChips}
+              onDismissChip={(id) => setContextChips((p) => p.filter((c) => c.id !== id))}
+              onPaperclipClick={() => setMultimodalOpen((p) => !p)}
+              planMode={planMode}
+              connected={
+                !backendConnected
+                  ? false
+                  : models.llmHealthChecking
+                    ? 'checking'
+                    : models.llmHealthy === true
+              }
+              connectionLabel={
+                !backendConnected
+                  ? 'Backend disconnected'
+                  : models.llmHealthChecking
+                    ? `Testing ${models.selectedProvider ?? 'LLM'}…`
+                    : models.llmHealthy
+                      ? `${models.selectedProvider ?? 'LLM'} connected`
+                      : `${models.selectedProvider ?? 'LLM'} unreachable`
+              }
+              tokenUsage={conversation.tokenUsage}
+              graphSelector={
+                <AgentGraphSelector
+                  graphs={agentGraphItems}
+                  selectedGraphId={models.selectedGraph}
+                  onGraphSelect={models.setSelectedGraph}
+                  loading={models.graphsLoading}
+                />
+              }
+              modelSelector={
+                <LLMSelector
+                  providers={models.providers}
+                  selectedProvider={models.selectedProvider}
+                  selectedModel={models.selectedModel}
+                  onProviderChange={models.changeProvider}
+                  onModelChange={models.changeModel}
+                  compact
+                />
+              }
+            />
           </div>
 
-          {/* Terminal */}
-          {terminalOpen && (
-            <div className="h-48 border-t border-border-subtle bg-bg-surface flex flex-col">
-              <div className="flex items-center justify-between px-3 py-1 border-b border-border-subtle">
-                <span className="text-[10px] uppercase tracking-wider text-text-muted font-semibold">Terminal</span>
-                <button type="button" onClick={() => setTerminalOpen(false)} className="p-0.5 text-text-muted hover:text-text-primary"><X className="w-3 h-3" /></button>
+          {/* ── Collapsible Terminal Panel (below input bar) ── */}
+          {terminalVisible && (
+            <div className="border-t border-glass-border flex flex-col" style={{ height: 220 }}>
+              <div className="flex items-center justify-between px-3 py-1 glass-titlebar flex-shrink-0">
+                <div className="flex items-center gap-1.5">
+                  <TerminalSquare className="h-3 w-3 text-text-muted" />
+                  <span className="text-[11px] font-medium text-text-secondary">Terminal</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTerminalVisible(false)}
+                  className="p-0.5 rounded text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
+                  title="Close terminal (⌘J)"
+                >
+                  <ChevronDown className="h-3 w-3" />
+                </button>
               </div>
               <div className="flex-1 min-h-0">
                 <Terminal />
@@ -596,190 +1059,35 @@ export default function App() {
           )}
         </div>
 
-        {/* ── Chat Panel (Right) ── */}
-        {chatPanelOpen && (
-          <div className="w-[380px] flex-shrink-0 border-l border-border-subtle bg-bg-app flex flex-col">
-            {/* Chat Header */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle">
-              <div className="flex items-center gap-2 min-w-0">
-                <Brain className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
-                <span className="text-xs font-medium text-text-primary truncate">{activeThreadTitle}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <button type="button" onClick={() => { setSidePanel("chat"); setSidePanelVisible(true); }} className="rounded-md p-1 text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors" title="Show all threads">
-                  <MessageSquare className="h-3 w-3" />
-                </button>
-                <button type="button" onClick={() => setChatPanelOpen(false)} className="rounded-md p-1 text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors" title="Close chat (⌘\\)">
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            </div>
-
-            {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 scrollbar-elegant">
-              {threads.conversationId && (
-                <div className="rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-xs">
-                  <div className="text-sm font-semibold text-text-primary">{activeThreadTitle}</div>
-                  <div className="text-[10px] text-text-muted">Updated {activeThread?.updatedAt ? formatRelativeTime(activeThread.updatedAt) : "now"}</div>
-                </div>
-              )}
-
-              {conversation.conversationLoading && (
-                <div className="border border-border-subtle bg-bg-surface px-3 py-2 text-xs text-text-muted rounded-md">Loading thread...</div>
-              )}
-
-              <div className="space-y-3">
-                {conversation.renderItems.map((item, idx) => {
-                  if (item.type === "tools") {
-                    const pairs: { call?: typeof item.events[0]; result?: typeof item.events[0] }[] = [];
-                    let current: { call?: typeof item.events[0]; result?: typeof item.events[0] } = {};
-                    for (const e of item.events) {
-                      if (e.kind === "assistant" && e.toolName) { if (current.call) pairs.push(current); current = { call: e }; }
-                      else if (e.kind === "tool") { current.result = e; pairs.push(current); current = {}; }
-                    }
-                    if (current.call) pairs.push(current);
-                    return (
-                      <div key={`tools-${idx}`}>
-                        {pairs.map((pair, i) => (
-                          <ToolInvocation key={`tools-${idx}-${i}`} name={pair.call?.toolName ?? pair.result?.toolName ?? "tool"} args={pair.call?.toolArgs} output={pair.result?.toolOutput} />
-                        ))}
-                      </div>
-                    );
-                  }
-
-                  const event = item.event;
-                  const isUser = event.kind === "user";
-                  const isAssistant = event.kind === "assistant" && !event.toolName;
-                  const isSystem = event.kind === "system";
-
-                  if (isSystem) return <div key={`${event.id ?? idx}-sys`} className="px-1 py-1 text-[10px] text-text-muted">{event.content}</div>;
-                  if (!isUser && !isAssistant) return null;
-
-                  const isEditing = typeof event.messageIndex === "number" && event.messageIndex === conversation.editingMessageIndex;
-
-                  return (
-                    <div key={`${event.id ?? idx}-msg`} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-                      <div className={`group max-w-[95%] rounded-lg px-3 py-2 text-[12px] ${isUser ? "border border-border-subtle bg-bg-elevated text-text-primary" : "bg-transparent text-text-secondary"}`}>
-                        {threads.conversationId && !conversation.streaming && typeof event.messageIndex === "number" && (
-                          <div className="flex justify-end mb-1">
-                            <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
-                              {isEditing ? (
-                                <>
-                                  <Button size="xs" variant="ghost" onClick={conversation.saveEditedMessage} disabled={conversation.editingMessageSaving}><Check className="h-3 w-3" /></Button>
-                                  <Button size="xs" variant="ghost" onClick={conversation.cancelEditMessage}><X className="h-3 w-3" /></Button>
-                                </>
-                              ) : (
-                                <Button size="xs" variant="ghost" onClick={() => conversation.startEditMessage(event.messageIndex!, event.content || "")}><Pencil className="h-3 w-3" /></Button>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        <div className="min-w-0 leading-relaxed">
-                          {isEditing ? (
-                            <Textarea value={conversation.editingMessageDraft} onChange={(e) => conversation.setEditingMessageDraft(e.target.value)} disabled={conversation.editingMessageSaving} noResize />
-                          ) : isAssistant ? (
-                            <MarkdownRenderer content={event.content ?? ""} />
-                          ) : (
-                            event.content
-                          )}
-                        </div>
-                        {isEditing && conversation.editingMessageError && <div className="mt-1 text-[10px] text-status-error-text">{conversation.editingMessageError}</div>}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* Thinking indicator */}
-                {conversation.streaming && !conversation.streamHasEvents && (
-                  <ThinkingBubble isActive summary="Working on it…" />
-                )}
-                {conversation.streaming && conversation.streamHasEvents && (
-                  <ThinkingBubble isActive summary="Agent is running…" />
-                )}
-
-                {conversation.sendError && <div className="border border-status-error-border bg-status-error-bg px-3 py-2 text-xs text-status-error-text rounded-md">{conversation.sendError}</div>}
-                <div ref={conversation.messagesEndRef} />
-              </div>
-            </div>
-
-            {/* Pending Changes (from agent) */}
-            {diffs.diffs.length > 0 && (
-              <div className="border-t border-border-subtle">
-                <div className="flex items-center justify-between px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                  <span>Pending changes</span>
-                  <span>{diffs.diffs.length}</span>
-                </div>
-                <div className="max-h-32 overflow-y-auto px-2 pb-2 space-y-0.5 scrollbar-elegant">
-                  {diffs.diffs.map((diff) => (
-                    <div key={diff.editId} className="flex items-center justify-between gap-1 rounded-md px-2 py-1 text-xs hover:bg-state-hover transition-colors">
-                      <button type="button" onClick={() => openDiffInEditor(diff.editId)} className="flex-1 text-left truncate text-text-secondary hover:text-text-primary">{diff.filePath}</button>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <Button size="xs" variant="secondary" onClick={() => diffs.applyAllDiff(diff.editId)}>Accept</Button>
-                        <Button size="xs" variant="ghost" onClick={() => diffs.rejectAllDiff(diff.editId)}>Reject</Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Context Chips */}
-            {contextChips.length > 0 && (
-              <div className="px-3 pt-2">
-                <ContextChips chips={contextChips} onDismiss={(id) => setContextChips((p) => p.filter((c) => c.id !== id))} size="sm" />
-              </div>
-            )}
-
-            {/* Chat Input */}
-            <div className="border-t border-border-subtle p-3">
-              <ChatInput
-                value={conversation.input}
-                onChange={conversation.setInput}
-                onSend={conversation.sendMessage}
-                onStop={conversation.stopStreaming}
-                sending={conversation.streaming}
-                disabled={conversation.streaming || !backendReady || !auth.auth?.accessToken}
-                placeholder="Ask for follow-up changes"
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void conversation.sendMessage(); } }}
-                footerLeft={
-                  <Button variant="secondary" size="xs" onClick={() => setTerminalOpen((p) => !p)} className="flex items-center gap-2">
-                    <TerminalIcon className="h-3.5 w-3.5" />
-                    Terminal
-                  </Button>
-                }
-                footerRight={
-                  <div className="flex items-center gap-2">
-                    <LLMSelector providers={models.providers} selectedProvider={models.selectedProvider} selectedModel={models.selectedModel} onProviderChange={models.changeProvider} onModelChange={models.setSelectedModel} compact />
-                    <span className={`h-1.5 w-1.5 rounded-full ${backendConnected ? "bg-status-success" : "bg-status-error"}`} title={backendConnected ? "Connected" : "Disconnected"} />
-                  </div>
-                }
-              />
-              {conversation.tokenUsage && (
-                <div className="mt-1 text-[10px] text-text-muted font-mono">
-                  Token usage: {conversation.tokenUsage.input ?? "—"} input · {conversation.tokenUsage.output ?? "—"} output
-                </div>
-              )}
-            </div>
-          </div>
+        {/* Right Sidebar: Project Utilities */}
+        {rightSidebarVisible && (
+          <ProjectUtilitySidebar
+            fileLinks={fileLinks}
+            pendingDiffs={pendingDiffItems}
+            onOpenDiff={(editId) => {
+              // Scroll to diff in conversation
+            }}
+            onAcceptDiff={(editId) => diffs.applyAllDiff(editId)}
+            onRejectDiff={(editId) => diffs.rejectAllDiff(editId)}
+            onOpenInIDE={(filePath) => {
+              try { (window as any).numezis?.openInVSCode?.(filePath); } catch { /* ignore */ }
+            }}
+            gitData={gitSidebarData}
+            onGitCommit={(msg) => git.commit(msg)}
+            onGitRefresh={() => git.refreshStatus()}
+            onGitGenerateMessage={() => git.generateCommitMessage()}
+            onCommitMessageChange={(msg) => git.setCommitMessage(msg)}
+          />
         )}
       </div>
 
-      {/* ── Status Bar ── */}
-      <StatusBar
-        branch={git.gitStatus?.branch}
-        syncStatus={git.gitLoading ? "syncing" : "synced"}
-        problems={git.gitError ? { errors: 1, warnings: 0 } : undefined}
-        language={fileExplorer.activeFile?.language}
-        encoding="UTF-8"
-        lineInfo={fileExplorer.activeFile ? `${fileExplorer.activeFile.filename}` : undefined}
-      />
-
-      {/* ── Command Palette ── */}
-      <CommandPalette
-        open={commandPaletteOpen}
-        onClose={() => setCommandPaletteOpen(false)}
-        commands={commands}
-        placeholder="Type a command or search files…"
+      {/* Replay Confirmation Dialog */}
+      <ReplayConfirmDialog
+        open={replayDialogOpen}
+        impact={replayImpact}
+        onConfirm={executeReplay}
+        onCancel={cancelReplay}
+        loading={replayLoading}
       />
     </div>
   );

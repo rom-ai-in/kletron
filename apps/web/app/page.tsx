@@ -22,8 +22,8 @@ const features = [
     ),
   },
   {
-    id: 'campaigns',
-    title: 'Campaigns',
+    id: 'automations',
+    title: 'Automations',
     subtitle: 'Orchestrate changes at scale',
     description: 'Run coordinated refactoring across multiple repositories. Define goals, track progress, and rollback with confidence.',
     bullets: ['Multi-repo orchestration', 'Progress tracking', 'Rollback capabilities', 'Team collaboration'],
@@ -106,13 +106,13 @@ export default function HomePage() {
             ) : user ? (
               <>
                 <Link
-                  href="/app/explore"
+                  href="/app/agent"
                   className="text-sm text-text-secondary hover:text-text-primary transition-colors"
                 >
                   Dashboard
                 </Link>
                 <Link
-                  href="/app/explore"
+                  href="/app/agent"
                   className="inline-flex items-center gap-2 rounded-md bg-bg-elevated hover:bg-state-hover border border-border-subtle px-3 py-1.5 text-sm font-medium text-text-primary transition-colors"
                 >
                   Open App →
@@ -166,7 +166,7 @@ export default function HomePage() {
           {/* Subheadline */}
           <p className="text-base text-text-muted mb-2 max-w-xl mx-auto leading-relaxed">
             The AI coding agent that understands your entire codebase. Visual graph workflows,
-            multi-repo campaigns, and zero data leaving the EU.
+            multi-repo automations, and zero data leaving the EU.
           </p>
           <p className="text-xs text-status-warning-text uppercase tracking-[0.2em] mb-6">
             Early Access • Expect rough edges while we polish the Mac experience.
@@ -241,7 +241,7 @@ export default function HomePage() {
       <section className="py-12 px-6 border-y border-border-subtle">
         <div className="max-w-4xl mx-auto">
           <div className="flex flex-wrap justify-center gap-3">
-            {['Graph Editor', 'Deep Agents', 'Campaigns', 'Anti-Drift', 'Multi-LLM', 'EU Sovereign'].map((badge) => (
+            {['Graph Editor', 'Deep Agents', 'Automations', 'Anti-Drift', 'Multi-LLM', 'EU Sovereign'].map((badge) => (
               <div
                 key={badge}
                 className="px-3 py-1.5 rounded-md border border-border-subtle bg-bg-surface text-xs font-medium text-text-muted"
@@ -420,7 +420,7 @@ export default function HomePage() {
               <div className="space-y-2.5">
                 {[
                   'Visual Graph Editor',
-                  'Multi-Repo Campaigns',
+                  'Multi-Repo Automations',
                   'Anti-Drift Detection',
                   'Deep Agents',
                   'Local LLM Support',
@@ -458,7 +458,7 @@ export default function HomePage() {
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
                     <span className="text-text-muted">✗</span>
-                    <span className="text-text-muted line-through">Campaigns</span>
+                    <span className="text-text-muted line-through">Automations</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
                     <span className="text-status-success-text">✓</span>
@@ -498,7 +498,7 @@ export default function HomePage() {
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
                     <span className="text-text-muted">✗</span>
-                    <span className="text-text-muted line-through">Campaigns</span>
+                    <span className="text-text-muted line-through">Automations</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
                     <span className="text-status-warning-text">~</span>
@@ -540,7 +540,7 @@ export default function HomePage() {
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
                     <span className="text-text-muted">✗</span>
-                    <span className="text-text-muted line-through">Campaigns</span>
+                    <span className="text-text-muted line-through">Automations</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
                     <span className="text-status-success-text">✓</span>
@@ -582,7 +582,7 @@ export default function HomePage() {
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
                     <span className="text-text-muted">✗</span>
-                    <span className="text-text-muted line-through">Campaigns</span>
+                    <span className="text-text-muted line-through">Automations</span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">
                     <span className="text-status-success-text">✓</span>

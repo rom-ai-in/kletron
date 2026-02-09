@@ -26,7 +26,7 @@ const DEFAULT_LIMITS: PlanLimits = {
     agentGraphs: 3,
     semanticIndexFiles: 10000,
     hostedTokensPerMonth: 0,
-    hasAdvancedCampaigns: false,
+    hasAdvancedAutomations: false,
     hasAntiDrift: false,
     hasPrioritySupport: false,
     hasTeamCollaboration: false,

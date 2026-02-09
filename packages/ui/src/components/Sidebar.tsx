@@ -13,7 +13,6 @@ import {
     Check,
     Database,
     Globe,
-    Compass,
     Home,
     Layers,
     Clock,
@@ -32,19 +31,14 @@ const navItems = [
         href: "/app",
     },
     {
-        label: "Explore",
-        icon: Compass,
-        href: "/app/explore",
-    },
-    {
-        label: "Deep Agent",
+        label: "Agent",
         icon: Terminal,
-        href: "/app/deep-agent",
+        href: "/app/agent",
     },
     {
-        label: "Campaigns",
+        label: "Automations",
         icon: Layers,
-        href: "/app/campaigns",
+        href: "/app/automations",
     },
     {
         label: "Code Comparator",

@@ -134,7 +134,10 @@ function createWindow() {
     height: 800,
     minWidth: 960,
     minHeight: 640,
-    backgroundColor: "#09090b",
+    transparent: true,
+    backgroundColor: "#00000000",
+    vibrancy: "sidebar",
+    visualEffectState: "active",
     titleBarStyle: "hiddenInset",
     icon: appIcon,
     webPreferences: {
@@ -414,4 +417,57 @@ ipcMain.handle("git:listBranches", async () => {
 ipcMain.handle("git:diff", async (_event, filePath?: string) => {
   if (!currentWorkspacePath) throw new Error("Workspace not set");
   return gitDiff(currentWorkspacePath, filePath);
+});
+
+// ── Command Center IPC ──────────────────────────────────────────────────────
+
+ipcMain.handle("app:pickFile", async () => {
+  const { dialog } = require("electron");
+  const result = await dialog.showOpenDialog({
+    properties: ["openFile", "multiSelections"],
+    filters: [
+      { name: "All Files", extensions: ["*"] },
+      { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"] },
+    ],
+  });
+  return result.filePaths;
+});
+
+ipcMain.handle("app:captureScreenshot", async () => {
+  const { desktopCapturer, screen } = require("electron");
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ["screen"],
+      thumbnailSize: screen.getPrimaryDisplay().workAreaSize,
+    });
+    if (sources.length > 0) {
+      const screenshot = sources[0].thumbnail.toDataURL();
+      return screenshot;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle("app:popOutThread", async (_event: any, { threadId, title }: { threadId: string; title: string }) => {
+  const { BrowserWindow } = require("electron");
+  const popout = new BrowserWindow({
+    width: 520,
+    height: 720,
+    title: title || "Thread",
+    titleBarStyle: "hiddenInset",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  // Load the same URL but with a hash for pop-out routing
+  const mainUrl = mainWindow?.webContents.getURL() || "";
+  const baseUrl = mainUrl.split("#")[0];
+  popout.loadURL(`${baseUrl}#/popout/${threadId}`);
+
+  return popout.id;
 });

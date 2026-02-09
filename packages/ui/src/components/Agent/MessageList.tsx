@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useMemo, useCallback } from 'react';
 import { cn } from '../../lib/utils';
 import { MessageBubble, SystemMessage } from './ChatMessage';
+import { MarkdownRenderer } from './MarkdownRenderer';
 import { ToolInvocation } from './ToolInvocation';
 import { ThoughtsPanel } from './ThoughtsPanel';
 
@@ -30,6 +31,28 @@ export type RenderItem =
     | { type: 'tools'; events: ChatEvent[] };
 
 /* ═══════════════════════════════════════════════════════════════════════════
+ * Helpers — detect tool call vs tool result events.
+ * Handles BOTH new data (AI tool-call → kind="assistant") and legacy data
+ * (AI tool-call → kind="tool" with toolArgs and empty content).
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Is this an AI message that issues a tool call (vs a tool result)? */
+function isToolCallEvent(e: ChatEvent): boolean {
+    // New format: assistant events with tool info
+    if (e.kind === 'assistant' && Boolean(e.toolName)) return true;
+    // Legacy format: kind="tool" with toolArgs and no meaningful content
+    if (e.kind === 'tool' && e.toolArgs && !e.content?.trim()) return true;
+    return false;
+}
+
+/** Is this a tool-related event (call or result)? */
+function isToolRelatedEvent(e: ChatEvent): boolean {
+    if (isToolCallEvent(e)) return true;
+    if (e.kind === 'tool') return true;
+    return false;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
  * groupEvents — pairs consecutive tool call / result events, separates
  * user and assistant text messages.
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -46,8 +69,7 @@ export function groupEvents(events: ChatEvent[]): RenderItem[] {
     };
 
     for (const event of events) {
-        const isToolEvent = (event.kind === 'assistant' && Boolean(event.toolName)) || event.kind === 'tool';
-        if (isToolEvent) {
+        if (isToolRelatedEvent(event)) {
             toolBuffer.push(event);
             continue;
         }
@@ -69,20 +91,45 @@ interface ToolPair {
 }
 
 function pairToolEvents(events: ChatEvent[]): ToolPair[] {
-    const pairs: ToolPair[] = [];
-    let current: ToolPair = {};
-
+    // Separate calls from results
+    const calls: ChatEvent[] = [];
+    const results: ChatEvent[] = [];
     for (const e of events) {
-        if (e.kind === 'assistant' && e.toolName) {
-            if (current.call) pairs.push(current);
-            current = { call: e };
-        } else if (e.kind === 'tool') {
-            current.result = e;
-            pairs.push(current);
-            current = {};
+        if (isToolCallEvent(e)) calls.push(e);
+        else results.push(e);
+    }
+
+    const pairs: ToolPair[] = [];
+    const usedResults = new Set<number>();
+
+    for (const call of calls) {
+        // Try to match by toolCallId first, then by toolName
+        let matchIdx = -1;
+        if (call.toolCallId) {
+            matchIdx = results.findIndex((r, i) => !usedResults.has(i) && r.toolCallId === call.toolCallId);
+        }
+        if (matchIdx === -1 && call.toolName) {
+            matchIdx = results.findIndex((r, i) => !usedResults.has(i) && r.toolName === call.toolName);
+        }
+        if (matchIdx === -1) {
+            // Grab the first unused result as a fallback
+            matchIdx = results.findIndex((_, i) => !usedResults.has(i));
+        }
+        if (matchIdx >= 0) {
+            usedResults.add(matchIdx);
+            pairs.push({ call, result: results[matchIdx] });
+        } else {
+            pairs.push({ call });
         }
     }
-    if (current.call) pairs.push(current);
+
+    // Any unmatched results become their own pairs
+    for (let i = 0; i < results.length; i++) {
+        if (!usedResults.has(i)) {
+            pairs.push({ result: results[i] });
+        }
+    }
+
     return pairs;
 }
 
@@ -99,6 +146,10 @@ export interface MessageListProps {
     messageActions?: (event: ChatEvent) => React.ReactNode;
     /** Whether the agent is currently streaming */
     streaming?: boolean;
+    /** Progressive streaming text (token-by-token accumulation). */
+    streamingText?: string;
+    /** Show tool calls in compact (single-line) mode */
+    compactTools?: boolean;
     /** Additional className for the scroll container */
     className?: string;
     /** Content to render after messages (e.g. pending edits panel) */
@@ -110,6 +161,8 @@ export const MessageList: React.FC<MessageListProps> = ({
     renderItems: externalRenderItems,
     messageActions,
     streaming,
+    streamingText,
+    compactTools = false,
     className,
     footer,
 }) => {
@@ -153,6 +206,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                                         args={pair.call?.toolArgs}
                                         output={pair.result?.toolOutput ?? pair.result?.content}
                                         meta={pair.call?.timestamp}
+                                        compact={compactTools}
                                     />
                                 ))}
                             </div>
@@ -204,9 +258,19 @@ export const MessageList: React.FC<MessageListProps> = ({
 
             {streaming && (
                 <div className="flex justify-start mt-1">
-                    <div className="max-w-[90%] rounded-lg px-3 py-2 text-[12px] bg-transparent text-text-muted">
-                        Working on it...
-                    </div>
+                    {streamingText ? (
+                        /* Progressive text — show accumulated tokens with a blinking cursor */
+                        <div className="w-full rounded-lg px-3 py-2 text-[12px] bg-transparent text-text-secondary">
+                            <MarkdownRenderer content={streamingText} />
+                            <span className="inline-block w-[2px] h-[14px] bg-text-muted align-text-bottom ml-0.5 animate-pulse" />
+                        </div>
+                    ) : (
+                        /* No text yet — show minimal "thinking" indicator */
+                        <div className="max-w-[90%] rounded-lg px-3 py-2 text-[12px] bg-transparent text-text-muted flex items-center gap-2">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-text-muted animate-pulse" />
+                            Working on it...
+                        </div>
+                    )}
                 </div>
             )}
 

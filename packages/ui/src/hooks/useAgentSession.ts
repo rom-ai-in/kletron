@@ -152,13 +152,19 @@ export function useAgentSession(): UseAgentSessionReturn {
     }, []);
 
     // ── Resolve selected graph once graphs are loaded ────────────────────
+    // IMPORTANT: Do NOT include `selectedGraphId` in the dependency array.
+    // This effect only runs for *initial* resolution (when graphs load or
+    // savedGraphId arrives from the API).  User-initiated changes via
+    // handleGraphChange must not be overridden.
     useEffect(() => {
         if (!graphOptionsLoaded) return;
         const hasAgentGraphs = agentGraphs.length > 0;
         const defaultGraphId = hasAgentGraphs
-            ? (agentGraphs.find((g) => g.name === "Simple ReAct (agent graph)")?._id ||
-                agentGraphs[0]?._id ||
-                "")
+            ? String(
+                  agentGraphs.find((g) => g.name === "Simple ReAct (agent graph)")?._id ??
+                  agentGraphs[0]?._id ??
+                  ""
+              )
             : (graphOptions[0]?.id || "universal-v1");
         const savedIsValid = savedGraphId
             ? hasAgentGraphs
@@ -166,10 +172,10 @@ export function useAgentSession(): UseAgentSessionReturn {
                 : graphOptions.some((g) => g.id === savedGraphId)
             : false;
         const nextGraphId = savedIsValid ? savedGraphId! : defaultGraphId;
-        if (nextGraphId && nextGraphId !== selectedGraphId) {
-            setSelectedGraphId(nextGraphId);
+        if (nextGraphId) {
+            setSelectedGraphId((prev) => (prev && prev !== "" ? prev : nextGraphId));
         }
-    }, [graphOptionsLoaded, agentGraphs, savedGraphId, selectedGraphId]);
+    }, [graphOptionsLoaded, agentGraphs, savedGraphId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Fetch enabled LLM providers ──────────────────────────────────────
     useEffect(() => {
@@ -222,6 +228,8 @@ export function useAgentSession(): UseAgentSessionReturn {
 
     const handleGraphChange = (graphId: string) => {
         setSelectedGraphId(graphId);
+        // Keep savedGraphId in sync so the resolve effect doesn't revert
+        setSavedGraphId(graphId);
         // Save to localStorage as fallback
         window.localStorage.setItem("numezis-graph-selection", graphId);
         // Persist to API (fire-and-forget, don't block UI)
@@ -245,10 +253,10 @@ export function useAgentSession(): UseAgentSessionReturn {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const graphSelectOptions = useMemo(() => (agentGraphs.length > 0 ? agentGraphs : graphOptions).map((g: any) => ({
-        id: g._id ?? g.id,
+        id: String(g._id ?? g.id ?? ""),
         label: g.name,
         sub: g.description,
-    })), [agentGraphs]);
+    })).filter((g) => g.id), [agentGraphs]);
 
     return {
         llmProvider,

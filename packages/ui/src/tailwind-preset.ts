@@ -132,6 +132,19 @@ const preset: Partial<Config> = {
           accentHover: 'var(--numezis-accent-hover)',
           accentMuted: 'var(--numezis-accent-muted)',
         },
+
+        // Glass / frosted surface colors
+        glass: {
+          sidebar: 'var(--glass-bg-sidebar)',
+          titlebar: 'var(--glass-bg-titlebar)',
+          panel: 'var(--glass-bg-panel)',
+          card: 'var(--glass-bg-card)',
+          cardHover: 'var(--glass-bg-card-hover)',
+          input: 'var(--glass-bg-input)',
+          elevated: 'var(--glass-bg-elevated)',
+          border: 'var(--glass-border)',
+          borderStrong: 'var(--glass-border-strong)',
+        },
       },
 
       // ── Spacing (from design tokens) ─────────────────────────────────────
@@ -174,9 +187,9 @@ const preset: Partial<Config> = {
 
       // ── Font Families ────────────────────────────────────────────────────
       fontFamily: {
-        display: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
-        body: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
-        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        display: ['"SF Pro Display"', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+        body: ['"SF Pro Text"', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+        mono: ['"SF Mono"', '"JetBrains Mono"', 'Menlo', 'Monaco', 'monospace'],
       },
 
       // ── Transition Duration (from motion tokens) ─────────────────────────

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { chainExecutor } from "@numezis/server/services/chainExecutor";
+import { automationExecutor } from "@numezis/server/services/automationExecutor";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
@@ -27,7 +27,7 @@ export async function POST(
       return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
     }
 
-    const run = await chainExecutor.getRun(runId, workspace._id.toString());
+    const run = await automationExecutor.getRun(runId, workspace._id.toString());
     if (!run) {
       return NextResponse.json({ error: "Execution run not found" }, { status: 404 });
     }
@@ -39,7 +39,7 @@ export async function POST(
       );
     }
 
-    await chainExecutor.cancelRun(runId);
+    await automationExecutor.cancelRun(runId);
     return NextResponse.json({ status: "CANCELLED", runId }, { status: 200 });
   } catch (error) {
     console.error(`[API /api/runs/${params.id}/cancel POST] Error:`, error);

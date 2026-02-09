@@ -23,6 +23,10 @@ export function useModels(
   const [toolsLoading, setToolsLoading] = useState(false);
   const [toolsError, setToolsError] = useState<string | null>(null);
 
+  // LLM provider health status
+  const [llmHealthy, setLlmHealthy] = useState<boolean | null>(null);
+  const [llmHealthChecking, setLlmHealthChecking] = useState(false);
+
   async function loadModel() {
     const token = await getAccessToken();
     if (!token) return;
@@ -70,12 +74,23 @@ export function useModels(
         throw new Error(text || `Failed to load graphs (${res.status})`);
       }
       const data = await res.json();
-      const list = Array.isArray(data?.graphs) ? (data.graphs as AgentGraphSummary[]) : [];
+      // API returns MongoDB docs with `_id`; normalise to `id` for the UI
+      const raw = Array.isArray(data?.graphs) ? data.graphs : [];
+      const list: AgentGraphSummary[] = raw
+        .map((g: any) => ({
+          id: String(g.id ?? g._id ?? ""),
+          name: g.name,
+          description: g.description,
+          updatedAt: g.updatedAt,
+        }))
+        .filter((g) => g.id); // discard entries without a usable id
       setGraphs(list);
       if (list.length > 0) {
-        const nextSelected =
-          selectedGraph && list.some((g) => g.id === selectedGraph) ? selectedGraph : list[0].id;
-        setSelectedGraph(nextSelected);
+        // Use functional updater to avoid stale closure — never overwrite
+        // a selection the user just made while this fetch was in flight.
+        setSelectedGraph((prev) =>
+          prev && list.some((g) => g.id === prev) ? prev : list[0].id
+        );
       } else {
         setSelectedGraph(null);
       }
@@ -154,14 +169,83 @@ export function useModels(
     }
   }
 
+  /** Check LLM provider health by calling POST /api/llm-config/test */
+  async function checkLlmHealth(provider?: string, config?: Record<string, unknown>) {
+    const token = await getAccessToken();
+    if (!token) { setLlmHealthy(false); return; }
+
+    const providerToTest = provider || selectedProvider;
+    if (!providerToTest || !modelConfig) { setLlmHealthy(null); return; }
+
+    // Build the config payload from what we know
+    const providerConfig = config || (modelConfig as Record<string, unknown>)?.[providerToTest] || {};
+
+    setLlmHealthChecking(true);
+    try {
+      const res = await fetch(`${backendUrlTrimmed}/api/llm-config/test`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ provider: providerToTest, config: providerConfig }),
+        signal: AbortSignal.timeout(15000), // 15s timeout for health check
+      });
+      if (!res.ok) { setLlmHealthy(false); return; }
+      const data = await res.json();
+      setLlmHealthy(data.success === true);
+    } catch {
+      setLlmHealthy(false);
+    } finally {
+      setLlmHealthChecking(false);
+    }
+  }
+
+  // Auto-check LLM health when provider/model changes
+  useEffect(() => {
+    if (backendReady && selectedProvider && modelConfig) {
+      void checkLlmHealth();
+    }
+  }, [selectedProvider, selectedModel, backendReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Persist LLM config changes to backend via PUT /api/llm-config */
+  async function saveModelConfig(provider: string, model: string) {
+    const token = await getAccessToken();
+    if (!token) return;
+    try {
+      const body: Record<string, unknown> = { provider };
+      // Set the provider-specific config
+      body[provider] = { model };
+      await fetch(`${backendUrlTrimmed}/api/llm-config`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      // Silently fail — user can retry from settings
+    }
+  }
+
   async function changeProvider(provider: string) {
     setSelectedProvider(provider);
     const providerData = providers.find((p) => p.id === provider);
-    if (providerData?.models.length) {
-      setSelectedModel(providerData.models[0].id);
+    const model = providerData?.models.length ? providerData.models[0].id : null;
+    if (model) {
+      setSelectedModel(model);
     }
     // Update modelConfig so the chat request uses the new provider
     setModelConfig((prev) => (prev ? { ...prev, provider } : { provider }));
+    // Persist to backend
+    if (model) void saveModelConfig(provider, model);
+  }
+
+  function changeModel(model: string) {
+    setSelectedModel(model);
+    // Persist to backend
+    if (selectedProvider) void saveModelConfig(selectedProvider, model);
   }
 
   const modelMeta = modelConfig?.provider ? `${modelConfig.provider} · ${modelLabel}` : modelLabel;
@@ -175,7 +259,12 @@ export function useModels(
     selectedProvider,
     selectedModel,
     changeProvider,
+    changeModel,
     setSelectedModel,
+    saveModelConfig,
+    llmHealthy,
+    llmHealthChecking,
+    checkLlmHealth,
     graphs,
     graphsLoading,
     graphsError,

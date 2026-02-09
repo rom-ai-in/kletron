@@ -32,19 +32,17 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
         setLoading(true);
         try {
             // Fetch conversations
-            const res = await fetch('/api/agent');
+            const res = await fetch('/api/sessions?limit=50');
             const convs = await res.json();
 
-            // Fetch pending edits to determine "Waiting" status
-            const editsRes = await fetch('/api/agent/edits');
-            const edits: PendingEdit[] = await editsRes.json();
-            const counts: Record<string, number> = {};
-            edits.forEach(e => {
-                counts[e.conversationId] = (counts[e.conversationId] || 0) + 1;
-            });
-
-            setConversations(convs);
-            setPendingEditCounts(counts);
+            setConversations(Array.isArray(convs) ? convs.map((s: any) => ({
+                id: s._id || s.id,
+                title: s.title || 'Untitled',
+                updatedAt: s.updatedAt || s.startedAt,
+                status: s.archived ? 'archived' : 'active',
+                lastRole: undefined,
+            })) : []);
+            setPendingEditCounts({});
 
         } catch (e) {
             console.error(e);
@@ -61,7 +59,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
         e.stopPropagation();
         if (!confirm("Permanently delete this conversation? This cannot be undone.")) return;
         try {
-            await fetch(`/api/agent?id=${id}&permanent=true`, { method: 'DELETE' });
+            await fetch(`/api/sessions/${id}?action=delete`, { method: 'DELETE' });
             void fetchData();
         } catch (e) {
             console.error(e);
@@ -72,7 +70,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
         e.stopPropagation();
         // if (!confirm("Archive this conversation?")) return;
         try {
-            await fetch(`/api/agent?id=${id}`, { method: 'DELETE' });
+            await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
             void fetchData();
         } catch (e) {
             console.error(e);
@@ -115,10 +113,10 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
             return;
         }
         try {
-            await fetch('/api/agent/update-title', {
+            await fetch(`/api/sessions/${convId}/title`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ conversationId: convId, title: editingTitle.trim() })
+                body: JSON.stringify({ title: editingTitle.trim() })
             });
             setConversations(prev => prev.map(c => c.id === convId ? { ...c, title: editingTitle.trim() } : c));
         } catch (e) {

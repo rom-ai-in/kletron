@@ -82,6 +82,7 @@ export class McpClient {
       try {
         const { startWatcher } = await import("@numezis/server/services/autoIndexer");
         const { startAutoIndexScheduler } = await import("@numezis/server/services/autoIndexScheduler");
+        const { startAutomationScheduler } = await import("@numezis/server/services/automationScheduler");
         const { listAllWorkspaces } = await import("@numezis/server/services/workspaceService");
 
         console.log("[AutoIndex] Initializing services...");
@@ -92,6 +93,9 @@ export class McpClient {
           startWatcher(workspace._id.toString(), workspace.rootPath);
           startAutoIndexScheduler(workspace._id.toString(), workspace.rootPath);
         }
+
+        // Start the automation scheduler (global singleton, not per-workspace)
+        startAutomationScheduler();
       } catch (error) {
         console.error("[AutoIndex] Failed to initialize:", error);
       }

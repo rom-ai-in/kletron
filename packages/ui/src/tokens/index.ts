@@ -42,6 +42,8 @@ export type { Shadow, Glow } from './shadows';
 export { zIndex, layerIndex } from './z-index';
 export type { ZIndex, LayerIndex } from './z-index';
 
+export { glass, glassSurfaces, glassBorders, glassBlur } from './glass';
+
 // =============================================================================
 // UNIFIED TOKEN OBJECT (for convenience)
 // =============================================================================
@@ -53,6 +55,7 @@ import { typography as _typography } from './typography';
 import { motion as _motion } from './motion';
 import { shadows as _shadows, glows as _glows, componentShadows as _componentShadows } from './shadows';
 import { zIndex as _zIndex, layerIndex as _layerIndex } from './z-index';
+import { glass as _glass } from './glass';
 
 /**
  * All design tokens in a single object.
@@ -71,6 +74,7 @@ export const tokens = {
     componentShadows: _componentShadows,
     zIndex: _zIndex,
     layerIndex: _layerIndex,
+    glass: _glass,
 } as const;
 
 export type Tokens = typeof tokens;

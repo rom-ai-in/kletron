@@ -16,7 +16,7 @@ import { History } from "lucide-react";
 
 type HistoryRunItem = {
   id: string;
-  type: "explore" | "deep_agent" | "graph" | "campaign" | "drift";
+  type: "agent" | "graph" | "automation" | "drift";
   title: string;
   status: string;
   startedAt: string;
@@ -24,19 +24,18 @@ type HistoryRunItem = {
   link: string;
   graphId?: string;
   graphName?: string;
-  campaignId?: string;
+  automationId?: string;
   workspaceId: string;
 };
 
-type FilterType = "all" | "explore" | "deep_agent" | "graph" | "campaign" | "drift";
+type FilterType = "all" | "agent" | "graph" | "automation" | "drift";
 
 const typeOptions: Array<{ id: FilterType; label: string }> = [
   { id: "all", label: "All" },
-  { id: "explore", label: "Explore" },
-  { id: "deep_agent", label: "Deep Agents" },
+  { id: "agent", label: "Agent" },
   { id: "drift", label: "Drift" },
   { id: "graph", label: "Graphs" },
-  { id: "campaign", label: "Campaigns" },
+  { id: "automation", label: "Automations" },
 ];
 
 const statusOptions = ["all", "RUNNING", "COMPLETED", "FAILED", "CANCELLED", "PAUSED", "PENDING", "active", "archived"] as const;
@@ -56,7 +55,7 @@ export default function HistoryPage() {
   const searchParams = useSearchParams();
   const initialType = (searchParams?.get("type") as FilterType) || "all";
   const graphIdParam = searchParams?.get("graphId") || "";
-  const campaignIdParam = searchParams?.get("campaignId") || "";
+  const automationIdParam = searchParams?.get("automationId") || "";
 
   const [runs, setRuns] = useState<HistoryRunItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +73,7 @@ export default function HistoryPage() {
       if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
       if (query) params.set("q", query);
       if (graphIdParam) params.set("graphId", graphIdParam);
-      if (campaignIdParam) params.set("campaignId", campaignIdParam);
+      if (automationIdParam) params.set("automationId", automationIdParam);
       params.set("limit", "100");
 
       const res = await fetch(`/api/history/runs?${params.toString()}`);
@@ -86,7 +85,7 @@ export default function HistoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [typeFilter, statusFilter, query, graphIdParam, campaignIdParam]);
+  }, [typeFilter, statusFilter, query, graphIdParam, automationIdParam]);
 
   useEffect(() => {
     void fetchRuns();
@@ -104,7 +103,7 @@ export default function HistoryPage() {
           <div>
             <h1 className="text-lg font-semibold text-text-primary">History</h1>
             <p className="text-sm text-text-muted">
-              Unified history across Explore, Deep Agents, Drift, Graphs, and Campaigns.
+              Unified history across Agent sessions, Drift, Graphs, and Automations.
             </p>
           </div>
         </div>
@@ -155,7 +154,7 @@ export default function HistoryPage() {
         {!loading && !error && filteredRuns.length === 0 && (
           <EmptyState
             title="No history yet"
-            description="Start a run in Explore, Deep Agents, or Campaigns to see it here."
+            description="Start a run in Explore, Deep Agents, or Automations to see it here."
             variant="no-data"
           />
         )}

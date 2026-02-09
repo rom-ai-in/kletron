@@ -26,7 +26,7 @@ function buildCrumbsFromSegments(pathname: string, segmentLabels: Record<string,
   const items: BreadcrumbItem[] = [];
 
   // Only show Explore if we are strictly at the root.
-  // Otherwise, top-level items (Explore, Campaigns, etc.) are siblings in the sidebar.
+  // Otherwise, top-level items (Explore, Automations, etc.) are siblings in the sidebar.
   if (segments.length === 0) {
     items.push({ href: "/", label: "Explore", isCurrent: true });
   }
@@ -43,14 +43,14 @@ function buildCrumbsFromSegments(pathname: string, segmentLabels: Record<string,
   return items;
 }
 
-const resolverCampaignDetails: BreadcrumbResolver = (pathname) => {
-  const m = pathname.match(/^\/app\/campaigns\/([^/]+)\/?$/);
+const resolverAutomationDetails: BreadcrumbResolver = (pathname) => {
+  const m = pathname.match(/^\/app\/automations\/([^/]+)\/?$/);
   if (!m) return null;
   const id = m[1];
   const short = id.length > 10 ? `${id.slice(0, 6)}…${id.slice(-3)}` : id;
   return [
-    { href: "/app/campaigns", label: "Campaigns", isCurrent: false },
-    { href: `/app/campaigns/${id}`, label: `Campaign ${short}`, isCurrent: true },
+    { href: "/app/automations", label: "Automations", isCurrent: false },
+    { href: `/app/automations/${id}`, label: `Automation ${short}`, isCurrent: true },
   ];
 };
 
@@ -65,14 +65,15 @@ const resolverRunDetails: BreadcrumbResolver = (pathname) => {
   ];
 };
 
-const resolvers: BreadcrumbResolver[] = [resolverCampaignDetails, resolverRunDetails];
+const resolvers: BreadcrumbResolver[] = [resolverAutomationDetails, resolverRunDetails];
 
 const segmentLabels: Record<string, string> = {
   "/": "Explore",
   "/app": "App",
-  "/app/explore": "Explore",
-  "/app/deep-agent": "Deep Agent",
-  "/app/campaigns": "Campaigns",
+  "/app/explore": "Agent",
+  "/app/deep-agent": "Agent",
+  "/app/agent": "Agent",
+  "/app/automations": "Automations",
   "/app/runs": "Execution Runs",
   "/app/vectors": "Vector Index",
   "/app/vectors/history": "Vector History",
@@ -86,8 +87,9 @@ const segmentLabels: Record<string, string> = {
   "/app/account": "Account",
 
   // Legacy mappings for breadcrumb segments
-  "deep-agent": "Deep Agent",
-  "campaigns": "Campaigns",
+  "deep-agent": "Agent",
+  "agent": "Agent",
+  "automations": "Automations",
   "runs": "Execution Runs",
   "vectors": "Vector Index",
   "history": "Activity",

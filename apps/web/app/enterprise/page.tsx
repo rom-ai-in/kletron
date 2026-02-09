@@ -173,13 +173,13 @@ export default function EnterprisePage() {
                         ) : user ? (
                             <>
                                 <Link
-                                    href="/app/explore"
+                                    href="/app/agent"
                                     className="text-sm text-text-secondary hover:text-text-primary transition-colors"
                                 >
                                     Dashboard
                                 </Link>
                                 <Link
-                                    href="/app/explore"
+                                    href="/app/agent"
                                     className="inline-flex items-center gap-2 rounded-md bg-bg-elevated hover:bg-state-hover border border-border-subtle px-3 py-1.5 text-sm font-medium text-text-primary transition-colors"
                                 >
                                     Open App →

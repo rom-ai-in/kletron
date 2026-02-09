@@ -6,7 +6,9 @@ export type SettingsSectionId =
   | "configuration"
   | "personalization"
   | "mcp"
-  | "git"
+  | "skills"
+  | "automations"
+  | "graphs"
   | "environments"
   | "worktrees"
   | "archived";
@@ -47,6 +49,8 @@ export type ChatEvent = {
   timestamp?: string;
   metadata?: Record<string, unknown>;
   thoughts?: string[];
+  /** Single block of long-form reasoning (alternative to thoughts array) */
+  thinking?: string;
   messageIndex?: number | null;
   local?: boolean;
 };
@@ -60,6 +64,8 @@ export type ServerAgentEvent = {
   kind?: "system" | "user" | "assistant" | "tool";
   role?: string;
   content?: string;
+  /** Tool name — set by backend guessToolName() */
+  name?: string;
   toolName?: string;
   toolCallId?: string;
   toolArgs?: string;
@@ -121,6 +127,7 @@ export type ConversationHistoryItem = {
 
 export type ConversationDetail = ConversationHistoryItem & {
   messages?: Array<ServerAgentEvent & { kind?: string; role?: string; content?: string }>;
+  conversationHistory?: Array<ServerAgentEvent & { kind?: string; role?: string; content?: string }>;
 };
 
 export type AgentGraphSummary = {
@@ -206,4 +213,83 @@ export type Worktree = {
   path: string;
   branch: string;
   isMain: boolean;
+};
+
+// ─── Command Center Types ────────────────────────────────────────────────────
+
+/** Project-based organization */
+export type Project = {
+  id: string;
+  name: string;
+  rootPath: string;
+  repoUrl?: string;
+  threads: string[]; // thread IDs
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+/** Extended thread with project association and live status */
+export type ThreadLiveStatus = "running" | "completed" | "idle" | "waiting" | "error";
+
+export type ThreadWithStatus = ConversationHistoryItem & {
+  projectId?: string;
+  liveStatus: ThreadLiveStatus;
+};
+
+/** Conversation tab (represents an open thread in the tab bar) */
+export type ConversationTab = {
+  id: string; // thread ID
+  title: string;
+  projectId?: string;
+  isPinned?: boolean;
+  liveStatus?: ThreadLiveStatus;
+};
+
+/** Right sidebar context item */
+export type ProjectContextItem = {
+  id: string;
+  type: "file" | "doc" | "variable" | "link";
+  label: string;
+  path?: string;
+  value?: string;
+};
+
+/** Slash command definition */
+export type SlashCommand = {
+  id: string;
+  label: string;
+  description?: string;
+  shortcut?: string;
+  action: () => void;
+  category?: string;
+};
+
+/** Personality mode */
+export type PersonalityMode = "pragmatic" | "empathetic";
+
+/** Skill definition */
+export type Skill = {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  category?: "design" | "project-management" | "deployment" | "custom";
+};
+
+/** Queued follow-up message (sent when agent finishes streaming) */
+export type QueuedMessage = {
+  id: string;
+  text: string;
+  createdAt: string;
+};
+
+/** Automation definition */
+export type Automation = {
+  id: string;
+  name: string;
+  description?: string;
+  schedule?: string; // cron expression
+  status: "active" | "paused" | "completed" | "failed";
+  lastRunAt?: string;
+  nextRunAt?: string;
 };

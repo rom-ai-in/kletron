@@ -6,7 +6,7 @@ import {
     buildDiamondFlowAgentGraph,
     buildCompleteDeepAgentGraph,
     buildDriftAnalysisGraph,
-    buildCampaignsGraph,
+    buildAutomationsGraph,
     buildPresentationGeneratorProGraph,
     buildSimpleReactAgentGraph,
     buildCoderAgentGraph,
@@ -47,7 +47,7 @@ function ensureFallbackGraphs() {
         { id: "000000000000000000000004", graph: buildPresentationGeneratorProGraph() },
         { id: "000000000000000000000005", graph: buildCompleteDeepAgentGraph() },
         { id: "000000000000000000000006", graph: buildDriftAnalysisGraph() },
-        { id: "000000000000000000000007", graph: buildCampaignsGraph() },
+        { id: "000000000000000000000007", graph: buildAutomationsGraph() },
         { id: "000000000000000000000008", graph: buildCoderAgentGraph() },
         { id: "000000000000000000000009", graph: buildExplorerAgentGraph() },
         { id: "00000000000000000000000a", graph: buildPlannerAgentGraph() },
@@ -118,9 +118,11 @@ export class AgentGraphService {
         }
         const query: any = {};
         if (filter?.search) {
+            // Escape regex special chars so names with parentheses, brackets, etc. match literally
+            const escaped = filter.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             query.$or = [
-                { name: { $regex: filter.search, $options: "i" } },
-                { description: { $regex: filter.search, $options: "i" } },
+                { name: { $regex: escaped, $options: "i" } },
+                { description: { $regex: escaped, $options: "i" } },
             ];
         }
         const graphs = await collection

@@ -14,12 +14,12 @@ type AgentGraphDto = {
     description?: string;
     nodes: any[];
     edges: any[];
-    category?: "deep_agent" | "graph" | "campaign" | "drift";
+    category?: "deep_agent" | "graph" | "automation" | "drift";
 };
 
 type HistoryRunItem = {
     id: string;
-    type: "explore" | "deep_agent" | "graph" | "campaign" | "drift";
+    type: "explore" | "deep_agent" | "graph" | "automation" | "drift";
     title: string;
     status: string;
     startedAt: string;
@@ -27,7 +27,7 @@ type HistoryRunItem = {
     link: string;
     graphId?: string;
     graphName?: string;
-    campaignId?: string;
+    automationId?: string;
     workspaceId: string;
 };
 
@@ -62,7 +62,7 @@ export default function AgentGraphDetailClient({ params }: { params: { id: strin
 
     const historyType = useMemo(() => {
         if (graph?.category === "deep_agent") return "deep_agent";
-        if (graph?.category === "campaign") return "campaign";
+        if (graph?.category === "automation") return "automation";
         if (graph?.category === "drift") return "drift";
         return "graph";
     }, [graph?.category]);

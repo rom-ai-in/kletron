@@ -10,6 +10,7 @@ import {
 } from "./agentSchemas";
 
 export type NodeOutputSchemaId =
+    | "conversational"
     | "generic_json"
     | "phase1_output"
     | "phase2_output"
@@ -32,6 +33,15 @@ export type NodeOutputSchemaId =
     | "cursor_refactor_output"
     | "cursor_final_gate_output"
     | "cursor_done_output";
+
+/**
+ * Schema for conversational nodes — accepts any text response.
+ * The executor wraps the raw assistant text into { response, rawContent }.
+ */
+export const ConversationalOutputSchema = z.object({
+    response: z.string().default(""),
+    rawContent: z.string().optional(),
+}).passthrough();
 
 export const GenericJsonObjectSchema = z.record(z.any());
 
@@ -170,6 +180,7 @@ export const CursorDoneOutputSchema = z.object({
 }).strip();
 
 export const nodeOutputSchemaRegistry: Record<NodeOutputSchemaId, z.ZodTypeAny> = {
+    conversational: ConversationalOutputSchema,
     generic_json: GenericJsonObjectSchema,
     phase1_output: Phase1OutputSchema,
     phase2_output: Phase2OutputSchema,
@@ -195,6 +206,7 @@ export const nodeOutputSchemaRegistry: Record<NodeOutputSchemaId, z.ZodTypeAny> 
 };
 
 export const nodeOutputSchemaOptions: Array<{ id: NodeOutputSchemaId; label: string }> = [
+    { id: "conversational", label: "Conversational (free text)" },
     { id: "generic_json", label: "Generic JSON object" },
     { id: "phase1_output", label: "Phase 1 output" },
     { id: "phase2_output", label: "Phase 2 output" },

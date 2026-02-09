@@ -71,7 +71,7 @@ const sampleThreads = [
 ];
 
 const sampleToolUse = [
-    { id: "tool-1", name: "read_file", detail: "apps/web/app/app/explore/page.tsx", status: "success" as const, meta: "120ms" },
+    { id: "tool-1", name: "read_file", detail: "apps/web/app/app/agent/page.tsx", status: "success" as const, meta: "120ms" },
     { id: "tool-2", name: "edit_file", detail: "packages/ui/src/components/Agent/ActiveSession.tsx", status: "running" as const, meta: "2s" },
     { id: "tool-3", name: "run_command", detail: "npm run test", status: "error" as const, meta: "failed" },
     { id: "tool-4", name: "search", detail: "design system updates", status: "pending" as const },

@@ -8,12 +8,108 @@ body {
   margin: 0;
   min-height: 100vh;
   /* Slightly tighter density baseline */
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   background: var(--bg-app);
   font-size: 0.875rem;
   /* 14px default */
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ── Glass / Frosted Surface Utilities ──────────────────── */
+@layer components {
+  .glass {
+    background: var(--glass-bg-panel);
+    backdrop-filter: blur(var(--glass-blur-lg)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--glass-blur-lg)) saturate(180%);
+    border: 1px solid var(--glass-border);
+  }
+
+  .glass-sidebar {
+    background: var(--glass-bg-sidebar);
+    backdrop-filter: blur(var(--glass-blur-xl)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--glass-blur-xl)) saturate(180%);
+    border-right: 1px solid var(--glass-border);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+                0 1px 0 0 rgba(255, 255, 255, 0.03) inset;
+  }
+
+  .glass-titlebar {
+    background: var(--glass-bg-titlebar);
+    backdrop-filter: blur(var(--glass-blur-xl)) saturate(200%);
+    -webkit-backdrop-filter: blur(var(--glass-blur-xl)) saturate(200%);
+    border-bottom: 1px solid var(--glass-border);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+                0 1px 0 0 rgba(255, 255, 255, 0.03) inset;
+  }
+
+  .glass-elevated {
+    background: var(--glass-bg-elevated);
+    backdrop-filter: blur(var(--glass-blur-xl)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--glass-blur-xl)) saturate(180%);
+    border: 1px solid var(--glass-border-strong);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  }
+
+  .glass-card {
+    background: var(--glass-bg-card);
+    backdrop-filter: blur(var(--glass-blur-md)) saturate(150%);
+    -webkit-backdrop-filter: blur(var(--glass-blur-md)) saturate(150%);
+    border: 1px solid var(--glass-border);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-card:hover {
+    background: var(--glass-bg-card-hover);
+    border-color: var(--glass-border-strong);
+  }
+
+  .glass-input {
+    background: var(--glass-bg-input);
+    backdrop-filter: blur(var(--glass-blur-sm));
+    -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+    border: 1px solid var(--glass-border);
+    transition: border-color 0.15s ease;
+  }
+
+  .glass-input:focus-within {
+    border-color: var(--glass-border-strong);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+  }
+
+  .glass-selected {
+    background: rgba(57, 148, 188, 0.12);
+    border: 1px solid rgba(57, 148, 188, 0.25);
+  }
+
+  .glass-noise::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    border-radius: inherit;
+    opacity: var(--glass-noise-opacity);
+  }
+
+  /* Web/non-macOS fallback — gradient behind glass panels */
+  .app-shell {
+    background:
+      radial-gradient(ellipse 80% 50% at 10% 0%, rgba(57, 148, 188, 0.08), transparent 60%),
+      radial-gradient(ellipse 60% 60% at 90% 100%, rgba(139, 92, 246, 0.06), transparent 60%),
+      radial-gradient(ellipse 50% 40% at 50% 50%, rgba(99, 102, 241, 0.04), transparent 60%),
+      var(--bg-app);
+  }
+
+  /* Glass demo container — richer gradient for showcasing glass effects */
+  .glass-demo-bg {
+    background:
+      radial-gradient(ellipse 70% 50% at 20% 20%, rgba(57, 148, 188, 0.18), transparent 60%),
+      radial-gradient(ellipse 50% 60% at 80% 70%, rgba(139, 92, 246, 0.14), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 50% 50%, rgba(99, 102, 241, 0.10), transparent 60%),
+      rgba(9, 9, 11, 0.95);
+  }
 }
 
 /* Global scrollbar – dark & subtle */
@@ -58,7 +154,7 @@ select:-webkit-autofill:active {
 pre,
 code,
 .font-mono {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  font-family: "SF Mono", "JetBrains Mono", Menlo, Monaco, monospace;
 }
 
 @layer utilities {
@@ -168,14 +264,7 @@ code,
     background-size: 64px 64px;
   }
 
-  /* Glassmorphic card */
-  .glass-card {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
+  /* Glassmorphic card (legacy, now in @layer components as .glass-card) */
   .glass-card-hover:hover {
     background: rgba(255, 255, 255, 0.05);
     border-color: rgba(255, 255, 255, 0.12);

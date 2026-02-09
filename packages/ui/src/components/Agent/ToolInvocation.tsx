@@ -7,6 +7,10 @@ import {
     Circle,
     FileText,
     FolderOpen,
+    GitBranch,
+    Globe,
+    LayoutList,
+    Package,
     Pencil,
     Search,
     Terminal as TerminalIcon,
@@ -32,12 +36,36 @@ function formatMaybeJson(value?: string): string {
 
 export function ToolInvocationIcon({ name, className }: { name: string; className?: string }) {
     const cls = cn('w-3 h-3 text-text-muted shrink-0', className);
-    if (name === 'run_command') return <TerminalIcon className={cls} />;
-    if (name === 'grep_search' || name === 'codebase_search') return <Search className={cls} />;
-    if (name === 'edit_file' || name === 'replace_file_content') return <Pencil className={cls} />;
-    if (name === 'read_file' || name === 'view_file') return <FileText className={cls} />;
-    if (name === 'list_dir') return <FolderOpen className={cls} />;
-    if (name === 'write_file' || name === 'write_to_file') return <Pencil className={cls} />;
+    // Terminal / execution
+    if (name === 'run_command' || name === 'execute_bash') return <TerminalIcon className={cls} />;
+    // Search tools
+    if (['grep_search', 'codebase_search', 'search_code', 'todo_search', 'semantic_code_search',
+         'find_symbol', 'go_to_definition', 'references', 'find_references',
+         'structural_search', 'locate_ui_feature'].includes(name))
+        return <Search className={cls} />;
+    // Edit / write tools
+    if (['edit_file', 'replace_file_content', 'write_file', 'write_to_file', 'str_replace_editor',
+         'write_todos', 'add_heading', 'add_paragraph', 'add_bullet_list', 'add_table',
+         'create_document', 'save_document'].includes(name))
+        return <Pencil className={cls} />;
+    // Read / view tools
+    if (['read_file', 'view_file', 'read_file_range', 'list_word_templates'].includes(name))
+        return <FileText className={cls} />;
+    // Directory / structure tools
+    if (['list_dir', 'list_files', 'describe_structure', 'symbols_list',
+         'bootstrap_context'].includes(name))
+        return <FolderOpen className={cls} />;
+    // Git tools
+    if (['git_log', 'git_diff', 'git_blame', 'git_grep'].includes(name))
+        return <GitBranch className={cls} />;
+    // Web / fetch tools
+    if (['web_search', 'fetch_url', 'github_api'].includes(name))
+        return <Globe className={cls} />;
+    // Metrics / dependency info
+    if (['repo_metrics', 'dependency_info'].includes(name))
+        return <Package className={cls} />;
+    // Output format
+    if (name === 'output_format') return <LayoutList className={cls} />;
     return <Circle className={cls} />;
 }
 
@@ -46,28 +74,63 @@ export function ToolInvocationIcon({ name, className }: { name: string; classNam
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 function getToolSummary(name: string, parsedArgs: Record<string, any>): string {
-    if (name === 'read_file' || name === 'view_file') {
-        const p = parsedArgs.path || parsedArgs.AbsolutePath || '';
-        return (p as string).split('/').pop() || p;
+    // Helper: extract filename from path
+    const filename = (p: string) => (p ? p.split('/').pop() || p : '');
+
+    // File read/view
+    if (['read_file', 'view_file', 'read_file_range'].includes(name)) {
+        return filename(parsedArgs.path || parsedArgs.AbsolutePath || parsedArgs.file_path || '');
     }
-    if (name === 'grep_search' || name === 'codebase_search') {
-        return parsedArgs.query || parsedArgs.Query || '';
+    // Search tools
+    if (['grep_search', 'codebase_search', 'search_code', 'todo_search',
+         'semantic_code_search', 'structural_search'].includes(name)) {
+        return parsedArgs.query || parsedArgs.Query || parsedArgs.pattern || '';
     }
-    if (name === 'edit_file' || name === 'replace_file_content') {
-        const p = parsedArgs.path || parsedArgs.TargetFile || '';
-        return (p as string).split('/').pop() || p;
+    // Edit / write tools
+    if (['edit_file', 'replace_file_content', 'str_replace_editor'].includes(name)) {
+        return filename(parsedArgs.path || parsedArgs.TargetFile || '');
     }
-    if (name === 'run_command') {
+    if (['write_file', 'write_to_file'].includes(name)) {
+        return filename(parsedArgs.path || parsedArgs.TargetFile || '');
+    }
+    // Terminal commands
+    if (name === 'run_command' || name === 'execute_bash') {
         return parsedArgs.command || parsedArgs.CommandLine || '';
     }
-    if (name === 'list_dir') {
-        const p = parsedArgs.path || parsedArgs.DirectoryPath || '';
-        return (p as string).split('/').pop() || p;
+    // Directory listing
+    if (['list_dir', 'list_files'].includes(name)) {
+        return filename(parsedArgs.path || parsedArgs.DirectoryPath || parsedArgs.directory || '');
     }
-    if (name === 'write_file' || name === 'write_to_file') {
-        const p = parsedArgs.path || parsedArgs.TargetFile || '';
-        return (p as string).split('/').pop() || p;
+    // Structure / bootstrap
+    if (name === 'describe_structure' || name === 'bootstrap_context') {
+        return filename(parsedArgs.root || parsedArgs.path || parsedArgs.directory || '');
     }
+    // Git tools
+    if (name === 'git_log' || name === 'git_diff' || name === 'git_blame' || name === 'git_grep') {
+        return parsedArgs.file || parsedArgs.path || parsedArgs.query || parsedArgs.pattern || '';
+    }
+    // Symbol tools
+    if (['find_symbol', 'go_to_definition', 'references', 'find_references', 'symbols_list'].includes(name)) {
+        return parsedArgs.symbol || parsedArgs.name || parsedArgs.query || '';
+    }
+    // Web / fetch
+    if (name === 'web_search') return parsedArgs.query || '';
+    if (name === 'fetch_url') return parsedArgs.url || '';
+    if (name === 'github_api') return parsedArgs.endpoint || '';
+    // Repo info
+    if (name === 'repo_metrics' || name === 'dependency_info') {
+        return filename(parsedArgs.root || parsedArgs.path || '');
+    }
+    // Document tools
+    if (name === 'create_document' || name === 'save_document') {
+        return parsedArgs.filename || parsedArgs.title || '';
+    }
+    if (['add_heading', 'add_paragraph'].includes(name)) {
+        const text = parsedArgs.text || '';
+        return text.length > 40 ? text.slice(0, 40) + '...' : text;
+    }
+    // Output format
+    if (name === 'output_format') return parsedArgs.format || '';
     return '';
 }
 
@@ -86,8 +149,8 @@ function ToolInvocationDetail({
     output?: string;
     parsedArgs: Record<string, any>;
 }) {
-    // ── run_command: terminal-style block ──
-    if (name === 'run_command') {
+    // ── run_command / execute_bash: terminal-style block ──
+    if (name === 'run_command' || name === 'execute_bash') {
         const command = parsedArgs.command || parsedArgs.CommandLine || '';
         const exitMatch = output?.match(/Exit code:\s*(\d+)/);
         const exitCode = exitMatch ? parseInt(exitMatch[1], 10) : null;
@@ -119,8 +182,8 @@ function ToolInvocationDetail({
         );
     }
 
-    // ── edit_file: inline diff ──
-    if (name === 'edit_file' || name === 'replace_file_content') {
+    // ── edit_file / str_replace_editor: inline diff ──
+    if (name === 'edit_file' || name === 'replace_file_content' || name === 'str_replace_editor') {
         const filePath = parsedArgs.path || parsedArgs.TargetFile || '';
         const oldStr: string = parsedArgs.old_string || '';
         const newStr: string = parsedArgs.new_string || '';
@@ -156,8 +219,8 @@ function ToolInvocationDetail({
         );
     }
 
-    // ── grep_search: search results ──
-    if (name === 'grep_search' || name === 'codebase_search') {
+    // ── grep_search / search_code / semantic: search results ──
+    if (['grep_search', 'codebase_search', 'search_code', 'semantic_code_search', 'structural_search'].includes(name)) {
         const query = parsedArgs.query || parsedArgs.Query || '';
         const resultLines = output?.split('\n').filter(Boolean) ?? [];
 
@@ -222,6 +285,12 @@ export interface ToolInvocationProps {
     meta?: string;
     /** Whether to start expanded */
     defaultOpen?: boolean;
+    /**
+     * Compact mode — hides the expand chevron and detail entirely.
+     * Just shows a single-line tool summary (icon + name + summary).
+     * Useful for long conversations where expanding every tool call is noisy.
+     */
+    compact?: boolean;
     /** Additional className */
     className?: string;
 }
@@ -232,6 +301,7 @@ export const ToolInvocation: React.FC<ToolInvocationProps> = ({
     output,
     meta,
     defaultOpen = false,
+    compact = false,
     className,
 }) => {
     const [open, setOpen] = useState(defaultOpen);
@@ -245,6 +315,24 @@ export const ToolInvocation: React.FC<ToolInvocationProps> = ({
     }, [args]);
 
     const summary = useMemo(() => getToolSummary(name, parsedArgs), [name, parsedArgs]);
+
+    // Compact mode: single-line, no expand capability
+    if (compact) {
+        return (
+            <div className={cn('py-0.5 pl-1 flex items-center gap-2', className)}>
+                <ToolInvocationIcon name={name} />
+                <span className="text-[10px] text-text-muted">{name}</span>
+                {summary && (
+                    <span className="text-[10px] font-mono text-text-muted truncate max-w-[200px]">{summary}</span>
+                )}
+                {output && (
+                    <span className="text-[9px] text-status-success-text ml-auto shrink-0">
+                        <Check size={10} />
+                    </span>
+                )}
+            </div>
+        );
+    }
 
     return (
         <div className={cn('py-0.5 pl-1', className)}>

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { ConversationHistoryItem } from "../types";
+import { useState, useEffect, useRef, useCallback } from "react";
+import type { ConversationHistoryItem, ThreadLiveStatus } from "../types";
 
 export function useThreads(
   backendUrlTrimmed: string,
@@ -21,7 +21,7 @@ export function useThreads(
     setThreadsLoading(true);
     setThreadsError(null);
     try {
-      const res = await fetch(`${backendUrlTrimmed}/api/agent`, {
+      const res = await fetch(`${backendUrlTrimmed}/api/sessions?limit=50`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -44,32 +44,12 @@ export function useThreads(
     }
   }
 
-  async function createConversation(selectedGraph?: string | null, graphName?: string) {
-    if (!backendReady) return null;
-    const token = await getAccessToken();
-    if (!token) return null;
-    try {
-      const res = await fetch(`${backendUrlTrimmed}/api/agent`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ title: "New thread" }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Failed to create thread (${res.status})`);
-      }
-      const data = await res.json();
-      if (data?.id) {
-        setConversationId(data.id);
-        await loadThreads(data.id);
-        return data.id as string;
-      }
-    } catch {
-      // ignore
-    }
+  /**
+   * In the unified session system, sessions are created on first message send
+   * via POST /api/sessions. This function is kept for API compatibility but
+   * simply returns null — the conversation hook handles session creation.
+   */
+  async function createConversation(_selectedGraph?: string | null, _graphName?: string) {
     return null;
   }
 
@@ -91,13 +71,13 @@ export function useThreads(
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Authentication expired.");
-      const res = await fetch(`${backendUrlTrimmed}/api/agent/update-title`, {
+      const res = await fetch(`${backendUrlTrimmed}/api/sessions/${editingThreadId}/title`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ conversationId: editingThreadId, title: nextTitle }),
+        body: JSON.stringify({ title: nextTitle }),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -124,7 +104,7 @@ export function useThreads(
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Authentication expired.");
-      const res = await fetch(`${backendUrlTrimmed}/api/agent?id=${encodeURIComponent(threadId)}`, {
+      const res = await fetch(`${backendUrlTrimmed}/api/sessions/${encodeURIComponent(threadId)}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -152,7 +132,7 @@ export function useThreads(
       const token = await getAccessToken();
       if (!token) throw new Error("Authentication expired.");
       const res = await fetch(
-        `${backendUrlTrimmed}/api/agent?id=${encodeURIComponent(threadId)}&permanent=true`,
+        `${backendUrlTrimmed}/api/sessions/${encodeURIComponent(threadId)}?action=delete`,
         { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
       );
       if (!res.ok) {
@@ -175,6 +155,60 @@ export function useThreads(
     setThreads([]);
   }
 
+  // ── Live status polling ─────────────────────────────────────────────────
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const pollThreadStatus = useCallback(async () => {
+    if (!backendReady || threads.length === 0) return;
+    const token = await getAccessToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${backendUrlTrimmed}/api/sessions?limit=50`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const list = Array.isArray(data) ? (data as ConversationHistoryItem[]) : [];
+      const active = list.filter((item) => item.status !== "archived");
+      // Only update if there are actual changes
+      setThreads((prev) => {
+        const changed = active.some((newThread) => {
+          const old = prev.find((t) => t.id === newThread.id);
+          return !old || old.lastRole !== newThread.lastRole || old.status !== newThread.status || old.title !== newThread.title;
+        });
+        return changed ? active : prev;
+      });
+    } catch {
+      // silent polling failure
+    }
+  }, [backendUrlTrimmed, backendReady, getAccessToken, threads.length]);
+
+  useEffect(() => {
+    // Poll every 5 seconds when we have active threads
+    if (threads.length === 0 || !backendReady) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+    pollRef.current = setInterval(pollThreadStatus, 5000);
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [threads.length, backendReady, pollThreadStatus]);
+
+  /** Derive live status from thread data */
+  function getThreadLiveStatus(thread: ConversationHistoryItem): ThreadLiveStatus {
+    if (thread.status === "archived") return "idle";
+    if (thread.lastRole === "user" || thread.lastRole === "tool") return "running";
+    if (thread.lastRole === "assistant") return "idle";
+    return "idle";
+  }
+
   return {
     threads,
     threadsLoading,
@@ -194,5 +228,6 @@ export function useThreads(
     archiveThread,
     deleteThread,
     resetThreads,
+    getThreadLiveStatus,
   };
 }

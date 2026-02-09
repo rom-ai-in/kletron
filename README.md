@@ -180,7 +180,7 @@ The web app is a **Next.js 14 App Router** application serving as the primary da
 - **Chat interface** — Conversational UI for interacting with AI agents
 - **Agent graphs** — Visual editor for creating and managing multi-step agent workflows
 - **Deep agent** — Advanced multi-phase research workflows
-- **Campaigns** — Batch execution of agent workflows across targets
+- **Automations** — Batch execution of agent workflows across targets
 - **Vector search** — Semantic code search powered by embeddings
 - **Context management** — Configure what context the agents receive
 - **Drift detection** — Detect code drift and changes
@@ -203,7 +203,7 @@ The web app is a **Next.js 14 App Router** application serving as the primary da
 | `/app/runs/[id]` | Run details |
 | `/app/changes` | Code changes view |
 | `/app/vectors` | Vector search interface |
-| `/app/campaigns` | Campaign management |
+| `/app/automations` | Automation management |
 | `/app/agent-graphs` | Agent graph editor |
 | `/app/config/*` | Configuration (AI, LLM, embeddings, context, tools, graphs, workspace) |
 | `/app/account/*` | Account management (billing, notifications, privacy, security) |
@@ -379,7 +379,7 @@ Shared TypeScript types and Zod schemas used across all packages.
 
 - `AgentWorkflowResult`, `AgentWorkflowUpdate` — workflow execution types
 - `TimelineEvent`, `AgentEvent` — event streaming types
-- `AuditChain`, `AuditStageConfig` — multi-stage chain types
+- `AutomationDefinition`, `AutomationStageConfig` — multi-stage automation types
 - `Finding`, `Claim`, `Task` — audit domain types
 - `graphCatalog` — predefined graph configurations
 - LLM and embedding configuration schemas
@@ -588,7 +588,7 @@ The web app exposes **128 API routes**. Here are the key categories:
 | **Agent Graphs** | `/api/agent-graphs/` | CRUD, `[id]/runs`, `[id]/stream` |
 | **Agent Graph Runs** | `/api/agent-graph-runs/` | `[runId]`, `[runId]/nodes`, `[runId]/approvals` |
 | **Chat** | `/api/chat/` | `route`, `stream` |
-| **Campaigns** | `/api/campaigns/` | CRUD, `[id]/execute`, `[id]/pause`, `[id]/resume`, `[id]/cancel`, `[id]/stream`, `[id]/report`, `[id]/runs` |
+| **Automations** | `/api/automations/` | CRUD, `[id]/execute`, `[id]/pause`, `[id]/resume`, `[id]/cancel`, `[id]/stream`, `[id]/report`, `[id]/runs` |
 | **LLM Config** | `/api/llm-config/` | `provider`, `enable`, `test`, `azure`, `openai`, `claude`, `gemini`, `ollama`, `ollama/test`, `lmstudio`, `lmstudio/models`, `lmstudio/load`, `lmstudio/unload` |
 | **Embeddings** | `/api/embedding-config/` | Config + `test` + per-provider: `azure`, `openai`, `gemini`, `ollama`, `lmstudio`, `voyage` |
 | **Vectors** | `/api/vectors/` | `index`, `search`, `history`, `reindex`, `clear` |
@@ -602,7 +602,7 @@ The web app exposes **128 API routes**. Here are the key categories:
 | **Runs** | `/api/runs/` | List, `[id]`, `[id]/cancel` |
 | **Run History** | `/api/history/runs` | Run history |
 | **Drift** | `/api/drift/` | `start`, `status`, `results`, `cancel` |
-| **Token Usage** | `/api/token-usage/` | `summary`, `run/[id]`, `campaign/[id]` |
+| **Token Usage** | `/api/token-usage/` | `summary`, `run/[id]`, `automation/[id]` |
 | **Billing** | `/api/stripe/` | `checkout`, `portal`, `subscription`, `webhook` |
 | **Skills** | `/api/skills/` | List, `[skillId]` |
 | **Audits** | `/api/audits/` | List, `[id]` |

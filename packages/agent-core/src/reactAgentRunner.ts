@@ -16,6 +16,8 @@ export type StreamReactAgentOptions = {
   onMessage?: (message: BaseMessage) => Promise<void> | void;
   /** Callback for each token usage update from LLM responses */
   onTokenUsage?: (usage: TokenUsage, model: string) => Promise<void> | void;
+  /** Callback for progressive text streaming (token-by-token) */
+  onTextDelta?: (delta: string) => void;
   /** Abort signal to stop streaming mid-run */
   abortSignal?: AbortSignal;
   /** Optional abort reason getter (used when abortSignal triggers) */
@@ -69,10 +71,18 @@ export async function streamReactAgentMessages(
   });
 
   const inputMessages = [...(opts.extraMessages ?? []), { role: "user", content: opts.userPrompt }];
+
+  // Use multi-mode streaming when onTextDelta is provided to get token-by-token output.
+  // With ["values", "messages"], the stream yields [mode, data] tuples:
+  //   ["values", { messages: BaseMessage[] }]   — complete state snapshots
+  //   ["messages", [AIMessageChunk, metadata]]  — token-level LLM chunks
+  const useMultiMode = !!opts.onTextDelta;
+  const streamMode = useMultiMode ? (["values", "messages"] as any) : "values";
+
   const stream = await agent.stream(
     { messages: inputMessages },
     {
-      streamMode: "values",
+      streamMode,
       recursionLimit: config.graphRecursionLimit,
       signal: opts.abortSignal,
     }
@@ -109,46 +119,70 @@ export async function streamReactAgentMessages(
     }
   };
 
-  try {
-    for await (const state of stream) {
+  /** Process a complete state snapshot (from "values" mode). */
+  const processValuesState = async (stateData: { messages?: BaseMessage[] }) => {
+    if (!Array.isArray(stateData.messages)) return;
+    lastState = stateData;
+
+    for (const message of stateData.messages) {
       await checkAbort();
-      if (!state || typeof state !== "object") continue;
-      lastState = state as { messages?: BaseMessage[] };
-      if (!Array.isArray(lastState.messages)) continue;
+      const idKey =
+        typeof message.id === "string"
+          ? message.id
+          : `${(message as any).role ?? "unknown"}-${typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "")}-${accumulatedMessages.length}`;
 
-      for (const message of lastState.messages) {
-        await checkAbort();
-        const idKey =
-          typeof message.id === "string"
-            ? message.id
-            : `${(message as any).role ?? "unknown"}-${typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "")}-${accumulatedMessages.length}`;
-
-        // Process message for event stream
-        if (!seenMessageIds.has(idKey)) {
-          seenMessageIds.add(idKey);
-          accumulatedMessages.push(message);
-          if (opts.onMessage) {
-            if (shouldEmitToCallback(message)) {
-              await opts.onMessage(message);
-            }
+      // Process message for event stream
+      if (!seenMessageIds.has(idKey)) {
+        seenMessageIds.add(idKey);
+        accumulatedMessages.push(message);
+        if (opts.onMessage) {
+          if (shouldEmitToCallback(message)) {
+            await opts.onMessage(message);
           }
         }
+      }
 
-        // Extract token usage (only once per message)
-        if (!seenUsageIds.has(idKey)) {
-          const usage = extractTokenUsage(message);
-          if (usage && (usage.inputTokens > 0 || usage.outputTokens > 0 || usage.totalTokens > 0)) {
-            seenUsageIds.add(idKey);
+      // Extract token usage (only once per message)
+      if (!seenUsageIds.has(idKey)) {
+        const usage = extractTokenUsage(message);
+        if (usage && (usage.inputTokens > 0 || usage.outputTokens > 0 || usage.totalTokens > 0)) {
+          seenUsageIds.add(idKey);
 
-            totalUsage.inputTokens += usage.inputTokens;
-            totalUsage.outputTokens += usage.outputTokens;
-            totalUsage.totalTokens += usage.totalTokens;
+          totalUsage.inputTokens += usage.inputTokens;
+          totalUsage.outputTokens += usage.outputTokens;
+          totalUsage.totalTokens += usage.totalTokens;
 
-            if (opts.onTokenUsage) {
-              await opts.onTokenUsage(usage, modelName);
-            }
+          if (opts.onTokenUsage) {
+            await opts.onTokenUsage(usage, modelName);
           }
         }
+      }
+    }
+  };
+
+  try {
+    for await (const rawEvent of stream) {
+      await checkAbort();
+      if (!rawEvent || typeof rawEvent !== "object") continue;
+
+      if (useMultiMode && Array.isArray(rawEvent)) {
+        // Multi-mode: [mode, data] tuple
+        const [mode, data] = rawEvent as [string, any];
+
+        if (mode === "messages") {
+          // Token-level chunk: data is [AIMessageChunk, metadata]
+          const chunk = Array.isArray(data) ? data[0] : data;
+          const content = typeof chunk?.content === "string" ? chunk.content : "";
+          // Only emit text deltas for non-tool-call assistant chunks
+          if (content && !chunk?.tool_calls?.length && !chunk?.tool_call_chunks?.length) {
+            opts.onTextDelta!(content);
+          }
+        } else if (mode === "values") {
+          await processValuesState(data as { messages?: BaseMessage[] });
+        }
+      } else {
+        // Single-mode ("values"): rawEvent is the state directly
+        await processValuesState(rawEvent as { messages?: BaseMessage[] });
       }
     }
   } catch (error) {

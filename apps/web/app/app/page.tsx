@@ -39,13 +39,13 @@ const LAUNCHPAD = [
   {
     title: "Deep Agent",
     description: "Run multi-step agents with live traces and tool calls.",
-    href: "/app/deep-agent",
+    href: "/app/agent",
     icon: Sparkles,
   },
   {
     title: "Explore",
     description: "Start or resume exploration sessions.",
-    href: "/app/explore",
+    href: "/app/agent",
     icon: TerminalSquare,
   },
   {
@@ -280,14 +280,14 @@ export default function AppDashboardPage() {
       if (data?.id) {
         sessionStorage.setItem(STORAGE_KEY, data.id);
       }
-      router.push("/app/explore");
+      router.push("/app/agent");
     } finally {
       setActionLoading(null);
     }
   }, [router, workspace?.id]);
 
   const openDeepAgent = useCallback(() => {
-    router.push("/app/deep-agent");
+    router.push("/app/agent");
   }, [router]);
 
   const createVectorIndex = useCallback(async () => {
@@ -471,7 +471,7 @@ export default function AppDashboardPage() {
             <Panel className="p-3">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Sessions</p>
-                <Link href="/app/explore" className="text-xs text-text-muted hover:text-text-primary">View all</Link>
+                <Link href="/app/agent" className="text-xs text-text-muted hover:text-text-primary">View all</Link>
               </div>
               {loading ? (
                 <LoadingState message="Loading sessions" />
@@ -482,7 +482,7 @@ export default function AppDashboardPage() {
                   {recentSessions.map((session) => (
                     <Link
                       key={session.id}
-                      href="/app/explore"
+                      href="/app/agent"
                       className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-xs text-text-muted transition hover:border-border-strong hover:text-text-primary"
                     >
                       <div className="min-w-0">

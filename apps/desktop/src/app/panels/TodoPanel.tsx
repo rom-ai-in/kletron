@@ -38,10 +38,10 @@ export function TodoPanel({ items, onAdd, onToggle, onRemove }: TodoPanelProps) 
             value={newTask}
             onChange={(e) => setNewTask(e.target.value)}
             placeholder="Add a task…"
-            className="flex-1 rounded-md bg-bg-surface border border-border-subtle py-1.5 px-2 text-xs text-text-primary placeholder:text-text-muted focus:border-border-strong focus:outline-none"
+            className="flex-1 rounded-md glass-input py-1.5 px-2 text-xs text-text-primary placeholder:text-text-muted focus:border-glass-border-strong focus:outline-none"
             onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
           />
-          <button type="button" onClick={handleSubmit} disabled={!newTask.trim()} className="p-1.5 rounded-md bg-bg-elevated border border-border-subtle text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors disabled:opacity-40">
+          <button type="button" onClick={handleSubmit} disabled={!newTask.trim()} className="p-1.5 rounded-md glass-card text-text-muted hover:text-text-primary hover:bg-glass-cardHover transition-colors disabled:opacity-40">
             <Plus className="w-3.5 h-3.5" />
           </button>
         </div>

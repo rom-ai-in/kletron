@@ -49,6 +49,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const response = await fetch('/api/auth/me');
             if (!response.ok) {
                 console.error('Failed to fetch profile:', response.statusText);
+                // Mark as fetched even on HTTP error to prevent retry flood
+                fetchedRef.current = userId;
                 return;
             }
             const data = await response.json();
@@ -61,10 +63,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     created_at: data.profile.createdAt,
                     updated_at: data.profile.updatedAt,
                 });
-                fetchedRef.current = userId;
             }
+            // Always mark as fetched after a successful HTTP response,
+            // even if profile is null — prevents retry loop on auth state changes
+            fetchedRef.current = userId;
         } catch (err) {
             console.error('Error fetching profile:', err);
+            // Only skip marking on network errors to allow genuine retries
         } finally {
             fetchingRef.current = null;
         }

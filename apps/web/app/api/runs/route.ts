@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import { chainExecutor } from "@numezis/server/services/chainExecutor";
+import { automationExecutor } from "@numezis/server/services/automationExecutor";
 import { getDb } from "@numezis/server/lib/db";
 import { ObjectId } from "mongodb";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
@@ -8,7 +8,7 @@ import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceS
 
 /**
  * GET /api/runs
- * List all execution runs across all campaigns
+ * List all execution runs across all automations
  */
 export async function GET(req: NextRequest) {
     const auth = await requireAppRouteAuth(req);
@@ -29,19 +29,19 @@ export async function GET(req: NextRequest) {
         const db = await getDb();
         const searchParams = req.nextUrl.searchParams;
         const limit = parseInt(searchParams.get("limit") || "50");
-        const campaignId = searchParams.get("campaignId") || undefined;
+        const automationId = searchParams.get("automationId") || undefined;
 
         // Fetch all runs, sorted by start date
         const runsQuery: any = {};
-        if (campaignId) {
+        if (automationId) {
             try {
-                runsQuery.chainId = new ObjectId(campaignId);
+                runsQuery.chainId = new ObjectId(automationId);
             } catch {
-                return NextResponse.json({ error: "Invalid campaignId" }, { status: 400 });
+                return NextResponse.json({ error: "Invalid automationId" }, { status: 400 });
             }
-            const chain = await chainExecutor.getChain(campaignId, workspaceId);
-            if (!chain) {
-                return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+            const automation = await automationExecutor.getAutomation(automationId, workspaceId);
+            if (!automation) {
+                return NextResponse.json({ error: "Automation not found" }, { status: 404 });
             }
         }
         runsQuery.workspaceId = new ObjectId(workspaceId);
@@ -51,12 +51,12 @@ export async function GET(req: NextRequest) {
             .limit(limit)
             .toArray();
 
-        // Optionally, we could join with campaign names here to make the UI simpler
+        // Optionally, we could join with automation names here to make the UI simpler
         const enrichedRuns = await Promise.all(runs.map(async (run) => {
-            const chain = await chainExecutor.getChain(run.chainId.toString(), workspaceId);
+            const automation = await automationExecutor.getAutomation(run.chainId.toString(), workspaceId);
             return {
                 ...run,
-                chainName: chain?.name || "Unknown Campaign"
+                automationName: automation?.name || "Unknown Automation"
             };
         }));
 

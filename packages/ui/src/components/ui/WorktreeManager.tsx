@@ -1,12 +1,16 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Plus, Trash2, GitBranch, FolderGit, Check } from 'lucide-react';
+import { Plus, Trash2, GitBranch, FolderGit, Check, Bot, Zap } from 'lucide-react';
 
 export interface Worktree {
     path: string;
     branch: string;
     isMain: boolean;
+    /** Thread ID of the agent using this worktree */
+    agentThreadId?: string;
+    /** Display name of the agent using this worktree */
+    agentLabel?: string;
 }
 
 export interface WorktreeManagerProps {
@@ -15,6 +19,8 @@ export interface WorktreeManagerProps {
     onAdd?: (path: string, branch: string) => void;
     onRemove?: (path: string) => void;
     onSwitch?: (path: string) => void;
+    /** Create a worktree with auto-generated branch for an agent */
+    onCreateForAgent?: (threadId: string) => void;
     className?: string;
 }
 
@@ -24,6 +30,7 @@ export function WorktreeManager({
     onAdd,
     onRemove,
     onSwitch,
+    onCreateForAgent,
     className = '',
 }: WorktreeManagerProps) {
     const [showAdd, setShowAdd] = useState(false);
@@ -63,10 +70,21 @@ export function WorktreeManager({
                                     )}
                                 </div>
                                 <div className="text-[10px] text-text-muted truncate font-mono">{worktree.path}</div>
+                                {worktree.agentLabel && (
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                        <Bot className="w-2.5 h-2.5 text-blue-400" />
+                                        <span className="text-[9px] text-blue-400 font-medium">{worktree.agentLabel}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <div className="flex items-center gap-1">
                             {isActive && <Check className="w-4 h-4 text-status-success-text" />}
+                            {worktree.agentThreadId && (
+                                <span className="px-1 py-0.5 rounded text-[9px] bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                    <Bot className="w-2.5 h-2.5 inline" /> isolated
+                                </span>
+                            )}
                             {!worktree.isMain && (
                                 <button
                                     type="button"
@@ -91,6 +109,18 @@ export function WorktreeManager({
                 <div className="rounded-md border border-border-subtle px-3 py-4 text-xs text-text-muted text-center">
                     No worktrees configured.
                 </div>
+            )}
+
+            {/* Quick create for agent isolation */}
+            {onCreateForAgent && (
+                <button
+                    type="button"
+                    onClick={() => onCreateForAgent('current')}
+                    className="flex items-center gap-2 w-full rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-blue-400 hover:bg-blue-500/10 transition-colors"
+                >
+                    <Zap className="w-3.5 h-3.5" />
+                    Create Isolated Worktree for Agent
+                </button>
             )}
 
             {showAdd ? (

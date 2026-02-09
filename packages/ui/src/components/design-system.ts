@@ -161,6 +161,12 @@ export { ThoughtsPanel } from './Agent/ThoughtsPanel';
 export { TokenUsageDisplay, DurationDisplay, formatTokenCount, formatDuration } from './Agent/metrics';
 export type { TokenUsageSummary } from './Agent/metrics';
 
+// Timeline Panel and Event Card (extracted from deep-agent for unified Agent page)
+export { TimelinePanel, PhaseItem } from './Agent/TimelinePanel';
+export type { TimelinePanelProps } from './Agent/TimelinePanel';
+export { EventCard } from './Agent/EventCard';
+export type { EventCardProps } from './Agent/EventCard';
+
 // Chat Message Components
 export { MessageBubble, SystemMessage, CopyButton } from './Agent/ChatMessage';
 export type { MessageBubbleProps, MessageRole, SystemMessageProps, CopyButtonProps } from './Agent/ChatMessage';
@@ -181,14 +187,6 @@ export type { MessageListProps, ChatEvent, RenderItem } from './Agent/MessageLis
 export { AgentTaskQueue } from './Agent/AgentTaskQueue';
 export type { AgentTaskQueueProps, AgentTask, AgentTaskStatus } from './Agent/AgentTaskQueue';
 
-// Agent Panel (side panel for agent interactions)
-export { AgentPanel } from './Agent/AgentPanel';
-export type { AgentPanelProps } from './Agent/AgentPanel';
-
-// Agent Drawer (full-screen drawer for agent sessions)
-export { AgentDrawer } from './Agent/AgentDrawer';
-export type { AgentDrawerProps } from './Agent/AgentDrawer';
-
 // Conversation List (sidebar conversation history)
 export { ConversationList } from './Agent/ConversationList';
 export type { ConversationListProps } from './Agent/ConversationList';
@@ -197,17 +195,13 @@ export type { ConversationListProps } from './Agent/ConversationList';
 export { AgentAuditModal } from './Agent/AgentAuditModal';
 export type { AgentAuditModalProps } from './Agent/AgentAuditModal';
 
-// Active Session (live agent chat session)
-export { ActiveSession } from './Agent/ActiveSession';
-export type { ActiveSessionProps } from './Agent/ActiveSession';
-
-// Agent Session Hooks (extracted business logic)
+// Agent Session Hooks (unified)
 export { useAgentSession } from '../hooks/useAgentSession';
 export type { UseAgentSessionReturn } from '../hooks/useAgentSession';
-export { useAgentStream, normalizeMessage } from '../hooks/useAgentStream';
-export type { Message, StreamStatus, UseAgentStreamOptions, UseAgentStreamReturn } from '../hooks/useAgentStream';
-export { useAgentEdits } from '../hooks/useAgentEdits';
-export type { PendingEdit, UseAgentEditsOptions, UseAgentEditsReturn } from '../hooks/useAgentEdits';
+export { useSessionStream, normalizeMessage } from '../hooks/useSessionStream';
+export type { Message, StreamStatus, TokenUsageForDisplay, UseSessionStreamOptions, UseSessionStreamReturn } from '../hooks/useSessionStream';
+export { useSessionEdits } from '../hooks/useSessionEdits';
+export type { SessionPendingEdit, UseSessionEditsOptions, UseSessionEditsReturn } from '../hooks/useSessionEdits';
 
 // =============================================================================
 // EDITOR COMPONENTS (Monaco-based)

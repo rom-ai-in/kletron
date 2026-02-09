@@ -13,7 +13,7 @@ describe('subscriptionService', () => {
                 agentGraphs: 3,
                 semanticIndexFiles: 10000,
                 hostedTokensPerMonth: 0,
-                hasAdvancedCampaigns: false,
+                hasAdvancedAutomations: false,
                 hasAntiDrift: false,
                 hasPrioritySupport: false,
                 hasTeamCollaboration: false,
@@ -28,7 +28,7 @@ describe('subscriptionService', () => {
             expect(limits.agentGraphs).toBe(-1); // unlimited
             expect(limits.semanticIndexFiles).toBe(100000);
             expect(limits.hostedTokensPerMonth).toBe(500000);
-            expect(limits.hasAdvancedCampaigns).toBe(true);
+            expect(limits.hasAdvancedAutomations).toBe(true);
             expect(limits.hasAntiDrift).toBe(true);
             expect(limits.hasPrioritySupport).toBe(true);
             expect(limits.hasTeamCollaboration).toBe(false);
@@ -42,7 +42,7 @@ describe('subscriptionService', () => {
             expect(limits.agentGraphs).toBe(-1); // unlimited
             expect(limits.semanticIndexFiles).toBe(-1); // unlimited
             expect(limits.hostedTokensPerMonth).toBe(1000000);
-            expect(limits.hasAdvancedCampaigns).toBe(true);
+            expect(limits.hasAdvancedAutomations).toBe(true);
             expect(limits.hasAntiDrift).toBe(true);
             expect(limits.hasPrioritySupport).toBe(true);
             expect(limits.hasTeamCollaboration).toBe(true);

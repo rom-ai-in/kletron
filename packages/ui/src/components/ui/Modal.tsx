@@ -40,7 +40,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, fullHe
             onMouseDown={handleOverlayClick}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
         >
-            <div className="relative flex h-full w-full max-w-4xl max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-xl border border-border-subtle bg-bg-elevated shadow-xl">
+            <div className="relative flex h-full w-full max-w-4xl max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-xl glass-elevated">
                 {/* Header */}
                 <div className="flex items-center justify-between gap-3 border-b border-border-subtle bg-bg-elevated px-6 py-4">
                     <div className="min-w-0 flex-1 mr-4">

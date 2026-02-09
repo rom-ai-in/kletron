@@ -1,10 +1,10 @@
 import { agentGraphService } from "@numezis/server/services/agentGraphService";
-import { buildCampaignsGraph } from "@numezis/server/services/agentGraphPresets";
+import { buildAutomationsGraph } from "@numezis/server/services/agentGraphPresets";
 import * as db from "@numezis/server/lib/db";
 
 async function main() {
-  const graph = buildCampaignsGraph();
-  const existing = await agentGraphService.listGraphs({ search: "Campaigns" });
+  const graph = buildAutomationsGraph();
+  const existing = await agentGraphService.listGraphs({ search: "Automations" });
   const matches = existing.filter((g) => g.name === graph.name);
   const keep = matches[0];
   if (keep?._id) {
@@ -39,7 +39,7 @@ async function main() {
 main()
   .catch((err) => {
     // eslint-disable-next-line no-console
-    console.error("Failed to seed campaigns graph:", err);
+    console.error("Failed to seed automations graph:", err);
     process.exitCode = 1;
   })
   .finally(async () => {

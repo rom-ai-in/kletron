@@ -40,7 +40,7 @@ export default function TermsOfServicePage() {
                             <li>AI-assisted code generation and analysis</li>
                             <li>Visual agent graph editor</li>
                             <li>Semantic code indexing</li>
-                            <li>Multi-repository campaign management</li>
+                            <li>Multi-repository automation management</li>
                             <li>Integration with third-party AI providers (BYOK model)</li>
                         </ul>
                     </Section>

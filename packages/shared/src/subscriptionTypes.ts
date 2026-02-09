@@ -7,7 +7,7 @@ export interface PlanLimits {
   agentGraphs: number;
   semanticIndexFiles: number;
   hostedTokensPerMonth: number;
-  hasAdvancedCampaigns: boolean;
+  hasAdvancedAutomations: boolean;
   hasAntiDrift: boolean;
   hasPrioritySupport: boolean;
   hasTeamCollaboration: boolean;

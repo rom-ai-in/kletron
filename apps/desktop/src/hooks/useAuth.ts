@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthState, LoginSession } from "../types";
 import {
   AUTH_STORAGE_KEY,
@@ -32,61 +32,97 @@ export function useAuth(backendUrlTrimmed: string, backendUrlValid: boolean) {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginPending, setLoginPending] = useState(false);
 
-  // Refresh tokens
-  async function refreshTokens(): Promise<AuthState | null> {
-    if (!auth?.refreshToken) return null;
-    try {
-      const res = await fetch(`${backendUrlTrimmed}/api/auth/ide-refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken: auth.refreshToken }),
-      });
-      const data = await res.json();
-      if (!data?.success) return null;
-      const updated: AuthState = {
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken,
-        expiresAt: data.expiresAt,
-        user: data.user || auth.user,
-      };
-      setAuth(updated);
-      saveAuth(updated);
-      return updated;
-    } catch {
-      return null;
-    }
-  }
+  // Refs for stable access in callbacks
+  const authRef = useRef(auth);
+  authRef.current = auth;
+  const backendUrlRef = useRef(backendUrlTrimmed);
+  backendUrlRef.current = backendUrlTrimmed;
 
-  async function getAccessToken(): Promise<string | null> {
-    if (!auth) return null;
-    const shouldRefresh = Date.now() > auth.expiresAt - 60_000;
-    if (!shouldRefresh) return auth.accessToken;
-    const refreshed = await refreshTokens();
-    return refreshed?.accessToken ?? null;
-  }
+  // Deduplicate concurrent token refreshes
+  const refreshPromiseRef = useRef<Promise<AuthState | null> | null>(null);
 
-  async function loadUser() {
-    if (!auth?.accessToken) return;
-    try {
-      const res = await fetch(`${backendUrlTrimmed}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${auth.accessToken}` },
-      });
-      if (res.ok) {
+  // Track which access token we already loaded the user for
+  const userLoadedTokenRef = useRef<string | null>(null);
+
+  // Refresh tokens (deduplicates concurrent calls)
+  const refreshTokens = useCallback(async (): Promise<AuthState | null> => {
+    // Return in-flight promise to avoid concurrent refreshes
+    if (refreshPromiseRef.current) return refreshPromiseRef.current;
+
+    const current = authRef.current;
+    if (!current?.refreshToken) return null;
+
+    const promise = (async (): Promise<AuthState | null> => {
+      try {
+        const res = await fetch(`${backendUrlRef.current}/api/auth/ide-refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken: current.refreshToken }),
+        });
         const data = await res.json();
-        const updated = { ...auth, user: data.user ?? auth.user };
+        if (!data?.success) return null;
+        const updated: AuthState = {
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          expiresAt: data.expiresAt,
+          user: data.user || current.user,
+        };
         setAuth(updated);
         saveAuth(updated);
+        return updated;
+      } catch {
+        return null;
+      } finally {
+        refreshPromiseRef.current = null;
       }
-    } catch {
-      // ignore
-    }
-  }
+    })();
 
-  // Load user on token change
+    refreshPromiseRef.current = promise;
+    return promise;
+  }, []);
+
+  const getAccessToken = useCallback(async (): Promise<string | null> => {
+    const current = authRef.current;
+    if (!current) return null;
+    const shouldRefresh = Date.now() > current.expiresAt - 60_000;
+    if (!shouldRefresh) return current.accessToken;
+    const refreshed = await refreshTokens();
+    return refreshed?.accessToken ?? null;
+  }, [refreshTokens]);
+
+  // Load user profile once per access token
   useEffect(() => {
-    if (auth?.accessToken) {
-      void loadUser();
-    }
+    if (!auth?.accessToken) return;
+    // Skip if we already loaded for this token
+    if (userLoadedTokenRef.current === auth.accessToken) return;
+    userLoadedTokenRef.current = auth.accessToken;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(`${backendUrlTrimmed}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${auth.accessToken}` },
+        });
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          const newUser = data.user ?? null;
+          const currentAuth = authRef.current;
+          // Only update state if user data actually changed
+          if (currentAuth && JSON.stringify(newUser) !== JSON.stringify(currentAuth.user)) {
+            const updated = { ...currentAuth, user: newUser };
+            setAuth(updated);
+            saveAuth(updated);
+          }
+        }
+      } catch {
+        // Allow retry on network error
+        if (!cancelled) userLoadedTokenRef.current = null;
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, [auth?.accessToken, backendUrlTrimmed]);
 
   // Clear login pending when auth arrives

@@ -4,14 +4,13 @@ import { ObjectId } from "mongodb";
 
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
-import { ConversationService } from "@numezis/server/services/agent/ConversationService";
 import { agentGraphService } from "@numezis/server/services/agentGraphService";
 import { getDb } from "@numezis/server/lib/db";
-import { chainExecutor } from "@numezis/server/services/chainExecutor";
+import { automationExecutor } from "@numezis/server/services/automationExecutor";
 
 export type HistoryRunItem = {
   id: string;
-  type: "explore" | "deep_agent" | "graph" | "campaign" | "drift";
+  type: "agent" | "graph" | "automation" | "drift";
   title: string;
   status: string;
   startedAt: string;
@@ -19,13 +18,15 @@ export type HistoryRunItem = {
   link: string;
   graphId?: string;
   graphName?: string;
-  campaignId?: string;
+  automationId?: string;
   workspaceId: string;
 };
 
 const normalizeType = (value?: string) => {
   const t = (value || "").toLowerCase();
-  if (t === "explore" || t === "deep_agent" || t === "graph" || t === "campaign" || t === "drift") return t;
+  if (t === "agent" || t === "graph" || t === "automation" || t === "drift") return t;
+  // Legacy compatibility
+  if (t === "explore" || t === "deep_agent") return "agent";
   return "all";
 };
 
@@ -50,10 +51,11 @@ export async function GET(req: NextRequest) {
   const limitParam = searchParams.get("limit");
   const limit = limitParam ? Math.max(1, Math.min(100, Number(limitParam))) : 50;
   const graphId = searchParams.get("graphId") || undefined;
-  const campaignId = searchParams.get("campaignId") || undefined;
+  const automationId = searchParams.get("automationId") || undefined;
 
   const workspaceId = workspace._id.toString();
   const results: HistoryRunItem[] = [];
+  console.log(`[history/runs] workspaceId=${workspaceId}, type=${typeFilter}, status=${statusFilter}, q=${queryFilter}, limit=${limit}`);
 
   const shouldIncludeType = (type: HistoryRunItem["type"]) => {
     if (typeFilter === "all") return true;
@@ -61,28 +63,10 @@ export async function GET(req: NextRequest) {
   };
 
   try {
-    if (typeFilter === "all" || typeFilter === "explore") {
-      const service = new ConversationService(workspaceId);
-      const conversations = await service.list();
-      for (const conv of conversations) {
-        const item: HistoryRunItem = {
-          id: conv.id,
-          type: "explore",
-          title: conv.title || "Explore Session",
-          status: conv.status,
-          startedAt: conv.createdAt,
-          endedAt: conv.status === "archived" ? conv.updatedAt : null,
-          link: `/app/explore?conversationId=${encodeURIComponent(conv.id)}`,
-          workspaceId,
-        };
-        results.push(item);
-      }
-    }
-
     const db = await getDb();
     const workspaceObjectId = new ObjectId(workspaceId);
 
-    if (typeFilter === "all" || typeFilter === "deep_agent" || typeFilter === "graph" || typeFilter === "campaign" || typeFilter === "drift") {
+    if (typeFilter === "all" || typeFilter === "agent" || typeFilter === "graph" || typeFilter === "automation" || typeFilter === "drift") {
       const runQuery: any = { workspaceId: workspaceObjectId };
       if (graphId) {
         if (!ObjectId.isValid(graphId)) {
@@ -90,6 +74,7 @@ export async function GET(req: NextRequest) {
         }
         runQuery.graphId = new ObjectId(graphId);
       }
+      console.log(`[history/runs] Querying agent_graph_runs:`, JSON.stringify(runQuery, (_, v) => v instanceof ObjectId ? v.toString() : v));
 
       const graphRuns = await db
         .collection("agent_graph_runs")
@@ -97,6 +82,7 @@ export async function GET(req: NextRequest) {
         .sort({ startedAt: -1 })
         .limit(Math.min(limit * 2, 200))
         .toArray();
+      console.log(`[history/runs] Found ${graphRuns.length} graph runs`);
 
       const graphs = await agentGraphService.listGraphs();
       const graphMap = new Map<string, { name: string; category?: string }>();
@@ -109,26 +95,26 @@ export async function GET(req: NextRequest) {
       for (const run of graphRuns) {
         const runGraphId = run.graphId?.toString?.() || "";
         const graphInfo = graphMap.get(runGraphId);
-        const category = (graphInfo?.category || "graph") as HistoryRunItem["type"];
+        const category = (graphInfo?.category || "graph") as string;
         const runType: HistoryRunItem["type"] =
-          category === "deep_agent"
-            ? "deep_agent"
-            : category === "campaign"
-            ? "campaign"
+          category === "deep_agent" || category === "graph"
+            ? "agent"
+            : category === "automation"
+            ? "automation"
             : category === "drift"
             ? "drift"
-            : "graph";
+            : "agent";
 
         if (!shouldIncludeType(runType)) continue;
 
         results.push({
           id: run._id?.toString?.() ?? "",
           type: runType,
-          title: run?.state?.userInput || run?.state?.mission || graphInfo?.name || "Agent Graph Run",
+          title: run?.title || run?.state?.userInput || run?.state?.mission || graphInfo?.name || "Agent Session",
           status: run.status,
           startedAt: run.startedAt ? new Date(run.startedAt).toISOString() : "",
           endedAt: run.endedAt ? new Date(run.endedAt).toISOString() : null,
-          link: `/app/agent-graphs/${runGraphId}/runs/${run._id?.toString?.() ?? ""}`,
+          link: `/app/agent?sessionId=${run._id?.toString?.() ?? ""}`,
           graphId: runGraphId,
           graphName: graphInfo?.name,
           workspaceId,
@@ -136,13 +122,13 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (typeFilter === "all" || typeFilter === "campaign") {
+    if (typeFilter === "all" || typeFilter === "automation") {
       const runQuery: any = { workspaceId: workspaceObjectId };
-      if (campaignId) {
-        if (!ObjectId.isValid(campaignId)) {
-          return NextResponse.json({ error: "Invalid campaignId" }, { status: 400 });
+      if (automationId) {
+        if (!ObjectId.isValid(automationId)) {
+          return NextResponse.json({ error: "Invalid automationId" }, { status: 400 });
         }
-        runQuery.chainId = new ObjectId(campaignId);
+        runQuery.chainId = new ObjectId(automationId);
       }
 
       const auditRuns = await db
@@ -152,33 +138,34 @@ export async function GET(req: NextRequest) {
         .limit(Math.min(limit * 2, 200))
         .toArray();
 
-      const chains = await chainExecutor.listChains({ workspaceId });
-      const chainMap = new Map<string, string>();
-      for (const chain of chains) {
-        if (chain._id) chainMap.set(String(chain._id), chain.name || "Campaign");
+      const automations = await automationExecutor.listAutomations({ workspaceId });
+      const automationMap = new Map<string, string>();
+      for (const automation of automations) {
+        if (automation._id) automationMap.set(String(automation._id), automation.name || "Automation");
       }
 
       for (const run of auditRuns) {
-        const chainId = run.chainId?.toString?.() || "";
+        const runAutomationId = run.chainId?.toString?.() || "";
         results.push({
           id: run._id?.toString?.() ?? "",
-          type: "campaign",
-          title: chainMap.get(chainId) || "Campaign Run",
+          type: "automation",
+          title: automationMap.get(runAutomationId) || "Automation Run",
           status: run.status,
           startedAt: run.startedAt ? new Date(run.startedAt).toISOString() : "",
           endedAt: run.endedAt ? new Date(run.endedAt).toISOString() : null,
           link: `/app/runs/${run._id?.toString?.() ?? ""}`,
-          campaignId: chainId,
+          automationId: runAutomationId,
           workspaceId,
         });
       }
     }
   } catch (error) {
-    console.error("[API /api/history/runs GET] Error:", error);
+    console.error("[history/runs] ✗ Error:", error);
     // Fail soft to avoid breaking UI on transient DB issues.
     return NextResponse.json({ runs: [] }, { status: 200 });
   }
 
+  console.log(`[history/runs] Total results before filtering: ${results.length}`);
   const filtered = results.filter((item) => {
     if (!shouldIncludeType(item.type)) return false;
     if (statusFilter && item.status?.toLowerCase() !== statusFilter.toLowerCase()) return false;
@@ -195,5 +182,6 @@ export async function GET(req: NextRequest) {
     return bTime - aTime;
   });
 
+  console.log(`[history/runs] Returning ${Math.min(filtered.length, limit)} runs (${filtered.length} after filter)`);
   return NextResponse.json({ runs: filtered.slice(0, limit) }, { status: 200 });
 }

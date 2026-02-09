@@ -29,7 +29,7 @@ export interface PlanLimits {
     agentGraphs: number;
     semanticIndexFiles: number;
     hostedTokensPerMonth: number;
-    hasAdvancedCampaigns: boolean;
+    hasAdvancedAutomations: boolean;
     hasAntiDrift: boolean;
     hasPrioritySupport: boolean;
     hasTeamCollaboration: boolean;
@@ -43,7 +43,7 @@ const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
         agentGraphs: 3,
         semanticIndexFiles: 10000,
         hostedTokensPerMonth: 0,
-        hasAdvancedCampaigns: false,
+        hasAdvancedAutomations: false,
         hasAntiDrift: false,
         hasPrioritySupport: false,
         hasTeamCollaboration: false,
@@ -54,7 +54,7 @@ const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
         agentGraphs: -1, // unlimited
         semanticIndexFiles: 100000,
         hostedTokensPerMonth: 500000,
-        hasAdvancedCampaigns: true,
+        hasAdvancedAutomations: true,
         hasAntiDrift: true,
         hasPrioritySupport: true,
         hasTeamCollaboration: false,
@@ -65,7 +65,7 @@ const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
         agentGraphs: -1, // unlimited
         semanticIndexFiles: -1, // unlimited
         hostedTokensPerMonth: 1000000,
-        hasAdvancedCampaigns: true,
+        hasAdvancedAutomations: true,
         hasAntiDrift: true,
         hasPrioritySupport: true,
         hasTeamCollaboration: true,

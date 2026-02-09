@@ -20,7 +20,7 @@ export const AgentAuditModal: React.FC<AgentAuditModalProps> = ({ open, onClose,
             setError(null);
             // Fetch the full run data. We might need a specific run endpoint or just use the agent endpoint
             // which likely returns the full session object.
-            fetch(`/api/agent/${conversationId}`)
+            fetch(`/api/sessions/${conversationId}`)
                 .then(res => {
                     if (!res.ok) throw new Error("Failed to fetch audit logs");
                     return res.json();

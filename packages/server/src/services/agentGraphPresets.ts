@@ -219,23 +219,17 @@ export function buildSimpleReactAgentGraph(): Omit<AgentGraphDefinition, "_id" |
       label: simpleReactPhaseLabel,
       react: {
         systemPrompt: simpleReactSystemPrompt,
-        userPromptTemplate: [
-          "Mission / question is in `state.mission`.",
-          "Current state:",
-          "{{state}}",
-          "",
-          "Answer by outputting a strict JSON object (generic JSON).",
-        ].join("\n"),
+        userPromptTemplate: "{{mission}}",
         toolNames: simpleReactToolNames,
         llmSelection: { provider: "azure" },
       },
-      output: { schemaId: "generic_json" },
+      output: { schemaId: "conversational" },
     },
   ];
 
   return {
     name: "Simple ReAct (agent graph)",
-    description: "Single-node ReAct agent graph (equivalent to the hard-coded simple ReAct workflow).",
+    description: "Single-node ReAct agent graph — conversational AI with tool access.",
     category: "graph",
     nodes,
     edges: [],
@@ -596,15 +590,15 @@ export function buildDriftAnalysisGraph(): Omit<AgentGraphDefinition, "_id" | "c
   };
 }
 
-export function buildCampaignsGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
+export function buildAutomationsGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
   const nodes: AgentGraphNode[] = [
     {
-      id: "campaign_brief",
-      label: "Campaign Brief",
+      id: "automation_brief",
+      label: "Automation Brief",
       kind: "react",
       react: {
         systemPrompt: [
-          "You are the Campaign Brief agent.",
+          "You are the Automation Brief agent.",
           "Capture objective, audience, and success metrics.",
           CURSOR_JSON_RULES,
           "",
@@ -622,12 +616,12 @@ export function buildCampaignsGraph(): Omit<AgentGraphDefinition, "_id" | "creat
       output: { schemaId: "cursor_spec_output", statePath: "state", stateMerge: true }
     },
     {
-      id: "campaign_plan",
-      label: "Campaign Plan",
+      id: "automation_plan",
+      label: "Automation Plan",
       kind: "react",
       react: {
         systemPrompt: [
-          "You are the Campaign Planner.",
+          "You are the Automation Planner.",
           "Create stages, deliverables, and a task queue.",
           CURSOR_JSON_RULES,
           "",
@@ -649,12 +643,12 @@ export function buildCampaignsGraph(): Omit<AgentGraphDefinition, "_id" | "creat
       output: { schemaId: "cursor_planner_output", statePath: "state", stateMerge: true }
     },
     {
-      id: "campaign_execute",
-      label: "Campaign Execution",
+      id: "automation_execute",
+      label: "Automation Execution",
       kind: "react",
       react: {
         systemPrompt: [
-          "You are the Campaign Executor.",
+          "You are the Automation Executor.",
           "Use tools to gather assets, update tasks, and produce deliverables.",
           TOOL_PREFERENCE_GUIDANCE,
           CURSOR_JSON_RULES,
@@ -677,12 +671,12 @@ export function buildCampaignsGraph(): Omit<AgentGraphDefinition, "_id" | "creat
       output: { schemaId: "cursor_coder_output", statePath: "state", stateMerge: true }
     },
     {
-      id: "campaign_report",
-      label: "Campaign Report",
+      id: "automation_report",
+      label: "Automation Report",
       kind: "react",
       react: {
         systemPrompt: [
-          "You are the Campaign Reporter.",
+          "You are the Automation Reporter.",
           "Summarize deliverables, results, and next steps.",
           CURSOR_JSON_RULES,
           "",
@@ -704,15 +698,15 @@ export function buildCampaignsGraph(): Omit<AgentGraphDefinition, "_id" | "creat
   ];
 
   const edges = [
-    { id: "edge-campaign-brief-plan", source: "campaign_brief", target: "campaign_plan" },
-    { id: "edge-campaign-plan-execute", source: "campaign_plan", target: "campaign_execute" },
-    { id: "edge-campaign-execute-report", source: "campaign_execute", target: "campaign_report" },
+    { id: "edge-automation-brief-plan", source: "automation_brief", target: "automation_plan" },
+    { id: "edge-automation-plan-execute", source: "automation_plan", target: "automation_execute" },
+    { id: "edge-automation-execute-report", source: "automation_execute", target: "automation_report" },
   ];
 
   return {
-    name: "Campaigns (agent graph)",
-    description: "Campaign planning and execution graph with task tracking.",
-    category: "campaign",
+    name: "Automations (agent graph)",
+    description: "Automation planning and execution graph with task tracking.",
+    category: "automation",
     nodes,
     edges,
     execution: { mode: "dag" }
@@ -1518,17 +1512,11 @@ export function buildCoderAgentGraph(): Omit<AgentGraphDefinition, "_id" | "crea
       label: "Coder Agent",
       react: {
         systemPrompt: CODER_SYSTEM_PROMPT,
-        userPromptTemplate: [
-          "Mission / question is in `state.mission`.",
-          "Current state:",
-          "{{state}}",
-          "",
-          "Answer by outputting a strict JSON object (generic JSON).",
-        ].join("\n"),
+        userPromptTemplate: "{{mission}}",
         toolNames: CODER_AGENT_TOOLS,
         llmSelection: { provider: "azure" },
       },
-      output: { schemaId: "generic_json" },
+      output: { schemaId: "conversational" },
     },
   ];
 
@@ -1548,17 +1536,11 @@ export function buildExplorerAgentGraph(): Omit<AgentGraphDefinition, "_id" | "c
       label: "Explorer Agent",
       react: {
         systemPrompt: EXPLORER_SYSTEM_PROMPT,
-        userPromptTemplate: [
-          "Mission / question is in `state.mission`.",
-          "Current state:",
-          "{{state}}",
-          "",
-          "Answer by outputting a strict JSON object (generic JSON).",
-        ].join("\n"),
+        userPromptTemplate: "{{mission}}",
         toolNames: EXPLORER_AGENT_TOOLS,
         llmSelection: { provider: "azure" },
       },
-      output: { schemaId: "generic_json" },
+      output: { schemaId: "conversational" },
     },
   ];
 
@@ -1578,17 +1560,11 @@ export function buildPlannerAgentGraph(): Omit<AgentGraphDefinition, "_id" | "cr
       label: "Planner Agent",
       react: {
         systemPrompt: PLANNER_SYSTEM_PROMPT,
-        userPromptTemplate: [
-          "Mission / question is in `state.mission`.",
-          "Current state:",
-          "{{state}}",
-          "",
-          "Answer by outputting a strict JSON object (generic JSON).",
-        ].join("\n"),
+        userPromptTemplate: "{{mission}}",
         toolNames: PLANNER_AGENT_TOOLS,
         llmSelection: { provider: "azure" },
       },
-      output: { schemaId: "generic_json" },
+      output: { schemaId: "conversational" },
     },
   ];
 

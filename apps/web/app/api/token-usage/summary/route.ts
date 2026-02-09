@@ -13,7 +13,7 @@ import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceS
  * - from: ISO date string for start date filter
  * - to: ISO date string for end date filter
  * - runId: Filter by specific run
- * - chainId: Filter by specific campaign
+ * - automationId: Filter by specific automation
  * - provider: Filter by LLM provider
  * - model: Filter by model name
  */
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
             from: searchParams.get("from") ? new Date(searchParams.get("from")!) : undefined,
             to: searchParams.get("to") ? new Date(searchParams.get("to")!) : undefined,
             runId: searchParams.get("runId") ?? undefined,
-            chainId: searchParams.get("chainId") ?? undefined,
+            chainId: searchParams.get("automationId") ?? undefined,
             workspaceId: workspace._id.toString(),
             provider: searchParams.get("provider") as any ?? undefined,
             model: searchParams.get("model") ?? undefined,

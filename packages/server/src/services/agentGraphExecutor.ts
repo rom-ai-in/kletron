@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
+import { HumanMessage, SystemMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
 import type { AgentEvent, AgentEventKind, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent, AgentWorkflowAbortReason } from "@numezis/shared/types";
 import { streamReactAgentMessages, AgentWorkflowAbortError } from "@numezis/agent-core/reactAgentRunner";
 import { allMcpTools } from "@numezis/agent-core/tools/mcpTools";
@@ -133,6 +134,22 @@ const describeMessageContent = (message: BaseMessage) => {
     if (typeof message.content === "string") {
         return message.content;
     }
+    // Handle array content blocks (Claude format: [{type:"thinking",...},{type:"text",...}])
+    if (Array.isArray(message.content)) {
+        const textBlocks = (message.content as any[])
+            .filter((block) => block?.type === "text" && typeof block.text === "string")
+            .map((block) => block.text as string);
+        if (textBlocks.length > 0) {
+            return textBlocks.join("\n");
+        }
+        // Fallback: concatenate all string-like content, skip thinking blocks
+        const allText = (message.content as any[])
+            .filter((block) => block?.type !== "thinking")
+            .map((block) => (typeof block === "string" ? block : block?.text ?? ""))
+            .filter(Boolean)
+            .join("\n");
+        if (allText) return allText;
+    }
     if ((message as any).text && typeof (message as any).text === "string" && (message as any).text.trim()) {
         return (message as any).text;
     }
@@ -146,9 +163,128 @@ const describeMessageContent = (message: BaseMessage) => {
     return "";
 };
 
+// ─── Thinking / Reasoning extraction ─────────────────────────────────────────
+
+/**
+ * Extract structured thinking from a LangChain BaseMessage.
+ * Checks (in order):
+ * 1. Array content blocks with type:"thinking" (Claude extended thinking)
+ * 2. additional_kwargs fields (Claude thinking, OpenAI reasoning_content)
+ * 3. <think> blocks in text content (any model)
+ * Returns raw thinking strings (one per source block found).
+ */
+function extractThinkingFromMessage(message: BaseMessage): string[] {
+    const thoughts: string[] = [];
+
+    // 1. Array content blocks (Claude extended thinking format)
+    if (Array.isArray(message.content)) {
+        for (const block of message.content as any[]) {
+            if (block?.type === "thinking" && typeof block.thinking === "string" && block.thinking.trim()) {
+                thoughts.push(block.thinking.trim());
+            }
+        }
+    }
+
+    // 2. additional_kwargs — provider-specific thinking fields
+    const kwargs = (message as any).additional_kwargs;
+    if (kwargs && typeof kwargs === "object") {
+        // Anthropic / Claude
+        if (typeof kwargs.thinking === "string" && kwargs.thinking.trim()) {
+            thoughts.push(kwargs.thinking.trim());
+        }
+        // OpenAI reasoning models (o1, o3, etc.)
+        if (typeof kwargs.reasoning_content === "string" && kwargs.reasoning_content.trim()) {
+            thoughts.push(kwargs.reasoning_content.trim());
+        }
+        if (typeof kwargs.reasoning === "string" && kwargs.reasoning.trim() && !thoughts.some(t => t === kwargs.reasoning.trim())) {
+            thoughts.push(kwargs.reasoning.trim());
+        }
+    }
+
+    // 3. <think> blocks in text content (any model that embeds reasoning in tags)
+    const textContent = typeof message.content === "string" ? message.content : "";
+    if (textContent) {
+        const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
+        let match: RegExpExecArray | null;
+        while ((match = thinkRegex.exec(textContent)) !== null) {
+            if (match[1].trim()) {
+                thoughts.push(match[1].trim());
+            }
+        }
+    }
+
+    return thoughts;
+}
+
+/**
+ * Heuristic extraction of reasoning from plain-text assistant content.
+ * Applied when no structured thinking was found. Looks for:
+ * - "Final:" / "Answer:" markers (text before → thoughts, text after → cleaned content)
+ * - First paragraph with reasoning cue words (split it into thoughts)
+ * Returns the cleaned content and extracted thought strings.
+ */
+function extractThoughtsFromContent(content: string): { content: string; thoughts: string[] } {
+    if (!content) return { content, thoughts: [] };
+
+    const thoughts: string[] = [];
+    let cleaned = content;
+
+    const addThoughts = (block: string) => {
+        const lines = block.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const bulletLines = lines.filter((line) => /^([-*]|\d+\.|\d+\))\s+/.test(line));
+        if (bulletLines.length > 0) {
+            bulletLines.forEach((line) => {
+                thoughts.push(line.replace(/^([-*]|\d+\.|\d+\))\s+/, "").trim());
+            });
+            return;
+        }
+        if (lines.length > 1) {
+            thoughts.push(...lines);
+            return;
+        }
+        if (block.trim()) {
+            thoughts.push(block.trim());
+        }
+    };
+
+    // Strip <think> blocks (already extracted by extractThinkingFromMessage)
+    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
+    // Split on explicit Final/Answer markers
+    const finalRegex = /(?:^|\n)\s*(final|answer)\s*:\s*/i;
+    const finalMatch = cleaned.match(finalRegex);
+    if (finalMatch && finalMatch.index !== undefined) {
+        const before = cleaned.slice(0, finalMatch.index).trim();
+        const after = cleaned.slice(finalMatch.index + finalMatch[0].length).trim();
+        if (after && before) {
+            addThoughts(before);
+            cleaned = after;
+        }
+    }
+
+    // Heuristic: if first paragraph looks like reasoning, split it out
+    const cueRegex = /\b(we need to|we should|we have|the user|user wants|goal|plan|approach|next step|tool|call|let's|i will)\b/i;
+    const paragraphs = cleaned.split(/\n\s*\n/);
+    if (paragraphs.length >= 2) {
+        const first = paragraphs[0].trim();
+        const rest = paragraphs.slice(1).join("\n\n").trim();
+        if (rest && cueRegex.test(first)) {
+            addThoughts(first);
+            cleaned = rest;
+        }
+    }
+
+    // Safeguard: don't blank out content completely
+    if (!cleaned.trim() && thoughts.length > 0) {
+        cleaned = content.trim();
+    }
+
+    return { content: cleaned, thoughts };
+}
+
 const guessToolName = (message: BaseMessage) => {
     const extra = message as BaseMessage & {
-        additional_kwargs?: { function_call?: Record<string, unknown>; tool_calls?: Record<string, unknown>[] };
+        additional_kwargs?: { function_call?: Record<string, unknown>; tool_calls?: Record<string, unknown>[]; name?: string };
         tool_calls?: Record<string, unknown>[];
         name?: string;
     };
@@ -163,10 +299,51 @@ const guessToolName = (message: BaseMessage) => {
         if (typeof first?.function?.name === "string") return first.function.name;
         return undefined;
     }
-    if (message.type === "tool" && typeof extra.name === "string" && extra.name) {
-        return extra.name;
+    // ToolMessage: check direct name, then additional_kwargs.name
+    if (message.type === "tool") {
+        if (typeof extra.name === "string" && extra.name) return extra.name;
+        if (typeof extra.additional_kwargs?.name === "string" && extra.additional_kwargs.name) return extra.additional_kwargs.name;
     }
     return undefined;
+};
+
+/**
+ * Extract ALL tool calls from a multi-tool-call AIMessage.
+ * Returns an array of { name, args, toolCallId } for each tool call.
+ * Returns empty array if the message has no tool calls.
+ */
+const extractAllToolCalls = (message: BaseMessage): Array<{ name: string; args: string; toolCallId?: string }> => {
+    const extra = message as BaseMessage & {
+        additional_kwargs?: {
+            function_call?: { name?: string; arguments?: unknown };
+            tool_calls?: Array<{ id?: string; name?: string; args?: unknown; arguments?: unknown; function?: { name?: string; arguments?: unknown } }>;
+        };
+        tool_calls?: Array<{ id?: string; name?: string; args?: unknown; arguments?: unknown; function?: { name?: string; arguments?: unknown } }>;
+    };
+    const result: Array<{ name: string; args: string; toolCallId?: string }> = [];
+
+    // Check LangChain tool_calls (parsed format)
+    const toolCalls = extra.tool_calls ?? extra.additional_kwargs?.tool_calls;
+    if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+        for (const tc of toolCalls) {
+            const name = typeof tc.name === "string" ? tc.name : typeof tc.function?.name === "string" ? tc.function.name : undefined;
+            if (!name) continue;
+            const rawArgs = tc.args ?? tc.arguments ?? tc.function?.arguments;
+            const args = typeof rawArgs === "string" ? rawArgs : rawArgs ? JSON.stringify(rawArgs) : "{}";
+            result.push({ name, args, toolCallId: tc.id ? String(tc.id) : undefined });
+        }
+        return result;
+    }
+
+    // Legacy function_call format (only one)
+    const functionCall = extra.additional_kwargs?.function_call;
+    if (functionCall?.name) {
+        const rawArgs = functionCall.arguments;
+        const args = typeof rawArgs === "string" ? rawArgs : rawArgs ? JSON.stringify(rawArgs) : "{}";
+        result.push({ name: functionCall.name, args });
+    }
+
+    return result;
 };
 
 const extractToolArgs = (message: BaseMessage): string | undefined => {
@@ -228,25 +405,48 @@ function createAgentEvent(
     const role = typeof (message as any).role === "string" ? (message as any).role : message.type ?? "assistant";
     const normalizedRole = role.toLowerCase();
     const messageType = typeof message.type === "string" ? message.type.toLowerCase() : "";
-    const hasToolCall =
-        messageType === "tool" ||
+    const isToolResult = messageType === "tool";
+    const hasToolCalls =
         Boolean(extra.additional_kwargs?.function_call) ||
         Boolean(extra.additional_kwargs?.tool_calls?.length) ||
         Boolean(extra.tool_calls?.length);
     const isSystemRole = normalizedRole === "system" || messageType === "system";
     const isUserRole =
         normalizedRole === "user" || normalizedRole === "human" || messageType === "user" || messageType === "human";
-    const kind: AgentEventKind = hasToolCall ? "tool" : isSystemRole ? "system" : isUserRole ? "user" : "assistant";
+    // Tool results → kind "tool"; AI messages that issue tool calls → kind "assistant" (with toolName/toolArgs set)
+    const kind: AgentEventKind = isToolResult ? "tool" : isSystemRole ? "system" : isUserRole ? "user" : "assistant";
     const toolArgs = extractToolArgs(message);
     const messageContent = describeMessageContent(message);
-    const isToolResult = messageType === "tool";
     let content = messageContent;
     let toolNote: string | undefined;
-    if (hasToolCall && !isToolResult) {
+    if (hasToolCalls && !isToolResult) {
+        // AI message issuing tool calls — store the raw content as a note, clear content
         toolNote = messageContent;
         content = "";
     } else if (!isToolResult) {
         toolNote = undefined;
+    }
+
+    // ── Extract thinking / reasoning ────────────────────────────────────
+    let thoughts: string[] | undefined;
+
+    if (kind === "assistant" && !hasToolCalls) {
+        // 1. Structured thinking from the LLM API (Claude thinking blocks, GPT reasoning, <think> tags)
+        const structured = extractThinkingFromMessage(message);
+        if (structured.length > 0) {
+            thoughts = structured;
+            // Strip <think> blocks from the displayed content
+            content = content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+        }
+
+        // 2. Heuristic fallback: extract reasoning from plain text
+        if (!thoughts?.length && content) {
+            const heuristic = extractThoughtsFromContent(content);
+            if (heuristic.thoughts.length > 0) {
+                thoughts = heuristic.thoughts;
+                content = heuristic.content;
+            }
+        }
     }
 
     return {
@@ -260,6 +460,7 @@ function createAgentEvent(
         content,
         toolNote,
         toolArgs,
+        thoughts: thoughts?.length ? thoughts : undefined,
         timestamp: new Date().toISOString(),
     };
 }
@@ -368,21 +569,137 @@ async function ensureContextGraphReady(workspaceId: string, rootPath: string) {
     return store;
 }
 
+/**
+ * Determine whether an event represents an AI message issuing tool calls
+ * (as opposed to a tool result).  Handles both:
+ *  - NEW data: kind="assistant" with name/toolArgs set
+ *  - LEGACY data: kind="tool" but with toolArgs and empty content
+ *    (backend previously assigned kind="tool" to both AI tool-call
+ *     and tool-result messages — fixed now, but old data may exist).
+ */
+function isAiToolCallEvent(event: AgentEvent): boolean {
+    // New format: assistant events with tool info
+    if (event.kind === "assistant" && (event.name || event.toolName) && event.toolArgs) return true;
+    // Legacy format: kind="tool" but has toolArgs and no meaningful content
+    if (event.kind === "tool" && event.toolArgs && !event.content?.trim()) return true;
+    return false;
+}
+
+/**
+ * Convert AgentEvent[] conversation history to BaseMessage[] for multi-turn.
+ * Mirrors the pattern used by ReActEngine for explore conversations.
+ */
+function convertConversationHistoryToMessages(events: AgentEvent[]): BaseMessage[] {
+    const messages: BaseMessage[] = [];
+    for (const event of events) {
+        if (event.kind === "user") {
+            messages.push(new HumanMessage(event.content));
+        } else if (event.kind === "system") {
+            messages.push(new SystemMessage(event.content));
+        } else if (isAiToolCallEvent(event)) {
+            // AI message that issues tool calls (new kind="assistant" or legacy kind="tool")
+            const toolName = event.toolName || event.name;
+            const msg = new AIMessage(event.content || "");
+            if (toolName && event.toolArgs) {
+                try {
+                    (msg as any).tool_calls = [{
+                        id: event.toolCallId || `call_${Date.now()}`,
+                        name: toolName,
+                        args: JSON.parse(event.toolArgs || "{}"),
+                    }];
+                } catch {
+                    // ignore parse errors
+                }
+            }
+            messages.push(msg);
+        } else if (event.kind === "assistant") {
+            // Pure text assistant message (no tool calls)
+            messages.push(new AIMessage(event.content || ""));
+        } else if (event.kind === "tool") {
+            // Tool result
+            messages.push(new ToolMessage(event.content || "", event.toolCallId || ""));
+        }
+    }
+    return messages;
+}
+
 export class AgentGraphExecutor {
     async executeRun(runId: string): Promise<void> {
         await this.executeRunStreaming(runId);
+    }
+
+    /**
+     * Continue an existing run with a follow-up message (multi-turn support).
+     * For single-node graphs: re-executes the node with accumulated conversation history.
+     * For multi-node graphs: re-executes the full graph with accumulated context.
+     */
+    async continueRun(
+        runId: string,
+        message: string,
+        opts?: {
+            onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
+            onTextDelta?: (delta: string) => void;
+            llmSelectionOverride?: { provider: LlmProviderType; model?: string };
+            shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
+        }
+    ): Promise<AgentWorkflowResult> {
+        console.log(`[AgentGraphExecutor] continueRun: runId=${runId}, message="${message.slice(0, 40)}"`);
+        const run = await agentGraphRunService.getRun(runId);
+        if (!run) throw new Error(`Run ${runId} not found`);
+        console.log(`[AgentGraphExecutor] continueRun: run status="${run.status}", graphId=${run.graphId}`);
+
+        // Append user message to conversation history
+        const history = run.state.conversationHistory ?? [];
+        history.push({
+            id: `event-continue-${Date.now()}`,
+            phaseId: "user",
+            phaseLabel: "User input",
+            kind: "user",
+            role: "user",
+            content: message,
+            timestamp: new Date().toISOString(),
+        });
+
+        // Update state with new mission and conversation history
+        const updatedState = {
+            ...run.state,
+            mission: message,
+            userInput: message,
+            conversationHistory: history,
+        };
+
+        // Reset node statuses for re-execution
+        const resetNodeStatuses: Record<string, any> = {};
+        for (const nodeId of run.nodeOrder) {
+            resetNodeStatuses[nodeId] = "PENDING";
+        }
+
+        await agentGraphRunService.updateRunStatus(runId, "PENDING", {
+            nodeStatuses: resetNodeStatuses,
+            state: updatedState,
+            endedAt: undefined,
+            error: undefined,
+        } as any);
+
+        await agentGraphRunService.incrementConversationTurns(runId);
+
+        return this.executeRunStreaming(runId, opts);
     }
 
     async executeRunStreaming(
         runId: string,
         opts?: {
             onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
+            /** Progressive text streaming callback — emits token-by-token text deltas */
+            onTextDelta?: (delta: string) => void;
             llmSelectionOverride?: { provider: LlmProviderType; model?: string };
             shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
         }
     ): Promise<AgentWorkflowResult> {
+        console.log(`[AgentGraphExecutor] executeRunStreaming: runId=${runId}`);
         const run = await agentGraphRunService.getRun(runId);
         if (!run) throw new Error(`Run ${runId} not found`);
+        console.log(`[AgentGraphExecutor] executeRunStreaming: status="${run.status}", graphId=${run.graphId}, workspaceId=${run.workspaceId}`);
 
         const workspaceId = run.workspaceId?.toString() ?? null;
         const workspace = workspaceId
@@ -437,8 +754,14 @@ export class AgentGraphExecutor {
         const contextInjectionEnabled = auditContextConfig?.enabled !== false;
         const auditContext = contextInjectionEnabled ? auditContextConfig?.context ?? null : null;
 
-        const graph = await agentGraphService.getGraph(run.graphId.toString());
-        if (!graph) throw new Error(`Graph ${run.graphId.toString()} not found`);
+        let graph = await agentGraphService.getGraph(run.graphId.toString());
+        if (!graph) {
+            // Graph was deleted — fall back to first available graph
+            const allGraphs = await agentGraphService.listGraphs();
+            graph = allGraphs[0] ?? null;
+            if (!graph) throw new Error(`No agent graphs available`);
+            console.warn(`[AgentGraph] Graph ${run.graphId.toString()} not found, falling back to "${graph.name}"`);
+        }
 
         const executionMode = resolveExecutionMode(graph);
         const timelineNodeIds = (run.nodeOrder?.length ? run.nodeOrder : getGraphNodeOrder(graph)).slice();
@@ -634,8 +957,16 @@ export class AgentGraphExecutor {
             };
         });
 
+        // Initialize conversation history in state if not present
+        if (!state.conversationHistory) {
+            state.conversationHistory = [];
+        }
+
         const globalEventStream: AgentEvent[] = [];
-        let globalEventCounter = 0;
+        // Offset counter by existing conversation history length so IDs are
+        // unique across multi-turn continuations (each turn starts from where
+        // the previous one left off instead of event-0 again).
+        let globalEventCounter = state.conversationHistory?.length ?? 0;
         const nextGlobalEventId = () => `event-${globalEventCounter++}`;
         const initialUserEvent: AgentEvent = {
             id: nextGlobalEventId(),
@@ -647,6 +978,12 @@ export class AgentGraphExecutor {
             timestamp: new Date().toISOString(),
         };
         globalEventStream.push(initialUserEvent);
+
+        // Add the initial user event to conversation history (if this is the first turn)
+        if (state.conversationHistory.length === 0 ||
+            state.conversationHistory[state.conversationHistory.length - 1]?.content !== initialUserEvent.content) {
+            state.conversationHistory.push(initialUserEvent);
+        }
 
         const emitUpdate = async () => {
             if (!opts?.onUpdate) return;
@@ -969,12 +1306,43 @@ export class AgentGraphExecutor {
                 const tools = selectedTools.map(wrapTool);
 
                 const builtMessageEvents: AgentEvent[] = [];
-                const handleStreamingMessage = async (message: BaseMessage) => {
-                    await ensureNotAborted();
-                    const event = createAgentEvent(message, node.id, node.label, nextEventId());
+                const pushEvent = (event: AgentEvent) => {
                     builtMessageEvents.push(event);
                     eventStream.push(event);
                     globalEventStream.push(event);
+                    state.conversationHistory!.push(event);
+                };
+                const handleStreamingMessage = async (message: BaseMessage) => {
+                    await ensureNotAborted();
+
+                    // For AI messages with multiple tool calls, create one event per
+                    // tool call so that each call pairs correctly with its result.
+                    const allCalls = extractAllToolCalls(message);
+                    if (allCalls.length > 1) {
+                        const messageContent = describeMessageContent(message);
+                        for (const tc of allCalls) {
+                            const tcEvent: AgentEvent = {
+                                id: nextEventId(),
+                                phaseId: node.id,
+                                phaseLabel: node.label,
+                                kind: "assistant",
+                                role: "assistant",
+                                name: tc.name,
+                                toolCallId: tc.toolCallId,
+                                content: "",
+                                toolNote: messageContent || undefined,
+                                toolArgs: tc.args,
+                                timestamp: new Date().toISOString(),
+                            };
+                            pushEvent(tcEvent);
+                        }
+                        await flushUpdate();
+                        return;
+                    }
+
+                    // Single or zero tool calls: use standard createAgentEvent
+                    const event = createAgentEvent(message, node.id, node.label, nextEventId());
+                    pushEvent(event);
                     await flushUpdate();
                 };
 
@@ -1198,14 +1566,22 @@ export class AgentGraphExecutor {
 
                     validated = schema.parse(parsed);
                 } else {
+                    // Build extraMessages from prior conversation history for multi-turn
+                    const priorHistory = state.conversationHistory ?? [];
+                    const extraMessages = priorHistory.length > 0
+                        ? convertConversationHistoryToMessages(priorHistory).filter(m => m.getType() !== "system")
+                        : undefined;
+
                     const result = await streamReactAgentMessages({
-                        name: `GraphNode:${node.id}`, // Using existing `node.id`
-                        systemPrompt: enhancedSystemPrompt, // Use enhanced prompt
-                        userPrompt: userPrompt, // Using existing `userPrompt`
+                        name: `GraphNode:${node.id}`,
+                        systemPrompt: enhancedSystemPrompt,
+                        userPrompt: userPrompt,
                         tools,
                         llmSelection: opts?.llmSelectionOverride ?? node.react.llmSelection,
-                        // extraMessages: messageHistory, // Commented out as `messageHistory` is not defined.
-                        onMessage: handleStreamingMessage, // Using existing `handleStreamingMessage`
+                        extraMessages,
+                        onMessage: handleStreamingMessage,
+                        // Forward text deltas for progressive streaming
+                        onTextDelta: opts?.onTextDelta,
                         abortSignal: abortController.signal,
                         getAbortReason: () => abortReason,
                         shouldAbort: checkAbortReason,
@@ -1228,39 +1604,46 @@ export class AgentGraphExecutor {
                         builtMessageEvents.at(-1);
                     const finalContent = finalAgentEvent?.content ?? "";
 
-                    let parsed: unknown = parseJsonOutput(finalContent);
                     const schemaId = node.output.schemaId as keyof typeof nodeOutputSchemaRegistry;
                     const schema = nodeOutputSchemaRegistry[schemaId];
                     if (!schema) {
                         throw new Error(`Unknown schemaId: ${node.output.schemaId}`);
                     }
-                    parsed = await maybeExecuteJsonActionTool({
-                        schemaId: String(schemaId),
-                        parsed,
-                        allowedToolNames: node.react.toolNames ?? [],
-                        phaseId: node.id,
-                        phaseLabel: node.label,
-                        makeEventId: nextGlobalEventId,
-                        pushEvent: (event) => {
-                            globalEventStream.push(event);
-                            eventStream.push(event);
-                        },
-                        invokeToolByName: async (name, args) => {
-                            const invoker = toolInvokerMap.get(name);
-                            if (!invoker) {
-                                return `Tool ${name} is not available in this node.`;
-                            }
-                            return await invoker(args);
-                        },
-                        ensureActive: ensureNotAborted,
-                    });
-                    validated = schema.parse(parsed);
-                    if (node.output?.schemaId === "cursor_planner_output") {
-                        const missionText =
-                            (typeof (state as any).mission === "string" && (state as any).mission) ||
-                            (typeof (state as any).userInput === "string" && (state as any).userInput) ||
-                            "";
-                        validated = ensurePlannerOutput(validated, missionText) as typeof validated;
+
+                    if (schemaId === "conversational") {
+                        // Conversational nodes: wrap the agent's text response directly.
+                        // No JSON parsing — the LLM output is natural language.
+                        validated = schema.parse({ response: finalContent, rawContent: finalContent });
+                    } else {
+                        let parsed: unknown = parseJsonOutput(finalContent);
+                        parsed = await maybeExecuteJsonActionTool({
+                            schemaId: String(schemaId),
+                            parsed,
+                            allowedToolNames: node.react.toolNames ?? [],
+                            phaseId: node.id,
+                            phaseLabel: node.label,
+                            makeEventId: nextGlobalEventId,
+                            pushEvent: (event) => {
+                                globalEventStream.push(event);
+                                eventStream.push(event);
+                            },
+                            invokeToolByName: async (name, args) => {
+                                const invoker = toolInvokerMap.get(name);
+                                if (!invoker) {
+                                    return `Tool ${name} is not available in this node.`;
+                                }
+                                return await invoker(args);
+                            },
+                            ensureActive: ensureNotAborted,
+                        });
+                        validated = schema.parse(parsed);
+                        if (node.output?.schemaId === "cursor_planner_output") {
+                            const missionText =
+                                (typeof (state as any).mission === "string" && (state as any).mission) ||
+                                (typeof (state as any).userInput === "string" && (state as any).userInput) ||
+                                "";
+                            validated = ensurePlannerOutput(validated, missionText) as typeof validated;
+                        }
                     }
                 }
 
