@@ -2,6 +2,12 @@ import { contextBridge, ipcRenderer } from "electron";
 
 export type WorkspaceInfo = { path: string; name: string };
 export type FileEntry = { path: string; name: string; isDirectory: boolean };
+export type GitFileChange = {
+  path: string;
+  status: 'modified' | 'created' | 'deleted' | 'renamed' | 'untracked';
+  from?: string;
+};
+
 export type GitStatus = {
   branch: string;
   ahead: number;
@@ -10,6 +16,8 @@ export type GitStatus = {
   created: string[];
   deleted: string[];
   renamed: Array<{ from: string; to: string }>;
+  staged: GitFileChange[];
+  unstaged: GitFileChange[];
 };
 
 export type UpdateStatus = {
@@ -60,6 +68,16 @@ const api = {
   gitClone: (repoUrl: string, branch?: string): Promise<WorkspaceInfo> => ipcRenderer.invoke("git:clone", repoUrl, branch),
   gitListBranches: (): Promise<string[]> => ipcRenderer.invoke("git:listBranches"),
   gitDiff: (filePath?: string): Promise<string> => ipcRenderer.invoke("git:diff", filePath),
+  gitDiffStaged: (filePath?: string): Promise<string> => ipcRenderer.invoke("git:diffStaged", filePath),
+  gitStageFile: (filePath: string): Promise<void> => ipcRenderer.invoke("git:stageFile", filePath),
+  gitStageAll: (): Promise<void> => ipcRenderer.invoke("git:stageAll"),
+  gitUnstageFile: (filePath: string): Promise<void> => ipcRenderer.invoke("git:unstageFile", filePath),
+  gitUnstageAll: (): Promise<void> => ipcRenderer.invoke("git:unstageAll"),
+  gitRevertFile: (filePath: string): Promise<void> => ipcRenderer.invoke("git:revertFile", filePath),
+  gitRevertAll: (): Promise<void> => ipcRenderer.invoke("git:revertAll"),
+  gitCommitStaged: (message: string): Promise<string> => ipcRenderer.invoke("git:commitStaged", message),
+  gitPush: (remote?: string, branch?: string): Promise<string> => ipcRenderer.invoke("git:push", remote, branch),
+  gitCreatePR: (title: string, body?: string, base?: string): Promise<{ url: string; number: number }> => ipcRenderer.invoke("git:createPR", title, body, base),
   // Command Center
   pickFile: (): Promise<string[]> => ipcRenderer.invoke("app:pickFile"),
   captureScreenshot: (): Promise<string | null> => ipcRenderer.invoke("app:captureScreenshot"),

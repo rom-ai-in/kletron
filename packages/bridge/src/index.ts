@@ -15,6 +15,12 @@ export type FileEntry = {
   isDirectory: boolean;
 };
 
+export type GitFileChange = {
+  path: string;
+  status: 'modified' | 'created' | 'deleted' | 'renamed' | 'untracked';
+  from?: string; // original path for renames
+};
+
 export type GitStatus = {
   branch: string;
   ahead: number;
@@ -23,6 +29,10 @@ export type GitStatus = {
   created: string[];
   deleted: string[];
   renamed: Array<{ from: string; to: string }>;
+  /** Files staged in the index (ready to commit) */
+  staged: GitFileChange[];
+  /** Files with unstaged working-tree changes */
+  unstaged: GitFileChange[];
 };
 
 export function getWorkspaceName(workspacePath: string): string {
@@ -99,6 +109,41 @@ function getGit(repoPath: string): SimpleGit {
 export async function getGitStatus(workspacePath: string): Promise<GitStatus> {
   const git = getGit(workspacePath);
   const status = await git.status();
+
+  // Build staged / unstaged lists from the per-file data
+  const staged: GitFileChange[] = [];
+  const unstaged: GitFileChange[] = [];
+
+  for (const f of status.files) {
+    const indexStatus = f.index;   // status in the staging area
+    const wtStatus = f.working_dir; // status in the working tree
+
+    // Staged changes (index column)
+    if (indexStatus && indexStatus !== ' ' && indexStatus !== '?') {
+      staged.push({
+        path: f.path,
+        status: indexStatus === 'M' ? 'modified'
+          : indexStatus === 'A' ? 'created'
+          : indexStatus === 'D' ? 'deleted'
+          : indexStatus === 'R' ? 'renamed'
+          : 'modified',
+        ...(indexStatus === 'R' ? { from: f.path } : {}),
+      });
+    }
+
+    // Unstaged changes (working tree column)
+    if (wtStatus && wtStatus !== ' ') {
+      unstaged.push({
+        path: f.path,
+        status: wtStatus === 'M' ? 'modified'
+          : wtStatus === 'D' ? 'deleted'
+          : wtStatus === '?' ? 'untracked'
+          : wtStatus === 'A' ? 'created'
+          : 'modified',
+      });
+    }
+  }
+
   return {
     branch: status.current || "",
     ahead: status.ahead || 0,
@@ -106,7 +151,9 @@ export async function getGitStatus(workspacePath: string): Promise<GitStatus> {
     modified: status.modified,
     created: status.created,
     deleted: status.deleted,
-    renamed: status.renamed.map(r => ({ from: r.from, to: r.to }))
+    renamed: status.renamed.map(r => ({ from: r.from, to: r.to })),
+    staged,
+    unstaged,
   };
 }
 
@@ -144,6 +191,95 @@ export async function gitDiff(workspacePath: string, filePath?: string): Promise
     return git.diff(["--", filePath]);
   }
   return git.diff();
+}
+
+/** Get diff for staged files (or a specific staged file) */
+export async function gitDiffStaged(workspacePath: string, filePath?: string): Promise<string> {
+  const git = getGit(workspacePath);
+  if (filePath) {
+    return git.diff(["--cached", "--", filePath]);
+  }
+  return git.diff(["--cached"]);
+}
+
+/** Stage a specific file (git add) */
+export async function gitStageFile(workspacePath: string, filePath: string): Promise<void> {
+  const git = getGit(workspacePath);
+  await git.add(filePath);
+}
+
+/** Stage all changes (git add .) */
+export async function gitStageAll(workspacePath: string): Promise<void> {
+  const git = getGit(workspacePath);
+  await git.add(".");
+}
+
+/** Unstage a specific file (git reset HEAD) */
+export async function gitUnstageFile(workspacePath: string, filePath: string): Promise<void> {
+  const git = getGit(workspacePath);
+  await git.reset(["HEAD", "--", filePath]);
+}
+
+/** Unstage all files (git reset HEAD) */
+export async function gitUnstageAll(workspacePath: string): Promise<void> {
+  const git = getGit(workspacePath);
+  await git.reset(["HEAD"]);
+}
+
+/** Revert a specific file (discard working tree changes) */
+export async function gitRevertFile(workspacePath: string, filePath: string): Promise<void> {
+  const git = getGit(workspacePath);
+  await git.checkout(["--", filePath]);
+}
+
+/** Revert all working tree changes */
+export async function gitRevertAll(workspacePath: string): Promise<void> {
+  const git = getGit(workspacePath);
+  await git.checkout(["--", "."]);
+}
+
+/** Commit only staged files (no git add .) */
+export async function gitCommitStaged(workspacePath: string, message: string): Promise<string> {
+  const git = getGit(workspacePath);
+  const result = await git.commit(message);
+  return result.commit || "";
+}
+
+/** Push to remote (defaults to origin, current branch) */
+export async function gitPush(workspacePath: string, remote = "origin", branch?: string): Promise<string> {
+  const git = getGit(workspacePath);
+  const status = await git.status();
+  const targetBranch = branch || status.current || "main";
+  const result = await git.push(remote, targetBranch, ["--set-upstream"]);
+  // result.pushed is an array of push details
+  return `Pushed to ${remote}/${targetBranch}`;
+}
+
+/** Create a PR using the `gh` CLI (must be installed and authenticated) */
+export async function gitCreatePR(
+  workspacePath: string,
+  title: string,
+  body?: string,
+  base?: string,
+): Promise<{ url: string; number: number }> {
+  const { execSync } = await import("node:child_process");
+  const args = ["gh", "pr", "create", "--title", title];
+  if (body) args.push("--body", body);
+  if (base) args.push("--base", base);
+  args.push("--fill");
+  const output = execSync(args.join(" "), {
+    cwd: workspacePath,
+    encoding: "utf-8",
+    timeout: 30_000,
+  }).trim();
+
+  // gh pr create outputs the PR URL on success
+  const urlMatch = output.match(/https:\/\/github\.com\/[^\s]+/);
+  const numberMatch = output.match(/\/pull\/(\d+)/);
+  return {
+    url: urlMatch?.[0] || output,
+    number: numberMatch ? parseInt(numberMatch[1], 10) : 0,
+  };
 }
 
 export async function gitCloneRepo(repoUrl: string, targetRoot?: string, branch?: string): Promise<CloneResult> {

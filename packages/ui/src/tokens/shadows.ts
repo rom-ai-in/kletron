@@ -70,7 +70,7 @@ export const componentShadows = {
     /** Focus ring - uses accent glow */
     focus: '0 0 0 3px var(--focus-ring)',
     /** Glass panel - frosted effect */
-    glass: '0 8px 32px rgba(0, 0, 0, 0.4)',
+    glass: '0 12px 48px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.25)',
 } as const;
 
 // Type exports

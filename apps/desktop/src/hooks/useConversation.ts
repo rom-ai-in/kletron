@@ -384,18 +384,36 @@ export function useConversation(
                 // Session completed
                 convoId = chunk.payload.sessionId ?? convoId;
 
-                // Auto-generate thread title for new sessions
+                // Auto-generate thread title for new sessions (with retries)
                 if (isNewSession && convoId && trimmed) {
-                  getAccessToken().then((tok) => {
+                  const generateTitle = async () => {
+                    const MAX_RETRIES = 2;
+                    const RETRY_DELAY_MS = 1500;
+                    const tok = await getAccessToken().catch(() => null);
                     if (!tok) return;
-                    fetch(`${backendUrlTrimmed}/api/sessions/${convoId}/title`, {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
-                      body: JSON.stringify({ generate: true, userMessage: trimmed }),
-                    })
-                      .then(() => loadThreads?.(convoId!))
-                      .catch(() => {}); // fire-and-forget
-                  }).catch(() => {});
+
+                    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+                      try {
+                        const res = await fetch(`${backendUrlTrimmed}/api/sessions/${convoId}/title`, {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+                          body: JSON.stringify({ generate: true, userMessage: trimmed }),
+                        });
+                        if (res.ok) {
+                          loadThreads?.(convoId!);
+                          return; // success
+                        }
+                        console.warn(`[title-gen] Attempt ${attempt + 1} returned ${res.status}`);
+                      } catch (e) {
+                        console.warn(`[title-gen] Attempt ${attempt + 1} failed:`, e);
+                      }
+                      if (attempt < MAX_RETRIES) {
+                        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
+                      }
+                    }
+                    console.error("[title-gen] All retries exhausted for session", convoId);
+                  };
+                  generateTitle(); // fire-and-forget but with internal retries
                 }
                 // Process any final events not yet seen
                 if (chunk.payload.eventStream?.length) {

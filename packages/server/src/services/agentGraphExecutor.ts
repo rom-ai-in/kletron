@@ -859,9 +859,36 @@ export class AgentGraphExecutor {
             return output;
         };
 
+        // ── write_todos deduplication & loop guard ────────────────────────
+        let lastTodosHash: string | null = null;
+        let consecutiveTodosDuplicates = 0;
+        const MAX_CONSECUTIVE_TODOS_DUPLICATES = 2;
+
         const writeTodosTool = createTool(
             async (input: { tasks: Array<{ id?: string; title?: string; status?: string }>; currentTaskId?: string }) => {
                 const tasks = Array.isArray(input.tasks) ? input.tasks : [];
+
+                // Compute a stable hash of the incoming payload to detect duplicates
+                const payloadHash = stableStringify({ tasks, currentTaskId: input.currentTaskId });
+                if (payloadHash === lastTodosHash) {
+                    consecutiveTodosDuplicates++;
+                    if (consecutiveTodosDuplicates >= MAX_CONSECUTIVE_TODOS_DUPLICATES) {
+                        return JSON.stringify(
+                            {
+                                updated: false,
+                                warning: `Duplicate write_todos call detected ${consecutiveTodosDuplicates} times in a row. The task queue is already up to date — stop calling write_todos and proceed with actual work using other tools.`,
+                                currentTaskId: (state as any).currentTaskId ?? "",
+                                taskCount: Array.isArray((state as any).taskQueue) ? (state as any).taskQueue.length : 0,
+                            },
+                            null,
+                            2
+                        );
+                    }
+                } else {
+                    consecutiveTodosDuplicates = 0;
+                }
+                lastTodosHash = payloadHash;
+
                 applyTodosUpdate(tasks as Array<Record<string, unknown>>, input.currentTaskId);
                 await persistState();
                 return JSON.stringify(
@@ -876,7 +903,7 @@ export class AgentGraphExecutor {
             },
             {
                 name: "write_todos",
-                description: "Update the task queue and current task pointer for this agent run.",
+                description: "Update the task queue and current task pointer for this agent run. Do NOT call this repeatedly with the same payload — the tool will reject duplicates.",
                 schema: z.object({
                     tasks: z
                         .array(
@@ -1172,6 +1199,23 @@ export class AgentGraphExecutor {
                 const selectedTools = selectToolsByName(mergedToolNames, localTools);
                 const toolInvokerMap = new Map<string, (input: Record<string, unknown>) => Promise<string>>();
 
+                // ── Tool call deduplication ──────────────────────────────────
+                // Track recent read-only tool calls to avoid identical re-invocations.
+                // Write tools (write_file, execute_bash, str_replace_editor) are NOT
+                // deduplicated since they have side effects.
+                const DEDUP_CACHE_MAX = 50;
+                const READ_ONLY_DEDUP_TOOLS = new Set([
+                    "list_files", "read_file", "read_file_range", "search_code",
+                    "repo_metrics", "dependency_info", "describe_structure",
+                    "git_log", "git_diff", "git_grep", "git_blame",
+                    "semantic_code_search", "structural_search", "symbols_list",
+                    "find_symbol", "go_to_definition", "references", "find_references",
+                    "todo_search", "bootstrap_context", "web_search", "fetch_url",
+                    "output_format", "write_todos",
+                ]);
+                const toolCallCache = new Map<string, string>();
+                let toolCallCount = 0;
+
                 const invokeBaseTool = async (baseTool: any, input: unknown) => {
                     if (typeof baseTool?.invoke === "function") {
                         return await baseTool.invoke(input);
@@ -1227,16 +1271,36 @@ export class AgentGraphExecutor {
                     const wrapped = createTool(
                         async (input: Record<string, unknown>) => {
                             await ensureNotAborted();
+                            toolCallCount++;
+
+                            // ── Dedup: return cached result for identical read-only calls ──
+                            if (READ_ONLY_DEDUP_TOOLS.has(name) && name !== "write_todos") {
+                                const cacheKey = `${name}:${stableStringify(input)}`;
+                                const cached = toolCallCache.get(cacheKey);
+                                if (cached !== undefined) {
+                                    return `[Cached — identical call was already made this turn]\n${cached}`;
+                                }
+                            }
 
                             const memoryResult = await handleMemoryTool(name, input);
                             if (memoryResult !== null) {
-                                return await maybeEvictToolResult({
+                                const evicted = await maybeEvictToolResult({
                                     rootDir,
                                     runId,
                                     nodeId: node.id,
                                     toolName: name,
                                     rawResult: memoryResult,
                                 });
+                                // Cache memory results too
+                                if (READ_ONLY_DEDUP_TOOLS.has(name) && name !== "write_todos" && typeof evicted === "string") {
+                                    const cacheKey = `${name}:${stableStringify(input)}`;
+                                    if (toolCallCache.size >= DEDUP_CACHE_MAX) {
+                                        const firstKey = toolCallCache.keys().next().value;
+                                        if (firstKey !== undefined) toolCallCache.delete(firstKey);
+                                    }
+                                    toolCallCache.set(cacheKey, evicted.slice(0, TOOL_RESULT_PREVIEW_CHARS));
+                                }
+                                return evicted;
                             }
 
                             if (name === "write_file" || name === "execute_bash" || name === "str_replace_editor") {
@@ -1287,13 +1351,26 @@ export class AgentGraphExecutor {
                             }
 
                             const result = await invokeBaseTool(baseTool, input);
-                            return await maybeEvictToolResult({
+                            const finalResult = await maybeEvictToolResult({
                                 rootDir,
                                 runId,
                                 nodeId: node.id,
                                 toolName: name,
                                 rawResult: result,
                             });
+
+                            // Cache read-only results for dedup
+                            if (READ_ONLY_DEDUP_TOOLS.has(name) && name !== "write_todos" && typeof finalResult === "string") {
+                                const cacheKey = `${name}:${stableStringify(input)}`;
+                                if (toolCallCache.size >= DEDUP_CACHE_MAX) {
+                                    // Evict oldest entry
+                                    const firstKey = toolCallCache.keys().next().value;
+                                    if (firstKey !== undefined) toolCallCache.delete(firstKey);
+                                }
+                                toolCallCache.set(cacheKey, finalResult.slice(0, TOOL_RESULT_PREVIEW_CHARS));
+                            }
+
+                            return finalResult;
                         },
                         { name, description, schema, returnDirect }
                     );
@@ -1393,8 +1470,27 @@ export class AgentGraphExecutor {
                     `Current task id: ${currentTaskId || "(none)"}`,
                     `Task queue: ${JSON.stringify(taskQueue, null, 2)}`,
                     "Use write_todos to create or update the task queue when the mission requires multiple steps.",
+                    "IMPORTANT: Do NOT call write_todos repeatedly with the same payload. Call it once, then proceed with actual work.",
                 ].join("\n");
-                const enhancedSystemPrompt = `${baseSystemPrompt}${contextBlock}${taskContextBlock}${auditContextPrompt ? `\n\n${auditContextPrompt}` : ""}`;
+
+                // ── Workspace awareness block ────────────────────────────────
+                // Prevents the agent from asking "how do I access the repo?"
+                const workspaceContextBlock = [
+                    "\n\n## WORKSPACE ENVIRONMENT",
+                    `You are running inside the repository at: ${rootDir}`,
+                    `Workspace ID: ${workspace._id?.toString() ?? "default"}`,
+                    "You already have full filesystem access via tools (list_files, read_file, search_code, etc.).",
+                    "Do NOT ask the user for repository access — you already have it.",
+                    "Do NOT re-plan if you have already created a plan — proceed with execution.",
+                    "",
+                    "## ANTI-LOOPING RULES",
+                    "- Never call the same tool with identical arguments more than once per turn. Reuse prior results.",
+                    "- Never call write_todos more than twice without making progress on actual tasks between calls.",
+                    "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
+                    "- Focus on PRODUCING OUTPUT, not endlessly planning. After gathering information, synthesize and report.",
+                ].join("\n");
+
+                const enhancedSystemPrompt = `${baseSystemPrompt}${workspaceContextBlock}${contextBlock}${taskContextBlock}${auditContextPrompt ? `\n\n${auditContextPrompt}` : ""}`;
 
                 // Update timeline with the ACTUAL prompt used (including context)
                 if (timeline[0]) {

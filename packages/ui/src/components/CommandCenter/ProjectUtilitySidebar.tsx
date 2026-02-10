@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   FileText,
   ExternalLink,
@@ -8,7 +8,7 @@ import {
   ChevronRight,
   Check,
   X,
-  Eye,
+  Search,
   GitBranch,
   GitCommit,
   Plus,
@@ -16,8 +16,15 @@ import {
   RefreshCw,
   Sparkles,
   Loader2,
+  Undo2,
+  MoreHorizontal,
+  Copy,
 } from 'lucide-react';
 import { Button } from '../design-system';
+import { GitChangeTree } from './GitChangeTree';
+import type { GitFileChangeItem } from './GitChangeTree';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface PendingDiffItem {
   editId: string;
@@ -40,12 +47,18 @@ export interface GitSidebarData {
   modified?: string[];
   created?: string[];
   deleted?: string[];
+  /** Staged files (in the index) */
+  staged?: GitFileChangeItem[];
+  /** Unstaged files (working tree changes) */
+  unstaged?: GitFileChangeItem[];
   commitMessage?: string;
   committing?: boolean;
   generatingMessage?: boolean;
   loading?: boolean;
   error?: string | null;
 }
+
+export type SourceControlTab = 'unstaged' | 'staged';
 
 export interface ProjectUtilitySidebarProps {
   /** Files touched by the agent in this conversation */
@@ -59,11 +72,24 @@ export interface ProjectUtilitySidebarProps {
   /** Git integration */
   gitData?: GitSidebarData | null;
   onGitCommit?: (message: string) => void;
+  onGitCommitStaged?: (message: string) => void;
   onGitRefresh?: () => void;
   onGitGenerateMessage?: () => void;
   onCommitMessageChange?: (message: string) => void;
+  /** Per-file git actions */
+  onGitStageFile?: (path: string) => void;
+  onGitStageAll?: () => void;
+  onGitUnstageFile?: (path: string) => void;
+  onGitUnstageAll?: () => void;
+  onGitRevertFile?: (path: string) => void;
+  onGitRevertAll?: () => void;
+  /** Diff viewer */
+  onViewFileDiff?: (file: GitFileChangeItem, staged: boolean) => void;
+  selectedDiffPath?: string | null;
   className?: string;
 }
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function ProjectUtilitySidebar({
   fileLinks = [],
@@ -74,197 +100,267 @@ export function ProjectUtilitySidebar({
   onOpenInIDE,
   gitData,
   onGitCommit,
+  onGitCommitStaged,
   onGitRefresh,
   onGitGenerateMessage,
   onCommitMessageChange,
+  onGitStageFile,
+  onGitStageAll,
+  onGitUnstageFile,
+  onGitUnstageAll,
+  onGitRevertFile,
+  onGitRevertAll,
+  onViewFileDiff,
+  selectedDiffPath,
   className = '',
 }: ProjectUtilitySidebarProps) {
-  const [filesCollapsed, setFilesCollapsed] = useState(false);
+  const [activeTab, setActiveTab] = useState<SourceControlTab>('unstaged');
+  const [filter, setFilter] = useState('');
   const [diffsCollapsed, setDiffsCollapsed] = useState(false);
-  const [gitCollapsed, setGitCollapsed] = useState(false);
-  const [gitChangesExpanded, setGitChangesExpanded] = useState(false);
+  const [filesCollapsed, setFilesCollapsed] = useState(true);
+
+  const stagedFiles = gitData?.staged ?? [];
+  const unstagedFiles = gitData?.unstaged ?? [];
+  const totalStaged = stagedFiles.length;
+  const totalUnstaged = unstagedFiles.length;
+
+  // Filter files by search term
+  const filteredFiles = useMemo(() => {
+    const files = activeTab === 'staged' ? stagedFiles : unstagedFiles;
+    if (!filter.trim()) return files;
+    const term = filter.toLowerCase();
+    return files.filter(f => f.path.toLowerCase().includes(term));
+  }, [activeTab, stagedFiles, unstagedFiles, filter]);
+
+  const isStaged = activeTab === 'staged';
 
   return (
     <div className={`flex flex-col h-full w-[300px] flex-shrink-0 glass-sidebar border-l border-glass-border ${className}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-border-subtle">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-          Context
-        </span>
-      </div>
 
-      <div className="flex-1 overflow-y-auto scrollbar-elegant">
-        {/* ── Git Section (Codex-style) ── */}
-        {gitData && (
-          <div className="border-b border-border-subtle">
+      {/* ── Unstaged / Staged Tab Bar (Cursor-style) ── */}
+      <div className="flex items-center gap-0 border-b border-border-subtle">
+        <button
+          type="button"
+          onClick={() => setActiveTab('unstaged')}
+          className={`flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold transition-colors ${
+            activeTab === 'unstaged'
+              ? 'text-text-primary bg-state-active'
+              : 'text-text-muted hover:text-text-secondary hover:bg-state-hover'
+          }`}
+        >
+          Unstaged
+          {totalUnstaged > 0 && (
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+              activeTab === 'unstaged'
+                ? 'bg-text-primary/10 text-text-primary'
+                : 'bg-text-muted/10 text-text-muted'
+            }`}>
+              {totalUnstaged}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('staged')}
+          className={`flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold transition-colors ${
+            activeTab === 'staged'
+              ? 'text-text-primary bg-state-active'
+              : 'text-text-muted hover:text-text-secondary hover:bg-state-hover'
+          }`}
+        >
+          Staged
+          {totalStaged > 0 && (
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+              activeTab === 'staged'
+                ? 'bg-green-500/10 text-green-400'
+                : 'bg-text-muted/10 text-text-muted'
+            }`}>
+              {totalStaged}
+            </span>
+          )}
+        </button>
+
+        {/* Right-side actions */}
+        <div className="ml-auto flex items-center gap-0.5 pr-2">
+          {/* Stage/Unstage all */}
+          {activeTab === 'unstaged' && onGitStageAll && totalUnstaged > 0 && (
             <button
               type="button"
-              onClick={() => setGitCollapsed(!gitCollapsed)}
-              className="flex w-full items-center gap-1.5 px-3 py-2 text-xs font-medium text-text-secondary hover:bg-state-hover transition-colors"
+              onClick={onGitStageAll}
+              className="p-1 rounded text-text-muted hover:text-green-400 hover:bg-green-400/10 transition-colors"
+              title="Stage all changes"
             >
-              {gitCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              <GitBranch className="h-3 w-3" />
-              <span>Git</span>
-              {gitData.totalChanges > 0 && (
-                <span className="ml-auto rounded-full bg-blue-500/10 text-blue-400 px-1.5 py-0.5 text-[10px] font-semibold">
-                  {gitData.totalChanges}
-                </span>
-              )}
+              <Plus className="h-3.5 w-3.5" />
             </button>
+          )}
+          {activeTab === 'staged' && onGitUnstageAll && totalStaged > 0 && (
+            <button
+              type="button"
+              onClick={onGitUnstageAll}
+              className="p-1 rounded text-text-muted hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"
+              title="Unstage all"
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {/* Discard all (unstaged only) */}
+          {activeTab === 'unstaged' && onGitRevertAll && totalUnstaged > 0 && (
+            <button
+              type="button"
+              onClick={onGitRevertAll}
+              className="p-1 rounded text-text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors"
+              title="Discard all changes"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {/* Refresh */}
+          {onGitRefresh && (
+            <button
+              type="button"
+              onClick={onGitRefresh}
+              className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${gitData?.loading ? 'animate-spin' : ''}`} />
+            </button>
+          )}
+        </div>
+      </div>
 
-            {!gitCollapsed && (
-              <div className="px-3 pb-3 space-y-2">
-                {/* Branch & sync status */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <GitBranch className="h-3 w-3 text-text-muted flex-shrink-0" />
-                    <span className="text-[11px] font-mono text-text-primary truncate">
-                      {gitData.branch || 'detached'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    {(gitData.ahead ?? 0) > 0 && (
-                      <span className="text-[10px] text-text-muted" title={`${gitData.ahead} ahead`}>↑{gitData.ahead}</span>
-                    )}
-                    {(gitData.behind ?? 0) > 0 && (
-                      <span className="text-[10px] text-text-muted" title={`${gitData.behind} behind`}>↓{gitData.behind}</span>
-                    )}
-                    {onGitRefresh && (
-                      <button
-                        type="button"
-                        onClick={onGitRefresh}
-                        className="p-0.5 rounded text-text-muted hover:text-text-primary transition-colors"
-                        title="Refresh git status"
-                      >
-                        <RefreshCw className={`h-3 w-3 ${gitData.loading ? 'animate-spin' : ''}`} />
-                      </button>
-                    )}
-                  </div>
-                </div>
+      {/* ── Filter Input ── */}
+      <div className="px-2 py-1.5 border-b border-border-subtle">
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-text-muted" />
+          <input
+            type="text"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter files..."
+            className="w-full rounded-md bg-bg-surface border border-border-subtle py-1 pl-7 pr-2 text-[11px] text-text-primary placeholder:text-text-muted focus:border-border-strong focus:outline-none"
+          />
+        </div>
+      </div>
 
-                {/* Change summary */}
-                {gitData.totalChanges > 0 && (
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => setGitChangesExpanded(!gitChangesExpanded)}
-                      className="flex items-center gap-1 text-[11px] text-text-secondary hover:text-text-primary transition-colors w-full"
-                    >
-                      {gitChangesExpanded ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
-                      <span className="flex items-center gap-2">
-                        {(gitData.modified?.length ?? 0) > 0 && (
-                          <span className="flex items-center gap-0.5 text-yellow-400">
-                            <span className="text-[10px]">~{gitData.modified!.length}</span>
-                          </span>
-                        )}
-                        {(gitData.created?.length ?? 0) > 0 && (
-                          <span className="flex items-center gap-0.5 text-green-400">
-                            <Plus className="h-2.5 w-2.5" /><span className="text-[10px]">{gitData.created!.length}</span>
-                          </span>
-                        )}
-                        {(gitData.deleted?.length ?? 0) > 0 && (
-                          <span className="flex items-center gap-0.5 text-red-400">
-                            <Minus className="h-2.5 w-2.5" /><span className="text-[10px]">{gitData.deleted!.length}</span>
-                          </span>
-                        )}
-                      </span>
-                    </button>
+      {/* ── Changed Files Tree ── */}
+      <div className="flex-1 overflow-y-auto scrollbar-elegant">
+        {filteredFiles.length > 0 ? (
+          <GitChangeTree
+            files={filteredFiles}
+            section={activeTab}
+            selectedPath={selectedDiffPath}
+            onFileClick={(f) => onViewFileDiff?.(f, isStaged)}
+            onStageFile={!isStaged ? onGitStageFile : undefined}
+            onUnstageFile={isStaged ? onGitUnstageFile : undefined}
+            onRevertFile={!isStaged ? onGitRevertFile : undefined}
+          />
+        ) : gitData?.loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-4 w-4 animate-spin text-text-muted" />
+          </div>
+        ) : filter ? (
+          <div className="px-3 py-6 text-[11px] text-text-muted text-center">
+            No files matching "{filter}"
+          </div>
+        ) : (
+          <div className="px-3 py-6 text-[11px] text-text-muted text-center">
+            {isStaged ? 'No staged changes' : 'Working tree clean'}
+          </div>
+        )}
+      </div>
 
-                    {gitChangesExpanded && (
-                      <div className="mt-1 space-y-0.5 ml-3">
-                        {gitData.modified?.map((f) => (
-                          <div key={f} className="flex items-center gap-1.5 text-[10px] text-yellow-400/80">
-                            <span className="w-1 h-1 rounded-full bg-yellow-400 flex-shrink-0" />
-                            <span className="truncate font-mono">{f.split('/').pop()}</span>
-                          </div>
-                        ))}
-                        {gitData.created?.map((f) => (
-                          <div key={f} className="flex items-center gap-1.5 text-[10px] text-green-400/80">
-                            <Plus className="h-2.5 w-2.5 flex-shrink-0" />
-                            <span className="truncate font-mono">{f.split('/').pop()}</span>
-                          </div>
-                        ))}
-                        {gitData.deleted?.map((f) => (
-                          <div key={f} className="flex items-center gap-1.5 text-[10px] text-red-400/80">
-                            <Minus className="h-2.5 w-2.5 flex-shrink-0" />
-                            <span className="truncate font-mono">{f.split('/').pop()}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+      {/* ── Bottom Panel: Commit + extras ── */}
+      <div className="border-t border-border-subtle">
 
-                {gitData.totalChanges === 0 && (
-                  <div className="text-[11px] text-text-muted">Working tree clean</div>
-                )}
-
-                {/* Quick commit */}
-                {gitData.totalChanges > 0 && onGitCommit && (
-                  <div className="space-y-1.5 pt-1 border-t border-border-subtle">
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        value={gitData.commitMessage ?? ''}
-                        onChange={(e) => onCommitMessageChange?.(e.target.value)}
-                        placeholder="Commit message..."
-                        className="flex-1 min-w-0 rounded border border-border-subtle bg-bg-app px-2 py-1 text-[11px] text-text-primary placeholder:text-text-muted focus:border-border-strong focus:outline-none"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey && gitData.commitMessage?.trim()) {
-                            e.preventDefault();
-                            onGitCommit(gitData.commitMessage.trim());
-                          }
-                        }}
-                      />
-                      {onGitGenerateMessage && (
-                        <button
-                          type="button"
-                          onClick={onGitGenerateMessage}
-                          disabled={gitData.generatingMessage}
-                          className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors disabled:opacity-50"
-                          title="Generate commit message with AI"
-                        >
-                          {gitData.generatingMessage ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                        </button>
-                      )}
-                    </div>
-                    <Button
-                      size="xs"
-                      variant="secondary"
-                      onClick={() => {
-                        if (gitData.commitMessage?.trim()) {
-                          onGitCommit(gitData.commitMessage.trim());
-                        }
-                      }}
-                      disabled={!gitData.commitMessage?.trim() || gitData.committing}
-                      className="w-full"
-                    >
-                      <GitCommit className="h-3 w-3 mr-1" />
-                      {gitData.committing ? 'Committing...' : 'Commit'}
-                    </Button>
-                  </div>
-                )}
-
-                {/* Error */}
-                {gitData.error && (
-                  <div className="text-[10px] text-status-error-text">{gitData.error}</div>
-                )}
-              </div>
+        {/* ── Branch row ── */}
+        {gitData && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-border-subtle">
+            <GitBranch className="h-3 w-3 text-text-muted flex-shrink-0" />
+            <span className="text-[11px] font-mono text-text-primary truncate">
+              {gitData.branch || 'detached'}
+            </span>
+            {(gitData.ahead ?? 0) > 0 && (
+              <span className="text-[10px] text-text-muted">↑{gitData.ahead}</span>
+            )}
+            {(gitData.behind ?? 0) > 0 && (
+              <span className="text-[10px] text-text-muted">↓{gitData.behind}</span>
             )}
           </div>
         )}
 
-        {/* Pending Changes Section */}
+        {/* ── Commit Area ── */}
+        {gitData && (gitData.totalChanges > 0 || totalStaged > 0) && (onGitCommit || onGitCommitStaged) && (
+          <div className="px-3 py-2 space-y-1.5">
+            <div className="flex items-center gap-1">
+              <input
+                type="text"
+                value={gitData.commitMessage ?? ''}
+                onChange={(e) => onCommitMessageChange?.(e.target.value)}
+                placeholder="Commit message..."
+                className="flex-1 min-w-0 rounded border border-border-subtle bg-bg-app px-2 py-1 text-[11px] text-text-primary placeholder:text-text-muted focus:border-border-strong focus:outline-none"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && gitData.commitMessage?.trim()) {
+                    e.preventDefault();
+                    if (totalStaged > 0 && onGitCommitStaged) {
+                      onGitCommitStaged(gitData.commitMessage!.trim());
+                    } else if (onGitCommit) {
+                      onGitCommit(gitData.commitMessage!.trim());
+                    }
+                  }
+                }}
+              />
+              {onGitGenerateMessage && (
+                <button
+                  type="button"
+                  onClick={onGitGenerateMessage}
+                  disabled={gitData.generatingMessage}
+                  className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors disabled:opacity-50"
+                  title="Generate commit message with AI"
+                >
+                  {gitData.generatingMessage ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                </button>
+              )}
+            </div>
+            <Button
+              size="xs"
+              variant="secondary"
+              onClick={() => {
+                if (gitData.commitMessage?.trim()) {
+                  if (totalStaged > 0 && onGitCommitStaged) {
+                    onGitCommitStaged(gitData.commitMessage.trim());
+                  } else if (onGitCommit) {
+                    onGitCommit(gitData.commitMessage.trim());
+                  }
+                }
+              }}
+              disabled={!gitData.commitMessage?.trim() || gitData.committing}
+              className="w-full"
+            >
+              <GitCommit className="h-3 w-3 mr-1" />
+              {gitData.committing
+                ? 'Committing...'
+                : totalStaged > 0
+                  ? `Commit Staged (${totalStaged})`
+                  : 'Commit All'
+              }
+            </Button>
+            {gitData.error && (
+              <div className="text-[10px] text-status-error-text">{gitData.error}</div>
+            )}
+          </div>
+        )}
+
+        {/* ── Pending Agent Reviews (collapsible) ── */}
         {pendingDiffs.length > 0 && (
-          <div className="border-b border-border-subtle">
+          <div className="border-t border-border-subtle">
             <button
               type="button"
               onClick={() => setDiffsCollapsed(!diffsCollapsed)}
-              className="flex w-full items-center gap-1.5 px-3 py-2 text-xs font-medium text-text-secondary hover:bg-state-hover transition-colors"
+              className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-text-secondary hover:bg-state-hover transition-colors"
             >
               {diffsCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              <span>Pending Changes</span>
-              <span className="ml-auto rounded-full bg-status-warning-bg text-status-warning-text px-1.5 py-0.5 text-[10px] font-semibold">
+              <span>Pending Reviews</span>
+              <span className="ml-auto rounded-full bg-status-warning-bg text-status-warning-text px-1.5 py-0.5 text-[9px] font-bold">
                 {pendingDiffs.length}
               </span>
             </button>
@@ -281,7 +377,7 @@ export function ProjectUtilitySidebar({
                       className="flex-1 text-left truncate text-text-secondary hover:text-text-primary flex items-center gap-1.5"
                     >
                       <FileText className="h-3 w-3 text-text-muted flex-shrink-0" />
-                      <span className="truncate">{diff.filePath.split('/').pop()}</span>
+                      <span className="truncate font-mono text-[11px]">{diff.filePath.split('/').pop()}</span>
                     </button>
                     <div className="flex items-center gap-0.5 flex-shrink-0">
                       <Button size="xs" variant="secondary" onClick={() => onAcceptDiff?.(diff.editId)}>
@@ -298,34 +394,28 @@ export function ProjectUtilitySidebar({
           </div>
         )}
 
-        {/* Project Files Section */}
-        <div>
-          <button
-            type="button"
-            onClick={() => setFilesCollapsed(!filesCollapsed)}
-            className="flex w-full items-center gap-1.5 px-3 py-2 text-xs font-medium text-text-secondary hover:bg-state-hover transition-colors"
-          >
-            {filesCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            <span>Project Files</span>
-            {fileLinks.length > 0 && (
+        {/* ── Agent Files (collapsible, at the very bottom) ── */}
+        {fileLinks.length > 0 && (
+          <div className="border-t border-border-subtle">
+            <button
+              type="button"
+              onClick={() => setFilesCollapsed(!filesCollapsed)}
+              className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-text-secondary hover:bg-state-hover transition-colors"
+            >
+              {filesCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              <span>Agent Files</span>
               <span className="ml-auto text-[10px] text-text-muted">{fileLinks.length}</span>
-            )}
-          </button>
-          {!filesCollapsed && (
-            <div className="px-2 pb-2 space-y-0.5">
-              {fileLinks.length === 0 ? (
-                <div className="px-2 py-3 text-[11px] text-text-muted text-center">
-                  Files touched by the agent will appear here.
-                </div>
-              ) : (
-                fileLinks.map((file) => (
+            </button>
+            {!filesCollapsed && (
+              <div className="px-2 pb-2 space-y-0.5">
+                {fileLinks.map((file) => (
                   <div
                     key={file.path}
-                    className="flex items-center justify-between gap-1 rounded-md px-2 py-1 text-xs text-text-secondary hover:bg-state-hover transition-colors"
+                    className="flex items-center justify-between gap-1 rounded-md px-2 py-0.5 text-[11px] text-text-secondary hover:bg-state-hover transition-colors"
                   >
                     <div className="flex items-center gap-1.5 min-w-0 flex-1">
                       <FileText className="h-3 w-3 text-text-muted flex-shrink-0" />
-                      <span className="truncate" title={file.path}>{file.label}</span>
+                      <span className="truncate font-mono" title={file.path}>{file.label}</span>
                     </div>
                     {onOpenInIDE && (
                       <button
@@ -338,11 +428,11 @@ export function ProjectUtilitySidebar({
                       </button>
                     )}
                   </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

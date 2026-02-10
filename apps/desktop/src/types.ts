@@ -174,6 +174,12 @@ export type OpenFile = {
   language: string;
 };
 
+export type GitFileChange = {
+  path: string;
+  status: 'modified' | 'created' | 'deleted' | 'renamed' | 'untracked';
+  from?: string;
+};
+
 export type GitStatusInfo = {
   branch: string;
   ahead: number;
@@ -182,6 +188,8 @@ export type GitStatusInfo = {
   created: string[];
   deleted: string[];
   renamed: Array<{ from: string; to: string }>;
+  staged: GitFileChange[];
+  unstaged: GitFileChange[];
 };
 
 export type SidePanelId = "explorer" | "search" | "git" | "ai" | "settings";

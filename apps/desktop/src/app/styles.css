@@ -26,10 +26,11 @@
     /* Layered gradient gives the glass panels something to show through.
        On macOS with Electron vibrancy, the desktop wallpaper also bleeds in. */
     background:
-      radial-gradient(ellipse 80% 50% at 10% 0%, rgba(57, 148, 188, 0.08), transparent 60%),
-      radial-gradient(ellipse 60% 60% at 90% 100%, rgba(139, 92, 246, 0.06), transparent 60%),
-      radial-gradient(ellipse 50% 40% at 50% 50%, rgba(99, 102, 241, 0.04), transparent 60%),
-      rgba(9, 9, 11, 0.88);
+      radial-gradient(ellipse 80% 50% at 10% 0%, rgba(57, 148, 188, 0.14), transparent 60%),
+      radial-gradient(ellipse 60% 60% at 90% 100%, rgba(139, 92, 246, 0.10), transparent 60%),
+      radial-gradient(ellipse 50% 40% at 50% 50%, rgba(99, 102, 241, 0.07), transparent 60%),
+      radial-gradient(ellipse 40% 30% at 70% 20%, rgba(14, 165, 233, 0.06), transparent 50%),
+      rgba(9, 9, 11, 0.85);
   }
 }
 
@@ -38,74 +39,88 @@
 
   .glass {
     background: var(--glass-bg-panel);
-    backdrop-filter: blur(var(--glass-blur-lg)) saturate(180%);
-    -webkit-backdrop-filter: blur(var(--glass-blur-lg)) saturate(180%);
+    backdrop-filter: blur(var(--glass-blur-lg)) saturate(200%) brightness(1.05);
+    -webkit-backdrop-filter: blur(var(--glass-blur-lg)) saturate(200%) brightness(1.05);
     border: 1px solid var(--glass-border);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+                0 1px 0 0 rgba(255, 255, 255, 0.05) inset;
   }
 
   .glass-sidebar {
     background: var(--glass-bg-sidebar);
-    backdrop-filter: blur(var(--glass-blur-xl)) saturate(180%);
-    -webkit-backdrop-filter: blur(var(--glass-blur-xl)) saturate(180%);
+    backdrop-filter: blur(var(--glass-blur-xl)) saturate(210%) brightness(1.08);
+    -webkit-backdrop-filter: blur(var(--glass-blur-xl)) saturate(210%) brightness(1.08);
     border-right: 1px solid var(--glass-border);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset,
-                0 1px 0 0 rgba(255, 255, 255, 0.03) inset;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07) inset,
+                0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+                1px 0 24px rgba(0, 0, 0, 0.15);
   }
 
   .glass-titlebar {
     background: var(--glass-bg-titlebar);
-    backdrop-filter: blur(var(--glass-blur-xl)) saturate(200%);
-    -webkit-backdrop-filter: blur(var(--glass-blur-xl)) saturate(200%);
+    backdrop-filter: blur(var(--glass-blur-xl)) saturate(220%) brightness(1.1);
+    -webkit-backdrop-filter: blur(var(--glass-blur-xl)) saturate(220%) brightness(1.1);
     border-bottom: 1px solid var(--glass-border);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset,
-                0 1px 0 0 rgba(255, 255, 255, 0.03) inset;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07) inset,
+                0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
+                0 2px 16px rgba(0, 0, 0, 0.12);
   }
 
   .glass-elevated {
     background: var(--glass-bg-elevated);
-    backdrop-filter: blur(var(--glass-blur-xl)) saturate(180%);
-    -webkit-backdrop-filter: blur(var(--glass-blur-xl)) saturate(180%);
+    backdrop-filter: blur(var(--glass-blur-xl)) saturate(210%) brightness(1.06);
+    -webkit-backdrop-filter: blur(var(--glass-blur-xl)) saturate(210%) brightness(1.06);
     border: 1px solid var(--glass-border-strong);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
-                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5),
+                0 4px 16px rgba(0, 0, 0, 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+                0 1px 0 0 rgba(255, 255, 255, 0.1) inset;
   }
 
   .glass-card {
     background: var(--glass-bg-card);
-    backdrop-filter: blur(var(--glass-blur-md)) saturate(150%);
-    -webkit-backdrop-filter: blur(var(--glass-blur-md)) saturate(150%);
+    backdrop-filter: blur(var(--glass-blur-md)) saturate(190%) brightness(1.04);
+    -webkit-backdrop-filter: blur(var(--glass-blur-md)) saturate(190%) brightness(1.04);
     border: 1px solid var(--glass-border);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+                0 1px 0 0 rgba(255, 255, 255, 0.05) inset;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .glass-card:hover {
     background: var(--glass-bg-card-hover);
     border-color: var(--glass-border-strong);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+                0 1px 0 0 rgba(255, 255, 255, 0.07) inset,
+                0 4px 20px rgba(0, 0, 0, 0.2);
   }
 
   .glass-input {
     background: var(--glass-bg-input);
-    backdrop-filter: blur(var(--glass-blur-sm));
-    -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+    backdrop-filter: blur(var(--glass-blur-sm)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(160%);
     border: 1px solid var(--glass-border);
-    transition: border-color 0.15s ease;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
 
   .glass-input:focus-within {
     border-color: var(--glass-border-strong);
-    box-shadow: 0 0 0 3px var(--focus-ring);
+    box-shadow: 0 0 0 3px var(--focus-ring),
+                0 0 0 1px rgba(255, 255, 255, 0.06) inset;
   }
 
   .glass-selected {
-    background: rgba(57, 148, 188, 0.12);
-    border: 1px solid rgba(57, 148, 188, 0.25);
+    background: rgba(57, 148, 188, 0.15);
+    border: 1px solid rgba(57, 148, 188, 0.30);
+    box-shadow: 0 0 0 1px rgba(57, 148, 188, 0.08) inset;
   }
 
   .glass-noise::after {
     content: '';
     position: absolute;
     inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
     pointer-events: none;
     border-radius: inherit;
     opacity: var(--glass-noise-opacity);

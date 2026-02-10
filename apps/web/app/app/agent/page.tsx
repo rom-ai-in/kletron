@@ -122,18 +122,30 @@ export default function AgentPage() {
   }, []);
 
   const handleTitleGenerate = useCallback(async (runId: string, userMessage: string) => {
-    try {
-      const res = await fetch(`/api/sessions/${runId}/title`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ generate: true, userMessage }),
-      });
-      if (res.ok) {
-        await fetchSessions();
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 1500;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch(`/api/sessions/${runId}/title`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ generate: true, userMessage }),
+        });
+        if (res.ok) {
+          await fetchSessions();
+          return; // success — stop retrying
+        }
+        console.warn(`[title-gen] Attempt ${attempt + 1} returned ${res.status}`);
+      } catch (e) {
+        console.warn(`[title-gen] Attempt ${attempt + 1} failed:`, e);
       }
-    } catch (e) {
-      console.error("Failed to generate title:", e);
+      // Wait before retrying (skip after last attempt)
+      if (attempt < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
+      }
     }
+    console.error("[title-gen] All retries exhausted for session", runId);
   }, []);
 
   const {

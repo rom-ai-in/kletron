@@ -9,9 +9,19 @@ import {
   gitCheckout,
   gitCloneRepo,
   gitCommitAll,
+  gitCommitStaged,
   gitCreateBranch,
   gitListBranches,
   gitDiff,
+  gitDiffStaged,
+  gitStageFile,
+  gitStageAll,
+  gitUnstageFile,
+  gitUnstageAll,
+  gitRevertFile,
+  gitRevertAll,
+  gitPush,
+  gitCreatePR,
   listFiles,
   readFile,
   writeFile
@@ -417,6 +427,56 @@ ipcMain.handle("git:listBranches", async () => {
 ipcMain.handle("git:diff", async (_event, filePath?: string) => {
   if (!currentWorkspacePath) throw new Error("Workspace not set");
   return gitDiff(currentWorkspacePath, filePath);
+});
+
+ipcMain.handle("git:diffStaged", async (_event, filePath?: string) => {
+  if (!currentWorkspacePath) throw new Error("Workspace not set");
+  return gitDiffStaged(currentWorkspacePath, filePath);
+});
+
+ipcMain.handle("git:stageFile", async (_event, filePath: string) => {
+  if (!currentWorkspacePath) throw new Error("Workspace not set");
+  return gitStageFile(currentWorkspacePath, filePath);
+});
+
+ipcMain.handle("git:stageAll", async () => {
+  if (!currentWorkspacePath) throw new Error("Workspace not set");
+  return gitStageAll(currentWorkspacePath);
+});
+
+ipcMain.handle("git:unstageFile", async (_event, filePath: string) => {
+  if (!currentWorkspacePath) throw new Error("Workspace not set");
+  return gitUnstageFile(currentWorkspacePath, filePath);
+});
+
+ipcMain.handle("git:unstageAll", async () => {
+  if (!currentWorkspacePath) throw new Error("Workspace not set");
+  return gitUnstageAll(currentWorkspacePath);
+});
+
+ipcMain.handle("git:revertFile", async (_event, filePath: string) => {
+  if (!currentWorkspacePath) throw new Error("Workspace not set");
+  return gitRevertFile(currentWorkspacePath, filePath);
+});
+
+ipcMain.handle("git:revertAll", async () => {
+  if (!currentWorkspacePath) throw new Error("Workspace not set");
+  return gitRevertAll(currentWorkspacePath);
+});
+
+ipcMain.handle("git:commitStaged", async (_event, message: string) => {
+  if (!currentWorkspacePath) throw new Error("Workspace not set");
+  return gitCommitStaged(currentWorkspacePath, message);
+});
+
+ipcMain.handle("git:push", async (_event, remote?: string, branch?: string) => {
+  if (!currentWorkspacePath) throw new Error("Workspace not set");
+  return gitPush(currentWorkspacePath, remote, branch);
+});
+
+ipcMain.handle("git:createPR", async (_event, title: string, body?: string, base?: string) => {
+  if (!currentWorkspacePath) throw new Error("Workspace not set");
+  return gitCreatePR(currentWorkspacePath, title, body, base);
 });
 
 // ── Command Center IPC ──────────────────────────────────────────────────────

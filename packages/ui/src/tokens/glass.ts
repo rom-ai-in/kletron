@@ -8,27 +8,27 @@
 
 // ── Glass background surfaces ────────────────────────────────────────────────
 export const glassSurfaces = {
-  /** Sidebar panels — 65% opaque dark zinc */
+  /** Sidebar panels — 52% opaque dark zinc */
   sidebar: 'var(--glass-bg-sidebar)',
-  /** Title bar / tab bar — 55% opaque */
+  /** Title bar / tab bar — 42% opaque */
   titlebar: 'var(--glass-bg-titlebar)',
-  /** General panels — 70% opaque */
+  /** General panels — 55% opaque */
   panel: 'var(--glass-bg-panel)',
-  /** Cards — very subtle white overlay */
+  /** Cards — subtle white overlay */
   card: 'var(--glass-bg-card)',
   /** Card hover state */
   cardHover: 'var(--glass-bg-card-hover)',
   /** Input fields — subtle recessed look */
   input: 'var(--glass-bg-input)',
-  /** Modals, popovers, dropdowns — 75% opaque elevated */
+  /** Modals, popovers, dropdowns — 60% opaque elevated */
   elevated: 'var(--glass-bg-elevated)',
 } as const;
 
 // ── Glass borders ────────────────────────────────────────────────────────────
 export const glassBorders = {
-  /** Standard glass edge — 8% white */
+  /** Standard glass edge — 12% white */
   DEFAULT: 'var(--glass-border)',
-  /** Stronger glass edge — 14% white */
+  /** Stronger glass edge — 20% white */
   strong: 'var(--glass-border-strong)',
 } as const;
 

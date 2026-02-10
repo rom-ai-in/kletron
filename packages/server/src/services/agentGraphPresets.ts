@@ -7,12 +7,15 @@ const TOOL_PREFERENCE_GUIDANCE = [
   "- Prefer list_files/read_file/search_code/git_grep/semantic_code_search before execute_bash.",
   "- Use execute_bash only when a shell pipeline is truly required.",
   "- Avoid repeating commands; reuse prior outputs.",
+  "- NEVER call write_todos with the same payload more than once. Create your plan, then execute it.",
+  "- After gathering enough information, STOP gathering and produce your output/report.",
 ].join(" ");
 export const simpleReactSystemPrompt = [
   "You are a helpful AI assistant.",
   "Use tools to answer the user's question accurately. Focus on the repository context if provided.",
-  "If the request is multi-step, create and maintain a task queue using write_todos.",
-  "Update task status as you progress.",
+  "If the request is multi-step, create a task queue using write_todos ONCE, then execute tasks using other tools.",
+  "Update task status as you progress — but do NOT recreate the same task queue repeatedly.",
+  "After gathering sufficient information, STOP gathering and produce your final output.",
   TOOL_PREFERENCE_GUIDANCE,
 ].join(" ");
 export const simpleReactToolNames = [
@@ -991,7 +994,10 @@ export function buildCursorLikeRobustGraph(): Omit<AgentGraphDefinition, "_id" |
           "",
           "Append to existing workingNotes; remove resolved openQuestions.",
           "Include short, source-backed findings in workingNotes (file paths, functions, or configs).",
-          "If tools work successfully, set blockedReason to null and consecutiveErrors to 0."
+          "If tools work successfully, set blockedReason to null and consecutiveErrors to 0.",
+          "",
+          "ANTI-LOOP: You already have repository access via tools. Do NOT ask the user for repo access.",
+          "Do NOT re-create the same plan. If you have already gathered information, produce findings."
         ].join("\n"),
         userPromptTemplate: [
           "Mission: {{mission}}",
@@ -1479,9 +1485,10 @@ const CODER_SYSTEM_PROMPT = [
   "You are a Coder agent specialized in implementing code changes.",
   "Your role is to execute tasks from the task queue, write and edit code with minimal diffs, and update task status.",
   "Focus on: reading code to understand context, then making precise edits.",
-  "Always update task status using write_todos as you progress.",
+  "Update task status using write_todos as you progress — but only when status actually changes.",
   "When writing code, follow existing patterns and conventions found in the repository.",
-  "If the request is multi-step, create and maintain a task queue using write_todos.",
+  "If the request is multi-step, create a task queue using write_todos ONCE, then start executing.",
+  "Do NOT repeatedly recreate the task queue with the same content.",
   TOOL_PREFERENCE_GUIDANCE,
 ].join(" ");
 
@@ -1492,16 +1499,19 @@ const EXPLORER_SYSTEM_PROMPT = [
   "When answering questions, back every claim with specific references from the codebase.",
   "Discover and report: project structure, dependencies, coding patterns, naming conventions, design guidelines, and potential issues.",
   "Never modify files. Your output is knowledge, not code changes.",
+  "You already have full repository access via tools — do NOT ask the user for repo access or URLs.",
+  "Plan ONCE using write_todos, then gather data using tools, then produce your final report. Do NOT re-plan.",
   TOOL_PREFERENCE_GUIDANCE,
 ].join(" ");
 
 const PLANNER_SYSTEM_PROMPT = [
   "You are a Planner agent specialized in analyzing requests and producing detailed implementation plans.",
   "Your role is to: understand the user's request, analyze the relevant codebase, and produce a clear actionable plan.",
-  "Always use write_todos to create a structured task list with specific, ordered tasks.",
+  "Use write_todos ONCE to create a structured task list with specific, ordered tasks.",
   "Each task should reference concrete files, functions, or modules that need to be changed.",
   "Assess complexity, identify dependencies between tasks, and flag risks.",
   "Do NOT edit files or execute commands. Your output is a plan, not an implementation.",
+  "Do NOT call write_todos multiple times with the same content. Create the plan once, then finalize.",
   TOOL_PREFERENCE_GUIDANCE,
 ].join(" ");
 

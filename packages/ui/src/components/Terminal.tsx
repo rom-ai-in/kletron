@@ -7,11 +7,15 @@ import { AttachAddon } from '@xterm/addon-attach';
 import '@xterm/xterm/css/xterm.css';
 import { useTheme } from '../hooks/useTheme';
 
-const TERMINAL_WS_URL = 'ws://localhost:3002'; // Port defined in scripts/terminal-worker.ts
+const TERMINAL_WS_BASE = 'ws://localhost:3002'; // Port defined in scripts/terminal-worker.ts
 
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
-export const Terminal: React.FC = () => {
+interface TerminalProps {
+    workspacePath?: string;
+}
+
+export const Terminal: React.FC<TerminalProps> = ({ workspacePath }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const terminalRef = useRef<XTerm | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
@@ -26,8 +30,23 @@ export const Terminal: React.FC = () => {
         }
     }, []);
 
+    // Build WebSocket URL with optional cwd query param
+    const wsUrl = workspacePath
+        ? `${TERMINAL_WS_BASE}?cwd=${encodeURIComponent(workspacePath)}`
+        : TERMINAL_WS_BASE;
+
     useEffect(() => {
-        if (!containerRef.current || terminalRef.current) return;
+        if (!containerRef.current) return;
+
+        // Dispose previous terminal if reconnecting (e.g. workspace changed)
+        if (terminalRef.current) {
+            terminalRef.current.dispose();
+            terminalRef.current = null;
+        }
+        if (socketRef.current) {
+            socketRef.current.close();
+            socketRef.current = null;
+        }
 
         const term = new XTerm({
             cursorBlink: true,
@@ -56,8 +75,8 @@ export const Terminal: React.FC = () => {
         // Write welcome message while connecting
         term.writeln('\x1b[90mConnecting to terminal...\x1b[0m');
 
-        // Connect to WebSocket
-        const socket = new WebSocket(TERMINAL_WS_URL);
+        // Connect to WebSocket with workspace cwd
+        const socket = new WebSocket(wsUrl);
         socketRef.current = socket;
 
         socket.onopen = () => {
@@ -116,7 +135,7 @@ export const Terminal: React.FC = () => {
             terminalRef.current = null;
             socketRef.current = null;
         };
-    }, []);
+    }, [wsUrl]); // Reconnect when workspace path changes
 
     // Theme updates are handled at initialization for the terminal.
     useEffect(() => {

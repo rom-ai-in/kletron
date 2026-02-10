@@ -15,13 +15,22 @@ export { InputBar } from './InputBar';
 export type { InputBarProps } from './InputBar';
 
 export { ProjectUtilitySidebar } from './ProjectUtilitySidebar';
-export type { ProjectUtilitySidebarProps, PendingDiffItem, FileLink, GitSidebarData } from './ProjectUtilitySidebar';
+export type { ProjectUtilitySidebarProps, PendingDiffItem, FileLink, GitSidebarData, SourceControlTab } from './ProjectUtilitySidebar';
+
+export { GitChangeTree } from './GitChangeTree';
+export type { GitChangeTreeProps, GitFileChangeItem, GitChangeStatus } from './GitChangeTree';
 
 export { AgentGraphSelector } from './AgentGraphSelector';
 export type { AgentGraphSelectorProps, AgentGraph } from './AgentGraphSelector';
 
 export { InlineDiffReview } from './InlineDiffReview';
 export type { InlineDiffReviewProps, InlineDiff } from './InlineDiffReview';
+
+export { GitDiffViewer } from './GitDiffViewer';
+export type { GitDiffViewerProps } from './GitDiffViewer';
+
+export { UncommittedChangesPanel } from './UncommittedChangesPanel';
+export type { UncommittedChangesPanelProps, FileDiffData } from './UncommittedChangesPanel';
 
 export { SlashCommandMenu } from './SlashCommandMenu';
 export type { SlashCommandMenuProps, SlashCommandItem } from './SlashCommandMenu';

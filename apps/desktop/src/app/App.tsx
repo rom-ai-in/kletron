@@ -31,6 +31,8 @@ import { InputBar } from "@numezis/ui/components/CommandCenter/InputBar";
 import { MessageQueue } from "@numezis/ui/components/CommandCenter/MessageQueue";
 import { ProjectUtilitySidebar } from "@numezis/ui/components/CommandCenter/ProjectUtilitySidebar";
 import type { PendingDiffItem, FileLink, GitSidebarData } from "@numezis/ui/components/CommandCenter/ProjectUtilitySidebar";
+import { UncommittedChangesPanel } from "@numezis/ui/components/CommandCenter/UncommittedChangesPanel";
+import type { FileDiffData } from "@numezis/ui/components/CommandCenter/UncommittedChangesPanel";
 import { InlineDiffReview } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
 import type { InlineDiff } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
 import { SlashCommandMenu } from "@numezis/ui/components/CommandCenter/SlashCommandMenu";
@@ -108,6 +110,7 @@ export default function App() {
 
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [rightSidebarVisible, setRightSidebarVisible] = useState(true);
+  const [changesVisible, setChangesVisible] = useState(false);
   const [terminalVisible, setTerminalVisible] = useState(false);
   const [openTabs, setOpenTabs] = useState<ConversationTab[]>([]);
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
@@ -135,6 +138,17 @@ export default function App() {
       if (e.key === "b" && !e.shiftKey) {
         e.preventDefault();
         setSidebarVisible((p) => !p);
+      }
+      if (e.key === "b" && e.shiftKey) {
+        e.preventDefault();
+        setRightSidebarVisible((p) => !p);
+      }
+      if (e.key === "g" && e.shiftKey) {
+        e.preventDefault();
+        setChangesVisible((p) => {
+          if (!p) void git.fetchAllDiffs();
+          return !p;
+        });
       }
       if (e.key === "n" && !e.shiftKey) {
         e.preventDefault();
@@ -317,6 +331,8 @@ export default function App() {
       modified: git.gitStatus?.modified,
       created: git.gitStatus?.created,
       deleted: git.gitStatus?.deleted,
+      staged: git.gitStatus?.staged,
+      unstaged: git.gitStatus?.unstaged,
       commitMessage: git.commitMessage,
       committing: git.committing,
       generatingMessage: git.generatingMessage,
@@ -324,6 +340,29 @@ export default function App() {
       error: git.gitError,
     };
   }, [git.gitStatus, git.totalChanges, git.commitMessage, git.committing, git.generatingMessage, git.gitLoading, git.gitError]);
+
+  // Build file diffs for the uncommitted changes panel
+  const uncommittedFileDiffs: FileDiffData[] = useMemo(() => {
+    const files = git.gitStatus?.unstaged ?? [];
+    return files.map((f) => ({
+      path: f.path,
+      status: f.status,
+      diff: git.allDiffs.get(f.path) ?? null,
+      loading: git.allDiffsLoading && !git.allDiffs.has(f.path),
+    }));
+  }, [git.gitStatus?.unstaged, git.allDiffs, git.allDiffsLoading]);
+
+  // Auto-refresh diffs when panel is open and git status changes
+  const unstagedPathsKey = useMemo(
+    () => (git.gitStatus?.unstaged ?? []).map((f) => f.path).join(','),
+    [git.gitStatus?.unstaged]
+  );
+  useEffect(() => {
+    if (changesVisible && unstagedPathsKey) {
+      void git.fetchAllDiffs();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [changesVisible, unstagedPathsKey]);
 
   // Build agent graph items for selector
   const agentGraphItems: AgentGraph[] = useMemo(() => {
@@ -862,10 +901,32 @@ export default function App() {
           try { (window as any).numezis?.openInVSCode?.(); } catch { /* ignore */ }
         }}
         onCommit={() => {
-          // Focus the right sidebar git section
+          // Focus the right sidebar git section to write commit message
           setRightSidebarVisible(true);
         }}
+        onPush={() => void git.push()}
+        onCreatePR={() => {
+          // Push first, then create PR. Use commit message as PR title, or a default.
+          const title = git.commitMessage.trim() || `PR from ${git.gitStatus?.branch ?? 'branch'}`;
+          void git.push().then(() =>
+            git.createPR(title).then((result) => {
+              if (result?.url) {
+                try { (window as any).numezis?.openExternal?.(result.url); } catch { /* ignore */ }
+              }
+            })
+          );
+        }}
+        committing={git.committing}
+        pushing={git.pushing}
+        creatingPR={git.creatingPR}
         onToggleTerminal={() => setTerminalVisible((p) => !p)}
+        onToggleChanges={() => {
+          setChangesVisible((p) => {
+            if (!p) void git.fetchAllDiffs();
+            return !p;
+          });
+        }}
+        changesVisible={changesVisible}
         gitDiffStats={git.gitStatus ? {
           additions: git.gitStatus.created.length + git.gitStatus.modified.length,
           deletions: git.gitStatus.deleted.length,
@@ -873,7 +934,7 @@ export default function App() {
       />
 
       {/* ── Three-Pane Body ── */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 relative">
         {/* Left Sidebar: Project Navigation */}
         {sidebarVisible && (
           <ProjectSidebar
@@ -1053,13 +1114,31 @@ export default function App() {
                 </button>
               </div>
               <div className="flex-1 min-h-0">
-                <Terminal />
+                <Terminal workspacePath={workspace.workspace?.path} />
               </div>
             </div>
           )}
         </div>
 
-        {/* Right Sidebar: Project Utilities */}
+        {/* Middle Panel: Uncommitted Changes Diffs */}
+        {changesVisible && (
+          <div className="w-[480px] min-w-[360px] max-w-[640px] flex-shrink-0">
+            <UncommittedChangesPanel
+              fileDiffs={uncommittedFileDiffs}
+              loading={git.allDiffsLoading}
+              onClose={() => setChangesVisible(false)}
+              onOpenInIDE={(p) => {
+                try { (window as any).numezis?.openInVSCode?.(p); } catch { /* ignore */ }
+              }}
+              onStageFile={(p) => { void git.stageFile(p).then(() => git.fetchAllDiffs()); }}
+              onRevertFile={(p) => { void git.revertFile(p).then(() => git.fetchAllDiffs()); }}
+              onRevertAll={() => { void git.revertAll().then(() => git.fetchAllDiffs()); }}
+              onStageAll={() => { void git.stageAll().then(() => git.fetchAllDiffs()); }}
+            />
+          </div>
+        )}
+
+        {/* Right Sidebar: Source Control */}
         {rightSidebarVisible && (
           <ProjectUtilitySidebar
             fileLinks={fileLinks}
@@ -1074,9 +1153,22 @@ export default function App() {
             }}
             gitData={gitSidebarData}
             onGitCommit={(msg) => git.commit(msg)}
+            onGitCommitStaged={(msg) => git.commitStaged(msg)}
             onGitRefresh={() => git.refreshStatus()}
             onGitGenerateMessage={() => git.generateCommitMessage()}
             onCommitMessageChange={(msg) => git.setCommitMessage(msg)}
+            onGitStageFile={(p) => git.stageFile(p)}
+            onGitStageAll={() => git.stageAll()}
+            onGitUnstageFile={(p) => git.unstageFile(p)}
+            onGitUnstageAll={() => git.unstageAll()}
+            onGitRevertFile={(p) => git.revertFile(p)}
+            onGitRevertAll={() => git.revertAll()}
+            onViewFileDiff={(file, staged) => {
+              // When clicking a file in the sidebar, open it in the changes panel
+              setChangesVisible(true);
+              void git.fetchAllDiffs();
+            }}
+            selectedDiffPath={git.selectedDiffPath}
           />
         )}
       </div>

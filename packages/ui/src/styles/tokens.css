@@ -220,18 +220,18 @@
   background: var(--bg-app);
 
   /* ── Glass / Frosted Surfaces ──────────────────────────── */
-  --glass-bg-sidebar:       rgba(24, 24, 27, 0.65);
-  --glass-bg-titlebar:      rgba(24, 24, 27, 0.55);
-  --glass-bg-panel:         rgba(24, 24, 27, 0.70);
-  --glass-bg-card:          rgba(255, 255, 255, 0.03);
-  --glass-bg-card-hover:    rgba(255, 255, 255, 0.06);
-  --glass-bg-input:         rgba(255, 255, 255, 0.04);
-  --glass-bg-elevated:      rgba(39, 39, 42, 0.75);
-  --glass-border:           rgba(255, 255, 255, 0.08);
-  --glass-border-strong:    rgba(255, 255, 255, 0.14);
-  --glass-blur-sm:          8px;
-  --glass-blur-md:          16px;
-  --glass-blur-lg:          24px;
-  --glass-blur-xl:          40px;
-  --glass-noise-opacity:    0.03;
+  --glass-bg-sidebar:       rgba(24, 24, 27, 0.52);
+  --glass-bg-titlebar:      rgba(24, 24, 27, 0.42);
+  --glass-bg-panel:         rgba(24, 24, 27, 0.55);
+  --glass-bg-card:          rgba(255, 255, 255, 0.045);
+  --glass-bg-card-hover:    rgba(255, 255, 255, 0.08);
+  --glass-bg-input:         rgba(255, 255, 255, 0.05);
+  --glass-bg-elevated:      rgba(39, 39, 42, 0.60);
+  --glass-border:           rgba(255, 255, 255, 0.12);
+  --glass-border-strong:    rgba(255, 255, 255, 0.20);
+  --glass-blur-sm:          12px;
+  --glass-blur-md:          24px;
+  --glass-blur-lg:          36px;
+  --glass-blur-xl:          56px;
+  --glass-noise-opacity:    0.045;
 }

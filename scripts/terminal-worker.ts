@@ -1,6 +1,8 @@
 import { WebSocketServer, WebSocket } from 'ws';
+import { IncomingMessage } from 'http';
 import * as pty from 'node-pty';
 import os from 'os';
+import fs from 'fs';
 
 const PORT = 3002;
 
@@ -8,14 +10,19 @@ console.log(`🚀 Terminal Worker starting on port ${PORT}...`);
 
 const wss = new WebSocketServer({ port: PORT });
 
-wss.on('connection', (ws: WebSocket) => {
+wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     console.log('Client connected to terminal worker');
+
+    // Parse cwd from query string (sent by the Terminal component)
+    const url = new URL(req.url || '/', `http://localhost:${PORT}`);
+    const requestedCwd = url.searchParams.get('cwd');
+    const cwd = requestedCwd && fs.existsSync(requestedCwd) ? requestedCwd : process.cwd();
 
     // Default shell - use explicit /bin/bash as safer fallback than zsh
     // This is often more reliably in path for spawned processes
     const shell = process.env.SHELL || (os.platform() === 'win32' ? 'powershell.exe' : '/bin/bash');
 
-    console.log(`Spawning pty with shell: ${shell}`);
+    console.log(`Spawning pty with shell: ${shell}, cwd: ${cwd}`);
 
     // Create pty with error handling
     let ptyProcess;
@@ -24,7 +31,7 @@ wss.on('connection', (ws: WebSocket) => {
             name: 'xterm-color',
             cols: 80,
             rows: 30,
-            cwd: process.cwd(),
+            cwd,
             env: process.env as any
         });
     } catch (error) {
