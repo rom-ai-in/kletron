@@ -59,24 +59,24 @@ export function InputBar({
   className = '',
 }: InputBarProps) {
   return (
-    <div className={`glass-input border-t border-glass-border ${className}`}>
+    <div className={`px-4 pb-3 pt-1 ${className}`}>
       {/* Plan mode indicator */}
       {planMode && (
-        <div className="flex items-center gap-2 px-4 py-1 bg-blue-500/10 border-b border-blue-500/20">
-          <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider">Plan Mode</span>
-          <span className="text-[10px] text-text-muted">Agent will propose a plan without writing code</span>
+        <div className="flex items-center gap-2 px-3 py-1 mb-1 rounded-lg bg-blue-500/8 border border-blue-500/15">
+          <span className="text-[11px] font-semibold text-blue-400 uppercase tracking-wider">Plan Mode</span>
+          <span className="text-[11px] text-text-muted">Agent will propose a plan without writing code</span>
         </div>
       )}
 
       {/* Context Chips */}
       {contextChips && contextChips.length > 0 && (
-        <div className="px-4 pt-2">
+        <div className="pb-1.5">
           <ContextChips chips={contextChips} onDismiss={onDismissChip} size="sm" />
         </div>
       )}
 
       {/* Input Area */}
-      <div className="px-4 py-3">
+      <div>
         <ChatInput
           value={value}
           onChange={onChange}
@@ -128,7 +128,7 @@ export function InputBar({
           }
         />
         {tokenUsage && (
-          <div className="mt-1 text-[10px] text-text-muted font-mono">
+          <div className="mt-1.5 text-[11px] text-text-muted font-mono">
             Tokens: {tokenUsage.input ?? '—'} in · {tokenUsage.output ?? '—'} out
           </div>
         )}

@@ -105,20 +105,20 @@ export function ConversationCenter({
       <div className={`flex-1 flex flex-col items-center justify-center gap-4 text-text-muted ${className}`}>
         {emptyState ?? (
           <>
-            <Brain className="w-12 h-12 opacity-20" />
+            <Brain className="w-14 h-14 opacity-15" />
             <div className="text-center">
-              <div className="text-sm font-medium text-text-secondary">Command Center</div>
-              <div className="text-xs mt-1">Start a new thread or select one from the sidebar</div>
+              <div className="text-base font-medium text-text-secondary">Command Center</div>
+              <div className="text-[13px] mt-1.5 text-text-muted">Start a new thread or select one from the sidebar</div>
             </div>
-            <div className="flex flex-col gap-1 text-[11px] mt-2">
+            <div className="flex flex-col gap-1.5 text-[12px] mt-3">
               <span>
-                <kbd className="px-1.5 py-0.5 rounded bg-bg-elevated border border-border-subtle text-[10px]">⌘N</kbd> New Thread
+                <kbd className="px-1.5 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-[11px]">⌘N</kbd> New Thread
               </span>
               <span>
-                <kbd className="px-1.5 py-0.5 rounded bg-bg-elevated border border-border-subtle text-[10px]">⌘B</kbd> Toggle Sidebar
+                <kbd className="px-1.5 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-[11px]">⌘B</kbd> Toggle Sidebar
               </span>
               <span>
-                <kbd className="px-1.5 py-0.5 rounded bg-bg-elevated border border-border-subtle text-[10px]">/</kbd> Command Menu
+                <kbd className="px-1.5 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-[11px]">/</kbd> Command Menu
               </span>
             </div>
           </>
@@ -128,8 +128,8 @@ export function ConversationCenter({
   }
 
   return (
-    <div className={`flex-1 overflow-y-auto px-4 py-4 scrollbar-elegant ${className}`}>
-      <div className="mx-auto max-w-3xl space-y-3">
+    <div className={`flex-1 overflow-y-auto px-6 py-6 scrollbar-elegant scroll-smooth ${className}`}>
+      <div className="mx-auto max-w-4xl space-y-4">
         {/* Loading state */}
         {conversationLoading && (
           <div className="border border-border-subtle bg-bg-surface px-3 py-2 text-xs text-text-muted rounded-md">
@@ -202,7 +202,7 @@ export function ConversationCenter({
 
           if (isSystem) {
             return (
-              <div key={`sys-${idx}-${event.id ?? 'msg'}`} className="px-1 py-1 text-[10px] text-text-muted">
+              <div key={`sys-${idx}-${event.id ?? 'msg'}`} className="px-1 py-1.5 text-[11px] text-text-muted">
                 {event.content}
               </div>
             );
@@ -222,12 +222,12 @@ export function ConversationCenter({
           return (
             <div key={`event-${idx}-${event.id ?? 'msg'}`} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
               <div
-                className={`group max-w-[85%] rounded-lg px-4 py-2.5 text-[13px] leading-relaxed transition-colors ${
+                className={`group max-w-[85%] rounded-xl px-4 py-3 text-[14px] leading-relaxed transition-all duration-200 ${
                   isUser
                     ? isEditing
-                      ? 'border border-brand-primary/40 bg-bg-elevated text-text-primary ring-1 ring-brand-primary/20'
-                      : 'border border-border-subtle bg-bg-elevated text-text-primary hover:border-border-strong cursor-text'
-                    : 'bg-transparent text-text-secondary'
+                      ? 'border border-brand-primary/40 bg-white/[0.06] text-text-primary ring-1 ring-brand-primary/20'
+                      : 'bg-white/[0.04] text-text-primary hover:bg-white/[0.06] cursor-text'
+                    : 'bg-transparent text-text-secondary pl-0'
                 }`}
                 onClick={() => {
                   if (canEdit && !isEditing) {
@@ -245,7 +245,7 @@ export function ConversationCenter({
                         onChange={(e) => onEditDraftChange?.(e.target.value)}
                         disabled={editingMessageSaving}
                         noResize
-                        className="!bg-transparent !border-none !ring-0 !shadow-none !p-0 text-[13px]"
+                        className="!bg-transparent !border-none !ring-0 !shadow-none !p-0 text-[14px]"
                         autoFocus
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -330,7 +330,7 @@ export function ConversationCenter({
 
         {/* Progressive text streaming — show accumulated tokens with cursor */}
         {streaming && streamingText && (
-          <div className="rounded-lg px-3 py-2 text-[12px] bg-transparent text-text-secondary">
+          <div className="rounded-xl px-4 py-3 text-[14px] bg-transparent text-text-secondary">
             <MarkdownRenderer content={streamingText} />
             <span className="inline-block w-[2px] h-[14px] bg-text-muted align-text-bottom ml-0.5 animate-pulse" />
           </div>

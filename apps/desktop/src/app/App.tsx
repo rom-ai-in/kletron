@@ -24,8 +24,6 @@ import { Terminal } from "@numezis/ui/components/Terminal";
 import { TitleBar } from "@numezis/ui/components/CommandCenter/TitleBar";
 import { ProjectSidebar } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
 import type { SidebarProject } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
-import { ConversationTabs } from "@numezis/ui/components/CommandCenter/ConversationTabs";
-import type { ConversationTabItem } from "@numezis/ui/components/CommandCenter/ConversationTabs";
 import { ConversationCenter } from "@numezis/ui/components/CommandCenter/ConversationCenter";
 import { InputBar } from "@numezis/ui/components/CommandCenter/InputBar";
 import { MessageQueue } from "@numezis/ui/components/CommandCenter/MessageQueue";
@@ -266,16 +264,6 @@ export default function App() {
         })),
     }));
   }, [projectsHook.projects, threads.threads, threads.conversationId, conversation.streaming, workspace.workspace?.path, workspace.workspace?.name]);
-
-  // Build conversation tabs from open threads
-  const tabItems: ConversationTabItem[] = useMemo(() => {
-    return openTabs.map((tab) => ({
-      id: tab.id,
-      title: tab.title,
-      isPinned: tab.isPinned,
-      liveStatus: threads.conversationId === tab.id && conversation.streaming ? "running" : undefined,
-    }));
-  }, [openTabs, threads.conversationId, conversation.streaming]);
 
   // Build pending diffs for right sidebar
   const pendingDiffItems: PendingDiffItem[] = useMemo(() => {
@@ -919,6 +907,7 @@ export default function App() {
         committing={git.committing}
         pushing={git.pushing}
         creatingPR={git.creatingPR}
+        threadTitle={activeThreadTitle}
         onToggleTerminal={() => setTerminalVisible((p) => !p)}
         onToggleChanges={() => {
           setChangesVisible((p) => {
@@ -958,14 +947,6 @@ export default function App() {
 
         {/* Center: Conversation Workspace */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Conversation Tabs */}
-          <ConversationTabs
-            tabs={tabItems}
-            activeTabId={threads.conversationId}
-            onTabSelect={handleThreadSelect}
-            onTabClose={handleTabClose}
-          />
-
           {/* Conversation Messages */}
           <ConversationCenter
             renderItems={conversation.renderItems}

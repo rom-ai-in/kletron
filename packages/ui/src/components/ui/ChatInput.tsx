@@ -65,7 +65,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     return (
       <div
         className={cn(
-          'rounded-xl border border-border-subtle bg-bg-elevated p-3 shadow-sm transition focus-within:border-border-strong',
+          'rounded-2xl border border-white/[0.08] bg-white/[0.04] p-3.5 shadow-lg transition-all duration-200 focus-within:border-white/[0.14] focus-within:bg-white/[0.05] focus-within:shadow-xl',
           containerClassName,
           className
         )}
@@ -79,16 +79,16 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           rows={1}
           disabled={disabled}
           className={cn(
-            'w-full resize-none border-none bg-transparent p-0 text-[13px] font-medium text-text-primary outline-none focus:ring-0',
-            'placeholder:text-text-muted/60 scrollbar-elegant',
+            'w-full resize-none border-none bg-transparent p-0 text-[14px] font-medium text-text-primary outline-none focus:ring-0',
+            'placeholder:text-text-muted/50 scrollbar-elegant',
             inputClassName
           )}
           {...props}
         />
 
         {(footerLeft || footerRight || showSendButton) && (
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+          <div className="mt-2.5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5">
               {footerLeft}
             </div>
             <div className="flex items-center gap-2">
@@ -99,10 +99,10 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   onClick={sending ? onStop : onSend}
                   disabled={!sending && !canSend}
                   className={cn(
-                    'flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200',
+                    'flex h-8 w-8 items-center justify-center rounded-xl transition-all duration-200',
                     sending
-                      ? 'bg-bg-surface border border-border-subtle text-status-error-text scale-110 active:scale-95'
-                      : 'bg-text-primary text-bg-surface hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed'
+                      ? 'bg-red-500/15 border border-red-500/25 text-red-400 hover:bg-red-500/20 active:scale-95'
+                      : 'bg-accent-cyan text-bg-app hover:brightness-110 disabled:opacity-20 disabled:cursor-not-allowed active:scale-95'
                   )}
                   aria-label={sending ? 'Stop generation' : 'Send message'}
                 >

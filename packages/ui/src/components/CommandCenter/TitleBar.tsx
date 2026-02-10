@@ -22,6 +22,8 @@ export interface GitDiffStats {
 
 export interface TitleBarProps {
   workspaceName?: string;
+  /** Active thread title shown in the center */
+  threadTitle?: string;
   /** Optional extra content rendered in the center */
   center?: React.ReactNode;
   /** Git diff stats to show on the right */
@@ -46,6 +48,7 @@ export interface TitleBarProps {
 
 export function TitleBar({
   workspaceName = 'Numezis Desktop',
+  threadTitle,
   center,
   gitDiffStats,
   showTrafficLights = true,
@@ -80,115 +83,110 @@ export function TitleBar({
   const hasGitActions = onCommit || onPush || onCreatePR;
 
   return (
-    <header className={`relative z-50 flex h-10 items-center justify-between glass-titlebar px-4 app-region-drag ${!showTrafficLights ? 'pl-[76px]' : ''}`}>
-      {/* Left: traffic lights (hidden in Electron where native ones exist) + workspace name */}
-      <div className="flex items-center gap-3">
+    <header className={`relative z-50 flex h-9 items-center justify-between glass-titlebar px-4 app-region-drag ${!showTrafficLights ? 'pl-[76px]' : ''}`}>
+      {/* Left: traffic lights + workspace name */}
+      <div className="flex items-center gap-3 min-w-0 flex-shrink-0">
         {showTrafficLights && <TrafficLights className="app-region-no-drag" />}
-        <div className="text-[11px] font-semibold uppercase tracking-widest text-text-muted">
+        <div className="text-[11px] font-medium text-text-muted truncate max-w-[120px]">
           {workspaceName}
         </div>
       </div>
 
-      {/* Center: optional content */}
-      {center && <div className="flex-1 flex items-center justify-center app-region-no-drag">{center}</div>}
+      {/* Center: thread title (replaces tab bar) */}
+      <div className="flex-1 flex items-center justify-center min-w-0 px-4">
+        {center ?? (
+          threadTitle && (
+            <span className="text-[13px] font-medium text-text-primary truncate max-w-[400px]">
+              {threadTitle}
+            </span>
+          )
+        )}
+      </div>
 
-      {/* Right: action buttons (Codex-style) */}
-      <div className="flex items-center gap-1.5 app-region-no-drag">
+      {/* Right: action buttons */}
+      <div className="flex items-center gap-1 app-region-no-drag flex-shrink-0">
         {/* Run */}
         {onRun && (
           <button
             type="button"
             onClick={onRun}
-            className="rounded-md p-1.5 text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
+            className="rounded-md p-1.5 text-text-muted hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150"
             title="Run"
           >
             <Play className="h-3.5 w-3.5" />
           </button>
         )}
 
-        {/* Open button with dropdown style */}
+        {/* Open button */}
         {onOpen && (
           <button
             type="button"
             onClick={onOpen}
-            className="flex items-center gap-1 rounded-full border border-border-subtle bg-bg-surface px-2.5 py-1 text-[11px] font-medium text-text-secondary hover:text-text-primary hover:border-border-strong transition-colors"
+            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150"
             title="Open in editor"
           >
             <FolderOpen className="h-3 w-3" />
             Open
-            <ChevronDown className="h-2.5 w-2.5 text-text-muted" />
           </button>
         )}
 
-        {/* Commit button with dropdown menu */}
+        {/* Commit dropdown */}
         {hasGitActions && (
           <div className="relative" ref={gitMenuRef}>
             <button
               type="button"
               onClick={() => setGitMenuOpen((p) => !p)}
-              className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-all duration-150 ${
                 gitMenuOpen
-                  ? 'border-border-strong bg-state-hover text-text-primary'
-                  : 'border-border-subtle bg-bg-surface text-text-secondary hover:text-text-primary hover:border-border-strong'
+                  ? 'bg-white/[0.08] text-text-primary'
+                  : 'text-text-muted hover:text-text-primary hover:bg-white/[0.06]'
               }`}
               title="Git actions"
             >
               <GitCommitHorizontal className="h-3 w-3" />
               Commit
-              <ChevronDown className={`h-2.5 w-2.5 text-text-muted transition-transform ${gitMenuOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-150 ${gitMenuOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Dropdown Menu */}
             {gitMenuOpen && (
-              <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-lg border border-border-subtle py-1 animate-in fade-in slide-in-from-top-1 duration-150" style={{ backgroundColor: '#1e1e22', boxShadow: '0 8px 32px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4)' }}>
+              <div className="absolute right-0 top-full mt-1.5 z-50 min-w-[180px] rounded-lg border border-white/[0.08] py-1" style={{ backgroundColor: '#1c1c20', boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.35)' }}>
                 <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
                   Git actions
                 </div>
 
-                {/* Commit */}
                 {onCommit && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setGitMenuOpen(false);
-                      onCommit();
-                    }}
+                    onClick={() => { setGitMenuOpen(false); onCommit(); }}
                     disabled={committing}
-                    className="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] text-text-secondary hover:text-text-primary hover:bg-state-hover transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2.5 w-full px-3 py-2 text-[12px] text-text-secondary hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150 disabled:opacity-50"
                   >
                     {committing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitCommitHorizontal className="h-3.5 w-3.5" />}
                     <span>Commit</span>
                   </button>
                 )}
 
-                {/* Push */}
                 {onPush && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setGitMenuOpen(false);
-                      onPush();
-                    }}
+                    onClick={() => { setGitMenuOpen(false); onPush(); }}
                     disabled={pushing}
-                    className="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] text-text-secondary hover:text-text-primary hover:bg-state-hover transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2.5 w-full px-3 py-2 text-[12px] text-text-secondary hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150 disabled:opacity-50"
                   >
                     {pushing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
                     <span>Push</span>
                   </button>
                 )}
 
-                {/* Create PR */}
                 {onCreatePR && (
                   <>
-                    <div className="my-1 border-t border-border-subtle" />
+                    <div className="my-1 mx-2 border-t border-white/[0.06]" />
                     <button
                       type="button"
-                      onClick={() => {
-                        setGitMenuOpen(false);
-                        onCreatePR();
-                      }}
+                      onClick={() => { setGitMenuOpen(false); onCreatePR(); }}
                       disabled={creatingPR}
-                      className="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] text-text-secondary hover:text-text-primary hover:bg-state-hover transition-colors disabled:opacity-50"
+                      className="flex items-center gap-2.5 w-full px-3 py-2 text-[12px] text-text-secondary hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150 disabled:opacity-50"
                     >
                       {creatingPR ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitPullRequest className="h-3.5 w-3.5" />}
                       <span>Create PR</span>
@@ -202,7 +200,7 @@ export function TitleBar({
 
         {/* Separator */}
         {(onOpen || hasGitActions) && (onToggleTerminal || onToggleChanges || onShare || gitDiffStats) && (
-          <div className="w-px h-4 bg-border-subtle mx-0.5" />
+          <div className="w-px h-3.5 bg-white/[0.08] mx-1" />
         )}
 
         {/* Uncommitted Changes */}
@@ -210,7 +208,7 @@ export function TitleBar({
           <button
             type="button"
             onClick={onToggleChanges}
-            className={`rounded-md p-1.5 transition-colors ${changesVisible ? 'text-accent-cyan bg-accent-cyan/10' : 'text-text-muted hover:text-text-primary hover:bg-state-hover'}`}
+            className={`rounded-md p-1.5 transition-all duration-150 ${changesVisible ? 'text-accent-cyan bg-accent-cyan/10' : 'text-text-muted hover:text-text-primary hover:bg-white/[0.06]'}`}
             title="Toggle uncommitted changes (⌘⇧G)"
           >
             <GitCompareArrows className="h-3.5 w-3.5" />
@@ -222,33 +220,21 @@ export function TitleBar({
           <button
             type="button"
             onClick={onToggleTerminal}
-            className="rounded-md p-1.5 text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
+            className="rounded-md p-1.5 text-text-muted hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150"
             title="Toggle terminal (⌘J)"
           >
             <TerminalSquare className="h-3.5 w-3.5" />
           </button>
         )}
 
-        {/* Share */}
-        {onShare && (
-          <button
-            type="button"
-            onClick={onShare}
-            className="rounded-md p-1.5 text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
-            title="Share"
-          >
-            <Share2 className="h-3.5 w-3.5" />
-          </button>
-        )}
-
-        {/* Git diff stats */}
+        {/* Git diff stats pill */}
         {gitDiffStats && (gitDiffStats.additions > 0 || gitDiffStats.deletions > 0) && (
-          <div className="flex items-center gap-1 ml-1 text-[11px] font-mono">
+          <div className="flex items-center gap-1.5 ml-1 px-2 py-0.5 rounded-full bg-white/[0.04] text-[11px] font-mono">
             {gitDiffStats.additions > 0 && (
-              <span className="text-green-400">+{gitDiffStats.additions}</span>
+              <span className="text-green-400">+{gitDiffStats.additions.toLocaleString()}</span>
             )}
             {gitDiffStats.deletions > 0 && (
-              <span className="text-red-400">-{gitDiffStats.deletions}</span>
+              <span className="text-red-400">-{gitDiffStats.deletions.toLocaleString()}</span>
             )}
           </div>
         )}

@@ -137,51 +137,54 @@ export function ProjectUtilitySidebar({
   return (
     <div className={`flex flex-col h-full w-[300px] flex-shrink-0 glass-sidebar border-l border-glass-border ${className}`}>
 
-      {/* ── Unstaged / Staged Tab Bar (Cursor-style) ── */}
-      <div className="flex items-center gap-0 border-b border-border-subtle">
-        <button
-          type="button"
-          onClick={() => setActiveTab('unstaged')}
-          className={`flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold transition-colors ${
-            activeTab === 'unstaged'
-              ? 'text-text-primary bg-state-active'
-              : 'text-text-muted hover:text-text-secondary hover:bg-state-hover'
-          }`}
-        >
-          Unstaged
-          {totalUnstaged > 0 && (
-            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+      {/* ── Unstaged / Staged Pill Tabs ── */}
+      <div className="flex items-center gap-2 px-2 py-2 border-b border-white/[0.06]">
+        {/* Pill switch */}
+        <div className="flex items-center gap-0.5 rounded-lg bg-white/[0.04] p-0.5">
+          <button
+            type="button"
+            onClick={() => setActiveTab('unstaged')}
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] font-semibold transition-all duration-150 ${
               activeTab === 'unstaged'
-                ? 'bg-text-primary/10 text-text-primary'
-                : 'bg-text-muted/10 text-text-muted'
-            }`}>
-              {totalUnstaged}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('staged')}
-          className={`flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold transition-colors ${
-            activeTab === 'staged'
-              ? 'text-text-primary bg-state-active'
-              : 'text-text-muted hover:text-text-secondary hover:bg-state-hover'
-          }`}
-        >
-          Staged
-          {totalStaged > 0 && (
-            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                ? 'bg-white/[0.10] text-text-primary shadow-sm'
+                : 'text-text-muted hover:text-text-secondary'
+            }`}
+          >
+            Unstaged
+            {totalUnstaged > 0 && (
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                activeTab === 'unstaged'
+                  ? 'bg-accent-cyan/15 text-accent-cyan'
+                  : 'bg-white/[0.06] text-text-muted'
+              }`}>
+                {totalUnstaged}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('staged')}
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] font-semibold transition-all duration-150 ${
               activeTab === 'staged'
-                ? 'bg-green-500/10 text-green-400'
-                : 'bg-text-muted/10 text-text-muted'
-            }`}>
-              {totalStaged}
-            </span>
-          )}
-        </button>
+                ? 'bg-white/[0.10] text-text-primary shadow-sm'
+                : 'text-text-muted hover:text-text-secondary'
+            }`}
+          >
+            Staged
+            {totalStaged > 0 && (
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                activeTab === 'staged'
+                  ? 'bg-green-500/15 text-green-400'
+                  : 'bg-white/[0.06] text-text-muted'
+              }`}>
+                {totalStaged}
+              </span>
+            )}
+          </button>
+        </div>
 
         {/* Right-side actions */}
-        <div className="ml-auto flex items-center gap-0.5 pr-2">
+        <div className="ml-auto flex items-center gap-0.5">
           {/* Stage/Unstage all */}
           {activeTab === 'unstaged' && onGitStageAll && totalUnstaged > 0 && (
             <button
@@ -229,7 +232,7 @@ export function ProjectUtilitySidebar({
       </div>
 
       {/* ── Filter Input ── */}
-      <div className="px-2 py-1.5 border-b border-border-subtle">
+      <div className="px-2 py-1.5 border-b border-white/[0.06]">
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-text-muted" />
           <input
@@ -237,7 +240,7 @@ export function ProjectUtilitySidebar({
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter files..."
-            className="w-full rounded-md bg-bg-surface border border-border-subtle py-1 pl-7 pr-2 text-[11px] text-text-primary placeholder:text-text-muted focus:border-border-strong focus:outline-none"
+            className="w-full rounded-lg bg-white/[0.03] border border-white/[0.06] py-1.5 pl-7 pr-2 text-[12px] text-text-primary placeholder:text-text-muted/50 focus:border-white/[0.12] focus:outline-none transition-all duration-150"
           />
         </div>
       </div>

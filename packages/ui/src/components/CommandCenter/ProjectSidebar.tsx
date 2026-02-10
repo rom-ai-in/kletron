@@ -55,14 +55,15 @@ export interface ProjectSidebarProps {
 }
 
 function StatusDot({ status }: { status: ThreadLiveStatus }) {
+  if (status === 'idle') return null;
   const styles: Record<ThreadLiveStatus, string> = {
     running: 'bg-status-success animate-pulse',
     completed: 'bg-status-success',
-    idle: 'bg-text-muted',
+    idle: '',
     waiting: 'bg-status-warning',
     error: 'bg-status-error',
   };
-  return <span className={`w-2 h-2 rounded-full flex-shrink-0 ${styles[status]}`} />;
+  return <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${styles[status]}`} />;
 }
 
 function formatRelativeTime(iso?: string | null): string {
@@ -136,7 +137,7 @@ export function ProjectSidebar({
   }
 
   return (
-    <div className={`flex flex-col h-full w-[280px] flex-shrink-0 glass-sidebar ${className}`}>
+    <div className={`flex flex-col h-full w-[260px] flex-shrink-0 glass-sidebar ${className}`}>
       {/* ── Top section: Review queue + Add project ── */}
       <div className="flex flex-col border-b border-border-subtle">
         {/* Review Queue */}
@@ -156,13 +157,13 @@ export function ProjectSidebar({
           <button
             type="button"
             onClick={onAddProject}
-            className="flex items-center justify-between mx-2 my-2 px-3 py-2 rounded-lg border border-border-subtle bg-bg-app text-xs text-text-secondary hover:border-border-strong hover:text-text-primary hover:bg-state-hover transition-all"
+            className="flex items-center justify-between mx-2 my-2 px-3 py-2 rounded-lg border border-white/[0.06] bg-white/[0.02] text-[12px] text-text-secondary hover:border-accent-cyan/30 hover:text-text-primary hover:bg-accent-cyan/5 transition-all duration-200"
           >
             <div className="flex items-center gap-2">
               <FolderPlus className="h-3.5 w-3.5 text-text-muted" />
               <span className="font-medium">Add new project</span>
             </div>
-            <kbd className="flex items-center gap-0.5 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] font-mono text-text-muted">
+            <kbd className="flex items-center gap-0.5 rounded bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-mono text-text-muted">
               <span>&#8984;</span><span>O</span>
             </kbd>
           </button>
@@ -170,8 +171,8 @@ export function ProjectSidebar({
       </div>
 
       {/* ── Threads section header ── */}
-      <div className="flex items-center justify-between px-3 py-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+      <div className="flex items-center justify-between px-3 py-2.5 mt-1">
+        <span className="text-[11px] font-bold uppercase tracking-widest text-text-muted">
           Threads
         </span>
         {onSettings && (
@@ -195,7 +196,7 @@ export function ProjectSidebar({
           return (
             <div key={project.id} className="relative">
               {/* Project Header */}
-              <div className="group/project flex w-full items-center gap-1 px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-state-hover transition-colors">
+              <div className="group/project flex w-full items-center gap-1 px-3 py-2 text-[12px] font-semibold text-text-secondary hover:bg-white/[0.03] transition-all duration-150 mt-1 first:mt-0">
                 <button
                   type="button"
                   onClick={() => toggleProject(project.id)}
@@ -289,10 +290,10 @@ export function ProjectSidebar({
                     return (
                       <div
                         key={thread.id}
-                        className={`group flex items-center gap-2 pl-9 pr-2 py-1.5 cursor-pointer transition-colors ${
+                        className={`group flex items-center gap-2 pl-9 pr-2 py-1.5 cursor-pointer transition-all duration-150 ${
                           isActive
-                            ? 'bg-state-selected text-text-primary'
-                            : 'text-text-secondary hover:bg-state-hover hover:text-text-primary'
+                            ? 'bg-accent-cyan/8 text-text-primary border-l-2 border-l-accent-cyan pl-[34px]'
+                            : 'text-text-secondary hover:bg-white/[0.03] hover:text-text-primary border-l-2 border-l-transparent'
                         }`}
                         onClick={() => !isEditing && onThreadSelect?.(thread.id)}
                       >
@@ -316,8 +317,8 @@ export function ProjectSidebar({
                           </div>
                         ) : (
                           <>
-                            <span className="flex-1 truncate text-xs">{thread.title || 'Untitled'}</span>
-                            <span className="text-[10px] text-text-muted flex-shrink-0">{formatRelativeTime(thread.updatedAt)}</span>
+                            <span className="flex-1 truncate text-[13px] font-medium">{thread.title || 'Untitled'}</span>
+                            <span className="text-[11px] text-text-muted flex-shrink-0">{formatRelativeTime(thread.updatedAt)}</span>
                             {/* Hover actions */}
                             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
                               {onRenameThread && (
@@ -357,11 +358,11 @@ export function ProjectSidebar({
       </div>
 
       {/* Footer */}
-      <div className="border-t border-border-subtle px-3 py-2">
+      <div className="border-t border-white/[0.06] px-3 py-2">
         <button
           type="button"
           onClick={onSettings}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-text-secondary hover:bg-state-hover hover:text-text-primary transition-colors"
+          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] text-text-muted hover:bg-white/[0.04] hover:text-text-primary transition-all duration-150"
         >
           <Settings className="h-3.5 w-3.5" />
           Settings

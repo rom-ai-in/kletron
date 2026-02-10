@@ -151,13 +151,16 @@ export function useAgentSession(): UseAgentSessionReturn {
         };
     }, []);
 
-    // ── Resolve selected graph once graphs are loaded ────────────────────
+    // ── Resolve selected graph once graphs AND preferences are loaded ───
     // IMPORTANT: Do NOT include `selectedGraphId` in the dependency array.
     // This effect only runs for *initial* resolution (when graphs load or
     // savedGraphId arrives from the API).  User-initiated changes via
     // handleGraphChange must not be overridden.
+    // We gate on `llmPrefsLoaded` to avoid a race condition where graphs
+    // load before preferences, causing the default to be picked instead
+    // of the user's saved selection.
     useEffect(() => {
-        if (!graphOptionsLoaded) return;
+        if (!graphOptionsLoaded || !llmPrefsLoaded) return;
         const hasAgentGraphs = agentGraphs.length > 0;
         const defaultGraphId = hasAgentGraphs
             ? String(
@@ -175,7 +178,7 @@ export function useAgentSession(): UseAgentSessionReturn {
         if (nextGraphId) {
             setSelectedGraphId((prev) => (prev && prev !== "" ? prev : nextGraphId));
         }
-    }, [graphOptionsLoaded, agentGraphs, savedGraphId]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [graphOptionsLoaded, llmPrefsLoaded, agentGraphs, savedGraphId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Fetch enabled LLM providers ──────────────────────────────────────
     useEffect(() => {
@@ -198,8 +201,12 @@ export function useAgentSession(): UseAgentSessionReturn {
     }, []);
 
     // ── Auto-correct provider if current selection is disabled ───────────
+    // We gate on `llmPrefsLoaded` to avoid overwriting the user's saved
+    // preference when enabled providers load before preferences (the initial
+    // 'azure' value might not be in the enabled list, causing a premature
+    // auto-correct that persists over the real saved preference).
     useEffect(() => {
-        if (!enabledProvidersLoaded || enabledProviders.length === 0) return;
+        if (!enabledProvidersLoaded || !llmPrefsLoaded || enabledProviders.length === 0) return;
         if (!enabledProviders.includes(llmProvider as LlmProviderType)) {
             const nextProvider = enabledProviders[0];
             if (nextProvider) {
@@ -207,7 +214,7 @@ export function useAgentSession(): UseAgentSessionReturn {
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [enabledProvidersLoaded, enabledProviders, llmProvider]);
+    }, [enabledProvidersLoaded, llmPrefsLoaded, enabledProviders, llmProvider]);
 
     // ── Handlers ─────────────────────────────────────────────────────────
 

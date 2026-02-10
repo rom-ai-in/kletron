@@ -351,18 +351,20 @@ export function UncommittedChangesPanel({
   return (
     <div className={`flex flex-col h-full glass border-l border-glass-border ${className}`}>
       {/* ── Header ── */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle glass-titlebar flex-shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[12px] font-semibold text-text-primary">Uncommitted changes</span>
-          <span className="text-[10px] text-text-muted">{totalFiles} file{totalFiles !== 1 ? 's' : ''}</span>
-          {totalAdditions > 0 && <span className="text-[10px] text-green-400 font-semibold">+{totalAdditions}</span>}
-          {totalDeletions > 0 && <span className="text-[10px] text-red-400 font-semibold">-{totalDeletions}</span>}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.06] flex-shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="text-[13px] font-semibold text-text-primary">Uncommitted changes</span>
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/[0.04] text-[11px] font-mono">
+            <span className="text-text-muted">{totalFiles}</span>
+            {totalAdditions > 0 && <span className="text-green-400">+{totalAdditions.toLocaleString()}</span>}
+            {totalDeletions > 0 && <span className="text-red-400">-{totalDeletions.toLocaleString()}</span>}
+          </div>
         </div>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            className="p-0.5 rounded text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
+            className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150"
             title="Close panel"
           >
             <X className="h-3.5 w-3.5" />
