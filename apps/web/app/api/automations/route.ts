@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { automationExecutor } from "@numezis/server/services/automationExecutor";
 import { AutomationConfigBuilder } from "@numezis/shared/automationConfigBuilder";
+import { LLM_PROVIDERS } from "@numezis/shared/schemas/llmConfig.schema";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
@@ -21,7 +22,7 @@ const CreateAutomationSchema = z.object({
                     name: z.string().min(1),
                     prompt: z.string().trim().min(1),
                     graphId: z.string().min(1),
-                    llmProvider: z.enum(["azure", "lmstudio"]),
+                    llmProvider: z.enum(LLM_PROVIDERS),
                     llmModel: z.string().optional(),
                     contextFromPreviousStages: z.array(z.string()).optional(),
                     skipIf: z.string().optional(),

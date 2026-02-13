@@ -179,23 +179,38 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const workspaceId = searchParams.get("workspaceId") ?? undefined;
+  const allWorkspaces = searchParams.get("allWorkspaces") === "true";
   const includeArchived = searchParams.get("includeArchived") === "true";
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "50", 10) || 50, 200);
   const graphId = searchParams.get("graphId") ?? undefined;
 
-  // If no workspaceId provided, resolve from request
+  // If allWorkspaces=true, fetch sessions across all user workspaces
+  // Otherwise resolve a single workspace to filter by
   let resolvedWorkspaceId = workspaceId;
-  if (!resolvedWorkspaceId) {
+  if (!allWorkspaces && !resolvedWorkspaceId) {
     const workspace = await resolveWorkspaceFromRequest(request, auth.userId, null);
     resolvedWorkspaceId = workspace?._id?.toString();
   }
 
   try {
-    const runs = await agentGraphRunService.listSessions(resolvedWorkspaceId, {
-      includeArchived,
-      limit,
-      graphId,
-    });
+    let runs;
+    if (allWorkspaces) {
+      // Fetch all sessions for this user — no workspace filter, then rely on
+      // the client to group by workspaceId. This avoids ObjectId/$in type
+      // mismatches and works regardless of how workspaceId is stored.
+      // The limit is applied at the DB level (single query, no N+1).
+      runs = await agentGraphRunService.listSessions(undefined, {
+        includeArchived,
+        limit,
+        graphId,
+      });
+    } else {
+      runs = await agentGraphRunService.listSessions(resolvedWorkspaceId, {
+        includeArchived,
+        limit,
+        graphId,
+      });
+    }
 
     // Helper: strip injected [System: ...] personality prefix from titles
     const cleanTitle = (raw?: string) => {
@@ -209,6 +224,7 @@ export async function GET(request: Request) {
     const sessions = runs.map((run) => ({
       id: run._id?.toString(),
       graphId: run.graphId?.toString(),
+      workspaceId: run.workspaceId?.toString() ?? null,
       title: cleanTitle(run.title ?? run.state?.mission?.slice(0, 80)),
       status: run.status,
       archived: run.archived ?? false,

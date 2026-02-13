@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { Project } from "../types";
+import { normPath } from "../utils";
 
 const PROJECTS_STORAGE_KEY = "numezis.desktop.projects";
 
@@ -9,16 +10,6 @@ function projectNameFromPath(rootPath: string, fallbackName?: string | null): st
   const folderName = parts[parts.length - 1];
   if (folderName) return folderName;
   return fallbackName || "Project";
-}
-
-/** Normalise a path for reliable comparison.
- *  - Trims whitespace
- *  - Collapses consecutive slashes (e.g. /Users//foo → /Users/foo)
- *  - Strips trailing slashes
- *  Returns "" for null / undefined / whitespace-only input. */
-function normPath(p?: string | null): string {
-  if (!p) return "";
-  return p.trim().replace(/\/{2,}/g, "/").replace(/\/+$/, "");
 }
 
 export function useProjects(workspacePath?: string | null, workspaceName?: string | null) {
@@ -92,11 +83,12 @@ export function useProjects(workspacePath?: string | null, workspaceName?: strin
     setProjects((prev) => {
       const exists = prev.some((p) => normPath(p.rootPath) === wp);
       if (exists) {
-        // Activate the matching project (side-effect safe in updater)
+        // Activate the matching project — but only if it's not already active
         const proj = prev.find((p) => normPath(p.rootPath) === wp);
         if (proj) {
           // Schedule setActiveProjectId for next tick to avoid setState-in-setState
-          queueMicrotask(() => setActiveProjectId(proj.id));
+          // Use functional form to only update if the value actually changed
+          queueMicrotask(() => setActiveProjectId((current) => current === proj.id ? current : proj.id));
         }
         return prev; // no change
       }

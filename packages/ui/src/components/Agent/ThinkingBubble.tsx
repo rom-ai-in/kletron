@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Brain, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 export interface ThinkingBubbleProps {
     /** Whether the AI is currently thinking */
@@ -34,48 +34,37 @@ export function ThinkingBubble({
     };
 
     return (
-        <div
-            className={`rounded-lg overflow-hidden transition-all
-        border bg-[var(--agent-thinking-bg)]
-        ${isActive
-                    ? 'border-[var(--agent-thinking-border)]'
-                    : 'border-[var(--agent-thinking-border)] opacity-80'
-                }
-        ${className}
-      `}
-        >
-            {/* Header */}
+        <div className={`py-2 ${className}`}>
+            {/* Minimal text indicator */}
             <button
-                onClick={handleToggle}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--agent-thinking-bg)]"
+                onClick={content ? handleToggle : undefined}
+                className={`flex items-center gap-2 text-left ${content ? 'cursor-pointer' : 'cursor-default'}`}
             >
-                {/* Brain icon with animation */}
-                <Brain
-                    className={`w-4 h-4 text-[var(--agent-thinking)] ${isActive ? 'animate-pulse' : ''}`}
-                />
+                {/* Animated dot */}
+                {isActive && (
+                    <span className="relative flex h-2 w-2 flex-shrink-0">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-text-muted/40" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-text-muted/60" />
+                    </span>
+                )}
 
-                {/* Summary text */}
-                <span className="flex-1 text-xs font-medium text-[var(--agent-thinking-text)]">
+                {/* Summary text — simple muted label */}
+                <span className={`text-[15px] font-medium text-text-muted ${isActive ? 'animate-pulse' : 'opacity-60'}`}>
                     {summary}
                 </span>
 
-                {/* Loading indicator when active */}
-                {isActive && (
-                    <Loader2 className="w-3 h-3 text-[var(--agent-thinking)] animate-spin" />
-                )}
-
-                {/* Expand/collapse chevron */}
+                {/* Expand chevron if content exists */}
                 {content && (
                     isExpanded
-                        ? <ChevronDown className="w-3 h-3 text-[var(--agent-thinking-text)]" />
-                        : <ChevronRight className="w-3 h-3 text-[var(--agent-thinking-text)]" />
+                        ? <ChevronDown className="w-3.5 h-3.5 text-text-muted/50" />
+                        : <ChevronRight className="w-3.5 h-3.5 text-text-muted/50" />
                 )}
             </button>
 
             {/* Expandable content */}
             {content && isExpanded && (
-                <div className="px-3 pb-2 border-t border-[var(--agent-thinking-border)] pt-2">
-                    <p className="text-[11px] text-[var(--agent-thinking-text)] opacity-70 whitespace-pre-wrap">
+                <div className="mt-2 pl-4 border-l-2 border-white/[0.06]">
+                    <p className="text-[12px] text-text-muted/60 whitespace-pre-wrap leading-relaxed">
                         {content}
                     </p>
                 </div>

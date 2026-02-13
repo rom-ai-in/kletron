@@ -1,4 +1,5 @@
 import type { AutomationDefinition, AutomationStageConfig, AutomationTriggerType } from "./automationTypes";
+import { LLM_PROVIDERS } from "./schemas/llmConfig.schema";
 
 /**
  * AutomationConfigBuilder - Pre-configured automation templates and validation utilities
@@ -364,7 +365,7 @@ export class AutomationConfigBuilder {
             errors.push("Graph ID is required for each stage");
         }
 
-        if (!["azure", "lmstudio"].includes(stage.llmProvider)) {
+        if (!(LLM_PROVIDERS as readonly string[]).includes(stage.llmProvider)) {
             errors.push(`Invalid LLM provider: ${stage.llmProvider}`);
         }
 

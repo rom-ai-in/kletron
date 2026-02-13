@@ -5,20 +5,23 @@ import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type LlmEnvInfo = {
-    defaultProvider?: "azure" | "lmstudio";
-    azure?: {
-        configured: boolean;
-        endpoint?: string | null;
-        deployment?: string | null;
-        model?: string | null;
-        apiVersion?: string | null;
-    };
-    lmstudio?: {
-        configured: boolean;
-        baseUrl?: string | null;
-        model?: string | null;
-    };
+/** Display labels for each provider (used when building the dynamic options list). */
+const PROVIDER_LABELS: Record<string, string> = {
+    azure: "Azure OpenAI",
+    openai: "OpenAI",
+    claude: "Claude",
+    gemini: "Gemini",
+    lmstudio: "LM Studio",
+    ollama: "Ollama",
+    vllm: "vLLM",
+};
+
+/** Full LLM config shape returned by GET /api/llm-config */
+type LlmConfigData = {
+    provider?: string;
+    defaultProvider?: string;
+    enabledProviders?: string[];
+    [key: string]: unknown; // each provider key (azure, openai, …) holds its config
 };
 
 type AgentGraphRecord = {
@@ -32,7 +35,7 @@ export interface UseAgentSessionReturn {
     enabledProviders: LlmProviderType[];
     selectedGraphId: string;
     agentGraphs: AgentGraphRecord[];
-    envInfo: LlmEnvInfo | null;
+    llmConfigData: LlmConfigData | null;
     llmPrefsLoaded: boolean;
     enabledProvidersLoaded: boolean;
     graphOptionsLoaded: boolean;
@@ -54,19 +57,20 @@ export function useAgentSession(): UseAgentSessionReturn {
     const [agentGraphs, setAgentGraphs] = useState<AgentGraphRecord[]>([]);
     const [graphOptionsLoaded, setGraphOptionsLoaded] = useState(false);
     const [savedGraphId, setSavedGraphId] = useState<string | null>(null);
-    const [envInfo, setEnvInfo] = useState<LlmEnvInfo | null>(null);
+    const [llmConfigData, setLlmConfigData] = useState<LlmConfigData | null>(null);
 
     const { status: llmStatus } = useLlmHealth(llmProvider);
 
-    // ── Fetch user preferences (LLM provider + graph selection) ──────────
+    // ── Fetch LLM config + user preferences (LLM provider + graph selection)
     useEffect(() => {
         const fetchPreferences = async () => {
             try {
-                // Fetch env info first
-                const envRes = await fetch("/api/env");
-                const envData = await envRes.json();
-                const envLLM = envData.llm as LlmEnvInfo;
-                setEnvInfo(envLLM);
+                // Fetch full LLM config (contains all provider configs + model names)
+                const configRes = await fetch("/api/llm-config");
+                const configData: LlmConfigData = configRes.ok ? await configRes.json() : {};
+                setLlmConfigData(configData);
+
+                const defaultProvider = (configData.provider ?? configData.defaultProvider ?? 'azure') as string;
 
                 // Try to fetch user preferences from API
                 const prefsRes = await fetch("/api/user-preferences");
@@ -77,7 +81,7 @@ export function useAgentSession(): UseAgentSessionReturn {
                         if (selectedLlmProvider) {
                             setLlmProvider(selectedLlmProvider);
                         } else {
-                            // Fallback to localStorage then env
+                            // Fallback to localStorage then config default
                             const stored = window.localStorage.getItem("numezis-llm-selection");
                             if (stored) {
                                 try {
@@ -85,7 +89,7 @@ export function useAgentSession(): UseAgentSessionReturn {
                                     if (parsed.provider) setLlmProvider(parsed.provider);
                                 } catch { }
                             } else {
-                                setLlmProvider(envLLM?.defaultProvider || 'azure');
+                                setLlmProvider(defaultProvider);
                             }
                         }
                         if (prefGraphId) {
@@ -109,7 +113,7 @@ export function useAgentSession(): UseAgentSessionReturn {
                         if (parsed.provider) setLlmProvider(parsed.provider);
                     } catch { }
                 } else {
-                    setLlmProvider(envLLM?.defaultProvider || 'azure');
+                    setLlmProvider(defaultProvider);
                 }
 
                 const storedGraph = window.localStorage.getItem("numezis-graph-selection");
@@ -220,10 +224,13 @@ export function useAgentSession(): UseAgentSessionReturn {
 
     const handleLlmChange = (provider: string) => {
         setLlmProvider(provider);
+        // Resolve model name from config data
+        const providerConfig = llmConfigData?.[provider] as Record<string, unknown> | undefined;
+        const model = (providerConfig?.model ?? providerConfig?.deployment ?? '') as string;
         // Save to localStorage as fallback
         window.localStorage.setItem(
             "numezis-llm-selection",
-            JSON.stringify({ provider, model: provider === 'azure' ? envInfo?.azure?.model : envInfo?.lmstudio?.model })
+            JSON.stringify({ provider, model })
         );
         // Persist to API (fire-and-forget, don't block UI)
         fetch("/api/user-preferences", {
@@ -249,14 +256,18 @@ export function useAgentSession(): UseAgentSessionReturn {
 
     // ── Derived data ─────────────────────────────────────────────────────
 
-    const llmOptions = useMemo(() => [
-        { id: 'azure', label: 'Azure OpenAI', sub: envInfo?.azure?.model || 'Not configured' },
-        { id: 'openai', label: 'OpenAI', sub: 'gpt-4o' },
-        { id: 'claude', label: 'Claude', sub: 'claude-sonnet-4' },
-        { id: 'gemini', label: 'Gemini', sub: 'gemini-2.5-flash' },
-        { id: 'lmstudio', label: 'LM Studio', sub: envInfo?.lmstudio?.model || 'Not configured' },
-        { id: 'ollama', label: 'Ollama', sub: 'qwen2.5:14b' },
-    ].filter((option) => enabledProviders.includes(option.id as LlmProviderType)), [envInfo, enabledProviders]);
+    /** Build LLM options dynamically from enabledProviders + llmConfigData. */
+    const llmOptions = useMemo(() =>
+        enabledProviders.map((providerId) => {
+            const cfg = llmConfigData?.[providerId] as Record<string, unknown> | undefined;
+            const model = (cfg?.model ?? cfg?.deployment ?? '') as string;
+            return {
+                id: providerId,
+                label: PROVIDER_LABELS[providerId] ?? providerId,
+                sub: model || 'Not configured',
+            };
+        }),
+    [enabledProviders, llmConfigData]);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const graphSelectOptions = useMemo(() => (agentGraphs.length > 0 ? agentGraphs : graphOptions).map((g: any) => ({
@@ -270,7 +281,7 @@ export function useAgentSession(): UseAgentSessionReturn {
         enabledProviders,
         selectedGraphId,
         agentGraphs,
-        envInfo,
+        llmConfigData,
         llmPrefsLoaded,
         enabledProvidersLoaded,
         graphOptionsLoaded,

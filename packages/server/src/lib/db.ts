@@ -77,6 +77,17 @@ export async function closeDb() {
     }
 }
 
+/**
+ * Get the connected MongoClient instance.
+ * Useful for services that need the raw client (e.g. LangGraph checkpoint saver).
+ */
+export async function getMongoClient(): Promise<MongoClient> {
+    if (!clientPromise) {
+        throw new Error("MongoDB client is not initialized (missing MONGODB_URI?)");
+    }
+    return await clientPromise;
+}
+
 // Aliases for backward compatibility with services migrating from mongoClient.ts
 export const getDatabase = getDb;
 export const closeMongoConnection = closeDb;

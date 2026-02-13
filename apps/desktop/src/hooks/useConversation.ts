@@ -10,8 +10,9 @@ import type {
   StreamingState,
   WorkspaceInfo,
 } from "../types";
-import type { ReplayImpact, FileChange } from "@numezis/ui";
+import type { ReplayImpact } from "@numezis/ui";
 import { buildHunks, normalizeContent, wait } from "../utils";
+import { computeReplayImpactPure } from "../replayImpact";
 
 export function useConversation(
   backendUrlTrimmed: string,
@@ -581,73 +582,11 @@ export function useConversation(
   /**
    * Compute the impact of replaying from a given message index.
    * Analyses all events after `fromIndex` to find messages, tool calls, and file changes.
+   * Extracts actual code content and builds diff lines where possible.
    */
   const computeReplayImpact = useCallback(
     (fromIndex: number, originalContent: string, newContent: string): ReplayImpact => {
-      const eventsAfter = conversationEvents.filter(
-        (e) => typeof e.messageIndex === "number" && e.messageIndex > fromIndex
-      );
-
-      let messagesRemoved = 0;
-      let toolCallsRemoved = 0;
-      const fileChangesMap = new Map<string, FileChange["action"]>();
-
-      for (const event of eventsAfter) {
-        if (event.kind === "user" || (event.kind === "assistant" && !event.toolName)) {
-          messagesRemoved++;
-        }
-        if (event.kind === "assistant" && event.toolName) {
-          toolCallsRemoved++;
-
-          // Parse tool args for file changes
-          const toolName = event.toolName.toLowerCase();
-          let args: Record<string, unknown> = {};
-          if (event.toolArgs) {
-            try {
-              args = JSON.parse(event.toolArgs);
-            } catch {
-              // ignore
-            }
-          }
-
-          const filePath =
-            (args.filePath as string) ??
-            (args.path as string) ??
-            (args.file_path as string) ??
-            (args.fileName as string) ??
-            "";
-
-          if (filePath) {
-            if (toolName.includes("write") || toolName.includes("create") || toolName.includes("save")) {
-              // If we already have it as "modified", keep "modified"; otherwise check if new
-              if (!fileChangesMap.has(filePath)) {
-                // Heuristic: if tool name contains "create", mark as created
-                fileChangesMap.set(
-                  filePath,
-                  toolName.includes("create") ? "created" : "modified"
-                );
-              }
-            } else if (toolName.includes("delete") || toolName.includes("remove")) {
-              fileChangesMap.set(filePath, "deleted");
-            }
-          }
-        }
-        if (event.kind === "tool") {
-          // Tool results don't count as separate tool calls (they're the response)
-        }
-      }
-
-      const fileChanges: FileChange[] = Array.from(fileChangesMap.entries()).map(
-        ([path, action]) => ({ path, action })
-      );
-
-      return {
-        messagesRemoved,
-        toolCallsRemoved,
-        fileChanges,
-        originalContent,
-        newContent,
-      };
+      return computeReplayImpactPure(conversationEvents, fromIndex, originalContent, newContent);
     },
     [conversationEvents]
   );

@@ -61,23 +61,30 @@ const api = {
   readFile: (relativePath: string): Promise<string> => ipcRenderer.invoke("fs:readFile", relativePath),
   writeFile: (relativePath: string, content: string): Promise<void> => ipcRenderer.invoke("fs:writeFile", relativePath, content),
   applyFileChange: (relativePath: string, content: string): Promise<void> => ipcRenderer.invoke("fs:applyFileChange", relativePath, content),
-  gitStatus: (): Promise<GitStatus> => ipcRenderer.invoke("git:status"),
-  gitCommit: (message: string): Promise<string> => ipcRenderer.invoke("git:commit", message),
-  gitCreateBranch: (branch: string): Promise<void> => ipcRenderer.invoke("git:createBranch", branch),
-  gitCheckout: (branch: string): Promise<void> => ipcRenderer.invoke("git:checkout", branch),
+
+  // ── Git operations ──────────────────────────────────────────────────────
+  // All git operations accept an optional `cwd` (workspace path) parameter.
+  // When provided, the main process uses it directly instead of the global
+  // `currentWorkspacePath`. This guarantees the command runs against the
+  // intended repo even if a workspace switch races with an in-flight IPC call.
+
+  gitStatus: (cwd?: string): Promise<GitStatus> => ipcRenderer.invoke("git:status", cwd),
+  gitCommit: (message: string, cwd?: string): Promise<string> => ipcRenderer.invoke("git:commit", message, cwd),
+  gitCreateBranch: (branch: string, cwd?: string): Promise<void> => ipcRenderer.invoke("git:createBranch", branch, cwd),
+  gitCheckout: (branch: string, cwd?: string): Promise<void> => ipcRenderer.invoke("git:checkout", branch, cwd),
   gitClone: (repoUrl: string, branch?: string): Promise<WorkspaceInfo> => ipcRenderer.invoke("git:clone", repoUrl, branch),
-  gitListBranches: (): Promise<string[]> => ipcRenderer.invoke("git:listBranches"),
-  gitDiff: (filePath?: string): Promise<string> => ipcRenderer.invoke("git:diff", filePath),
-  gitDiffStaged: (filePath?: string): Promise<string> => ipcRenderer.invoke("git:diffStaged", filePath),
-  gitStageFile: (filePath: string): Promise<void> => ipcRenderer.invoke("git:stageFile", filePath),
-  gitStageAll: (): Promise<void> => ipcRenderer.invoke("git:stageAll"),
-  gitUnstageFile: (filePath: string): Promise<void> => ipcRenderer.invoke("git:unstageFile", filePath),
-  gitUnstageAll: (): Promise<void> => ipcRenderer.invoke("git:unstageAll"),
-  gitRevertFile: (filePath: string): Promise<void> => ipcRenderer.invoke("git:revertFile", filePath),
-  gitRevertAll: (): Promise<void> => ipcRenderer.invoke("git:revertAll"),
-  gitCommitStaged: (message: string): Promise<string> => ipcRenderer.invoke("git:commitStaged", message),
-  gitPush: (remote?: string, branch?: string): Promise<string> => ipcRenderer.invoke("git:push", remote, branch),
-  gitCreatePR: (title: string, body?: string, base?: string): Promise<{ url: string; number: number }> => ipcRenderer.invoke("git:createPR", title, body, base),
+  gitListBranches: (cwd?: string): Promise<string[]> => ipcRenderer.invoke("git:listBranches", cwd),
+  gitDiff: (filePath?: string, cwd?: string): Promise<string> => ipcRenderer.invoke("git:diff", filePath, cwd),
+  gitDiffStaged: (filePath?: string, cwd?: string): Promise<string> => ipcRenderer.invoke("git:diffStaged", filePath, cwd),
+  gitStageFile: (filePath: string, cwd?: string): Promise<void> => ipcRenderer.invoke("git:stageFile", filePath, cwd),
+  gitStageAll: (cwd?: string): Promise<void> => ipcRenderer.invoke("git:stageAll", cwd),
+  gitUnstageFile: (filePath: string, cwd?: string): Promise<void> => ipcRenderer.invoke("git:unstageFile", filePath, cwd),
+  gitUnstageAll: (cwd?: string): Promise<void> => ipcRenderer.invoke("git:unstageAll", cwd),
+  gitRevertFile: (filePath: string, cwd?: string): Promise<void> => ipcRenderer.invoke("git:revertFile", filePath, cwd),
+  gitRevertAll: (cwd?: string): Promise<void> => ipcRenderer.invoke("git:revertAll", cwd),
+  gitCommitStaged: (message: string, cwd?: string): Promise<string> => ipcRenderer.invoke("git:commitStaged", message, cwd),
+  gitPush: (remote?: string, branch?: string, cwd?: string): Promise<string> => ipcRenderer.invoke("git:push", remote, branch, cwd),
+  gitCreatePR: (title: string, body?: string, base?: string, cwd?: string): Promise<{ url: string; number: number }> => ipcRenderer.invoke("git:createPR", title, body, base, cwd),
   // Command Center
   pickFile: (): Promise<string[]> => ipcRenderer.invoke("app:pickFile"),
   captureScreenshot: (): Promise<string | null> => ipcRenderer.invoke("app:captureScreenshot"),

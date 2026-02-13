@@ -393,24 +393,27 @@ ipcMain.handle("fs:applyFileChange", async (_event, relativePath: string, conten
   return applyFileChange(currentWorkspacePath, relativePath, content);
 });
 
-ipcMain.handle("git:status", async () => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return getGitStatus(currentWorkspacePath);
+// Helper: resolve the workspace path from an explicit cwd or the global fallback.
+function resolveWorkspace(cwd?: string): string {
+  const resolved = cwd || currentWorkspacePath;
+  if (!resolved) throw new Error("Workspace not set");
+  return resolved;
+}
+
+ipcMain.handle("git:status", async (_event, cwd?: string) => {
+  return getGitStatus(resolveWorkspace(cwd));
 });
 
-ipcMain.handle("git:commit", async (_event, message: string) => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitCommitAll(currentWorkspacePath, message);
+ipcMain.handle("git:commit", async (_event, message: string, cwd?: string) => {
+  return gitCommitAll(resolveWorkspace(cwd), message);
 });
 
-ipcMain.handle("git:createBranch", async (_event, branch: string) => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitCreateBranch(currentWorkspacePath, branch);
+ipcMain.handle("git:createBranch", async (_event, branch: string, cwd?: string) => {
+  return gitCreateBranch(resolveWorkspace(cwd), branch);
 });
 
-ipcMain.handle("git:checkout", async (_event, branch: string) => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitCheckout(currentWorkspacePath, branch);
+ipcMain.handle("git:checkout", async (_event, branch: string, cwd?: string) => {
+  return gitCheckout(resolveWorkspace(cwd), branch);
 });
 
 ipcMain.handle("git:clone", async (_event, repoUrl: string, branch?: string) => {
@@ -419,64 +422,52 @@ ipcMain.handle("git:clone", async (_event, repoUrl: string, branch?: string) => 
   return result.workspace;
 });
 
-ipcMain.handle("git:listBranches", async () => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitListBranches(currentWorkspacePath);
+ipcMain.handle("git:listBranches", async (_event, cwd?: string) => {
+  return gitListBranches(resolveWorkspace(cwd));
 });
 
-ipcMain.handle("git:diff", async (_event, filePath?: string) => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitDiff(currentWorkspacePath, filePath);
+ipcMain.handle("git:diff", async (_event, filePath?: string, cwd?: string) => {
+  return gitDiff(resolveWorkspace(cwd), filePath);
 });
 
-ipcMain.handle("git:diffStaged", async (_event, filePath?: string) => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitDiffStaged(currentWorkspacePath, filePath);
+ipcMain.handle("git:diffStaged", async (_event, filePath?: string, cwd?: string) => {
+  return gitDiffStaged(resolveWorkspace(cwd), filePath);
 });
 
-ipcMain.handle("git:stageFile", async (_event, filePath: string) => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitStageFile(currentWorkspacePath, filePath);
+ipcMain.handle("git:stageFile", async (_event, filePath: string, cwd?: string) => {
+  return gitStageFile(resolveWorkspace(cwd), filePath);
 });
 
-ipcMain.handle("git:stageAll", async () => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitStageAll(currentWorkspacePath);
+ipcMain.handle("git:stageAll", async (_event, cwd?: string) => {
+  return gitStageAll(resolveWorkspace(cwd));
 });
 
-ipcMain.handle("git:unstageFile", async (_event, filePath: string) => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitUnstageFile(currentWorkspacePath, filePath);
+ipcMain.handle("git:unstageFile", async (_event, filePath: string, cwd?: string) => {
+  return gitUnstageFile(resolveWorkspace(cwd), filePath);
 });
 
-ipcMain.handle("git:unstageAll", async () => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitUnstageAll(currentWorkspacePath);
+ipcMain.handle("git:unstageAll", async (_event, cwd?: string) => {
+  return gitUnstageAll(resolveWorkspace(cwd));
 });
 
-ipcMain.handle("git:revertFile", async (_event, filePath: string) => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitRevertFile(currentWorkspacePath, filePath);
+ipcMain.handle("git:revertFile", async (_event, filePath: string, cwd?: string) => {
+  return gitRevertFile(resolveWorkspace(cwd), filePath);
 });
 
-ipcMain.handle("git:revertAll", async () => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitRevertAll(currentWorkspacePath);
+ipcMain.handle("git:revertAll", async (_event, cwd?: string) => {
+  return gitRevertAll(resolveWorkspace(cwd));
 });
 
-ipcMain.handle("git:commitStaged", async (_event, message: string) => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitCommitStaged(currentWorkspacePath, message);
+ipcMain.handle("git:commitStaged", async (_event, message: string, cwd?: string) => {
+  return gitCommitStaged(resolveWorkspace(cwd), message);
 });
 
-ipcMain.handle("git:push", async (_event, remote?: string, branch?: string) => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitPush(currentWorkspacePath, remote, branch);
+ipcMain.handle("git:push", async (_event, remote?: string, branch?: string, cwd?: string) => {
+  return gitPush(resolveWorkspace(cwd), remote, branch);
 });
 
-ipcMain.handle("git:createPR", async (_event, title: string, body?: string, base?: string) => {
-  if (!currentWorkspacePath) throw new Error("Workspace not set");
-  return gitCreatePR(currentWorkspacePath, title, body, base);
+ipcMain.handle("git:createPR", async (_event, title: string, body?: string, base?: string, cwd?: string) => {
+  return gitCreatePR(resolveWorkspace(cwd), title, body, base);
 });
 
 // ── Command Center IPC ──────────────────────────────────────────────────────

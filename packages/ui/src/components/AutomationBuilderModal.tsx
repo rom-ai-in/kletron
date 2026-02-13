@@ -4,9 +4,22 @@ import { useState, useEffect } from "react";
 import { Modal, Button, Skeleton, Panel, SelectableRow } from "@numezis/ui/components/design-system";
 import { AutomationConfigBuilder } from "@numezis/shared/automationConfigBuilder";
 import type { AutomationDefinition, AutomationStageConfig, AutomationTriggerType, GitEventType } from "@numezis/shared/automationTypes";
+import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
 import { describeCron } from "@numezis/shared/cronUtils";
 
 type GraphOption = { id: string; name: string; description?: string };
+type LlmProviderOption = { id: LlmProviderType; label: string; model?: string };
+
+/** Display labels for each provider. */
+const PROVIDER_LABELS: Record<string, string> = {
+    azure: "Azure OpenAI",
+    openai: "OpenAI",
+    claude: "Claude",
+    gemini: "Gemini",
+    lmstudio: "LM Studio",
+    ollama: "Ollama",
+    vllm: "vLLM",
+};
 
 const TRIGGER_OPTIONS: { id: AutomationTriggerType; label: string; description: string }[] = [
     { id: "manual", label: "Manual", description: "Triggered manually from the UI" },
@@ -65,8 +78,9 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
         stages: [],
     });
     const [graphOptions, setGraphOptions] = useState<GraphOption[]>([]);
+    const [llmProviderOptions, setLlmProviderOptions] = useState<LlmProviderOption[]>([]);
 
-    // Fetch available agent graphs
+    // Fetch available agent graphs + enabled LLM providers
     useEffect(() => {
         let cancelled = false;
         const loadGraphs = async () => {
@@ -88,7 +102,44 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                 // Fallback to empty — the UI will still work, just with no options
             }
         };
+        const loadProviders = async () => {
+            try {
+                // Fetch enabled providers
+                const enableRes = await fetch("/api/llm-config/enable", { cache: "no-store" });
+                const enableData = enableRes.ok ? await enableRes.json() : {};
+                const enabled: LlmProviderType[] = Array.isArray(enableData.enabledProviders)
+                    ? enableData.enabledProviders
+                    : [];
+
+                // Fetch full config to get model names for each provider
+                const configRes = await fetch("/api/llm-config", { cache: "no-store" });
+                const configData = configRes.ok ? await configRes.json() : {};
+
+                if (!cancelled) {
+                    setLlmProviderOptions(
+                        enabled.map((providerId) => {
+                            const cfg = configData?.[providerId] as Record<string, unknown> | undefined;
+                            const model = (cfg?.model ?? cfg?.deployment ?? "") as string;
+                            return {
+                                id: providerId,
+                                label: PROVIDER_LABELS[providerId] ?? providerId,
+                                model: model || undefined,
+                            };
+                        })
+                    );
+                }
+            } catch {
+                // Fallback — show at least azure/lmstudio so the UI isn't empty
+                if (!cancelled) {
+                    setLlmProviderOptions([
+                        { id: "azure", label: "Azure OpenAI" },
+                        { id: "lmstudio", label: "LM Studio" },
+                    ]);
+                }
+            }
+        };
         void loadGraphs();
+        void loadProviders();
         return () => { cancelled = true; };
     }, []);
 
@@ -141,12 +192,13 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
 
     const handleAddStage = () => {
         const defaultGraphId = graphOptions.length > 0 ? graphOptions[0].id : "";
+        const defaultProvider: LlmProviderType = llmProviderOptions.length > 0 ? llmProviderOptions[0].id : "azure";
         const newStage: AutomationStageConfig = {
             id: `stage-${(automationData.stages?.length || 0) + 1}`,
             name: "New Stage",
             prompt: "",
             graphId: defaultGraphId,
-            llmProvider: "azure",
+            llmProvider: defaultProvider,
         };
         setAutomationData({
             ...automationData,
@@ -335,11 +387,23 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                                             <label className="block text-[10px] text-text-muted uppercase mb-1">LLM Provider</label>
                                             <select
                                                 value={stage.llmProvider}
-                                                onChange={(e) => handleUpdateStage(idx, { llmProvider: e.target.value as "azure" | "lmstudio" })}
+                                                onChange={(e) => handleUpdateStage(idx, { llmProvider: e.target.value as LlmProviderType })}
                                                 className="w-full rounded border-border-subtle bg-bg-surface px-2 py-1 text-xs"
                                             >
-                                                <option value="azure">Azure OpenAI</option>
-                                                <option value="lmstudio">LM Studio</option>
+                                                {llmProviderOptions.length === 0 && (
+                                                    <option value="" disabled>Loading providers...</option>
+                                                )}
+                                                {llmProviderOptions.map((p) => (
+                                                    <option key={p.id} value={p.id}>
+                                                        {p.label}{p.model ? ` (${p.model})` : ""}
+                                                    </option>
+                                                ))}
+                                                {/* If the current provider isn't in the list (e.g. disabled), keep it visible */}
+                                                {stage.llmProvider && !llmProviderOptions.some((p) => p.id === stage.llmProvider) && (
+                                                    <option value={stage.llmProvider}>
+                                                        {PROVIDER_LABELS[stage.llmProvider] ?? stage.llmProvider} (disabled)
+                                                    </option>
+                                                )}
                                             </select>
                                         </div>
                                     </div>
@@ -619,7 +683,9 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                                     <span className="text-text-primary">{automationData.stages?.length} stages</span>
                                     <span className="text-text-muted">Providers:</span>
                                     <span className="text-text-primary">
-                                        {[...new Set(automationData.stages?.map(s => s.llmProvider))].join(", ")}
+                                        {[...new Set(automationData.stages?.map(s => s.llmProvider))]
+                                            .map(p => PROVIDER_LABELS[p] ?? p)
+                                            .join(", ")}
                                     </span>
                                     <span className="text-text-muted">Trigger:</span>
                                     <span className="text-text-primary">{triggerLabel}</span>

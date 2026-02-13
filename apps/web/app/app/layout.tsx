@@ -4,6 +4,7 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@numezis/ui/context/AuthContext';
+import { WorkspaceProvider } from '@numezis/ui/context/WorkspaceContext';
 import { Sidebar } from '@numezis/ui/components/Sidebar';
 import { AppHeader } from '@numezis/ui/components/AppHeader';
 import { BreadcrumbOverridesProvider } from '@numezis/ui/components/ui/BreadcrumbOverridesProvider';
@@ -49,14 +50,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
     // Authenticated - render app shell with sidebar
     return (
-        <div className="flex h-screen overflow-hidden">
-            <Sidebar />
-            <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
-                <BreadcrumbOverridesProvider>
-                    <AppHeader />
-                    <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
-                </BreadcrumbOverridesProvider>
-            </main>
-        </div>
+        <WorkspaceProvider>
+            <div className="flex h-screen overflow-hidden">
+                <Sidebar />
+                <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+                    <BreadcrumbOverridesProvider>
+                        <AppHeader />
+                        <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
+                    </BreadcrumbOverridesProvider>
+                </main>
+            </div>
+        </WorkspaceProvider>
     );
 }

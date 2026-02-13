@@ -7,6 +7,17 @@ import type { AgentEvent } from "@numezis/shared/types";
 import { Button, Panel } from "@numezis/ui/components/design-system";
 import { AutomationBuilderModal } from "@numezis/ui/components/AutomationBuilderModal";
 import { describeCron } from "@numezis/shared/cronUtils";
+
+/** Display labels for LLM providers */
+const PROVIDER_LABELS: Record<string, string> = {
+    azure: "Azure OpenAI",
+    openai: "OpenAI",
+    claude: "Claude",
+    gemini: "Gemini",
+    lmstudio: "LM Studio",
+    ollama: "Ollama",
+    vllm: "vLLM",
+};
 import {
     Play,
     Pause,
@@ -496,7 +507,7 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
                                         <div className="flex-1 min-w-0">
                                             <div className="text-sm font-medium text-text-primary truncate">{stage.name}</div>
                                         <div className="text-[11px] text-text-muted truncate font-mono mt-0.5">
-                                            {stage.llmProvider}
+                                            {PROVIDER_LABELS[stage.llmProvider] ?? stage.llmProvider}
                                         </div>
                                         <div className={`text-[11px] truncate font-mono mt-0.5 ${promptMissing ? "text-status-error-text" : "text-text-muted"}`}>
                                             {promptMissing ? "Missing prompt" : stage.prompt}

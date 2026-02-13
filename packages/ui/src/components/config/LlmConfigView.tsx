@@ -2047,7 +2047,7 @@ function VLLMConfigForm({
             type="url"
             value={formData.baseUrl || ""}
             onChange={(e) => setFormData((prev) => ({ ...prev, baseUrl: e.target.value }))}
-            placeholder="http://127.0.0.1:8000"
+            placeholder="http://127.0.0.1:8001"
             className="w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-warning-border focus:outline-none focus:ring-1 focus:ring-status-warning-border transition-all"
           />
           <p className="text-[11px] text-text-muted">

@@ -103,6 +103,21 @@ export type AgentWorkflowUpdate = {
 
 export type AgentWorkflowAbortReason = "PAUSED" | "CANCELLED";
 
+/**
+ * Checkpoint metadata included in workflow results when a run is
+ * interrupted (human-in-the-loop).
+ */
+export type CheckpointInfo = {
+    /** LangGraph thread ID for resume. */
+    threadId: string;
+    /** The graph node where the interrupt occurred. */
+    nodeId?: string;
+    /** ISO timestamp of the interrupt. */
+    interruptedAt: string;
+    /** Current status of the checkpoint. */
+    status: "awaiting_approval" | "approved" | "rejected";
+};
+
 export type AgentWorkflowOptions = {
     onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
     llmSelection?: { provider: LlmProviderType; model?: string };
@@ -140,4 +155,18 @@ export type RepoAnalysisResult = {
         techStack: string[];
         architectureType: string;
     };
+};
+
+/** Workspace summary for multi-project management (shared across web and desktop). */
+export type WorkspaceSummary = {
+    id: string;
+    name: string;
+    rootPath: string;
+    repoUrl?: string;
+    provider?: string;
+    defaultBranch?: string;
+    status?: string;
+    createdAt?: string | Date;
+    updatedAt?: string | Date;
+    lastUsed?: string | Date;
 };

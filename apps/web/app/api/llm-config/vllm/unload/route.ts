@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     try {
         const llmConfig = await getLlmConfig().catch(() => null);
-        const rawBaseUrl = llmConfig?.vllm?.baseUrl ?? envConfig.vllm.baseUrl ?? "http://127.0.0.1:8000";
+        const rawBaseUrl = llmConfig?.vllm?.baseUrl ?? envConfig.vllm.baseUrl ?? "http://127.0.0.1:8001";
         const base = cleanBase(rawBaseUrl);
 
         const endpoints = [

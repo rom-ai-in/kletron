@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import {
   ChevronLeft, Settings, Brain, Zap, Eye, User,
   Wrench, GitBranch, Paperclip, ChevronUp, ChevronDown, TerminalSquare,
@@ -14,6 +14,7 @@ import {
   WorktreeManager,
   ContextChips,
   createFileChip,
+  useToast,
 } from "@numezis/ui/components/design-system";
 import type { ContextChip } from "@numezis/ui/components/design-system";
 
@@ -58,13 +59,14 @@ import { useSkills } from "../hooks/useSkills";
 
 // Utils & types
 import type { MCPServer, EnvVariable, Worktree, ConversationTab, Automation, QueuedMessage } from "../types";
-import { SETTINGS_SECTIONS, formatRelativeTime } from "../utils";
+import { SETTINGS_SECTIONS, formatRelativeTime, pathsEqual } from "../utils";
 
 export default function App() {
   // ═══════════════════════════════════════════════════════════════════════════
   // HOOKS & BUSINESS LOGIC
   // ═══════════════════════════════════════════════════════════════════════════
 
+  const toast = useToast();
   const settings = useSettings();
   const { backendUrlTrimmed, backendUrlValid, backendConnected, setBackendConnected } = settings;
 
@@ -374,14 +376,34 @@ export default function App() {
   // HANDLERS
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /** Switch workspace with a debounced toast notification.
+   *  If the user clicks through multiple threads quickly, only the final
+   *  workspace switch fires the toast and the intermediate ones are coalesced. */
+  const switchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const switchWorkspaceTo = useCallback((path: string, name: string) => {
+    if (pathsEqual(path, workspace.workspace?.path)) return;
+    workspace.setWorkspace({ path, name });
+
+    // Debounce the toast so rapid switching doesn't spam notifications
+    if (switchDebounceRef.current) clearTimeout(switchDebounceRef.current);
+    switchDebounceRef.current = setTimeout(() => {
+      toast.info("Switched project", `Now working in ${name}`);
+      switchDebounceRef.current = null;
+    }, 400);
+  }, [workspace.workspace?.path, toast]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function handleNewThreadInProject(projectId: string) {
     conversation.abortRef.current?.abort();
     conversation.resetConversation();
     diffs.resetDiffs();
     // Clear the current conversation so the next sendMessage creates a fresh session
     threads.setConversationId(null);
-    // Set the target project as active
+    // Set the target project as active and switch workspace
     projectsHook.setActiveProjectId(projectId);
+    const project = projectsHook.projects.find((p) => p.id === projectId);
+    if (project?.rootPath) {
+      switchWorkspaceTo(project.rootPath, project.name);
+    }
   }
 
   async function handleAddProject() {
@@ -391,6 +413,8 @@ export default function App() {
       const folderPath: string = result.path;
       const folderName: string = result.name || folderPath.split("/").pop() || "Project";
       projectsHook.addProject(folderName, folderPath);
+      // Switch workspace to the newly added project
+      switchWorkspaceTo(folderPath, folderName);
     } catch {
       // ignore — user cancelled or Electron API unavailable
     }
@@ -402,6 +426,21 @@ export default function App() {
     conversation.resetConversation();
     diffs.resetDiffs();
     threads.setConversationId(threadId);
+
+    // Auto-switch workspace to the project that owns this thread
+    const ownerProject = projectsHook.projects.find((p) => p.threads.includes(threadId));
+    if (ownerProject) {
+      projectsHook.setActiveProjectId(ownerProject.id);
+      if (ownerProject.rootPath) {
+        switchWorkspaceTo(ownerProject.rootPath, ownerProject.name);
+      }
+    } else {
+      // Orphan thread — assign it to the current active project so it has a home
+      const fallbackProject = projectsHook.activeProject ?? projectsHook.projects[0];
+      if (fallbackProject) {
+        projectsHook.assignThread(fallbackProject.id, threadId);
+      }
+    }
 
     // Add to open tabs if not already there
     const thread = threads.threads.find((t) => t.id === threadId);
@@ -883,7 +922,7 @@ export default function App() {
     <div className="flex h-screen flex-col text-text-primary">
       {/* ── Title Bar ── */}
       <TitleBar
-        workspaceName={workspace.workspace?.path?.split("/").pop() || workspace.workspace?.name || "Numezis Desktop"}
+        workspaceName={projectsHook.activeProject?.name || workspace.workspace?.path?.split("/").pop() || workspace.workspace?.name || "Numezis Desktop"}
         showTrafficLights={false}
         onOpen={() => {
           try { (window as any).numezis?.openInVSCode?.(); } catch { /* ignore */ }
@@ -941,7 +980,17 @@ export default function App() {
             }}
             onArchiveThread={(threadId) => void threads.archiveThread(threadId)}
             onDeleteThread={(threadId) => void threads.deleteThread(threadId)}
-            onRemoveProject={(projectId) => projectsHook.removeProject(projectId)}
+            onRemoveProject={(projectId) => {
+              const remaining = projectsHook.projects.filter((p) => p.id !== projectId);
+              projectsHook.removeProject(projectId);
+              // Switch workspace to the next project if the removed one was active
+              if (projectsHook.activeProjectId === projectId && remaining.length > 0) {
+                const next = remaining[0];
+                if (next.rootPath) {
+                  switchWorkspaceTo(next.rootPath, next.name);
+                }
+              }
+            }}
           />
         )}
 

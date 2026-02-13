@@ -2,6 +2,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "../lib/db";
 import type { AgentGraphNodeStatus, AgentGraphRun, AgentGraphStatus, AgentGraphState } from "./agentGraphTypes";
 import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
+import { deleteThreadCheckpoints } from "./checkpointService";
 
 const COLLECTION_NAME = "agent_graph_runs";
 const fallbackRuns = new Map<string, AgentGraphRun>();
@@ -369,6 +370,59 @@ export class AgentGraphRunService {
     }
 
     /**
+     * List sessions across multiple workspace IDs (including orphans) in a single query.
+     * Uses `$or` to avoid N+1 queries.
+     */
+    async listSessionsForWorkspaces(
+        workspaceIds: string[],
+        opts?: { includeArchived?: boolean; limit?: number; graphId?: string }
+    ): Promise<AgentGraphRun[]> {
+        const limit = opts?.limit ?? 50;
+        const collection = await getCollectionSafe();
+
+        // Build valid ObjectIds
+        const validWsOids = workspaceIds
+            .filter((id) => ObjectId.isValid(id))
+            .map((id) => new ObjectId(id));
+
+        if (!collection) {
+            // Fallback: in-memory filter
+            const wsSet = new Set(validWsOids.map((o) => o.toString()));
+            let runs = Array.from(fallbackRuns.values()).filter((run) => {
+                // Include if workspace matches OR if orphan (no workspaceId)
+                const wsStr = run.workspaceId?.toString();
+                if (wsStr && !wsSet.has(wsStr)) return false;
+                if (!opts?.includeArchived && run.archived) return false;
+                if (opts?.graphId && ObjectId.isValid(opts.graphId) && run.graphId?.toString() !== opts.graphId) return false;
+                return true;
+            });
+            runs = runs.sort((a, b) => (b.startedAt?.getTime?.() ?? 0) - (a.startedAt?.getTime?.() ?? 0));
+            return runs.slice(0, limit);
+        }
+
+        // Single DB query: sessions in any of the workspaces OR orphans (no workspaceId)
+        const filter: Record<string, unknown> = {
+            $or: [
+                ...(validWsOids.length > 0 ? [{ workspaceId: { $in: validWsOids } }] : []),
+                { workspaceId: { $exists: false } },
+                { workspaceId: null },
+            ],
+        };
+        if (!opts?.includeArchived) {
+            filter.archived = { $ne: true };
+        }
+        if (opts?.graphId && ObjectId.isValid(opts.graphId)) {
+            filter.graphId = new ObjectId(opts.graphId);
+        }
+        const runs = await collection
+            .find(filter)
+            .sort({ startedAt: -1 })
+            .limit(limit)
+            .toArray();
+        return runs as AgentGraphRun[];
+    }
+
+    /**
      * Update the title of a run/session.
      */
     async updateTitle(runId: string, title: string): Promise<void> {
@@ -424,11 +478,19 @@ export class AgentGraphRunService {
 
     /**
      * Delete a run/session permanently.
+     * Also cleans up any LangGraph checkpoints associated with the run.
      */
     async deleteRun(runId: string): Promise<void> {
         if (!ObjectId.isValid(runId)) {
             throw new Error("Invalid run ID format");
         }
+
+        // Clean up LangGraph checkpoints for all possible thread IDs.
+        // Thread IDs follow the pattern `{runId}:{nodeId}` — we attempt
+        // to delete the run-level thread; per-node threads are cleaned up
+        // by the checkpoint service if it supports prefix-based deletion.
+        deleteThreadCheckpoints(runId).catch(() => {});
+
         const collection = await getCollectionSafe();
         if (!collection) {
             fallbackRuns.delete(runId);

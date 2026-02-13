@@ -3,7 +3,7 @@ export { TitleBar } from './TitleBar';
 export type { TitleBarProps, GitDiffStats } from './TitleBar';
 
 export { ProjectSidebar } from './ProjectSidebar';
-export type { ProjectSidebarProps, SidebarProject, SidebarThread } from './ProjectSidebar';
+export type { ProjectSidebarProps, SidebarProject, SidebarThread, ThreadLiveStatus } from './ProjectSidebar';
 
 export { ConversationTabs } from './ConversationTabs';
 export type { ConversationTabsProps, ConversationTabItem } from './ConversationTabs';
@@ -50,3 +50,6 @@ export type { AutomationsDashboardProps, Automation as AutomationItem } from './
 
 export { ReplayConfirmDialog } from './ReplayConfirmDialog';
 export type { ReplayConfirmDialogProps, ReplayImpact, FileChange } from './ReplayConfirmDialog';
+
+export { AddWorkspaceModal } from './AddWorkspaceModal';
+export type { AddWorkspaceModalProps } from './AddWorkspaceModal';

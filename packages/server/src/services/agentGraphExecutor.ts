@@ -26,6 +26,9 @@ import { formatAuditContextPrompt, type AuditContext } from "@numezis/shared/doc
 import { agentMemoryService } from "./agentMemoryService";
 import { SafeEditGate } from "./agent/SafeEditGate";
 
+// --- Checkpoint Imports ---
+import { getCheckpointSaver, hasCheckpoint, computeGraphHash, ensureCheckpointIndexes } from "./checkpointService";
+
 // --- Context Management Imports ---
 import { getContextGraphStore } from "@numezis/server/context/graph/ContextGraphStore";
 import { ContextRanker } from "@numezis/server/context/graph/ContextRanker";
@@ -632,6 +635,9 @@ export class AgentGraphExecutor {
      * Continue an existing run with a follow-up message (multi-turn support).
      * For single-node graphs: re-executes the node with accumulated conversation history.
      * For multi-node graphs: re-executes the full graph with accumulated context.
+     *
+     * If the run was previously interrupted (status=PAUSED with checkpoint info),
+     * and the message is an approval signal, the run resumes from the checkpoint.
      */
     async continueRun(
         runId: string,
@@ -647,6 +653,89 @@ export class AgentGraphExecutor {
         const run = await agentGraphRunService.getRun(runId);
         if (!run) throw new Error(`Run ${runId} not found`);
         console.log(`[AgentGraphExecutor] continueRun: run status="${run.status}", graphId=${run.graphId}`);
+
+        // ── Check for checkpoint-based resume ────────────────────────────
+        // If the run was interrupted (PAUSED with checkpoint metadata),
+        // resume from the checkpoint instead of re-executing from scratch.
+        const checkpoint = (run.state as any)?.checkpoint;
+        const isInterruptedResume =
+            run.status === "PAUSED" &&
+            checkpoint?.status === "awaiting_approval" &&
+            checkpoint?.threadId;
+
+        if (isInterruptedResume) {
+            console.log(`[AgentGraphExecutor] Resuming from checkpoint: threadId=${checkpoint.threadId}, nodeId=${checkpoint.nodeId}`);
+
+            // ── Graph version guard ──────────────────────────────────────
+            // If the graph definition changed since the checkpoint was taken,
+            // resuming could produce undefined behaviour.  We warn and fall
+            // through to the standard multi-turn continuation instead.
+            let graphChanged = false;
+            if (checkpoint.graphHash) {
+                const currentGraph = await agentGraphService.getGraph(run.graphId.toString());
+                if (currentGraph) {
+                    const currentHash = computeGraphHash(currentGraph.nodes, currentGraph.edges);
+                    if (currentHash !== checkpoint.graphHash) {
+                        console.warn(
+                            `[AgentGraphExecutor] Graph definition changed since checkpoint ` +
+                            `(saved=${checkpoint.graphHash}, current=${currentHash}). ` +
+                            `Cannot safely resume — falling back to fresh run.`
+                        );
+                        graphChanged = true;
+                    }
+                }
+            }
+
+            if (!graphChanged) {
+                // Clear checkpoint metadata and mark as resuming
+                const updatedState = {
+                    ...run.state,
+                    checkpoint: {
+                        ...checkpoint,
+                        status: "approved",
+                        approvedAt: new Date().toISOString(),
+                        approvalMessage: message,
+                    },
+                };
+
+                // Append user approval to conversation history
+                const history = updatedState.conversationHistory ?? [];
+                history.push({
+                    id: `event-approve-${Date.now()}`,
+                    phaseId: "user",
+                    phaseLabel: "User approval",
+                    kind: "user" as const,
+                    role: "user",
+                    content: message,
+                    timestamp: new Date().toISOString(),
+                });
+                updatedState.conversationHistory = history;
+
+                // Reset only the interrupted node to PENDING
+                const resetNodeStatuses: Record<string, any> = { ...run.nodeStatuses };
+                if (checkpoint.nodeId) {
+                    resetNodeStatuses[checkpoint.nodeId] = "PENDING";
+                }
+
+                await agentGraphRunService.updateRunStatus(runId, "PENDING", {
+                    nodeStatuses: resetNodeStatuses,
+                    state: updatedState,
+                    endedAt: undefined,
+                    error: undefined,
+                } as any);
+
+                await agentGraphRunService.incrementConversationTurns(runId);
+
+                return this.executeRunStreaming(runId, {
+                    ...opts,
+                    enableCheckpoints: true,
+                    resumeFromCheckpoint: true,
+                });
+            }
+            // graphChanged=true → fall through to standard multi-turn continuation below
+        }
+
+        // ── Standard multi-turn continuation ─────────────────────────────
 
         // Append user message to conversation history
         const history = run.state.conversationHistory ?? [];
@@ -694,6 +783,16 @@ export class AgentGraphExecutor {
             onTextDelta?: (delta: string) => void;
             llmSelectionOverride?: { provider: LlmProviderType; model?: string };
             shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
+            /**
+             * If true, the agent will checkpoint state at every step and
+             * interrupt before tool execution for human-in-the-loop approval.
+             */
+            enableCheckpoints?: boolean;
+            /**
+             * If true, resume from the last checkpoint instead of starting fresh.
+             * Requires enableCheckpoints to also be true.
+             */
+            resumeFromCheckpoint?: boolean;
         }
     ): Promise<AgentWorkflowResult> {
         console.log(`[AgentGraphExecutor] executeRunStreaming: runId=${runId}`);
@@ -715,6 +814,19 @@ export class AgentGraphExecutor {
             workspace._id!.toString(),
             workspace.rootPath
         );
+
+        // ── Checkpoint saver ─────────────────────────────────────────────
+        // Lazily resolve the checkpoint saver.  If it fails (e.g. MongoDB is
+        // unavailable) we continue without checkpoints.
+        const enableCheckpoints = opts?.enableCheckpoints !== false; // on by default
+        let checkpointer: import("@langchain/langgraph").BaseCheckpointSaver | undefined;
+        if (enableCheckpoints) {
+            try {
+                checkpointer = await getCheckpointSaver();
+            } catch (err) {
+                console.warn("[AgentGraph] Checkpointer unavailable, continuing without:", (err as Error)?.message);
+            }
+        }
 
         const shouldAbort = opts?.shouldAbort;
         const abortController = new AbortController();
@@ -995,20 +1107,36 @@ export class AgentGraphExecutor {
         // the previous one left off instead of event-0 again).
         let globalEventCounter = state.conversationHistory?.length ?? 0;
         const nextGlobalEventId = () => `event-${globalEventCounter++}`;
-        const initialUserEvent: AgentEvent = {
+
+        // For multi-turn continuations, continueRun already pushed the user
+        // event to conversationHistory (with id "event-continue-{ts}").
+        // Reuse that event for globalEventStream so IDs stay consistent
+        // between the stream and the persisted conversation history.
+        const missionContent = typeof state.mission === "string" ? state.mission : "";
+        const lastHistoryEvent = state.conversationHistory.length > 0
+            ? state.conversationHistory[state.conversationHistory.length - 1]
+            : null;
+        const existingUserEvent =
+            lastHistoryEvent &&
+            lastHistoryEvent.kind === "user" &&
+            lastHistoryEvent.content === missionContent
+                ? lastHistoryEvent
+                : null;
+
+        const initialUserEvent: AgentEvent = existingUserEvent ?? {
             id: nextGlobalEventId(),
             phaseId: "user",
             phaseLabel: "User input",
             kind: "user",
             role: "user",
-            content: typeof state.mission === "string" ? state.mission : "",
+            content: missionContent,
             timestamp: new Date().toISOString(),
         };
         globalEventStream.push(initialUserEvent);
 
-        // Add the initial user event to conversation history (if this is the first turn)
-        if (state.conversationHistory.length === 0 ||
-            state.conversationHistory[state.conversationHistory.length - 1]?.content !== initialUserEvent.content) {
+        // Add the initial user event to conversation history (only for the first turn
+        // when no existing event was found)
+        if (!existingUserEvent) {
             state.conversationHistory.push(initialUserEvent);
         }
 
@@ -1668,19 +1796,42 @@ export class AgentGraphExecutor {
                         ? convertConversationHistoryToMessages(priorHistory).filter(m => m.getType() !== "system")
                         : undefined;
 
+                    // ── Checkpoint / Resume ──────────────────────────────
+                    // Each (run, node) gets a unique LangGraph thread_id so
+                    // checkpoints are scoped correctly.
+                    const threadId = checkpointer ? `${runId}:${node.id}` : undefined;
+                    const shouldResume = !!(
+                        opts?.resumeFromCheckpoint &&
+                        checkpointer &&
+                        threadId &&
+                        (await hasCheckpoint(threadId))
+                    );
+
+                    // Read the per-node interruptBeforeTools config.
+                    // Only meaningful when checkpointing is active.
+                    const interruptBeforeTools = !!(
+                        checkpointer &&
+                        node.react.interruptBeforeTools
+                    );
+
                     const result = await streamReactAgentMessages({
                         name: `GraphNode:${node.id}`,
                         systemPrompt: enhancedSystemPrompt,
                         userPrompt: userPrompt,
                         tools,
                         llmSelection: opts?.llmSelectionOverride ?? node.react.llmSelection,
-                        extraMessages,
+                        extraMessages: shouldResume ? undefined : extraMessages,
                         onMessage: handleStreamingMessage,
                         // Forward text deltas for progressive streaming
                         onTextDelta: opts?.onTextDelta,
                         abortSignal: abortController.signal,
                         getAbortReason: () => abortReason,
                         shouldAbort: checkAbortReason,
+                        // Checkpoint / persistence
+                        checkpointer,
+                        threadId,
+                        interruptBeforeTools,
+                        resumeFromCheckpoint: shouldResume,
                         onTokenUsage: async (usage, model) => {
                             // Log individual usage to MongoDB and accumulate in-memory
                             await tokenUsageService.logUsage({
@@ -1695,6 +1846,46 @@ export class AgentGraphExecutor {
                             });
                         },
                     });
+
+                    // ── Handle interrupt (human-in-the-loop) ─────────────
+                    if (result.interrupted) {
+                        console.log(`[AgentGraph] Node ${node.id} interrupted (checkpoint saved). Awaiting human approval.`);
+                        await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "RUNNING");
+                        await agentGraphRunService.updateRunStatus(runId, "PAUSED", {
+                            error: `Interrupted at node ${node.id}: awaiting approval.`,
+                        } as any);
+                        // Update state with checkpoint info (including graph hash for version guard)
+                        (state as any).checkpoint = {
+                            threadId,
+                            nodeId: node.id,
+                            interruptedAt: new Date().toISOString(),
+                            status: "awaiting_approval",
+                            graphHash: computeGraphHash(graph.nodes, graph.edges),
+                        };
+                        await agentGraphRunService.updateRunState(runId, cloneValue(state));
+
+                        if (timelineEntry) {
+                            timelineEntry.status = "running";
+                            timelineEntry.summary = "Paused — awaiting approval";
+                        }
+                        await emitUpdate();
+
+                        // Return partial result; the caller will see status=PAUSED
+                        const { summary: partialTokenUsage } = tokenUsageService.finalizeRunTracking(runId);
+                        await agentGraphRunService.updateRunTokenUsage(runId, partialTokenUsage);
+                        return {
+                            sessionId: runId,
+                            timeline: globalTimeline,
+                            conclusion: "Run paused (human-in-the-loop interrupt).",
+                            outputs: createPlaceholderOutputs({
+                                mission: typeof state.mission === "string" ? state.mission : "",
+                                report: "Awaiting human approval to continue.",
+                                meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state), interrupted: true },
+                            }),
+                            eventStream: globalEventStream,
+                        };
+                    }
+
                     const finalAgentEvent =
                         builtMessageEvents.slice().reverse().find((event) => event.kind === "assistant") ??
                         builtMessageEvents.at(-1);

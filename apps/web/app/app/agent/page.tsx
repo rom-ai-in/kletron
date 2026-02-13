@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   ChatInput,
   Selector,
-  ThreadFeed,
   WorkspaceLayout,
-  Modal,
 } from "@numezis/ui/components/design-system";
-import type { ThreadStatus } from "@numezis/ui/components/design-system";
+import { ProjectSidebar } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
+import type { SidebarProject, SidebarThread, ThreadLiveStatus } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
+import { AddWorkspaceModal } from "@numezis/ui/components/CommandCenter/AddWorkspaceModal";
 import { TimelinePanel } from "@numezis/ui/components/Agent/TimelinePanel";
 import { EventCard } from "@numezis/ui/components/Agent/EventCard";
 import {
@@ -18,15 +18,10 @@ import {
 import { useAgentSession } from "@numezis/ui/hooks/useAgentSession";
 import { useSessionStream } from "@numezis/ui/hooks/useSessionStream";
 import { useSessionEdits } from "@numezis/ui/hooks/useSessionEdits";
+import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 import {
   Loader2,
-  Plus,
-  RefreshCw,
-  PencilLine,
-  Check,
-  X,
-  Archive,
-  Trash2,
+  Folder,
 } from "lucide-react";
 
 // For simple chat view - reuse existing components (groups tool events, renders collapsible tool cards)
@@ -39,6 +34,7 @@ import type { QueuedMessageItem } from "@numezis/ui/components/CommandCenter/Mes
 type SessionSummary = {
   id: string;
   graphId: string;
+  workspaceId: string | null;
   title: string;
   status: string;
   archived: boolean;
@@ -65,6 +61,22 @@ type SessionDetail = {
 
 const SESSION_STORAGE_KEY = "agent-active-session";
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/** Map server session status to ProjectSidebar's ThreadLiveStatus */
+function toThreadLiveStatus(status: string, isStreaming: boolean): ThreadLiveStatus {
+  if (isStreaming) return "running";
+  switch (status) {
+    case "RUNNING": return "running";
+    case "COMPLETED": return "completed";
+    case "FAILED": return "error";
+    case "PAUSED": return "waiting";
+    case "PENDING": return "waiting";
+    case "CANCELLED": return "idle";
+    default: return "idle";
+  }
+}
+
 // ─── Page Component ─────────────────────────────────────────────────────────
 
 export default function AgentPage() {
@@ -73,12 +85,21 @@ export default function AgentPage() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renamingValue, setRenamingValue] = useState("");
-  const [renameLoading, setRenameLoading] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [messageQueue, setMessageQueue] = useState<QueuedMessageItem[]>([]);
+  const [addWorkspaceOpen, setAddWorkspaceOpen] = useState(false);
+
+  // ── Workspace context ──────────────────────────────────────────────────
+  const {
+    workspaces,
+    activeWorkspaceId,
+    activeWorkspace,
+    error: workspaceError,
+    switchWorkspace,
+    refreshWorkspaces,
+    deleteWorkspace: deleteWorkspaceCtx,
+  } = useWorkspace();
 
   // ── Hooks ─────────────────────────────────────────────────────────────
   const {
@@ -90,31 +111,48 @@ export default function AgentPage() {
     handleGraphChange,
     llmStatus,
     graphOptionsLoaded,
-    llmPrefsLoaded,
     agentGraphs,
   } = useAgentSession();
 
   // Determine if the selected graph is single-node (simple chat) or multi-node (timeline)
   const isSimpleGraph = useMemo(() => {
     if (!selectedGraphId || !graphOptionsLoaded) return true;
-    // Check agent graphs from DB
     const agentGraph = agentGraphs.find(
       (g: any) => String(g._id) === selectedGraphId
     );
     if (agentGraph) {
-      return (agentGraph as any).nodes?.length === 1;
+      const nodeCount = (agentGraph as any).nodes?.length;
+      // Default to simple chat when nodes are not defined or only 1 node
+      return !nodeCount || nodeCount <= 1;
     }
-    // For built-in graph options, check phases count
-    return true; // Default to simple for built-in "universal-v1"
+    return true;
   }, [selectedGraphId, graphOptionsLoaded, agentGraphs]);
 
   // Active session's graph node count (from loaded session detail)
   const activeGraphIsSimple = useMemo(() => {
     if (sessionDetail?.graph) {
-      return sessionDetail.graph.nodeCount <= 1;
+      const nc = sessionDetail.graph.nodeCount;
+      // Default to simple chat when nodeCount is missing/undefined or <= 1
+      return nc == null || nc <= 1;
     }
     return isSimpleGraph;
   }, [sessionDetail, isSimpleGraph]);
+
+  // ── Fetch sessions (all workspaces) ─────────────────────────────────
+  const fetchSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const res = await fetch("/api/sessions?limit=50&allWorkspaces=true");
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch sessions:", e);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
 
   const handleSessionCreated = useCallback((runId: string, _graphId: string) => {
     setActiveSessionId(runId);
@@ -134,19 +172,18 @@ export default function AgentPage() {
         });
         if (res.ok) {
           await fetchSessions();
-          return; // success — stop retrying
+          return;
         }
         console.warn(`[title-gen] Attempt ${attempt + 1} returned ${res.status}`);
       } catch (e) {
         console.warn(`[title-gen] Attempt ${attempt + 1} failed:`, e);
       }
-      // Wait before retrying (skip after last attempt)
       if (attempt < MAX_RETRIES) {
         await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
       }
     }
     console.error("[title-gen] All retries exhausted for session", runId);
-  }, []);
+  }, [fetchSessions]);
 
   const {
     messages,
@@ -167,10 +204,12 @@ export default function AgentPage() {
     formatTime,
     isAtBottomRef,
     streamingText,
+    isStreaming,
   } = useSessionStream({
     sessionId: activeSessionId,
     selectedGraphId,
     llmProvider,
+    workspaceId: activeWorkspaceId,
     onSessionCreated: handleSessionCreated,
     onTitleGenerate: handleTitleGenerate,
   });
@@ -188,22 +227,6 @@ export default function AgentPage() {
     isStreaming: streamStatus === "streaming",
   });
 
-  // ── Fetch sessions ────────────────────────────────────────────────────
-  const fetchSessions = useCallback(async () => {
-    setSessionsLoading(true);
-    try {
-      const res = await fetch("/api/sessions?limit=50");
-      if (res.ok) {
-        const data = await res.json();
-        setSessions(Array.isArray(data) ? data : []);
-      }
-    } catch (e) {
-      console.error("Failed to fetch sessions:", e);
-    } finally {
-      setSessionsLoading(false);
-    }
-  }, []);
-
   // ── Fetch session detail when active session changes ──────────────────
   const loadSessionDetail = useCallback(async (sessionId: string) => {
     try {
@@ -212,22 +235,51 @@ export default function AgentPage() {
         const data = await res.json();
         setSessionDetail(data);
 
-        // Load existing conversation history as messages for simple view
         if (data.conversationHistory?.length) {
-          const loadedMessages = data.conversationHistory
+          // Deduplicate loaded messages by id — the server can store
+          // duplicate events (e.g. `event-continue-*` vs `event-N` for
+          // the same user message). We keep the last occurrence per id
+          // and also deduplicate by role+content to handle ID mismatches.
+          const rawMessages = data.conversationHistory
             .filter((e: any) => e.kind === "user" || e.kind === "assistant" || e.kind === "tool")
             .map((e: any) => ({
               id: e.id,
               role: e.kind === "tool" ? "tool" : e.kind,
-              content: e.content,
+              content: e.content ?? "",
               timestamp: e.timestamp,
-              // AgentEvent stores tool name in `name`, Message uses `toolName`
               toolName: e.toolName ?? e.name,
               toolArgs: typeof e.toolArgs === "string" ? e.toolArgs : e.toolArgs ? JSON.stringify(e.toolArgs) : undefined,
               toolOutput: e.kind === "tool" ? e.content : undefined,
               toolCallId: e.toolCallId,
               thoughts: e.thoughts,
             }));
+
+          // Dedup pass: remove exact ID duplicates and consecutive user messages
+          // with the same content (the latter handles the legacy event-continue-*
+          // vs event-N ID mismatch — same message stored twice in a row).
+          const seenIds = new Set<string>();
+          const loadedMessages: typeof rawMessages = [];
+          for (let i = 0; i < rawMessages.length; i++) {
+            const m = rawMessages[i];
+            if (seenIds.has(m.id)) continue;
+            // Check for consecutive user-message duplicates (same content, adjacent in array)
+            if (m.role === "user" && loadedMessages.length > 0) {
+              const prev = loadedMessages[loadedMessages.length - 1];
+              if (
+                prev.role === "user" &&
+                (prev.content ?? "").trim() === (m.content ?? "").trim()
+              ) {
+                // Skip this duplicate — keep the one already in the list
+                continue;
+              }
+            }
+            seenIds.add(m.id);
+            loadedMessages.push(m);
+          }
+
+          // setMessages will be a no-op during active streaming thanks
+          // to the guard in useSessionStream.  This prevents the race
+          // condition where loadSessionDetail overwrites stream data.
           setMessages(loadedMessages);
         }
       }
@@ -239,7 +291,6 @@ export default function AgentPage() {
   // ── Initialize ────────────────────────────────────────────────────────
   useEffect(() => {
     fetchSessions();
-    // Restore active session from sessionStorage
     const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
     if (stored) {
       setActiveSessionId(stored);
@@ -253,24 +304,65 @@ export default function AgentPage() {
     }
   }, [activeSessionId, loadSessionDetail]);
 
-  // Refresh sessions list after stream completes
+  // Refresh sessions & reload session detail after stream completes.
+  // The stream guard in useSessionStream prevents loadSessionDetail from
+  // running mid-stream, so we reload once the stream is done to ensure
+  // the final conversation history is synced.
+  const prevStreamStatusRef = useRef<string>(streamStatus);
   useEffect(() => {
-    if (streamStatus === "idle" && activeSessionId) {
+    const wasStreaming = prevStreamStatusRef.current === "streaming";
+    prevStreamStatusRef.current = streamStatus;
+
+    if (streamStatus !== "streaming" && activeSessionId) {
+      fetchSessions();
+      // Only reload detail when transitioning out of streaming
+      // (avoids re-running on every "idle" render)
+      if (wasStreaming) {
+        void loadSessionDetail(activeSessionId);
+      }
+    }
+  }, [streamStatus, activeSessionId, fetchSessions, loadSessionDetail]);
+
+  // Re-fetch sessions when active workspace changes (ensures sidebar stays current)
+  const prevWorkspaceRef = useRef(activeWorkspaceId);
+  useEffect(() => {
+    if (activeWorkspaceId && activeWorkspaceId !== prevWorkspaceRef.current) {
+      prevWorkspaceRef.current = activeWorkspaceId;
       fetchSessions();
     }
-  }, [streamStatus, activeSessionId, fetchSessions]);
+  }, [activeWorkspaceId, fetchSessions]);
 
   // ── Session actions ───────────────────────────────────────────────────
   const handleNewSession = useCallback(() => {
+    // Stop any active stream before clearing state — this also releases
+    // the streaming guard so setMessages will work.
+    handleStop();
     setActiveSessionId(null);
     setSessionDetail(null);
     setMessages([]);
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
-  }, [setMessages]);
+  }, [setMessages, handleStop]);
 
+  /** Select a session and auto-switch to its owning workspace */
   const handleSelectSession = useCallback((id: string) => {
     setActiveSessionId(id);
-  }, []);
+    // Auto-switch workspace if the session belongs to a different one
+    const session = sessions.find((s) => s.id === id);
+    if (session?.workspaceId && session.workspaceId !== activeWorkspaceId) {
+      void switchWorkspace(session.workspaceId);
+    }
+  }, [sessions, activeWorkspaceId, switchWorkspace]);
+
+  // Auto-switch workspace after sessions load for a restored session from sessionStorage
+  const didAutoSwitchRef = useRef(false);
+  useEffect(() => {
+    if (didAutoSwitchRef.current || !activeSessionId || sessions.length === 0) return;
+    const session = sessions.find((s) => s.id === activeSessionId);
+    if (session?.workspaceId && session.workspaceId !== activeWorkspaceId) {
+      didAutoSwitchRef.current = true;
+      void switchWorkspace(session.workspaceId);
+    }
+  }, [activeSessionId, sessions, activeWorkspaceId, switchWorkspace]);
 
   const handleArchiveSession = useCallback(async (id: string) => {
     try {
@@ -284,22 +376,94 @@ export default function AgentPage() {
     }
   }, [activeSessionId, handleNewSession, fetchSessions]);
 
+  const handleDeleteSession = useCallback(async (id: string) => {
+    try {
+      await fetch(`/api/sessions/${id}?action=delete`, { method: "DELETE" });
+      if (activeSessionId === id) {
+        handleNewSession();
+      }
+      await fetchSessions();
+    } catch (e) {
+      console.error("Failed to delete session:", e);
+    }
+  }, [activeSessionId, handleNewSession, fetchSessions]);
+
   const handleRenameSession = useCallback(async (id: string, title: string) => {
-    setRenameLoading(true);
     try {
       await fetch(`/api/sessions/${id}/title`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
       });
-      setRenamingId(null);
       await fetchSessions();
     } catch (e) {
       console.error("Failed to rename:", e);
-    } finally {
-      setRenameLoading(false);
     }
   }, [fetchSessions]);
+
+  // ── Workspace actions ─────────────────────────────────────────────────
+
+  /** Create a new session inside a specific workspace */
+  const handleNewSessionInWorkspace = useCallback(async (workspaceId: string) => {
+    if (workspaceId === "__unassigned__") return; // guard: synthetic group
+    // Switch to the target workspace (optimistic update in context is immediate),
+    // then start a fresh session
+    await switchWorkspace(workspaceId);
+    handleNewSession();
+  }, [switchWorkspace, handleNewSession]);
+
+  /** Open the add workspace modal */
+  const handleAddWorkspace = useCallback(() => {
+    setAddWorkspaceOpen(true);
+  }, []);
+
+  /** Called when a workspace is successfully created from the modal */
+  const handleWorkspaceCreated = useCallback(async (ws: { id: string; name: string; rootPath: string }) => {
+    await refreshWorkspaces();
+    await switchWorkspace(ws.id);
+    await fetchSessions();
+  }, [refreshWorkspaces, switchWorkspace, fetchSessions]);
+
+  /** Remove (archive) a workspace */
+  const handleRemoveWorkspace = useCallback((workspaceId: string) => {
+    if (workspaceId === "__unassigned__") return; // guard: synthetic group
+    void deleteWorkspaceCtx(workspaceId);
+  }, [deleteWorkspaceCtx]);
+
+  // ── Build sidebar projects from workspaces + sessions ─────────────────
+  const sidebarProjects: SidebarProject[] = useMemo(() => {
+    const projects: SidebarProject[] = workspaces.map((ws) => ({
+      id: ws.id,
+      name: ws.name,
+      threads: sessions
+        .filter((s) => s.workspaceId === ws.id)
+        .map((s): SidebarThread => ({
+          id: s.id,
+          title: s.title || "Untitled",
+          updatedAt: s.startedAt,
+          liveStatus: toThreadLiveStatus(s.status, sending && activeSessionId === s.id),
+        })),
+    }));
+
+    // Orphan sessions (no workspace or workspace not in user's list)
+    const wsIds = new Set(workspaces.map((w) => w.id));
+    const orphans = sessions.filter((s) => !s.workspaceId || !wsIds.has(s.workspaceId));
+    if (orphans.length > 0) {
+      projects.push({
+        id: "__unassigned__",
+        name: "Unassigned",
+        readonly: true,
+        threads: orphans.map((s): SidebarThread => ({
+          id: s.id,
+          title: s.title || "Untitled",
+          updatedAt: s.startedAt,
+          liveStatus: toThreadLiveStatus(s.status, sending && activeSessionId === s.id),
+        })),
+      });
+    }
+
+    return projects;
+  }, [workspaces, sessions, sending, activeSessionId]);
 
   // Convert Message[] from useSessionStream to ChatEvent[] for MessageList
   const chatEventsForView = useMemo<ChatEvent[]>(() => {
@@ -325,13 +489,11 @@ export default function AgentPage() {
 
   // ── Message Queue ─────────────────────────────────────────────────────
 
-  /** Wraps handleSend — queues if agent is busy, sends directly if idle */
   const handleSendOrQueue = useCallback(() => {
     const text = input.trim();
     if (!text) return;
 
     if (sending) {
-      // Queue the message
       setMessageQueue((prev) => [
         ...prev,
         { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() },
@@ -343,17 +505,14 @@ export default function AgentPage() {
     void handleSend();
   }, [input, sending, handleSend, setInput]);
 
-  /** Send a specific text directly (for dequeue). */
   const sendTextDirectly = useCallback((text: string) => {
     void handleSend({ text });
   }, [handleSend]);
 
-  /** Dequeue and send the first queued message. */
   const dequeueAndSend = useCallback(() => {
     setMessageQueue((prev) => {
       if (prev.length === 0) return prev;
       const [next, ...rest] = prev;
-      // Schedule send after state update
       setTimeout(() => sendTextDirectly(next.text), 0);
       return rest;
     });
@@ -379,13 +538,11 @@ export default function AgentPage() {
     setMessageQueue((prev) => prev.filter((m) => m.id !== id));
   }, []);
 
-  /** Force-send: stop current stream, then send the next queued message. */
   const handleQueueForceSend = useCallback(() => {
     handleStop();
     setTimeout(() => dequeueAndSend(), 120);
   }, [handleStop, dequeueAndSend]);
 
-  /** Keyboard handler — queues when streaming, sends when idle */
   const handleKeyDownWithQueue = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -393,7 +550,7 @@ export default function AgentPage() {
     }
   }, [handleSendOrQueue]);
 
-  // Auto-dequeue: when stream finishes and there are queued messages, send next
+  // Auto-dequeue
   const prevSendingRef = useRef(false);
   useEffect(() => {
     const wasSending = prevSendingRef.current;
@@ -403,83 +560,6 @@ export default function AgentPage() {
       setTimeout(() => dequeueAndSend(), 50);
     }
   }, [sending, messageQueue.length, dequeueAndSend]);
-
-  // ── Thread sidebar items ──────────────────────────────────────────────
-  const threadItems = useMemo(() => {
-    return sessions.map((s) => ({
-      id: s.id,
-      title: (
-        renamingId === s.id ? (
-          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-            <input
-              className="flex-1 bg-bg-elevated border border-border-strong rounded px-1.5 py-0.5 text-[12px] text-text-primary outline-none"
-              value={renamingValue}
-              onChange={(e) => setRenamingValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  void handleRenameSession(s.id, renamingValue);
-                }
-                if (e.key === "Escape") setRenamingId(null);
-              }}
-              autoFocus
-            />
-            <button
-              onClick={() => void handleRenameSession(s.id, renamingValue)}
-              className="text-status-success-text hover:text-text-primary"
-              disabled={renameLoading}
-            >
-              <Check className="h-3 w-3" />
-            </button>
-            <button
-              onClick={() => setRenamingId(null)}
-              className="text-text-muted hover:text-text-primary"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        ) : (
-          <span className="truncate text-[12px]">{s.title}</span>
-        )
-      ),
-      subtitle: (
-        <span className="text-[10px] text-text-muted">
-          {new Date(s.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-          {s.conversationTurns > 1 && ` · ${s.conversationTurns} turns`}
-        </span>
-      ),
-      status: (
-        s.status === "RUNNING" ? "active" :
-        s.status === "COMPLETED" ? "idle" :
-        s.status === "FAILED" ? "idle" :
-        "waiting"
-      ) as ThreadStatus,
-      actions: renamingId !== s.id ? (
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setRenamingId(s.id);
-              setRenamingValue(s.title);
-            }}
-            className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-state-hover"
-            title="Rename"
-          >
-            <PencilLine className="h-3 w-3" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              void handleArchiveSession(s.id);
-            }}
-            className="p-1 rounded text-text-muted hover:text-status-error-text hover:bg-state-hover"
-            title="Archive"
-          >
-            <Archive className="h-3 w-3" />
-          </button>
-        </div>
-      ) : undefined,
-    }));
-  }, [sessions, renamingId, renamingValue, renameLoading, handleRenameSession, handleArchiveSession]);
 
   // ── Pending edits panel ───────────────────────────────────────────────
   const pendingEditsPanel = pendingEdits.length > 0 ? (
@@ -539,49 +619,55 @@ export default function AgentPage() {
 
   // ── Render ────────────────────────────────────────────────────────────
   const sidebar = (
-    <div className="flex flex-col h-full">
-      <ThreadFeed
-        title="Sessions"
-        items={threadItems}
-        activeId={activeSessionId ?? undefined}
-        onSelect={handleSelectSession}
-        headerAction={
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => void fetchSessions()}
-              className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-state-hover"
-              title="Refresh"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${sessionsLoading ? "animate-spin" : ""}`} />
-            </button>
-            <button
-              onClick={handleNewSession}
-              className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-state-hover"
-              title="New Session"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        }
-        emptyState={
-          <div className="flex flex-col items-center py-8 text-text-muted">
-            <p className="text-[12px]">No sessions yet</p>
-            <p className="text-[11px] mt-1">Start a conversation below</p>
-          </div>
-        }
-      />
-    </div>
+    <ProjectSidebar
+      projects={sidebarProjects}
+      activeThreadId={activeSessionId}
+      activeProjectId={activeWorkspaceId}
+      onThreadSelect={handleSelectSession}
+      onNewThreadInProject={handleNewSessionInWorkspace}
+      onAddProject={handleAddWorkspace}
+      onRenameThread={(id, title) => void handleRenameSession(id, title)}
+      onArchiveThread={(id) => void handleArchiveSession(id)}
+      onDeleteThread={(id) => void handleDeleteSession(id)}
+      onRemoveProject={handleRemoveWorkspace}
+      className="w-full"
+    />
   );
 
   const mainContent = (
     <div className="flex flex-col h-full">
-      {/* Token usage / duration header */}
-      {runStartedAt && (
-        <div className="flex-none flex items-center justify-end gap-3 px-4 py-2 border-b border-border-subtle bg-bg-surface">
-          {tokenUsage && <TokenUsageDisplay tokenUsage={tokenUsage} />}
-          <DurationDisplay startedAt={runStartedAt} endedAt={runEndedAt ?? undefined} />
+      {/* Active workspace indicator + Token usage / duration header */}
+      <div className="flex-none flex items-center justify-between gap-3 px-4 py-2 border-b border-border-subtle bg-bg-surface">
+        {/* Left: workspace indicator */}
+        {activeWorkspace ? (
+          <div className="flex items-center gap-2 min-w-0">
+            <Folder className="h-3.5 w-3.5 text-text-muted flex-shrink-0" />
+            <span className="text-[11px] font-medium text-text-secondary truncate">
+              {activeWorkspace.name}
+            </span>
+            <span className="text-[10px] text-text-muted truncate hidden sm:inline">
+              {activeWorkspace.rootPath}
+            </span>
+          </div>
+        ) : workspaceError ? (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-status-error-text">Failed to load workspaces</span>
+            <button
+              onClick={() => void refreshWorkspaces()}
+              className="text-[10px] text-text-muted underline hover:text-text-primary"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="text-[11px] text-text-muted">No workspace selected</div>
+        )}
+        {/* Right: metrics */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {runStartedAt && tokenUsage && <TokenUsageDisplay tokenUsage={tokenUsage} />}
+          {runStartedAt && <DurationDisplay startedAt={runStartedAt} endedAt={runEndedAt ?? undefined} />}
         </div>
-      )}
+      </div>
 
       {/* Main content area - adaptive */}
       <div
@@ -595,9 +681,6 @@ export default function AgentPage() {
         }}
       >
         {activeGraphIsSimple ? (
-          /* Simple Chat View — uses MessageList which groups tool events into
-             collapsible ToolInvocation cards and renders assistant text with
-             markdown + thoughts panels. */
           <div className="max-w-3xl mx-auto">
             {messages.length === 0 && !sending && (
               <div className="flex flex-col items-center justify-center py-20 text-text-muted">
@@ -616,7 +699,6 @@ export default function AgentPage() {
                 footer={<div ref={bottomRef} />}
               />
             )}
-            {/* Error banner */}
             {errorMessage && !sending && (
               <div className="mx-2 mb-4 rounded-lg border border-status-error-border bg-status-error-bg px-4 py-3 text-[12px] text-status-error-text">
                 <p className="font-medium">Something went wrong</p>
@@ -625,7 +707,6 @@ export default function AgentPage() {
             )}
           </div>
         ) : (
-          /* Timeline + Event Log View (multi-node) */
           <div className="px-4 py-4 space-y-3">
             {eventStream.length === 0 && !sending && (
               <div className="flex flex-col items-center justify-center py-20 text-text-muted">
@@ -646,7 +727,6 @@ export default function AgentPage() {
                 <span className="text-[12px]">Executing...</span>
               </div>
             )}
-            {/* Error banner */}
             {errorMessage && !sending && (
               <div className="rounded-lg border border-status-error-border bg-status-error-bg px-4 py-3 text-[12px] text-status-error-text">
                 <p className="font-medium">Something went wrong</p>
@@ -719,12 +799,19 @@ export default function AgentPage() {
   ) : undefined;
 
   return (
-    <WorkspaceLayout
-      sidebar={sidebar}
-      content={mainContent}
-      aside={timelineSidebar}
-      sidebarWidth="w-64"
-      asideWidth="w-72"
-    />
+    <>
+      <WorkspaceLayout
+        sidebar={sidebar}
+        content={mainContent}
+        aside={timelineSidebar}
+        sidebarWidth="w-[260px]"
+        asideWidth="w-72"
+      />
+      <AddWorkspaceModal
+        open={addWorkspaceOpen}
+        onClose={() => setAddWorkspaceOpen(false)}
+        onCreated={(ws) => void handleWorkspaceCreated(ws)}
+      />
+    </>
   );
 }

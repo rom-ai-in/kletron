@@ -64,7 +64,7 @@ export const VLLMModelConfigSchema = z.object({
 });
 
 export const VLLMConfigSchema = z.object({
-    baseUrl: z.string().url().describe("vLLM server base URL (e.g., http://127.0.0.1:8000)"),
+    baseUrl: z.string().url().describe("vLLM server base URL (e.g., http://127.0.0.1:8001)"),
     apiKey: z.string().optional().describe("vLLM API key (optional)"),
     model: z.string().min(1).describe("Model name (HuggingFace model ID)"),
     modelSettings: z.record(VLLMModelConfigSchema).optional().describe("Per-model settings"),

@@ -128,6 +128,8 @@ export interface UseSessionStreamOptions {
     llmProvider: string;
     /** LLM model override (optional). */
     llmModel?: string;
+    /** Active workspace ID to scope new sessions to. */
+    workspaceId?: string | null;
     /** Callback when a new session is created (receives runId). */
     onSessionCreated?: (runId: string, graphId: string) => void;
     /** Callback when a title should be generated. */
@@ -137,6 +139,11 @@ export interface UseSessionStreamOptions {
 export interface UseSessionStreamReturn {
     /** Messages for simple chat view (converted from eventStream). */
     messages: Message[];
+    /**
+     * Safe setter for messages.  During active streaming this is a no-op to
+     * prevent race conditions (e.g. loadSessionDetail overwriting stream data).
+     * After the stream finishes, calls go through normally.
+     */
     setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
     /** Full event stream (for timeline/event card view). */
     eventStream: AgentEvent[];
@@ -172,6 +179,8 @@ export interface UseSessionStreamReturn {
     isAtBottomRef: React.MutableRefObject<boolean>;
     /** The final result of the last run. */
     lastResult: AgentWorkflowResult | null;
+    /** Whether we are inside an active stream request. */
+    isStreaming: boolean;
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
@@ -182,6 +191,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         selectedGraphId,
         llmProvider,
         llmModel,
+        workspaceId,
         onSessionCreated,
         onTitleGenerate,
     } = options;
@@ -204,9 +214,22 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const isFirstMessageRef = useRef(true);
     /** Accumulates text deltas in a ref (state is flushed via batched setStreamingText). */
     const streamingTextRef = useRef('');
+    /**
+     * Tracks whether we are currently inside a streaming request.
+     * Used to prevent external callers (e.g. loadSessionDetail) from
+     * replacing messages mid-stream, which causes duplicates.
+     */
+    const isStreamingRef = useRef(false);
 
     // Reset all streaming state when sessionId changes
     useEffect(() => {
+        // Abort any in-flight stream when switching sessions
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        setSending(false);
+        isStreamingRef.current = false;
         setStreamStatus("idle");
         setErrorMessage(null);
         setEventStream([]);
@@ -215,17 +238,37 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         setRunStartedAt(null);
         setRunEndedAt(null);
         setLastResult(null);
+        streamingTextRef.current = '';
+        setStreamingText('');
         // Reset first-message flag so title generation works for each new session
         isFirstMessageRef.current = true;
         // Note: messages are NOT reset here — the page component loads them from session detail.
         // Clearing messages here would cause a flash. The page handles setMessages via loadSessionDetail.
     }, [sessionId]);
 
+    /**
+     * Guarded setMessages exposed to callers — silently skips during active
+     * streaming to prevent loadSessionDetail from overwriting stream state.
+     */
+    const setMessagesSafe = useCallback<React.Dispatch<React.SetStateAction<Message[]>>>(
+        (action) => {
+            if (isStreamingRef.current) {
+                // During streaming the stream's mergeStreamMessages is the
+                // sole owner of the messages state.  External callers
+                // (e.g. loadSessionDetail) must not interfere.
+                return;
+            }
+            setMessages(action);
+        },
+        [],
+    );
+
     const handleStop = useCallback(() => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
             setSending(false);
+            isStreamingRef.current = false;
             setRunEndedAt(new Date().toISOString());
             setStreamStatus("stopped");
 
@@ -277,6 +320,11 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
      * Merge streaming event messages into existing messages (append + dedup by ID).
      * This preserves messages from previous turns loaded via session detail,
      * replaces the optimistic user message, and adds new streaming events.
+     *
+     * The server-side fix ensures that `continueRun` and `executeRunStreaming`
+     * produce matching IDs, so ID-based dedup is sufficient.  Legacy sessions
+     * with mismatched IDs (event-continue-* vs event-N) are handled at load
+     * time by `loadSessionDetail`.
      */
     const mergeStreamMessages = useCallback((
         eventStream: AgentEvent[],
@@ -292,14 +340,24 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             const seenIds = new Set<string>();
             const result: Message[] = [];
 
-            // First: keep all existing messages, updating any that appear in the stream
+            // Build a map of stream messages by ID for fast lookup
+            const streamById = new Map<string, Message>();
+            for (const sm of streamMessages) {
+                streamById.set(sm.id, sm);
+            }
+
+            // First pass: keep all existing messages, updating any that match stream events
             for (const existing of prev) {
+                // Guard: skip if we already emitted this ID (possible when
+                // an earlier optimistic-replacement consumed the same ID)
+                if (seenIds.has(existing.id)) continue;
+
                 // Replace the optimistic user message with the real one from the stream
                 if (optimisticTempId && existing.id === optimisticTempId) {
                     const realUserMsg = streamMessages.find(
                         m => m.role === "user" && m.content === existing.content
                     );
-                    if (realUserMsg) {
+                    if (realUserMsg && !seenIds.has(realUserMsg.id)) {
                         result.push(realUserMsg);
                         seenIds.add(realUserMsg.id);
                         continue;
@@ -307,7 +365,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 }
 
                 // Update existing message if the stream has a newer version
-                const streamVersion = streamMessages.find(m => m.id === existing.id);
+                const streamVersion = streamById.get(existing.id);
                 if (streamVersion) {
                     result.push(streamVersion);
                     seenIds.add(streamVersion.id);
@@ -317,7 +375,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 }
             }
 
-            // Then: append any genuinely new messages from the stream
+            // Second pass: append genuinely new messages from the stream
             for (const msg of streamMessages) {
                 if (!seenIds.has(msg.id)) {
                     result.push(msg);
@@ -444,6 +502,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         if (!msg || sending) return;
         setInput('');
         setSending(true);
+        isStreamingRef.current = true;
         setStreamStatus("streaming");
         setErrorMessage(null);
         setRunStartedAt(new Date().toISOString());
@@ -460,7 +519,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             ? '/api/sessions'
             : `/api/sessions/${sessionId}/chat`;
         const body = isNewSession
-            ? { graphId: selectedGraphId, message: msg, provider: llmProvider, model: llmModel }
+            ? { graphId: selectedGraphId, message: msg, provider: llmProvider, model: llmModel, ...(workspaceId ? { workspaceId } : {}) }
             : { message: msg, provider: llmProvider, model: llmModel };
 
         // Optimistic user message (temp ID will be replaced by the real event)
@@ -492,20 +551,21 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 setStreamStatus("stopped");
                 // Server-side stop is already handled by handleStop; this is just safety
             } else {
-                const msg = (e as Error)?.message || "Failed to send message.";
-                console.error("[useSessionStream] Error:", msg);
-                setErrorMessage(msg);
+                const errMsg = (e as Error)?.message || "Failed to send message.";
+                console.error("[useSessionStream] Error:", errMsg);
+                setErrorMessage(errMsg);
                 setStreamStatus("error");
             }
             setRunEndedAt(new Date().toISOString());
         } finally {
             if (abortControllerRef.current === controller) {
                 setSending(false);
+                isStreamingRef.current = false;
                 abortControllerRef.current = null;
             }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, processNdjsonStream]);
+    }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, workspaceId, processNdjsonStream]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -521,7 +581,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
     return {
         messages,
-        setMessages,
+        setMessages: setMessagesSafe,
         eventStream,
         timeline,
         input,
@@ -539,5 +599,6 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         formatTime,
         isAtBottomRef,
         lastResult,
+        isStreaming: sending,
     };
 }

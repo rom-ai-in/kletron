@@ -63,32 +63,8 @@ export function useLlmHealth(provider: string) {
 
             const dbData = await configRes.json();
 
-            // Determine config for this provider
-            let configToTest: Record<string, unknown> | undefined;
-
-            switch (provider) {
-                case 'azure':
-                    configToTest = dbData?.azure;
-                    break;
-                case 'lmstudio':
-                    configToTest = dbData?.lmstudio;
-                    break;
-                case 'ollama':
-                    configToTest = dbData?.ollama;
-                    break;
-                case 'openai':
-                    configToTest = dbData?.openai;
-                    break;
-                case 'claude':
-                    configToTest = dbData?.claude;
-                    break;
-                case 'gemini':
-                    configToTest = dbData?.gemini;
-                    break;
-                default:
-                    finish(provider, 'error', `Unknown provider: ${provider}`);
-                    return;
-            }
+            // Determine config for this provider – use dynamic key lookup
+            const configToTest: Record<string, unknown> | undefined = dbData?.[provider];
 
             if (!configToTest) {
                 finish(provider, 'none', 'No configuration found');
@@ -108,7 +84,7 @@ export function useLlmHealth(provider: string) {
             const hasEndpoint = !!(configToTest as any).endpoint;
 
             const needsKey = ['azure', 'openai', 'claude', 'gemini'].includes(provider);
-            const needsUrl = ['lmstudio', 'ollama'].includes(provider);
+            const needsUrl = ['lmstudio', 'ollama', 'vllm'].includes(provider);
 
             if (needsKey && !hasApiKey) {
                 finish(provider, 'error', 'API key not configured');

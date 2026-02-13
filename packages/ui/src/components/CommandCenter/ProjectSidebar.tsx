@@ -31,6 +31,8 @@ export interface SidebarProject {
   id: string;
   name: string;
   threads: SidebarThread[];
+  /** When true, hide "New thread" and "Remove project" actions for this project */
+  readonly?: boolean;
 }
 
 export interface ProjectSidebarProps {
@@ -211,42 +213,44 @@ export function ProjectSidebar({
                   <span className="truncate">{project.name}</span>
                 </button>
 
-                {/* Hover action icons — ... menu + new thread */}
-                <div className="flex items-center gap-0.5 opacity-0 group-hover/project:opacity-100 transition-all flex-shrink-0">
-                  {/* Context menu (remove) */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (showContextMenu) {
-                        closeContextMenu();
-                      } else {
-                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                        setMenuPosition({ top: rect.bottom + 4, left: rect.left });
-                        setContextMenuProjectId(project.id);
-                      }
-                    }}
-                    className="p-0.5 rounded text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
-                    title="More actions"
-                  >
-                    <MoreHorizontal className="h-3.5 w-3.5" />
-                  </button>
-
-                  {/* New thread in this project */}
-                  {onNewThreadInProject && (
+                {/* Hover action icons — ... menu + new thread (hidden for readonly projects) */}
+                {!project.readonly && (
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover/project:opacity-100 transition-all flex-shrink-0">
+                    {/* Context menu (remove) */}
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onNewThreadInProject(project.id);
+                        if (showContextMenu) {
+                          closeContextMenu();
+                        } else {
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          setMenuPosition({ top: rect.bottom + 4, left: rect.left });
+                          setContextMenuProjectId(project.id);
+                        }
                       }}
                       className="p-0.5 rounded text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
-                      title={`Start new thread in ${project.name}`}
+                      title="More actions"
                     >
-                      <SquarePen className="h-3.5 w-3.5" />
+                      <MoreHorizontal className="h-3.5 w-3.5" />
                     </button>
-                  )}
-                </div>
+
+                    {/* New thread in this project */}
+                    {onNewThreadInProject && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onNewThreadInProject(project.id);
+                        }}
+                        className="p-0.5 rounded text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
+                        title={`Start new thread in ${project.name}`}
+                      >
+                        <SquarePen className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Context menu dropdown — rendered via portal to avoid overflow clipping */}

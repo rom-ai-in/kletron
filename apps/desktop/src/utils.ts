@@ -28,6 +28,23 @@ export const SETTINGS_SECTIONS = [
   { id: "archived", label: "Archived threads" },
 ] as const;
 
+// ─── Path Helpers ────────────────────────────────────────────────────────────
+
+/** Normalise a file-system path for reliable comparison.
+ *  - Trims whitespace
+ *  - Collapses consecutive slashes (e.g. /Users//foo → /Users/foo)
+ *  - Strips trailing slashes
+ *  Returns "" for null / undefined / whitespace-only input. */
+export function normPath(p?: string | null): string {
+  if (!p) return "";
+  return p.trim().replace(/\/{2,}/g, "/").replace(/\/+$/, "");
+}
+
+/** Compare two file-system paths for equality after normalisation. */
+export function pathsEqual(a?: string | null, b?: string | null): boolean {
+  return normPath(a) === normPath(b);
+}
+
 // ─── URL Helpers ─────────────────────────────────────────────────────────────
 
 export function getDefaultBackendUrl(): string {

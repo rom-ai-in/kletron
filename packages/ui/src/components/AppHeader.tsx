@@ -1,46 +1,18 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Plus, History } from "lucide-react";
 import { Breadcrumbs, Selector, type SelectorOption } from "@numezis/ui/components/design-system";
-
-type WorkspaceSummary = {
-  id: string;
-  name: string;
-  rootPath: string;
-  repoUrl?: string;
-  status?: string;
-};
+import { useWorkspace } from "../context/WorkspaceContext";
 
 export function AppHeader() {
-  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>("");
-  const [workspaceLoading, setWorkspaceLoading] = useState(true);
-  const router = useRouter();
-
-  useEffect(() => {
-    const fetchWorkspaces = async () => {
-      setWorkspaceLoading(true);
-      try {
-        const res = await fetch("/api/workspaces");
-        if (!res.ok) {
-          throw new Error("Failed to load workspaces");
-        }
-        const data = await res.json();
-        const list = Array.isArray(data.workspaces) ? data.workspaces : [];
-        setWorkspaces(list);
-        setActiveWorkspaceId(data.activeWorkspaceId ?? list[0]?.id ?? "");
-      } catch (e) {
-        console.error("Failed to fetch workspaces", e);
-      } finally {
-        setWorkspaceLoading(false);
-      }
-    };
-
-    void fetchWorkspaces();
-  }, []);
+  const {
+    workspaces,
+    activeWorkspaceId,
+    loading: workspaceLoading,
+    switchWorkspace,
+  } = useWorkspace();
 
   const workspaceOptions = useMemo<SelectorOption[]>(() => {
     if (!workspaces.length) {
@@ -58,19 +30,7 @@ export function AppHeader() {
 
   const handleSelectWorkspace = async (workspaceId: string) => {
     if (!workspaceId || workspaceId === "none" || workspaceId === activeWorkspaceId) return;
-    setWorkspaceLoading(true);
-    try {
-      const res = await fetch(`/api/workspaces/${workspaceId}/select`, { method: "POST" });
-      if (!res.ok) {
-        throw new Error("Failed to select workspace");
-      }
-      setActiveWorkspaceId(workspaceId);
-      router.refresh();
-    } catch (e) {
-      console.error("Failed to select workspace", e);
-    } finally {
-      setWorkspaceLoading(false);
-    }
+    await switchWorkspace(workspaceId);
   };
 
   return (

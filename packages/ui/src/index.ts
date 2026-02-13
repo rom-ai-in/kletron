@@ -112,11 +112,12 @@ export {
     AutomationsDashboard,
     AgentGraphSelector,
     ReplayConfirmDialog,
+    AddWorkspaceModal,
 } from './components/CommandCenter';
 
 export type {
     TitleBarProps, GitDiffStats,
-    ProjectSidebarProps, SidebarProject, SidebarThread,
+    ProjectSidebarProps, SidebarProject, SidebarThread, ThreadLiveStatus,
     ConversationTabsProps, ConversationTabItem,
     ConversationCenterProps,
     InputBarProps,
@@ -129,4 +130,5 @@ export type {
     AutomationsDashboardProps, AutomationItem,
     AgentGraphSelectorProps, AgentGraph,
     ReplayConfirmDialogProps, ReplayImpact, FileChange,
+    AddWorkspaceModalProps,
 } from './components/CommandCenter';

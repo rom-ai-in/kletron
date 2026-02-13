@@ -26,6 +26,12 @@ export type AgentGraphNodeReactConfig = {
     llmSelection?: AgentGraphLlmSelection;
     /** Future: enforce hard cap on tool calls. */
     maxToolCalls?: number;
+    /**
+     * If true, the agent will interrupt before executing tools so that a
+     * human can review and approve the pending tool calls (human-in-the-loop).
+     * Requires checkpointing to be enabled on the run.
+     */
+    interruptBeforeTools?: boolean;
 };
 
 export type AgentGraphNodeKind = "react" | "router" | "delegate";
@@ -155,6 +161,29 @@ export type AgentGraphState = {
     };
     /** Accumulated conversation history for multi-turn sessions. */
     conversationHistory?: AgentEvent[];
+    /**
+     * LangGraph checkpoint metadata — present when a run was interrupted
+     * and is awaiting human approval to resume.
+     */
+    checkpoint?: {
+        /** LangGraph thread ID (format: `{runId}:{nodeId}`). */
+        threadId?: string;
+        /** The node that was interrupted. */
+        nodeId?: string;
+        /** ISO timestamp when the interrupt occurred. */
+        interruptedAt?: string;
+        /** Current checkpoint status. */
+        status?: "awaiting_approval" | "approved" | "rejected";
+        /** ISO timestamp when the human approved/rejected. */
+        approvedAt?: string;
+        /** The human's approval message. */
+        approvalMessage?: string;
+        /**
+         * FNV-1a hash of the graph definition (nodes + edges) at checkpoint time.
+         * Used to detect incompatible graph changes between interrupt and resume.
+         */
+        graphHash?: string;
+    };
 };
 
 export interface AgentGraphRun {
@@ -179,4 +208,6 @@ export interface AgentGraphRun {
     archived?: boolean;
     /** Number of multi-turn conversation turns. */
     conversationTurns?: number;
+    /** Whether this run has an active LangGraph checkpoint (for resume). */
+    hasCheckpoint?: boolean;
 }

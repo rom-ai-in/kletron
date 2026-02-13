@@ -22,8 +22,8 @@ interface OpenAIModelsResponse {
 
 /**
  * Normalize base URL: strip trailing slashes and /v1 suffix.
- * Input:  "http://127.0.0.1:8000"  or "http://127.0.0.1:8000/v1"  or "http://127.0.0.1:8000/v1/"
- * Output: "http://127.0.0.1:8000"
+ * Input:  "http://127.0.0.1:8001"  or "http://127.0.0.1:8001/v1"  or "http://127.0.0.1:8001/v1/"
+ * Output: "http://127.0.0.1:8001"
  */
 function cleanBase(url: string): string {
     return url.replace(/\/+$/, "").replace(/\/v1$/, "");
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     try {
         const llmConfig = await getLlmConfig().catch(() => null);
-        const rawBaseUrl = llmConfig?.vllm?.baseUrl ?? envConfig.vllm.baseUrl ?? "http://127.0.0.1:8000";
+        const rawBaseUrl = llmConfig?.vllm?.baseUrl ?? envConfig.vllm.baseUrl ?? "http://127.0.0.1:8001";
         const apiKey = llmConfig?.vllm?.apiKey ?? envConfig.vllm.apiKey;
         const base = cleanBase(rawBaseUrl);
 

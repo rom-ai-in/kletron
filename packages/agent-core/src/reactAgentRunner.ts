@@ -1,5 +1,6 @@
 import { BaseMessage, SystemMessage } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import type { BaseCheckpointSaver } from "@langchain/langgraph";
 
 import { getChatModel, type LlmSelection } from "@numezis/server/llm";
 import { config } from "@numezis/server/config";
@@ -24,12 +25,34 @@ export type StreamReactAgentOptions = {
   getAbortReason?: () => AgentWorkflowAbortReason | null;
   /** Optional check hook for cooperative aborts */
   shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
+
+  // ── Checkpoint / Persistence ─────────────────────────────────────────
+  /** LangGraph checkpoint saver for state persistence & resume. */
+  checkpointer?: BaseCheckpointSaver;
+  /** Unique thread ID for this execution (required when checkpointer is set). */
+  threadId?: string;
+  /**
+   * If true, interrupt the agent *before* the tools node so the caller
+   * can implement human-in-the-loop approval.  Requires a checkpointer.
+   */
+  interruptBeforeTools?: boolean;
+  /**
+   * If true, this is a *resume* invocation — the agent will continue from
+   * the last checkpoint instead of starting fresh.
+   */
+  resumeFromCheckpoint?: boolean;
 };
 
 export type StreamReactAgentResult = {
   messages: BaseMessage[];
   tokenUsage: TokenUsage;
   model: string;
+  /**
+   * True when the stream ended because of a LangGraph interrupt
+   * (e.g. `interruptBeforeTools`).  The caller should persist the
+   * "INTERRUPTED" status and wait for human approval before resuming.
+   */
+  interrupted?: boolean;
 };
 
 export class AgentWorkflowAbortError extends Error {
@@ -63,14 +86,32 @@ export async function streamReactAgentMessages(
   const model = await getChatModel(opts.llmSelection);
   const modelName = (model as any).modelName ?? (model as any).model ?? "unknown";
 
-  const agent = createReactAgent({
+  // ── Build createReactAgent params ──────────────────────────────────
+  const agentParams: Parameters<typeof createReactAgent>[0] = {
     llm: model,
     tools: opts.tools,
     prompt: new SystemMessage(opts.systemPrompt),
     name: opts.name,
-  });
+  };
 
-  const inputMessages = [...(opts.extraMessages ?? []), { role: "user", content: opts.userPrompt }];
+  // Wire in checkpointer if provided
+  if (opts.checkpointer) {
+    agentParams.checkpointSaver = opts.checkpointer;
+  }
+  // Interrupt before the "tools" node for human-in-the-loop
+  if (opts.interruptBeforeTools && opts.checkpointer) {
+    agentParams.interruptBefore = ["tools"];
+  }
+
+  const agent = createReactAgent(agentParams);
+
+  // ── Determine input ────────────────────────────────────────────────
+  // When resuming from a checkpoint, pass `null` as input so LangGraph
+  // continues from the saved state.  Otherwise, construct the message list.
+  const isResume = opts.resumeFromCheckpoint && opts.checkpointer && opts.threadId;
+  const input = isResume
+    ? null
+    : { messages: [...(opts.extraMessages ?? []), { role: "user", content: opts.userPrompt }] };
 
   // Use multi-mode streaming when onTextDelta is provided to get token-by-token output.
   // With ["values", "messages"], the stream yields [mode, data] tuples:
@@ -79,13 +120,23 @@ export async function streamReactAgentMessages(
   const useMultiMode = !!opts.onTextDelta;
   const streamMode = useMultiMode ? (["values", "messages"] as any) : "values";
 
+  // ── Build stream config ────────────────────────────────────────────
+  const streamConfig: Record<string, any> = {
+    streamMode,
+    recursionLimit: config.graphRecursionLimit,
+    signal: opts.abortSignal,
+  };
+  // Thread configuration for checkpoint persistence
+  if (opts.threadId) {
+    streamConfig.configurable = {
+      thread_id: opts.threadId,
+      checkpoint_ns: "",
+    };
+  }
+
   const stream = await agent.stream(
-    { messages: inputMessages },
-    {
-      streamMode,
-      recursionLimit: config.graphRecursionLimit,
-      signal: opts.abortSignal,
-    }
+    input as any,
+    streamConfig,
   );
 
   const seenMessageIds = new Set<string>();
@@ -167,7 +218,7 @@ export async function streamReactAgentMessages(
 
       if (useMultiMode && Array.isArray(rawEvent)) {
         // Multi-mode: [mode, data] tuple
-        const [mode, data] = rawEvent as [string, any];
+        const [mode, data] = rawEvent as unknown as [string, any];
 
         if (mode === "messages") {
           // Token-level chunk: data is [AIMessageChunk, metadata]
@@ -195,9 +246,32 @@ export async function streamReactAgentMessages(
 
   const finalMessages = lastState?.messages ?? accumulatedMessages;
 
+  // ── Detect interrupt ─────────────────────────────────────────────
+  // When `interruptBeforeTools` is active, the stream ends normally but
+  // the last AI message has pending tool_calls that were never executed.
+  // We surface this as `interrupted: true` so the caller can handle it.
+  let interrupted = false;
+  if (opts.interruptBeforeTools && opts.checkpointer && opts.threadId) {
+    const lastMsg = finalMessages.at(-1);
+    const hasPendingToolCalls =
+      lastMsg &&
+      (lastMsg as any).tool_calls?.length > 0 &&
+      !finalMessages.some(
+        (m) =>
+          m.getType?.() === "tool" &&
+          (lastMsg as any).tool_calls?.some(
+            (tc: any) => tc.id && (m as any).tool_call_id === tc.id
+          )
+      );
+    if (hasPendingToolCalls) {
+      interrupted = true;
+    }
+  }
+
   return {
     messages: finalMessages,
     tokenUsage: totalUsage,
     model: modelName,
+    interrupted,
   };
 }

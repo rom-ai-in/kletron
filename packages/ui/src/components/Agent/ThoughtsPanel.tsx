@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Brain, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 interface ThoughtsPanelProps {
     thoughts: string[];
@@ -45,38 +45,33 @@ export const ThoughtsPanel: React.FC<ThoughtsPanelProps> = ({
         : `${cleanedThoughts.length} step${cleanedThoughts.length > 1 ? 's' : ''}`;
 
     return (
-        <div className="mb-1.5 border border-border-subtle rounded-md overflow-hidden bg-bg-elevated/60">
+        <div className="mb-1">
             <button
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-state-hover transition-colors"
+                className="flex items-center gap-1.5 text-left transition-all duration-150 group"
             >
-                <div className="flex items-center justify-center w-4 h-4 rounded text-text-muted shrink-0">
-                    {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                <div className="flex items-center justify-center shrink-0 text-text-muted/50">
+                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </div>
-                <div className="flex items-center gap-1.5 text-text-muted min-w-0">
-                    {isProse ? <Sparkles size={12} className="shrink-0" /> : <Brain size={12} className="shrink-0" />}
-                    <span className="text-[10px] font-medium tracking-wide truncate">
-                        {isProse ? 'Thought' : 'Reasoning'} — {headerSummary}
-                    </span>
-                </div>
+                <span className="text-[13px] font-medium text-text-muted group-hover:text-text-secondary transition-colors">
+                    {isProse ? 'Thought' : 'Reasoning'} — {headerSummary}
+                </span>
             </button>
 
             {isExpanded && (
-                <div className="px-3 pb-2 pt-0.5 border-t border-border-subtle">
+                <div className="mt-1.5 pl-4 border-l-2 border-white/[0.06]">
                     {isProse ? (
-                        /* Long-form prose — render as continuous text like ChatGPT / Cursor */
-                        <div className="text-[11px] text-text-secondary leading-relaxed whitespace-pre-wrap">
+                        <div className="text-[13px] text-text-muted/70 leading-relaxed whitespace-pre-wrap">
                             {cleanedThoughts.join('\n\n')}
                         </div>
                     ) : (
-                        /* Discrete steps — compact list without heavy checkmark icons */
-                        <div className="space-y-0.5 mt-0.5">
+                        <div className="space-y-0.5">
                             {cleanedThoughts.map((step, idx) => (
-                                <div key={idx} className="flex gap-2 text-[10px] group">
-                                    <span className="shrink-0 text-text-muted/60 font-mono w-3 text-right select-none">
+                                <div key={idx} className="flex gap-2 text-[12px]">
+                                    <span className="shrink-0 text-text-muted/40 font-mono w-3 text-right select-none">
                                         {idx + 1}
                                     </span>
-                                    <span className="text-text-secondary leading-snug">
+                                    <span className="text-text-muted/70 leading-relaxed">
                                         {step}
                                     </span>
                                 </div>

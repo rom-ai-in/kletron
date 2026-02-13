@@ -231,7 +231,7 @@ const ollamaBaseUrl = process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434";
 const ollamaModel = process.env.OLLAMA_MODEL ?? "llama3.2";
 
 // vLLM
-const vllmBaseUrl = process.env.VLLM_BASE_URL ?? "http://127.0.0.1:8000";
+const vllmBaseUrl = process.env.VLLM_BASE_URL ?? "http://127.0.0.1:8001";
 const vllmApiKey = process.env.VLLM_API_KEY;
 const vllmModel = process.env.VLLM_MODEL ?? "";
 

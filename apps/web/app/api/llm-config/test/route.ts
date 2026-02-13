@@ -65,25 +65,33 @@ export async function POST(req: NextRequest) {
             // Normalize: strip trailing slashes, strip /v1 if present
             const cleanBaseUrl = (baseUrl as string).replace(/\/+$/, "").replace(/\/v1$/, "");
 
-            // 1. Health check via /api/status first
+            // 1. Health check: try /api/status (vLLM UI backend), fall back to /v1/models (vanilla vLLM)
             const startTime = Date.now();
+            let healthOk = false;
             try {
                 const statusResponse = await fetch(`${cleanBaseUrl}/api/status`, {
                     method: "GET",
                     signal: AbortSignal.timeout(5000),
                 });
-                if (!statusResponse.ok) {
-                    return okError(`vLLM server returned ${statusResponse.status} on /api/status. Is the server running?`);
+                // 200 = vLLM UI backend is present and healthy
+                // 404/405 = vanilla vLLM engine (doesn't have /api/status) – fall through
+                if (statusResponse.ok) {
+                    healthOk = true;
                 }
-            } catch (err) {
-                // /api/status may not exist in vanilla vLLM – try /v1/models instead
+            } catch {
+                // Connection error on /api/status – will try /v1/models next
+            }
+
+            if (!healthOk) {
                 try {
                     const modelsResponse = await fetch(`${cleanBaseUrl}/v1/models`, {
                         method: "GET",
                         signal: AbortSignal.timeout(5000),
                     });
-                    if (!modelsResponse.ok) {
-                        return okError(`Cannot reach vLLM server at ${cleanBaseUrl}. Make sure it is running.`);
+                    if (modelsResponse.ok) {
+                        healthOk = true;
+                    } else {
+                        return okError(`Cannot reach vLLM server at ${cleanBaseUrl}. /v1/models returned ${modelsResponse.status}.`);
                     }
                 } catch {
                     return okError(`Cannot connect to vLLM at ${cleanBaseUrl}. Make sure the server is running and accessible.`);
@@ -337,23 +345,114 @@ export async function POST(req: NextRequest) {
 
         // Perform the test with a prompt that generates more tokens for accurate measurement
         const startTime = Date.now();
-        const response = await model.invoke("Count from 1 to 10.");
-        const duration = Date.now() - startTime;
 
-        // Extract token usage from LangChain response metadata
-        const outputTokens = response.usage_metadata?.output_tokens || 0;
-        const tokensPerSecond = duration > 0 && outputTokens > 0
-            ? Math.round((outputTokens / (duration / 1000)) * 10) / 10
-            : undefined;
+        try {
+            const response = await model.invoke("Count from 1 to 10.");
+            const duration = Date.now() - startTime;
 
-        return NextResponse.json({
-            success: true,
-            latency: duration,
-            ...(tokensPerSecond !== undefined && { tokensPerSecond }),
-            ...(outputTokens > 0 && { outputTokens }),
-            message: "Connection successful",
-            response: response.content ? response.content.toString().slice(0, 50) + "..." : "No content",
-        }, { status: 200 });
+            // Extract token usage from LangChain response metadata
+            const outputTokens = response.usage_metadata?.output_tokens || 0;
+            const tokensPerSecond = duration > 0 && outputTokens > 0
+                ? Math.round((outputTokens / (duration / 1000)) * 10) / 10
+                : undefined;
+
+            return NextResponse.json({
+                success: true,
+                latency: duration,
+                ...(tokensPerSecond !== undefined && { tokensPerSecond }),
+                ...(outputTokens > 0 && { outputTokens }),
+                message: "Connection successful",
+                response: response.content ? response.content.toString().slice(0, 50) + "..." : "No content",
+            }, { status: 200 });
+        } catch (chatError: any) {
+            // If /v1/chat/completions returns 405, the model may only support
+            // the raw /v1/completions endpoint (no chat template).  Fall back
+            // to a plain completions call for vLLM / LM Studio providers.
+            const is405 = chatError?.status === 405 ||
+                chatError?.message?.includes("405") ||
+                chatError?.cause?.status === 405;
+
+            if (is405 && (provider === "vllm" || provider === "lmstudio")) {
+                try {
+                    const cfg = (model as any)?.clientConfig ?? {};
+                    const baseURL = cfg.baseURL ??
+                        ((model as any)?.configuration?.baseURL) ??
+                        ((model as any)?.client?.baseURL);
+
+                    // Resolve the /v1 base URL for the raw completions call
+                    let completionsBaseUrl: string | undefined;
+                    if (baseURL) {
+                        completionsBaseUrl = baseURL;
+                    } else if (provider === "vllm") {
+                        const { baseUrl: rawUrl } = body.config;
+                        if (rawUrl) {
+                            const clean = (rawUrl as string).replace(/\/+$/, "").replace(/\/v1$/, "");
+                            completionsBaseUrl = `${clean}/v1`;
+                        }
+                    }
+
+                    if (!completionsBaseUrl) {
+                        throw chatError; // cannot determine URL – rethrow
+                    }
+
+                    const completionsUrl = `${completionsBaseUrl.replace(/\/+$/, "")}/completions`;
+                    const apiKey = body.config?.apiKey || "vllm";
+
+                    const fbStart = Date.now();
+                    const fbRes = await fetch(completionsUrl, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+                        },
+                        body: JSON.stringify({
+                            model: body.config?.model,
+                            prompt: "Count from 1 to 10.",
+                            max_tokens: 64,
+                        }),
+                        signal: AbortSignal.timeout(30000),
+                    });
+
+                    const fbDuration = Date.now() - fbStart;
+
+                    if (!fbRes.ok) {
+                        const errBody = await fbRes.text().catch(() => "");
+                        return okError(
+                            `${fbRes.status} from /v1/completions${errBody ? `: ${errBody.slice(0, 200)}` : ""}`,
+                        );
+                    }
+
+                    const fbData = await fbRes.json();
+                    const fbText =
+                        fbData.choices?.[0]?.text?.trim() ||
+                        fbData.choices?.[0]?.message?.content?.trim() ||
+                        "No content";
+                    const fbTokens = fbData.usage?.completion_tokens || 0;
+                    const fbTps = fbDuration > 0 && fbTokens > 0
+                        ? Math.round((fbTokens / (fbDuration / 1000)) * 10) / 10
+                        : undefined;
+
+                    return NextResponse.json({
+                        success: true,
+                        latency: fbDuration,
+                        ...(fbTps !== undefined && { tokensPerSecond: fbTps }),
+                        ...(fbTokens > 0 && { outputTokens: fbTokens }),
+                        message: "Connection successful (via /v1/completions – model has no chat template)",
+                        response: fbText.slice(0, 50) + (fbText.length > 50 ? "..." : ""),
+                    }, { status: 200 });
+                } catch (fbErr: any) {
+                    // Completions fallback also failed – report original 405 with guidance
+                    return okError(
+                        "Model does not support /v1/chat/completions (405) and /v1/completions fallback also failed. " +
+                        "Make sure the vLLM server URL and port are correct.",
+                        { details: fbErr?.message || "No additional details" },
+                    );
+                }
+            }
+
+            // Not a 405 or not vllm/lmstudio – rethrow to the outer catch
+            throw chatError;
+        }
 
     } catch (error: any) {
         console.error("LLM Connection Test Failed:", error);

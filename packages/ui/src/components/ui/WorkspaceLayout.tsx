@@ -47,7 +47,7 @@ export function WorkspaceLayout({
             {sidebar}
           </aside>
         )}
-        <main className={cn('flex-1 min-h-0', contentClassName)}>
+        <main className={cn('flex-1 min-h-0 min-w-0 overflow-hidden', contentClassName)}>
           {content}
         </main>
         {aside && (

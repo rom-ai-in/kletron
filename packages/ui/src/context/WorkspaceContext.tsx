@@ -1,0 +1,173 @@
+'use client';
+
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+export type WorkspaceSummary = {
+  id: string;
+  name: string;
+  rootPath: string;
+  repoUrl?: string;
+  provider?: string;
+  defaultBranch?: string;
+  status?: string;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+  lastUsed?: string | Date;
+};
+
+interface WorkspaceContextValue {
+  /** All active workspaces for the current user */
+  workspaces: WorkspaceSummary[];
+  /** The currently active workspace ID */
+  activeWorkspaceId: string | null;
+  /** The currently active workspace object (convenience) */
+  activeWorkspace: WorkspaceSummary | null;
+  /** Whether workspace data is loading */
+  loading: boolean;
+  /** Error message from the last workspace operation (null if none) */
+  error: string | null;
+  /** Switch the active workspace (calls API, updates local state) */
+  switchWorkspace: (id: string) => Promise<void>;
+  /** Refresh the workspace list from the server */
+  refreshWorkspaces: () => Promise<void>;
+  /** Create a new workspace */
+  createWorkspace: (input: { rootPath: string; name?: string; repoUrl?: string }) => Promise<WorkspaceSummary | null>;
+  /** Delete (archive) a workspace */
+  deleteWorkspace: (id: string) => Promise<void>;
+}
+
+const WorkspaceContext = createContext<WorkspaceContextValue | undefined>(undefined);
+
+// ─── Provider ───────────────────────────────────────────────────────────────
+
+export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  /** Monotonic counter to guard against stale workspace-switch responses */
+  const switchCounterRef = useRef(0);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const refreshWorkspaces = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/workspaces');
+      if (!res.ok) throw new Error('Failed to load workspaces');
+      const data = await res.json();
+      if (!mountedRef.current) return;
+      const list: WorkspaceSummary[] = Array.isArray(data.workspaces) ? data.workspaces : [];
+      setWorkspaces(list);
+      setActiveWorkspaceId(data.activeWorkspaceId ?? list[0]?.id ?? null);
+    } catch (e) {
+      console.error('[WorkspaceContext] Failed to fetch workspaces:', e);
+      if (mountedRef.current) setError((e as Error).message ?? 'Failed to load workspaces');
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }, []);
+
+  // Fetch on mount
+  useEffect(() => {
+    void refreshWorkspaces();
+  }, [refreshWorkspaces]);
+
+  const switchWorkspace = useCallback(async (id: string) => {
+    if (!id || id === activeWorkspaceId) return;
+    // Increment counter; only the latest call will apply its result
+    const myCounter = ++switchCounterRef.current;
+    const previousId = activeWorkspaceId;
+    // Optimistic update — set immediately so React state is correct
+    // before the API call completes. This prevents stale workspaceId
+    // from being sent when creating new sessions.
+    setActiveWorkspaceId(id);
+    try {
+      const res = await fetch(`/api/workspaces/${id}/select`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to select workspace');
+      if (!mountedRef.current) return;
+      // If a newer switch happened while we were waiting, don't touch state
+      if (switchCounterRef.current !== myCounter) return;
+      // API confirmed — state is already correct (optimistic)
+    } catch (e) {
+      console.error('[WorkspaceContext] Failed to switch workspace:', e);
+      if (mountedRef.current && switchCounterRef.current === myCounter) {
+        // Revert optimistic update on failure
+        setActiveWorkspaceId(previousId);
+        setError((e as Error).message ?? 'Failed to switch workspace');
+      }
+    }
+  }, [activeWorkspaceId]);
+
+  const createWorkspace = useCallback(async (input: { rootPath: string; name?: string; repoUrl?: string }): Promise<WorkspaceSummary | null> => {
+    try {
+      const res = await fetch('/api/workspaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as Record<string, string>).error || 'Failed to create workspace');
+      }
+      const data = await res.json();
+      if (!mountedRef.current) return null;
+      const ws: WorkspaceSummary = data.workspace;
+      // Refresh list to include the new workspace
+      await refreshWorkspaces();
+      return ws;
+    } catch (e) {
+      console.error('[WorkspaceContext] Failed to create workspace:', e);
+      return null;
+    }
+  }, [refreshWorkspaces]);
+
+  const deleteWorkspace = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/workspaces/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete workspace');
+      if (!mountedRef.current) return;
+      // Refresh list and update active if necessary
+      await refreshWorkspaces();
+    } catch (e) {
+      console.error('[WorkspaceContext] Failed to delete workspace:', e);
+    }
+  }, [refreshWorkspaces]);
+
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
+
+  return (
+    <WorkspaceContext.Provider
+      value={{
+        workspaces,
+        activeWorkspaceId,
+        activeWorkspace,
+        loading,
+        error,
+        switchWorkspace,
+        refreshWorkspaces,
+        createWorkspace,
+        deleteWorkspace,
+      }}
+    >
+      {children}
+    </WorkspaceContext.Provider>
+  );
+}
+
+// ─── Hook ───────────────────────────────────────────────────────────────────
+
+export function useWorkspace(): WorkspaceContextValue {
+  const ctx = useContext(WorkspaceContext);
+  if (!ctx) {
+    throw new Error('useWorkspace must be used within a WorkspaceProvider');
+  }
+  return ctx;
+}
