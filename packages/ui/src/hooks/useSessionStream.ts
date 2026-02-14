@@ -221,9 +221,26 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
      */
     const isStreamingRef = useRef(false);
 
+    // Track the previous sessionId so we can distinguish session creation
+    // (null → id) from session switching (id → different id).
+    const prevSessionIdRef = useRef(sessionId);
+
     // Reset all streaming state when sessionId changes
     useEffect(() => {
-        // Abort any in-flight stream when switching sessions
+        const prevId = prevSessionIdRef.current;
+        prevSessionIdRef.current = sessionId;
+
+        // When sessionId goes from null → a value AND we're actively
+        // streaming, this is the session-creation flow (server just returned
+        // the new run ID). Do NOT abort — the stream is still running for
+        // this new session.
+        if (!prevId && sessionId && isStreamingRef.current) {
+            return;
+        }
+
+        // Otherwise this is a session switch (user clicked a different thread
+        // or started a new blank session). Abort any in-flight stream and
+        // reset state.
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
@@ -330,10 +347,29 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         eventStream: AgentEvent[],
         optimisticTempId?: string,
     ) => {
-        const streamMessages: Message[] = [];
+        // Convert events to messages
+        const rawStreamMessages: Message[] = [];
         for (const event of eventStream) {
             const msg = eventToMessage(event);
-            if (msg) streamMessages.push(msg);
+            if (msg) rawStreamMessages.push(msg);
+        }
+
+        // Dedup consecutive same-role same-content stream messages (the server
+        // can emit duplicate assistant events with different IDs, e.g. the
+        // agent loop echoing the same response multiple times with 1ms offset)
+        const streamMessages: Message[] = [];
+        for (const msg of rawStreamMessages) {
+            if (streamMessages.length > 0) {
+                const prev = streamMessages[streamMessages.length - 1];
+                if (
+                    prev.role === msg.role &&
+                    (prev.content ?? "").trim() === (msg.content ?? "").trim() &&
+                    (prev.content ?? "").trim() !== ""
+                ) {
+                    continue; // skip consecutive duplicate
+                }
+            }
+            streamMessages.push(msg);
         }
 
         setMessages(prev => {
@@ -383,7 +419,24 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 }
             }
 
-            return result;
+            // Final pass: remove consecutive same-role same-content in merged result
+            // (catches duplicates between existing messages and new stream messages)
+            const deduped: Message[] = [];
+            for (const msg of result) {
+                if (deduped.length > 0) {
+                    const prev = deduped[deduped.length - 1];
+                    if (
+                        prev.role === msg.role &&
+                        (prev.content ?? "").trim() === (msg.content ?? "").trim() &&
+                        (prev.content ?? "").trim() !== ""
+                    ) {
+                        continue;
+                    }
+                }
+                deduped.push(msg);
+            }
+
+            return deduped;
         });
     }, [eventToMessage]);
 

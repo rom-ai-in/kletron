@@ -22,6 +22,7 @@ import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 import {
   Loader2,
   Folder,
+  ClipboardCopy,
 } from "lucide-react";
 
 // For simple chat view - reuse existing components (groups tool events, renders collapsible tool cards)
@@ -228,7 +229,7 @@ export default function AgentPage() {
   });
 
   // ── Fetch session detail when active session changes ──────────────────
-  const loadSessionDetail = useCallback(async (sessionId: string) => {
+  const loadSessionDetail = useCallback(async (sessionId: string, options?: { mergeMessages?: boolean }) => {
     try {
       const res = await fetch(`/api/sessions/${sessionId}`);
       if (res.ok) {
@@ -254,22 +255,25 @@ export default function AgentPage() {
               thoughts: e.thoughts,
             }));
 
-          // Dedup pass: remove exact ID duplicates and consecutive user messages
-          // with the same content (the latter handles the legacy event-continue-*
-          // vs event-N ID mismatch — same message stored twice in a row).
+          // Dedup pass:
+          // 1. Remove exact ID duplicates
+          // 2. Remove consecutive same-role same-content messages (handles
+          //    server-side duplicates where the same event is stored with
+          //    different IDs or timestamps, e.g. assistant responses echoed
+          //    multiple times by the agent loop)
           const seenIds = new Set<string>();
           const loadedMessages: typeof rawMessages = [];
           for (let i = 0; i < rawMessages.length; i++) {
             const m = rawMessages[i];
             if (seenIds.has(m.id)) continue;
-            // Check for consecutive user-message duplicates (same content, adjacent in array)
-            if (m.role === "user" && loadedMessages.length > 0) {
+            // Check for consecutive same-role same-content duplicates
+            if (loadedMessages.length > 0) {
               const prev = loadedMessages[loadedMessages.length - 1];
               if (
-                prev.role === "user" &&
-                (prev.content ?? "").trim() === (m.content ?? "").trim()
+                prev.role === m.role &&
+                (prev.content ?? "").trim() === (m.content ?? "").trim() &&
+                (prev.content ?? "").trim() !== "" // don't dedup empty messages
               ) {
-                // Skip this duplicate — keep the one already in the list
                 continue;
               }
             }
@@ -277,10 +281,20 @@ export default function AgentPage() {
             loadedMessages.push(m);
           }
 
-          // setMessages will be a no-op during active streaming thanks
-          // to the guard in useSessionStream.  This prevents the race
-          // condition where loadSessionDetail overwrites stream data.
-          setMessages(loadedMessages);
+          // When called after a stream ends (mergeMessages: true), prefer
+          // whichever dataset is richer.  This protects against the server
+          // returning stale/incomplete data for FAILED sessions where turn-2
+          // events weren't persisted.  For normal loads (session switch,
+          // initial page load) we always replace.
+          // During active streaming the safe setter is a no-op anyway.
+          if (options?.mergeMessages) {
+            setMessages(prev => {
+              if (prev.length > loadedMessages.length) return prev;
+              return loadedMessages;
+            });
+          } else {
+            setMessages(loadedMessages);
+          }
         }
       }
     } catch (e) {
@@ -316,9 +330,11 @@ export default function AgentPage() {
     if (streamStatus !== "streaming" && activeSessionId) {
       fetchSessions();
       // Only reload detail when transitioning out of streaming
-      // (avoids re-running on every "idle" render)
+      // (avoids re-running on every "idle" render).
+      // Use mergeMessages to keep the richer dataset — the stream may
+      // have produced events the server hasn't persisted (FAILED runs).
       if (wasStreaming) {
-        void loadSessionDetail(activeSessionId);
+        void loadSessionDetail(activeSessionId, { mergeMessages: true });
       }
     }
   }, [streamStatus, activeSessionId, fetchSessions, loadSessionDetail]);
@@ -466,19 +482,92 @@ export default function AgentPage() {
   }, [workspaces, sessions, sending, activeSessionId]);
 
   // Convert Message[] from useSessionStream to ChatEvent[] for MessageList
+  // Includes a final consecutive-duplicate guard to catch any remaining dupes
   const chatEventsForView = useMemo<ChatEvent[]>(() => {
-    return messages.map((m) => ({
-      id: m.id,
-      kind: m.role as ChatEvent["kind"],
-      content: m.content,
-      toolName: m.toolName,
-      toolArgs: m.toolArgs,
-      toolOutput: m.role === "tool" ? (m.toolOutput ?? m.content) : m.toolOutput,
-      toolCallId: m.toolCallId,
-      thoughts: m.thoughts,
-      timestamp: m.timestamp,
-    }));
+    const events: ChatEvent[] = [];
+    for (const m of messages) {
+      const evt: ChatEvent = {
+        id: m.id,
+        kind: m.role as ChatEvent["kind"],
+        content: m.content,
+        toolName: m.toolName,
+        toolArgs: m.toolArgs,
+        toolOutput: m.role === "tool" ? (m.toolOutput ?? m.content) : m.toolOutput,
+        toolCallId: m.toolCallId,
+        thoughts: m.thoughts,
+        timestamp: m.timestamp,
+      };
+      // Skip consecutive same-kind same-content duplicates
+      if (events.length > 0) {
+        const prev = events[events.length - 1];
+        if (
+          prev.kind === evt.kind &&
+          (prev.content ?? "").trim() === (evt.content ?? "").trim() &&
+          (prev.content ?? "").trim() !== ""
+        ) {
+          continue;
+        }
+      }
+      events.push(evt);
+    }
+    return events;
   }, [messages]);
+
+  // ── Copy debug logs ──────────────────────────────────────────────────
+  const [logsCopied, setLogsCopied] = useState(false);
+  const handleCopyLogs = useCallback(() => {
+    const debugState = {
+      timestamp: new Date().toISOString(),
+      activeSessionId,
+      streamStatus,
+      sending,
+      isStreaming,
+      errorMessage,
+      messagesCount: messages.length,
+      messages: messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        contentLength: m.content?.length ?? 0,
+        contentPreview: (m.content ?? "").slice(0, 120),
+        toolName: m.toolName,
+        timestamp: m.timestamp,
+      })),
+      eventStreamCount: eventStream.length,
+      eventStream: eventStream.slice(0, 30).map((e) => ({
+        id: e.id,
+        kind: e.kind,
+        contentLength: e.content?.length ?? 0,
+        contentPreview: (e.content ?? "").slice(0, 120),
+        name: e.name,
+        timestamp: e.timestamp,
+      })),
+      activeGraphIsSimple,
+      selectedGraphId,
+      llmProvider,
+      sessionDetail: sessionDetail ? {
+        id: sessionDetail.id,
+        graphId: sessionDetail.graphId,
+        status: sessionDetail.status,
+        graph: sessionDetail.graph,
+        conversationHistoryCount: sessionDetail.conversationHistory?.length ?? 0,
+      } : null,
+      tokenUsage,
+      runStartedAt,
+      runEndedAt,
+      timelineCount: timeline.length,
+    };
+    const text = JSON.stringify(debugState, null, 2);
+    navigator.clipboard?.writeText(text).then(() => {
+      setLogsCopied(true);
+      setTimeout(() => setLogsCopied(false), 2000);
+    }).catch((err) => {
+      console.error("Failed to copy logs:", err);
+    });
+  }, [
+    activeSessionId, streamStatus, sending, isStreaming, errorMessage,
+    messages, eventStream, activeGraphIsSimple, selectedGraphId, llmProvider,
+    sessionDetail, tokenUsage, runStartedAt, runEndedAt, timeline,
+  ]);
 
   // Auto-scroll
   useEffect(() => {
@@ -662,10 +751,18 @@ export default function AgentPage() {
         ) : (
           <div className="text-[11px] text-text-muted">No workspace selected</div>
         )}
-        {/* Right: metrics */}
+        {/* Right: metrics + debug */}
         <div className="flex items-center gap-3 flex-shrink-0">
           {runStartedAt && tokenUsage && <TokenUsageDisplay tokenUsage={tokenUsage} />}
           {runStartedAt && <DurationDisplay startedAt={runStartedAt} endedAt={runEndedAt ?? undefined} />}
+          <button
+            onClick={handleCopyLogs}
+            className="flex items-center gap-1 rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+            title="Copy debug logs to clipboard"
+          >
+            <ClipboardCopy className="h-3 w-3" />
+            {logsCopied ? "Copied!" : "Logs"}
+          </button>
         </div>
       </div>
 
