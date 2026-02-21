@@ -7,6 +7,8 @@ import {
   buildCoderAgentGraph,
   buildExplorerAgentGraph,
   buildPlannerAgentGraph,
+  buildContinuousImprovementGraph,
+  buildBusinessAnalystGraph,
 } from "@numezis/server/services/agentGraphPresets";
 import * as db from "@numezis/server/lib/db";
 
@@ -23,6 +25,8 @@ const presets: GraphPreset[] = [
   { name: "Cursor-like Robust Loop (agent graph)", builder: buildCursorLikeRobustGraph },
   { name: "Complete Deep Agent (agent graph)", builder: buildCompleteDeepAgentGraph },
   { name: "Drift Analysis (agent graph)", builder: buildDriftAnalysisGraph },
+  { name: "Continuous Improvement (agent graph)", builder: buildContinuousImprovementGraph },
+  { name: "Business Analyst", builder: buildBusinessAnalystGraph },
 ];
 
 // Legacy / removed graph names — delete any remaining copies from the database

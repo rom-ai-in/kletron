@@ -29,6 +29,7 @@ const PROVIDER_ICONS: Record<string, string> = {
     gemini: 'GE',
     ollama: 'OL',
     lmstudio: 'LM',
+    vllm: 'VL',
 };
 
 function ProviderIcon({ providerId }: { providerId: string }) {

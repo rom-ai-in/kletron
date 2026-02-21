@@ -20,6 +20,7 @@ import {
     ChevronRight,
     UserCircle,
     LogOut,
+    TrendingUp,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
@@ -39,6 +40,11 @@ const navItems = [
         label: "Automations",
         icon: Layers,
         href: "/app/automations",
+    },
+    {
+        label: "Business Analyst",
+        icon: TrendingUp,
+        href: "/app/business-analyst",
     },
     {
         label: "Code Comparator",

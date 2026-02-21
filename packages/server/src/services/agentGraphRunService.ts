@@ -52,7 +52,7 @@ async function ensureFallbackRun(runId: string, collection: any) {
 }
 
 export class AgentGraphRunService {
-    async createRun(graphId: string, workspaceId?: string): Promise<string> {
+    async createRun(graphId: string, workspaceId?: string, source?: string): Promise<string> {
         if (!ObjectId.isValid(graphId)) {
             throw new Error("Invalid graph ID format");
         }
@@ -60,6 +60,7 @@ export class AgentGraphRunService {
         const run: AgentGraphRun = {
             graphId: new ObjectId(graphId),
             workspaceId: workspaceId && ObjectId.isValid(workspaceId) ? new ObjectId(workspaceId) : undefined,
+            ...(source ? { source } : {}),
             status: "PENDING",
             startedAt: new Date(),
             nodeOrder: [],
@@ -336,7 +337,7 @@ export class AgentGraphRunService {
      */
     async listSessions(
         workspaceId?: string,
-        opts?: { includeArchived?: boolean; limit?: number; graphId?: string }
+        opts?: { includeArchived?: boolean; limit?: number; graphId?: string; excludeSource?: string }
     ): Promise<AgentGraphRun[]> {
         const limit = opts?.limit ?? 50;
         const collection = await getCollectionSafe();
@@ -346,6 +347,7 @@ export class AgentGraphRunService {
                 if (wsObj && run.workspaceId?.toString() !== wsObj.toString()) return false;
                 if (!opts?.includeArchived && run.archived) return false;
                 if (opts?.graphId && ObjectId.isValid(opts.graphId) && run.graphId?.toString() !== opts.graphId) return false;
+                if (opts?.excludeSource && run.source === opts.excludeSource) return false;
                 return true;
             });
             runs = runs.sort((a, b) => (b.startedAt?.getTime?.() ?? 0) - (a.startedAt?.getTime?.() ?? 0));
@@ -360,6 +362,9 @@ export class AgentGraphRunService {
         }
         if (opts?.graphId && ObjectId.isValid(opts.graphId)) {
             filter.graphId = new ObjectId(opts.graphId);
+        }
+        if (opts?.excludeSource) {
+            filter.source = { $ne: opts.excludeSource };
         }
         const runs = await collection
             .find(filter)
@@ -534,6 +539,45 @@ export class AgentGraphRunService {
                 ...seeded,
                 conversationTurns: (seeded.conversationTurns ?? 0) + 1,
             });
+        }
+    }
+    /**
+     * One-time migration: tag existing automation-created runs with source="automation".
+     * Cross-references the audit_runs collection's sessionIds.
+     */
+    async backfillAutomationSource(): Promise<number> {
+        const collection = await getCollectionSafe();
+        if (!collection) return 0;
+
+        try {
+            const db = (await import("../lib/db")).getDb;
+            const database = await db();
+            const auditRuns = database.collection("audit_runs");
+
+            const allAuditRuns = await auditRuns
+                .find({ sessionIds: { $exists: true, $ne: [] } })
+                .project({ sessionIds: 1 })
+                .toArray();
+
+            const automationRunIds: ObjectId[] = [];
+            for (const ar of allAuditRuns) {
+                for (const sid of ar.sessionIds ?? []) {
+                    if (sid && ObjectId.isValid(sid)) {
+                        automationRunIds.push(new ObjectId(sid));
+                    }
+                }
+            }
+
+            if (automationRunIds.length === 0) return 0;
+
+            const result = await collection.updateMany(
+                { _id: { $in: automationRunIds }, source: { $exists: false } },
+                { $set: { source: "automation" } }
+            );
+            return result.modifiedCount;
+        } catch (error) {
+            console.warn("[AgentGraphRun] backfillAutomationSource failed:", (error as Error)?.message);
+            return 0;
         }
     }
 }

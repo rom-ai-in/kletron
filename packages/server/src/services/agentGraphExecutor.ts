@@ -483,13 +483,30 @@ function createSessionTimeline(node: AgentGraphNode): TimelineEvent[] {
     ];
 }
 
+function extractFindingsFromState(state: Record<string, unknown> | undefined): unknown[] {
+    if (!state) return [];
+    // Direct findings array in state (e.g. from CI discovery node merging into state)
+    if (Array.isArray(state.findings) && state.findings.length > 0) return state.findings;
+    // Scan node outputs for findings arrays
+    const nodes = state.nodes as Record<string, unknown> | undefined;
+    if (nodes && typeof nodes === "object") {
+        for (const val of Object.values(nodes)) {
+            if (val && typeof val === "object" && Array.isArray((val as any).findings) && (val as any).findings.length > 0) {
+                return (val as any).findings;
+            }
+        }
+    }
+    return [];
+}
+
 function createPlaceholderOutputs(opts: { mission: string; report: string; meta?: Record<string, unknown> }) {
+    const state = opts.meta?.state as Record<string, unknown> | undefined;
     return {
         context: { mission: opts.mission ?? "", languages: [], frameworks: [], hotspots: [] },
         target_files: [],
         raw_claims: [],
         verified_findings: [],
-        findings: [],
+        findings: extractFindingsFromState(state),
         tasks: [],
         report: opts.report ?? "",
         meta: opts.meta ?? {},

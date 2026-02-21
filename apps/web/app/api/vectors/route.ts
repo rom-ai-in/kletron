@@ -5,6 +5,16 @@ import { getSchedulerStatus } from "@numezis/server/services/autoIndexScheduler"
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
 
+/**
+ * GET /api/vectors — Lightweight index status endpoint.
+ *
+ * Returns fast DB-only stats (indexed file count, chunk count, dimensions)
+ * plus cached disk file count. No per-file hash comparison — that work
+ * only happens during actual indexing operations.
+ *
+ * Errors are capped to the last 50 entries to keep the payload small
+ * during polling; the full error list is available via errorCount.
+ */
 export async function GET(request: Request) {
     const startTime = Date.now();
     let status = 200;
@@ -29,8 +39,13 @@ export async function GET(request: Request) {
         const indexStatus = await refreshIndexStatus(workspaceId, workspace.rootPath);
         const scheduler = getSchedulerStatus(workspaceId);
 
+        // Cap errors to keep polling payload small
+        const MAX_ERRORS_IN_RESPONSE = 50;
+        const cappedErrors = indexStatus.errors.slice(-MAX_ERRORS_IN_RESPONSE);
+
         return NextResponse.json({
             ...indexStatus,
+            errors: cappedErrors,
             autoIndexEnabled: !process.env.DISABLE_AUTO_INDEX,
             lastAutoIndex: scheduler.lastRun?.toISOString() ?? null,
             nextAutoIndex: scheduler.lastRun

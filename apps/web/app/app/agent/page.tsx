@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ChatInput,
   Selector,
@@ -81,6 +82,9 @@ function toThreadLiveStatus(status: string, isStreaming: boolean): ThreadLiveSta
 // ─── Page Component ─────────────────────────────────────────────────────────
 
 export default function AgentPage() {
+  // ── Read handoff params from BA Feature detail ────────────────────────
+  const searchParams = useSearchParams();
+
   // ── State ─────────────────────────────────────────────────────────────
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -143,7 +147,7 @@ export default function AgentPage() {
   const fetchSessions = useCallback(async () => {
     setSessionsLoading(true);
     try {
-      const res = await fetch("/api/sessions?limit=50&allWorkspaces=true");
+      const res = await fetch("/api/sessions?limit=50&allWorkspaces=true&excludeSource=automation");
       if (res.ok) {
         const data = await res.json();
         setSessions(Array.isArray(data) ? data : []);
@@ -301,6 +305,25 @@ export default function AgentPage() {
       console.error("Failed to load session detail:", e);
     }
   }, [setMessages]);
+
+  // ── Pre-fill from BA handoff (URL search params) ──────────────────────
+  const handoffAppliedRef = useRef(false);
+  useEffect(() => {
+    if (handoffAppliedRef.current) return;
+    const mission = searchParams?.get("mission");
+    const goal = searchParams?.get("goal");
+    const acceptanceCriteria = searchParams?.get("acceptanceCriteria");
+    if (mission || goal) {
+      handoffAppliedRef.current = true;
+      const parts: string[] = [];
+      if (mission) parts.push(mission);
+      if (goal) parts.push(`\n\nGoal:\n${goal}`);
+      if (acceptanceCriteria) parts.push(`\n\nAcceptance Criteria:\n${acceptanceCriteria}`);
+      setInput(parts.join(""));
+      // Clear search params from URL without navigation
+      window.history.replaceState({}, "", "/app/agent");
+    }
+  }, [searchParams, setInput]);
 
   // ── Initialize ────────────────────────────────────────────────────────
   useEffect(() => {

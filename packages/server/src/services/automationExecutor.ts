@@ -23,6 +23,98 @@ import { computeNextRun } from "@numezis/shared/cronUtils";
 const COLLECTION_NAME = "audit_chains"; // Legacy collection name - kept for backward compatibility
 const RUNS_COLLECTION = "audit_runs"; // Legacy collection name - kept for backward compatibility
 
+/**
+ * Parse findings from a markdown/text report produced by a conversational agent.
+ * Handles multiple LLM output formats:
+ *   Format A: "### 1) Title\n**Severity:** BLOQUANT\n**Where:** ..."
+ *   Format B: "1) **BLOQUANT — Title**\n- **Files** ..."
+ *   Format C: "### Finding 1: Title\n**Severity:** WARNING"
+ */
+function parseFindingsFromText(
+    report: string,
+    chainId: string,
+    stageId: string,
+    sessionId: string,
+): Finding[] {
+    if (!report || report.length < 50) return [];
+
+    // Unwrap JSON wrapper: { "simple_react": { "response": "..." } }
+    let text = report;
+    try {
+        const parsed = JSON.parse(report);
+        const inner = parsed?.simple_react?.response ?? parsed?.response;
+        if (typeof inner === "string") text = inner;
+    } catch { /* not JSON, use as-is */ }
+
+    // Split on numbered items: "### 1)", "1)", "### Finding 1:", etc.
+    // Each section runs until the next numbered item or end-of-string.
+    const sectionPattern = /(?:^|\n)(?:#{1,4}\s+)?(?:Finding\s+)?\d+[.):][\s\S]*?(?=\n(?:#{1,4}\s+)?(?:Finding\s+)?\d+[.):]|$)/g;
+    const sections = text.match(sectionPattern);
+    if (!sections || sections.length === 0) {
+        console.info(`[parseFindingsFromText] No numbered sections found in ${text.length}-char report`);
+        return [];
+    }
+
+    console.info(`[parseFindingsFromText] Found ${sections.length} candidate sections in ${text.length}-char report`);
+
+    const findings: Finding[] = [];
+    const severityWords = /\b(BLOQUANT|CRITICAL|WARNING|INFO|HIGH|MEDIUM|LOW)\b/i;
+
+    for (const section of sections) {
+        const firstLine = section.trim().split("\n")[0] ?? "";
+        const titleClean = firstLine
+            .replace(/^#{1,4}\s*/, "")
+            .replace(/^(?:Finding\s+)?\d+[.):\s]+/, "")
+            .replace(/\*\*/g, "")
+            .trim();
+        if (!titleClean) continue;
+
+        // Severity: "**Severity:** **BLOQUANT**" or inline "**BLOQUANT —"
+        let type: "BLOQUANT" | "WARNING" | "INFO" = "INFO";
+        const sevLabelMatch = section.match(/\*\*Severity:?\*\*[:\s]*\*?\*?(BLOQUANT|CRITICAL|WARNING|INFO|HIGH|MEDIUM|LOW)\*?\*?/i);
+        const sevInlineMatch = firstLine.match(severityWords);
+        const sevRaw = (sevLabelMatch?.[1] ?? sevInlineMatch?.[1] ?? "").toUpperCase();
+        if (sevRaw === "BLOQUANT" || sevRaw === "CRITICAL" || sevRaw === "HIGH") type = "BLOQUANT";
+        else if (sevRaw === "WARNING" || sevRaw === "MEDIUM") type = "WARNING";
+
+        // File paths: backtick-quoted containing / or .
+        const filePaths = section.match(/`([a-zA-Z0-9_.@/-]+\.[a-zA-Z0-9]{1,6})`/g)
+            ?.map(m => m.replace(/`/g, "")) ?? [];
+        const file = filePaths[0] ?? "unknown";
+
+        // Line numbers: "**~357-377**", "~lines 96-105", "line 42", "L206-302"
+        const lineMatch = section.match(/\*?\*?~?\s*(?:lines?\s*)?(\d+)\s*[-–]\s*(\d+)\s*\*?\*?/)
+            ?? section.match(/\*?\*?~?\s*lines?\s+(\d+)\s*\*?\*?/i)
+            ?? section.match(/\bL(\d+)(?:\s*[-–]\s*(\d+))?/);
+        const lineStart = lineMatch ? parseInt(lineMatch[1], 10) : undefined;
+        const lineEnd = lineMatch?.[2] ? parseInt(lineMatch[2], 10) : undefined;
+
+        // Description: prefer "**Description:**" block, then "What's wrong", then title only
+        const descBlock = section.match(/\*\*Description:?\*\*\s*([\s\S]*?)(?=\n-\s*\*\*(?:Concrete|Suggested) fix|$)/i);
+        const whatWrong = section.match(/\*\*What'?s wrong\*\*\s*\n([\s\S]*?)(?=\n\*\*(?:Concrete|Suggested) fix|$)/i);
+        const detail = descBlock?.[1]?.trim() ?? whatWrong?.[1]?.trim() ?? "";
+        const cleanDetail = detail.replace(/\*\*/g, "").replace(/```[\s\S]*?```/g, "[code]").trim();
+        const desc = cleanDetail
+            ? `${titleClean}: ${cleanDetail.slice(0, 300)}`
+            : titleClean;
+
+        findings.push({
+            chainId,
+            stageId,
+            sessionId,
+            type,
+            file,
+            description: desc,
+            lineStart,
+            lineEnd,
+            timestamp: new Date(),
+        });
+    }
+
+    console.info(`[parseFindingsFromText] Extracted ${findings.length} findings`);
+    return findings;
+}
+
 const toObjectId = (id?: string): ObjectId | undefined => {
     if (!id) return undefined;
     if (!ObjectId.isValid(id)) return undefined;
@@ -695,6 +787,7 @@ export class AutomationExecutor {
                     model: stage.llmModel,
                 },
                 workspaceId: prepared?.workspaceId,
+                source: "automation",
                 shouldAbort: prepared?.shouldAbort,
                 ...(auditSessionId
                     ? {
@@ -709,8 +802,8 @@ export class AutomationExecutor {
             }
             const sessionIdForLogs = auditSessionId || workflowResult.sessionId;
 
-            // Extract findings
-            const findings: Finding[] = (workflowResult.outputs?.findings || []).map(
+            // Extract findings from structured output first, fall back to parsing text
+            let findings: Finding[] = (workflowResult.outputs?.findings || []).map(
                 (f: any) => ({
                     chainId,
                     stageId: stage.id,
@@ -724,6 +817,14 @@ export class AutomationExecutor {
                     timestamp: new Date(),
                 })
             );
+
+            // If no structured findings, parse them from the text report
+            if (findings.length === 0) {
+                const reportText = workflowResult.outputs?.report ?? workflowResult.conclusion ?? "";
+                console.info(`[AutomationExecutor] No structured findings; parsing from ${reportText.length}-char report text`);
+                findings = parseFindingsFromText(reportText, chainId, stage.id, sessionIdForLogs);
+                console.info(`[AutomationExecutor] Parsed ${findings.length} findings from text`);
+            }
 
             const rawClaims: WorkflowClaim[] = workflowResult.outputs?.raw_claims ?? [];
             const claims = rawClaims.map((rawClaim, index) => ({
@@ -747,6 +848,8 @@ export class AutomationExecutor {
                 };
             });
 
+            const rawOutput = workflowResult.outputs?.report ?? workflowResult.conclusion ?? "";
+
             return {
                 stageId: stage.id,
                 stageName: stage.name,
@@ -755,6 +858,7 @@ export class AutomationExecutor {
                 findings,
                 claims,
                 tasks,
+                rawOutput,
                 duration: Date.now() - startTime,
             };
         } catch (error) {
@@ -796,7 +900,9 @@ export class AutomationExecutor {
     }
 
     /**
-     * Build context from previous stages
+     * Build context from previous stages.
+     * When a referenced field (e.g. "findings") is an empty array and the stage
+     * has a rawOutput, inject the rawOutput so the next stage still gets useful context.
      */
     private buildStageContext(
         stage: AutomationStageConfig,
@@ -812,8 +918,15 @@ export class AutomationExecutor {
             const [stageId, field] = selector.split(".");
             const prevResult = previousResults.find((r) => r.stageId === stageId);
 
-            if (prevResult && field in prevResult) {
-                context[selector] = (prevResult as any)[field];
+            if (!prevResult) continue;
+
+            const value = field in prevResult ? (prevResult as any)[field] : undefined;
+            const isEmpty = Array.isArray(value) ? value.length === 0 : !value;
+
+            if (!isEmpty) {
+                context[selector] = value;
+            } else if (prevResult.rawOutput) {
+                context[`${stageId}.output`] = prevResult.rawOutput;
             }
         }
 
@@ -821,7 +934,8 @@ export class AutomationExecutor {
     }
 
     /**
-     * Build user prompt with context
+     * Build user prompt with context.
+     * Wraps the stage prompt with instructions that force thorough, iterative analysis.
      */
     private buildUserPrompt(stage: AutomationStageConfig, context: any): string {
         const basePrompt = stage.prompt?.trim();
@@ -829,13 +943,37 @@ export class AutomationExecutor {
             throw new Error(`Stage ${stage.id} has an empty prompt`);
         }
 
-        let prompt = basePrompt;
+        const parts: string[] = [];
+
+        parts.push("## TASK");
+        parts.push(basePrompt);
 
         if (context) {
-            prompt += `\n\n${JSON.stringify(context, null, 2)}`;
+            parts.push("");
+            parts.push("## CONTEXT FROM PREVIOUS STAGES");
+            parts.push(JSON.stringify(context, null, 2));
         }
 
-        return prompt;
+        parts.push("");
+        parts.push("## EXECUTION INSTRUCTIONS");
+        parts.push([
+            "You MUST perform a thorough, multi-step analysis. Do NOT stop after one tool call.",
+            "1. Start by listing the project structure (describe_structure or list_files).",
+            "2. Identify the files most relevant to this audit stage.",
+            "3. Read at least 5-10 key source files using read_file or read_file_range.",
+            "4. Use search_code to find specific patterns, anti-patterns, or keywords related to the audit.",
+            "5. For each issue found, note the exact file path, line numbers, severity (BLOQUANT/WARNING/INFO), and a concrete fix.",
+            "6. After thorough investigation, produce a detailed report with ALL findings.",
+            "",
+            "Your final output MUST include:",
+            "- A summary of what was analyzed",
+            "- A numbered list of findings with file paths, line numbers, severity, description, and fix",
+            "- If no issues are found after thorough analysis, explain what was checked and why it's clean",
+            "",
+            "Do NOT give up after a single tool call. Iterate until you have examined the codebase in depth.",
+        ].join("\n"));
+
+        return parts.join("\n");
     }
 
     /**
@@ -1018,6 +1156,19 @@ export class AutomationExecutor {
         lines.push(`- **Warnings**: ${warningCount}`);
         lines.push(`- **Info**: ${infoCount}`);
         lines.push("");
+
+        if (allFindings.length > 0) {
+            lines.push("## Detailed Findings");
+            lines.push("");
+            allFindings.forEach((f, i) => {
+                const loc = f.lineStart
+                    ? `L${f.lineStart}${f.lineEnd ? `-${f.lineEnd}` : ""}`
+                    : "";
+                lines.push(`${i + 1}. **[${f.type}]** \`${f.file}\`${loc ? ` ${loc}` : ""}`);
+                lines.push(`   ${f.description.slice(0, 500)}`);
+                lines.push("");
+            });
+        }
 
         return lines.join("\n");
     }

@@ -12,6 +12,8 @@ import {
     buildCoderAgentGraph,
     buildExplorerAgentGraph,
     buildPlannerAgentGraph,
+    buildContinuousImprovementGraph,
+    buildBusinessAnalystGraph,
 } from "./agentGraphPresets";
 
 const COLLECTION_NAME = "agent_graphs";
@@ -51,6 +53,8 @@ function ensureFallbackGraphs() {
         { id: "000000000000000000000008", graph: buildCoderAgentGraph() },
         { id: "000000000000000000000009", graph: buildExplorerAgentGraph() },
         { id: "00000000000000000000000a", graph: buildPlannerAgentGraph() },
+        { id: "00000000000000000000000b", graph: buildContinuousImprovementGraph() },
+        { id: "00000000000000000000000c", graph: buildBusinessAnalystGraph() },
     ];
 
     for (const entry of entries) {

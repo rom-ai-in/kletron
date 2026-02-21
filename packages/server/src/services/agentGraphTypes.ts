@@ -101,7 +101,7 @@ export interface AgentGraphDefinition {
     _id?: ObjectId;
     name: string;
     description?: string;
-    category?: "deep_agent" | "graph" | "automation" | "drift";
+    category?: "deep_agent" | "graph" | "automation" | "drift" | "continuous_improvement" | "business_analysis";
     createdAt: Date;
     updatedAt: Date;
     nodes: AgentGraphNode[];
@@ -190,6 +190,8 @@ export interface AgentGraphRun {
     _id?: ObjectId;
     graphId: ObjectId;
     workspaceId?: ObjectId;
+    /** Origin of this run: "agent" (UI), "automation", "api", "cli", etc. */
+    source?: string;
     status: AgentGraphStatus;
     startedAt: Date;
     endedAt?: Date;

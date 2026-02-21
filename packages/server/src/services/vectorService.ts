@@ -435,3 +435,34 @@ export async function getAllIndexedFilePaths(repoPath: string): Promise<string[]
         .toArray();
     return result.map(r => r.filePath as string);
 }
+
+/**
+ * Fast index statistics — 3 lightweight parallel queries, no filesystem access.
+ * Uses the { repoPath: 1, filePath: 1 } compound index for speed.
+ */
+export async function getIndexStats(repoPath: string): Promise<{
+    indexedFiles: number;
+    totalChunks: number;
+    dimensions: number | null;
+}> {
+    const collection = await getCollection();
+
+    const [fileCountResult, totalChunks, sampleDoc] = await Promise.all([
+        // Count unique files via aggregation (covered by compound index)
+        collection.aggregate<{ count: number }>([
+            { $match: { repoPath } },
+            { $group: { _id: "$filePath" } },
+            { $count: "count" }
+        ]).toArray(),
+        // Total chunks
+        collection.countDocuments({ repoPath }),
+        // Single doc for embedding dimensions (projection avoids loading full docs)
+        collection.findOne({ repoPath }, { projection: { embedding: 1 } }),
+    ]);
+
+    return {
+        indexedFiles: fileCountResult[0]?.count ?? 0,
+        totalChunks,
+        dimensions: sampleDoc?.embedding ? (sampleDoc.embedding as number[]).length : null,
+    };
+}

@@ -303,6 +303,264 @@ export class AutomationConfigBuilder {
                 },
             ],
         },
+
+        /**
+         * Continuous Improvement - Daily automated scan
+         * Duration: ~2 hours
+         */
+        CONTINUOUS_IMPROVEMENT: {
+            name: "Continuous Improvement (Daily)",
+            description:
+                "Daily automated scan for bugs, features, UX/perf/security improvements with auto-fix and PR creation. Designed to run on a cron schedule.",
+            triggerType: "schedule" as AutomationTriggerType,
+            schedule: {
+                enabled: true,
+                cron: "0 2 * * 1-5",
+                timezone: "Europe/Zurich",
+            },
+            stages: [
+                {
+                    id: "ci-discovery",
+                    name: "Codebase Discovery & Health Scan",
+                    prompt:
+                        "Scan the entire repository for improvement opportunities across all dimensions: code health (TODOs, complexity, churn, duplication, dead code), security vulnerabilities (injection, auth, secrets, input validation), UX quality (missing states, accessibility, design system consistency), and dependency health (outdated packages, CVEs, deprecated APIs). Use repo_metrics, describe_structure, git_log, search_code, semantic_code_search, dependency_info extensively. Output structured findings with file paths, evidence, severity, and auto-fixability assessment. Focus on the 40 most impactful findings.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "ci-github",
+                    name: "GitHub Issues & PR Sync",
+                    prompt:
+                        "Fetch open GitHub issues and recent pull requests using github_api. Correlate GitHub issues with the codebase findings from the previous stage. Identify issues that match or relate to discovered findings. Flag stale PRs (open > 14 days). Output a correlation map linking findings to issue numbers.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["ci-discovery.findings"],
+                },
+                {
+                    id: "ci-triage",
+                    name: "Triage & Prioritize",
+                    prompt:
+                        "Categorize and prioritize all findings into structured improvement suggestions. For each finding, assign: category (feature/bug/ux/perf/security/refactor/deps/docs/testing), priority (CRITICAL/HIGH/MEDIUM/LOW) based on impact, effort estimate (XS/S/M/L/XL), confidence score (0-100, filter < 50), and auto-fixability. Deduplicate overlapping findings. Correlate with GitHub issues. Sort by priority then confidence. Maximum 50 suggestions.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["ci-discovery.findings", "ci-github.findings"],
+                },
+                {
+                    id: "ci-autofix",
+                    name: "Auto-Implement Safe Fixes",
+                    prompt:
+                        "Implement the highest-priority auto-fixable improvements (max 5 per run). Only make clearly correct, low-risk changes. Never modify core business logic, database schemas, or reduce test coverage. For each fix: read the file, implement the change using write_file/str_replace_editor, then verify with lint/typecheck. Skip and mark as needs_human_review if unsure. Record all changes made.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["ci-triage.tasks"],
+                    skipIf: "ci-triage.findings.length === 0",
+                },
+                {
+                    id: "ci-report",
+                    name: "Generate Improvement Report",
+                    prompt:
+                        "Generate a comprehensive daily improvement report in markdown format. Include: Executive Summary, Auto-Fixed Items (if any), Suggestions Requiring Human Review (grouped by priority), and Statistics. Create a GitHub issue with the report using github_api (resource='create_issue', labels=['continuous-improvement', 'automated']). Send a notification using the notify tool.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: [
+                        "ci-discovery.findings",
+                        "ci-triage.findings",
+                        "ci-autofix.findings",
+                    ],
+                },
+            ],
+        },
+
+        /**
+         * Business Analysis (Full) — Complete BA pipeline
+         * Duration: ~1 hour
+         */
+        BUSINESS_ANALYSIS_FULL: {
+            name: "Business Analysis (Full)",
+            description:
+                "Complete business analysis: context review, market scanning, competitive analysis, feature discovery, requirements drafting, prioritization, innovation scan, gap analysis, and final report.",
+            stages: [
+                {
+                    id: "ba-context",
+                    name: "Context & Strategy Review",
+                    prompt:
+                        "Load and analyze the product's business context and repository structure. Summarize the product vision, target personas, competitors, tech stack, existing features, and strategic positioning. Use describe_structure, list_files, read_file, and search_code to understand the codebase.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "ba-market",
+                    name: "Market Scanning",
+                    prompt:
+                        "Analyze current market trends, emerging technologies, and industry movements relevant to this product's domain. Use web_search to research market size, growth trends, opportunities, and threats. Identify key trends that could impact the product.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["ba-context.findings"],
+                },
+                {
+                    id: "ba-competitive",
+                    name: "Competitive Analysis",
+                    prompt:
+                        "Deep-dive into each competitor defined in the business context. Build a feature-by-feature competitive matrix scoring each area (absent/basic/good/excellent). Identify competitive gaps, advantages, and market gaps. Use web_search to research competitors and their features.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["ba-context.findings", "ba-market.findings"],
+                },
+                {
+                    id: "ba-features",
+                    name: "Feature Discovery & Generation",
+                    prompt:
+                        "Generate 15-25 comprehensive feature proposals based on the context, market analysis, competitive gaps, and persona needs. Include new features, improvements, innovations, competitive catch-ups, and technical debt items. For each feature provide: title, type (new_feature/improvement/fix/optimization/innovation/competitive/technical_debt/compliance), summary, detailed description, user story, business value (CRITICAL/HIGH/MEDIUM/LOW), effort (XS/S/M/L/XL), priority (0-100), confidence score (0-100), innovation score (0-100), competitive context, impact areas, and risks.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["ba-context.findings", "ba-market.findings", "ba-competitive.findings"],
+                },
+                {
+                    id: "ba-requirements",
+                    name: "Requirements Drafting",
+                    prompt:
+                        "For each feature proposal, draft detailed requirements: refine user stories, write 3-5 acceptance criteria, identify dependencies, explore the codebase to find affected files, and suggest implementation approaches. Focus on making requirements specific and testable.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["ba-features.findings"],
+                },
+                {
+                    id: "ba-scoring",
+                    name: "Prioritization & Scoring",
+                    prompt:
+                        "Final scoring pass. Re-score each feature on business value (40%), effort efficiency (20%), innovation (20%), and competitive advantage (20%). Deduplicate overlapping features. Sort by final priority score descending. Identify quick wins (high value, low effort).",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["ba-features.findings", "ba-requirements.findings"],
+                },
+                {
+                    id: "ba-innovation",
+                    name: "Innovation Opportunities",
+                    prompt:
+                        "Identify innovative, differentiating features that could set this product apart from competitors. Consider emerging technologies, novel user experiences, and unique value propositions. Focus on features that are hard for competitors to replicate.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["ba-competitive.findings", "ba-features.findings"],
+                },
+                {
+                    id: "ba-gaps",
+                    name: "Gap Analysis",
+                    prompt:
+                        "Perform a comprehensive gap analysis: identify what's missing from the product vs. market expectations, competitor offerings, and user needs. Prioritize gaps by business impact and feasibility.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["ba-competitive.findings", "ba-features.findings"],
+                },
+                {
+                    id: "ba-report",
+                    name: "Final BA Report",
+                    prompt:
+                        "Generate a comprehensive Business Analysis report in markdown format. Include: Executive Summary, Market Overview, Competitive Landscape (with matrix), Feature Proposals (grouped by type and sorted by priority), Quick Wins, Strategic Recommendations, Innovation Opportunities, and Statistics.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: [
+                        "ba-features.findings",
+                        "ba-scoring.findings",
+                        "ba-innovation.findings",
+                        "ba-gaps.findings",
+                    ],
+                },
+            ],
+        },
+
+        /**
+         * Quick Feature Brainstorm — Fast ideation
+         * Duration: ~15 minutes
+         */
+        QUICK_FEATURE_BRAINSTORM: {
+            name: "Quick Feature Brainstorm",
+            description:
+                "Fast feature ideation pipeline: context review, feature generation, and quick scoring.",
+            stages: [
+                {
+                    id: "qb-context",
+                    name: "Context Review",
+                    prompt:
+                        "Quickly analyze the repository structure, tech stack, and existing features. Summarize the product's current state, strengths, and areas for improvement.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "qb-features",
+                    name: "Feature Generation",
+                    prompt:
+                        "Generate 10-15 feature proposals based on the product context. Mix of new features, improvements, and innovations. For each: title, type, summary, description, business value, effort, priority (0-100), and innovation score (0-100).",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["qb-context.findings"],
+                },
+                {
+                    id: "qb-scoring",
+                    name: "Quick Scoring",
+                    prompt:
+                        "Score and prioritize all feature proposals. Sort by priority. Identify top 3 quick wins and top 3 strategic features. Generate a brief summary report.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["qb-features.findings"],
+                },
+            ],
+        },
+
+        /**
+         * Competitive Deep Dive — In-depth competitive analysis
+         * Duration: ~30 minutes
+         */
+        COMPETITIVE_DEEP_DIVE: {
+            name: "Competitive Deep Dive",
+            description:
+                "In-depth competitive analysis with feature matrix, gap analysis, and strategic recommendations.",
+            stages: [
+                {
+                    id: "cd-context",
+                    name: "Context & Competitors",
+                    prompt:
+                        "Analyze the product's current features and defined competitors. Summarize our strengths and each competitor's positioning.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                },
+                {
+                    id: "cd-research",
+                    name: "Competitor Research",
+                    prompt:
+                        "Research each competitor in depth using web_search. Analyze their product features, pricing, user reviews, recent updates, and market positioning. Identify their innovations and strategies.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["cd-context.findings"],
+                },
+                {
+                    id: "cd-matrix",
+                    name: "Feature Matrix Builder",
+                    prompt:
+                        "Build a comprehensive feature-by-feature competitive matrix. For each feature area, score all players (us and each competitor) as: absent, basic, good, or excellent. Identify at least 15-20 feature areas for comparison.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["cd-context.findings", "cd-research.findings"],
+                },
+                {
+                    id: "cd-gaps",
+                    name: "Gap & Opportunity Analysis",
+                    prompt:
+                        "Based on the competitive matrix, identify all gaps (features competitors have that we lack), all advantages (features we excel at), and market opportunities (features no one does well). Prioritize by business impact.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["cd-matrix.findings"],
+                },
+                {
+                    id: "cd-strategy",
+                    name: "Strategic Recommendations",
+                    prompt:
+                        "Generate strategic recommendations: which competitive gaps to close first, which advantages to double down on, which market opportunities to pursue. Include quick wins (< 1 sprint) and long-term plays (multi-quarter). Produce a comprehensive competitive intelligence report.",
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    contextFromPreviousStages: ["cd-matrix.findings", "cd-gaps.findings"],
+                },
+            ],
+        },
     };
 
     /**
@@ -520,6 +778,7 @@ export class AutomationConfigBuilder {
             FULL_FRONTEND_AUDIT: "~4 hours",
             MONGO_INDEX_AUDIT: "~1 hour",
             DOC_QUALITY_AUDIT: "~30 mins",
+            CONTINUOUS_IMPROVEMENT: "~2 hours",
         };
 
         return {

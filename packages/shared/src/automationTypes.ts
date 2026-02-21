@@ -147,6 +147,53 @@ export interface Task {
 }
 
 /**
+ * Category of an improvement suggestion
+ */
+export type ImprovementCategory =
+    | "feature"
+    | "bug"
+    | "ux"
+    | "perf"
+    | "security"
+    | "refactor"
+    | "deps"
+    | "docs"
+    | "testing";
+
+/**
+ * Effort size estimate
+ */
+export type EffortSize = "XS" | "S" | "M" | "L" | "XL";
+
+/**
+ * A structured improvement suggestion produced by continuous improvement automation
+ */
+export interface ImprovementSuggestion {
+    /** Unique identifier for this suggestion */
+    id: string;
+    /** Category of the improvement */
+    category: ImprovementCategory;
+    /** Short title */
+    title: string;
+    /** Detailed description of the improvement */
+    description: string;
+    /** File paths affected */
+    files: string[];
+    /** Priority level */
+    priority: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+    /** Estimated effort */
+    effort: EffortSize;
+    /** Confidence score (0-100) */
+    confidence: number;
+    /** Whether the agent can auto-fix this without human intervention */
+    autoFixable: boolean;
+    /** Suggested fix or approach */
+    suggestedFix?: string;
+    /** Related GitHub issue numbers */
+    relatedIssues?: number[];
+}
+
+/**
  * A file targeted for investigation
  */
 export interface TargetFile {
@@ -180,6 +227,10 @@ export interface AutomationContext {
     techStack?: string[];
     /** Findings from previous stages */
     previousFindings?: Finding[];
+    /** Improvement suggestions from continuous improvement automation */
+    suggestions?: ImprovementSuggestion[];
+    /** GitHub issues synced for correlation */
+    githubIssues?: Array<{ number: number; title: string; labels: string[] }>;
 }
 
 /** @deprecated Use AutomationContext instead */
@@ -357,6 +408,8 @@ export interface StageResult {
     claims: Claim[];
     /** Generated tasks */
     tasks: Task[];
+    /** Raw report/output text from the workflow (used as fallback context between stages) */
+    rawOutput?: string;
     /** Execution duration in milliseconds */
     duration: number;
     /** Number of retry attempts */

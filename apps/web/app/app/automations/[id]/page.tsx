@@ -46,6 +46,7 @@ import {
     Copy,
     Eye,
     EyeOff,
+    Trash2,
 } from "lucide-react";
 import { cn } from "@numezis/shared/utils/cn";
 
@@ -83,6 +84,7 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
     const [activeTab, setActiveTab] = useState<Tab>("overview");
     const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
     const [showSecret, setShowSecret] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         void fetchAutomation();
@@ -184,6 +186,23 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
             await fetchAutomation();
         } catch (err: any) {
             alert(`Failed to pause automation: ${err.message}`);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!confirm("Are you sure you want to delete this automation? This action cannot be undone.")) return;
+        try {
+            setDeleting(true);
+            const res = await fetch(`/api/automations/${params.id}`, { method: "DELETE" });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error((data as any).error || "Failed to delete automation");
+            }
+            router.push("/app/automations");
+        } catch (err: any) {
+            alert(`Failed to delete: ${err.message}`);
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -315,6 +334,16 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
 
                         <Button size="sm" variant="secondary" onClick={() => setIsEditing(true)} title="Edit Configuration">
                             <Edit2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => void handleDelete()}
+                            disabled={deleting || automation.status === "RUNNING"}
+                            title={automation.status === "RUNNING" ? "Pause the automation before deleting" : "Delete Automation"}
+                            className="gap-2 text-status-error-text hover:bg-status-error-bg hover:border-status-error-border"
+                        >
+                            <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                     </div>
                 </div>

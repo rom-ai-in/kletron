@@ -37,6 +37,7 @@ import { executeBash } from "./tools/executeBash.js";
 import { outputFormat } from "./tools/outputFormat.js";
 import { writeFile } from "./tools/writeFile.js";
 import { loadSkill, listSkills } from "./tools/skillLoader.js";
+import { notify } from "./tools/notify.js";
 import { config } from "./config.js";
 
 const argv = process.argv.slice(2);
@@ -138,6 +139,9 @@ function buildAllTools() {
     // Skills system
     load_skill: loadSkill,
     list_skills: listSkills,
+
+    // Notifications
+    notify,
   };
 
   return { ...tools, ...advancedTools };

@@ -10,6 +10,20 @@ import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceS
 
 const textEncoder = new TextEncoder();
 
+let _backfillDone = false;
+async function backfillAutomationSourceOnce() {
+  if (_backfillDone) return;
+  _backfillDone = true;
+  try {
+    const count = await agentGraphRunService.backfillAutomationSource();
+    if (count > 0) {
+      console.log(`[sessions] Backfilled source="automation" on ${count} existing runs`);
+    }
+  } catch {
+    _backfillDone = false;
+  }
+}
+
 type StreamChunk =
   | { type: "init"; payload: { runId: string; graphId: string } }
   | { type: "update"; payload: AgentWorkflowUpdate }
@@ -81,7 +95,7 @@ export async function POST(request: Request) {
   // Create run record
   const nodeOrder = getGraphNodeOrder(graph as any);
   console.log(`[sessions/create] Creating run for graph "${graph.name}" (${graphId}), workspace=${workspace._id}`);
-  const runId = await agentGraphRunService.createRun(graphId, workspace._id.toString());
+  const runId = await agentGraphRunService.createRun(graphId, workspace._id.toString(), "agent");
   console.log(`[sessions/create] ✓ Run created: ${runId}`);
   const initialNodeStatuses: Record<string, any> = {};
   for (const node of graph.nodes) {
@@ -183,6 +197,12 @@ export async function GET(request: Request) {
   const includeArchived = searchParams.get("includeArchived") === "true";
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "50", 10) || 50, 200);
   const graphId = searchParams.get("graphId") ?? undefined;
+  const excludeSource = searchParams.get("excludeSource") ?? undefined;
+
+  // One-time migration: tag existing automation runs so excludeSource works on old data
+  if (excludeSource) {
+    await backfillAutomationSourceOnce();
+  }
 
   // If allWorkspaces=true, fetch sessions across all user workspaces
   // Otherwise resolve a single workspace to filter by
@@ -195,20 +215,18 @@ export async function GET(request: Request) {
   try {
     let runs;
     if (allWorkspaces) {
-      // Fetch all sessions for this user — no workspace filter, then rely on
-      // the client to group by workspaceId. This avoids ObjectId/$in type
-      // mismatches and works regardless of how workspaceId is stored.
-      // The limit is applied at the DB level (single query, no N+1).
       runs = await agentGraphRunService.listSessions(undefined, {
         includeArchived,
         limit,
         graphId,
+        excludeSource,
       });
     } else {
       runs = await agentGraphRunService.listSessions(resolvedWorkspaceId, {
         includeArchived,
         limit,
         graphId,
+        excludeSource,
       });
     }
 

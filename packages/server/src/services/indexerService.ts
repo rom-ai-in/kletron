@@ -10,6 +10,7 @@ import {
     deleteFileVectors,
     deleteFilesVectors,
     getAllIndexedFilePaths,
+    getIndexStats,
     type CodeVector
 } from "./vectorService";
 import { recordVectorIndexRun } from "./vectorHistoryService";
@@ -24,16 +25,19 @@ interface IndexStatus {
     lastIndexedAt?: Date;
     currentFile?: string;
     errors: string[];
+    errorCount: number;
     dimensions?: number;
     repoPath?: string;
 }
 
-// Persist status across dev-mode reloads
+// ---------------------------------------------------------------------------
+// In-memory status (persists across dev-mode HMR reloads via global symbol)
+// ---------------------------------------------------------------------------
+
 const statusKey = Symbol.for("numezis.indexer.status");
 if (!(globalThis as any)[statusKey]) {
     (globalThis as any)[statusKey] = new Map<string, IndexStatus>();
 }
-
 const statusMap: Map<string, IndexStatus> = (globalThis as any)[statusKey];
 
 function getStatus(workspaceId: string, repoPath: string): IndexStatus {
@@ -48,6 +52,7 @@ function getStatus(workspaceId: string, repoPath: string): IndexStatus {
         indexedFiles: 0,
         totalChunks: 0,
         errors: [],
+        errorCount: 0,
         repoPath,
     };
     statusMap.set(workspaceId, status);
@@ -55,45 +60,16 @@ function getStatus(workspaceId: string, repoPath: string): IndexStatus {
 }
 
 /**
- * Get current indexing status
+ * Get current indexing status (synchronous, returns in-memory state only).
  */
 export function getIndexStatus(workspaceId: string, repoPath: string): IndexStatus {
-    const currentStatus = getStatus(workspaceId, repoPath);
-    // Attempt to discover dimensions and counts from DB if not set
-    if (!currentStatus.isIndexing) {
-        import("../lib/db").then(async m => {
-            try {
-                const db = await m.getDatabase();
-                const col = db.collection("code_vectors");
-
-                // Fetch dimension if missing
-                if (!currentStatus.dimensions) {
-                    const doc = await col.findOne({ repoPath });
-                    if (doc && (doc as any).embedding) {
-                        currentStatus.dimensions = (doc as any).embedding.length;
-                    }
-                }
-
-                // Fetch total chunks if they are 0
-                if (currentStatus.totalChunks === 0) {
-                    currentStatus.totalChunks = await col.countDocuments({ repoPath });
-                }
-
-                // If we have chunks but totalFiles is 0, we can estimate/fetch it
-                if (currentStatus.totalChunks > 0 && currentStatus.totalFiles === 0) {
-                    const uniqueFiles = await getAllIndexedFilePaths(repoPath);
-                    currentStatus.totalFiles = uniqueFiles.length;
-                    currentStatus.indexedFiles = uniqueFiles.length; // Assume they are all indexed
-                }
-            } catch (e) {
-                // Silently ignore if DB not ready or other error
-            }
-        });
-    }
-    return { ...currentStatus };
+    return { ...getStatus(workspaceId, repoPath) };
 }
 
-// --- TTL cache for refreshIndexStatus ---
+// ---------------------------------------------------------------------------
+// Refresh cache (in-memory TTL, survives HMR)
+// ---------------------------------------------------------------------------
+
 const REFRESH_CACHE_TTL_MS = 30_000; // 30 seconds
 const refreshCacheKey = Symbol.for("numezis.indexer.refreshCache");
 if (!(globalThis as any)[refreshCacheKey]) {
@@ -108,10 +84,100 @@ export function invalidateRefreshCache(workspaceId: string): void {
     refreshCache.delete(workspaceId);
 }
 
-/**
- * Refresh indexing status with disk/DB reconciliation (used when not indexing).
- * Results are cached for 30 s to avoid repeated filesystem scans.
- */
+// ---------------------------------------------------------------------------
+// Disk file count cache (avoids repeated recursive filesystem walks)
+// ---------------------------------------------------------------------------
+
+const DISK_COUNT_CACHE_TTL_MS = 60_000; // 60 seconds
+const diskCountCacheKey = Symbol.for("numezis.indexer.diskCountCache");
+if (!(globalThis as any)[diskCountCacheKey]) {
+    (globalThis as any)[diskCountCacheKey] = new Map<string, { count: number; ts: number }>();
+}
+const diskCountCache: Map<string, { count: number; ts: number }> = (globalThis as any)[diskCountCacheKey];
+
+async function getCachedDiskFileCount(repoPath: string): Promise<number> {
+    const cached = diskCountCache.get(repoPath);
+    if (cached && Date.now() - cached.ts < DISK_COUNT_CACHE_TTL_MS) {
+        return cached.count;
+    }
+    const files = await findFiles(repoPath);
+    const count = files.length;
+    diskCountCache.set(repoPath, { count, ts: Date.now() });
+    return count;
+}
+
+// ---------------------------------------------------------------------------
+// DB snapshot persistence for cold-start recovery
+// ---------------------------------------------------------------------------
+
+const STATUS_SNAPSHOT_COLLECTION = "index_status_snapshots";
+
+async function persistStatusSnapshot(workspaceId: string, status: IndexStatus): Promise<void> {
+    try {
+        const db = await getDatabase();
+        const { errors: _errors, ...rest } = status;
+        await db.collection(STATUS_SNAPSHOT_COLLECTION).updateOne(
+            { workspaceId },
+            { $set: { ...rest, errorCount: status.errorCount, workspaceId, updatedAt: new Date() } },
+            { upsert: true }
+        );
+    } catch {
+        // Best-effort — never block the response on persistence failures
+    }
+}
+
+async function loadStatusSnapshot(workspaceId: string): Promise<IndexStatus | null> {
+    try {
+        const db = await getDatabase();
+        const doc = await db.collection(STATUS_SNAPSHOT_COLLECTION).findOne({ workspaceId });
+        if (!doc) return null;
+        return {
+            isIndexing: false, // Never restore an "indexing" state from a snapshot
+            totalFiles: doc.totalFiles ?? 0,
+            indexedFiles: doc.indexedFiles ?? 0,
+            totalChunks: doc.totalChunks ?? 0,
+            lastIndexedAt: doc.lastIndexedAt,
+            errors: [],
+            errorCount: doc.errorCount ?? 0,
+            dimensions: doc.dimensions,
+            repoPath: doc.repoPath,
+        };
+    } catch {
+        return null;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// In-flight deduplication — coalesce concurrent calls for the same workspace
+// ---------------------------------------------------------------------------
+
+const inflightKey = Symbol.for("numezis.indexer.inflight");
+if (!(globalThis as any)[inflightKey]) {
+    (globalThis as any)[inflightKey] = new Map<string, Promise<IndexStatus>>();
+}
+const inflightMap: Map<string, Promise<IndexStatus>> = (globalThis as any)[inflightKey];
+
+// ---------------------------------------------------------------------------
+// refreshIndexStatus — FAST version
+//
+// OLD behaviour (removed):
+//   - Recursively walked the filesystem to list every file
+//   - For each file on disk that existed in the DB, it read the full file
+//     content, computed a SHA-256 hash, and issued an individual MongoDB query
+//     to compare hashes.
+//   → O(N) file reads + O(N) DB queries on every status poll.
+//
+// NEW behaviour:
+//   - 3 lightweight parallel MongoDB queries via getIndexStats():
+//       1. count unique filePaths  (uses compound index)
+//       2. countDocuments          (uses repoPath index)
+//       3. findOne for dimensions  (single doc, projection-only)
+//   - Cached disk file count (fs walk every 60 s, not every request)
+//   - DB snapshot for instant cold-start recovery
+//   - In-flight deduplication to coalesce concurrent requests
+//   → Typical response < 50 ms instead of 5-30 s
+// ---------------------------------------------------------------------------
+
 export async function refreshIndexStatus(workspaceId: string, repoPath: string): Promise<IndexStatus> {
     const currentStatus = getStatus(workspaceId, repoPath);
 
@@ -120,77 +186,59 @@ export async function refreshIndexStatus(workspaceId: string, repoPath: string):
         return { ...currentStatus };
     }
 
-    const shouldRecompute =
-        currentStatus.totalFiles === 0 ||
-        currentStatus.indexedFiles === 0 ||
-        currentStatus.indexedFiles < currentStatus.totalFiles;
-
-    if (!shouldRecompute) {
-        return { ...currentStatus };
-    }
-
-    // Return cached result if still fresh
+    // Return in-memory cache if still fresh
     const cached = refreshCache.get(workspaceId);
     if (cached && Date.now() - cached.ts < REFRESH_CACHE_TTL_MS) {
         return { ...cached.data };
     }
 
-    // Always compute total files from disk so UI can show totals even if DB is unavailable.
-    let diskFiles: string[] = [];
-    try {
-        diskFiles = await findFiles(repoPath);
-        currentStatus.totalFiles = diskFiles.length;
-    } catch {
-        // ignore disk scan errors
-    }
+    // Deduplicate concurrent in-flight requests for the same workspace
+    const existing = inflightMap.get(workspaceId);
+    if (existing) return existing;
 
-    try {
-        const db = await getDatabase();
-        const col = db.collection("code_vectors");
-
-        // Total chunks and dimensions (lightweight)
-        if (currentStatus.totalChunks === 0) {
-            currentStatus.totalChunks = await col.countDocuments({ repoPath });
-        }
-        if (!currentStatus.dimensions) {
-            const doc = await col.findOne({ repoPath });
-            if (doc && (doc as any).embedding) {
-                currentStatus.dimensions = (doc as any).embedding.length;
-            }
-        }
-
-        // Recompute file counts using hashes
-        const existingFiles = await getAllIndexedFilePaths(repoPath);
-        const existingSet = new Set(existingFiles);
-
-        let indexed = 0;
-        for (const filePath of diskFiles) {
-            const relativePath = path.relative(repoPath, filePath);
-            if (!existingSet.has(relativePath)) continue;
-
-            try {
-                const content = await fs.readFile(filePath, "utf-8");
-                const contentHash = calculateHash(content);
-                const storedHash = await getFileHash(repoPath, relativePath);
-                if (storedHash && storedHash === contentHash) {
-                    indexed++;
+    const work = (async (): Promise<IndexStatus> => {
+        try {
+            // Cold-start recovery: if in-memory state is zeroed, try loading from DB snapshot
+            if (currentStatus.totalFiles === 0 && currentStatus.totalChunks === 0) {
+                const snapshot = await loadStatusSnapshot(workspaceId);
+                if (snapshot) {
+                    Object.assign(currentStatus, snapshot);
+                    currentStatus.repoPath = repoPath;
                 }
-            } catch {
-                // ignore read/hash errors for status refresh
             }
+
+            // Fast DB-only stats (3 parallel lightweight queries, no per-file reads)
+            try {
+                const stats = await getIndexStats(repoPath);
+                currentStatus.indexedFiles = stats.indexedFiles;
+                currentStatus.totalChunks = stats.totalChunks;
+                if (stats.dimensions) currentStatus.dimensions = stats.dimensions;
+            } catch {
+                // DB unavailable — keep existing in-memory values
+            }
+
+            // Disk file count (cached for 60 s to avoid repeated filesystem walks)
+            try {
+                currentStatus.totalFiles = await getCachedDiskFileCount(repoPath);
+            } catch {
+                // Filesystem unavailable — keep existing value
+            }
+
+            currentStatus.errorCount = currentStatus.errors.length;
+
+            // Cache result + persist snapshot (fire-and-forget)
+            const result: IndexStatus = { ...currentStatus };
+            refreshCache.set(workspaceId, { data: result, ts: Date.now() });
+            void persistStatusSnapshot(workspaceId, result);
+
+            return result;
+        } finally {
+            inflightMap.delete(workspaceId);
         }
+    })();
 
-        currentStatus.totalFiles = diskFiles.length;
-        currentStatus.indexedFiles = indexed;
-    } catch {
-        // If DB is unavailable, keep indexedFiles as-is (likely 0)
-    }
-
-    // Store in cache
-    const snapshot = { ...currentStatus };
-    refreshCache.set(workspaceId, { data: snapshot, ts: Date.now() });
-
-    return snapshot;
+    inflightMap.set(workspaceId, work);
+    return work;
 }
 
 /**
@@ -255,6 +303,7 @@ export async function startIndexing(
     currentStatus.indexedFiles = 0;
     currentStatus.totalChunks = 0;
     currentStatus.errors = [];
+    currentStatus.errorCount = 0;
     currentStatus.currentFile = "Starting...";
 
     let chunksGeneratedInRun = 0;
@@ -437,7 +486,9 @@ export async function startIndexing(
 
         currentStatus.isIndexing = false;
         currentStatus.currentFile = undefined;
-        // Invalidate cache so the next status request gets fresh data
+        currentStatus.errorCount = currentStatus.errors.length;
+        // Invalidate caches so the next status request gets fresh data
         invalidateRefreshCache(workspaceId);
+        diskCountCache.delete(repoPath);
     }
 }

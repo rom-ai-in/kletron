@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Panel } from "@numezis/ui/components/ui/Panel";
 import { Button } from "@numezis/ui/components/ui/Button";
@@ -31,6 +31,8 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
     ollama: "Ollama",
 };
 
+const VECTORS_CACHE_KEY = "numezis-vectors-cache";
+
 type IndexStatus = {
     isIndexing: boolean;
     totalFiles: number;
@@ -39,6 +41,7 @@ type IndexStatus = {
     lastIndexedAt?: string;
     currentFile?: string;
     errors: string[];
+    errorCount?: number;
     autoIndexEnabled?: boolean;
     lastAutoIndex?: string;
     nextAutoIndex?: string;
@@ -82,7 +85,32 @@ export default function VectorIndexPage() {
     const remainingPercent = totalFiles ? Math.max(100 - progressPercent, 0) : 0;
     const isPartial = totalFiles > 0 && remainingFiles > 0;
 
-    // Fetch initial data
+    // Ref to track indexing state without causing effect re-runs
+    const isIndexingRef = useRef(false);
+    useEffect(() => {
+        isIndexingRef.current = status?.isIndexing ?? false;
+    }, [status?.isIndexing]);
+
+    // Lightweight status-only fetch (used during polling)
+    const fetchStatus = useCallback(async () => {
+        try {
+            const res = await fetch("/api/vectors");
+            if (res.ok) {
+                const data = await res.json();
+                setStatus(data);
+                if (loadError) setLoadError(null);
+                // Update localStorage cache
+                try { localStorage.setItem(VECTORS_CACHE_KEY, JSON.stringify({ status: data, ts: Date.now() })); } catch {}
+            } else {
+                const data = await res.json().catch(() => ({}));
+                setLoadError(data.error || `Failed to load vector status (${res.status})`);
+            }
+        } catch {
+            // Silently ignore polling errors to avoid spamming the UI
+        }
+    }, [loadError]);
+
+    // Full data fetch (status + config in parallel)
     const fetchData = useCallback(async (showLoader = false) => {
         if (showLoader) setIsLoading(true);
         setLoadError(null);
@@ -93,15 +121,20 @@ export default function VectorIndexPage() {
             ]);
             const errors: string[] = [];
 
+            let statusData: IndexStatus | null = null;
+            let configData: any = null;
+
             if (statusRes.ok) {
-                setStatus(await statusRes.json());
+                statusData = await statusRes.json();
+                setStatus(statusData);
             } else {
                 const data = await statusRes.json().catch(() => ({}));
                 errors.push(data.error || `Failed to load vector status (${statusRes.status})`);
             }
 
             if (configRes.ok) {
-                setConfig(await configRes.json());
+                configData = await configRes.json();
+                setConfig(configData);
             } else {
                 const data = await configRes.json().catch(() => ({}));
                 errors.push(data.error || `Failed to load embedding config (${configRes.status})`);
@@ -110,6 +143,15 @@ export default function VectorIndexPage() {
             if (errors.length) {
                 setLoadError(errors.join(" • "));
             }
+
+            // Persist to localStorage for stale-while-revalidate on next visit
+            try {
+                localStorage.setItem(VECTORS_CACHE_KEY, JSON.stringify({
+                    status: statusData,
+                    config: configData,
+                    ts: Date.now()
+                }));
+            } catch {}
         } catch (error) {
             console.error("Failed to fetch vector data", error);
             setLoadError(error instanceof Error ? error.message : "Failed to fetch vector data");
@@ -118,34 +160,47 @@ export default function VectorIndexPage() {
         }
     }, []);
 
+    // On mount: hydrate from localStorage immediately (stale-while-revalidate),
+    // then fetch fresh data. Polling uses a ref so this effect never re-runs.
     useEffect(() => {
-        void fetchData(true);
-        const interval = setInterval(() => {
-            if (status?.isIndexing) void fetchStatus();
-        }, 2000);
-        return () => clearInterval(interval);
-    }, [fetchData, status?.isIndexing]);
-
-    useEffect(() => {
-        const handleFocus = () => {
-            if (!status || loadError) {
-                void fetchData(!status && !config);
+        // Hydrate cached state instantly so the page never shows a blank skeleton
+        try {
+            const raw = localStorage.getItem(VECTORS_CACHE_KEY);
+            if (raw) {
+                const cached = JSON.parse(raw);
+                if (cached.status) setStatus(cached.status);
+                if (cached.config) setConfig(cached.config);
+                // Show content immediately, but still fetch fresh data below
+                setIsLoading(false);
             }
+        } catch {}
+
+        // Fetch fresh data (shows loader only if no cached data)
+        void fetchData(true);
+
+        // Polling: 2 s when indexing, otherwise no polling
+        const interval = setInterval(() => {
+            if (isIndexingRef.current) void fetchStatus();
+        }, 2000);
+
+        return () => clearInterval(interval);
+    }, [fetchData, fetchStatus]);
+
+    // Debounced focus handler — at most once per 30 s, background refresh (no loader)
+    useEffect(() => {
+        let lastFocusFetch = 0;
+        const FOCUS_DEBOUNCE_MS = 30_000;
+
+        const handleFocus = () => {
+            const now = Date.now();
+            if (now - lastFocusFetch < FOCUS_DEBOUNCE_MS) return;
+            lastFocusFetch = now;
+            void fetchData(false);
         };
+
         window.addEventListener("focus", handleFocus);
         return () => window.removeEventListener("focus", handleFocus);
-    }, [fetchData, status, config, loadError]);
-
-    const fetchStatus = async () => {
-        const res = await fetch("/api/vectors");
-        if (res.ok) {
-            setStatus(await res.json());
-            if (loadError) setLoadError(null);
-        } else {
-            const data = await res.json().catch(() => ({}));
-            setLoadError(data.error || `Failed to load vector status (${res.status})`);
-        }
-    };
+    }, [fetchData]);
 
     const handleStartIndexing = (force = false) => {
         if (force) {

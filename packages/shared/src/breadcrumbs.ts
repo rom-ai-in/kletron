@@ -65,7 +65,19 @@ const resolverRunDetails: BreadcrumbResolver = (pathname) => {
   ];
 };
 
-const resolvers: BreadcrumbResolver[] = [resolverAutomationDetails, resolverRunDetails];
+const resolverBAFeatureDetails: BreadcrumbResolver = (pathname) => {
+  const m = pathname.match(/^\/app\/business-analyst\/features\/([^/]+)\/?$/);
+  if (!m) return null;
+  const id = m[1];
+  const short = id.length > 10 ? `${id.slice(0, 6)}…${id.slice(-3)}` : id;
+  return [
+    { href: "/app/business-analyst", label: "Business Analyst", isCurrent: false },
+    { href: "/app/business-analyst/features", label: "Features", isCurrent: false },
+    { href: `/app/business-analyst/features/${id}`, label: `Feature ${short}`, isCurrent: true },
+  ];
+};
+
+const resolvers: BreadcrumbResolver[] = [resolverAutomationDetails, resolverRunDetails, resolverBAFeatureDetails];
 
 const segmentLabels: Record<string, string> = {
   "/": "Explore",
@@ -85,6 +97,10 @@ const segmentLabels: Record<string, string> = {
   "/app/config/llm": "LLM",
   "/app/config/graphs": "Graphs",
   "/app/account": "Account",
+  "/app/business-analyst": "Business Analyst",
+  "/app/business-analyst/config": "BA Config",
+  "/app/business-analyst/features": "Features",
+  "/app/business-analyst/market": "Market Analysis",
 
   // Legacy mappings for breadcrumb segments
   "deep-agent": "Agent",
@@ -100,6 +116,9 @@ const segmentLabels: Record<string, string> = {
   "llm": "LLM",
   "graphs": "Graphs",
   "account": "Account",
+  "business-analyst": "Business Analyst",
+  "features": "Features",
+  "market": "Market Analysis",
 
 };
 

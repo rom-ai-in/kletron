@@ -1,0 +1,73 @@
+export const dynamic = "force-dynamic";
+import { NextRequest, NextResponse } from "next/server";
+import { businessAnalystService } from "@numezis/server/services/businessAnalystService";
+import { CompetitorCreateSchema } from "@numezis/shared/businessContext";
+import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+
+/**
+ * PUT /api/business-analyst/context/competitors/[id]
+ * Update a competitor
+ */
+export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+    const auth = await requireAppRouteAuth(req);
+    if (!auth) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
+    try {
+        const body = await req.json();
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, body);
+        if (!workspace || !workspace._id) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
+
+        const validation = CompetitorCreateSchema.partial().safeParse(body);
+        if (!validation.success) {
+            return NextResponse.json(
+                { error: "Invalid input", details: validation.error.errors },
+                { status: 400 }
+            );
+        }
+
+        await businessAnalystService.updateCompetitor(
+            workspace._id.toString(),
+            params.id,
+            validation.data
+        );
+        return NextResponse.json({ updated: true }, { status: 200 });
+    } catch (error) {
+        console.error(`[API /api/business-analyst/context/competitors/${params.id} PUT] Error:`, error);
+        return NextResponse.json({ error: "Failed to update competitor" }, { status: 500 });
+    }
+}
+
+/**
+ * DELETE /api/business-analyst/context/competitors/[id]
+ * Delete a competitor
+ */
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+    const auth = await requireAppRouteAuth(req);
+    if (!auth) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
+    try {
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        if (!workspace || !workspace._id) {
+            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        }
+
+        await businessAnalystService.deleteCompetitor(workspace._id.toString(), params.id);
+        return NextResponse.json({ deleted: true }, { status: 200 });
+    } catch (error) {
+        console.error(`[API /api/business-analyst/context/competitors/${params.id} DELETE] Error:`, error);
+        return NextResponse.json({ error: "Failed to delete competitor" }, { status: 500 });
+    }
+}

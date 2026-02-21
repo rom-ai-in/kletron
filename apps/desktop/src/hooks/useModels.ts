@@ -45,12 +45,21 @@ export function useModels(
       setSelectedModel(model);
 
       // Build providers list from config
-      const knownProviders = ["openai", "claude", "azure", "gemini", "ollama", "lmstudio"];
+      const knownProviders = ["openai", "claude", "azure", "gemini", "ollama", "lmstudio", "vllm"];
+      const providerLabels: Record<string, string> = {
+        openai: "OpenAI",
+        claude: "Anthropic",
+        azure: "Azure",
+        gemini: "Google",
+        ollama: "Ollama",
+        lmstudio: "LM Studio",
+        vllm: "vLLM",
+      };
       const providersList: LLMProvider[] = knownProviders
         .filter((p) => data?.[p])
         .map((p) => ({
           id: p,
-          label: p === "openai" ? "OpenAI" : p === "claude" ? "Anthropic" : p === "azure" ? "Azure" : p === "gemini" ? "Google" : p === "ollama" ? "Ollama" : "LM Studio",
+          label: providerLabels[p] ?? p,
           models: data[p]?.model ? [{ id: data[p].model, label: data[p].model }] : [],
           connected: p === provider,
         }));
@@ -208,21 +217,30 @@ export function useModels(
     }
   }, [selectedProvider, selectedModel, backendReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Persist LLM config changes to backend via PUT /api/llm-config */
+  /** Persist LLM config changes to backend. */
   async function saveModelConfig(provider: string, model: string) {
     const token = await getAccessToken();
     if (!token) return;
     try {
-      const body: Record<string, unknown> = { provider };
-      // Set the provider-specific config
-      body[provider] = { model };
+      // 1. Set the default provider via POST /api/llm-config
       await fetch(`${backendUrlTrimmed}/api/llm-config`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ provider }),
+      });
+      // 2. Merge model into existing provider config (backend validates full schema)
+      const existingProviderConfig = (modelConfig as Record<string, unknown>)?.[provider] ?? {};
+      const mergedConfig = { ...existingProviderConfig, model };
+      await fetch(`${backendUrlTrimmed}/api/llm-config/${provider}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(mergedConfig),
       });
     } catch {
       // Silently fail — user can retry from settings

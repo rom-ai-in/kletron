@@ -227,6 +227,13 @@ export default function App() {
     diffs.resetDiffs();
   }, [backendUrlTrimmed, workspace.workspace?.path]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Refresh LLM config whenever the user opens Settings (config may have changed in the web UI)
+  useEffect(() => {
+    if (settings.activeView === "settings" && backendReady) {
+      void models.loadModel();
+    }
+  }, [settings.activeView, backendReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ═══════════════════════════════════════════════════════════════════════════
   // DERIVED DATA
   // ═══════════════════════════════════════════════════════════════════════════

@@ -122,6 +122,8 @@ export type AgentWorkflowOptions = {
     onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
     llmSelection?: { provider: LlmProviderType; model?: string };
     workspaceId?: string;
+    /** Origin tag written to the run record (e.g. "agent", "automation", "api"). */
+    source?: string;
     shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
 };
 
