@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Folder, AlertCircle, Check, Loader2, X } from 'lucide-react';
+import { Folder, AlertCircle, Check, Loader2, X, FolderOpen, ChevronUp, ChevronRight } from 'lucide-react';
 
 export interface AddWorkspaceModalProps {
   open: boolean;
@@ -22,6 +22,12 @@ type GitValidationState = {
   currentBranch?: string;
 };
 
+type BrowseEntry = {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+};
+
 const INITIAL_VALIDATION: ValidationState = { valid: false, checked: false };
 const INITIAL_GIT_VALIDATION: GitValidationState = { valid: false, checked: false };
 
@@ -35,7 +41,14 @@ export function AddWorkspaceModal({ open, onClose, onCreated }: AddWorkspaceModa
   const [error, setError] = useState<string | null>(null);
   const pathInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset all state when modal opens (fix #12: reset on open, not after close)
+  // Folder browser state
+  const [showBrowser, setShowBrowser] = useState(false);
+  const [browsePath, setBrowsePath] = useState<string>('');
+  const [browseParent, setBrowseParent] = useState<string | null>(null);
+  const [browseEntries, setBrowseEntries] = useState<BrowseEntry[]>([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
+
+  // Reset all state when modal opens
   useEffect(() => {
     if (open) {
       setRootPath('');
@@ -45,14 +58,15 @@ export function AddWorkspaceModal({ open, onClose, onCreated }: AddWorkspaceModa
       setGitValidation(INITIAL_GIT_VALIDATION);
       setSaving(false);
       setError(null);
-      // Auto-focus the path input after a tick (fix #6)
+      setShowBrowser(false);
+      setBrowseEntries([]);
       requestAnimationFrame(() => {
         pathInputRef.current?.focus();
       });
     }
   }, [open]);
 
-  // Escape key handler (fix #6)
+  // Escape key handler
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -84,7 +98,6 @@ export function AddWorkspaceModal({ open, onClose, onCreated }: AddWorkspaceModa
       setValidation({ checked: true, valid: data.valid, error: data.error });
 
       if (data.valid) {
-        // Also check git
         try {
           const gitRes = await fetch('/api/validation/git', {
             method: 'POST',
@@ -115,7 +128,6 @@ export function AddWorkspaceModal({ open, onClose, onCreated }: AddWorkspaceModa
   const handlePathBlur = useCallback(() => {
     if (rootPath.trim()) {
       void validatePath(rootPath);
-      // Auto-derive name from path
       if (!name.trim()) {
         const parts = rootPath.trim().split('/').filter(Boolean);
         const derived = parts[parts.length - 1] || '';
@@ -123,6 +135,46 @@ export function AddWorkspaceModal({ open, onClose, onCreated }: AddWorkspaceModa
       }
     }
   }, [rootPath, name, validatePath]);
+
+  // Folder browser functions
+  const browseTo = useCallback(async (dirPath?: string) => {
+    setBrowseLoading(true);
+    try {
+      const url = dirPath
+        ? `/api/fs/browse?path=${encodeURIComponent(dirPath)}`
+        : '/api/fs/browse';
+      const res = await fetch(url);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as Record<string, string>).error || 'Failed to browse');
+      }
+      const data = await res.json();
+      setBrowsePath(data.current);
+      setBrowseParent(data.parent);
+      setBrowseEntries(data.entries || []);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBrowseLoading(false);
+    }
+  }, []);
+
+  const handleOpenBrowser = useCallback(() => {
+    setShowBrowser(true);
+    void browseTo(rootPath.trim() || undefined);
+  }, [rootPath, browseTo]);
+
+  const handleSelectFolder = useCallback((folderPath: string) => {
+    setRootPath(folderPath);
+    setShowBrowser(false);
+    void validatePath(folderPath);
+    // Auto-derive name
+    if (!name.trim()) {
+      const parts = folderPath.split('/').filter(Boolean);
+      const derived = parts[parts.length - 1] || '';
+      setName(derived);
+    }
+  }, [name, validatePath]);
 
   const handleCreate = useCallback(async () => {
     if (!validation.valid || saving) return;
@@ -153,11 +205,11 @@ export function AddWorkspaceModal({ open, onClose, onCreated }: AddWorkspaceModa
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onClick={onClose} // Fix #6: backdrop click closes modal
+      onClick={onClose}
     >
       <div
         className="w-full max-w-lg rounded-xl border border-border-subtle bg-bg-surface shadow-xl"
-        onClick={(e) => e.stopPropagation()} // Prevent backdrop close when clicking inside
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border-subtle px-5 py-4">
@@ -186,17 +238,80 @@ export function AddWorkspaceModal({ open, onClose, onCreated }: AddWorkspaceModa
             <label className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
               Folder Path
             </label>
-            <input
-              ref={pathInputRef}
-              value={rootPath}
-              onChange={(e) => setRootPath(e.target.value)}
-              onBlur={handlePathBlur}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handlePathBlur();
-              }}
-              placeholder="/path/to/your/project"
-              className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-border-strong transition-colors"
-            />
+            <div className="flex gap-2">
+              <input
+                ref={pathInputRef}
+                value={rootPath}
+                onChange={(e) => setRootPath(e.target.value)}
+                onBlur={handlePathBlur}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handlePathBlur();
+                }}
+                placeholder="/path/to/your/project"
+                className="flex-1 rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-border-strong transition-colors"
+              />
+              <button
+                type="button"
+                onClick={handleOpenBrowser}
+                className="rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-text-primary hover:bg-bg-component-hover transition-colors"
+                title="Browse folders"
+              >
+                <FolderOpen className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Inline Folder Browser */}
+            {showBrowser && (
+              <div className="rounded-md border border-border-subtle bg-bg-elevated overflow-hidden mt-2">
+                {/* Browser header with current path */}
+                <div className="flex items-center gap-1 border-b border-border-subtle bg-bg-app px-3 py-2">
+                  {browseParent && (
+                    <button
+                      onClick={() => void browseTo(browseParent)}
+                      className="rounded p-1 text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
+                      title="Go up"
+                    >
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <span className="text-[11px] text-text-muted truncate flex-1 font-mono">
+                    {browsePath}
+                  </span>
+                  <button
+                    onClick={() => handleSelectFolder(browsePath)}
+                    className="rounded-md px-2 py-1 text-[10px] font-medium bg-text-primary text-bg-surface hover:opacity-90 transition-colors"
+                  >
+                    Select This Folder
+                  </button>
+                </div>
+                {/* Directory listing */}
+                <div className="max-h-48 overflow-y-auto scrollbar-elegant">
+                  {browseLoading ? (
+                    <div className="flex items-center justify-center py-6 text-text-muted">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                  ) : browseEntries.length === 0 ? (
+                    <div className="py-4 text-center text-[11px] text-text-muted">
+                      No subdirectories
+                    </div>
+                  ) : (
+                    browseEntries.map((entry) => (
+                      <button
+                        key={entry.path}
+                        onClick={() => void browseTo(entry.path)}
+                        onDoubleClick={() => handleSelectFolder(entry.path)}
+                        className="flex items-center gap-2 w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-state-hover transition-colors"
+                      >
+                        <Folder className="h-3.5 w-3.5 text-text-muted flex-shrink-0" />
+                        <span className="truncate">{entry.name}</span>
+                        <ChevronRight className="h-3 w-3 text-text-muted ml-auto flex-shrink-0" />
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Validation indicators */}
             {validating && (
               <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
@@ -229,7 +344,6 @@ export function AddWorkspaceModal({ open, onClose, onCreated }: AddWorkspaceModa
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
-                // Fix #6: Enter on name field submits the form
                 if (e.key === 'Enter' && validation.valid && !saving) {
                   e.preventDefault();
                   void handleCreate();

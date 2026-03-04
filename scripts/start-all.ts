@@ -2,7 +2,7 @@ import {
   ensurePortsFree,
   createMcpLauncher,
   createLangGraphLauncher,
-  requireTargetRepoRoot,
+  resolveTargetRepoRoot,
 } from "./lib/serviceLauncher.js";
 
 const PORTS = [
@@ -15,11 +15,16 @@ async function main() {
   console.log("✨ Preparing ports...");
   await ensurePortsFree(PORTS.map((entry) => entry.port));
 
-  const targetRepoRoot = await requireTargetRepoRoot();
-  console.log(`📁 MCP repo root: ${targetRepoRoot}`);
+  let targetRepoRoot: string | undefined;
+  try {
+    targetRepoRoot = resolveTargetRepoRoot();
+    console.log(`📁 MCP repo root: ${targetRepoRoot}`);
+  } catch {
+    console.warn("⚠️  No repository path configured yet. You can set it later in the UI at Configuration > Repository Settings.");
+  }
 
   const children = [
-    createMcpLauncher(targetRepoRoot, { MCP_PORT: "9000" }),
+    createMcpLauncher(targetRepoRoot ?? process.cwd(), { MCP_PORT: "9000" }),
     createLangGraphLauncher({ overrides: { LANGGRAPH_PORT: "8080", MCP_URL } }),
   ];
 

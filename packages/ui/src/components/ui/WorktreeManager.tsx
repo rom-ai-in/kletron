@@ -131,12 +131,31 @@ export function WorktreeManager({
                         placeholder="Branch name"
                         className="w-full rounded-md bg-bg-app border border-border-subtle px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:border-border-strong focus:outline-none"
                     />
-                    <input
-                        value={newPath}
-                        onChange={(e) => setNewPath(e.target.value)}
-                        placeholder="Worktree path"
-                        className="w-full rounded-md bg-bg-app border border-border-subtle px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:border-border-strong focus:outline-none font-mono"
-                    />
+                    <div className="flex items-center gap-2">
+                        <input
+                            value={newPath}
+                            onChange={(e) => setNewPath(e.target.value)}
+                            placeholder="Worktree path"
+                            className="flex-1 rounded-md bg-bg-app border border-border-subtle px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:border-border-strong focus:outline-none font-mono"
+                        />
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                try {
+                                    const result = await (window as any).numezis?.selectWorkspace?.();
+                                    if (result && result.path) {
+                                        setNewPath(result.path);
+                                    }
+                                } catch {
+                                    // ignore — user cancelled or Electron API unavailable
+                                }
+                            }}
+                            className="px-2 py-1 rounded text-xs text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
+                            title="Browse for folder"
+                        >
+                            Browse...
+                        </button>
+                    </div>
                     <div className="flex items-center justify-end gap-2">
                         <button type="button" onClick={() => setShowAdd(false)} className="px-3 py-1 text-xs text-text-muted hover:text-text-primary">
                             Cancel

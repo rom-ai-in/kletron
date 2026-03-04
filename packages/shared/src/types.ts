@@ -84,13 +84,28 @@ export type AgentWorkflowResult = {
         context: DocumentContext;
         target_files: TargetFile[];
         raw_claims: Claim[];
-        verified_findings: Finding[];
+        verified_findings: Finding[] | { total: number; by_severity: Record<"low"|"medium"|"high"|"critical", number>; items: Finding[] };
         findings: Finding[];
         tasks: Task[];
-        report: string;
+        report: string | {
+            markdown?: string;
+            json?: string;
+            summary?: string;
+        };
         meta?: Record<string, unknown>;
         stageMetrics?: StageMetric[];
         todo?: string[];
+        status?: "success" | "partial_success" | "failure" | "error";
+        execution_metrics?: {
+            success_rate: number;
+            total_operations: number;
+            failed_operations: number;
+            token_usage?: {
+                inputTokens: number;
+                outputTokens: number;
+                totalTokens: number;
+            };
+        };
     };
     eventStream: AgentEvent[];
 };

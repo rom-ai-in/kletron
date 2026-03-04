@@ -21,6 +21,7 @@ import {
     Play
 } from "lucide-react";
 import { useLlmHealth } from "@numezis/ui/hooks/useLlmHealth";
+import { RequireWorkspace } from "@numezis/ui/components/workspace/RequireWorkspace";
 
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
     azure: "Azure OpenAI",
@@ -60,6 +61,14 @@ type SearchResult = {
 };
 
 export default function VectorIndexPage() {
+    return (
+        <RequireWorkspace message="Select a workspace to manage its vector index and semantic search.">
+            <VectorIndexContent />
+        </RequireWorkspace>
+    );
+}
+
+function VectorIndexContent() {
     const [status, setStatus] = useState<IndexStatus | null>(null);
     const [config, setConfig] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -100,7 +109,7 @@ export default function VectorIndexPage() {
                 setStatus(data);
                 if (loadError) setLoadError(null);
                 // Update localStorage cache
-                try { localStorage.setItem(VECTORS_CACHE_KEY, JSON.stringify({ status: data, ts: Date.now() })); } catch {}
+                try { localStorage.setItem(VECTORS_CACHE_KEY, JSON.stringify({ status: data, ts: Date.now() })); } catch { }
             } else {
                 const data = await res.json().catch(() => ({}));
                 setLoadError(data.error || `Failed to load vector status (${res.status})`);
@@ -151,7 +160,7 @@ export default function VectorIndexPage() {
                     config: configData,
                     ts: Date.now()
                 }));
-            } catch {}
+            } catch { }
         } catch (error) {
             console.error("Failed to fetch vector data", error);
             setLoadError(error instanceof Error ? error.message : "Failed to fetch vector data");
@@ -173,7 +182,7 @@ export default function VectorIndexPage() {
                 // Show content immediately, but still fetch fresh data below
                 setIsLoading(false);
             }
-        } catch {}
+        } catch { }
 
         // Fetch fresh data (shows loader only if no cached data)
         void fetchData(true);
@@ -433,234 +442,234 @@ export default function VectorIndexPage() {
                         </div>
                     </>
                 ) : (
-                <>
-                {/* Stats Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <StatusCard
-                        title="Active Provider"
-                        value={config?.provider ? PROVIDER_DISPLAY_NAMES[config.provider] ?? "None" : "None"}
-                        icon={getHealthIcon()}
-                        subtitle={
-                            healthStatus === 'error' ? (healthMessage || "Connection failed") :
-                                healthStatus === 'success' ? (healthMessage || "Online") :
-                                    healthStatus === 'loading' ? "Checking connection..." :
-                                        (config?.provider ? (config[config.provider]?.model || "Unknown model") : "Configure provider")
-                        }
-                        color={healthStatus === 'success' ? 'emerald' : healthStatus === 'error' ? 'rose' : healthStatus === 'loading' ? 'amber' : 'zinc'}
-                        isAnimated={healthStatus === 'loading'}
-                    />
-                    <StatusCard
-                        title="Index Status"
-                        value={
-                            status?.isIndexing
-                                ? "Indexing..."
-                                : totalFiles === 0
-                                    ? "Not Indexed"
-                                    : isPartial
-                                        ? "Partial"
-                                        : "Indexed"
-                        }
-                        icon={status?.isIndexing ? RefreshCw : CheckCircle2}
-                        subtitle={
-                            status?.isIndexing
-                                ? `Processing ${indexedFiles} / ${totalFiles}`
-                                : totalFiles > 0
-                                    ? isPartial
-                                        ? `Indexed ${indexedFiles} / ${totalFiles} • Remaining ${remainingFiles} (${remainingPercent}%)`
-                                        : `Indexed ${indexedFiles} / ${totalFiles} • Last update: ${status?.lastIndexedAt ? new Date(status.lastIndexedAt).toLocaleTimeString() : "—"}`
-                                    : "Ready to index"
-                        }
-                        color={status?.isIndexing ? "sky" : totalFiles > 0 && !isPartial ? "emerald" : "zinc"}
-                        isAnimated={status?.isIndexing}
-                    />
-                    <StatusCard
-                        title="Indexed Files"
-                        value={`${indexedFiles} / ${totalFiles}`}
-                        icon={FileCode}
-                        progress={totalFiles ? (indexedFiles / totalFiles) * 100 : 0}
-                        color="zinc"
-                    />
-                    <Link href="/app/vectors/history" className="block h-full">
-                        <StatusCard
-                            title="Run History"
-                            value="View Log"
-                            icon={Clock}
-                            subtitle="Review past indexing runs"
-                            color="amber"
-                            className="h-full hover:bg-bg-elevated cursor-pointer"
-                        />
-                    </Link>
-                </div>
-
-                {/* Actions Panel */}
-                <Panel className="p-6">
-                    <div className="flex items-center justify-between mb-6">
-                        <div>
-                            <h2 className="text-base font-semibold text-text-primary">Indexing Operations</h2>
-                            <p className="text-sm text-text-muted mt-1">Manage semantic indexing of your repository</p>
-                        </div>
-                        <div className="flex gap-2">
-                            {isPartial && (
-                                <Button
-                                    className="bg-status-success hover:bg-status-success text-white"
-                                    onClick={() => void handleContinueIndexing()}
-                                    disabled={status?.isIndexing || isActionLoading}
-                                >
-                                    <Play className="mr-2 h-4 w-4 fill-current" />
-                                    Continue Indexing
-                                </Button>
-                            )}
-                            {status?.totalChunks ? (
-                                <>
-                                    <Button
-                                        variant="secondary"
-                                        onClick={() => void handleStartIndexing(true)}
-                                        disabled={status.isIndexing || isActionLoading}
-                                    >
-                                        <RefreshCw className={`mr-2 h-4 w-4 ${status.isIndexing ? 'animate-spin' : ''}`} />
-                                        Full Reindex
-                                    </Button>
-                                    <Button
-                                        variant="secondary"
-                                        className="text-status-error-text hover:text-status-error-text hover:bg-status-error-bg"
-                                        onClick={() => void handleClearIndex()}
-                                        disabled={status.isIndexing || isActionLoading}
-                                    >
-                                        <Trash2 className="mr-2 h-4 w-4" />
-                                        Clear Vectors
-                                    </Button>
-                                </>
-                            ) : (
-                                <Button
-                                    className="bg-status-success hover:bg-status-success text-white"
-                                    onClick={() => void handleStartIndexing()}
-                                    disabled={status?.isIndexing || isActionLoading}
-                                >
-                                    <Play className="mr-2 h-4 w-4 fill-current" />
-                                    Start Initial Indexing
-                                </Button>
-                            )}
-                        </div>
-                    </div>
-
-                    {status?.isIndexing && (
-                        <div className="space-y-2 mt-4">
-                            <div className="flex justify-between text-xs text-text-secondary">
-                                <span>Processing repository...</span>
-                                <span>{progressPercent}%</span>
-                            </div>
-                            <div className="h-1.5 w-full bg-bg-app rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-status-success transition-all duration-500"
-                                    style={{ width: `${progressPercent}%` }}
+                    <>
+                        {/* Stats Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <StatusCard
+                                title="Active Provider"
+                                value={config?.provider ? PROVIDER_DISPLAY_NAMES[config.provider] ?? "None" : "None"}
+                                icon={getHealthIcon()}
+                                subtitle={
+                                    healthStatus === 'error' ? (healthMessage || "Connection failed") :
+                                        healthStatus === 'success' ? (healthMessage || "Online") :
+                                            healthStatus === 'loading' ? "Checking connection..." :
+                                                (config?.provider ? (config[config.provider]?.model || "Unknown model") : "Configure provider")
+                                }
+                                color={healthStatus === 'success' ? 'emerald' : healthStatus === 'error' ? 'rose' : healthStatus === 'loading' ? 'amber' : 'zinc'}
+                                isAnimated={healthStatus === 'loading'}
+                            />
+                            <StatusCard
+                                title="Index Status"
+                                value={
+                                    status?.isIndexing
+                                        ? "Indexing..."
+                                        : totalFiles === 0
+                                            ? "Not Indexed"
+                                            : isPartial
+                                                ? "Partial"
+                                                : "Indexed"
+                                }
+                                icon={status?.isIndexing ? RefreshCw : CheckCircle2}
+                                subtitle={
+                                    status?.isIndexing
+                                        ? `Processing ${indexedFiles} / ${totalFiles}`
+                                        : totalFiles > 0
+                                            ? isPartial
+                                                ? `Indexed ${indexedFiles} / ${totalFiles} • Remaining ${remainingFiles} (${remainingPercent}%)`
+                                                : `Indexed ${indexedFiles} / ${totalFiles} • Last update: ${status?.lastIndexedAt ? new Date(status.lastIndexedAt).toLocaleTimeString() : "—"}`
+                                            : "Ready to index"
+                                }
+                                color={status?.isIndexing ? "sky" : totalFiles > 0 && !isPartial ? "emerald" : "zinc"}
+                                isAnimated={status?.isIndexing}
+                            />
+                            <StatusCard
+                                title="Indexed Files"
+                                value={`${indexedFiles} / ${totalFiles}`}
+                                icon={FileCode}
+                                progress={totalFiles ? (indexedFiles / totalFiles) * 100 : 0}
+                                color="zinc"
+                            />
+                            <Link href="/app/vectors/history" className="block h-full">
+                                <StatusCard
+                                    title="Run History"
+                                    value="View Log"
+                                    icon={Clock}
+                                    subtitle="Review past indexing runs"
+                                    color="amber"
+                                    className="h-full hover:bg-bg-elevated cursor-pointer"
                                 />
-                            </div>
-                            <p className="text-[10px] font-mono text-text-muted truncate">
-                                Current: {status.currentFile}
-                            </p>
+                            </Link>
                         </div>
-                    )}
-                </Panel>
 
-                {/* Search Preview */}
-                <div className="flex flex-col gap-6 pb-6">
-                    <div className="flex flex-col h-[600px] overflow-hidden rounded-lg border border-border-subtle bg-bg-surface shadow-sm">
-                        <div className="p-4 border-b border-border-subtle bg-bg-surface flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <Search className="h-4 w-4 text-text-muted" />
-                                <h2 className="text-sm font-semibold text-text-primary">Semantic Search Preview</h2>
-                            </div>
-                            {searchResults.length > 0 && (
-                                <span className="text-[10px] text-text-muted">{searchResults.length} results found</span>
-                            )}
-                        </div>
-                        <div className="p-4 bg-bg-surface border-b border-border-subtle">
-                            <form onSubmit={(e) => void handleSearch(e)} className="flex gap-2">
-                                <input
-                                    type="text"
-                                    placeholder="Enter natural language query (e.g. 'auth logic')"
-                                    className="flex-1 rounded-md border border-border-subtle bg-bg-elevated px-3 py-1.5 text-sm text-text-primary outline-none focus:border-status-success-border"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                />
-                                <div className="flex items-center gap-2 px-2 border-l border-border-subtle">
-                                    <span className="text-[10px] text-text-muted font-bold uppercase whitespace-nowrap">Top K:</span>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        max="50"
-                                        value={topK}
-                                        onChange={(e) => setTopK(parseInt(e.target.value) || 1)}
-                                        className="w-12 rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-xs text-text-primary outline-none focus:border-status-success-border"
-                                    />
+                        {/* Actions Panel */}
+                        <Panel className="p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 className="text-base font-semibold text-text-primary">Indexing Operations</h2>
+                                    <p className="text-sm text-text-muted mt-1">Manage semantic indexing of your repository</p>
                                 </div>
-                                <Button type="submit" size="sm" disabled={isSearching || !status?.totalChunks}>
-                                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
-                                </Button>
-                            </form>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-elegant bg-bg-app/20 min-h-0">
-                            {searchError && (
-                                <div className="p-4 rounded-lg bg-status-error-bg border border-status-error-border text-status-error-text flex items-start gap-3">
-                                    <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                                    <div className="text-xs">
-                                        <p className="font-semibold mb-1">Search Error</p>
-                                        <p>{searchError}</p>
+                                <div className="flex gap-2">
+                                    {isPartial && (
+                                        <Button
+                                            className="bg-status-success hover:bg-status-success text-white"
+                                            onClick={() => void handleContinueIndexing()}
+                                            disabled={status?.isIndexing || isActionLoading}
+                                        >
+                                            <Play className="mr-2 h-4 w-4 fill-current" />
+                                            Continue Indexing
+                                        </Button>
+                                    )}
+                                    {status?.totalChunks ? (
+                                        <>
+                                            <Button
+                                                variant="secondary"
+                                                onClick={() => void handleStartIndexing(true)}
+                                                disabled={status.isIndexing || isActionLoading}
+                                            >
+                                                <RefreshCw className={`mr-2 h-4 w-4 ${status.isIndexing ? 'animate-spin' : ''}`} />
+                                                Full Reindex
+                                            </Button>
+                                            <Button
+                                                variant="secondary"
+                                                className="text-status-error-text hover:text-status-error-text hover:bg-status-error-bg"
+                                                onClick={() => void handleClearIndex()}
+                                                disabled={status.isIndexing || isActionLoading}
+                                            >
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                Clear Vectors
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        <Button
+                                            className="bg-status-success hover:bg-status-success text-white"
+                                            onClick={() => void handleStartIndexing()}
+                                            disabled={status?.isIndexing || isActionLoading}
+                                        >
+                                            <Play className="mr-2 h-4 w-4 fill-current" />
+                                            Start Initial Indexing
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {status?.isIndexing && (
+                                <div className="space-y-2 mt-4">
+                                    <div className="flex justify-between text-xs text-text-secondary">
+                                        <span>Processing repository...</span>
+                                        <span>{progressPercent}%</span>
                                     </div>
+                                    <div className="h-1.5 w-full bg-bg-app rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-status-success transition-all duration-500"
+                                            style={{ width: `${progressPercent}%` }}
+                                        />
+                                    </div>
+                                    <p className="text-[10px] font-mono text-text-muted truncate">
+                                        Current: {status.currentFile}
+                                    </p>
                                 </div>
                             )}
-                            {searchResults.length === 0 && !isSearching && !searchError && (
-                                <div className="h-full flex flex-col items-center justify-center text-text-muted opacity-50">
-                                    <Search className="h-10 w-10 mb-2" />
-                                    <p className="text-xs italic">Enter a query to test the vector search</p>
+                        </Panel>
+
+                        {/* Search Preview */}
+                        <div className="flex flex-col gap-6 pb-6">
+                            <div className="flex flex-col h-[600px] overflow-hidden rounded-lg border border-border-subtle bg-bg-surface shadow-sm">
+                                <div className="p-4 border-b border-border-subtle bg-bg-surface flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Search className="h-4 w-4 text-text-muted" />
+                                        <h2 className="text-sm font-semibold text-text-primary">Semantic Search Preview</h2>
+                                    </div>
+                                    {searchResults.length > 0 && (
+                                        <span className="text-[10px] text-text-muted">{searchResults.length} results found</span>
+                                    )}
                                 </div>
-                            )}
-                            {searchResults.map((result, idx) => (
-                                <div key={idx} className="group rounded-lg border border-border-subtle bg-bg-elevated/40 p-4 hover:border-status-success-border transition shadow-sm">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <FileCode className="h-4 w-4 text-status-info-text" />
-                                            <span className="text-xs font-mono text-text-primary truncate">{result.filePath}:{result.startLine}</span>
+                                <div className="p-4 bg-bg-surface border-b border-border-subtle">
+                                    <form onSubmit={(e) => void handleSearch(e)} className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            placeholder="Enter natural language query (e.g. 'auth logic')"
+                                            className="flex-1 rounded-md border border-border-subtle bg-bg-elevated px-3 py-1.5 text-sm text-text-primary outline-none focus:border-status-success-border"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                        />
+                                        <div className="flex items-center gap-2 px-2 border-l border-border-subtle">
+                                            <span className="text-[10px] text-text-muted font-bold uppercase whitespace-nowrap">Top K:</span>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="50"
+                                                value={topK}
+                                                onChange={(e) => setTopK(parseInt(e.target.value) || 1)}
+                                                className="w-12 rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-xs text-text-primary outline-none focus:border-status-success-border"
+                                            />
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-1.5 w-24 bg-bg-app rounded-full overflow-hidden mr-1">
-                                                <div
-                                                    className="h-full bg-status-success"
-                                                    style={{ width: `${result.score * 100}%` }}
-                                                />
+                                        <Button type="submit" size="sm" disabled={isSearching || !status?.totalChunks}>
+                                            {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
+                                        </Button>
+                                    </form>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-elegant bg-bg-app/20 min-h-0">
+                                    {searchError && (
+                                        <div className="p-4 rounded-lg bg-status-error-bg border border-status-error-border text-status-error-text flex items-start gap-3">
+                                            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                                            <div className="text-xs">
+                                                <p className="font-semibold mb-1">Search Error</p>
+                                                <p>{searchError}</p>
                                             </div>
-                                            <span className="text-xs font-bold text-status-success-text">{(result.score * 100).toFixed(1)}%</span>
                                         </div>
-                                    </div>
-                                    <pre className="text-xs leading-relaxed text-text-secondary bg-bg-app p-3 rounded border border-border-subtle overflow-auto whitespace-pre font-mono max-h-[400px]">
-                                        {result.content}
-                                    </pre>
+                                    )}
+                                    {searchResults.length === 0 && !isSearching && !searchError && (
+                                        <div className="h-full flex flex-col items-center justify-center text-text-muted opacity-50">
+                                            <Search className="h-10 w-10 mb-2" />
+                                            <p className="text-xs italic">Enter a query to test the vector search</p>
+                                        </div>
+                                    )}
+                                    {searchResults.map((result, idx) => (
+                                        <div key={idx} className="group rounded-lg border border-border-subtle bg-bg-elevated/40 p-4 hover:border-status-success-border transition shadow-sm">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <FileCode className="h-4 w-4 text-status-info-text" />
+                                                    <span className="text-xs font-mono text-text-primary truncate">{result.filePath}:{result.startLine}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-1.5 w-24 bg-bg-app rounded-full overflow-hidden mr-1">
+                                                        <div
+                                                            className="h-full bg-status-success"
+                                                            style={{ width: `${result.score * 100}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="text-xs font-bold text-status-success-text">{(result.score * 100).toFixed(1)}%</span>
+                                                </div>
+                                            </div>
+                                            <pre className="text-xs leading-relaxed text-text-secondary bg-bg-app p-3 rounded border border-border-subtle overflow-auto whitespace-pre font-mono max-h-[400px]">
+                                                {result.content}
+                                            </pre>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                    </div>
+                            </div>
 
-                    {/* Errors / Logs */}
-                    <div className="flex flex-col h-[300px] overflow-hidden rounded-lg border border-border-subtle bg-bg-surface shadow-sm">
-                        <div className="p-4 border-b border-border-subtle bg-bg-surface flex items-center gap-2">
-                            <AlertCircle className="h-4 w-4 text-text-muted" />
-                            <h2 className="text-sm font-semibold text-text-primary">Indexing Logs</h2>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-2 font-mono scrollbar-elegant bg-bg-app/40 min-h-0">
-                            {!status?.errors?.length && (
-                                <div className="p-4 text-xs text-text-muted italic">No errors reported</div>
-                            )}
-                            {status?.errors.map((error, idx) => (
-                                <div key={idx} className="p-2 border-b border-border-subtle last:border-0 hover:bg-white/5 transition">
-                                    <p className="text-xs text-status-error-text leading-normal">{error}</p>
+                            {/* Errors / Logs */}
+                            <div className="flex flex-col h-[300px] overflow-hidden rounded-lg border border-border-subtle bg-bg-surface shadow-sm">
+                                <div className="p-4 border-b border-border-subtle bg-bg-surface flex items-center gap-2">
+                                    <AlertCircle className="h-4 w-4 text-text-muted" />
+                                    <h2 className="text-sm font-semibold text-text-primary">Indexing Logs</h2>
                                 </div>
-                            ))}
+                                <div className="flex-1 overflow-y-auto p-2 font-mono scrollbar-elegant bg-bg-app/40 min-h-0">
+                                    {!status?.errors?.length && (
+                                        <div className="p-4 text-xs text-text-muted italic">No errors reported</div>
+                                    )}
+                                    {status?.errors.map((error, idx) => (
+                                        <div key={idx} className="p-2 border-b border-border-subtle last:border-0 hover:bg-white/5 transition">
+                                            <p className="text-xs text-status-error-text leading-normal">{error}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-            </>
-            )}
-        </div>
+                    </>
+                )}
+            </div>
 
             {/* Confirmation Modal */}
             <Modal

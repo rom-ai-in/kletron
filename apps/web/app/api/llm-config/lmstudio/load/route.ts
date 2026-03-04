@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         modelId = body.model;
+        const contextSize = body.context_size ?? body.contextSize;
 
         if (!modelId || typeof modelId !== "string") {
             return NextResponse.json(
@@ -42,13 +43,21 @@ export async function POST(request: NextRequest) {
         const cleanBaseUrl = baseUrl.replace(/\/v1\/?$/, "").replace(/\/+$/, "");
         loadUrl = `${cleanBaseUrl}/api/v1/models/load`;
 
-        // Load the model in LM Studio
+        // Load the model in LM Studio with context size
+        const requestBody: Record<string, unknown> = { model: modelId };
+        
+        if (contextSize !== undefined && typeof contextSize === "number") {
+            requestBody.context_size = contextSize;
+        }
+
+        console.log(`Loading model "${modelId}"${contextSize ? ` with context size ${contextSize}` : ""}`);
+
         const response = await fetch(loadUrl, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({ model: modelId }),
+            body: JSON.stringify(requestBody),
             signal: AbortSignal.timeout(timeoutMs), // 2 minute timeout for loading
         });
 
@@ -61,8 +70,9 @@ export async function POST(request: NextRequest) {
                     details: {
                         status: response.status,
                         statusText: response.statusText,
-                        endpoint: loadUrl,
-                        model: modelId,
+                    endpoint: loadUrl,
+                    model: modelId,
+                    context_size: requestBody.context_size ?? undefined,
                     },
                 },
                 { status: 200 }

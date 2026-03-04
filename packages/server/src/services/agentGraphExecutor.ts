@@ -6,7 +6,8 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { HumanMessage, SystemMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
-import type { AgentEvent, AgentEventKind, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent, AgentWorkflowAbortReason } from "@numezis/shared/types";
+import type { AgentEvent, AgentEventKind, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent, AgentWorkflowAbortReason, Finding } from "@numezis/shared/types";
+import { enhanceWorkflowResult } from "@numezis/shared/reportUtils";
 import { streamReactAgentMessages, AgentWorkflowAbortError } from "@numezis/agent-core/reactAgentRunner";
 import { allMcpTools } from "@numezis/agent-core/tools/mcpTools";
 import { agentGraphRunService } from "./agentGraphRunService";
@@ -483,16 +484,17 @@ function createSessionTimeline(node: AgentGraphNode): TimelineEvent[] {
     ];
 }
 
-function extractFindingsFromState(state: Record<string, unknown> | undefined): unknown[] {
+function extractFindingsFromState(state: Record<string, unknown> | undefined): Finding[] {
     if (!state) return [];
     // Direct findings array in state (e.g. from CI discovery node merging into state)
-    if (Array.isArray(state.findings) && state.findings.length > 0) return state.findings;
+    const findings = (state as any).findings;
+    if (Array.isArray(findings) && findings.length > 0) return findings as Finding[];
     // Scan node outputs for findings arrays
     const nodes = state.nodes as Record<string, unknown> | undefined;
     if (nodes && typeof nodes === "object") {
         for (const val of Object.values(nodes)) {
             if (val && typeof val === "object" && Array.isArray((val as any).findings) && (val as any).findings.length > 0) {
-                return (val as any).findings;
+                return (val as any).findings as Finding[];
             }
         }
     }
@@ -511,6 +513,149 @@ function createPlaceholderOutputs(opts: { mission: string; report: string; meta?
         report: opts.report ?? "",
         meta: opts.meta ?? {},
     } satisfies AgentWorkflowResult["outputs"];
+}
+
+/**
+ * Create a comprehensive formatted report from workflow results
+ */
+function createFormattedReport(result: AgentWorkflowResult): {
+    markdown?: string;
+    json?: string;
+    summary?: string;
+} {
+    const outputs = result.outputs || {};
+    const timeline = result.timeline || [];
+    const events = result.eventStream || [];
+
+    // Calculate execution metrics
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    timeline.forEach(t => {
+        if (t.tokenUsage) {
+            totalInputTokens += t.tokenUsage.inputTokens || 0;
+            totalOutputTokens += t.tokenUsage.outputTokens || 0;
+        }
+    });
+
+    // Count findings by severity
+    const findings = Array.isArray(outputs.findings) ? outputs.findings : [];
+    const critical = findings.filter(f => f.severity === "critical").length;
+    const high = findings.filter(f => f.severity === "high").length;
+    const medium = findings.filter(f => f.severity === "medium").length;
+    const low = findings.filter(f => f.severity === "low").length;
+
+    // Determine overall status
+    let status: "success" | "partial_success" | "failure" | "error" = "success";
+    const errorCount = timeline.filter(t => t.status === "error").length;
+    if (errorCount > 0) {
+        status = errorCount >= timeline.length / 2 ? "failure" : "partial_success";
+    }
+
+    // Create executive summary
+    let markdown = `# Automation Results Report\n\n`;
+    markdown += `---\n\n`;
+
+    // Executive Summary
+    markdown += `## 📊 Executive Summary\n\n`;
+    markdown += `**Status**: ${status === "success" ? "✅ Success" : status === "partial_success" ? "⚠️ Partial Success" : "❌ Failed"}\n\n`;
+
+    // Execution Metrics
+    const successCount = timeline.filter(t => t.status === "success").length;
+    markdown += `### 🔢 Execution Metrics\n`;
+    markdown += `- **Total Nodes**: ${timeline.length}\n`;
+    markdown += `- **Successful**: ${successCount}\n`;
+    markdown += `- **Failed**: ${errorCount}\n`;
+    markdown += `- **Success Rate**: ${timeline.length > 0 ? Math.round((successCount / timeline.length) * 100) : 0}%\n\n`;
+
+    // Token Usage
+    const totalTokens = totalInputTokens + totalOutputTokens;
+    markdown += `### 💬 Token Usage\n`;
+    markdown += `- **Input Tokens**: ${totalInputTokens.toLocaleString()}\n`;
+    markdown += `- **Output Tokens**: ${totalOutputTokens.toLocaleString()}\n`;
+    markdown += `- **Total Tokens**: ${totalTokens.toLocaleString()}\n\n`;
+
+    // Findings Summary
+    const totalFindings = findings.length;
+    markdown += `### 🔍 Findings Summary\n`;
+    if (critical > 0) {
+        markdown += `- ❌ **Critical Issues**: ${critical}\n`;
+    }
+    if (high > 0) {
+        markdown += `- ⚠️ **High Priority**: ${high}\n`;
+    }
+    if (medium > 0) {
+        markdown += `- 🔶 **Medium Priority**: ${medium}\n`;
+    }
+    if (low > 0) {
+        markdown += `- 🔵 **Low Priority**: ${low}\n`;
+    }
+    markdown += `- **Total Findings**: ${totalFindings}\n\n`;
+
+    // Detailed Findings Section
+    if (findings.length > 0) {
+        markdown += `## 📋 Detailed Findings\n\n`;
+
+        if (critical > 0) {
+            markdown += `### ❌ Critical Issues (${critical})\n\n`;
+            findings.filter(f => f.severity === "critical").forEach((f, i) => {
+                markdown += `**${i + 1}. ${f.title}**\n`;
+                markdown += `${f.summary}\n`;
+                if (f.evidence) {
+                    markdown += `\`\`\`\n${f.evidence}\n\`\`\`\n`;
+                }
+                markdown += "\n";
+            });
+        }
+
+        if (high > 0) {
+            markdown += `### ⚠️ High Priority (${high})\n\n`;
+            findings.filter(f => f.severity === "high").forEach((f, i) => {
+                markdown += `**${i + 1}. ${f.title}**\n`;
+                markdown += `${f.summary}\n`;
+                if (f.evidence) {
+                    markdown += `\`\`\`\n${f.evidence}\n\`\`\`\n`;
+                }
+                markdown += "\n";
+            });
+        }
+
+        if (medium > 0) {
+            markdown += `### 🔶 Medium Priority (${medium})\n\n`;
+            findings.filter(f => f.severity === "medium").forEach((f, i) => {
+                markdown += `**${i + 1}. ${f.title}**\n`;
+                markdown += `${f.summary}\n`;
+                if (f.evidence) {
+                    markdown += `\`\`\`\n${f.evidence}\n\`\`\`\n`;
+                }
+                markdown += "\n";
+            });
+        }
+
+        if (low > 0) {
+            markdown += `### 🔵 Low Priority (${low})\n\n`;
+            findings.filter(f => f.severity === "low").forEach((f, i) => {
+                markdown += `**${i + 1}. ${f.title}**\n`;
+                markdown += `${f.summary}\n`;
+                if (f.evidence) {
+                    markdown += `\`\`\`\n${f.evidence}\n\`\`\`\n`;
+                }
+                markdown += "\n";
+            });
+        }
+    } else {
+        markdown += `## 📋 Detailed Findings\n\nNo findings reported.\n\n`;
+    }
+
+    // Raw Output Section
+    const rawReport = typeof outputs.report === "string" ? outputs.report : JSON.stringify(outputs.report || "", null, 2);
+    markdown += `---\n\n`;
+    markdown += `## 📄 Raw Output\n\n\`\`\`json\n${rawReport}\n\`\`\``;
+
+    return {
+        markdown,
+        json: rawReport,
+        summary: `Automation completed with ${status}. ${totalFindings} findings reported (${critical} critical, ${high} high, ${medium} medium, ${low} low). ${totalTokens.toLocaleString()} tokens used.`
+    };
 }
 
 function selectToolsByName(toolNames: string[], extraTools: any[] = []) {
@@ -1593,8 +1738,8 @@ export class AgentGraphExecutor {
                         contextBlock += `\nThe following files are likely relevant to your task:\n`;
                         for (const item of rankedContext) {
                             const rel = (item.score * 100).toFixed(0);
-                            const reasons = item.reasons.join(", ");
-                            contextBlock += `- ${item.node.id} (Relevance: ${rel}% - ${reasons})\n`;
+                            const reasonText = typeof item.reason === "string" ? item.reason : "";
+                            contextBlock += `- ${item.node.id} (Relevance: ${rel}% - ${reasonText})\n`;
                             // Future: Inject snippets here if budget allows
                         }
                     } else {
@@ -2070,7 +2215,8 @@ export class AgentGraphExecutor {
             endedAt: new Date(),
         } as any);
 
-        const successResult: AgentWorkflowResult = {
+        // Enhance the workflow result with formatted outputs and metrics
+        const enhancedResult = enhanceWorkflowResult({
             sessionId: runId,
             timeline: globalTimeline,
             conclusion: "Run completed.",
@@ -2080,7 +2226,9 @@ export class AgentGraphExecutor {
                 meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
             }),
             eventStream: globalEventStream,
-        };
+        });
+
+        const successResult = enhancedResult;
         await emitUpdate();
         return successResult;
         });

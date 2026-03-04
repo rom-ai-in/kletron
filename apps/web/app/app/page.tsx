@@ -15,6 +15,7 @@ import {
 } from "@numezis/ui/components/design-system";
 import { TokenUsageDisplay, type TokenUsageSummary } from "@numezis/ui/components/Agent/metrics";
 import { useLlmHealth } from "@numezis/ui/hooks/useLlmHealth";
+import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -96,11 +97,6 @@ type AgentGraphRunSummary = {
   endedAt?: string | null;
 };
 
-type WorkspaceSummary = {
-  id: string;
-  name: string;
-  rootPath: string;
-};
 
 type VectorStatus = {
   isIndexing: boolean;
@@ -152,10 +148,10 @@ function statusBadge(status: string | undefined) {
 
 export default function AppDashboardPage() {
   const router = useRouter();
+  const { activeWorkspace: workspace } = useWorkspace();
   const [sessions, setSessions] = useState<ConversationHistoryItem[]>([]);
   const [runs, setRuns] = useState<AgentGraphRunSummary[]>([]);
   const [graphs, setGraphs] = useState<AgentGraphSummary[]>([]);
-  const [workspace, setWorkspace] = useState<WorkspaceSummary | null>(null);
   const [vectorStatus, setVectorStatus] = useState<VectorStatus | null>(null);
   const [llmConfig, setLlmConfig] = useState<LlmConfig | null>(null);
   const [embeddingConfig, setEmbeddingConfig] = useState<EmbeddingConfig | null>(null);
@@ -211,10 +207,9 @@ export default function AppDashboardPage() {
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
-      const [sessionsRes, graphsRes, workspaceRes, vectorRes, llmRes, embeddingRes] = await Promise.all([
+      const [sessionsRes, graphsRes, vectorRes, llmRes, embeddingRes] = await Promise.all([
         fetch("/api/agent"),
         fetch("/api/agent-graphs"),
-        fetch("/api/workspaces/active"),
         fetch("/api/vectors"),
         fetch("/api/llm-config"),
         fetch("/api/embedding-config"),
@@ -235,10 +230,6 @@ export default function AppDashboardPage() {
         setRuns([]);
       }
 
-      if (workspaceRes.ok) {
-        const data = await workspaceRes.json();
-        setWorkspace(data?.workspace ?? null);
-      }
 
       if (vectorRes.ok) {
         setVectorStatus(await vectorRes.json());

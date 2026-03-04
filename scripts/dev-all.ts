@@ -6,7 +6,7 @@ import {
   createTerminalWorkerLauncher,
   createWebLauncher,
   createDesktopLauncher,
-  requireTargetRepoRoot,
+  resolveTargetRepoRoot,
   waitForHttpOk,
 } from "./lib/serviceLauncher.js";
 
@@ -22,11 +22,16 @@ async function main() {
   console.log("✨ Dev workflow initializing...");
   await ensurePortsFree(PORTS);
 
-  const targetRepoRoot = await requireTargetRepoRoot();
-  console.log(`📁 MCP repo root: ${targetRepoRoot}`);
+  let targetRepoRoot: string | undefined;
+  try {
+    targetRepoRoot = resolveTargetRepoRoot();
+    console.log(`📁 MCP repo root: ${targetRepoRoot}`);
+  } catch {
+    console.warn("⚠️  No repository path configured yet. You can set it later in the UI at Configuration > Repository Settings.");
+  }
 
   const children = [
-    createMcpLauncher(targetRepoRoot, { MCP_PORT: "9000" }),
+    createMcpLauncher(targetRepoRoot ?? process.cwd(), { MCP_PORT: "9000" }),
     createLangGraphDevServer({
       port: 8080,
       configPath: "langgraph.json",

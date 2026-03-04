@@ -18,6 +18,9 @@ import {
 import { Button, Panel, Breadcrumbs } from "@numezis/ui/components/design-system";
 import { FolderTreePicker } from "@numezis/ui/components/ui/FolderTreePicker";
 import { DriftAnalysisModal } from "@numezis/ui/components/drift/DriftAnalysisModal";
+import { RequireWorkspace } from "@numezis/ui/components/workspace/RequireWorkspace";
+import { ActiveWorkspaceBanner } from "@numezis/ui/components/workspace/ActiveWorkspaceBanner";
+import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 
 export interface DiffChunk {
     sha: string;
@@ -30,6 +33,15 @@ export interface DiffChunk {
 
 
 export default function ChangesPage() {
+    return (
+        <RequireWorkspace message="Select a workspace to inspect git diffs and code changes.">
+            <ChangesPageContent />
+        </RequireWorkspace>
+    );
+}
+
+function ChangesPageContent() {
+    const { activeWorkspace } = useWorkspace();
     const [path, setPath] = useState("src/");
     const [granularity, setGranularity] = useState<"hour" | "day" | "week">("day");
 
@@ -110,6 +122,7 @@ export default function ChangesPage() {
 
     return (
         <div className="flex h-full flex-col overflow-y-auto">
+            <ActiveWorkspaceBanner />
             {/* Header */}
             <div className="shrink-0 flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
                 <div className="flex items-center gap-3">
@@ -202,7 +215,7 @@ export default function ChangesPage() {
                         Total changes found: <span className="font-semibold text-text-primary">{diffs.length}</span>
                     </div>
                     <div className="text-[10px] text-text-muted uppercase tracking-widest font-bold">
-                        Targeting: <span className="font-mono text-text-secondary">/Users/romainmagnin/Desktop/numezis</span>
+                        Targeting: <span className="font-mono text-text-secondary">{activeWorkspace?.rootPath || 'No workspace'}</span>
                     </div>
                 </div>
             </div>

@@ -9,6 +9,7 @@ export default defineConfig({
     'tailwind-preset': 'src/tailwind-preset.ts',
   },
   format: ['esm'],
+  tsconfig: 'tsconfig.build.json',
   dts: true,
   splitting: true,
   treeshake: true,
