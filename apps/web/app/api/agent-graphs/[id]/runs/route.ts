@@ -71,7 +71,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         }
 
         const nodeOrder = getGraphNodeOrder(graph as any);
-        const runId = await agentGraphRunService.createRun(params.id, workspace._id.toString());
+        const runId = await agentGraphRunService.createRun(params.id, workspace._id.toString(), "agent");
 
         const initialNodeStatuses: Record<string, any> = {};
         for (const node of graph.nodes) {

@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
 import chokidar, { type FSWatcher } from "chokidar";
 
 const formatterEmitter = new EventEmitter();
@@ -31,6 +32,10 @@ function getWorkspaceWatcher(workspaceId: string, root: string): WorkspaceWatche
 }
 
 export function startWatcher(workspaceId: string, root: string) {
+    if (!fs.existsSync(root)) {
+        console.warn(`[AutoIndex] Watcher not started for missing path: ${root}`);
+        return;
+    }
     const state = getWorkspaceWatcher(workspaceId, root);
     if (state.isWatching && state.root === root) return;
     if (state.watcher) {

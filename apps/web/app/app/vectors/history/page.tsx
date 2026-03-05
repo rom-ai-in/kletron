@@ -19,8 +19,17 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type VectorIndexRun } from "@numezis/server/services/vectorHistoryService";
+import { RequireWorkspace } from "@numezis/ui/components/workspace/RequireWorkspace";
 
 export default function VectorHistoryPage() {
+    return (
+        <RequireWorkspace message="Select a workspace to inspect vector indexing history.">
+            <VectorHistoryContent />
+        </RequireWorkspace>
+    );
+}
+
+function VectorHistoryContent() {
     const [runs, setRuns] = useState<(Omit<VectorIndexRun, "_id"> & { _id: string })[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedRun, setSelectedRun] = useState<(Omit<VectorIndexRun, "_id"> & { _id: string }) | null>(null);

@@ -1,6 +1,7 @@
 import { getDirtyFiles } from "./autoIndexer";
 import { startIndexing } from "./indexerService";
 import { acquireLock, releaseLock } from "./lockService";
+import fs from "node:fs";
 
 type SchedulerState = {
     pendingRun: boolean;
@@ -79,6 +80,10 @@ function scheduleNextRun(workspaceId: string, repoPath: string) {
 }
 
 export async function runAutoIndex(workspaceId: string, repoPath: string) {
+    if (!fs.existsSync(repoPath)) {
+        console.warn(`[AutoIndex] Skipping run for missing workspace path: ${repoPath}`);
+        return;
+    }
     const state = getState(workspaceId);
     const dirty = getDirtyFiles(workspaceId);
     if (dirty.length === 0) {

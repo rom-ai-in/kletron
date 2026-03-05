@@ -5,7 +5,7 @@ import { automationExecutor } from "@numezis/server/services/automationExecutor"
 import { AutomationConfigBuilder } from "@numezis/shared/automationConfigBuilder";
 import { LLM_PROVIDERS } from "@numezis/shared/schemas/llmConfig.schema";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
 
 /**
  * Zod schema for creating an automation
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null);
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
@@ -91,6 +91,10 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({ automations }, { status: 200 });
     } catch (error) {
+        const workspaceError = workspaceErrorToHttp(error);
+        if (workspaceError) {
+            return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+        }
         console.error("[API /api/automations GET] Error (returning empty list):", error);
         return NextResponse.json({ automations: [] }, { status: 200 });
     }
@@ -112,7 +116,7 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
 
-        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, body);
+        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, body);
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
@@ -158,6 +162,10 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ automationId }, { status: 201 });
     } catch (error) {
+        const workspaceError = workspaceErrorToHttp(error);
+        if (workspaceError) {
+            return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+        }
         console.error("[API /api/automations POST] Error:", error);
         return NextResponse.json(
             { error: "Failed to create automation" },

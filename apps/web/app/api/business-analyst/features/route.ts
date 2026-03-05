@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { businessAnalystService } from "@numezis/server/services/businessAnalystService";
 import { FeatureProposalCreateSchema, FeatureFilterSchema } from "@numezis/shared/businessAnalystTypes";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
 
 /**
  * GET /api/business-analyst/features
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null);
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
@@ -46,6 +46,10 @@ export async function GET(req: NextRequest) {
         );
         return NextResponse.json({ features }, { status: 200 });
     } catch (error) {
+        const workspaceError = workspaceErrorToHttp(error);
+        if (workspaceError) {
+            return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+        }
         console.error("[API /api/business-analyst/features GET] Error:", error);
         return NextResponse.json({ features: [] }, { status: 200 });
     }
@@ -66,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     try {
         const body = await req.json();
-        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, body);
+        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, body);
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
@@ -85,6 +89,10 @@ export async function POST(req: NextRequest) {
         );
         return NextResponse.json({ featureId }, { status: 201 });
     } catch (error) {
+        const workspaceError = workspaceErrorToHttp(error);
+        if (workspaceError) {
+            return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+        }
         console.error("[API /api/business-analyst/features POST] Error:", error);
         return NextResponse.json({ error: "Failed to create feature" }, { status: 500 });
     }

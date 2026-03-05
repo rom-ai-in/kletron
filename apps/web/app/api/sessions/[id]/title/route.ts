@@ -3,35 +3,12 @@ import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
 import { getChatModel } from "@numezis/server/llm";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { stripSystemPrefix, stripThoughtContent, sanitizeTitle, heuristicTitle } from "@numezis/server/services/titleSanitizer";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const LLM_RETRY_COUNT = 2;
 const LLM_RETRY_BASE_MS = 800; // exponential backoff: 800ms, 1600ms
-
-/** Strip [System: ...] personality prefix if present. */
-function stripSystemPrefix(text: string): string {
-  if (text.startsWith("[System:") && text.indexOf("]\n\n") !== -1) {
-    return text.slice(text.indexOf("]\n\n") + 3).trim();
-  }
-  return text;
-}
-
-/**
- * Heuristic fallback: capitalise the first 5 meaningful words of the message.
- * Used when the LLM call fails after all retries.
- */
-function heuristicTitle(message: string): string {
-  const words = message
-    .replace(/[^\w\s'-]/g, " ") // strip non-word chars
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 5);
-  if (words.length === 0) return "Untitled";
-  // Capitalise first word, keep the rest as-is
-  words[0] = words[0].charAt(0).toUpperCase() + words[0].slice(1);
-  return words.join(" ");
-}
 
 /** Attempt to generate a title via LLM with retries + exponential backoff. */
 async function generateTitleWithLLM(cleanMessage: string): Promise<string | null> {
@@ -51,7 +28,7 @@ Respond with ONLY the title, nothing else.`;
         new SystemMessage(systemPrompt),
         new HumanMessage(`User message: "${cleanMessage.substring(0, 500)}"`),
       ]);
-      const title = String(response.content).trim().replace(/^["']|["']$/g, "");
+      const title = sanitizeTitle(String(response.content).trim().replace(/^["']|["']$/g, ""));
       if (title) return title;
     } catch (err) {
       console.warn(
@@ -88,7 +65,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     let finalTitle = directTitle;
 
     if (generate && userMessage) {
-      const cleanMessage = stripSystemPrefix(userMessage);
+      const cleanMessage = stripThoughtContent(stripSystemPrefix(userMessage));
 
       // Try LLM generation with retries
       const llmTitle = await generateTitleWithLLM(cleanMessage);
@@ -102,6 +79,11 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         );
         finalTitle = heuristicTitle(cleanMessage);
       }
+    }
+
+    finalTitle = sanitizeTitle(finalTitle);
+    if (!finalTitle && userMessage) {
+      finalTitle = heuristicTitle(stripThoughtContent(stripSystemPrefix(userMessage)));
     }
 
     if (!finalTitle) {

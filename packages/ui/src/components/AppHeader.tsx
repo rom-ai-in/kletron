@@ -11,6 +11,7 @@ export function AppHeader() {
     workspaces,
     activeWorkspaceId,
     loading: workspaceLoading,
+    hasWorkspaceHealthIssues,
     switchWorkspace,
   } = useWorkspace();
 
@@ -23,7 +24,10 @@ export function AppHeader() {
       return {
         id: workspace.id,
         label: workspace.name || fallbackName,
-        sub: workspace.rootPath,
+        sub:
+          workspace.health && workspace.health !== "healthy"
+            ? `${workspace.rootPath} (${workspace.health})`
+            : workspace.rootPath,
       };
     });
   }, [workspaces]);
@@ -55,6 +59,11 @@ export function AppHeader() {
             >
               <Plus className="h-3.5 w-3.5" />
             </Link>
+            {hasWorkspaceHealthIssues && (
+              <span className="rounded-md border border-status-warning-border bg-status-warning-bg px-2 py-1 text-[10px] font-semibold text-status-warning-text">
+                Workspace attention needed
+              </span>
+            )}
           </div>
           <Link
             href="/app/history"

@@ -2,7 +2,7 @@ import { AgentWorkflowResult, AgentWorkflowUpdate } from "@numezis/shared/types"
 import { resolveLlmSelection } from "@numezis/server/llm";
 import { runWorkflow } from "@numezis/agent-core/workflows";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
 import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 
 const textEncoder = new TextEncoder();
@@ -36,7 +36,19 @@ export async function POST(request: Request) {
     });
   }
 
-  const workspace = await resolveWorkspaceFromRequest(request, auth.userId, payload as any);
+  let workspace;
+  try {
+    workspace = await resolveWorkspaceFromRequestStrict(request, auth.userId, payload as any);
+  } catch (error) {
+    const workspaceError = workspaceErrorToHttp(error);
+    if (workspaceError) {
+      return new Response(JSON.stringify(workspaceError.body), {
+        status: workspaceError.status,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    throw error;
+  }
   if (!workspace || !workspace._id) {
     return new Response(JSON.stringify({ error: "Workspace not configured" }), {
       status: 400,
@@ -57,6 +69,7 @@ export async function POST(request: Request) {
               sendChunk({ type: "update", payload: update });
             },
             workspaceId: workspace._id!.toString(),
+            source: "api",
             ...(llmSelection ? { llmSelection } : {}),
           });
           sendChunk({ type: "final", payload: result });

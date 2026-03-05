@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { automationExecutor } from "@numezis/server/services/automationExecutor";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
 import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 
 /**
@@ -23,7 +23,7 @@ export async function POST(
     try {
         const automationId = params.id;
 
-        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null);
         const workspaceId = workspace?._id?.toString();
         if (!workspace || !workspaceId) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
@@ -51,6 +51,10 @@ export async function POST(
 
         return NextResponse.json({ status: "RUNNING" }, { status: 200 });
     } catch (error) {
+        const workspaceError = workspaceErrorToHttp(error);
+        if (workspaceError) {
+            return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+        }
         console.error(`[API /api/automations/${params.id}/resume POST] Error:`, error);
         return NextResponse.json(
             { error: "Failed to resume automation" },

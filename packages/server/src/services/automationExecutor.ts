@@ -115,6 +115,58 @@ function parseFindingsFromText(
     return findings;
 }
 
+function extractRawReportText(rawReport: unknown): string {
+    if (typeof rawReport === "string") return rawReport;
+    if (rawReport && typeof rawReport === "object") {
+        const record = rawReport as Record<string, unknown>;
+        const markdown = typeof record.markdown === "string" ? record.markdown : "";
+        const summary = typeof record.summary === "string" ? record.summary : "";
+        if (markdown) return markdown;
+        if (summary) return summary;
+        return JSON.stringify(record);
+    }
+    return "";
+}
+
+function detectToolExecutionBlockers(workflowResult: AgentWorkflowResult, reportText: string): string | null {
+    const directBlockers = [
+        /resolved path is outside of the configured repository directories/i,
+        /configured path does not exist or is not a directory/i,
+        /tools are blocked/i,
+        /cannot perform the analysis due to environment restrictions/i,
+    ];
+    if (directBlockers.some((re) => re.test(reportText))) {
+        return "Tool execution is blocked by workspace/path restrictions";
+    }
+
+    const events = Array.isArray((workflowResult as any)?.eventStream)
+        ? ((workflowResult as any).eventStream as Array<Record<string, unknown>>)
+        : [];
+    const toolEvents = events.filter((e) => e?.kind === "tool");
+    if (!toolEvents.length) return null;
+
+    const toolErrors = toolEvents.filter((e) => {
+        const content = typeof e?.content === "string" ? e.content : "";
+        return /^error:/i.test(content.trim()) || /please fix your mistakes/i.test(content);
+    });
+    if (!toolErrors.length) return null;
+
+    const hasPathBlock = toolErrors.some((e) => {
+        const content = typeof e?.content === "string" ? e.content : "";
+        return directBlockers.some((re) => re.test(content));
+    });
+    if (hasPathBlock) {
+        return "Tool execution failed because repository paths are not accessible";
+    }
+
+    // If most tool calls errored, stage output is not reliable.
+    if (toolErrors.length >= 3 && toolErrors.length / toolEvents.length >= 0.7) {
+        return "Most tool calls failed during the audit stage";
+    }
+
+    return null;
+}
+
 const toObjectId = (id?: string): ObjectId | undefined => {
     if (!id) return undefined;
     if (!ObjectId.isValid(id)) return undefined;
@@ -508,8 +560,8 @@ export class AutomationExecutor {
             ...(chain.workspaceId
                 ? { workspaceId: chain.workspaceId }
                 : workspaceObjectId
-                ? { workspaceId: workspaceObjectId }
-                : {}),
+                    ? { workspaceId: workspaceObjectId }
+                    : {}),
             status: "PENDING",
             startedAt: new Date(),
             currentStageIndex: 0,
@@ -791,10 +843,10 @@ export class AutomationExecutor {
                 shouldAbort: prepared?.shouldAbort,
                 ...(auditSessionId
                     ? {
-                          onUpdate: async (update) => {
-                              await auditService.updateSession(auditSessionId, update as Partial<AgentWorkflowResult>);
-                          },
-                      }
+                        onUpdate: async (update) => {
+                            await auditService.updateSession(auditSessionId, update as Partial<AgentWorkflowResult>);
+                        },
+                    }
                     : {}),
             });
             if (auditSessionId) {
@@ -820,7 +872,8 @@ export class AutomationExecutor {
 
             // If no structured findings, parse them from the text report
             if (findings.length === 0) {
-                const reportText = workflowResult.outputs?.report ?? workflowResult.conclusion ?? "";
+                const rawReport = workflowResult.outputs?.report ?? workflowResult.conclusion ?? "";
+                const reportText = typeof rawReport === "string" ? rawReport : (rawReport.markdown ?? rawReport.summary ?? JSON.stringify(rawReport));
                 console.info(`[AutomationExecutor] No structured findings; parsing from ${reportText.length}-char report text`);
                 findings = parseFindingsFromText(reportText, chainId, stage.id, sessionIdForLogs);
                 console.info(`[AutomationExecutor] Parsed ${findings.length} findings from text`);
@@ -848,7 +901,23 @@ export class AutomationExecutor {
                 };
             });
 
-            const rawOutput = workflowResult.outputs?.report ?? workflowResult.conclusion ?? "";
+            const rawReportOutput = workflowResult.outputs?.report ?? workflowResult.conclusion ?? "";
+            const rawOutput = extractRawReportText(rawReportOutput);
+            const blockerReason = detectToolExecutionBlockers(workflowResult, rawOutput);
+            if (blockerReason) {
+                return {
+                    stageId: stage.id,
+                    stageName: stage.name,
+                    sessionId: sessionIdForLogs,
+                    success: false,
+                    error: blockerReason,
+                    findings: [],
+                    claims,
+                    tasks,
+                    rawOutput,
+                    duration: Date.now() - startTime,
+                };
+            }
 
             return {
                 stageId: stage.id,
@@ -1128,6 +1197,9 @@ export class AutomationExecutor {
             lines.push(
                 `${i + 1}. ${icon} **${result.stageName}** - ${result.findings.length} findings (${(result.duration / 1000 / 60).toFixed(1)}m)`
             );
+            if (!result.success && result.error) {
+                lines.push(`   - Error: ${result.error}`);
+            }
         });
         lines.push("");
 

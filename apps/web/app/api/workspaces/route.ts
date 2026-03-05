@@ -5,6 +5,7 @@ import {
   createWorkspace,
   getActiveWorkspaceId,
   toWorkspaceSummary,
+  validateWorkspaceRoot,
 } from "@numezis/server/services/workspaceService";
 
 export async function GET(request: Request) {
@@ -19,8 +20,17 @@ export async function GET(request: Request) {
   try {
     const workspaces = await listWorkspaces(auth.userId);
     const activeWorkspaceId = await getActiveWorkspaceId(auth.userId);
+    const workspacesWithHealth = workspaces.map((workspace) => {
+      const health = validateWorkspaceRoot(workspace);
+      return {
+        ...toWorkspaceSummary(workspace),
+        health: health.status,
+        healthMessage: health.message ?? null,
+        selectable: health.status === "healthy",
+      };
+    });
     return NextResponse.json({
-      workspaces: workspaces.map(toWorkspaceSummary),
+      workspaces: workspacesWithHealth,
       activeWorkspaceId,
     });
   } catch (error) {

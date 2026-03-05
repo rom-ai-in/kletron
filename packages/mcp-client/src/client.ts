@@ -83,13 +83,18 @@ export class McpClient {
         const { startWatcher } = await import("@numezis/server/services/autoIndexer");
         const { startAutoIndexScheduler } = await import("@numezis/server/services/autoIndexScheduler");
         const { startAutomationScheduler } = await import("@numezis/server/services/automationScheduler");
-        const { listAllWorkspaces } = await import("@numezis/server/services/workspaceService");
+        const { listAllWorkspaces, validateWorkspaceRoot } = await import("@numezis/server/services/workspaceService");
 
         console.log("[AutoIndex] Initializing services...");
         (globalThis as any).__MCP_SERVICES_INITIALIZED__ = true;
         const workspaces = await listAllWorkspaces();
         for (const workspace of workspaces) {
           if (!workspace._id) continue;
+          const health = validateWorkspaceRoot(workspace);
+          if (health.status !== "healthy") {
+            console.warn(`[AutoIndex] Skipping unhealthy workspace ${workspace._id.toString()} (${health.status}): ${health.rootPath}`);
+            continue;
+          }
           startWatcher(workspace._id.toString(), workspace.rootPath);
           startAutoIndexScheduler(workspace._id.toString(), workspace.rootPath);
         }

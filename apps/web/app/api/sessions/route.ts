@@ -6,7 +6,7 @@ import { agentGraphService } from "@numezis/server/services/agentGraphService";
 import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
 import { getGraphNodeOrder, buildInitialState } from "@numezis/server/services/agentGraphRuntime";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
 
 const textEncoder = new TextEncoder();
 
@@ -84,7 +84,19 @@ export async function POST(request: Request) {
     }
   }
 
-  const workspace = await resolveWorkspaceFromRequest(request, auth.userId, payload as any);
+  let workspace;
+  try {
+    workspace = await resolveWorkspaceFromRequestStrict(request, auth.userId, payload as any);
+  } catch (error) {
+    const workspaceError = workspaceErrorToHttp(error);
+    if (workspaceError) {
+      return new Response(JSON.stringify(workspaceError.body), {
+        status: workspaceError.status,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    throw error;
+  }
   if (!workspace || !workspace._id) {
     return new Response(JSON.stringify({ error: "Workspace not configured" }), {
       status: 400,
@@ -208,8 +220,16 @@ export async function GET(request: Request) {
   // Otherwise resolve a single workspace to filter by
   let resolvedWorkspaceId = workspaceId;
   if (!allWorkspaces && !resolvedWorkspaceId) {
-    const workspace = await resolveWorkspaceFromRequest(request, auth.userId, null);
-    resolvedWorkspaceId = workspace?._id?.toString();
+    try {
+      const workspace = await resolveWorkspaceFromRequestStrict(request, auth.userId, null);
+      resolvedWorkspaceId = workspace?._id?.toString();
+    } catch (error) {
+      const workspaceError = workspaceErrorToHttp(error);
+      if (workspaceError) {
+        return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+      }
+      throw error;
+    }
   }
 
   try {

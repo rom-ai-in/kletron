@@ -1,18 +1,14 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
     Settings,
     Share2,
-    Folder,
     Terminal,
     History,
-    Copy,
-    Check,
     Database,
-    Globe,
     Home,
     Layers,
     Clock,
@@ -112,8 +108,6 @@ export function Sidebar() {
     const pathname = usePathname();
     const { user, profile, loading: authLoading, signOut } = useAuth();
 
-    const [targetDir, setTargetDir] = useState<string | null>(null);
-    const [copied, setCopied] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     // Memoize user display values
@@ -136,29 +130,6 @@ export function Sidebar() {
     }, [profile, user]);
 
     const isAccountActive = pathname === '/app/account' || pathname?.startsWith('/app/account/');
-
-    useEffect(() => {
-        const fetchEnv = async () => {
-            try {
-                const res = await fetch("/api/env");
-                if (res.ok) {
-                    const data = await res.json();
-                    setTargetDir(data.targetDir || null);
-                }
-            } catch (e) {
-                console.error("Failed to fetch env", e);
-            }
-        };
-        void fetchEnv();
-    }, []);
-
-    const handleCopyPath = () => {
-        if (!targetDir) return;
-        void navigator.clipboard.writeText(targetDir).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        });
-    };
 
     const handleSignOut = async () => {
         await signOut();
@@ -227,39 +198,6 @@ export function Sidebar() {
 
             {/* Footer */}
             <div className={`border-t border-border-subtle p-4 transition-all duration-300 ${isCollapsed ? "px-2" : ""}`}>
-                {/* Active Workspace */}
-                {targetDir && (
-                    <div className={`space-y-1.5 ${isCollapsed ? "flex justify-center" : ""}`}>
-                        {!isCollapsed && (
-                            <div className="px-2 text-[10px] font-bold uppercase tracking-widest text-text-muted whitespace-nowrap overflow-hidden">
-                                Active Workspace
-                            </div>
-                        )}
-
-                        {isCollapsed ? (
-                            <div className="group relative flex items-center justify-center rounded-lg p-2 transition hover:bg-bg-elevated" title={`Active Workspace: ${targetDir}`}>
-                                <Folder className="h-4 w-4 text-text-muted" />
-                            </div>
-                        ) : (
-                            <div className="group relative flex items-center justify-between gap-2 rounded-lg border border-border-subtle bg-bg-elevated/50 p-2 transition hover:border-border-strong">
-                                <div className="flex flex-1 items-center gap-2 overflow-hidden">
-                                    <Folder className="h-3.5 w-3.5 shrink-0 text-text-muted" />
-                                    <span className="truncate text-[11px] font-mono text-text-secondary">
-                                        {targetDir}
-                                    </span>
-                                </div>
-                                <button
-                                    onClick={handleCopyPath}
-                                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-                                    title="Copy Path"
-                                >
-                                    {copied ? <Check className="h-3 w-3 text-status-success-text" /> : <Copy className="h-3 w-3" />}
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                )}
-
                 {/* Profile Section - Linked to /app/account */}
                 <Link
                     href="/app/account"

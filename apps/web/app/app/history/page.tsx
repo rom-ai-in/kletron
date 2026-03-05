@@ -13,6 +13,7 @@ import {
   EmptyState,
 } from "@numezis/ui/components/design-system";
 import { History } from "lucide-react";
+import { RequireWorkspace } from "@numezis/ui/components/workspace/RequireWorkspace";
 
 type HistoryRunItem = {
   id: string;
@@ -52,6 +53,14 @@ const statusStyles: Record<string, string> = {
 };
 
 export default function HistoryPage() {
+  return (
+    <RequireWorkspace message="Select a workspace to view history for runs, automations, and analyses.">
+      <HistoryPageContent />
+    </RequireWorkspace>
+  );
+}
+
+function HistoryPageContent() {
   const searchParams = useSearchParams();
   const initialType = (searchParams?.get("type") as FilterType) || "all";
   const graphIdParam = searchParams?.get("graphId") || "";

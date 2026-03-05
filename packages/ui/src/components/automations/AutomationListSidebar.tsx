@@ -51,18 +51,24 @@ export function AutomationListSidebar() {
     const [triggerFilter, setTriggerFilter] = useState<"all" | AutomationTriggerType>("all");
     const [loading, setLoading] = useState(false);
     const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+    const [apiError, setApiError] = useState<string | null>(null);
 
     // Fetch automations
     const fetchAutomations = async () => {
         setLoading(true);
+        setApiError(null);
         try {
             const res = await fetch("/api/automations");
             if (res.ok) {
                 const data = await res.json();
                 setAutomations(data.automations || data.chains || []);
+            } else {
+                const err = await res.json().catch(() => ({}));
+                setApiError((err as Record<string, string>).message || (err as Record<string, string>).error || "Failed to load automations");
             }
         } catch (error) {
             console.error("Failed to fetch automations", error);
+            setApiError("Failed to load automations");
         } finally {
             setLoading(false);
         }
@@ -192,6 +198,11 @@ export function AutomationListSidebar() {
 
             {/* List */}
             <div className="flex-1 overflow-y-auto scrollbar-elegant">
+                {apiError && (
+                    <div className="mx-3 mt-3 rounded-md border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning-text">
+                        {apiError}
+                    </div>
+                )}
                 {loading && automations.length === 0 ? (
                     <div className="p-4 space-y-2">
                         {[1, 2, 3].map(i => (
@@ -268,11 +279,11 @@ function SidebarTriggerIcon({ triggerType }: { triggerType?: AutomationTriggerTy
     const trigger = triggerType || "manual";
     switch (trigger) {
         case "schedule":
-            return <Timer className="h-2.5 w-2.5 text-status-info-text" title="Scheduled" />;
+            return <span title="Scheduled"><Timer className="h-2.5 w-2.5 text-status-info-text" /></span>;
         case "webhook":
-            return <Webhook className="h-2.5 w-2.5 text-status-warning-text" title="Webhook" />;
+            return <span title="Webhook"><Webhook className="h-2.5 w-2.5 text-status-warning-text" /></span>;
         case "git_event":
-            return <GitBranch className="h-2.5 w-2.5 text-status-success-text" title="Git Event" />;
+            return <span title="Git Event"><GitBranch className="h-2.5 w-2.5 text-status-success-text" /></span>;
         default:
             return null; // Manual doesn't show an icon
     }

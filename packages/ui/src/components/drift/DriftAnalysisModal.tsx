@@ -51,6 +51,7 @@ const PROVIDER_LABELS: Record<LlmProviderType, string> = {
     gemini: "Gemini",
     lmstudio: "LM Studio",
     ollama: "Ollama",
+    vllm: "vLLM",
 };
 
 const fmtPct = (n: number) => `${Math.max(0, Math.min(100, Math.round(n)))}%`;

@@ -12,6 +12,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { getToolApprovalPolicy } from "../src/services/toolApprovalPolicy";
 
 // ─── Helpers (replicated from executor for isolated testing) ────────────────
 
@@ -243,6 +244,32 @@ describe("tool call cache (deduplication)", () => {
             const results = simulateToolCalls([call, call]);
             assert.equal(results[1].cached, true, `Expected ${toolName} to be cached on second call`);
         }
+    });
+});
+
+describe("tool approval policy guard coverage", () => {
+    it("treats execute_bash and str_replace_editor as read-only auto-approve for agent", () => {
+        const executePolicy = getToolApprovalPolicy({ source: "agent", toolName: "execute_bash" });
+        const replacePolicy = getToolApprovalPolicy({ source: "agent", toolName: "str_replace_editor" });
+        assert.equal(executePolicy.decision, "auto_approve");
+        assert.equal(replacePolicy.decision, "auto_approve");
+    });
+
+    it("keeps write_file behind manual approval for agent", () => {
+        const policy = getToolApprovalPolicy({ source: "agent", toolName: "write_file" });
+        assert.equal(policy.decision, "requires_approval");
+    });
+
+    it("treats document tools as write-capable and not auto-approved", () => {
+        const policy = getToolApprovalPolicy({ source: "agent", toolName: "create_document" });
+        assert.equal(policy.decision, "requires_approval");
+    });
+
+    it("marks automation write tools as approval-required (executor fail-fast handles blocking)", () => {
+        const repoWrite = getToolApprovalPolicy({ source: "automation", toolName: "write_file" });
+        const artifactWrite = getToolApprovalPolicy({ source: "automation", toolName: "save_document" });
+        assert.equal(repoWrite.decision, "requires_approval");
+        assert.equal(artifactWrite.decision, "requires_approval");
     });
 });
 

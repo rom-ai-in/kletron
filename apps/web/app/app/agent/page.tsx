@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   ChatInput,
   Selector,
@@ -776,6 +777,20 @@ export default function AgentPage() {
         )}
         {/* Right: metrics + debug */}
         <div className="flex items-center gap-3 flex-shrink-0">
+          <Link
+            href="/app/config/tools"
+            className="rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+            title="Manage tool catalog and policy"
+          >
+            Tools
+          </Link>
+          <Link
+            href={selectedGraphId ? `/app/agent-graphs/${selectedGraphId}` : "/app/config/graphs"}
+            className="rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+            title="Manage graph tool allowlist"
+          >
+            Graph
+          </Link>
           {runStartedAt && tokenUsage && <TokenUsageDisplay tokenUsage={tokenUsage} />}
           {runStartedAt && <DurationDisplay startedAt={runStartedAt} endedAt={runEndedAt ?? undefined} />}
           <button

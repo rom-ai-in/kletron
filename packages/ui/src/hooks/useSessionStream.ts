@@ -83,8 +83,14 @@ function extractThoughtsFromContent(content: string): { content: string; thought
         }
     }
 
+    // Guardrail: if policy/prompt-like leakage is present, hide it from visible content.
+    if (/\brespond with only the title\b/i.test(cleaned) || /\bshort chat title\b/i.test(cleaned)) {
+        addThoughts(cleaned);
+        cleaned = "";
+    }
+
     if (!cleaned.trim() && thoughts.length > 0) {
-        cleaned = content.trim();
+        cleaned = "";
     }
 
     return { content: cleaned, thoughts };

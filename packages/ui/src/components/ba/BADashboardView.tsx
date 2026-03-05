@@ -210,160 +210,160 @@ export function BADashboardView() {
                         <div className="text-sm text-text-muted animate-pulse">Loading dashboard...</div>
                     </div>
                 ) : (
-                <div className="space-y-6">
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard
-                    icon={ListChecks}
-                    label="Total Features"
-                    value={summary?.totalFeatures ?? 0}
-                    sub={`${summary?.byStatus.validated ?? 0} validated`}
-                />
-                <StatCard
-                    icon={Sparkles}
-                    label="Innovation Score"
-                    value={summary?.innovationScore != null ? `${summary.innovationScore}/100` : "N/A"}
-                    sub="Average across features"
-                />
-                <StatCard
-                    icon={Swords}
-                    label="Competitive Score"
-                    value={summary?.competitiveScore != null ? `${summary.competitiveScore}/100` : "N/A"}
-                    sub="vs. competitors"
-                />
-                <StatCard
-                    icon={Clock}
-                    label="Last Analysis"
-                    value={summary?.lastAnalysis ? new Date(summary.lastAnalysis).toLocaleDateString() : "Never"}
-                    sub={summary?.lastAnalysis ? new Date(summary.lastAnalysis).toLocaleTimeString() : "Run your first analysis"}
-                />
-            </div>
+                    <div className="space-y-6">
+                        {/* KPI Cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <StatCard
+                                icon={ListChecks}
+                                label="Total Features"
+                                value={summary?.totalFeatures ?? 0}
+                                sub={`${summary?.byStatus.validated ?? 0} validated`}
+                            />
+                            <StatCard
+                                icon={Sparkles}
+                                label="Innovation Score"
+                                value={summary?.innovationScore != null ? `${summary.innovationScore}/100` : "N/A"}
+                                sub="Average across features"
+                            />
+                            <StatCard
+                                icon={Swords}
+                                label="Competitive Score"
+                                value={summary?.competitiveScore != null ? `${summary.competitiveScore}/100` : "N/A"}
+                                sub="vs. competitors"
+                            />
+                            <StatCard
+                                icon={Clock}
+                                label="Last Analysis"
+                                value={summary?.lastAnalysis ? new Date(summary.lastAnalysis).toLocaleDateString() : "Never"}
+                                sub={summary?.lastAnalysis ? new Date(summary.lastAnalysis).toLocaleTimeString() : "Run your first analysis"}
+                            />
+                        </div>
 
-            {/* Top Features + Actions */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Top Priority Features */}
-                <div className="lg:col-span-2">
-                    <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-text-primary">Top Priority Features</h3>
-                        <Link
-                            href="/app/business-analyst/features"
-                            className="text-xs text-text-muted hover:text-text-secondary transition-colors"
-                        >
-                            View all &rarr;
-                        </Link>
-                    </div>
-                    <div className="space-y-2">
-                        {summary?.topPriorityFeatures.length ? (
-                            summary.topPriorityFeatures.map((feature) => (
-                                <FeatureRow key={feature.id} feature={feature} />
-                            ))
-                        ) : (
-                            <Panel className="p-8 border border-border-subtle text-center">
-                                <Target className="h-6 w-6 text-text-muted mx-auto mb-2" />
-                                <p className="text-sm text-text-muted">
-                                    No features yet. Run an analysis to discover feature opportunities.
-                                </p>
-                            </Panel>
+                        {/* Top Features + Actions */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Top Priority Features */}
+                            <div className="lg:col-span-2">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-sm font-semibold text-text-primary">Top Priority Features</h3>
+                                    <Link
+                                        href="/app/business-analyst/features"
+                                        className="text-xs text-text-muted hover:text-text-secondary transition-colors"
+                                    >
+                                        View all &rarr;
+                                    </Link>
+                                </div>
+                                <div className="space-y-2">
+                                    {summary?.topPriorityFeatures.length ? (
+                                        summary.topPriorityFeatures.map((feature) => (
+                                            <FeatureRow key={feature.id} feature={feature} />
+                                        ))
+                                    ) : (
+                                        <Panel className="p-8 border border-border-subtle text-center">
+                                            <Target className="h-6 w-6 text-text-muted mx-auto mb-2" />
+                                            <p className="text-sm text-text-muted">
+                                                No features yet. Run an analysis to discover feature opportunities.
+                                            </p>
+                                        </Panel>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Quick Actions */}
+                            <div>
+                                <h3 className="text-sm font-semibold text-text-primary mb-3">Quick Actions</h3>
+                                <div className="space-y-3">
+                                    <Panel className="p-4 border border-border-subtle">
+                                        <div className="flex items-start gap-3">
+                                            <div className="p-2 rounded-lg bg-status-success-bg">
+                                                <Play className="h-4 w-4 text-status-success-text" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-text-primary">Full Analysis</p>
+                                                <p className="text-[11px] text-text-muted mt-0.5">
+                                                    Complete BA pipeline: market, competitive, features, requirements, scoring
+                                                </p>
+                                                <Button
+                                                    size="sm"
+                                                    className="mt-2"
+                                                    onClick={() => handleAnalyze("BUSINESS_ANALYSIS_FULL")}
+                                                    disabled={analyzing !== null}
+                                                >
+                                                    {analyzing === "BUSINESS_ANALYSIS_FULL" ? "Starting..." : "Run Full Analysis"}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </Panel>
+
+                                    <Panel className="p-4 border border-border-subtle">
+                                        <div className="flex items-start gap-3">
+                                            <div className="p-2 rounded-lg bg-status-warning-bg">
+                                                <Zap className="h-4 w-4 text-status-warning-text" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-text-primary">Quick Brainstorm</p>
+                                                <p className="text-[11px] text-text-muted mt-0.5">
+                                                    Fast feature ideation in ~15 minutes
+                                                </p>
+                                                <Button
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    className="mt-2"
+                                                    onClick={() => handleAnalyze("QUICK_FEATURE_BRAINSTORM")}
+                                                    disabled={analyzing !== null}
+                                                >
+                                                    {analyzing === "QUICK_FEATURE_BRAINSTORM" ? "Starting..." : "Quick Brainstorm"}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </Panel>
+
+                                    <Panel className="p-4 border border-border-subtle">
+                                        <div className="flex items-start gap-3">
+                                            <div className="p-2 rounded-lg bg-status-info-bg">
+                                                <Swords className="h-4 w-4 text-status-info-text" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-text-primary">Competitive Deep Dive</p>
+                                                <p className="text-[11px] text-text-muted mt-0.5">
+                                                    In-depth competitive analysis with matrix
+                                                </p>
+                                                <Button
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    className="mt-2"
+                                                    onClick={() => handleAnalyze("COMPETITIVE_DEEP_DIVE")}
+                                                    disabled={analyzing !== null}
+                                                >
+                                                    {analyzing === "COMPETITIVE_DEEP_DIVE" ? "Starting..." : "Deep Dive"}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </Panel>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Feature Distribution */}
+                        {summary && summary.totalFeatures > 0 && (
+                            <div>
+                                <h3 className="text-sm font-semibold text-text-primary mb-3">Feature Distribution</h3>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+                                    {Object.entries(summary.byType)
+                                        .filter(([_, count]) => count > 0)
+                                        .sort(([, a], [, b]) => b - a)
+                                        .map(([type, count]) => (
+                                            <Panel key={type} className="p-3 border border-border-subtle text-center">
+                                                <p className="text-lg font-semibold text-text-primary">{count}</p>
+                                                <p className="text-[10px] text-text-muted uppercase tracking-wider">
+                                                    {type.replace("_", " ")}
+                                                </p>
+                                            </Panel>
+                                        ))
+                                    }
+                                </div>
+                            </div>
                         )}
                     </div>
-                </div>
-
-                {/* Quick Actions */}
-                <div>
-                    <h3 className="text-sm font-semibold text-text-primary mb-3">Quick Actions</h3>
-                    <div className="space-y-3">
-                        <Panel className="p-4 border border-border-subtle">
-                            <div className="flex items-start gap-3">
-                                <div className="p-2 rounded-lg bg-status-success-bg">
-                                    <Play className="h-4 w-4 text-status-success-text" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-text-primary">Full Analysis</p>
-                                    <p className="text-[11px] text-text-muted mt-0.5">
-                                        Complete BA pipeline: market, competitive, features, requirements, scoring
-                                    </p>
-                                    <Button
-                                        size="sm"
-                                        className="mt-2"
-                                        onClick={() => handleAnalyze("BUSINESS_ANALYSIS_FULL")}
-                                        disabled={analyzing !== null}
-                                    >
-                                        {analyzing === "BUSINESS_ANALYSIS_FULL" ? "Starting..." : "Run Full Analysis"}
-                                    </Button>
-                                </div>
-                            </div>
-                        </Panel>
-
-                        <Panel className="p-4 border border-border-subtle">
-                            <div className="flex items-start gap-3">
-                                <div className="p-2 rounded-lg bg-status-warning-bg">
-                                    <Zap className="h-4 w-4 text-status-warning-text" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-text-primary">Quick Brainstorm</p>
-                                    <p className="text-[11px] text-text-muted mt-0.5">
-                                        Fast feature ideation in ~15 minutes
-                                    </p>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="mt-2"
-                                        onClick={() => handleAnalyze("QUICK_FEATURE_BRAINSTORM")}
-                                        disabled={analyzing !== null}
-                                    >
-                                        {analyzing === "QUICK_FEATURE_BRAINSTORM" ? "Starting..." : "Quick Brainstorm"}
-                                    </Button>
-                                </div>
-                            </div>
-                        </Panel>
-
-                        <Panel className="p-4 border border-border-subtle">
-                            <div className="flex items-start gap-3">
-                                <div className="p-2 rounded-lg bg-status-info-bg">
-                                    <Swords className="h-4 w-4 text-status-info-text" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-text-primary">Competitive Deep Dive</p>
-                                    <p className="text-[11px] text-text-muted mt-0.5">
-                                        In-depth competitive analysis with matrix
-                                    </p>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="mt-2"
-                                        onClick={() => handleAnalyze("COMPETITIVE_DEEP_DIVE")}
-                                        disabled={analyzing !== null}
-                                    >
-                                        {analyzing === "COMPETITIVE_DEEP_DIVE" ? "Starting..." : "Deep Dive"}
-                                    </Button>
-                                </div>
-                            </div>
-                        </Panel>
-                    </div>
-                </div>
-            </div>
-
-            {/* Feature Distribution */}
-            {summary && summary.totalFeatures > 0 && (
-                <div>
-                    <h3 className="text-sm font-semibold text-text-primary mb-3">Feature Distribution</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-                        {Object.entries(summary.byType)
-                            .filter(([_, count]) => count > 0)
-                            .sort(([, a], [, b]) => b - a)
-                            .map(([type, count]) => (
-                                <Panel key={type} className="p-3 border border-border-subtle text-center">
-                                    <p className="text-lg font-semibold text-text-primary">{count}</p>
-                                    <p className="text-[10px] text-text-muted uppercase tracking-wider">
-                                        {type.replace("_", " ")}
-                                    </p>
-                                </Panel>
-                            ))
-                        }
-                    </div>
-                </div>
-            )}
-                </div>
                 )}
             </div>
         </div>

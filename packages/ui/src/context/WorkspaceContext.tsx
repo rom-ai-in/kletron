@@ -15,6 +15,9 @@ export type WorkspaceSummary = {
   createdAt?: string | Date;
   updatedAt?: string | Date;
   lastUsed?: string | Date;
+  health?: "healthy" | "missing" | "inaccessible";
+  healthMessage?: string | null;
+  selectable?: boolean;
 };
 
 interface WorkspaceContextValue {
@@ -28,6 +31,8 @@ interface WorkspaceContextValue {
   loading: boolean;
   /** Error message from the last workspace operation (null if none) */
   error: string | null;
+  /** True when at least one workspace is unhealthy */
+  hasWorkspaceHealthIssues: boolean;
   /** Switch the active workspace (calls API, updates local state) */
   switchWorkspace: (id: string) => Promise<void>;
   /** Refresh the workspace list from the server */
@@ -80,6 +85,20 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     void refreshWorkspaces();
   }, [refreshWorkspaces]);
 
+  // Periodic health revalidation for stale/moved workspace paths.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void refreshWorkspaces();
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [refreshWorkspaces]);
+
+  useEffect(() => {
+    const onFocus = () => void refreshWorkspaces();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refreshWorkspaces]);
+
   const switchWorkspace = useCallback(async (id: string) => {
     if (!id || id === activeWorkspaceId) return;
     // Increment counter; only the latest call will apply its result
@@ -91,7 +110,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setActiveWorkspaceId(id);
     try {
       const res = await fetch(`/api/workspaces/${id}/select`, { method: 'POST' });
-      if (!res.ok) throw new Error('Failed to select workspace');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as Record<string, string>).message || (err as Record<string, string>).error || 'Failed to select workspace');
+      }
       if (!mountedRef.current) return;
       // If a newer switch happened while we were waiting, don't touch state
       if (switchCounterRef.current !== myCounter) return;
@@ -142,6 +164,19 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }, [refreshWorkspaces]);
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
+  const hasWorkspaceHealthIssues = workspaces.some((w) => (w.health ?? "healthy") !== "healthy");
+
+  // Auto-recovery: if active workspace is unhealthy, switch to the first healthy workspace.
+  useEffect(() => {
+    if (!activeWorkspaceId || !workspaces.length) return;
+    const current = workspaces.find((w) => w.id === activeWorkspaceId);
+    if (!current) return;
+    const currentHealthy = (current.health ?? "healthy") === "healthy" && current.selectable !== false;
+    if (currentHealthy) return;
+    const nextHealthy = workspaces.find((w) => (w.health ?? "healthy") === "healthy" && w.selectable !== false);
+    if (!nextHealthy || nextHealthy.id === activeWorkspaceId) return;
+    void switchWorkspace(nextHealthy.id);
+  }, [activeWorkspaceId, workspaces, switchWorkspace]);
 
   return (
     <WorkspaceContext.Provider
@@ -151,6 +186,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         activeWorkspace,
         loading,
         error,
+        hasWorkspaceHealthIssues,
         switchWorkspace,
         refreshWorkspaces,
         createWorkspace,

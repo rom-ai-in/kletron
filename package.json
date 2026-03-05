@@ -73,7 +73,6 @@
   },
   "devDependencies": {
     "@langchain/langgraph-cli": "^1.1.11",
-    "@types/diff": "^8.0.0",
     "@types/mongodb": "^4.0.6",
     "@types/node": "^20.6.0",
     "@types/react": "^18.2.35",

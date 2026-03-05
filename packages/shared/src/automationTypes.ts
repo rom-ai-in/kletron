@@ -86,8 +86,8 @@ export interface CronSchedule {
  * Webhook trigger configuration
  */
 export interface WebhookTriggerConfig {
-    /** HMAC signing secret for verifying webhook payloads */
-    secret: string;
+    /** HMAC signing secret for verifying webhook payloads (optional — if omitted, verification is skipped) */
+    secret?: string;
     /** Optional allowlist of IP addresses */
     allowedIps?: string[];
 }
@@ -100,8 +100,8 @@ export interface GitEventTriggerConfig {
     events: GitEventType[];
     /** Optional branch filter (glob patterns, e.g. ["main", "release/*"]) */
     branches?: string[];
-    /** HMAC signing secret for verifying git webhook payloads */
-    secret: string;
+    /** HMAC signing secret for verifying git webhook payloads (optional — if omitted, verification is skipped) */
+    secret?: string;
 }
 
 /**

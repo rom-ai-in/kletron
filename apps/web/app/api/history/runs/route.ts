@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
 import { agentGraphService } from "@numezis/server/services/agentGraphService";
 import { getDb } from "@numezis/server/lib/db";
 import { automationExecutor } from "@numezis/server/services/automationExecutor";
@@ -39,7 +39,16 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+  let workspace = null;
+  try {
+    workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null);
+  } catch (error) {
+    const workspaceError = workspaceErrorToHttp(error);
+    if (workspaceError) {
+      return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+    }
+    throw error;
+  }
   if (!workspace || !workspace._id) {
     return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
   }

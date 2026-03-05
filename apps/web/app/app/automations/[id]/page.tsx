@@ -535,12 +535,12 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-sm font-medium text-text-primary truncate">{stage.name}</div>
-                                        <div className="text-[11px] text-text-muted truncate font-mono mt-0.5">
-                                            {PROVIDER_LABELS[stage.llmProvider] ?? stage.llmProvider}
-                                        </div>
-                                        <div className={`text-[11px] truncate font-mono mt-0.5 ${promptMissing ? "text-status-error-text" : "text-text-muted"}`}>
-                                            {promptMissing ? "Missing prompt" : stage.prompt}
-                                        </div>
+                                            <div className="text-[11px] text-text-muted truncate font-mono mt-0.5">
+                                                {PROVIDER_LABELS[stage.llmProvider] ?? stage.llmProvider}
+                                            </div>
+                                            <div className={`text-[11px] truncate font-mono mt-0.5 ${promptMissing ? "text-status-error-text" : "text-text-muted"}`}>
+                                                {promptMissing ? "Missing prompt" : stage.prompt}
+                                            </div>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className={`text-[10px] px-2 py-0.5 rounded border ${statusStyles[stageStatus] || statusStyles.PENDING}`}>
@@ -1181,11 +1181,10 @@ function TriggerTab({
                             key={opt.id}
                             type="button"
                             onClick={() => setTriggerType(opt.id)}
-                            className={`flex flex-col items-start gap-1 rounded-lg border px-4 py-3 text-left transition-all ${
-                                triggerType === opt.id
-                                    ? "border-text-primary bg-state-selected shadow-sm"
-                                    : "border-border-subtle hover:border-border-strong hover:bg-state-hover"
-                            }`}
+                            className={`flex flex-col items-start gap-1 rounded-lg border px-4 py-3 text-left transition-all ${triggerType === opt.id
+                                ? "border-text-primary bg-state-selected shadow-sm"
+                                : "border-border-subtle hover:border-border-strong hover:bg-state-hover"
+                                }`}
                         >
                             <div className="flex items-center gap-2">
                                 {opt.id === "manual" && <Hand className="h-4 w-4 text-text-muted" />}
@@ -1215,11 +1214,10 @@ function TriggerTab({
                                     onClick={() => {
                                         if (preset.value) setCronExpr(preset.value);
                                     }}
-                                    className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors ${
-                                        (preset.value !== "" && cronExpr === preset.value) || (preset.value === "" && !isPresetCron && cronExpr !== "")
-                                            ? "border-text-primary bg-state-selected text-text-primary"
-                                            : "border-border-subtle text-text-muted hover:border-border-strong"
-                                    }`}
+                                    className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors ${(preset.value !== "" && cronExpr === preset.value) || (preset.value === "" && !isPresetCron && cronExpr !== "")
+                                        ? "border-text-primary bg-state-selected text-text-primary"
+                                        : "border-border-subtle text-text-muted hover:border-border-strong"
+                                        }`}
                                 >
                                     {preset.label}
                                 </button>
@@ -1317,7 +1315,7 @@ function TriggerTab({
                                         <button onClick={() => setShowSecret(!showSecret)} className="rounded-lg p-2 hover:bg-state-hover text-text-muted hover:text-text-primary transition-colors border border-border-subtle" title={showSecret ? "Hide" : "Reveal"}>
                                             {showSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                                         </button>
-                                        <button onClick={() => copyToClipboard(automation.webhookConfig!.secret)} className="rounded-lg p-2 hover:bg-state-hover text-text-muted hover:text-text-primary transition-colors border border-border-subtle" title="Copy secret">
+                                        <button onClick={() => copyToClipboard(automation.webhookConfig!.secret!)} className="rounded-lg p-2 hover:bg-state-hover text-text-muted hover:text-text-primary transition-colors border border-border-subtle" title="Copy secret">
                                             <Copy className="h-3.5 w-3.5" />
                                         </button>
                                     </div>
@@ -1368,11 +1366,10 @@ function TriggerTab({
                                                 ? gitEvents.filter((e) => e !== evt.id)
                                                 : [...gitEvents, evt.id]);
                                         }}
-                                        className={`rounded-lg px-4 py-2 text-sm font-medium border transition-colors ${
-                                            selected
-                                                ? "border-text-primary bg-state-selected text-text-primary"
-                                                : "border-border-subtle text-text-muted hover:border-border-strong"
-                                        }`}
+                                        className={`rounded-lg px-4 py-2 text-sm font-medium border transition-colors ${selected
+                                            ? "border-text-primary bg-state-selected text-text-primary"
+                                            : "border-border-subtle text-text-muted hover:border-border-strong"
+                                            }`}
                                     >
                                         {evt.label}
                                     </button>
@@ -1415,7 +1412,7 @@ function TriggerTab({
                                         <button onClick={() => setShowSecret(!showSecret)} className="rounded-lg p-2 hover:bg-state-hover text-text-muted hover:text-text-primary transition-colors border border-border-subtle" title={showSecret ? "Hide" : "Reveal"}>
                                             {showSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                                         </button>
-                                        <button onClick={() => copyToClipboard(automation.gitEventConfig!.secret)} className="rounded-lg p-2 hover:bg-state-hover text-text-muted hover:text-text-primary transition-colors border border-border-subtle" title="Copy secret">
+                                        <button onClick={() => copyToClipboard(automation.gitEventConfig!.secret!)} className="rounded-lg p-2 hover:bg-state-hover text-text-muted hover:text-text-primary transition-colors border border-border-subtle" title="Copy secret">
                                             <Copy className="h-3.5 w-3.5" />
                                         </button>
                                     </div>
@@ -1493,10 +1490,10 @@ function TriggerInfoPanel({
     const TriggerIcon = automation.triggerType === "schedule"
         ? Timer
         : automation.triggerType === "webhook"
-        ? Webhook
-        : automation.triggerType === "git_event"
-        ? GitBranch
-        : Hand;
+            ? Webhook
+            : automation.triggerType === "git_event"
+                ? GitBranch
+                : Hand;
 
     return (
         <div className="rounded-lg border border-border-subtle bg-bg-surface p-4">
@@ -1583,7 +1580,7 @@ function TriggerInfoPanel({
                                     {showSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                                 </button>
                                 <button
-                                    onClick={() => copyToClipboard(automation.webhookConfig!.secret)}
+                                    onClick={() => copyToClipboard(automation.webhookConfig!.secret!)}
                                     className="rounded p-1 hover:bg-state-hover text-text-muted hover:text-text-primary transition-colors"
                                     title="Copy secret"
                                 >
@@ -1662,7 +1659,7 @@ function TriggerInfoPanel({
                                     {showSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                                 </button>
                                 <button
-                                    onClick={() => copyToClipboard(automation.gitEventConfig!.secret)}
+                                    onClick={() => copyToClipboard(automation.gitEventConfig!.secret!)}
                                     className="rounded p-1 hover:bg-state-hover text-text-muted hover:text-text-primary transition-colors"
                                     title="Copy secret"
                                 >

@@ -4,7 +4,7 @@ import { automationExecutor } from "@numezis/server/services/automationExecutor"
 import { getDb } from "@numezis/server/lib/db";
 import { ObjectId } from "mongodb";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
 
 /**
  * GET /api/runs
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null);
         const workspaceId = workspace?._id?.toString();
         if (!workspaceId) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
@@ -62,6 +62,10 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({ runs: enrichedRuns }, { status: 200 });
     } catch (error) {
+        const workspaceError = workspaceErrorToHttp(error);
+        if (workspaceError) {
+            return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+        }
         console.error("[API /api/runs GET] Error (returning empty list):", error);
         // Fallback to empty list so UI doesn't break if DB is unreachable
         return NextResponse.json({ runs: [] }, { status: 200 });

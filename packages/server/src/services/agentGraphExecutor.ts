@@ -26,6 +26,8 @@ import { getAuditContextConfig } from "@numezis/server/services/auditContextServ
 import { formatAuditContextPrompt, type AuditContext } from "@numezis/shared/documentContext";
 import { agentMemoryService } from "./agentMemoryService";
 import { SafeEditGate } from "./agent/SafeEditGate";
+import { getToolApprovalPolicy } from "./toolApprovalPolicy";
+import { stripThoughtContent } from "./titleSanitizer";
 
 // --- Checkpoint Imports ---
 import { getCheckpointSaver, hasCheckpoint, computeGraphHash, ensureCheckpointIndexes } from "./checkpointService";
@@ -756,15 +758,32 @@ function isAiToolCallEvent(event: AgentEvent): boolean {
  */
 function convertConversationHistoryToMessages(events: AgentEvent[]): BaseMessage[] {
     const messages: BaseMessage[] = [];
+    const sanitizeEventContent = (value?: string) => {
+        const cleaned = stripThoughtContent(value ?? "").trim();
+        if (!cleaned) return "";
+        // Prevent old policy/prompt leakage from re-entering model context
+        if (
+            /\brespond with only the title\b/i.test(cleaned) ||
+            /\bwe need to produce a short chat title\b/i.test(cleaned)
+        ) {
+            return "";
+        }
+        return cleaned;
+    };
     for (const event of events) {
         if (event.kind === "user") {
-            messages.push(new HumanMessage(event.content));
+            const content = sanitizeEventContent(event.content);
+            if (!content) continue;
+            messages.push(new HumanMessage(content));
         } else if (event.kind === "system") {
-            messages.push(new SystemMessage(event.content));
+            const content = sanitizeEventContent(event.content);
+            if (!content) continue;
+            messages.push(new SystemMessage(content));
         } else if (isAiToolCallEvent(event)) {
             // AI message that issues tool calls (new kind="assistant" or legacy kind="tool")
             const toolName = event.toolName || event.name;
-            const msg = new AIMessage(event.content || "");
+            const content = sanitizeEventContent(event.content);
+            const msg = new AIMessage(content || "");
             if (toolName && event.toolArgs) {
                 try {
                     (msg as any).tool_calls = [{
@@ -779,10 +798,13 @@ function convertConversationHistoryToMessages(events: AgentEvent[]): BaseMessage
             messages.push(msg);
         } else if (event.kind === "assistant") {
             // Pure text assistant message (no tool calls)
-            messages.push(new AIMessage(event.content || ""));
+            const content = sanitizeEventContent(event.content);
+            if (!content) continue;
+            messages.push(new AIMessage(content));
         } else if (event.kind === "tool") {
             // Tool result
-            messages.push(new ToolMessage(event.content || "", event.toolCallId || ""));
+            const content = sanitizeEventContent(event.content);
+            messages.push(new ToolMessage(content || "", event.toolCallId || ""));
         }
     }
     return messages;
@@ -961,6 +983,7 @@ export class AgentGraphExecutor {
         const run = await agentGraphRunService.getRun(runId);
         if (!run) throw new Error(`Run ${runId} not found`);
         console.log(`[AgentGraphExecutor] executeRunStreaming: status="${run.status}", graphId=${run.graphId}, workspaceId=${run.workspaceId}`);
+        const runSource = String(run.source ?? "unknown");
 
         const workspaceId = run.workspaceId?.toString() ?? null;
         const workspace = workspaceId
@@ -1204,7 +1227,7 @@ export class AgentGraphExecutor {
                 throw new Error("Subgraph cannot reference the current graph");
             }
             const nodeOrder = getGraphNodeOrder(subGraph);
-            const subRunId = await agentGraphRunService.createRun(graphId, workspace._id?.toString());
+            const subRunId = await agentGraphRunService.createRun(graphId, workspace._id?.toString(), runSource);
             const initialNodeStatuses: Record<string, any> = {};
             for (const node of subGraph.nodes) {
                 initialNodeStatuses[node.id] = "PENDING";
@@ -1593,13 +1616,31 @@ export class AgentGraphExecutor {
                                 return evicted;
                             }
 
-                            if (name === "write_file" || name === "execute_bash" || name === "str_replace_editor") {
+                            const policy = getToolApprovalPolicy({ source: runSource, toolName: name });
+                            console.info(
+                                `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} decision=${policy.decision} reason="${policy.reason}"`
+                            );
+
+                            if (policy.decision !== "auto_approve") {
+                                if (policy.normalizedSource === "automation") {
+                                    console.warn(
+                                        `[ToolApprovalPolicy] Blocking automation tool call runId=${runId} tool=${name} decision=${policy.decision}`
+                                    );
+                                    throw new Error(
+                                        `Tool ${name} requires manual approval and is not allowed in automation runs.`
+                                    );
+                                }
+                                if (policy.decision === "deny") {
+                                    throw new Error(`Tool ${name} is denied by approval policy.`);
+                                }
                                 const descriptionText =
                                     name === "write_file"
                                         ? `Write file ${String(input?.filePath ?? "")}`
                                         : name === "str_replace_editor"
                                         ? `Edit file ${String((input as any)?.filePath ?? (input as any)?.path ?? "")}`
-                                        : `Execute command ${String(input?.command ?? "")}`;
+                                        : name === "execute_bash"
+                                        ? `Execute command ${String(input?.command ?? "")}`
+                                        : `Run ${name}`;
                                 const approvals = (state as any).approvals ?? {};
                                 const pending = Array.isArray(approvals.pending) ? approvals.pending.slice() : [];
                                 const granted = Array.isArray(approvals.granted) ? approvals.granted.slice() : [];
@@ -1637,8 +1678,15 @@ export class AgentGraphExecutor {
                                 });
                                 (state as any).approvals = { ...approvals, pending };
                                 await persistState();
+                                console.info(
+                                    `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} action=queued_for_approval approvalId=${edit.id}`
+                                );
                                 return `Approval required. Proposed ${name} with ID ${edit.id}.`;
                             }
+
+                            console.info(
+                                `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} action=auto_approved_execute`
+                            );
 
                             const result = await invokeBaseTool(baseTool, input);
                             const finalResult = await maybeEvictToolResult({
@@ -1954,8 +2002,10 @@ export class AgentGraphExecutor {
                 } else {
                     // Build extraMessages from prior conversation history for multi-turn
                     const priorHistory = state.conversationHistory ?? [];
+                    // Keep only a recent window to avoid replaying stale/noisy history.
+                    const historyWindow = priorHistory.slice(-60);
                     const extraMessages = priorHistory.length > 0
-                        ? convertConversationHistoryToMessages(priorHistory).filter(m => m.getType() !== "system")
+                        ? convertConversationHistoryToMessages(historyWindow).filter(m => m.getType() !== "system")
                         : undefined;
 
                     // ── Checkpoint / Resume ──────────────────────────────

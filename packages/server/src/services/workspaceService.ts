@@ -5,6 +5,11 @@ import { getDatabase } from "../lib/db";
 import { getConfigSafe } from "../config";
 
 export type WorkspaceStatus = "active" | "archived";
+export type WorkspaceHealthStatus = "healthy" | "missing" | "inaccessible";
+export type WorkspaceErrorCode =
+  | "WORKSPACE_NOT_CONFIGURED"
+  | "WORKSPACE_PATH_MISSING"
+  | "WORKSPACE_PATH_INACCESSIBLE";
 
 export interface Workspace {
   _id?: ObjectId;
@@ -19,6 +24,20 @@ export interface Workspace {
   updatedAt: Date;
   lastUsed?: Date;
 }
+
+export type WorkspaceHealth = {
+  status: WorkspaceHealthStatus;
+  rootPath: string;
+  message?: string;
+};
+
+export type WorkspaceResolutionErrorPayload = {
+  code: WorkspaceErrorCode;
+  message: string;
+  workspaceId?: string | null;
+  rootPath?: string | null;
+  action: "select_or_fix_workspace";
+};
 
 const WORKSPACE_COLLECTION = "workspaces";
 const STATE_COLLECTION = "workspace_state";
@@ -36,6 +55,31 @@ const normalizeRootPath = (rootPath: string) => path.resolve(rootPath.trim());
 function ensureDirectory(rootPath: string) {
   if (!fs.existsSync(rootPath) || !fs.statSync(rootPath).isDirectory()) {
     throw new Error(`Workspace path does not exist or is not a directory: ${rootPath}`);
+  }
+}
+
+export class WorkspaceResolutionError extends Error {
+  code: WorkspaceErrorCode;
+  status: number;
+  payload: WorkspaceResolutionErrorPayload;
+
+  constructor(
+    code: WorkspaceErrorCode,
+    status: number,
+    message: string,
+    details?: { workspaceId?: string | null; rootPath?: string | null }
+  ) {
+    super(message);
+    this.name = "WorkspaceResolutionError";
+    this.code = code;
+    this.status = status;
+    this.payload = {
+      code,
+      message,
+      workspaceId: details?.workspaceId ?? null,
+      rootPath: details?.rootPath ?? null,
+      action: "select_or_fix_workspace",
+    };
   }
 }
 
@@ -62,6 +106,71 @@ function toSummary(workspace: Workspace) {
     updatedAt: workspace.updatedAt,
     lastUsed: workspace.lastUsed,
   };
+}
+
+export function validateWorkspaceRoot(workspace: Workspace): WorkspaceHealth {
+  const rootPath = path.resolve(workspace.rootPath || "");
+  if (!rootPath) {
+    return { status: "missing", rootPath, message: "Workspace path is empty" };
+  }
+  try {
+    if (!fs.existsSync(rootPath)) {
+      return {
+        status: "missing",
+        rootPath,
+        message: `Workspace path does not exist: ${rootPath}`,
+      };
+    }
+    const stat = fs.statSync(rootPath);
+    if (!stat.isDirectory()) {
+      return {
+        status: "missing",
+        rootPath,
+        message: `Workspace path is not a directory: ${rootPath}`,
+      };
+    }
+    fs.accessSync(rootPath, fs.constants.R_OK);
+    return { status: "healthy", rootPath };
+  } catch (error) {
+    return {
+      status: "inaccessible",
+      rootPath,
+      message: (error as Error)?.message ?? "Workspace path is not accessible",
+    };
+  }
+}
+
+export function assertWorkspaceHealthy(workspace: Workspace): Workspace {
+  const health = validateWorkspaceRoot(workspace);
+  if (health.status === "healthy") return workspace;
+  const workspaceId = workspace._id?.toString() ?? null;
+  if (health.status === "missing") {
+    throw new WorkspaceResolutionError(
+      "WORKSPACE_PATH_MISSING",
+      422,
+      health.message ?? "Workspace path is missing",
+      { workspaceId, rootPath: health.rootPath }
+    );
+  }
+  throw new WorkspaceResolutionError(
+    "WORKSPACE_PATH_INACCESSIBLE",
+    422,
+    health.message ?? "Workspace path is inaccessible",
+    { workspaceId, rootPath: health.rootPath }
+  );
+}
+
+export function asWorkspaceResolutionError(error: unknown): WorkspaceResolutionError | null {
+  if (error instanceof WorkspaceResolutionError) return error;
+  return null;
+}
+
+export function workspaceErrorToHttp(
+  error: unknown
+): { status: number; body: WorkspaceResolutionErrorPayload } | null {
+  const resolved = asWorkspaceResolutionError(error);
+  if (!resolved) return null;
+  return { status: resolved.status, body: resolved.payload };
 }
 
 async function getFallbackWorkspace(ownerId?: string): Promise<Workspace | null> {
@@ -185,7 +294,7 @@ export async function createWorkspace(input: {
   const collection = await getWorkspaceCollection();
   const result = await collection.insertOne(workspace as any);
   workspace._id = result.insertedId;
-  await syncConfigJson();
+  await syncConfigJson(input.ownerId);
   return workspace;
 }
 
@@ -202,7 +311,7 @@ export async function updateWorkspace(
     updatedAt: new Date(),
   };
   await collection.updateOne({ _id: new ObjectId(id), ownerId }, { $set: updateDoc });
-  await syncConfigJson();
+  await syncConfigJson(ownerId);
   return getWorkspaceById(id, ownerId);
 }
 
@@ -217,7 +326,7 @@ export async function deleteWorkspace(id: string, ownerId: string): Promise<void
   if (activeId === id) {
     await setActiveWorkspaceId(ownerId, null);
   }
-  await syncConfigJson();
+  await syncConfigJson(ownerId);
 }
 
 export async function setActiveWorkspaceId(ownerId: string, id: string | null): Promise<void> {
@@ -246,7 +355,7 @@ export async function setActiveWorkspaceId(ownerId: string, id: string | null): 
     );
   }
 
-  await syncConfigJson();
+  await syncConfigJson(ownerId);
 }
 
 export async function getActiveWorkspaceId(ownerId: string): Promise<string | null> {
@@ -315,11 +424,24 @@ export async function bootstrapFromLegacyConfig(ownerId: string): Promise<Worksp
   }
 }
 
-export async function syncConfigJson() {
+async function reloadMcpClientBestEffort() {
+  try {
+    const { McpClient } = await import("@numezis/mcp-client/client");
+    await McpClient.reloadInstance();
+  } catch (error) {
+    // Non-fatal: config is already persisted, reload can fail in contexts
+    // where MCP is not running/available.
+    console.warn("[Workspace] MCP reload skipped:", (error as Error)?.message ?? error);
+  }
+}
+
+export async function syncConfigJson(ownerId?: string) {
   try {
     const workspaceList = await listAllWorkspaces();
-    const activeId = workspaceList[0]?._id?.toString() ?? null;
-    const active = activeId ? await getWorkspaceByIdUnsafe(activeId) : null;
+    const activeWorkspace =
+      ownerId
+        ? await getActiveWorkspace(ownerId)
+        : (workspaceList.find((ws) => validateWorkspaceRoot(ws).status === "healthy") ?? workspaceList[0] ?? null);
     const configDir = path.resolve(process.cwd(), "config");
     const configJsonPath = path.join(configDir, "config.json");
 
@@ -337,7 +459,7 @@ export async function syncConfigJson() {
     }
 
     const activeRoot =
-      active?.rootPath ??
+      activeWorkspace?.rootPath ??
       (typeof existingConfig.workingFolder === "string" ? existingConfig.workingFolder : undefined);
     const workspaceRoots = workspaceList.map((ws) => ws.rootPath);
     const rootSet = new Set<string>(workspaceRoots);
@@ -349,12 +471,28 @@ export async function syncConfigJson() {
     existingConfig.workspaceRoots = Array.from(rootSet);
 
     fs.writeFileSync(configJsonPath, JSON.stringify(existingConfig, null, 2), "utf-8");
+    await reloadMcpClientBestEffort();
   } catch (error) {
     console.error("[Workspace] Failed to sync config.json:", error);
   }
 }
 
 export async function resolveWorkspaceFromRequest(
+  request: Request,
+  ownerId: string,
+  body?: Record<string, unknown> | null
+): Promise<Workspace | null> {
+  try {
+    return await resolveWorkspaceFromRequestStrict(request, ownerId, body);
+  } catch (error) {
+    if (asWorkspaceResolutionError(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function resolveWorkspaceFromRequestStrict(
   request: Request,
   ownerId: string,
   body?: Record<string, unknown> | null
@@ -366,29 +504,32 @@ export async function resolveWorkspaceFromRequest(
     typeof body?.workspaceId === "string" ? body.workspaceId : undefined;
 
   const id = bodyId || headerId || queryId;
-  try {
-    if (id) {
-      const workspace = await getWorkspaceById(id, ownerId);
-      return workspace;
-    }
+  let workspace: Workspace | null = null;
+  if (id) {
+    workspace = await getWorkspaceById(id, ownerId);
+  } else {
+    const activeId = await getActiveWorkspaceId(ownerId);
+    workspace = activeId ? await getWorkspaceById(activeId, ownerId) : null;
+  }
+  if (!workspace) return null;
+  return assertWorkspaceHealthy(workspace);
+}
 
-    return await getActiveWorkspace(ownerId);
+export async function resolveWorkspaceFromRequestSafe(
+  request: Request,
+  ownerId: string,
+  body?: Record<string, unknown> | null
+): Promise<
+  | { workspace: Workspace; error: null }
+  | { workspace: null; error: WorkspaceResolutionError | null }
+> {
+  try {
+    const workspace = await resolveWorkspaceFromRequestStrict(request, ownerId, body);
+    return workspace ? { workspace, error: null } : { workspace: null, error: null };
   } catch (error) {
-    console.warn("[Workspace] Falling back to config.json workspace:", (error as Error)?.message ?? error);
-    const config = await getConfigSafe();
-    if (!config?.workingFolder) {
-      return null;
-    }
-    const now = new Date();
     return {
-      _id: new ObjectId("000000000000000000000001"),
-      ownerId,
-      name: path.basename(config.workingFolder),
-      rootPath: path.resolve(config.workingFolder),
-      status: "active",
-      createdAt: now,
-      updatedAt: now,
-      lastUsed: now,
+      workspace: null,
+      error: asWorkspaceResolutionError(error),
     };
   }
 }

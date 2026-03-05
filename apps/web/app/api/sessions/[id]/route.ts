@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
 import { agentGraphService } from "@numezis/server/services/agentGraphService";
+import { stripThoughtContent } from "@numezis/server/services/titleSanitizer";
 
 /**
  * GET /api/sessions/[id] - Get session details with conversation history and graph info.
@@ -28,6 +29,29 @@ export async function GET(request: Request, { params }: { params: { id: string }
       title = title.slice(title.indexOf("]\n\n") + 3).trim() || "Untitled";
     }
 
+    const rawHistory = Array.isArray(run.state?.conversationHistory)
+      ? run.state.conversationHistory
+      : [];
+    const sanitizedConversationHistory = rawHistory
+      .map((event) => {
+        const original = typeof event?.content === "string" ? event.content : "";
+        const cleaned = stripThoughtContent(original).trim();
+        if (
+          !cleaned ||
+          /\brespond with only the title\b/i.test(cleaned) ||
+          /\bwe need to produce a short chat title\b/i.test(cleaned)
+        ) {
+          return { ...event, content: "" };
+        }
+        return cleaned === original ? event : { ...event, content: cleaned };
+      })
+      .filter((event) => {
+        const content = typeof event?.content === "string" ? event.content.trim() : "";
+        if (event?.kind === "assistant" && !content) return false;
+        if (event?.kind === "user" && !content) return false;
+        return true;
+      });
+
     return NextResponse.json({
       id: run._id?.toString(),
       graphId: run.graphId?.toString(),
@@ -42,7 +66,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       tokenUsage: run.tokenUsage ?? null,
       nodeTokenUsage: run.nodeTokenUsage ?? null,
       state: run.state,
-      conversationHistory: run.state?.conversationHistory ?? [],
+      conversationHistory: sanitizedConversationHistory,
       graph: graph ? {
         name: graph.name,
         description: graph.description,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Wrench, Search, Play, Loader2, AlertCircle } from "lucide-react";
 import { Panel, Button, Skeleton, Modal } from "@numezis/ui/components/design-system";
 
@@ -146,6 +147,33 @@ export default function ToolsConfigPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 scrollbar-elegant">
+                <Panel className="mb-4 border-border-subtle p-4">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <h2 className="text-sm font-semibold text-text-primary">Approval Policy</h2>
+                            <p className="mt-1 text-xs text-text-secondary">
+                                Read-only tools auto-run for <span className="font-mono">agent</span> and <span className="font-mono">automation</span>.
+                                Repo writes (<span className="font-mono">write_file</span>) and document write tools require approval.
+                                In automations, approval-required tools are blocked with a fail-fast error.
+                            </p>
+                        </div>
+                        <div className="flex gap-2">
+                            <Link
+                                href="/app/config/graphs"
+                                className="rounded-md border border-border-subtle bg-bg-elevated px-2.5 py-1.5 text-xs text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
+                            >
+                                Configure per-graph tools
+                            </Link>
+                            <Link
+                                href="/app/agent"
+                                className="rounded-md border border-border-subtle bg-bg-elevated px-2.5 py-1.5 text-xs text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
+                            >
+                                Open agent approvals
+                            </Link>
+                        </div>
+                    </div>
+                </Panel>
+
                 {loading ? (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {[1, 2, 3, 4, 5, 6].map((i) => (

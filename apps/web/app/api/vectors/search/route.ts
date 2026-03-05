@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { semanticSearch } from "@numezis/server/services/vectorService";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
 
 export async function POST(request: NextRequest) {
     const auth = await requireAppRouteAuth(request);
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Query is required" }, { status: 400 });
         }
 
-        const workspace = await resolveWorkspaceFromRequest(request, auth.userId, body);
+        const workspace = await resolveWorkspaceFromRequestStrict(request, auth.userId, body);
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
@@ -34,6 +34,10 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({ results });
     } catch (error) {
+        const workspaceError = workspaceErrorToHttp(error);
+        if (workspaceError) {
+            return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+        }
         console.error("Semantic search preview failed:", error);
         return NextResponse.json(
             { error: error instanceof Error ? error.message : "Search failed" },

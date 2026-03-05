@@ -127,7 +127,8 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ filePath }) => {
             </div>
 
             {/* Styles for document content */}
-            <style jsx global>{`
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .document-content {
                     background: var(--color-bg-app);
                     color: var(--color-text-primary);
@@ -186,7 +187,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ filePath }) => {
                     font-style: italic;
                     margin-top: 1.5rem;
                 }
-            `}</style>
+            ` }} />
         </div>
     );
 };

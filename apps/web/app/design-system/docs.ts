@@ -15,7 +15,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         id: "button",
         name: "Button",
         summary: "Primary action control with variants, sizes, and loading state.",
-        usage: `<Button variant="primary" size="md">Save changes</Button>` ,
+        usage: `<Button variant="primary" size="md">Save changes</Button>`,
         props: [
             "variant: primary | secondary | ghost | danger",
             "size: xs | sm | md | lg | icon",
@@ -37,7 +37,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         id: "badge",
         name: "Badge",
         summary: "Compact label for status, metadata, and small counts.",
-        usage: `<Badge variant="success">Completed</Badge>` ,
+        usage: `<Badge variant="success">Completed</Badge>`,
         props: [
             "variant: default | success | error | warning | info | pending | running | paused | completed | failed",
             "size: xs | sm | md",
@@ -158,7 +158,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         id: "checkboxGroup",
         name: "CheckboxGroup",
         summary: "Group of checkbox items with shared state.",
-        usage: `<CheckboxGroup defaultValue={["alerts"]}>...</CheckboxGroup>` ,
+        usage: `<CheckboxGroup defaultValue={["alerts"]}>...</CheckboxGroup>`,
         props: ["value?: string[]", "defaultValue?: string[]", "onChange?: (values) => void", "direction?: vertical | horizontal"],
         tokens: ["spacing.gaps"],
         states: ["default", "disabled"],
@@ -176,7 +176,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         id: "radioGroup",
         name: "RadioGroup",
         summary: "Single-select group with shared name and value.",
-        usage: `<RadioGroup name="plan" defaultValue="weekly">...</RadioGroup>` ,
+        usage: `<RadioGroup name="plan" defaultValue="weekly">...</RadioGroup>`,
         props: ["name: string", "value?: string", "defaultValue?: string", "onChange?: (value) => void"],
         tokens: ["spacing.gaps"],
         states: ["default", "disabled"],
@@ -194,7 +194,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         id: "tabs",
         name: "Tabs",
         summary: "Tabs container with controlled or uncontrolled state.",
-        usage: `<Tabs defaultValue="overview">...</Tabs>` ,
+        usage: `<Tabs defaultValue="overview">...</Tabs>`,
         props: ["defaultValue: string", "value?: string", "onValueChange?: (value) => void", "variant?: default | pills | underline | segment"],
         tokens: ["colors.states", "componentRadius.card"],
         variants: ["default", "pills", "underline", "segment"],
@@ -230,7 +230,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         id: "tooltip",
         name: "Tooltip",
         summary: "Hover tooltip for small explanatory text.",
-        usage: `<Tooltip content="Help text"><Button>Hover</Button></Tooltip>` ,
+        usage: `<Tooltip content="Help text"><Button>Hover</Button></Tooltip>`,
         props: ["content: string", "position?: top | bottom | left | right"],
         tokens: ["componentRadius.tooltip", "componentShadows.tooltip"],
         states: ["visible", "hidden"],
@@ -252,7 +252,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         id: "modal",
         name: "Modal",
         summary: "Overlay dialog for short tasks and confirmations.",
-        usage: `<Modal open={open} onClose={close} title="Modal">...</Modal>` ,
+        usage: `<Modal open={open} onClose={close} title="Modal">...</Modal>`,
         props: ["open: boolean", "onClose: () => void", "title?: string", "subtitle?: string"],
         tokens: ["componentRadius.modal", "componentShadows.modal", "zIndex.modal"],
         states: ["open", "closed"],
@@ -261,7 +261,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         id: "panel",
         name: "Panel",
         summary: "Container for grouped settings and content blocks.",
-        usage: `<Panel title="Panel" headerAction={<Button />}>...</Panel>` ,
+        usage: `<Panel title="Panel" headerAction={<Button />}>...</Panel>`,
         props: ["title?: string", "headerAction?: ReactNode", "variant?: default | elevated | outlined"],
         tokens: ["componentRadius.panel", "componentShadows.card"],
         variants: ["default", "elevated", "outlined"],
@@ -342,7 +342,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         id: "avatarGroup",
         name: "AvatarGroup",
         summary: "Stacked avatars with max overflow count.",
-        usage: `<AvatarGroup max={4}>...</AvatarGroup>` ,
+        usage: `<AvatarGroup max={4}>...</AvatarGroup>`,
         props: ["max?: number"],
         tokens: ["componentRadius.avatar"],
         states: ["default", "overflow"],
@@ -406,7 +406,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         id: "breadcrumbOverridesProvider",
         name: "BreadcrumbOverridesProvider",
         summary: "Provide custom breadcrumb labels by path.",
-        usage: `<BreadcrumbOverridesProvider>...</BreadcrumbOverridesProvider>` ,
+        usage: `<BreadcrumbOverridesProvider>...</BreadcrumbOverridesProvider>`,
         props: ["value: { labelsByHref: Record<string, string> }"],
         tokens: ["colors.text"],
         states: ["overridden"],
@@ -684,7 +684,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         tokens: ["colors.status", "colors.border.subtle", "colors.text.muted"],
         states: ["pending", "running", "success", "error", "selected"],
     },
-    activityBar: {
+    activityBarIde: {
         id: "activityBar",
         name: "ActivityBar",
         summary: "VS Code-style vertical icon rail for switching between sidebar panels (Explorer, Search, Git, Tasks, etc.).",
@@ -720,7 +720,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         tokens: ["colors.diffEditor", "colors.status.success", "colors.status.error"],
         states: ["side-by-side", "inline"],
     },
-    editorTabs: {
+    editorTabsIde: {
         id: "editorTabs",
         name: "EditorTabs",
         summary: "Tab bar for open files with modified indicators, close buttons, and pin support.",
@@ -729,7 +729,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         tokens: ["colors.tab", "colors.border"],
         states: ["active", "inactive", "modified", "pinned"],
     },
-    commandPalette: {
+    commandPaletteIde: {
         id: "commandPalette",
         name: "CommandPalette",
         summary: "Spotlight-style command palette for quick access to all commands, files, and actions.",
@@ -738,7 +738,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         tokens: ["colors.bg.surface", "colors.border.strong", "shadows.2xl"],
         states: ["open", "searching", "empty"],
     },
-    statusBar: {
+    statusBarIde: {
         id: "statusBar",
         name: "StatusBar",
         summary: "Bottom status bar showing git branch, problems, language, encoding, and active LLM model.",
@@ -756,7 +756,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         tokens: ["colors.bg.surface", "colors.status", "colors.border.subtle"],
         states: ["idle", "loading", "committing", "generating-message"],
     },
-    contextChips: {
+    contextChipsIde: {
         id: "contextChips",
         name: "ContextChips",
         summary: "Dismissible context chips for @file, @folder, @model mentions attached to the chat input.",
@@ -765,7 +765,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         tokens: ["colors.status", "colors.border.subtle"],
         variants: ["file", "folder", "agent", "model", "tag", "mention"],
     },
-    thinkingBubble: {
+    thinkingBubbleIde: {
         id: "thinkingBubble",
         name: "ThinkingBubble",
         summary: "Animated indicator for AI agent thinking/processing state with expandable content.",

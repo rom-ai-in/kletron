@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { refreshIndexStatus } from "@numezis/server/services/indexerService";
 import { getSchedulerStatus } from "@numezis/server/services/autoIndexScheduler";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
 
 /**
  * GET /api/vectors — Lightweight index status endpoint.
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
             });
         }
 
-        const workspace = await resolveWorkspaceFromRequest(request, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequestStrict(request, auth.userId, null);
         if (!workspace || !workspace._id) {
             status = 400;
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
@@ -55,6 +55,11 @@ export async function GET(request: Request) {
             schedulerInterval: scheduler.intervalMs
         });
     } catch (error) {
+        const workspaceError = workspaceErrorToHttp(error);
+        if (workspaceError) {
+            status = workspaceError.status;
+            return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+        }
         status = 500;
         return NextResponse.json(
             { error: "Failed to get index status" },

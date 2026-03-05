@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { clearVectors } from "@numezis/server/services/vectorService";
 import { invalidateRefreshCache } from "@numezis/server/services/indexerService";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
 
 export async function DELETE(request: Request) {
     const auth = await requireAppRouteAuth(request);
@@ -14,7 +14,7 @@ export async function DELETE(request: Request) {
     }
 
     try {
-        const workspace = await resolveWorkspaceFromRequest(request, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequestStrict(request, auth.userId, null);
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
@@ -25,6 +25,10 @@ export async function DELETE(request: Request) {
             message: "All vectors cleared for current repository"
         });
     } catch (error) {
+        const workspaceError = workspaceErrorToHttp(error);
+        if (workspaceError) {
+            return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+        }
         return NextResponse.json(
             { error: "Failed to clear vectors" },
             { status: 500 }

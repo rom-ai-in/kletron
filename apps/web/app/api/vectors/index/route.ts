@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { startIndexing } from "@numezis/server/services/indexerService";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
 
 export async function POST(request: NextRequest) {
     const auth = await requireAppRouteAuth(request);
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const workspace = await resolveWorkspaceFromRequest(request, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequestStrict(request, auth.userId, null);
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
@@ -37,6 +37,10 @@ export async function POST(request: NextRequest) {
             message: "Indexing started in background"
         });
     } catch (error) {
+        const workspaceError = workspaceErrorToHttp(error);
+        if (workspaceError) {
+            return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+        }
         return NextResponse.json(
             { error: error instanceof Error ? error.message : "Failed to start indexing" },
             { status: 500 }

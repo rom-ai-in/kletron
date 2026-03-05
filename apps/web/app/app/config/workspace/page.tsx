@@ -128,6 +128,7 @@ export default function WorkspaceConfigPage() {
                                 )}
                                 {workspaces.map((workspace) => {
                                     const isActive = workspace.id === activeWorkspaceId;
+                                    const isHealthy = (workspace.health ?? "healthy") === "healthy" && workspace.selectable !== false;
                                     return (
                                         <div
                                             key={workspace.id}
@@ -139,6 +140,11 @@ export default function WorkspaceConfigPage() {
                                                     {workspace.name}
                                                 </div>
                                                 <div className="text-xs text-text-muted truncate">{workspace.rootPath}</div>
+                                                {!isHealthy && (
+                                                    <div className="mt-1 text-[11px] text-status-warning-text">
+                                                        {workspace.health === "missing" ? "Path missing" : "Path inaccessible"} - {workspace.healthMessage || "Repair or remove this workspace"}
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 {isActive ? (
@@ -147,7 +153,7 @@ export default function WorkspaceConfigPage() {
                                                     <Button
                                                         variant="secondary"
                                                         onClick={() => selectWorkspace(workspace.id)}
-                                                        disabled={saving}
+                                                        disabled={saving || !isHealthy}
                                                         size="sm"
                                                     >
                                                         Select

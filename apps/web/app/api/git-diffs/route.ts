@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import path from "node:path";
 import { getDiffsForWindow } from '@numezis/server/services/gitLocalService';
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
 import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 
 export async function GET(request: Request) {
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     }
 
     try {
-        const workspace = await resolveWorkspaceFromRequest(request, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequestStrict(request, auth.userId, null);
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
@@ -52,6 +52,10 @@ export async function GET(request: Request) {
             return NextResponse.json({ diffs, granularity });
         });
     } catch (e: any) {
+        const workspaceError = workspaceErrorToHttp(e);
+        if (workspaceError) {
+            return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+        }
         console.error('Git diff API error:', e);
         return NextResponse.json({ error: e.message }, { status: 500 });
     }
