@@ -17,7 +17,7 @@ import type {
     AutomationRun,
 } from "@numezis/shared/automationTypes";
 import type { AgentWorkflowAbortReason } from "@numezis/shared/types";
-import type { Claim as WorkflowClaim, Task as WorkflowTask, AgentWorkflowResult } from "@numezis/shared/types";
+import type { Claim as WorkflowClaim, Task as WorkflowTask, AgentWorkflowResult, AgentEvent } from "@numezis/shared/types";
 import { computeNextRun } from "@numezis/shared/cronUtils";
 
 const COLLECTION_NAME = "audit_chains"; // Legacy collection name - kept for backward compatibility
@@ -165,6 +165,111 @@ function detectToolExecutionBlockers(workflowResult: AgentWorkflowResult, report
     }
 
     return null;
+}
+
+function parseJsonObject(raw?: string): Record<string, unknown> | null {
+    if (!raw || typeof raw !== "string") return null;
+    try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+    } catch {
+        return null;
+    }
+}
+
+function collectAuditEvidence(workflowResult: AgentWorkflowResult) {
+    const events = Array.isArray(workflowResult.eventStream)
+        ? (workflowResult.eventStream as AgentEvent[])
+        : [];
+    const toolEvents = events.filter((e) => e.kind === "tool");
+
+    let fileReadOps = 0;
+    let searchOps = 0;
+    let structureOps = 0;
+    let toolErrors = 0;
+    const toolsUsed = new Set<string>();
+    const filesRead = new Set<string>();
+
+    for (const event of toolEvents) {
+        const toolName = String(event.toolName || event.name || "").trim();
+        if (!toolName) continue;
+        toolsUsed.add(toolName);
+
+        const lower = toolName.toLowerCase();
+        if (/^error:/i.test((event.content || "").trim()) || /please fix your mistakes/i.test(event.content || "")) {
+            toolErrors += 1;
+        }
+
+        if (lower === "read_file" || lower === "read_file_range") {
+            fileReadOps += 1;
+            const args = parseJsonObject(event.toolArgs);
+            const filePath = typeof args?.filePath === "string"
+                ? args.filePath
+                : typeof args?.path === "string"
+                    ? args.path
+                    : "";
+            if (filePath) filesRead.add(filePath);
+        }
+
+        if (
+            lower === "search_code" ||
+            lower === "semantic_code_search" ||
+            lower === "git_grep" ||
+            lower === "structural_search" ||
+            lower === "symbols_list" ||
+            lower === "find_symbol"
+        ) {
+            searchOps += 1;
+        }
+
+        if (lower === "list_files" || lower === "describe_structure" || lower === "repo_metrics") {
+            structureOps += 1;
+        }
+    }
+
+    return {
+        toolCalls: toolEvents.length,
+        toolErrors,
+        fileReadOps,
+        filesReadUnique: filesRead.size,
+        searchOps,
+        structureOps,
+        toolsUsed: Array.from(toolsUsed),
+    };
+}
+
+function evaluateZeroFindingEvidenceGate(params: {
+    findingsCount: number;
+    claimsCount: number;
+    tasksCount: number;
+    workflowResult: AgentWorkflowResult;
+}): string | null {
+    if (params.findingsCount > 0) return null;
+
+    const evidence = collectAuditEvidence(params.workflowResult);
+    const checks = [
+        evidence.toolCalls >= 8,
+        evidence.structureOps >= 1,
+        evidence.searchOps >= 2,
+        evidence.fileReadOps >= 3 || evidence.filesReadUnique >= 3,
+        evidence.toolErrors <= Math.floor(Math.max(evidence.toolCalls, 1) * 0.4),
+    ];
+
+    const hasReasonableSubstance = params.claimsCount >= 3 || params.tasksCount >= 2;
+    const passed = checks.every(Boolean) && hasReasonableSubstance;
+    if (passed) return null;
+
+    return [
+        "Insufficient audit evidence for a zero-findings conclusion.",
+        `toolCalls=${evidence.toolCalls}`,
+        `toolErrors=${evidence.toolErrors}`,
+        `structureOps=${evidence.structureOps}`,
+        `searchOps=${evidence.searchOps}`,
+        `fileReadOps=${evidence.fileReadOps}`,
+        `filesReadUnique=${evidence.filesReadUnique}`,
+        `claims=${params.claimsCount}`,
+        `tasks=${params.tasksCount}`,
+    ].join(" ");
 }
 
 const toObjectId = (id?: string): ObjectId | undefined => {
@@ -919,6 +1024,27 @@ export class AutomationExecutor {
                 };
             }
 
+            const evidenceGateError = evaluateZeroFindingEvidenceGate({
+                findingsCount: findings.length,
+                claimsCount: claims.length,
+                tasksCount: tasks.length,
+                workflowResult,
+            });
+            if (evidenceGateError) {
+                return {
+                    stageId: stage.id,
+                    stageName: stage.name,
+                    sessionId: sessionIdForLogs,
+                    success: false,
+                    error: evidenceGateError,
+                    findings: [],
+                    claims,
+                    tasks,
+                    rawOutput,
+                    duration: Date.now() - startTime,
+                };
+            }
+
             return {
                 stageId: stage.id,
                 stageName: stage.name,
@@ -1038,6 +1164,11 @@ export class AutomationExecutor {
             "- A summary of what was analyzed",
             "- A numbered list of findings with file paths, line numbers, severity, description, and fix",
             "- If no issues are found after thorough analysis, explain what was checked and why it's clean",
+            "- If findings count is 0, include an explicit 'Audit Evidence' section listing tools used and files inspected",
+            "",
+            "Mandatory scope hygiene:",
+            "- Exclude noise directories: venv, .venv, node_modules, __pycache__, site-packages, build, dist, .git",
+            "- Focus on project source/config/tests first",
             "",
             "Do NOT give up after a single tool call. Iterate until you have examined the codebase in depth.",
         ].join("\n"));

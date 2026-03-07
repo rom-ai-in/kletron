@@ -10,6 +10,8 @@ export interface SessionPendingEdit {
     status: string;
     createdAt?: string;
     description?: string;
+    lastError?: string;
+    lastAttemptAt?: string;
 }
 
 export interface UseSessionEditsOptions {
@@ -102,11 +104,15 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
     const approveEdit = useCallback(async (editId: string) => {
         if (!sessionId) return;
         try {
-            await fetch(`/api/sessions/${sessionId}/edits/approve`, {
+            const res = await fetch(`/api/sessions/${sessionId}/edits/approve`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ editId }),
             });
+            if (!res.ok) {
+                const payload = await res.json().catch(() => ({}));
+                throw new Error(payload?.executionResult?.message || payload?.error || "Approval execution failed");
+            }
             await fetchEdits();
         } catch (e) {
             console.error("[useSessionEdits] Approve failed:", e);
@@ -131,11 +137,15 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
         if (!sessionId) return;
         setApprovingAll(true);
         try {
-            await fetch(`/api/sessions/${sessionId}/edits/approve`, {
+            const res = await fetch(`/api/sessions/${sessionId}/edits/approve`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "all" }),
             });
+            if (!res.ok) {
+                const payload = await res.json().catch(() => ({}));
+                throw new Error(payload?.error || "Bulk approval execution failed");
+            }
             await fetchEdits();
         } catch (e) {
             console.error("[useSessionEdits] Approve all failed:", e);

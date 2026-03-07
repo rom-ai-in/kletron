@@ -27,7 +27,7 @@ import { formatAuditContextPrompt, type AuditContext } from "@numezis/shared/doc
 import { agentMemoryService } from "./agentMemoryService";
 import { SafeEditGate } from "./agent/SafeEditGate";
 import { getToolApprovalPolicy } from "./toolApprovalPolicy";
-import { stripThoughtContent } from "./titleSanitizer";
+import { sanitizeAssistantVisibleContent, stripThoughtContent } from "./titleSanitizer";
 
 // --- Checkpoint Imports ---
 import { getCheckpointSaver, hasCheckpoint, computeGraphHash, ensureCheckpointIndexes } from "./checkpointService";
@@ -437,6 +437,22 @@ function createAgentEvent(
     let thoughts: string[] | undefined;
 
     if (kind === "assistant" && !hasToolCalls) {
+        content = sanitizeAssistantVisibleContent(content);
+        if (!content) {
+            return {
+                id: eventId,
+                phaseId,
+                phaseLabel,
+                kind,
+                role,
+                name: guessToolName(message),
+                toolCallId: extractToolCallId(message),
+                content: "",
+                toolNote,
+                toolArgs,
+                timestamp: new Date().toISOString(),
+            };
+        }
         // 1. Structured thinking from the LLM API (Claude thinking blocks, GPT reasoning, <think> tags)
         const structured = extractThinkingFromMessage(message);
         if (structured.length > 0) {
@@ -759,7 +775,7 @@ function isAiToolCallEvent(event: AgentEvent): boolean {
 function convertConversationHistoryToMessages(events: AgentEvent[]): BaseMessage[] {
     const messages: BaseMessage[] = [];
     const sanitizeEventContent = (value?: string) => {
-        const cleaned = stripThoughtContent(value ?? "").trim();
+        const cleaned = sanitizeAssistantVisibleContent(stripThoughtContent(value ?? "")).trim();
         if (!cleaned) return "";
         // Prevent old policy/prompt leakage from re-entering model context
         if (

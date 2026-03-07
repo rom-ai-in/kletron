@@ -1,5 +1,10 @@
 import { closeDb, getDb } from "../packages/server/src/lib/db";
-import { sanitizeTitle, stripThoughtContent } from "../packages/server/src/services/titleSanitizer";
+import {
+  sanitizeAssistantVisibleContent,
+  sanitizeTitle,
+  stripSystemPrefix,
+  stripThoughtContent,
+} from "../packages/server/src/services/titleSanitizer";
 
 type AgentEventLike = {
   kind?: string;
@@ -29,7 +34,10 @@ const getArgValue = (name: string): string | null => {
   return process.argv[idx + 1] ?? null;
 };
 
-const TITLE_LEAK_RE = /\brespond with only the title\b|\bwe need to produce a short chat title\b|<think>/i;
+const TITLE_LEAK_RE =
+  /\brespond with only the title\b|\bwe need to produce a short chat title\b|\bnow,\s*the user wants to know\b|^we need to (output|produce|provide)\b|<think>/i;
+const MESSAGE_LEAK_RE =
+  /\bgiven the pattern\b|\bapproval required\b|\bwe can proceed to output a final answer\b|\bthe user asked to\b|\bwe must not make further tool calls\b|\bnow,\s*the user wants to know\b|\bprovide (a )?structured analysis\b|\bproceed to final\b|\bthis should satisfy the user request\b/i;
 
 async function main() {
   const apply = hasFlag("--apply");
@@ -67,10 +75,12 @@ async function main() {
     for (const event of sourceHistory) {
       const original = typeof event?.content === "string" ? event.content : "";
       const stripped = stripThoughtContent(original).trim();
+      const sanitized = sanitizeAssistantVisibleContent(stripped).trim();
       const forcedBlank =
-        !stripped ||
-        /\brespond with only the title\b/i.test(stripped) ||
-        /\bwe need to produce a short chat title\b/i.test(stripped);
+        !sanitized ||
+        /\brespond with only the title\b/i.test(sanitized) ||
+        /\bwe need to produce a short chat title\b/i.test(sanitized) ||
+        MESSAGE_LEAK_RE.test(sanitized);
 
       if (forcedBlank && (event?.kind === "assistant" || event?.kind === "user")) {
         removedMessages += 1;
@@ -78,10 +88,10 @@ async function main() {
         continue;
       }
 
-      if (typeof event?.content === "string" && stripped !== original) {
+      if (typeof event?.content === "string" && sanitized !== original) {
         cleanedMessages += 1;
         runChanged = true;
-        cleanedHistory.push({ ...event, content: stripped });
+        cleanedHistory.push({ ...event, content: sanitized });
       } else {
         cleanedHistory.push(event);
       }
@@ -90,7 +100,8 @@ async function main() {
     const rawTitle = typeof run.title === "string" ? run.title.trim() : "";
     let nextTitle: string | undefined;
     if (rawTitle) {
-      const sanitized = sanitizeTitle(rawTitle);
+      const titleInput = stripSystemPrefix(stripThoughtContent(rawTitle)).trim();
+      const sanitized = sanitizeTitle(titleInput);
       if (sanitized && sanitized !== rawTitle) {
         nextTitle = sanitized;
         cleanedTitles += 1;

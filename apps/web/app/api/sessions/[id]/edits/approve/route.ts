@@ -126,20 +126,32 @@ export async function POST(request: Request, { params }: { params: { id: string 
         return gateEdit ? safeEditGate.approveEdit(edit.id) : edit;
       });
 
+      const pending = Array.isArray(run.state?.approvals?.pending) ? [...run.state.approvals.pending as any[]] : [];
       const granted = Array.isArray(run.state?.approvals?.granted) ? [...run.state.approvals.granted as any[]] : [];
       for (const edit of edits) {
         let executionResult: any;
         try { executionResult = await executeEdit(edit); } catch (err) {
           executionResult = { executed: false, message: (err as Error)?.message ?? "Execution failed" };
         }
-        granted.push({
-          id: edit.id, toolName: edit.toolName, args: edit.args,
-          status: "approved", executedAt: new Date().toISOString(),
-          result: executionResult.result ?? executionResult.message ?? "",
-          evictedPath: executionResult.evictedPath ?? undefined,
-        });
+        const idx = pending.findIndex((p: any) => p?.id === edit.id);
+        if (executionResult?.executed) {
+          if (idx >= 0) pending.splice(idx, 1);
+          granted.push({
+            id: edit.id, toolName: edit.toolName, args: edit.args,
+            status: "approved", executedAt: new Date().toISOString(),
+            result: executionResult.result ?? executionResult.message ?? "",
+            evictedPath: executionResult.evictedPath ?? undefined,
+          });
+        } else if (idx >= 0) {
+          pending[idx] = {
+            ...pending[idx],
+            status: "pending",
+            lastError: executionResult?.message ?? "Execution failed",
+            lastAttemptAt: new Date().toISOString(),
+          };
+        }
       }
-      const approvals = await updateRunApprovals({ pending: [], granted });
+      const approvals = await updateRunApprovals({ pending, granted });
       return NextResponse.json({ approved: edits, approvals });
     }
 
@@ -160,16 +172,29 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
 
     const pending = Array.isArray(run.state?.approvals?.pending)
-      ? (run.state.approvals.pending as any[]).filter((p: any) => p?.id !== editId) : [];
+      ? [...(run.state.approvals.pending as any[])] : [];
     const granted = Array.isArray(run.state?.approvals?.granted) ? [...run.state.approvals.granted as any[]] : [];
-    granted.push({
-      id: edit.id, toolName: edit.toolName, args: edit.args,
-      status: "approved", executedAt: new Date().toISOString(),
-      result: executionResult.result ?? executionResult.message ?? "",
-      evictedPath: executionResult.evictedPath ?? undefined,
-    });
+    const pendingIdx = pending.findIndex((p: any) => p?.id === editId);
+    if (executionResult?.executed) {
+      if (pendingIdx >= 0) pending.splice(pendingIdx, 1);
+      granted.push({
+        id: edit.id, toolName: edit.toolName, args: edit.args,
+        status: "approved", executedAt: new Date().toISOString(),
+        result: executionResult.result ?? executionResult.message ?? "",
+        evictedPath: executionResult.evictedPath ?? undefined,
+      });
+    } else if (pendingIdx >= 0) {
+      pending[pendingIdx] = {
+        ...pending[pendingIdx],
+        status: "pending",
+        lastError: executionResult?.message ?? "Execution failed",
+        lastAttemptAt: new Date().toISOString(),
+      };
+    }
     const approvals = await updateRunApprovals({ pending, granted });
-    return NextResponse.json({ approved: edit, executionResult, approvals });
+    return NextResponse.json({ approved: executionResult?.executed ? edit : null, executionResult, approvals }, {
+      status: executionResult?.executed ? 200 : 502,
+    });
   } catch (error) {
     return NextResponse.json({ error: (error as Error)?.message ?? "Approval failed" }, { status: 500 });
   }

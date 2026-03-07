@@ -7,6 +7,7 @@ import { agentGraphRunService } from "@numezis/server/services/agentGraphRunServ
 import { getGraphNodeOrder, buildInitialState } from "@numezis/server/services/agentGraphRuntime";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
+import { heuristicTitle, sanitizeTitle, stripSystemPrefix, stripThoughtContent } from "@numezis/server/services/titleSanitizer";
 
 const textEncoder = new TextEncoder();
 
@@ -253,10 +254,24 @@ export async function GET(request: Request) {
     // Helper: strip injected [System: ...] personality prefix from titles
     const cleanTitle = (raw?: string) => {
       if (!raw) return "Untitled";
-      if (raw.startsWith("[System:") && raw.indexOf("]\n\n") !== -1) {
-        return raw.slice(raw.indexOf("]\n\n") + 3).trim() || "Untitled";
+      const stripped = stripSystemPrefix(raw);
+      const noThoughts = stripThoughtContent(stripped).trim();
+      const sanitized = sanitizeTitle(noThoughts);
+      if (sanitized) {
+        if (/\bwe need to\b|<think>|\bfinal answer\b/i.test(raw)) {
+          // #region agent log
+          fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:'sessions-list',hypothesisId:'H1',location:'apps/web/app/api/sessions/route.ts:cleanTitle',message:'Title sanitized directly',data:{raw:raw.slice(0,120),sanitized},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+        }
+        return sanitized;
       }
-      return raw;
+      const fallback = heuristicTitle(noThoughts || stripped);
+      if (/\bwe need to\b|<think>|\bfinal answer\b/i.test(raw) || /\bwe need to\b/i.test(fallback)) {
+        // #region agent log
+        fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:'sessions-list',hypothesisId:'H1',location:'apps/web/app/api/sessions/route.ts:cleanTitle',message:'Title fallback used',data:{raw:raw.slice(0,120),noThoughts:noThoughts.slice(0,120),fallback},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
+      return fallback || "Untitled";
     };
 
     const sessions = runs.map((run) => ({
@@ -271,6 +286,10 @@ export async function GET(request: Request) {
       endedAt: run.endedAt?.toISOString?.() ?? null,
       tokenUsage: run.tokenUsage ?? null,
     }));
+
+    // #region agent log
+    fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:'sessions-list',hypothesisId:'H6',location:'apps/web/app/api/sessions/route.ts:GET',message:'Sessions list emitted',data:{count:sessions.length,suspiciousCount:sessions.filter((s)=>/\bwe need to\b|\bfinal answer\b|<think>/i.test(String(s.title ?? ''))).length},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
     return NextResponse.json(sessions);
   } catch (error) {

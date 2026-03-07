@@ -96,10 +96,61 @@ function extractThoughtsFromContent(content: string): { content: string; thought
     return { content: cleaned, thoughts };
 }
 
+function sanitizeVisibleAssistantContent(content: string): string {
+    if (!content) return "";
+    const paragraphs = content
+        .replace(/<think>[\s\S]*?<\/think>/gi, " ")
+        .split(/\n{2,}/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    if (!paragraphs.length) return "";
+
+    const metaPatterns = [
+        /\bwe must obey policy\b/i,
+        /\bfinal answer in ["']?final["']? channel\b/i,
+        /\bwe should provide a thorough analysis\b/i,
+        /\bwe need to include the analysis and final answer\b/i,
+        /\bthe user wrote\b/i,
+        /\bnow,\s*we need to determine\b/i,
+        /\bnow,\s*final answer\b/i,
+        /\bgiven the pattern\b/i,
+        /\bapproval required\b/i,
+        /\bwe can proceed to output a final answer\b/i,
+        /\bthe user asked to\b/i,
+        /\bwe must not make further tool calls\b/i,
+        /\bcopy-?paste exactly\b/i,
+        /\bthis should satisfy the user request\b/i,
+        /\bnow,\s*the user wants to know\b/i,
+        /\bprovide (a )?structured analysis\b/i,
+        /\bproceed to final\b/i,
+    ];
+
+    const seen = new Set<string>();
+    const kept: string[] = [];
+    for (const paragraph of paragraphs) {
+        if (metaPatterns.some((pattern) => pattern.test(paragraph))) {
+            continue;
+        }
+        const key = paragraph.replace(/\s+/g, " ").trim().toLowerCase();
+        if (key.length >= 80 && seen.has(key)) continue;
+        if (key.length >= 80) seen.add(key);
+        kept.push(paragraph);
+    }
+    return kept.join("\n\n").trim();
+}
+
 export function normalizeMessage(msg: Message): Message {
     if (msg.role !== 'assistant' || !msg.content) return msg;
+    const visibleContent = sanitizeVisibleAssistantContent(msg.content);
+    if (!visibleContent) {
+        return {
+            ...msg,
+            content: "",
+            thoughts: msg.thoughts ?? [],
+        };
+    }
     if (msg.thoughts && msg.thoughts.length > 0) return msg;
-    const extracted = extractThoughtsFromContent(msg.content);
+    const extracted = extractThoughtsFromContent(visibleContent);
     if (extracted.thoughts.length === 0) return msg;
     return {
         ...msg,
@@ -327,10 +378,16 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             }
         }
 
+        const normalizedContent = e.kind === "assistant" ? sanitizeVisibleAssistantContent(content) : content;
+        if (e.kind === "assistant" && /\bwe need to\b|\bfinal answer\b|<think>/i.test(content) && normalizedContent !== content) {
+            // #region agent log
+            fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:sessionId ?? 'unknown',hypothesisId:'H2',location:'packages/ui/src/hooks/useSessionStream.ts:eventToMessage',message:'Assistant content sanitized in eventToMessage',data:{eventId:e.id,before:content.slice(0,180),after:normalizedContent.slice(0,180),kind:e.kind},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+        }
         return normalizeMessage({
             id: e.id,
             role: e.kind === "tool" ? "tool" : e.kind as "user" | "assistant",
-            content,
+            content: normalizedContent,
             timestamp: e.timestamp,
             toolName: e.toolName ?? e.name,
             toolArgs: e.toolArgs,
@@ -483,6 +540,11 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                     } else if (chunk.type === "text_delta") {
                         // Progressive text streaming — accumulate and flush to state
                         streamingTextRef.current += chunk.payload.content;
+                        if (/\bwe need to\b|\bfinal answer\b|<think>/i.test(chunk.payload.content ?? "")) {
+                            // #region agent log
+                            fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:sessionId ?? 'new-session',hypothesisId:'H4',location:'packages/ui/src/hooks/useSessionStream.ts:text-delta',message:'Suspicious text delta observed',data:{delta:(chunk.payload.content ?? '').slice(0,180),accumulated:streamingTextRef.current.slice(0,180)},timestamp:Date.now()})}).catch(()=>{});
+                            // #endregion
+                        }
                         setStreamingText(streamingTextRef.current);
                     } else if (chunk.type === "update") {
                         // A full update arrived — clear progressive text since the real
@@ -514,6 +576,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                             }
                         }
                     } else if (chunk.type === "final") {
+                        // #region agent log
+                        fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:sessionId ?? 'new-session',hypothesisId:'H6',location:'packages/ui/src/hooks/useSessionStream.ts:final-chunk',message:'Final chunk received',data:{eventStreamCount:chunk.payload.eventStream?.length ?? 0,timelineCount:chunk.payload.timeline?.length ?? 0},timestamp:Date.now()})}).catch(()=>{});
+                        // #endregion
                         // Clear any residual streaming text
                         streamingTextRef.current = '';
                         setStreamingText('');

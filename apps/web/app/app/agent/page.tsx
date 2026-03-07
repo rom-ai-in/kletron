@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -60,6 +60,15 @@ type SessionDetail = {
   nodeOrder: string[];
   nodeStatuses: Record<string, string>;
   tokenUsage: any;
+  conversationPagination?: {
+    total: number;
+    start: number;
+    end: number;
+    limit: number;
+    hasOlder: boolean;
+    hasNewer: boolean;
+    nextBeforeIndex: number | null;
+  };
 };
 
 const SESSION_STORAGE_KEY = "agent-active-session";
@@ -80,6 +89,113 @@ function toThreadLiveStatus(status: string, isStreaming: boolean): ThreadLiveSta
   }
 }
 
+interface AgentComposerProps {
+  sending: boolean;
+  onStop: () => void;
+  onSendText: (text: string) => void;
+  selectedGraphId: string;
+  graphSelectOptions: any[];
+  onGraphChange: (value: string) => void;
+  llmProvider: string;
+  llmOptions: any[];
+  onLlmChange: (value: string) => void;
+  llmStatus?: "none" | "loading" | "success" | "error";
+  prefillText?: string | null;
+  resetKey: string;
+  perfDebugEnabled?: boolean;
+  onInputLatencySample?: (ms: number) => void;
+}
+
+const AgentComposer = memo(function AgentComposer({
+  sending,
+  onStop,
+  onSendText,
+  selectedGraphId,
+  graphSelectOptions,
+  onGraphChange,
+  llmProvider,
+  llmOptions,
+  onLlmChange,
+  llmStatus,
+  prefillText,
+  resetKey,
+  perfDebugEnabled = false,
+  onInputLatencySample,
+}: AgentComposerProps) {
+  const [draft, setDraft] = useState("");
+
+  useEffect(() => {
+    setDraft("");
+  }, [resetKey]);
+
+  useEffect(() => {
+    if (prefillText && prefillText.trim()) {
+      setDraft(prefillText);
+    }
+  }, [prefillText]);
+
+  const handleSend = useCallback(() => {
+    const text = draft.trim();
+    if (!text) return;
+    onSendText(text);
+    setDraft("");
+  }, [draft, onSendText]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (perfDebugEnabled) {
+      const isEditingKey =
+        e.key.length === 1 ||
+        e.key === "Backspace" ||
+        e.key === "Delete" ||
+        e.key === "Enter";
+      if (isEditingKey && onInputLatencySample) {
+        const t0 = performance.now();
+        requestAnimationFrame(() => {
+          onInputLatencySample(performance.now() - t0);
+        });
+      }
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }, [handleSend, onInputLatencySample, perfDebugEnabled]);
+
+  return (
+    <ChatInput
+      value={draft}
+      onChange={setDraft}
+      onSend={handleSend}
+      onStop={sending ? onStop : undefined}
+      onKeyDown={handleKeyDown}
+      sending={sending}
+      placeholder={sending ? "Add a follow-up (queued until agent finishes)..." : "Ask anything…"}
+      containerClassName="max-w-3xl mx-auto"
+      footerLeft={
+        <div className="flex items-center gap-2">
+          <Selector
+            label="GRAPH"
+            value={selectedGraphId}
+            options={graphSelectOptions}
+            onSelect={onGraphChange}
+            size="sm"
+            direction="up"
+          />
+          <Selector
+            label="LLM"
+            value={llmProvider}
+            options={llmOptions}
+            onSelect={onLlmChange}
+            size="sm"
+            direction="up"
+            status={llmStatus}
+          />
+        </div>
+      }
+    />
+  );
+});
+
 // ─── Page Component ─────────────────────────────────────────────────────────
 
 export default function AgentPage() {
@@ -89,12 +205,26 @@ export default function AgentPage() {
   // ── State ─────────────────────────────────────────────────────────────
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [messageQueue, setMessageQueue] = useState<QueuedMessageItem[]>([]);
   const [addWorkspaceOpen, setAddWorkspaceOpen] = useState(false);
+  const [composerPrefill, setComposerPrefill] = useState<string | null>(null);
+  const [historyPage, setHistoryPage] = useState({
+    total: 0,
+    start: 0,
+    end: 0,
+    hasOlder: false,
+  });
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [perfDebugEnabled, setPerfDebugEnabled] = useState(false);
+  const [fps, setFps] = useState<number | null>(null);
+  const [inputLatencyStats, setInputLatencyStats] = useState<{ avg: number; p95: number; count: number }>({
+    avg: 0,
+    p95: 0,
+    count: 0,
+  });
 
   // ── Workspace context ──────────────────────────────────────────────────
   const {
@@ -146,17 +276,26 @@ export default function AgentPage() {
 
   // ── Fetch sessions (all workspaces) ─────────────────────────────────
   const fetchSessions = useCallback(async () => {
-    setSessionsLoading(true);
     try {
       const res = await fetch("/api/sessions?limit=50&allWorkspaces=true&excludeSource=automation");
       if (res.ok) {
         const data = await res.json();
+        // #region agent log
+        fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:'agent-page',hypothesisId:'H6',location:'apps/web/app/app/agent/page.tsx:fetchSessions',message:'Client fetched sessions',data:{isArray:Array.isArray(data),count:Array.isArray(data)?data.length:-1},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        const suspiciousTitles = (Array.isArray(data) ? data : [])
+          .map((s: any) => String(s?.title ?? ""))
+          .filter((t: string) => /\bwe need to\b|\bfinal answer\b|<think>/i.test(t))
+          .slice(0, 6);
+        if (suspiciousTitles.length > 0) {
+          // #region agent log
+          fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:'agent-page',hypothesisId:'H5',location:'apps/web/app/app/agent/page.tsx:fetchSessions',message:'Suspicious titles received by client',data:{count:suspiciousTitles.length,samples:suspiciousTitles},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+        }
         setSessions(Array.isArray(data) ? data : []);
       }
     } catch (e) {
       console.error("Failed to fetch sessions:", e);
-    } finally {
-      setSessionsLoading(false);
     }
   }, []);
 
@@ -165,30 +304,32 @@ export default function AgentPage() {
     sessionStorage.setItem(SESSION_STORAGE_KEY, runId);
   }, []);
 
-  const handleTitleGenerate = useCallback(async (runId: string, userMessage: string) => {
-    const MAX_RETRIES = 2;
-    const RETRY_DELAY_MS = 1500;
+  const handleTitleGenerate = useCallback((runId: string, userMessage: string) => {
+    void (async () => {
+      const MAX_RETRIES = 2;
+      const RETRY_DELAY_MS = 1500;
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        const res = await fetch(`/api/sessions/${runId}/title`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ generate: true, userMessage }),
-        });
-        if (res.ok) {
-          await fetchSessions();
-          return;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const res = await fetch(`/api/sessions/${runId}/title`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ generate: true, userMessage }),
+          });
+          if (res.ok) {
+            await fetchSessions();
+            return;
+          }
+          console.warn(`[title-gen] Attempt ${attempt + 1} returned ${res.status}`);
+        } catch (e) {
+          console.warn(`[title-gen] Attempt ${attempt + 1} failed:`, e);
         }
-        console.warn(`[title-gen] Attempt ${attempt + 1} returned ${res.status}`);
-      } catch (e) {
-        console.warn(`[title-gen] Attempt ${attempt + 1} failed:`, e);
+        if (attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
+        }
       }
-      if (attempt < MAX_RETRIES) {
-        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
-      }
-    }
-    console.error("[title-gen] All retries exhausted for session", runId);
+      console.error("[title-gen] All retries exhausted for session", runId);
+    })();
   }, [fetchSessions]);
 
   const {
@@ -196,8 +337,6 @@ export default function AgentPage() {
     setMessages,
     eventStream,
     timeline,
-    input,
-    setInput,
     sending,
     streamStatus,
     errorMessage,
@@ -206,8 +345,6 @@ export default function AgentPage() {
     runEndedAt,
     handleSend,
     handleStop,
-    handleKeyDown,
-    formatTime,
     isAtBottomRef,
     streamingText,
     isStreaming,
@@ -234,12 +371,37 @@ export default function AgentPage() {
   });
 
   // ── Fetch session detail when active session changes ──────────────────
-  const loadSessionDetail = useCallback(async (sessionId: string, options?: { mergeMessages?: boolean }) => {
+  const loadSessionDetail = useCallback(async (
+    sessionId: string,
+    options?: { mergeMessages?: boolean; beforeIndex?: number; appendOlder?: boolean },
+  ) => {
     try {
-      const res = await fetch(`/api/sessions/${sessionId}`);
+      const query = new URLSearchParams();
+      query.set("limit", "120");
+      if (typeof options?.beforeIndex === "number") {
+        query.set("beforeIndex", String(options.beforeIndex));
+      }
+      const res = await fetch(`/api/sessions/${sessionId}?${query.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setSessionDetail(data);
+        if (data?.conversationPagination) {
+          if (options?.appendOlder) {
+            setHistoryPage((prev) => ({
+              total: data.conversationPagination.total ?? prev.total,
+              start: data.conversationPagination.start ?? prev.start,
+              end: Math.max(prev.end, data.conversationPagination.end ?? 0),
+              hasOlder: Boolean(data.conversationPagination.hasOlder),
+            }));
+          } else {
+            setHistoryPage({
+              total: data.conversationPagination.total ?? 0,
+              start: data.conversationPagination.start ?? 0,
+              end: data.conversationPagination.end ?? 0,
+              hasOlder: Boolean(data.conversationPagination.hasOlder),
+            });
+          }
+        }
 
         if (data.conversationHistory?.length) {
           // Deduplicate loaded messages by id — the server can store
@@ -292,7 +454,13 @@ export default function AgentPage() {
           // events weren't persisted.  For normal loads (session switch,
           // initial page load) we always replace.
           // During active streaming the safe setter is a no-op anyway.
-          if (options?.mergeMessages) {
+          if (options?.appendOlder) {
+            setMessages(prev => {
+              const seen = new Set<string>(prev.map((m: any) => m.id));
+              const olderUnique = loadedMessages.filter((m: any) => !seen.has(m.id));
+              return [...olderUnique, ...prev];
+            });
+          } else if (options?.mergeMessages) {
             setMessages(prev => {
               if (prev.length > loadedMessages.length) return prev;
               return loadedMessages;
@@ -320,15 +488,62 @@ export default function AgentPage() {
       if (mission) parts.push(mission);
       if (goal) parts.push(`\n\nGoal:\n${goal}`);
       if (acceptanceCriteria) parts.push(`\n\nAcceptance Criteria:\n${acceptanceCriteria}`);
-      setInput(parts.join(""));
+      setComposerPrefill(parts.join(""));
       // Clear search params from URL without navigation
       window.history.replaceState({}, "", "/app/agent");
     }
-  }, [searchParams, setInput]);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const perfParam = searchParams?.get("perf");
+    if (perfParam === "1") setPerfDebugEnabled(true);
+  }, [searchParams]);
+
+  const initialBeforeIndexRef = useRef<number | null>(null);
+  const beforeIndexAppliedForSessionRef = useRef<string | null>(null);
+  useEffect(() => {
+    const raw = searchParams?.get("beforeIndex");
+    if (!raw) {
+      initialBeforeIndexRef.current = null;
+      beforeIndexAppliedForSessionRef.current = null;
+      return;
+    }
+    const parsed = Number(raw);
+    initialBeforeIndexRef.current = Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : null;
+    beforeIndexAppliedForSessionRef.current = null;
+  }, [searchParams]);
+
+  const inputLatencySamplesRef = useRef<number[]>([]);
+  const handleInputLatencySample = useCallback((ms: number) => {
+    const next = [...inputLatencySamplesRef.current, ms].slice(-120);
+    inputLatencySamplesRef.current = next;
+    const avg = next.reduce((acc, v) => acc + v, 0) / Math.max(next.length, 1);
+    const sorted = [...next].sort((a, b) => a - b);
+    const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))] ?? 0;
+    setInputLatencyStats({ avg, p95, count: next.length });
+  }, []);
+
+  useEffect(() => {
+    if (!perfDebugEnabled) return;
+    let raf = 0;
+    let frames = 0;
+    let last = performance.now();
+    const loop = (now: number) => {
+      frames += 1;
+      if (now - last >= 1000) {
+        setFps(Math.round((frames * 1000) / (now - last)));
+        frames = 0;
+        last = now;
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [perfDebugEnabled]);
 
   // ── Initialize ────────────────────────────────────────────────────────
   useEffect(() => {
-    fetchSessions();
+    void fetchSessions();
     const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
     if (stored) {
       setActiveSessionId(stored);
@@ -337,10 +552,24 @@ export default function AgentPage() {
 
   useEffect(() => {
     if (activeSessionId) {
-      loadSessionDetail(activeSessionId);
+      const shouldApplyBeforeIndex = beforeIndexAppliedForSessionRef.current !== activeSessionId;
+      const beforeIndex = shouldApplyBeforeIndex ? initialBeforeIndexRef.current ?? undefined : undefined;
+      beforeIndexAppliedForSessionRef.current = activeSessionId;
+      void loadSessionDetail(activeSessionId, { beforeIndex });
       sessionStorage.setItem(SESSION_STORAGE_KEY, activeSessionId);
     }
   }, [activeSessionId, loadSessionDetail]);
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const url = new URL(window.location.href);
+    if (historyPage.start > 0) {
+      url.searchParams.set("beforeIndex", String(historyPage.end));
+    } else {
+      url.searchParams.delete("beforeIndex");
+    }
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [activeSessionId, historyPage.start, historyPage.end]);
 
   // Refresh sessions & reload session detail after stream completes.
   // The stream guard in useSessionStream prevents loadSessionDetail from
@@ -352,7 +581,7 @@ export default function AgentPage() {
     prevStreamStatusRef.current = streamStatus;
 
     if (streamStatus !== "streaming" && activeSessionId) {
-      fetchSessions();
+      void fetchSessions();
       // Only reload detail when transitioning out of streaming
       // (avoids re-running on every "idle" render).
       // Use mergeMessages to keep the richer dataset — the stream may
@@ -368,7 +597,7 @@ export default function AgentPage() {
   useEffect(() => {
     if (activeWorkspaceId && activeWorkspaceId !== prevWorkspaceRef.current) {
       prevWorkspaceRef.current = activeWorkspaceId;
-      fetchSessions();
+      void fetchSessions();
     }
   }, [activeWorkspaceId, fetchSessions]);
 
@@ -380,8 +609,22 @@ export default function AgentPage() {
     setActiveSessionId(null);
     setSessionDetail(null);
     setMessages([]);
+    setHistoryPage({ total: 0, start: 0, end: 0, hasOlder: false });
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
   }, [setMessages, handleStop]);
+
+  const handleLoadOlderMessages = useCallback(async () => {
+    if (!activeSessionId || loadingOlder || !historyPage.hasOlder) return;
+    setLoadingOlder(true);
+    try {
+      await loadSessionDetail(activeSessionId, {
+        beforeIndex: historyPage.start,
+        appendOlder: true,
+      });
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [activeSessionId, loadingOlder, historyPage.hasOlder, historyPage.start, loadSessionDetail]);
 
   /** Select a session and auto-switch to its owning workspace */
   const handleSelectSession = useCallback((id: string) => {
@@ -536,6 +779,7 @@ export default function AgentPage() {
     }
     return events;
   }, [messages]);
+  const deferredChatEvents = useDeferredValue(chatEventsForView);
 
   // ── Copy debug logs ──────────────────────────────────────────────────
   const [logsCopied, setLogsCopied] = useState(false);
@@ -602,21 +846,20 @@ export default function AgentPage() {
 
   // ── Message Queue ─────────────────────────────────────────────────────
 
-  const handleSendOrQueue = useCallback(() => {
-    const text = input.trim();
-    if (!text) return;
+  const handleSendOrQueueText = useCallback((text: string) => {
+    const normalized = text.trim();
+    if (!normalized) return;
 
     if (sending) {
       setMessageQueue((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() },
+        { id: crypto.randomUUID(), text: normalized, createdAt: new Date().toISOString() },
       ]);
-      setInput("");
       return;
     }
 
-    void handleSend();
-  }, [input, sending, handleSend, setInput]);
+    void handleSend({ text: normalized });
+  }, [sending, handleSend]);
 
   const sendTextDirectly = useCallback((text: string) => {
     void handleSend({ text });
@@ -655,13 +898,6 @@ export default function AgentPage() {
     handleStop();
     setTimeout(() => dequeueAndSend(), 120);
   }, [handleStop, dequeueAndSend]);
-
-  const handleKeyDownWithQueue = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSendOrQueue();
-    }
-  }, [handleSendOrQueue]);
 
   // Auto-dequeue
   const prevSendingRef = useRef(false);
@@ -709,6 +945,11 @@ export default function AgentPage() {
               {edit.description && (
                 <p className="text-text-muted truncate">{edit.description}</p>
               )}
+              {edit.lastError && (
+                <p className="text-status-error-text truncate">
+                  Last error: {edit.lastError}
+                </p>
+              )}
             </div>
             <div className="flex gap-1">
               <button
@@ -737,7 +978,7 @@ export default function AgentPage() {
       activeThreadId={activeSessionId}
       activeProjectId={activeWorkspaceId}
       onThreadSelect={handleSelectSession}
-      onNewThreadInProject={handleNewSessionInWorkspace}
+      onNewThreadInProject={(workspaceId) => { void handleNewSessionInWorkspace(workspaceId); }}
       onAddProject={handleAddWorkspace}
       onRenameThread={(id, title) => void handleRenameSession(id, title)}
       onArchiveThread={(id) => void handleArchiveSession(id)}
@@ -746,6 +987,19 @@ export default function AgentPage() {
       className="w-full"
     />
   );
+
+  const memoSidebar = useMemo(() => sidebar, [
+    sidebarProjects,
+    activeSessionId,
+    activeWorkspaceId,
+    handleSelectSession,
+    handleNewSessionInWorkspace,
+    handleAddWorkspace,
+    handleRenameSession,
+    handleArchiveSession,
+    handleDeleteSession,
+    handleRemoveWorkspace,
+  ]);
 
   const mainContent = (
     <div className="flex flex-col h-full">
@@ -794,6 +1048,22 @@ export default function AgentPage() {
           {runStartedAt && tokenUsage && <TokenUsageDisplay tokenUsage={tokenUsage} />}
           {runStartedAt && <DurationDisplay startedAt={runStartedAt} endedAt={runEndedAt ?? undefined} />}
           <button
+            onClick={() => setPerfDebugEnabled((v) => !v)}
+            className={`rounded border px-2 py-1 text-[10px] transition ${
+              perfDebugEnabled
+                ? "border-status-info-border bg-status-info-bg text-status-info-text"
+                : "border-border-subtle bg-bg-elevated text-text-muted hover:bg-state-hover hover:text-text-primary"
+            }`}
+            title="Toggle performance debug metrics"
+          >
+            Perf {perfDebugEnabled ? "ON" : "OFF"}
+          </button>
+          {perfDebugEnabled && (
+            <div className="rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-muted">
+              FPS: {fps ?? "…"} | input p95: {inputLatencyStats.p95.toFixed(1)}ms | avg: {inputLatencyStats.avg.toFixed(1)}ms
+            </div>
+          )}
+          <button
             onClick={handleCopyLogs}
             className="flex items-center gap-1 rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
             title="Copy debug logs to clipboard"
@@ -807,16 +1077,20 @@ export default function AgentPage() {
       {/* Main content area - adaptive */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto scrollbar-elegant"
-        onScroll={() => {
-          if (scrollContainerRef.current) {
-            const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-            isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 50;
-          }
-        }}
+        className={activeGraphIsSimple ? "flex-1 overflow-hidden" : "flex-1 overflow-y-auto scrollbar-elegant"}
+        onScroll={
+          activeGraphIsSimple
+            ? undefined
+            : () => {
+                if (scrollContainerRef.current) {
+                  const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+                  isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 50;
+                }
+              }
+        }
       >
         {activeGraphIsSimple ? (
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-3xl mx-auto h-full min-h-0 flex flex-col">
             {messages.length === 0 && !sending && (
               <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                 <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>
@@ -827,11 +1101,17 @@ export default function AgentPage() {
             )}
             {(messages.length > 0 || sending) && (
               <MessageList
-                events={chatEventsForView}
+                events={deferredChatEvents}
                 streaming={sending}
                 streamingText={streamingText}
-                className="overflow-visible flex-initial p-0 px-2 py-4"
-                footer={<div ref={bottomRef} />}
+                maxVisibleEvents={320}
+                hasOlder={historyPage.hasOlder}
+                loadingOlder={loadingOlder}
+                onLoadOlder={handleLoadOlderMessages}
+                virtualized
+                prefetchNearTop
+                onNearTop={handleLoadOlderMessages}
+                className="flex-1 min-h-0 p-0 px-2 py-4"
               />
             )}
             {errorMessage && !sending && (
@@ -888,36 +1168,21 @@ export default function AgentPage() {
 
       {/* Chat input */}
       <div className="flex-none border-t border-border-subtle bg-bg-surface px-4 py-3">
-        <ChatInput
-          value={input}
-          onChange={setInput}
-          onSend={handleSendOrQueue}
-          onStop={sending ? handleStop : undefined}
-          onKeyDown={handleKeyDownWithQueue}
+        <AgentComposer
           sending={sending}
-          placeholder={sending ? "Add a follow-up (queued until agent finishes)..." : "Ask anything…"}
-          containerClassName="max-w-3xl mx-auto"
-          footerLeft={
-            <div className="flex items-center gap-2">
-              <Selector
-                label="GRAPH"
-                value={selectedGraphId}
-                options={graphSelectOptions}
-                onSelect={handleGraphChange}
-                size="sm"
-                direction="up"
-              />
-              <Selector
-                label="LLM"
-                value={llmProvider}
-                options={llmOptions}
-                onSelect={handleLlmChange}
-                size="sm"
-                direction="up"
-                status={llmStatus}
-              />
-            </div>
-          }
+          onStop={handleStop}
+          onSendText={handleSendOrQueueText}
+          selectedGraphId={selectedGraphId}
+          graphSelectOptions={graphSelectOptions}
+          onGraphChange={handleGraphChange}
+          llmProvider={llmProvider}
+          llmOptions={llmOptions}
+          onLlmChange={handleLlmChange}
+          llmStatus={llmStatus}
+          prefillText={composerPrefill}
+          resetKey={activeSessionId ?? "new-session"}
+          perfDebugEnabled={perfDebugEnabled}
+          onInputLatencySample={handleInputLatencySample}
         />
       </div>
     </div>
@@ -936,7 +1201,7 @@ export default function AgentPage() {
   return (
     <>
       <WorkspaceLayout
-        sidebar={sidebar}
+        sidebar={memoSidebar}
         content={mainContent}
         aside={timelineSidebar}
         sidebarWidth="w-[260px]"

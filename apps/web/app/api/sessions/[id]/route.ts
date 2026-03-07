@@ -3,7 +3,13 @@ import { NextResponse } from "next/server";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
 import { agentGraphService } from "@numezis/server/services/agentGraphService";
-import { stripThoughtContent } from "@numezis/server/services/titleSanitizer";
+import {
+  heuristicTitle,
+  sanitizeAssistantVisibleContent,
+  sanitizeTitle,
+  stripSystemPrefix,
+  stripThoughtContent,
+} from "@numezis/server/services/titleSanitizer";
 
 /**
  * GET /api/sessions/[id] - Get session details with conversation history and graph info.
@@ -15,6 +21,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
   }
 
   try {
+    const { searchParams } = new URL(request.url);
+    const limitParam = Number(searchParams.get("limit") ?? "120");
+    const beforeIndexParam = searchParams.get("beforeIndex");
+    const limit = Number.isFinite(limitParam) ? Math.min(Math.max(Math.trunc(limitParam), 1), 500) : 120;
+
     const run = await agentGraphRunService.getRun(params.id);
     if (!run) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
@@ -24,10 +35,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const graph = await agentGraphService.getGraph(run.graphId.toString());
 
     // Strip injected [System: ...] personality prefix from title
-    let title = run.title ?? run.state?.mission?.slice(0, 80) ?? "Untitled";
-    if (title.startsWith("[System:") && title.indexOf("]\n\n") !== -1) {
-      title = title.slice(title.indexOf("]\n\n") + 3).trim() || "Untitled";
-    }
+    const rawTitle = run.title ?? run.state?.mission?.slice(0, 80) ?? "";
+    const strippedTitle = stripThoughtContent(stripSystemPrefix(rawTitle)).trim();
+    const title = sanitizeTitle(strippedTitle) || heuristicTitle(strippedTitle || rawTitle) || "Untitled";
 
     const rawHistory = Array.isArray(run.state?.conversationHistory)
       ? run.state.conversationHistory
@@ -35,12 +45,20 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const sanitizedConversationHistory = rawHistory
       .map((event) => {
         const original = typeof event?.content === "string" ? event.content : "";
-        const cleaned = stripThoughtContent(original).trim();
+        const cleaned = sanitizeAssistantVisibleContent(stripThoughtContent(original)).trim();
+        const leakedMetaPattern =
+          /\bgiven the pattern\b|\bapproval required\b|\bwe can proceed to output a final answer\b|\bthe user asked to\b|\bwe must not make further tool calls\b|\bnow,\s*the user wants to know\b|\bprovide (a )?structured analysis\b|\bproceed to final\b|\bthis should satisfy the user request\b/i;
         if (
           !cleaned ||
+          leakedMetaPattern.test(cleaned) ||
           /\brespond with only the title\b/i.test(cleaned) ||
           /\bwe need to produce a short chat title\b/i.test(cleaned)
         ) {
+          if (original && (leakedMetaPattern.test(original) || /\bwe need to\b|\bfinal answer\b|<think>/i.test(original))) {
+            // #region agent log
+            fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:params.id,hypothesisId:'H3',location:'apps/web/app/api/sessions/[id]/route.ts:history-map',message:'History event blanked by sanitizer',data:{eventId:event?.id,kind:event?.kind,original:original.slice(0,180),cleaned:cleaned.slice(0,180)},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+          }
           return { ...event, content: "" };
         }
         return cleaned === original ? event : { ...event, content: cleaned };
@@ -51,6 +69,27 @@ export async function GET(request: Request, { params }: { params: { id: string }
         if (event?.kind === "user" && !content) return false;
         return true;
       });
+
+    const totalHistory = sanitizedConversationHistory.length;
+    const parsedBeforeIndexRaw = beforeIndexParam == null ? null : Number(beforeIndexParam);
+    const parsedBeforeIndex =
+      parsedBeforeIndexRaw == null || !Number.isFinite(parsedBeforeIndexRaw)
+        ? null
+        : parsedBeforeIndexRaw;
+    const endIndex = parsedBeforeIndex == null
+      ? totalHistory
+      : Math.min(Math.max(Math.trunc(parsedBeforeIndex), 0), totalHistory);
+    const startIndex = Math.max(0, endIndex - limit);
+    const paginatedConversationHistory = sanitizedConversationHistory.slice(startIndex, endIndex);
+    const pagination = {
+      total: totalHistory,
+      start: startIndex,
+      end: endIndex,
+      limit,
+      hasOlder: startIndex > 0,
+      hasNewer: endIndex < totalHistory,
+      nextBeforeIndex: startIndex > 0 ? startIndex : null,
+    };
 
     return NextResponse.json({
       id: run._id?.toString(),
@@ -66,7 +105,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
       tokenUsage: run.tokenUsage ?? null,
       nodeTokenUsage: run.nodeTokenUsage ?? null,
       state: run.state,
-      conversationHistory: sanitizedConversationHistory,
+      conversationHistory: paginatedConversationHistory,
+      conversationPagination: pagination,
       graph: graph ? {
         name: graph.name,
         description: graph.description,
