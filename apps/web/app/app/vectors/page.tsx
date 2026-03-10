@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useLlmHealth } from "@numezis/ui/hooks/useLlmHealth";
 import { RequireWorkspace } from "@numezis/ui/components/workspace/RequireWorkspace";
+import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
     azure: "Azure OpenAI",
@@ -85,6 +86,8 @@ function VectorIndexContent() {
     } | null>(null);
     const [topK, setTopK] = useState(5);
 
+    const { activeWorkspaceId } = useWorkspace();
+
     const { status: healthStatus, message: healthMessage, recheck: recheckHealth } = useLlmHealth(config?.provider);
 
     const totalFiles = status?.totalFiles ?? 0;
@@ -103,7 +106,11 @@ function VectorIndexContent() {
     // Lightweight status-only fetch (used during polling)
     const fetchStatus = useCallback(async () => {
         try {
-            const res = await fetch("/api/vectors");
+            const params = new URLSearchParams();
+            if (activeWorkspaceId) {
+                params.set("workspaceId", activeWorkspaceId);
+            }
+            const res = await fetch(`/api/vectors?${params.toString()}`);
             if (res.ok) {
                 const data = await res.json();
                 setStatus(data);
@@ -117,15 +124,19 @@ function VectorIndexContent() {
         } catch {
             // Silently ignore polling errors to avoid spamming the UI
         }
-    }, [loadError]);
+    }, [loadError, activeWorkspaceId]);
 
     // Full data fetch (status + config in parallel)
     const fetchData = useCallback(async (showLoader = false) => {
         if (showLoader) setIsLoading(true);
         setLoadError(null);
         try {
+            const statusParams = new URLSearchParams();
+            if (activeWorkspaceId) {
+                statusParams.set("workspaceId", activeWorkspaceId);
+            }
             const [statusRes, configRes] = await Promise.all([
-                fetch("/api/vectors"),
+                fetch(`/api/vectors?${statusParams.toString()}`),
                 fetch("/api/embedding-config")
             ]);
             const errors: string[] = [];
@@ -167,7 +178,7 @@ function VectorIndexContent() {
         } finally {
             if (showLoader) setIsLoading(false);
         }
-    }, []);
+    }, [activeWorkspaceId]);
 
     // On mount: hydrate from localStorage immediately (stale-while-revalidate),
     // then fetch fresh data. Polling uses a ref so this effect never re-runs.
@@ -219,7 +230,10 @@ function VectorIndexContent() {
                 action: async () => {
                     setIsActionLoading(true);
                     try {
-                        await fetch("/api/vectors/reindex", { method: "POST" });
+                await fetch("/api/vectors/reindex", {
+                    method: "POST",
+                    headers: activeWorkspaceId ? { "Content-Type": "application/json", "x-workspace-id": activeWorkspaceId } : { "Content-Type": "application/json" },
+                });
                         void fetchStatus();
                     } finally {
                         setIsActionLoading(false);
@@ -233,7 +247,10 @@ function VectorIndexContent() {
         void (async () => {
             setIsActionLoading(true);
             try {
-                await fetch("/api/vectors/index", { method: "POST" });
+                await fetch("/api/vectors/index", {
+                    method: "POST",
+                    headers: activeWorkspaceId ? { "Content-Type": "application/json", "x-workspace-id": activeWorkspaceId } : { "Content-Type": "application/json" },
+                });
                 void fetchStatus();
             } finally {
                 setIsActionLoading(false);
@@ -248,7 +265,7 @@ function VectorIndexContent() {
                 await fetch("/api/vectors/index", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ resume: true }),
+                    body: JSON.stringify({ resume: true, ...(activeWorkspaceId ? { workspaceId: activeWorkspaceId } : {}) }),
                 });
                 void fetchStatus();
             } finally {
@@ -264,7 +281,10 @@ function VectorIndexContent() {
             action: async () => {
                 setIsActionLoading(true);
                 try {
-                    await fetch("/api/vectors/clear", { method: "DELETE" });
+                    await fetch("/api/vectors/clear", {
+                        method: "DELETE",
+                        headers: activeWorkspaceId ? { "x-workspace-id": activeWorkspaceId } : undefined,
+                    });
                     void fetchStatus();
                 } finally {
                     setIsActionLoading(false);
@@ -282,7 +302,10 @@ function VectorIndexContent() {
         try {
             const res = await fetch("/api/vectors/search", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(activeWorkspaceId ? { "x-workspace-id": activeWorkspaceId } : {}),
+                },
                 body: JSON.stringify({
                     query: searchQuery,
                     maxResults: topK

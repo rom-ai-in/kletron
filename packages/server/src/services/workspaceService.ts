@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { ObjectId } from "mongodb";
 import { getDatabase } from "../lib/db";
-import { getConfigSafe } from "../config";
+import { getConfigSafe, saveConfig } from "../config";
 
 export type WorkspaceStatus = "active" | "archived";
 export type WorkspaceHealthStatus = "healthy" | "missing" | "inaccessible";
@@ -207,10 +207,8 @@ export async function listWorkspaces(ownerId: string): Promise<Workspace[]> {
   try {
     await claimLegacyWorkspaces(ownerId);
     const collection = await getWorkspaceCollection();
-    return collection
-      .find({ status: { $ne: "archived" }, ownerId })
-      .sort({ updatedAt: -1 })
-      .toArray();
+    // Return all non-archived workspaces for the owner
+    return collection.find({ status: { $ne: "archived" }, ownerId }).sort({ updatedAt: -1 }).toArray();
   } catch (error) {
     console.warn("[Workspace] listWorkspaces fallback:", (error as Error)?.message ?? error);
     const fallback = await getFallbackWorkspace(ownerId);
@@ -340,12 +338,20 @@ export async function setActiveWorkspaceId(ownerId: string, id: string | null): 
       throw new Error("Workspace not found");
     }
   }
-  const activeWorkspaceId = id ? new ObjectId(id) : undefined;
-  await state.updateOne(
-    { _id: ownerId },
-    { $set: { activeWorkspaceId, updatedAt: new Date() } },
-    { upsert: true }
-  );
+  if (id) {
+    const activeWorkspaceId = new ObjectId(id);
+    await state.updateOne(
+      { _id: ownerId },
+      { $set: { activeWorkspaceId, updatedAt: new Date() } },
+      { upsert: true }
+    );
+  } else {
+    await state.updateOne(
+      { _id: ownerId },
+      { $unset: { activeWorkspaceId: "" }, $set: { updatedAt: new Date() } },
+      { upsert: true }
+    );
+  }
 
   if (id) {
     const collection = await getWorkspaceCollection();
@@ -442,6 +448,19 @@ export async function syncConfigJson(ownerId?: string) {
       ownerId
         ? await getActiveWorkspace(ownerId)
         : (workspaceList.find((ws) => validateWorkspaceRoot(ws).status === "healthy") ?? workspaceList[0] ?? null);
+
+    const activeRoot = activeWorkspace?.rootPath;
+
+    // 1) Persist the active workspace root as the canonical workingFolder
+    // in the workspace config collection and mirror it to config/config.json.
+    if (activeRoot) {
+      await saveConfig({ workingFolder: path.resolve(activeRoot) });
+    }
+
+    // 2) Ensure config/config.json.workspaceRoots is the union of all known
+    // workspace root paths plus the active root.  This is used by the MCP
+    // server purely as an allowlist / discovery set, NOT for selecting the
+    // active workspace.
     const configDir = path.resolve(process.cwd(), "config");
     const configJsonPath = path.join(configDir, "config.json");
 
@@ -458,16 +477,19 @@ export async function syncConfigJson(ownerId?: string) {
       }
     }
 
-    const activeRoot =
-      activeWorkspace?.rootPath ??
-      (typeof existingConfig.workingFolder === "string" ? existingConfig.workingFolder : undefined);
     const workspaceRoots = workspaceList.map((ws) => ws.rootPath);
-    const rootSet = new Set<string>(workspaceRoots);
+    const rootSet = new Set<string>(
+      Array.isArray((existingConfig as any).workspaceRoots)
+        ? ((existingConfig as any).workspaceRoots as string[])
+        : []
+    );
+    for (const root of workspaceRoots) {
+      rootSet.add(path.resolve(root));
+    }
     if (activeRoot) {
-      rootSet.add(activeRoot);
+      rootSet.add(path.resolve(activeRoot));
     }
 
-    existingConfig.workingFolder = activeRoot ?? existingConfig.workingFolder;
     existingConfig.workspaceRoots = Array.from(rootSet);
 
     fs.writeFileSync(configJsonPath, JSON.stringify(existingConfig, null, 2), "utf-8");

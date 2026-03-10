@@ -20,6 +20,7 @@ import {
 import Link from "next/link";
 import { type VectorIndexRun } from "@numezis/server/services/vectorHistoryService";
 import { RequireWorkspace } from "@numezis/ui/components/workspace/RequireWorkspace";
+import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 
 export default function VectorHistoryPage() {
     return (
@@ -34,8 +35,15 @@ function VectorHistoryContent() {
     const [loading, setLoading] = useState(true);
     const [selectedRun, setSelectedRun] = useState<(Omit<VectorIndexRun, "_id"> & { _id: string }) | null>(null);
 
+  const { activeWorkspaceId } = useWorkspace();
+
     useEffect(() => {
-        fetch("/api/vectors/history?limit=50")
+        const params = new URLSearchParams();
+        params.set("limit", "50");
+        if (activeWorkspaceId) {
+            params.set("workspaceId", activeWorkspaceId);
+        }
+        fetch(`/api/vectors/history?${params.toString()}`)
             .then(res => res.json())
             .then(data => {
                 setRuns(Array.isArray(data) ? data : []);
@@ -45,7 +53,7 @@ function VectorHistoryContent() {
                 console.error(err);
                 setLoading(false);
             });
-    }, []);
+    }, [activeWorkspaceId]);
 
     const formatDuration = (ms: number) => {
         if (ms < 1000) return `${ms}ms`;

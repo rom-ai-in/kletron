@@ -25,6 +25,7 @@ import {
     FEATURE_STATUSES,
     FEATURE_SOURCES,
 } from "@numezis/shared/businessAnalystTypes";
+import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 
 // ---------------------------------------------------------------------------
 // API helpers
@@ -38,11 +39,15 @@ async function fetchFeatures(params: Record<string, string>): Promise<FeaturePro
     return data.features ?? [];
 }
 
-async function updateFeatureStatus(id: string, status: FeatureStatus): Promise<void> {
+async function updateFeatureStatus(id: string, status: FeatureStatus, workspaceId?: string | null): Promise<void> {
+    const headers: HeadersInit = { "Content-Type": "application/json" };
+    if (workspaceId) {
+        (headers as any)["x-workspace-id"] = workspaceId;
+    }
     const res = await fetch(`/api/business-analyst/features/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        headers,
+        body: JSON.stringify({ status, ...(workspaceId ? { workspaceId } : {}) }),
     });
     if (!res.ok) throw new Error("Failed to update feature status");
 }
@@ -108,6 +113,8 @@ export function BAFeaturesListView() {
     // Selection
     const [selected, setSelected] = useState<Set<string>>(new Set());
 
+    const { activeWorkspaceId } = useWorkspace();
+
     const load = useCallback(async () => {
         try {
             const params: Record<string, string> = {};
@@ -115,6 +122,7 @@ export function BAFeaturesListView() {
             if (filterType) params.type = filterType;
             if (filterStatus) params.status = filterStatus;
             if (filterSource) params.source = filterSource;
+            if (activeWorkspaceId) params.workspaceId = activeWorkspaceId;
             const data = await fetchFeatures(params);
             setFeatures(data);
         } catch (e) {
@@ -122,7 +130,7 @@ export function BAFeaturesListView() {
         } finally {
             setLoading(false);
         }
-    }, [searchText, filterType, filterStatus, filterSource]);
+    }, [searchText, filterType, filterStatus, filterSource, activeWorkspaceId]);
 
     useEffect(() => {
         void load();
@@ -145,7 +153,7 @@ export function BAFeaturesListView() {
 
     const handleBulkAction = async (status: FeatureStatus) => {
         for (const id of selected) {
-            await updateFeatureStatus(id, status);
+            await updateFeatureStatus(id, status, activeWorkspaceId);
         }
         setSelected(new Set());
         await load();

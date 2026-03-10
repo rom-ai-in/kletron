@@ -1,13 +1,10 @@
 import { agentGraphService } from "@numezis/server/services/agentGraphService";
 import {
-  buildCursorLikeRobustGraph,
   buildSimpleReactAgentGraph,
-  buildCompleteDeepAgentGraph,
   buildDriftAnalysisGraph,
   buildCoderAgentGraph,
   buildExplorerAgentGraph,
   buildPlannerAgentGraph,
-  buildContinuousImprovementGraph,
   buildBusinessAnalystGraph,
 } from "@numezis/server/services/agentGraphPresets";
 import * as db from "@numezis/server/lib/db";
@@ -22,10 +19,7 @@ const presets: GraphPreset[] = [
   { name: "Coder Agent (agent graph)", builder: buildCoderAgentGraph },
   { name: "Explorer Agent (agent graph)", builder: buildExplorerAgentGraph },
   { name: "Planner Agent (agent graph)", builder: buildPlannerAgentGraph },
-  { name: "Cursor-like Robust Loop (agent graph)", builder: buildCursorLikeRobustGraph },
-  { name: "Complete Deep Agent (agent graph)", builder: buildCompleteDeepAgentGraph },
   { name: "Drift Analysis (agent graph)", builder: buildDriftAnalysisGraph },
-  { name: "Continuous Improvement (agent graph)", builder: buildContinuousImprovementGraph },
   { name: "Business Analyst", builder: buildBusinessAnalystGraph },
 ];
 
@@ -36,6 +30,9 @@ const LEGACY_NAMES = [
   "Diamond flow (agent graph)",
   "Presentation Generator Pro",
   "Automations (agent graph)",
+  "Cursor-like Robust Loop (agent graph)",
+  "Complete Deep Agent (agent graph)",
+  "Continuous Improvement (agent graph)",
 ];
 
 async function main() {

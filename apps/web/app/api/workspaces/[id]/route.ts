@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import { deleteWorkspace, getWorkspaceById, toWorkspaceSummary, getActiveWorkspaceId } from "@numezis/server/services/workspaceService";

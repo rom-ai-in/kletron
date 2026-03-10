@@ -10,7 +10,13 @@ import { nodeOutputSchemaRegistry } from "@numezis/shared/nodeOutputSchemas";
 import { allMcpTools } from "@numezis/agent-core/tools/mcpTools";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 
-const mcpToolNames = new Set<string>(allMcpTools.map((t: any) => String((t as any)?.name ?? "")));
+// Allowed tool names for agent graph nodes.
+// Includes all MCP-backed tools plus special in-process tools like `write_todos`
+// that are provided by the agent graph executor rather than the MCP server.
+const mcpToolNames = new Set<string>([
+    ...allMcpTools.map((t: any) => String((t as any)?.name ?? "")),
+    "write_todos",
+]);
 const schemaIds = new Set<string>(Object.keys(nodeOutputSchemaRegistry));
 
 const GraphSchema = z.object({

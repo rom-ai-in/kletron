@@ -1,40 +1,21 @@
 import { agentGraphService } from "@numezis/server/services/agentGraphService";
-import { buildCursorLikeRobustGraph } from "@numezis/server/services/agentGraphPresets";
 import * as db from "@numezis/server/lib/db";
 
 async function main() {
-  const graph = buildCursorLikeRobustGraph();
   const existing = await agentGraphService.listGraphs({ search: "Cursor-like Robust Loop" });
-  const matches = existing.filter((g) => g.name === graph.name);
-  const keep = matches[0];
-  if (keep?._id) {
-    const duplicates = matches.slice(1);
-    for (const dup of duplicates) {
-      if (dup._id) {
-        await agentGraphService.deleteGraph(String(dup._id));
-      }
-    }
-    // Force update existing graph with latest preset definition
-    await agentGraphService.updateGraph(String(keep._id), graph);
+  const matches = existing.filter((g) => g.name === "Cursor-like Robust Loop (agent graph)");
+
+  for (const m of matches) {
+    if (!m._id) continue;
+    await agentGraphService.deleteGraph(String(m._id));
     // eslint-disable-next-line no-console
-    console.log(
-      JSON.stringify(
-        {
-          updatedGraphId: String(keep._id),
-          name: graph.name,
-          deletedDuplicates: duplicates.length,
-          action: "UPDATED with latest preset"
-        },
-        null,
-        2
-      )
-    );
-    return;
+    console.log(`Deleted Cursor-like Robust Loop graph ${String(m._id)}`);
   }
 
-  const id = await agentGraphService.createGraph(graph);
-  // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ insertedGraphId: id, name: graph.name }, null, 2));
+  if (matches.length === 0) {
+    // eslint-disable-next-line no-console
+    console.log("No Cursor-like Robust Loop graphs found to delete.");
+  }
 }
 
 main()

@@ -15,23 +15,32 @@ import {
 } from "lucide-react";
 import { Panel, Button, Badge } from "@numezis/ui/components/design-system";
 import type { BADashboardSummary, FeatureProposal, FeatureType } from "@numezis/shared/businessAnalystTypes";
+import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 
 // ---------------------------------------------------------------------------
 // API helpers
 // ---------------------------------------------------------------------------
 
-async function fetchDashboard(): Promise<BADashboardSummary> {
-    const res = await fetch("/api/business-analyst/dashboard");
+async function fetchDashboard(workspaceId?: string | null): Promise<BADashboardSummary> {
+    const params = new URLSearchParams();
+    if (workspaceId) {
+        params.set("workspaceId", workspaceId);
+    }
+    const res = await fetch(`/api/business-analyst/dashboard?${params.toString()}`);
     if (!res.ok) throw new Error("Failed to fetch dashboard");
     const data = await res.json();
     return data.summary;
 }
 
-async function triggerAnalysis(preset: string): Promise<string | null> {
+async function triggerAnalysis(preset: string, workspaceId?: string | null): Promise<string | null> {
+    const headers: HeadersInit = { "Content-Type": "application/json" };
+    if (workspaceId) {
+        (headers as any)["x-workspace-id"] = workspaceId;
+    }
     const res = await fetch("/api/business-analyst/analyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preset }),
+        headers,
+        body: JSON.stringify({ preset, ...(workspaceId ? { workspaceId } : {}) }),
     });
     if (!res.ok) return null;
     return (await res.json()).automationId;
@@ -137,16 +146,18 @@ export function BADashboardView() {
     const [loading, setLoading] = useState(true);
     const [analyzing, setAnalyzing] = useState<string | null>(null);
 
+    const { activeWorkspaceId } = useWorkspace();
+
     const load = useCallback(async () => {
         try {
-            const data = await fetchDashboard();
+            const data = await fetchDashboard(activeWorkspaceId);
             setSummary(data);
         } catch (e) {
             console.error("Failed to load dashboard:", e);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [activeWorkspaceId]);
 
     useEffect(() => {
         void load();
@@ -155,7 +166,7 @@ export function BADashboardView() {
     const handleAnalyze = async (preset: string) => {
         setAnalyzing(preset);
         try {
-            const automationId = await triggerAnalysis(preset);
+            const automationId = await triggerAnalysis(preset, activeWorkspaceId);
             if (automationId) {
                 // Redirect to automation detail to watch progress
                 window.location.href = `/app/automations/${automationId}`;

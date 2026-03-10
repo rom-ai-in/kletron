@@ -13,23 +13,32 @@ import {
 } from "lucide-react";
 import { Panel, Button, Badge } from "@numezis/ui/components/design-system";
 import type { MarketAnalysis, CompetitiveMatrixEntry, CompetitiveStatus } from "@numezis/shared/businessAnalystTypes";
+import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 
 // ---------------------------------------------------------------------------
 // API helpers
 // ---------------------------------------------------------------------------
 
-async function fetchMarketAnalysis(): Promise<MarketAnalysis | null> {
-    const res = await fetch("/api/business-analyst/market-analysis");
+async function fetchMarketAnalysis(workspaceId?: string | null): Promise<MarketAnalysis | null> {
+    const params = new URLSearchParams();
+    if (workspaceId) {
+        params.set("workspaceId", workspaceId);
+    }
+    const res = await fetch(`/api/business-analyst/market-analysis?${params.toString()}`);
     if (!res.ok) throw new Error("Failed to fetch market analysis");
     const data = await res.json();
     return data.analysis;
 }
 
-async function triggerAnalysis(): Promise<string | null> {
+async function triggerAnalysis(workspaceId?: string | null): Promise<string | null> {
+    const headers: HeadersInit = { "Content-Type": "application/json" };
+    if (workspaceId) {
+        (headers as any)["x-workspace-id"] = workspaceId;
+    }
     const res = await fetch("/api/business-analyst/analyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preset: "COMPETITIVE_DEEP_DIVE" }),
+        headers,
+        body: JSON.stringify({ preset: "COMPETITIVE_DEEP_DIVE", ...(workspaceId ? { workspaceId } : {}) }),
     });
     if (!res.ok) return null;
     return (await res.json()).automationId;
@@ -128,16 +137,18 @@ export function BAMarketAnalysisView() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
+    const { activeWorkspaceId } = useWorkspace();
+
     const load = useCallback(async () => {
         try {
-            const data = await fetchMarketAnalysis();
+            const data = await fetchMarketAnalysis(activeWorkspaceId);
             setAnalysis(data);
         } catch (e) {
             console.error("Failed to load market analysis:", e);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [activeWorkspaceId]);
 
     useEffect(() => {
         void load();
@@ -146,7 +157,7 @@ export function BAMarketAnalysisView() {
     const handleRefresh = async () => {
         setRefreshing(true);
         try {
-            const automationId = await triggerAnalysis();
+            const automationId = await triggerAnalysis(activeWorkspaceId);
             if (automationId) {
                 window.location.href = `/app/automations/${automationId}`;
             }

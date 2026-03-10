@@ -241,38 +241,31 @@ export default function App() {
   const activeThread = threads.threads.find((t) => t.id === threads.conversationId) ?? null;
   const activeThreadTitle = activeThread?.title || (threads.conversationId ? "Untitled" : "New thread");
 
-  // Build sidebar project data
+  // Build sidebar project data: single project derived from the active workspace,
+  // with all threads for that workspace.
   const sidebarProjects: SidebarProject[] = useMemo(() => {
-    if (projectsHook.projects.length === 0) {
-      // Fallback: single "default" project with all threads
-      return [{
-        id: "default",
-        name: workspace.workspace?.path?.split("/").pop() || workspace.workspace?.name || "Workspace",
+    const name =
+      workspace.workspace?.name ||
+      workspace.workspace?.path?.split("/").pop() ||
+      "Workspace";
+    return [
+      {
+        id: workspace.workspace?.path ?? "default",
+        name,
         threads: threads.threads.map((t) => ({
           id: t.id,
           title: t.title || "Untitled",
           updatedAt: t.updatedAt,
-          liveStatus: t.status === "archived" ? "idle" as const
-            : threads.conversationId === t.id && conversation.streaming ? "running" as const
-            : "idle" as const,
+          liveStatus:
+            t.status === "archived"
+              ? ("idle" as const)
+              : threads.conversationId === t.id && conversation.streaming
+                ? ("running" as const)
+                : ("idle" as const),
         })),
-      }];
-    }
-    return projectsHook.projects.map((project) => ({
-      id: project.id,
-      name: project.name,
-      threads: threads.threads
-        .filter((t) => project.threads.includes(t.id))
-        .map((t) => ({
-          id: t.id,
-          title: t.title || "Untitled",
-          updatedAt: t.updatedAt,
-          liveStatus: t.status === "archived" ? "idle" as const
-            : threads.conversationId === t.id && conversation.streaming ? "running" as const
-            : "idle" as const,
-        })),
-    }));
-  }, [projectsHook.projects, threads.threads, threads.conversationId, conversation.streaming, workspace.workspace?.path, workspace.workspace?.name]);
+      },
+    ];
+  }, [threads.threads, threads.conversationId, conversation.streaming, workspace.workspace?.path, workspace.workspace?.name]);
 
   // Build pending diffs for right sidebar
   const pendingDiffItems: PendingDiffItem[] = useMemo(() => {
@@ -433,21 +426,6 @@ export default function App() {
     conversation.resetConversation();
     diffs.resetDiffs();
     threads.setConversationId(threadId);
-
-    // Auto-switch workspace to the project that owns this thread
-    const ownerProject = projectsHook.projects.find((p) => p.threads.includes(threadId));
-    if (ownerProject) {
-      projectsHook.setActiveProjectId(ownerProject.id);
-      if (ownerProject.rootPath) {
-        switchWorkspaceTo(ownerProject.rootPath, ownerProject.name);
-      }
-    } else {
-      // Orphan thread — assign it to the current active project so it has a home
-      const fallbackProject = projectsHook.activeProject ?? projectsHook.projects[0];
-      if (fallbackProject) {
-        projectsHook.assignThread(fallbackProject.id, threadId);
-      }
-    }
 
     // Add to open tabs if not already there
     const thread = threads.threads.find((t) => t.id === threadId);
@@ -658,25 +636,7 @@ export default function App() {
     });
   }, [threads.conversationId, threads.threads]);
 
-  // Auto-assign new conversations to the active project
-  const prevConvoIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    const convoId = threads.conversationId;
-    if (!convoId || convoId === prevConvoIdRef.current) return;
-    prevConvoIdRef.current = convoId;
-
-    // Check if this thread already belongs to a project
-    const alreadyAssigned = projectsHook.projects.some((p) =>
-      p.threads.includes(convoId)
-    );
-    if (alreadyAssigned) return;
-
-    // Assign to the active project (or the first project as fallback)
-    const targetProjectId = projectsHook.activeProjectId ?? projectsHook.projects[0]?.id;
-    if (targetProjectId) {
-      projectsHook.assignThread(targetProjectId, convoId);
-    }
-  }, [threads.conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // No project auto-assignment: threads are now scoped purely by workspace.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SETTINGS VIEW
@@ -929,7 +889,9 @@ export default function App() {
     <div className="flex h-screen flex-col text-text-primary">
       {/* ── Title Bar ── */}
       <TitleBar
-        workspaceName={projectsHook.activeProject?.name || workspace.workspace?.path?.split("/").pop() || workspace.workspace?.name || "Numezis Desktop"}
+        workspaceName={workspace.workspace?.name || workspace.workspace?.path?.split("/").pop() || "Numezis Desktop"}
+        workspaceSelectorLabel={workspace.workspace?.name || workspace.workspace?.path?.split("/").pop() || "Select workspace"}
+        onWorkspaceSelectorClick={() => { void workspace.selectWorkspace(); }}
         showTrafficLights={false}
         onOpen={() => {
           try { (window as any).numezis?.openInVSCode?.(); } catch { /* ignore */ }
@@ -975,10 +937,8 @@ export default function App() {
           <ProjectSidebar
             projects={sidebarProjects}
             activeThreadId={threads.conversationId}
-            activeProjectId={projectsHook.activeProjectId}
+            activeProjectId={workspace.workspace?.path ?? null}
             onThreadSelect={handleThreadSelect}
-            onNewThreadInProject={handleNewThreadInProject}
-            onAddProject={handleAddProject}
             onSettings={() => settings.setActiveView("settings")}
             onRenameThread={(threadId, newTitle) => {
               threads.startEditThread({ id: threadId, title: newTitle });
@@ -987,17 +947,6 @@ export default function App() {
             }}
             onArchiveThread={(threadId) => void threads.archiveThread(threadId)}
             onDeleteThread={(threadId) => void threads.deleteThread(threadId)}
-            onRemoveProject={(projectId) => {
-              const remaining = projectsHook.projects.filter((p) => p.id !== projectId);
-              projectsHook.removeProject(projectId);
-              // Switch workspace to the next project if the removed one was active
-              if (projectsHook.activeProjectId === projectId && remaining.length > 0) {
-                const next = remaining[0];
-                if (next.rootPath) {
-                  switchWorkspaceTo(next.rootPath, next.name);
-                }
-              }
-            }}
           />
         )}
 

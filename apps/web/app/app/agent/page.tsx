@@ -274,14 +274,14 @@ export default function AgentPage() {
     return isSimpleGraph;
   }, [sessionDetail, isSimpleGraph]);
 
-  // ── Fetch sessions (all workspaces) ─────────────────────────────────
+  // ── Fetch sessions (current workspace only) ─────────────────────────
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await fetch("/api/sessions?limit=50&allWorkspaces=true&excludeSource=automation");
+      const res = await fetch("/api/sessions?limit=50&excludeSource=automation");
       if (res.ok) {
         const data = await res.json();
         // #region agent log
-        fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:'agent-page',hypothesisId:'H6',location:'apps/web/app/app/agent/page.tsx:fetchSessions',message:'Client fetched sessions',data:{isArray:Array.isArray(data),count:Array.isArray(data)?data.length:-1},timestamp:Date.now()})}).catch(()=>{});
+        fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c540e' }, body: JSON.stringify({ sessionId: '0c540e', runId: 'agent-page', hypothesisId: 'H6', location: 'apps/web/app/app/agent/page.tsx:fetchSessions', message: 'Client fetched sessions', data: { isArray: Array.isArray(data), count: Array.isArray(data) ? data.length : -1 }, timestamp: Date.now() }) }).catch(() => { });
         // #endregion
         const suspiciousTitles = (Array.isArray(data) ? data : [])
           .map((s: any) => String(s?.title ?? ""))
@@ -289,7 +289,7 @@ export default function AgentPage() {
           .slice(0, 6);
         if (suspiciousTitles.length > 0) {
           // #region agent log
-          fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:'agent-page',hypothesisId:'H5',location:'apps/web/app/app/agent/page.tsx:fetchSessions',message:'Suspicious titles received by client',data:{count:suspiciousTitles.length,samples:suspiciousTitles},timestamp:Date.now()})}).catch(()=>{});
+          fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c540e' }, body: JSON.stringify({ sessionId: '0c540e', runId: 'agent-page', hypothesisId: 'H5', location: 'apps/web/app/app/agent/page.tsx:fetchSessions', message: 'Suspicious titles received by client', data: { count: suspiciousTitles.length, samples: suspiciousTitles }, timestamp: Date.now() }) }).catch(() => { });
           // #endregion
         }
         setSessions(Array.isArray(data) ? data : []);
@@ -628,13 +628,19 @@ export default function AgentPage() {
 
   /** Select a session and auto-switch to its owning workspace */
   const handleSelectSession = useCallback((id: string) => {
-    setActiveSessionId(id);
     // Auto-switch workspace if the session belongs to a different one
     const session = sessions.find((s) => s.id === id);
     if (session?.workspaceId && session.workspaceId !== activeWorkspaceId) {
+      const ws = workspaces.find((w) => w.id === session.workspaceId);
+      const isHealthy = !ws || !ws.health || ws.health === "healthy";
+      if (!isHealthy) {
+        console.warn("Cannot select session from an unhealthy workspace");
+        return;
+      }
       void switchWorkspace(session.workspaceId);
     }
-  }, [sessions, activeWorkspaceId, switchWorkspace]);
+    setActiveSessionId(id);
+  }, [sessions, activeWorkspaceId, switchWorkspace, workspaces]);
 
   // Auto-switch workspace after sessions load for a restored session from sessionStorage
   const didAutoSwitchRef = useRef(false);
@@ -642,10 +648,17 @@ export default function AgentPage() {
     if (didAutoSwitchRef.current || !activeSessionId || sessions.length === 0) return;
     const session = sessions.find((s) => s.id === activeSessionId);
     if (session?.workspaceId && session.workspaceId !== activeWorkspaceId) {
+      const ws = workspaces.find((w) => w.id === session.workspaceId);
+      const isHealthy = !ws || !ws.health || ws.health === "healthy";
+      if (!isHealthy) {
+        console.warn("Skipping auto-switch to unhealthy workspace");
+        didAutoSwitchRef.current = true;
+        return;
+      }
       didAutoSwitchRef.current = true;
       void switchWorkspace(session.workspaceId);
     }
-  }, [activeSessionId, sessions, activeWorkspaceId, switchWorkspace]);
+  }, [activeSessionId, sessions, activeWorkspaceId, switchWorkspace, workspaces]);
 
   const handleArchiveSession = useCallback(async (id: string) => {
     try {
@@ -686,67 +699,35 @@ export default function AgentPage() {
 
   // ── Workspace actions ─────────────────────────────────────────────────
 
-  /** Create a new session inside a specific workspace */
-  const handleNewSessionInWorkspace = useCallback(async (workspaceId: string) => {
-    if (workspaceId === "__unassigned__") return; // guard: synthetic group
-    // Switch to the target workspace (optimistic update in context is immediate),
-    // then start a fresh session
-    await switchWorkspace(workspaceId);
+  /** Create a new session in the currently active workspace */
+  const handleNewSessionInActiveWorkspace = useCallback(async () => {
+    // Workspace scoping is handled on the server from the active workspace
+    // selected in the global header.
     handleNewSession();
-  }, [switchWorkspace, handleNewSession]);
+  }, [handleNewSession]);
 
-  /** Open the add workspace modal */
-  const handleAddWorkspace = useCallback(() => {
-    setAddWorkspaceOpen(true);
-  }, []);
-
-  /** Called when a workspace is successfully created from the modal */
-  const handleWorkspaceCreated = useCallback(async (ws: { id: string; name: string; rootPath: string }) => {
-    await refreshWorkspaces();
-    await switchWorkspace(ws.id);
-    await fetchSessions();
-  }, [refreshWorkspaces, switchWorkspace, fetchSessions]);
-
-  /** Remove (archive) a workspace */
-  const handleRemoveWorkspace = useCallback((workspaceId: string) => {
-    if (workspaceId === "__unassigned__") return; // guard: synthetic group
-    void deleteWorkspaceCtx(workspaceId);
-  }, [deleteWorkspaceCtx]);
-
-  // ── Build sidebar projects from workspaces + sessions ─────────────────
+  // ── Build sidebar project from active workspace + its sessions ───────
   const sidebarProjects: SidebarProject[] = useMemo(() => {
-    const projects: SidebarProject[] = workspaces.map((ws) => ({
-      id: ws.id,
-      name: ws.name,
-      threads: sessions
-        .filter((s) => s.workspaceId === ws.id)
-        .map((s): SidebarThread => ({
-          id: s.id,
-          title: s.title || "Untitled",
-          updatedAt: s.startedAt,
-          liveStatus: toThreadLiveStatus(s.status, sending && activeSessionId === s.id),
-        })),
-    }));
-
-    // Orphan sessions (no workspace or workspace not in user's list)
-    const wsIds = new Set(workspaces.map((w) => w.id));
-    const orphans = sessions.filter((s) => !s.workspaceId || !wsIds.has(s.workspaceId));
-    if (orphans.length > 0) {
-      projects.push({
-        id: "__unassigned__",
-        name: "Unassigned",
-        readonly: true,
-        threads: orphans.map((s): SidebarThread => ({
-          id: s.id,
-          title: s.title || "Untitled",
-          updatedAt: s.startedAt,
-          liveStatus: toThreadLiveStatus(s.status, sending && activeSessionId === s.id),
-        })),
-      });
-    }
-
-    return projects;
-  }, [workspaces, sessions, sending, activeSessionId]);
+    if (!activeWorkspace) return [];
+    const threadsForWorkspace = sessions
+      .filter((s) => s.workspaceId === activeWorkspace.id)
+      .map((s): SidebarThread => ({
+        id: s.id,
+        title: s.title || "Untitled",
+        updatedAt: s.startedAt,
+        liveStatus: toThreadLiveStatus(s.status, sending && activeSessionId === s.id),
+      }));
+    return [
+      {
+        id: activeWorkspace.id,
+        name: activeWorkspace.name,
+        health: activeWorkspace.health,
+        healthMessage: activeWorkspace.healthMessage,
+        selectable: activeWorkspace.selectable,
+        threads: threadsForWorkspace,
+      },
+    ];
+  }, [activeWorkspace, sessions, sending, activeSessionId]);
 
   // Convert Message[] from useSessionStream to ChatEvent[] for MessageList
   // Includes a final consecutive-duplicate guard to catch any remaining dupes
@@ -978,12 +959,10 @@ export default function AgentPage() {
       activeThreadId={activeSessionId}
       activeProjectId={activeWorkspaceId}
       onThreadSelect={handleSelectSession}
-      onNewThreadInProject={(workspaceId) => { void handleNewSessionInWorkspace(workspaceId); }}
-      onAddProject={handleAddWorkspace}
+      onNewThreadInProject={() => { void handleNewSessionInActiveWorkspace(); }}
       onRenameThread={(id, title) => void handleRenameSession(id, title)}
       onArchiveThread={(id) => void handleArchiveSession(id)}
       onDeleteThread={(id) => void handleDeleteSession(id)}
-      onRemoveProject={handleRemoveWorkspace}
       className="w-full"
     />
   );
@@ -993,12 +972,10 @@ export default function AgentPage() {
     activeSessionId,
     activeWorkspaceId,
     handleSelectSession,
-    handleNewSessionInWorkspace,
-    handleAddWorkspace,
+    handleNewSessionInActiveWorkspace,
     handleRenameSession,
     handleArchiveSession,
     handleDeleteSession,
-    handleRemoveWorkspace,
   ]);
 
   const mainContent = (
@@ -1049,11 +1026,10 @@ export default function AgentPage() {
           {runStartedAt && <DurationDisplay startedAt={runStartedAt} endedAt={runEndedAt ?? undefined} />}
           <button
             onClick={() => setPerfDebugEnabled((v) => !v)}
-            className={`rounded border px-2 py-1 text-[10px] transition ${
-              perfDebugEnabled
-                ? "border-status-info-border bg-status-info-bg text-status-info-text"
-                : "border-border-subtle bg-bg-elevated text-text-muted hover:bg-state-hover hover:text-text-primary"
-            }`}
+            className={`rounded border px-2 py-1 text-[10px] transition ${perfDebugEnabled
+              ? "border-status-info-border bg-status-info-bg text-status-info-text"
+              : "border-border-subtle bg-bg-elevated text-text-muted hover:bg-state-hover hover:text-text-primary"
+              }`}
             title="Toggle performance debug metrics"
           >
             Perf {perfDebugEnabled ? "ON" : "OFF"}
@@ -1082,11 +1058,11 @@ export default function AgentPage() {
           activeGraphIsSimple
             ? undefined
             : () => {
-                if (scrollContainerRef.current) {
-                  const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-                  isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 50;
-                }
+              if (scrollContainerRef.current) {
+                const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+                isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 50;
               }
+            }
         }
       >
         {activeGraphIsSimple ? (
@@ -1193,7 +1169,7 @@ export default function AgentPage() {
     <TimelinePanel
       timeline={timeline}
       selectedEventId={null}
-      onPhaseSelect={() => {}}
+      onPhaseSelect={() => { }}
       tokenUsage={tokenUsage ?? undefined}
     />
   ) : undefined;
@@ -1206,11 +1182,6 @@ export default function AgentPage() {
         aside={timelineSidebar}
         sidebarWidth="w-[260px]"
         asideWidth="w-72"
-      />
-      <AddWorkspaceModal
-        open={addWorkspaceOpen}
-        onClose={() => setAddWorkspaceOpen(false)}
-        onCreated={(ws) => void handleWorkspaceCreated(ws)}
       />
     </>
   );

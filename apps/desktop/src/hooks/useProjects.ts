@@ -12,7 +12,7 @@ function projectNameFromPath(rootPath: string, fallbackName?: string | null): st
   return fallbackName || "Project";
 }
 
-export function useProjects(workspacePath?: string | null, workspaceName?: string | null) {
+export function useProjects(workspacePath?: string | null, workspaceName?: string | null, backendUrl?: string, getAccessToken?: () => Promise<string | null>) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const storageLoadedRef = useRef(false);
@@ -205,6 +205,103 @@ export function useProjects(workspacePath?: string | null, workspaceName?: strin
     []
   );
 
+  // Fetch projects from backend and merge with localStorage
+  const fetchProjectsFromBackend = useCallback(async () => {
+    if (!backendUrl || !getAccessToken) return;
+
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+
+      const response = await fetch(`${backendUrl}/api/projects`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        // If backend doesn't have projects API or it fails, just continue with localStorage
+        return;
+      }
+
+      const backendProjects: Array<{
+        id: string;
+        name: string;
+        rootPath: string;
+        threads?: string[];
+      }> = await response.json();
+
+      if (backendProjects.length === 0) return;
+
+      // Merge backend projects with localStorage projects
+      setProjects((prevLocalProjects) => {
+        const merged = new Map<string, Project>();
+
+        // Add all local projects first
+        for (const local of prevLocalProjects) {
+          merged.set(local.id, { ...local });
+        }
+
+        // Add/update with backend projects
+        for (const backend of backendProjects) {
+          const existing = prevLocalProjects.find((p) => p.rootPath === backend.rootPath);
+          if (existing) {
+            // Update local project with backend data if needed
+            merged.set(existing.id, {
+              ...existing,
+              name: backend.name || existing.name,
+              threads: backend.threads || existing.threads,
+              updatedAt: new Date().toISOString(),
+            });
+          } else {
+            // Add new project from backend
+            const newProject: Project = {
+              id: crypto.randomUUID(), // Generate local ID for backend projects
+              name: backend.name,
+              rootPath: normPath(backend.rootPath),
+              threads: backend.threads || [],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            merged.set(newProject.id, newProject);
+          }
+        }
+
+        const result = Array.from(merged.values());
+        persistProjects(result);
+
+        // If we added new projects and no active project, set the first one
+        if (result.length > 0 && !activeProjectId) {
+          setActiveProjectId(result[0].id);
+        }
+
+        return result;
+      });
+    } catch (error) {
+      console.error("Failed to fetch projects from backend:", error);
+      // Continue with localStorage projects on error
+    }
+  }, [backendUrl, getAccessToken, activeProjectId]);
+
+  // Periodically sync with backend
+  useEffect(() => {
+    if (!backendUrl || !getAccessToken) return;
+
+    const interval = setInterval(() => {
+      void fetchProjectsFromBackend();
+    }, 30000); // Sync every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [backendUrl, getAccessToken, fetchProjectsFromBackend]);
+
+  // Initial sync when backend is ready
+  useEffect(() => {
+    if (backendUrl && getAccessToken) {
+      const timer = setTimeout(() => {
+        void fetchProjectsFromBackend();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [backendUrl, getAccessToken, fetchProjectsFromBackend]);
+
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
 
   return {
@@ -216,5 +313,6 @@ export function useProjects(workspacePath?: string | null, workspaceName?: strin
     removeProject,
     assignThread,
     unassignThread,
+    refreshProjects: fetchProjectsFromBackend, // Expose for manual refresh
   };
 }

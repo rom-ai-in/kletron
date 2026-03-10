@@ -60,20 +60,20 @@ export async function loadConfig(): Promise<Config> {
   }
 
   if (!persisted?.workingFolder || persisted.workingFolder.trim() === "") {
-    // Fallback to config/config.json (kept in sync by workspace service)
+    // Fallback to config/config.json (kept in sync by workspace service).
+    // IMPORTANT: we only trust the explicit `workingFolder` field here.
+    // `workspaceRoots` is treated purely as an allowlist for MCP and MUST
+    // NOT be used to infer the active workspace, otherwise the first entry
+    // can silently point the system at the wrong repository.
     try {
       const configDir = path.resolve(process.cwd(), "config");
       const configJsonPath = path.join(configDir, "config.json");
       if (fs.existsSync(configJsonPath)) {
         const raw = fs.readFileSync(configJsonPath, "utf-8");
-        const data = JSON.parse(raw) as { workingFolder?: string; workspaceRoots?: string[] };
-        const fallback = data.workingFolder?.trim()
-          ? data.workingFolder
-          : Array.isArray(data.workspaceRoots) && data.workspaceRoots.length > 0
-            ? data.workspaceRoots[0]
-            : "";
-        if (fallback) {
-          const normalized = path.resolve(fallback);
+        const data = JSON.parse(raw) as { workingFolder?: string };
+        const fromFile = data.workingFolder?.trim() ?? "";
+        if (fromFile) {
+          const normalized = path.resolve(fromFile);
           if (fs.existsSync(normalized) && fs.statSync(normalized).isDirectory()) {
             return { workingFolder: normalized };
           }

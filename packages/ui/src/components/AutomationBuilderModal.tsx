@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Modal, Button, Skeleton, Panel, SelectableRow } from "@numezis/ui/components/design-system";
+import { Modal, Button, Skeleton, Panel, SelectableRow, Selector } from "@numezis/ui/components/design-system";
+import type { SelectorOption } from "@numezis/ui/components/design-system";
 import { AutomationConfigBuilder } from "@numezis/shared/automationConfigBuilder";
 import type { AutomationDefinition, AutomationStageConfig, AutomationTriggerType, GitEventType } from "@numezis/shared/automationTypes";
 import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
@@ -115,11 +116,46 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                 const configRes = await fetch("/api/llm-config", { cache: "no-store" });
                 const configData = configRes.ok ? await configRes.json() : {};
 
+                // Probe live status for local providers to get exact loaded models
+                let lmStudioLoadedModel: string | undefined = undefined;
+                if (enabled.includes("lmstudio" as LlmProviderType)) {
+                    try {
+                        const lmsRes = await fetch("/api/llm-config/lmstudio/models", { cache: "no-store" });
+                        if (lmsRes.ok) {
+                            const lmsData = await lmsRes.json();
+                            lmStudioLoadedModel = lmsData.loadedModel || undefined;
+                        }
+                    } catch {
+                        // ignore failures
+                    }
+                }
+
+                let vllmLoadedModel: string | undefined = undefined;
+                if (enabled.includes("vllm" as LlmProviderType)) {
+                    try {
+                        const vllmRes = await fetch("/api/llm-config/vllm/models", { cache: "no-store" });
+                        if (vllmRes.ok) {
+                            const vllmData = await vllmRes.json();
+                            vllmLoadedModel = vllmData.loadedModel || undefined;
+                        }
+                    } catch {
+                        // ignore failures
+                    }
+                }
+
                 if (!cancelled) {
                     setLlmProviderOptions(
                         enabled.map((providerId) => {
                             const cfg = configData?.[providerId] as Record<string, unknown> | undefined;
-                            const model = (cfg?.model ?? cfg?.deployment ?? "") as string;
+                            let model = (cfg?.model ?? cfg?.deployment ?? "") as string;
+
+                            // Override static config model if there is a live model explicitly loaded
+                            if (providerId === "lmstudio" && lmStudioLoadedModel) {
+                                model = lmStudioLoadedModel;
+                            } else if (providerId === "vllm" && vllmLoadedModel) {
+                                model = vllmLoadedModel;
+                            }
+
                             return {
                                 id: providerId,
                                 label: PROVIDER_LABELS[providerId] ?? providerId,
@@ -345,9 +381,9 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                         )}
                         <div className="space-y-3">
                             {automationData.stages?.map((stage: AutomationStageConfig, idx: number) => (
-                                <Panel
+                                <div
                                     key={idx}
-                                    className={`space-y-3 p-3 text-xs border-border-subtle bg-bg-elevated/50 ${(!stage.prompt || stage.prompt.trim() === "") ? "border-status-error-border bg-status-error-bg" : ""}`}
+                                    className={`rounded-lg border shadow-sm space-y-3 p-3 text-xs border-border-subtle bg-bg-elevated/50 ${(!stage.prompt || stage.prompt.trim() === "") ? "border-status-error-border bg-status-error-bg" : ""}`}
                                 >
                                     <div className="flex items-center justify-between gap-2">
                                         <input
@@ -364,47 +400,47 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                                         </button>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
+                                        <Selector
+                                            label="Graph"
+                                            value={stage.graphId}
+                                            fullWidth
+                                            onSelect={(id) => handleUpdateStage(idx, { graphId: id })}
+                                            options={
+                                                graphOptions.length === 0
+                                                    ? [{ id: stage.graphId || "", label: "Loading graphs..." }]
+                                                    : [
+                                                        ...graphOptions.map(g => ({ id: g.id, label: g.name })),
+                                                        ...(stage.graphId && !graphOptions.some(g => g.id === stage.graphId)
+                                                            ? [{ id: stage.graphId, label: `${stage.graphId} (legacy)` }]
+                                                            : [])
+                                                    ]
+                                            }
+                                        />
                                         <div>
-                                            <label className="block text-[10px] text-text-muted uppercase mb-1">Graph / Flow</label>
-                                            <select
-                                                value={stage.graphId}
-                                                onChange={(e) => handleUpdateStage(idx, { graphId: e.target.value })}
-                                                className="w-full rounded border-border-subtle bg-bg-surface px-2 py-1 text-xs"
-                                            >
-                                                {graphOptions.length === 0 && (
-                                                    <option value="" disabled>Loading graphs...</option>
-                                                )}
-                                                {graphOptions.map(g => (
-                                                    <option key={g.id} value={g.id}>{g.name}</option>
-                                                ))}
-                                                {/* If the current graphId isn't in the list (e.g. legacy), show it */}
-                                                {stage.graphId && !graphOptions.some(g => g.id === stage.graphId) && (
-                                                    <option value={stage.graphId}>{stage.graphId} (legacy)</option>
-                                                )}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] text-text-muted uppercase mb-1">LLM Provider</label>
-                                            <select
+                                            <div className="mb-2 text-[10px] text-text-muted uppercase tracking-wider font-semibold">LLM Provider</div>
+                                            <Selector
+                                                label="Provider"
                                                 value={stage.llmProvider}
-                                                onChange={(e) => handleUpdateStage(idx, { llmProvider: e.target.value as LlmProviderType })}
-                                                className="w-full rounded border-border-subtle bg-bg-surface px-2 py-1 text-xs"
-                                            >
-                                                {llmProviderOptions.length === 0 && (
-                                                    <option value="" disabled>Loading providers...</option>
-                                                )}
-                                                {llmProviderOptions.map((p) => (
-                                                    <option key={p.id} value={p.id}>
-                                                        {p.label}{p.model ? ` (${p.model})` : ""}
-                                                    </option>
-                                                ))}
-                                                {/* If the current provider isn't in the list (e.g. disabled), keep it visible */}
-                                                {stage.llmProvider && !llmProviderOptions.some((p) => p.id === stage.llmProvider) && (
-                                                    <option value={stage.llmProvider}>
-                                                        {PROVIDER_LABELS[stage.llmProvider] ?? stage.llmProvider} (disabled)
-                                                    </option>
-                                                )}
-                                            </select>
+                                                fullWidth
+                                                onSelect={(id) => handleUpdateStage(idx, { llmProvider: id as LlmProviderType })}
+                                                options={
+                                                    llmProviderOptions.length === 0
+                                                        ? [{ id: stage.llmProvider || "", label: "Loading providers..." }]
+                                                        : [
+                                                            ...llmProviderOptions.map(p => ({
+                                                                id: p.id,
+                                                                label: p.label,
+                                                                sub: p.model ? p.model : undefined
+                                                            })),
+                                                            ...(stage.llmProvider && !llmProviderOptions.some(p => p.id === stage.llmProvider)
+                                                                ? [{
+                                                                    id: stage.llmProvider,
+                                                                    label: `${PROVIDER_LABELS[stage.llmProvider] ?? stage.llmProvider} (disabled)`
+                                                                }]
+                                                                : [])
+                                                        ]
+                                                }
+                                            />
                                         </div>
                                     </div>
                                     <div>
@@ -419,7 +455,7 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                                             <div className="mt-1 text-[10px] text-status-error-text">Prompt is required.</div>
                                         )}
                                     </div>
-                                </Panel>
+                                </div>
                             ))}
                             {automationData.stages?.length === 0 && (
                                 <div className="py-8 text-center text-xs text-text-muted border border-dashed border-border-subtle rounded-md">
@@ -474,11 +510,10 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                                             }
                                             setAutomationData({ ...automationData, ...updates });
                                         }}
-                                        className={`flex flex-col items-start gap-0.5 rounded-md border px-3 py-2 text-left transition-colors ${
-                                            currentTrigger === opt.id
-                                                ? "border-text-primary bg-state-selected"
-                                                : "border-border-subtle hover:border-border-strong hover:bg-state-hover"
-                                        }`}
+                                        className={`flex flex-col items-start gap-0.5 rounded-md border px-3 py-2 text-left transition-colors ${currentTrigger === opt.id
+                                            ? "border-text-primary bg-state-selected"
+                                            : "border-border-subtle hover:border-border-strong hover:bg-state-hover"
+                                            }`}
                                     >
                                         <span className="text-xs font-medium text-text-primary">{opt.label}</span>
                                         <span className="text-[10px] text-text-muted">{opt.description}</span>
@@ -508,11 +543,10 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                                                         },
                                                     });
                                                 }}
-                                                className={`rounded-md px-2 py-1 text-[10px] font-medium border transition-colors ${
-                                                    (preset.value !== "" && currentCron === preset.value) || (preset.value === "" && !isPresetCron && currentCron !== "")
-                                                        ? "border-text-primary bg-state-selected text-text-primary"
-                                                        : "border-border-subtle text-text-muted hover:border-border-strong"
-                                                }`}
+                                                className={`rounded-md px-2 py-1 text-[10px] font-medium border transition-colors ${(preset.value !== "" && currentCron === preset.value) || (preset.value === "" && !isPresetCron && currentCron !== "")
+                                                    ? "border-text-primary bg-state-selected text-text-primary"
+                                                    : "border-border-subtle text-text-muted hover:border-border-strong"
+                                                    }`}
                                             >
                                                 {preset.label}
                                             </button>
@@ -631,11 +665,10 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                                                             },
                                                         });
                                                     }}
-                                                    className={`rounded-md px-3 py-1 text-xs font-medium border transition-colors ${
-                                                        selected
-                                                            ? "border-text-primary bg-state-selected text-text-primary"
-                                                            : "border-border-subtle text-text-muted hover:border-border-strong"
-                                                    }`}
+                                                    className={`rounded-md px-3 py-1 text-xs font-medium border transition-colors ${selected
+                                                        ? "border-text-primary bg-state-selected text-text-primary"
+                                                        : "border-border-subtle text-text-muted hover:border-border-strong"
+                                                        }`}
                                                 >
                                                     {evt.label}
                                                 </button>

@@ -33,6 +33,9 @@ export interface SidebarProject {
   threads: SidebarThread[];
   /** When true, hide "New thread" and "Remove project" actions for this project */
   readonly?: boolean;
+  health?: "healthy" | "missing" | "inaccessible";
+  healthMessage?: string | null;
+  selectable?: boolean;
 }
 
 export interface ProjectSidebarProps {
@@ -173,20 +176,40 @@ export function ProjectSidebar({
       </div>
 
       {/* ── Threads section header ── */}
-      <div className="flex items-center justify-between px-3 py-2.5 mt-1">
+      <div className="flex items-center justify-between px-3 py-2.5 mt-1 gap-2">
         <span className="text-[11px] font-bold uppercase tracking-widest text-text-muted">
           Threads
         </span>
-        {onSettings && (
-          <button
-            type="button"
-            onClick={onSettings}
-            className="rounded-md p-1 text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
-            title="Settings"
-          >
-            <Settings className="h-3.5 w-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {onNewThreadInProject && projects.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const targetId =
+                  activeProjectId && projects.some((p) => p.id === activeProjectId)
+                    ? activeProjectId
+                    : projects[0]?.id;
+                if (targetId) {
+                  onNewThreadInProject(targetId);
+                }
+              }}
+              className="rounded-md px-2 py-1 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
+              title="New thread"
+            >
+              New
+            </button>
+          )}
+          {onSettings && (
+            <button
+              type="button"
+              onClick={onSettings}
+              className="rounded-md p-1 text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
+              title="Settings"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Project & Thread List ── */}
@@ -194,15 +217,20 @@ export function ProjectSidebar({
         {projects.map((project) => {
           const isCollapsed = collapsedProjects.has(project.id);
           const showContextMenu = contextMenuProjectId === project.id;
+          const isHealthy = !project.health || project.health === 'healthy';
 
           return (
             <div key={project.id} className="relative">
               {/* Project Header */}
-              <div className="group/project flex w-full items-center gap-1 px-3 py-2 text-[12px] font-semibold text-text-secondary hover:bg-white/[0.03] transition-all duration-150 mt-1 first:mt-0">
+              <div
+                className={`group/project flex w-full items-center gap-1 px-3 py-2 text-[12px] font-semibold transition-all duration-150 mt-1 first:mt-0 ${isHealthy ? 'text-text-secondary hover:bg-white/[0.03]' : 'text-text-muted opacity-50 cursor-not-allowed'}`}
+                title={!isHealthy ? (project.healthMessage || 'Project inaccessible') : undefined}
+              >
                 <button
                   type="button"
-                  onClick={() => toggleProject(project.id)}
-                  className="flex flex-1 items-center gap-1.5 min-w-0"
+                  onClick={() => isHealthy && toggleProject(project.id)}
+                  disabled={!isHealthy}
+                  className={`flex flex-1 items-center gap-1.5 min-w-0 ${!isHealthy && 'cursor-not-allowed'}`}
                 >
                   {isCollapsed ? (
                     <ChevronRight className="h-3 w-3 text-text-muted flex-shrink-0" />
@@ -236,7 +264,7 @@ export function ProjectSidebar({
                     </button>
 
                     {/* New thread in this project */}
-                    {onNewThreadInProject && (
+                    {onNewThreadInProject && isHealthy && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -294,11 +322,10 @@ export function ProjectSidebar({
                     return (
                       <div
                         key={thread.id}
-                        className={`group flex items-center gap-2 pl-9 pr-2 py-1.5 cursor-pointer transition-all duration-150 ${
-                          isActive
-                            ? 'bg-accent-cyan/8 text-text-primary border-l-2 border-l-accent-cyan pl-[34px]'
-                            : 'text-text-secondary hover:bg-white/[0.03] hover:text-text-primary border-l-2 border-l-transparent'
-                        }`}
+                        className={`group flex items-center gap-2 pl-9 pr-2 py-1.5 cursor-pointer transition-all duration-150 ${isActive
+                          ? 'bg-accent-cyan/8 text-text-primary border-l-2 border-l-accent-cyan pl-[34px]'
+                          : 'text-text-secondary hover:bg-white/[0.03] hover:text-text-primary border-l-2 border-l-transparent'
+                          }`}
                         onClick={() => !isEditing && onThreadSelect?.(thread.id)}
                       >
                         <StatusDot status={thread.liveStatus} />

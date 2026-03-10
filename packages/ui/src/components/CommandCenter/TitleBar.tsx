@@ -22,6 +22,9 @@ export interface GitDiffStats {
 
 export interface TitleBarProps {
   workspaceName?: string;
+  /** Optional label + handler for a workspace selector pill on the right */
+  workspaceSelectorLabel?: string;
+  onWorkspaceSelectorClick?: () => void;
   /** Active thread title shown in the center */
   threadTitle?: string;
   /** Optional extra content rendered in the center */
@@ -48,6 +51,8 @@ export interface TitleBarProps {
 
 export function TitleBar({
   workspaceName = 'Numezis Desktop',
+  workspaceSelectorLabel,
+  onWorkspaceSelectorClick,
   threadTitle,
   center,
   gitDiffStats,
@@ -105,6 +110,19 @@ export function TitleBar({
 
       {/* Right: action buttons */}
       <div className="flex items-center gap-1 app-region-no-drag flex-shrink-0">
+        {/* Workspace selector pill */}
+        {workspaceSelectorLabel && onWorkspaceSelectorClick && (
+          <button
+            type="button"
+            onClick={onWorkspaceSelectorClick}
+            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150"
+            title="Select workspace folder"
+          >
+            <span className="truncate max-w-[140px]">{workspaceSelectorLabel}</span>
+            <ChevronDown className="h-2.5 w-2.5" />
+          </button>
+        )}
+
         {/* Run */}
         {onRun && (
           <button

@@ -2,9 +2,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "../lib/db";
 import type { AgentGraphDefinition } from "./agentGraphTypes";
 import {
-    buildCursorLikeRobustGraph,
     buildDiamondFlowAgentGraph,
-    buildCompleteDeepAgentGraph,
     buildDriftAnalysisGraph,
     buildAutomationsGraph,
     buildPresentationGeneratorProGraph,
@@ -12,7 +10,6 @@ import {
     buildCoderAgentGraph,
     buildExplorerAgentGraph,
     buildPlannerAgentGraph,
-    buildContinuousImprovementGraph,
     buildBusinessAnalystGraph,
 } from "./agentGraphPresets";
 
@@ -20,6 +17,13 @@ const COLLECTION_NAME = "agent_graphs";
 const fallbackGraphs = new Map<string, AgentGraphDefinition>();
 let fallbackEnabled = false;
 let fallbackWarned = false;
+
+// Graphs that should no longer appear in default lists / UI
+const HIDDEN_GRAPH_NAMES = new Set<string>([
+    "Cursor-like Robust Loop (agent graph)",
+    "Complete Deep Agent (agent graph)",
+    "Continuous Improvement (agent graph)",
+]);
 
 function warnFallback(error: unknown) {
     if (fallbackWarned) return;
@@ -43,17 +47,14 @@ function ensureFallbackGraphs() {
     if (fallbackGraphs.size > 0) return;
     const now = new Date();
     const entries: Array<{ id: string; graph: Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> }> = [
-        { id: "000000000000000000000001", graph: buildCursorLikeRobustGraph() },
         { id: "000000000000000000000002", graph: buildSimpleReactAgentGraph() },
         { id: "000000000000000000000003", graph: buildDiamondFlowAgentGraph() },
         { id: "000000000000000000000004", graph: buildPresentationGeneratorProGraph() },
-        { id: "000000000000000000000005", graph: buildCompleteDeepAgentGraph() },
         { id: "000000000000000000000006", graph: buildDriftAnalysisGraph() },
         { id: "000000000000000000000007", graph: buildAutomationsGraph() },
         { id: "000000000000000000000008", graph: buildCoderAgentGraph() },
         { id: "000000000000000000000009", graph: buildExplorerAgentGraph() },
         { id: "00000000000000000000000a", graph: buildPlannerAgentGraph() },
-        { id: "00000000000000000000000b", graph: buildContinuousImprovementGraph() },
         { id: "00000000000000000000000c", graph: buildBusinessAnalystGraph() },
     ];
 
@@ -110,6 +111,7 @@ export class AgentGraphService {
         if (!collection) {
             ensureFallbackGraphs();
             let graphs = Array.from(fallbackGraphs.values());
+            graphs = graphs.filter((graph) => !HIDDEN_GRAPH_NAMES.has(graph.name));
             if (filter?.search) {
                 const needle = filter.search.toLowerCase();
                 graphs = graphs.filter(
@@ -133,7 +135,9 @@ export class AgentGraphService {
             .find(query)
             .sort({ updatedAt: -1 })
             .toArray();
-        return graphs as AgentGraphDefinition[];
+        return (graphs as AgentGraphDefinition[]).filter(
+            (graph) => !HIDDEN_GRAPH_NAMES.has(graph.name)
+        );
     }
 
     async updateGraph(graphId: string, updates: Partial<AgentGraphDefinition>): Promise<void> {

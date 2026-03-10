@@ -852,7 +852,23 @@ export class AgentGraphExecutor {
         console.log(`[AgentGraphExecutor] continueRun: runId=${runId}, message="${message.slice(0, 40)}"`);
         const run = await agentGraphRunService.getRun(runId);
         if (!run) throw new Error(`Run ${runId} not found`);
-        console.log(`[AgentGraphExecutor] continueRun: run status="${run.status}", graphId=${run.graphId}`);
+        console.log(
+            `[AgentGraphExecutor] continueRun: run status="${run.status}", graphId=${run.graphId}, workspaceId=${run.workspaceId}`
+        );
+
+        // Resolve and bind the workspace for this continuation. This ensures that
+        // all downstream tooling (MCP, git, semantic index, etc.) sees a stable
+        // workspace context even if the user changed the global active workspace
+        // between turns.
+        const workspaceId = run.workspaceId?.toString() ?? null;
+        const workspace = workspaceId
+            ? await getWorkspaceByIdUnsafe(workspaceId)
+            : (await listAllWorkspaces())[0];
+        if (!workspace || !workspace._id) {
+            throw new Error("Workspace not found for run continuation.");
+        }
+
+        return await runWithWorkspaceContext(workspace, async () => {
 
         // ── Check for checkpoint-based resume ────────────────────────────
         // If the run was interrupted (PAUSED with checkpoint metadata),
@@ -973,6 +989,7 @@ export class AgentGraphExecutor {
         await agentGraphRunService.incrementConversationTurns(runId);
 
         return this.executeRunStreaming(runId, opts);
+        });
     }
 
     async executeRunStreaming(

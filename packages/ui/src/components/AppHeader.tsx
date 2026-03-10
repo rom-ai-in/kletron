@@ -28,6 +28,7 @@ export function AppHeader() {
           workspace.health && workspace.health !== "healthy"
             ? `${workspace.rootPath} (${workspace.health})`
             : workspace.rootPath,
+        hasWarning: workspace.health && workspace.health !== "healthy",
       };
     });
   }, [workspaces]);
@@ -45,7 +46,7 @@ export function AppHeader() {
           <div className="flex items-center gap-2">
             <Selector
               label="Workspace"
-              value={activeWorkspaceId || workspaceOptions[0]?.id || "none"}
+              value={activeWorkspaceId || "none"}
               options={workspaceOptions}
               onSelect={handleSelectWorkspace}
               size="sm"
@@ -59,11 +60,6 @@ export function AppHeader() {
             >
               <Plus className="h-3.5 w-3.5" />
             </Link>
-            {hasWorkspaceHealthIssues && (
-              <span className="rounded-md border border-status-warning-border bg-status-warning-bg px-2 py-1 text-[10px] font-semibold text-status-warning-text">
-                Workspace attention needed
-              </span>
-            )}
           </div>
           <Link
             href="/app/history"

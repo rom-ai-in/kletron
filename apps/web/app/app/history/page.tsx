@@ -14,6 +14,7 @@ import {
 } from "@numezis/ui/components/design-system";
 import { History } from "lucide-react";
 import { RequireWorkspace } from "@numezis/ui/components/workspace/RequireWorkspace";
+import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 
 type HistoryRunItem = {
   id: string;
@@ -73,6 +74,8 @@ function HistoryPageContent() {
   const [typeFilter, setTypeFilter] = useState<FilterType>(initialType);
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
+  const { activeWorkspaceId } = useWorkspace();
+
   const fetchRuns = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -83,6 +86,7 @@ function HistoryPageContent() {
       if (query) params.set("q", query);
       if (graphIdParam) params.set("graphId", graphIdParam);
       if (automationIdParam) params.set("automationId", automationIdParam);
+      if (activeWorkspaceId) params.set("workspaceId", activeWorkspaceId);
       params.set("limit", "100");
 
       const res = await fetch(`/api/history/runs?${params.toString()}`);
@@ -94,7 +98,7 @@ function HistoryPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [typeFilter, statusFilter, query, graphIdParam, automationIdParam]);
+  }, [typeFilter, statusFilter, query, graphIdParam, automationIdParam, activeWorkspaceId]);
 
   useEffect(() => {
     void fetchRuns();

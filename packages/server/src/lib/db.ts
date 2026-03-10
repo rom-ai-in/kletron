@@ -44,6 +44,8 @@ if (process.env.MONGODB_URI) {
                 }
                 throw error;
             });
+            // Prevent unhandled promise rejection from crashing the process
+            globalWithMongo._mongoClientPromise.catch(() => { });
         }
         clientPromise = globalWithMongo._mongoClientPromise;
     } else {
@@ -56,6 +58,8 @@ if (process.env.MONGODB_URI) {
             }
             throw error;
         });
+        // Prevent unhandled promise rejection from crashing the process
+        clientPromise.catch(() => { });
     }
 }
 

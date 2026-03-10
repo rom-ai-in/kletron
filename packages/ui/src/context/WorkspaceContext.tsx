@@ -65,7 +65,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/workspaces');
+      const res = await fetch(`/api/workspaces?t=${Date.now()}`);
       if (!res.ok) throw new Error('Failed to load workspaces');
       const data = await res.json();
       if (!mountedRef.current) return;
@@ -166,15 +166,27 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
   const hasWorkspaceHealthIssues = workspaces.some((w) => (w.health ?? "healthy") !== "healthy");
 
+  // Track if we've already attempted auto-recovery for the current activeWorkspaceId
+  const autoRecoveryAttemptedRef = useRef<string | null>(null);
+
   // Auto-recovery: if active workspace is unhealthy, switch to the first healthy workspace.
   useEffect(() => {
     if (!activeWorkspaceId || !workspaces.length) return;
     const current = workspaces.find((w) => w.id === activeWorkspaceId);
     if (!current) return;
     const currentHealthy = (current.health ?? "healthy") === "healthy" && current.selectable !== false;
-    if (currentHealthy) return;
+    if (currentHealthy) {
+      autoRecoveryAttemptedRef.current = null;
+      return;
+    }
+
+    // Prevent infinite loop if the fallback post fails and it reverts the activeWorkspaceId
+    if (autoRecoveryAttemptedRef.current === activeWorkspaceId) return;
+
     const nextHealthy = workspaces.find((w) => (w.health ?? "healthy") === "healthy" && w.selectable !== false);
     if (!nextHealthy || nextHealthy.id === activeWorkspaceId) return;
+
+    autoRecoveryAttemptedRef.current = activeWorkspaceId;
     void switchWorkspace(nextHealthy.id);
   }, [activeWorkspaceId, workspaces, switchWorkspace]);
 
