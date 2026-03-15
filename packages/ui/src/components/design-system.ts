@@ -145,6 +145,9 @@ export type { ThinkingBubbleProps, ThoughtItem, ThinkingListProps } from './Agen
 export { ToolLog } from './Agent/ToolLog';
 export type { ToolCall, ToolStatus, ToolLogProps } from './Agent/ToolLog';
 
+export { ToolBatchAccordion } from './Agent/ToolBatchAccordion';
+export type { ToolBatchAccordionProps, ToolPair } from './Agent/ToolBatchAccordion';
+
 export { DiffApproval } from './Agent/DiffApproval';
 export type { DiffFile, DiffHunk, DiffLine, DiffState, DiffApprovalProps } from './Agent/DiffApproval';
 

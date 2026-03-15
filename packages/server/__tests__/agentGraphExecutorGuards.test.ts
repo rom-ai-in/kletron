@@ -260,16 +260,10 @@ describe("tool approval policy guard coverage", () => {
         assert.equal(policy.decision, "requires_approval");
     });
 
-    it("treats document tools as write-capable and not auto-approved", () => {
-        const policy = getToolApprovalPolicy({ source: "agent", toolName: "create_document" });
-        assert.equal(policy.decision, "requires_approval");
-    });
 
     it("marks automation write tools as approval-required (executor fail-fast handles blocking)", () => {
         const repoWrite = getToolApprovalPolicy({ source: "automation", toolName: "write_file" });
-        const artifactWrite = getToolApprovalPolicy({ source: "automation", toolName: "save_document" });
         assert.equal(repoWrite.decision, "requires_approval");
-        assert.equal(artifactWrite.decision, "requires_approval");
     });
 });
 
@@ -335,16 +329,13 @@ describe("system prompt anti-loop content verification", () => {
     });
 
     it("simpleReactSystemPrompt includes anti-loop instructions", () => {
-        const prompt = [
-            "You are a helpful AI assistant.",
-            "Use tools to answer the user's question accurately. Focus on the repository context if provided.",
-            "If the request is multi-step, create a task queue using write_todos ONCE, then execute tasks using other tools.",
-            "Update task status as you progress — but do NOT recreate the same task queue repeatedly.",
-            "After gathering sufficient information, STOP gathering and produce your final output.",
-        ].join(" ");
+        // Import the actual prompt to verify it contains key anti-loop phrases
+        const { simpleReactSystemPrompt } = require("../src/services/agentGraphPresets");
 
-        assert.ok(prompt.includes("write_todos ONCE"));
-        assert.ok(prompt.includes("do NOT recreate the same task queue repeatedly"));
-        assert.ok(prompt.includes("STOP gathering and produce your final output"));
+        assert.ok(simpleReactSystemPrompt.includes("write_todos **ONCE**"));
+        assert.ok(simpleReactSystemPrompt.includes("Never recreate the same queue"));
+        assert.ok(simpleReactSystemPrompt.includes("Stop tool usage and produce the final answer"));
+        assert.ok(simpleReactSystemPrompt.includes("Numezis Code"));
+        assert.ok(simpleReactSystemPrompt.includes("Repository First Principle"));
     });
 });

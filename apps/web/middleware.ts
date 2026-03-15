@@ -7,7 +7,9 @@ const DEFAULT_DEV_CORS_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:8080",
-    "http://127.0.0.1:8080"
+    "http://127.0.0.1:8080",
+    "file://",
+    "numezis-code://"
 ];
 
 function parseCorsAllowlist(): string[] {
@@ -38,7 +40,7 @@ function buildCorsHeaders(request: NextRequest): Headers {
     }
 
     headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With, Accept");
+    headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With, Accept, x-workspace-id");
     headers.set("Access-Control-Max-Age", "86400");
     return headers;
 }

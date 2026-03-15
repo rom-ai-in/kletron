@@ -14,11 +14,19 @@ import {
     ErrorState,
 } from "@numezis/ui/components/design-system";
 import type { AutomationRun, AutomationStatus } from "@numezis/shared/automationTypes";
+import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 import { PlayCircle } from "lucide-react";
 
 type FilterStatus = "all" | "running" | "completed" | "failed" | "cancelled";
 
 function RunsPageContent() {
+    const { activeWorkspaceId } = useWorkspace() ?? {};
+    const fetchWithWorkspace = async (url: string, init?: RequestInit) => {
+        const headers: Record<string, string> = { ...init?.headers as Record<string, string> };
+        if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+        return fetch(url, { ...init, headers });
+    };
+
     const router = useRouter();
     const searchParams = useSearchParams();
     const [runs, setRuns] = useState<(AutomationRun & { automationName: string })[]>([]);
@@ -35,7 +43,7 @@ function RunsPageContent() {
             return;
         }
         let cancelled = false;
-        void fetch(`/api/automations/${automationId}`)
+        void fetchWithWorkspace(`/api/automations/${automationId}`)
             .then(async (res) => {
                 if (!res.ok) return null;
                 const data = (await res.json()) as { automation?: { name?: string } };
@@ -64,7 +72,7 @@ function RunsPageContent() {
             if (automationId) qs.set("automationId", automationId);
             const url = `/api/runs${qs.toString() ? `?${qs.toString()}` : ""}`;
 
-            const res = await fetch(url);
+            const res = await fetchWithWorkspace(url);
             if (!res.ok) throw new Error("Failed to load execution runs");
             const data = (await res.json()) as { runs: (AutomationRun & { automationName: string })[] };
             setRuns(data.runs || []);

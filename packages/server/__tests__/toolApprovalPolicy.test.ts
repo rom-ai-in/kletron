@@ -6,7 +6,6 @@ import {
     getToolApprovalPolicy,
     normalizeRunSource,
     READONLY_TOOLS,
-    WRITE_ARTIFACT_TOOLS,
     WRITE_REPO_TOOLS,
 } from "../src/services/toolApprovalPolicy";
 
@@ -40,9 +39,7 @@ describe("toolApprovalPolicy tool classification", () => {
 
     it("classifies write tools", () => {
         assert.ok(WRITE_REPO_TOOLS.has("write_file"));
-        assert.ok(WRITE_ARTIFACT_TOOLS.has("create_document"));
         assert.equal(classifyTool("write_file"), "write_repo");
-        assert.equal(classifyTool("save_document"), "write_artifact");
     });
 });
 
@@ -55,11 +52,9 @@ describe("toolApprovalPolicy decision matrix", () => {
         assert.equal(automationPolicy.decision, "auto_approve");
     });
 
-    it("requires manual approval for write_repo and write_artifact tools", () => {
+    it("requires manual approval for write_repo tools", () => {
         const repoWrite = getToolApprovalPolicy({ source: "agent", toolName: "write_file" });
-        const artifactWrite = getToolApprovalPolicy({ source: "agent", toolName: "add_paragraph" });
         assert.equal(repoWrite.decision, "requires_approval");
-        assert.equal(artifactWrite.decision, "requires_approval");
     });
 
     it("uses conservative fallback for unknown source", () => {

@@ -145,7 +145,7 @@ export function formatToolPreview(value?: string): string {
 
 export function buildHunks(editId: string, filePath: string, baseContent: string, targetContent: string): DiffHunk[] {
   const patch = structuredPatch(filePath, filePath, baseContent, targetContent, "", "");
-  return patch.hunks.map((hunk, index) => ({
+  return patch.hunks.map((hunk: any, index: number) => ({
     id: `${editId}-${index}`,
     oldStart: hunk.oldStart,
     oldLines: hunk.oldLines,

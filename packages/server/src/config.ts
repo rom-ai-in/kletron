@@ -1,9 +1,32 @@
 // src/config.ts
 import path from "node:path";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import { z } from "zod";
 import { getDatabase } from "./lib/db";
+
+// Use __filename and __dirname equivalents in ESM, or fallback to standard in CJS.
+// We are in TS transpiled to commonjs / esm, so we'll use a robust approach
+export function getProjectRoot(): string {
+  // Walk up from this file's directory until we find package.json containing "numezis-code"
+  // This file is in packages/server/src/config.ts or packages/server/dist/config.js
+  let currentDir = __dirname;
+  while (currentDir !== path.parse(currentDir).root) {
+    if (fs.existsSync(path.join(currentDir, "package.json"))) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(currentDir, "package.json"), "utf-8"));
+        if (pkg.name === "numezis-code" || pkg.workspaces) {
+          return currentDir;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    currentDir = path.dirname(currentDir);
+  }
+  return process.cwd(); // Final fallback
+}
 
 
 dotenv.config();
@@ -66,7 +89,7 @@ export async function loadConfig(): Promise<Config> {
     // NOT be used to infer the active workspace, otherwise the first entry
     // can silently point the system at the wrong repository.
     try {
-      const configDir = path.resolve(process.cwd(), "config");
+      const configDir = path.resolve(getProjectRoot(), "config");
       const configJsonPath = path.join(configDir, "config.json");
       if (fs.existsSync(configJsonPath)) {
         const raw = fs.readFileSync(configJsonPath, "utf-8");
@@ -136,7 +159,7 @@ export async function saveConfig(newConfig: Config): Promise<void> {
   // 2. Sync to config/config.json for MCP server compatibility
   // The MCP server reads from this file for git operations
   try {
-    const configDir = path.resolve(process.cwd(), "config");
+    const configDir = path.resolve(getProjectRoot(), "config");
     const configJsonPath = path.join(configDir, "config.json");
 
     // Ensure config directory exists

@@ -19,14 +19,6 @@ const TOOL_EXAMPLES: Record<string, object> = {
     read_file: { filePath: "README.md" },
     read_file_range: { filePath: "README.md", startLine: 1, endLine: 10 },
     write_file: { filePath: "output/test.txt", content: "Hello world" },
-    // Word document tools
-    list_word_templates: {},
-    create_document: { templateName: "proposal" },
-    add_heading: { text: "Executive Summary", level: 1 },
-    add_paragraph: { text: "This document outlines our proposed solution..." },
-    add_bullet_list: { items: ["Point 1", "Point 2", "Point 3"] },
-    add_table: { headers: ["Item", "Price"], rows: [["Product A", "$100"], ["Product B", "$200"]] },
-    save_document: { outputPath: "output/proposal.docx" },
     // Research tools
     web_search: { query: "market trends 2024" },
     fetch_url: { url: "https://example.com/api/data" },
@@ -153,7 +145,7 @@ export default function ToolsConfigPage() {
                             <h2 className="text-sm font-semibold text-text-primary">Approval Policy</h2>
                             <p className="mt-1 text-xs text-text-secondary">
                                 Read-only tools auto-run for <span className="font-mono">agent</span> and <span className="font-mono">automation</span>.
-                                Repo writes (<span className="font-mono">write_file</span>) and document write tools require approval.
+                                Repo writes (<span className="font-mono">write_file</span>) require approval.
                                 In automations, approval-required tools are blocked with a fail-fast error.
                             </p>
                         </div>

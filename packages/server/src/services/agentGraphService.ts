@@ -171,6 +171,27 @@ export class AgentGraphService {
         }
         await collection.deleteOne({ _id: new ObjectId(graphId) });
     }
+
+    /**
+     * Ensure that all default preset graphs exist in the database.
+     * Safe to call multiple times — skips graphs that already exist by name.
+     * Called during user registration to guarantee every new user has default graphs.
+     */
+    async ensureDefaultGraphs(): Promise<void> {
+        const defaultPresets = [
+            buildSimpleReactAgentGraph,
+        ];
+
+        for (const builder of defaultPresets) {
+            const preset = builder();
+            const existing = await this.listGraphs({ search: preset.name });
+            const match = existing.find((g) => g.name === preset.name);
+            if (!match) {
+                await this.createGraph(preset);
+            }
+        }
+    }
 }
 
 export const agentGraphService = new AgentGraphService();
+

@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null, { requireExplicitWorkspace: true });
         const workspaceId = workspace?._id?.toString();
         if (!workspaceId) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });

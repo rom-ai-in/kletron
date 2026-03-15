@@ -90,17 +90,21 @@ export default function App() {
   }, [backendUrlTrimmed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const workspace = useWorkspace(backendUrlTrimmed, auth.getAccessToken);
+  const projectsHook = useProjects(workspace.workspace?.path, workspace.workspace?.name);
+
+  const activeWorkspaceId = workspace.workspaceSummary?.id ?? projectsHook.activeProjectId ?? null;
+
   const models = useModels(backendUrlTrimmed, backendReady, auth.getAccessToken);
-  const threads = useThreads(backendUrlTrimmed, backendReady, auth.getAccessToken);
+  const threads = useThreads(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
   const diffs = useDiffs(workspace.workspace);
   const conversation = useConversation(
     backendUrlTrimmed, backendReady, auth.getAccessToken,
     threads.conversationId, threads.setConversationId,
     workspace.workspace, models.modelConfig, models.selectedGraph,
-    models.selectedGraphName, threads.loadThreads, diffs.setDiffs
+    models.selectedGraphName, threads.loadThreads, diffs.setDiffs,
+    activeWorkspaceId
   );
   const git = useGit(workspace.workspace?.path ?? null, backendUrlTrimmed, auth.getAccessToken);
-  const projectsHook = useProjects(workspace.workspace?.path, workspace.workspace?.name);
   const personality = usePersonality();
   const skillsHook = useSkills(backendUrlTrimmed, backendReady, auth.getAccessToken);
 
@@ -241,8 +245,8 @@ export default function App() {
   const activeThread = threads.threads.find((t) => t.id === threads.conversationId) ?? null;
   const activeThreadTitle = activeThread?.title || (threads.conversationId ? "Untitled" : "New thread");
 
-  // Build sidebar project data: single project derived from the active workspace,
-  // with all threads for that workspace.
+  // Build sidebar project data: single project derived from the ACTIVE workspace,
+  // with threads for that workspace only. Workspace switching is done via the TitleBar dropdown.
   const sidebarProjects: SidebarProject[] = useMemo(() => {
     const name =
       workspace.workspace?.name ||
@@ -290,7 +294,7 @@ export default function App() {
               label: filename,
               type: event.toolName.includes("read") ? "read"
                 : event.toolName.includes("write") || event.toolName.includes("edit") ? "write"
-                : "search",
+                  : "search",
             });
           }
         } catch {
@@ -351,7 +355,7 @@ export default function App() {
     if (changesVisible && unstagedPathsKey) {
       void git.fetchAllDiffs();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [changesVisible, unstagedPathsKey]);
 
   // Build agent graph items for selector
@@ -392,18 +396,33 @@ export default function App() {
     }, 400);
   }, [workspace.workspace?.path, toast]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleNewThreadInProject(projectId: string) {
+  function handleNewThreadInProject(projectIdOrPath: string) {
     conversation.abortRef.current?.abort();
     conversation.resetConversation();
     diffs.resetDiffs();
     // Clear the current conversation so the next sendMessage creates a fresh session
     threads.setConversationId(null);
-    // Set the target project as active and switch workspace
-    projectsHook.setActiveProjectId(projectId);
-    const project = projectsHook.projects.find((p) => p.id === projectId);
-    if (project?.rootPath) {
-      switchWorkspaceTo(project.rootPath, project.name);
+
+    // The sidebar might pass a path (rootPath), while the keyboard shortcut passes a UUID.
+    const project = projectsHook.projects.find(
+      (p) => p.id === projectIdOrPath || p.rootPath === projectIdOrPath
+    );
+
+    if (project) {
+      projectsHook.setActiveProjectId(project.id);
+      if (project.rootPath) {
+        switchWorkspaceTo(project.rootPath, project.name);
+      }
     }
+  }
+
+  /** Handle workspace selection from the TitleBar dropdown */
+  function handleWorkspaceSelect(workspaceId: string) {
+    conversation.abortRef.current?.abort();
+    conversation.resetConversation();
+    diffs.resetDiffs();
+    threads.setConversationId(null);
+    void workspace.switchWorkspaceById(workspaceId);
   }
 
   async function handleAddProject() {
@@ -415,6 +434,18 @@ export default function App() {
       projectsHook.addProject(folderName, folderPath);
       // Switch workspace to the newly added project
       switchWorkspaceTo(folderPath, folderName);
+      // Also register on the backend and refresh the list
+      try {
+        const token = await auth.getAccessToken();
+        if (token) {
+          await fetch(`${backendUrlTrimmed}/api/workspaces`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ rootPath: folderPath, name: folderName }),
+          });
+          await workspace.refreshAllWorkspaces();
+        }
+      } catch { /* ignore backend registration errors */ }
     } catch {
       // ignore — user cancelled or Electron API unavailable
     }
@@ -660,11 +691,10 @@ export default function App() {
                   key={section.id}
                   type="button"
                   onClick={() => settings.setActiveSettingsSection(section.id)}
-                  className={`flex w-full items-center rounded-md px-2 py-1.5 text-xs font-medium transition ${
-                    settings.activeSettingsSection === section.id
-                      ? "bg-state-selected text-text-primary"
-                      : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
-                  }`}
+                  className={`flex w-full items-center rounded-md px-2 py-1.5 text-xs font-medium transition ${settings.activeSettingsSection === section.id
+                    ? "bg-state-selected text-text-primary"
+                    : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
+                    }`}
                 >
                   {section.label}
                 </button>
@@ -809,11 +839,10 @@ export default function App() {
                     {models.graphs.map((graph) => (
                       <div
                         key={graph.id}
-                        className={`rounded-md px-3 py-2.5 transition-colors cursor-pointer ${
-                          models.selectedGraph === graph.id
-                            ? "glass-selected"
-                            : "glass-card"
-                        }`}
+                        className={`rounded-md px-3 py-2.5 transition-colors cursor-pointer ${models.selectedGraph === graph.id
+                          ? "glass-selected"
+                          : "glass-card"
+                          }`}
                         onClick={() => models.setSelectedGraph(graph.id)}
                       >
                         <div className="flex items-center justify-between">
@@ -892,6 +921,10 @@ export default function App() {
         workspaceName={workspace.workspace?.name || workspace.workspace?.path?.split("/").pop() || "Numezis Desktop"}
         workspaceSelectorLabel={workspace.workspace?.name || workspace.workspace?.path?.split("/").pop() || "Select workspace"}
         onWorkspaceSelectorClick={() => { void workspace.selectWorkspace(); }}
+        workspaceItems={workspace.allWorkspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        onWorkspaceSelect={handleWorkspaceSelect}
+        onAddWorkspace={handleAddProject}
         showTrafficLights={false}
         onOpen={() => {
           try { (window as any).numezis?.openInVSCode?.(); } catch { /* ignore */ }
@@ -939,6 +972,8 @@ export default function App() {
             activeThreadId={threads.conversationId}
             activeProjectId={workspace.workspace?.path ?? null}
             onThreadSelect={handleThreadSelect}
+            onNewThreadInProject={handleNewThreadInProject}
+            onAddProject={handleAddProject}
             onSettings={() => settings.setActiveView("settings")}
             onRenameThread={(threadId, newTitle) => {
               threads.startEditThread({ id: threadId, title: newTitle });

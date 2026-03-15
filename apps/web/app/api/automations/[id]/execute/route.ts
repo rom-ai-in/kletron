@@ -23,7 +23,7 @@ export async function PUT(
     try {
         const automationId = params.id;
 
-        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null, { requireExplicitWorkspace: true });
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }

@@ -55,6 +55,11 @@
     "@monaco-editor/react": "^4.7.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "monaco-editor": "^0.55.1"
+    "monaco-editor": "^0.55.1",
+    "prettier": "^3.8.1",
+    "rehype-sanitize": "^6.0.0",
+    "remark-breaks": "^4.0.0",
+    "remark-stringify": "^11.0.0",
+    "unified": "^11.0.5"
   }
 }

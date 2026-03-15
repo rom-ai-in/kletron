@@ -45,11 +45,10 @@ export function ToolInvocationIcon({ name, className }: { name: string; classNam
         return <Search className={cls} />;
     // Edit / write tools
     if (['edit_file', 'replace_file_content', 'write_file', 'write_to_file', 'str_replace_editor',
-         'write_todos', 'add_heading', 'add_paragraph', 'add_bullet_list', 'add_table',
-         'create_document', 'save_document'].includes(name))
+         'write_todos'].includes(name))
         return <Pencil className={cls} />;
     // Read / view tools
-    if (['read_file', 'view_file', 'read_file_range', 'list_word_templates'].includes(name))
+    if (['read_file', 'view_file', 'read_file_range'].includes(name))
         return <FileText className={cls} />;
     // Directory / structure tools
     if (['list_dir', 'list_files', 'describe_structure', 'symbols_list',
@@ -121,14 +120,7 @@ function getToolSummary(name: string, parsedArgs: Record<string, any>): string {
     if (name === 'repo_metrics' || name === 'dependency_info') {
         return filename(parsedArgs.root || parsedArgs.path || '');
     }
-    // Document tools
-    if (name === 'create_document' || name === 'save_document') {
-        return parsedArgs.filename || parsedArgs.title || '';
-    }
-    if (['add_heading', 'add_paragraph'].includes(name)) {
-        const text = parsedArgs.text || '';
-        return text.length > 40 ? text.slice(0, 40) + '...' : text;
-    }
+
     // Output format
     if (name === 'output_format') return parsedArgs.format || '';
     return '';

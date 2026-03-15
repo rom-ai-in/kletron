@@ -2,6 +2,7 @@
 // API route for user registration
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@numezis/server/lib/supabase/supabaseServer';
+import { agentGraphService } from '@numezis/server/services/agentGraphService';
 
 export async function POST(request: Request) {
     try {
@@ -48,6 +49,14 @@ export async function POST(request: Request) {
             );
         }
 
+        // Seed default agent graphs for the new user
+        try {
+            await agentGraphService.ensureDefaultGraphs();
+        } catch (seedErr) {
+            // Non-blocking: registration still succeeds even if graph seeding fails
+            console.error('[Register] Failed to seed default graphs:', seedErr);
+        }
+
         const response = NextResponse.json({
             success: true,
             message: 'Registration successful',
@@ -71,3 +80,4 @@ export async function POST(request: Request) {
         );
     }
 }
+

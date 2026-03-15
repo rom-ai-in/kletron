@@ -3,8 +3,7 @@
 import { useCallback, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 import type { AgentEvent, AgentEventKind } from "@numezis/shared/types";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -62,10 +61,10 @@ export function EventCard({ event }: EventCardProps) {
   const titleText = isToolEvent
     ? event.name ?? "Tool output"
     : event.kind === "user"
-    ? "User request"
-    : event.kind === "assistant"
-    ? "Agent response"
-    : "System message";
+      ? "User request"
+      : event.kind === "assistant"
+        ? "Agent response"
+        : "System message";
 
   const agentMarkdown = (() => {
     if (event.kind !== "assistant") return null;
@@ -73,7 +72,7 @@ export function EventCard({ event }: EventCardProps) {
       const parsed = JSON.parse(resultText);
       if (typeof parsed?.report_markdown === "string") return parsed.report_markdown;
       if (typeof parsed?.repo_map_markdown === "string") return parsed.repo_map_markdown;
-    } catch {}
+    } catch { }
     return null;
   })();
 
@@ -143,11 +142,10 @@ export function EventCard({ event }: EventCardProps) {
       onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
-      className={`group cursor-pointer rounded-lg border border-border-subtle bg-bg-surface text-text-primary transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus-ring ${
-        isToolEvent
+      className={`group cursor-pointer rounded-lg border border-border-subtle bg-bg-surface text-text-primary transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus-ring ${isToolEvent
           ? "hover:border-border-strong border-l-2 border-l-text-muted"
           : "hover:border-border-strong shadow-sm"
-      }`}
+        }`}
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] text-text-muted">
@@ -213,9 +211,7 @@ export function EventCard({ event }: EventCardProps) {
           <div>
             {isToolEvent && <p className="text-[10px] text-text-muted mb-1">Result</p>}
             {agentMarkdown ? (
-              <div className="prose prose-sm max-w-none text-text-primary">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentMarkdown}</ReactMarkdown>
-              </div>
+              <MarkdownRenderer content={agentMarkdown} />
             ) : (
               <pre className="rounded-lg border border-border-subtle bg-bg-elevated p-2 text-[11px] font-mono text-text-secondary overflow-auto max-h-96 whitespace-pre-wrap">
                 {resultText}

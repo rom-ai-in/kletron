@@ -7,6 +7,7 @@ import { AutomationConfigBuilder } from "@numezis/shared/automationConfigBuilder
 import type { AutomationDefinition, AutomationStageConfig, AutomationTriggerType, GitEventType } from "@numezis/shared/automationTypes";
 import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
 import { describeCron } from "@numezis/shared/cronUtils";
+import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 
 type GraphOption = { id: string; name: string; description?: string };
 type LlmProviderOption = { id: LlmProviderType; label: string; model?: string };
@@ -70,6 +71,7 @@ interface AutomationBuilderModalProps {
 type WizardStep = 1 | 2 | 3 | 4;
 
 export function AutomationBuilderModal({ open, onClose, onCreated, editAutomationId }: AutomationBuilderModalProps) {
+    const { activeWorkspaceId } = useWorkspace() ?? {};
     const [step, setStep] = useState<WizardStep>(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -184,7 +186,9 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
             if (!editAutomationId) return;
             setLoading(true);
             try {
-                const res = await fetch(`/api/automations/${editAutomationId}`);
+                const headers: Record<string, string> = {};
+                if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+                const res = await fetch(`/api/automations/${editAutomationId}`, { headers });
                 if (res.ok) {
                     const data = await res.json();
                     const chain = data.automation ?? data.chain;
@@ -211,7 +215,8 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                 setAutomationData({ name: "", description: "", stages: [], triggerType: "manual" });
             }
         }
-    }, [open, editAutomationId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, editAutomationId, activeWorkspaceId]);
 
     const presets = AutomationConfigBuilder.getPresetNames();
 
@@ -261,9 +266,12 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
             const url = editAutomationId ? `/api/automations/${editAutomationId}` : "/api/automations";
             const method = editAutomationId ? "PUT" : "POST";
 
+            const headers: Record<string, string> = { "Content-Type": "application/json" };
+            if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+
             const res = await fetch(url, {
                 method,
-                headers: { "Content-Type": "application/json" },
+                headers,
                 body: JSON.stringify({ config: automationData }),
             });
             if (!res.ok) {

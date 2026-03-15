@@ -851,101 +851,6 @@ export const outputFormatTool = tool(
   }
 );
 
-// ============================================================
-// Document Tools (Word)
-// ============================================================
-
-export const listWordTemplatesTool = tool(
-  async () => {
-    return formatResult(await callMcpTool("list_word_templates", {}));
-  },
-  {
-    name: "list_word_templates",
-    description: "List available Word document templates.",
-    schema: z.object({}),
-  }
-);
-
-export const createDocumentTool = tool(
-  async (input: { templateName?: string }) => {
-    return formatResult(await callMcpTool("create_document", { templateName: input.templateName }));
-  },
-  {
-    name: "create_document",
-    description: "Create a new Word document from a template. Returns the document ID.",
-    schema: z.object({
-      templateName: z.string().optional().describe("Name of the template to use"),
-    }),
-  }
-);
-
-export const addHeadingTool = tool(
-  async (input: { text: string; level?: number }) => {
-    return formatResult(await callMcpTool("add_heading", { text: input.text, level: input.level ?? 1 }));
-  },
-  {
-    name: "add_heading",
-    description: "Add a heading to the current document.",
-    schema: z.object({
-      text: z.string().describe("Heading text"),
-      level: z.number().int().min(1).max(6).optional().default(1).describe("Heading level (1-6)"),
-    }),
-  }
-);
-
-export const addParagraphTool = tool(
-  async (input: { text: string }) => {
-    return formatResult(await callMcpTool("add_paragraph", { text: input.text }));
-  },
-  {
-    name: "add_paragraph",
-    description: "Add a paragraph of text to the current document.",
-    schema: z.object({
-      text: z.string().describe("Paragraph text"),
-    }),
-  }
-);
-
-export const addBulletListTool = tool(
-  async (input: { items: string[] }) => {
-    return formatResult(await callMcpTool("add_bullet_list", { items: input.items }));
-  },
-  {
-    name: "add_bullet_list",
-    description: "Add a bulleted list to the current document.",
-    schema: z.object({
-      items: z.array(z.string()).describe("Array of list items"),
-    }),
-  }
-);
-
-export const addTableTool = tool(
-  async (input: { headers: string[]; rows: string[][] }) => {
-    return formatResult(await callMcpTool("add_table", { headers: input.headers, rows: input.rows }));
-  },
-  {
-    name: "add_table",
-    description: "Add a table to the current document.",
-    schema: z.object({
-      headers: z.array(z.string()).describe("Array of column headers"),
-      rows: z.array(z.array(z.string())).describe("2D array of row data"),
-    }),
-  }
-);
-
-export const saveDocumentTool = tool(
-  async (input: { outputPath: string }) => {
-    return formatResult(await callMcpTool("save_document", { outputPath: input.outputPath }));
-  },
-  {
-    name: "save_document",
-    description: "Save the current document to a file.",
-    schema: z.object({
-      outputPath: z.string().describe("Output file path for the .docx file"),
-    }),
-  }
-);
-
 import { semanticSearch } from "@numezis/server/services/vectorService";
 
 export const semanticCodeSearchTool = tool(
@@ -992,14 +897,6 @@ export const allMcpTools = [
   readFileTool,
   readFileRangeTool,
   writeFileTool,
-  // Document tools
-  listWordTemplatesTool,
-  createDocumentTool,
-  addHeadingTool,
-  addParagraphTool,
-  addBulletListTool,
-  addTableTool,
-  saveDocumentTool,
   // Research tools
   webSearchTool,
   fetchUrlTool,

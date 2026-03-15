@@ -25,7 +25,8 @@ export function useConversation(
   selectedGraph: string | null,
   graphName?: string,
   loadThreads?: (preferredId?: string) => Promise<void>,
-  setDiffs?: (fn: (prev: DiffRequest[]) => DiffRequest[]) => void
+  setDiffs?: (fn: (prev: DiffRequest[]) => DiffRequest[]) => void,
+  activeWorkspaceId?: string | null
 ) {
   const [conversationEvents, setConversationEvents] = useState<ChatEvent[]>([]);
   const [conversationLoading, setConversationLoading] = useState(false);
@@ -63,9 +64,12 @@ export function useConversation(
   async function fetchPendingEdits(convoId: string, token: string) {
     if (!workspace?.path || !setDiffs) return;
     try {
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+
       const res = await fetch(
         `${backendUrlTrimmed}/api/sessions/${encodeURIComponent(convoId)}/edits`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers }
       );
       if (!res.ok) return;
       const edits = (await res.json()) as PendingEdit[];
@@ -127,6 +131,13 @@ export function useConversation(
     }
   }
 
+  // Cancel any active stream when the workspace ID changes
+  useEffect(() => {
+    if (abortRef.current) {
+      stopStreaming();
+    }
+  }, [activeWorkspaceId]);
+
   async function loadConversation(convoId: string) {
     const token = await getAccessToken();
     if (!token) return;
@@ -138,8 +149,11 @@ export function useConversation(
     setEditingMessageError(null);
     handledEditIdsRef.current = new Set();
     try {
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+
       const res = await fetch(`${backendUrlTrimmed}/api/sessions/${convoId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers,
       });
       if (!res.ok) {
         const text = await res.text();
@@ -172,6 +186,7 @@ export function useConversation(
             toolArgs: typeof msg?.toolArgs === "string" ? msg.toolArgs : msg?.toolArgs ? JSON.stringify(msg.toolArgs) : undefined,
             toolOutput: typeof msg?.toolOutput === "string" ? msg.toolOutput : msg?.toolOutput ? JSON.stringify(msg.toolOutput) : undefined,
             toolCallId: msg?.toolCallId,
+            isError: msg?.isError,
             timestamp: msg?.timestamp,
             metadata: msg?.metadata,
             thoughts: Array.isArray(msg?.thoughts) ? msg.thoughts : undefined,
@@ -235,11 +250,17 @@ export function useConversation(
     let convoId: string | null = null;
     abortRef.current?.abort();
     abortRef.current = new AbortController();
-    // Pre-populate with IDs from already-loaded conversation events so that
-    // streamed events whose IDs match loaded events are not appended again.
-    streamedEventIdsRef.current = new Set(
-      conversationEvents.filter((e) => e.id).map((e) => e.id as string)
-    );
+    // Pre-populate with IDs AND content fingerprints from already-loaded conversation
+    // events so that streamed events whose IDs or content match loaded events are not
+    // appended again (prevents duplication of past messages on multi-turn continuations).
+    const seeded = new Set<string>();
+    for (const e of conversationEvents) {
+      if (e.id) seeded.add(e.id);
+      // Content fingerprint — same formula as appendChatEvent
+      const fp = `${e.kind}:${e.toolCallId ?? ""}:${(e.content ?? "").slice(0, 200)}:${e.toolName ?? ""}`;
+      seeded.add(fp);
+    }
+    streamedEventIdsRef.current = seeded;
 
     try {
       // Determine whether to create a new session or continue existing one
@@ -252,21 +273,24 @@ export function useConversation(
         : trimmed;
       const body = isNewSession
         ? {
-            graphId: selectedGraph || undefined,
-            message: messageContent,
-            ...(modelConfig?.provider ? { provider: modelConfig.provider } : {}),
-          }
+          graphId: selectedGraph || undefined,
+          message: messageContent,
+          ...(modelConfig?.provider ? { provider: modelConfig.provider } : {}),
+        }
         : {
-            message: messageContent,
-            ...(modelConfig?.provider ? { provider: modelConfig.provider } : {}),
-          };
+          message: messageContent,
+          ...(modelConfig?.provider ? { provider: modelConfig.provider } : {}),
+        };
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      };
+      if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
 
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify(body),
         signal: abortRef.current?.signal,
       });
@@ -291,8 +315,17 @@ export function useConversation(
       const appendChatEvent = (chatEvent: ChatEvent, eventId?: string) => {
         const id = eventId ?? chatEvent.id;
         if (id && streamedEventIdsRef.current.has(id)) return;
+        // Content-based fingerprint dedup: prevents duplicate events with different IDs
+        // that carry the same payload (e.g., multi-turn continuation echoes).
+        const fingerprint = `${chatEvent.kind}:${chatEvent.toolCallId ?? ""}:${(chatEvent.content ?? "").slice(0, 200)}:${chatEvent.toolName ?? ""}`;
+        if (streamedEventIdsRef.current.has(fingerprint)) return;
         if (id) streamedEventIdsRef.current.add(id);
-        setConversationEvents((prev) => [...prev, { ...chatEvent, id }]);
+        streamedEventIdsRef.current.add(fingerprint);
+        // Also check against already-loaded conversation events to avoid echoing old history
+        setConversationEvents((prev) => {
+          if (id && prev.some((e) => e.id === id)) return prev;
+          return [...prev, { ...chatEvent, id }];
+        });
         setStreamHasEvents(true);
       };
 
@@ -357,6 +390,7 @@ export function useConversation(
                         toolName: event.name ?? event.toolName,
                         toolOutput: event.content,
                         toolCallId: event.toolCallId,
+                        isError: event.isError,
                         timestamp: event.timestamp,
                         content: event.content,
                       }, event.id);
@@ -395,9 +429,12 @@ export function useConversation(
 
                     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
                       try {
+                        const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${tok}` };
+                        if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+
                         const res = await fetch(`${backendUrlTrimmed}/api/sessions/${convoId}/title`, {
                           method: "PUT",
-                          headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+                          headers,
                           body: JSON.stringify({ generate: true, userMessage: trimmed }),
                         });
                         if (res.ok) {
@@ -442,6 +479,7 @@ export function useConversation(
                         toolName: event.name ?? event.toolName,
                         toolOutput: event.content,
                         toolCallId: event.toolCallId,
+                        isError: event.isError,
                         timestamp: event.timestamp,
                         content: event.content,
                       }, event.id);
@@ -472,7 +510,16 @@ export function useConversation(
     } catch (error) {
       if ((error as Error)?.name !== "AbortError") {
         didError = true;
-        setSendError(String(error));
+        const rawMessage = (error as Error)?.message ?? String(error);
+        // Detect native fetch failure (network issue / CORS / server down)
+        if (rawMessage.includes("Failed to fetch") || rawMessage.includes("fetch failed") || rawMessage.includes("NetworkError")) {
+          setSendError(
+            `Could not reach the backend at ${backendUrlTrimmed}. ` +
+            `Please ensure the server is running and accessible.`
+          );
+        } else {
+          setSendError(rawMessage);
+        }
       } else {
         didAbort = true;
       }
@@ -498,11 +545,14 @@ export function useConversation(
     if (conversationId) {
       getAccessToken().then((token) => {
         if (!token) return;
+        const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+        if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+
         fetch(`${backendUrlTrimmed}/api/sessions/${conversationId}/stop`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        }).catch(() => {});
-      }).catch(() => {});
+          headers,
+        }).catch(() => { });
+      }).catch(() => { });
     }
   }
 
@@ -530,9 +580,12 @@ export function useConversation(
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Authentication expired.");
+      const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+      if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+
       const res = await fetch(`${backendUrlTrimmed}/api/sessions/${conversationId}/truncate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers,
         body: JSON.stringify({ afterIndex: editingMessageIndex }),
       });
       if (!res.ok) {
@@ -611,9 +664,12 @@ export function useConversation(
 
     try {
       // 1. Truncate everything AFTER this message on the server (uses the unified sessions API)
+      const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+      if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+
       const truncateRes = await fetch(`${backendUrlTrimmed}/api/sessions/${conversationId}/truncate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers,
         body: JSON.stringify({ afterIndex: messageIndex + 1 }),
       });
       if (!truncateRes.ok) {

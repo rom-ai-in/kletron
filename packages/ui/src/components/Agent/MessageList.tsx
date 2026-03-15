@@ -5,6 +5,7 @@ import { cn } from '../../lib/utils';
 import { MessageBubble, SystemMessage } from './ChatMessage';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ToolInvocation } from './ToolInvocation';
+import { ToolBatchAccordion, ToolPair } from './ToolBatchAccordion';
 import { ThoughtsPanel } from './ThoughtsPanel';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -19,6 +20,8 @@ export interface ChatEvent {
     toolArgs?: string;
     toolOutput?: string;
     toolCallId?: string;
+    /** Whether this tool result is an error (explicit signal from the server) */
+    isError?: boolean;
     thoughts?: string[];
     thinking?: string;
     timestamp?: string;
@@ -84,11 +87,6 @@ export function groupEvents(events: ChatEvent[]): RenderItem[] {
  * pairToolEvents — given a buffer of tool events, pair each assistant call
  * with its corresponding tool result.
  * ═══════════════════════════════════════════════════════════════════════════ */
-
-interface ToolPair {
-    call?: ChatEvent;
-    result?: ChatEvent;
-}
 
 function pairToolEvents(events: ChatEvent[]): ToolPair[] {
     // Separate calls from results
@@ -307,14 +305,54 @@ const MessageListInner: React.FC<MessageListProps> = ({
         };
     }, [virtualized, items.length, scrollTop, viewportHeight, findStartIndex, offsets.starts, offsets.heights]);
 
+    const observerMapRef = useRef<Map<number, ResizeObserver>>(new Map());
+    const nodeMapRef = useRef<Map<number, HTMLDivElement>>(new Map());
+
     const measureItem = useCallback((index: number, node: HTMLDivElement | null) => {
+        // Clean up previous observer for this index
+        const prevObserver = observerMapRef.current.get(index);
+        const prevNode = nodeMapRef.current.get(index);
+        if (prevNode && prevNode !== node && prevObserver) {
+            prevObserver.disconnect();
+            observerMapRef.current.delete(index);
+            nodeMapRef.current.delete(index);
+        }
+
         if (!node) return;
+
+        // Initial measure
         const h = node.offsetHeight;
         const prev = itemHeightsRef.current.get(index);
         if (prev !== h) {
             itemHeightsRef.current.set(index, h);
             setMeasureVersion((v) => v + 1);
         }
+
+        // Set up ResizeObserver for dynamic size changes (accordion collapse/expand)
+        if (!observerMapRef.current.has(index) || nodeMapRef.current.get(index) !== node) {
+            const observer = new ResizeObserver((entries) => {
+                for (const entry of entries) {
+                    const newH = Math.round(entry.borderBoxSize?.[0]?.blockSize ?? entry.target.getBoundingClientRect().height);
+                    const cached = itemHeightsRef.current.get(index);
+                    if (cached !== newH && newH > 0) {
+                        itemHeightsRef.current.set(index, newH);
+                        setMeasureVersion((v) => v + 1);
+                    }
+                }
+            });
+            observer.observe(node);
+            observerMapRef.current.set(index, observer);
+            nodeMapRef.current.set(index, node);
+        }
+    }, []);
+
+    // Cleanup all observers on unmount
+    useEffect(() => {
+        const map = observerMapRef.current;
+        return () => {
+            map.forEach((observer) => observer.disconnect());
+            map.clear();
+        };
     }, []);
 
     useEffect(() => {
@@ -327,18 +365,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
         if (item.type === 'tools') {
             const pairs = pairToolEvents(item.events);
             return (
-                <div key={`tools-${index}`}>
-                    {pairs.map((pair, i) => (
-                        <ToolInvocation
-                            key={`tools-${index}-${i}`}
-                            name={pair.call?.toolName ?? pair.result?.toolName ?? 'tool'}
-                            args={pair.call?.toolArgs}
-                            output={pair.result?.toolOutput ?? pair.result?.content}
-                            meta={pair.call?.timestamp}
-                            compact={compactTools}
-                        />
-                    ))}
-                </div>
+                <ToolBatchAccordion key={`tools-${index}`} pairs={pairs} compact={compactTools} />
             );
         }
 

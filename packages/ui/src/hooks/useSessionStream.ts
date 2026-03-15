@@ -12,6 +12,7 @@ export interface Message {
     toolArgs?: string;
     toolOutput?: string;
     toolCallId?: string;
+    isError?: boolean;
     thoughts?: string[];
     thinking?: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -318,7 +319,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         isFirstMessageRef.current = true;
         // Note: messages are NOT reset here — the page component loads them from session detail.
         // Clearing messages here would cause a flash. The page handles setMessages via loadSessionDetail.
-    }, [sessionId]);
+    }, [sessionId, workspaceId]);
 
     /**
      * Guarded setMessages exposed to callers — silently skips during active
@@ -348,7 +349,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
             // Fire-and-forget: notify the server so the run status is updated
             if (sessionId) {
-                fetch(`/api/sessions/${sessionId}/stop`, { method: "POST" }).catch(() => {});
+                const headers: Record<string, string> = {};
+                if (workspaceId) headers["x-workspace-id"] = workspaceId;
+                fetch(`/api/sessions/${sessionId}/stop`, { method: "POST", headers }).catch(() => { });
             }
         }
     }, [sessionId]);
@@ -381,7 +384,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         const normalizedContent = e.kind === "assistant" ? sanitizeVisibleAssistantContent(content) : content;
         if (e.kind === "assistant" && /\bwe need to\b|\bfinal answer\b|<think>/i.test(content) && normalizedContent !== content) {
             // #region agent log
-            fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:sessionId ?? 'unknown',hypothesisId:'H2',location:'packages/ui/src/hooks/useSessionStream.ts:eventToMessage',message:'Assistant content sanitized in eventToMessage',data:{eventId:e.id,before:content.slice(0,180),after:normalizedContent.slice(0,180),kind:e.kind},timestamp:Date.now()})}).catch(()=>{});
+            fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c540e' }, body: JSON.stringify({ sessionId: '0c540e', runId: sessionId ?? 'unknown', hypothesisId: 'H2', location: 'packages/ui/src/hooks/useSessionStream.ts:eventToMessage', message: 'Assistant content sanitized in eventToMessage', data: { eventId: e.id, before: content.slice(0, 180), after: normalizedContent.slice(0, 180), kind: e.kind }, timestamp: Date.now() }) }).catch(() => { });
             // #endregion
         }
         return normalizeMessage({
@@ -392,6 +395,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             toolName: e.toolName ?? e.name,
             toolArgs: e.toolArgs,
             toolCallId: e.toolCallId,
+            isError: e.isError,
             thoughts: e.thoughts,
         });
     }, []);
@@ -542,7 +546,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                         streamingTextRef.current += chunk.payload.content;
                         if (/\bwe need to\b|\bfinal answer\b|<think>/i.test(chunk.payload.content ?? "")) {
                             // #region agent log
-                            fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:sessionId ?? 'new-session',hypothesisId:'H4',location:'packages/ui/src/hooks/useSessionStream.ts:text-delta',message:'Suspicious text delta observed',data:{delta:(chunk.payload.content ?? '').slice(0,180),accumulated:streamingTextRef.current.slice(0,180)},timestamp:Date.now()})}).catch(()=>{});
+                            fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c540e' }, body: JSON.stringify({ sessionId: '0c540e', runId: sessionId ?? 'new-session', hypothesisId: 'H4', location: 'packages/ui/src/hooks/useSessionStream.ts:text-delta', message: 'Suspicious text delta observed', data: { delta: (chunk.payload.content ?? '').slice(0, 180), accumulated: streamingTextRef.current.slice(0, 180) }, timestamp: Date.now() }) }).catch(() => { });
                             // #endregion
                         }
                         setStreamingText(streamingTextRef.current);
@@ -577,7 +581,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                         }
                     } else if (chunk.type === "final") {
                         // #region agent log
-                        fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:sessionId ?? 'new-session',hypothesisId:'H6',location:'packages/ui/src/hooks/useSessionStream.ts:final-chunk',message:'Final chunk received',data:{eventStreamCount:chunk.payload.eventStream?.length ?? 0,timelineCount:chunk.payload.timeline?.length ?? 0},timestamp:Date.now()})}).catch(()=>{});
+                        fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c540e' }, body: JSON.stringify({ sessionId: '0c540e', runId: sessionId ?? 'new-session', hypothesisId: 'H6', location: 'packages/ui/src/hooks/useSessionStream.ts:final-chunk', message: 'Final chunk received', data: { eventStreamCount: chunk.payload.eventStream?.length ?? 0, timelineCount: chunk.payload.timeline?.length ?? 0 }, timestamp: Date.now() }) }).catch(() => { });
                         // #endregion
                         // Clear any residual streaming text
                         streamingTextRef.current = '';
@@ -656,9 +660,12 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         }]);
 
         try {
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (workspaceId) headers['x-workspace-id'] = workspaceId;
+
             const res = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify(body),
                 signal: controller.signal,
             });
@@ -688,7 +695,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 abortControllerRef.current = null;
             }
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, workspaceId, processNdjsonStream]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {

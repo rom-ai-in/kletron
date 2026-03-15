@@ -22,18 +22,16 @@ export async function GET(
     try {
         const runId = params.id;
         const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
-        if (!workspace || !workspace._id) {
-            return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
-        }
+        const workspaceId = workspace?._id?.toString();
 
-        const run = await automationExecutor.getRun(runId, workspace._id.toString());
+        const run = await automationExecutor.getRun(runId, workspaceId);
 
         if (!run) {
             return NextResponse.json({ error: "Execution run not found" }, { status: 404 });
         }
 
         // Fetch the associated automation configuration
-        const automation = await automationExecutor.getAutomation(run.chainId.toString(), workspace._id.toString());
+        const automation = await automationExecutor.getAutomation(run.chainId.toString(), workspaceId);
 
         return NextResponse.json({ run, automation }, { status: 200 });
     } catch (error) {

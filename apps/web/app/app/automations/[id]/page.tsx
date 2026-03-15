@@ -48,6 +48,7 @@ import {
     EyeOff,
     Trash2,
 } from "lucide-react";
+import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 import { cn } from "@numezis/shared/utils/cn";
 
 interface AutomationDetailPageProps {
@@ -73,6 +74,12 @@ function getPromptIssues(automation: AutomationDefinition): PromptIssue[] {
 }
 
 export default function AutomationDetailPage({ params }: AutomationDetailPageProps) {
+    const { activeWorkspaceId } = useWorkspace() ?? {};
+    const fetchWithWorkspace = async (url: string, init?: RequestInit) => {
+        const headers: Record<string, string> = { ...init?.headers as Record<string, string> };
+        if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+        return fetch(url, { ...init, headers });
+    };
     const router = useRouter();
     const [automation, setAutomation] = useState<AutomationDefinition | null>(null);
     const [loading, setLoading] = useState(true);
@@ -110,7 +117,7 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
             setExecuteError("");
         }
         try {
-            const res = await fetch(`/api/automations/${params.id}`);
+            const res = await fetchWithWorkspace(`/api/automations/${params.id}`);
             if (!res.ok) throw new Error("Failed to load automation");
             const data = await res.json();
             setAutomation(data.automation);
@@ -132,7 +139,7 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
 
     const handleOpenLatestRun = async () => {
         try {
-            const res = await fetch(`/api/automations/${params.id}/runs`, { cache: "no-store" });
+            const res = await fetchWithWorkspace(`/api/automations/${params.id}/runs`, { cache: "no-store" });
             if (!res.ok) throw new Error("Failed to load runs");
             const data = (await res.json()) as { runs: AutomationRun[] };
             const runs = Array.isArray(data.runs) ? data.runs : [];
@@ -157,7 +164,7 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
     const handleExecute = async () => {
         try {
             setExecuteError("");
-            const res = await fetch(`/api/automations/${params.id}/execute`, {
+            const res = await fetchWithWorkspace(`/api/automations/${params.id}/execute`, {
                 method: "PUT",
             });
             const data = (await res.json().catch(() => ({}))) as { status?: string; runId?: string; error?: string; details?: any[] };
@@ -179,7 +186,7 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
 
     const handlePause = async () => {
         try {
-            const res = await fetch(`/api/automations/${params.id}/pause`, {
+            const res = await fetchWithWorkspace(`/api/automations/${params.id}/pause`, {
                 method: "POST",
             });
             if (!res.ok) throw new Error("Failed to pause");
@@ -193,7 +200,7 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
         if (!confirm("Are you sure you want to delete this automation? This action cannot be undone.")) return;
         try {
             setDeleting(true);
-            const res = await fetch(`/api/automations/${params.id}`, { method: "DELETE" });
+            const res = await fetchWithWorkspace(`/api/automations/${params.id}`, { method: "DELETE" });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
                 throw new Error((data as any).error || "Failed to delete automation");
@@ -219,7 +226,7 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
     const handleExportJSON = async () => {
         if (!automation) return;
         try {
-            const res = await fetch(`/api/automations/${params.id}/report`);
+            const res = await fetchWithWorkspace(`/api/automations/${params.id}/report`);
             const data = await res.json();
             downloadFile(`automation-report-${params.id}.json`, JSON.stringify(data, null, 2), "application/json");
         } catch (err) {
@@ -230,7 +237,7 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
     const handleExportMarkdown = async () => {
         if (!automation) return;
         try {
-            const res = await fetch(`/api/automations/${params.id}/report`);
+            const res = await fetchWithWorkspace(`/api/automations/${params.id}/report`);
             const data = await res.json();
             downloadFile(`automation-report-${params.id}.md`, data.report || "# Audit Report", "text/markdown");
         } catch (err) {
@@ -678,6 +685,12 @@ function ActivityList({
     isRunning?: boolean;
     stages?: { id: string; name: string }[];
 }) {
+    const { activeWorkspaceId } = useWorkspace() ?? {};
+    const fetchWithWorkspace = async (url: string, init?: RequestInit) => {
+        const headers: Record<string, string> = { ...init?.headers as Record<string, string> };
+        if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+        return fetch(url, { ...init, headers });
+    };
     const router = useRouter();
     const [runs, setRuns] = useState<AutomationRun[]>([]);
     const [loading, setLoading] = useState(true);
@@ -707,7 +720,7 @@ function ActivityList({
         }
         try {
             const url = `/api/automations/${automationId}/runs`;
-            const res = await fetch(url, { cache: "no-store" });
+            const res = await fetchWithWorkspace(url, { cache: "no-store" });
             if (!res.ok) throw new Error("Failed to load activity history");
             const data = (await res.json()) as { runs: AutomationRun[] };
             const runs = Array.isArray(data.runs) ? data.runs : [];
@@ -780,7 +793,7 @@ function ActivityList({
             [sessionId]: { events: prev[sessionId]?.events ?? [], loading: true, error: undefined }
         }));
         try {
-            const res = await fetch(`/api/audits/${sessionId}`, { cache: "no-store" });
+            const res = await fetchWithWorkspace(`/api/audits/${sessionId}`, { cache: "no-store" });
             if (!res.ok) throw new Error("Failed to load stage logs");
             const data = await res.json();
             const stream = data.eventStream || data.workflowResult?.eventStream;
@@ -1074,6 +1087,12 @@ function TriggerTab({
     webhookUrl: string | null;
     onUpdate: () => void;
 }) {
+    const { activeWorkspaceId } = useWorkspace() ?? {};
+    const fetchWithWorkspace = async (url: string, init?: RequestInit) => {
+        const headers: Record<string, string> = { ...init?.headers as Record<string, string> };
+        if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+        return fetch(url, { ...init, headers });
+    };
     const currentTrigger: AutomationTriggerType = automation.triggerType || "manual";
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState("");
@@ -1145,7 +1164,7 @@ function TriggerTab({
         }
 
         try {
-            const res = await fetch(`/api/automations/${automation._id}`, {
+            const res = await fetchWithWorkspace(`/api/automations/${automation._id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ config }),

@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import CodeBlock from './CodeBlock'; // We will create this next
 
 interface ToolOutputProps {

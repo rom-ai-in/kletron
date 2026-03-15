@@ -1,6 +1,6 @@
 export type NormalizedRunSource = "agent" | "automation" | "unknown";
 
-export type ToolClass = "readonly" | "write_repo" | "write_artifact" | "unknown";
+export type ToolClass = "readonly" | "write_repo" | "unknown";
 
 export type ToolApprovalDecision = "auto_approve" | "requires_approval" | "deny";
 
@@ -59,15 +59,6 @@ export const READONLY_TOOLS = new Set<string>([
 
 export const WRITE_REPO_TOOLS = new Set<string>(["write_file"]);
 
-export const WRITE_ARTIFACT_TOOLS = new Set<string>([
-    "create_document",
-    "add_heading",
-    "add_paragraph",
-    "add_bullet_list",
-    "add_table",
-    "save_document",
-]);
-
 export const normalizeRunSource = (source?: string): NormalizedRunSource => {
     const normalized = String(source ?? "").trim().toLowerCase();
     if (normalized === "agent") return "agent";
@@ -79,7 +70,6 @@ export const classifyTool = (toolName: string): ToolClass => {
     const normalizedToolName = String(toolName).trim().toLowerCase();
     if (READONLY_TOOLS.has(normalizedToolName)) return "readonly";
     if (WRITE_REPO_TOOLS.has(normalizedToolName)) return "write_repo";
-    if (WRITE_ARTIFACT_TOOLS.has(normalizedToolName)) return "write_artifact";
     return "unknown";
 };
 
@@ -137,16 +127,6 @@ export const getToolApprovalPolicy = (input: ToolApprovalPolicyInput): ToolAppro
         };
     }
 
-    if (toolClass === "write_artifact") {
-        return {
-            source,
-            normalizedSource,
-            toolName,
-            toolClass,
-            decision: "requires_approval",
-            reason: "Artifact write tools require explicit approval.",
-        };
-    }
 
     return {
         source,

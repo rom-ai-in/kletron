@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null, { requireExplicitWorkspace: true });
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
 
-        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, body);
+        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, body, { requireExplicitWorkspace: true });
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }

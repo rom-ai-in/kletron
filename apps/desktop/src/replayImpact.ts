@@ -14,7 +14,7 @@ export interface ReplayEvent {
     kind: string;
     toolName?: string;
     toolArgs?: string;
-    messageIndex?: number;
+    messageIndex?: number | null;
 }
 
 /**

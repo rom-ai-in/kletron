@@ -1,6 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { WorkspaceInfo, WorkspaceSummary } from "../types";
 import { WORKSPACE_STORAGE_KEY, deriveWorkspaceName, pathsEqual } from "../utils";
+
+export type BackendWorkspace = {
+  id: string;
+  name: string;
+  rootPath: string;
+  repoUrl?: string;
+  provider?: string;
+  defaultBranch?: string;
+  status?: string;
+  health?: "healthy" | "missing" | "inaccessible";
+  healthMessage?: string | null;
+  selectable?: boolean;
+};
 
 export function useWorkspace(
   backendUrlTrimmed: string,
@@ -12,6 +25,7 @@ export function useWorkspace(
   });
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [allWorkspaces, setAllWorkspaces] = useState<BackendWorkspace[]>([]);
 
   // Track whether the workspace was explicitly set by the user/app (thread select,
   // add project, etc.).  When true, `loadWorkspaceSummary` will not override it.
@@ -77,6 +91,52 @@ export function useWorkspace(
     }
   }
 
+  const refreshAllWorkspaces = useCallback(async () => {
+    const token = await getAccessToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${backendUrlTrimmed}/api/workspaces?t=${Date.now()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const list: BackendWorkspace[] = Array.isArray(data.workspaces) ? data.workspaces : [];
+      setAllWorkspaces(list);
+    } catch {
+      // ignore
+    }
+  }, [backendUrlTrimmed, getAccessToken]);
+
+  // Load full workspace list on mount and periodically
+  useEffect(() => {
+    void refreshAllWorkspaces();
+    const interval = setInterval(() => void refreshAllWorkspaces(), 60_000);
+    return () => clearInterval(interval);
+  }, [refreshAllWorkspaces]);
+
+  /** Switch the active workspace on the backend by ID, then refresh local state */
+  async function switchWorkspaceById(id: string) {
+    const token = await getAccessToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${backendUrlTrimmed}/api/workspaces/${id}/select`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      // Find the workspace in allWorkspaces to set local state
+      const ws = allWorkspaces.find((w) => w.id === id);
+      if (ws) {
+        setWorkspace({ path: ws.rootPath, name: ws.name });
+      }
+      // Refresh the summary and full list
+      await loadWorkspaceSummary();
+      await refreshAllWorkspaces();
+    } catch {
+      // ignore
+    }
+  }
+
   async function selectWorkspace() {
     const result = await window.numezis.selectWorkspace();
     if (result) {
@@ -92,5 +152,8 @@ export function useWorkspace(
     loadWorkspaceSummary,
     selectWorkspace,
     allowBackendSync,
+    allWorkspaces,
+    refreshAllWorkspaces,
+    switchWorkspaceById,
   };
 }

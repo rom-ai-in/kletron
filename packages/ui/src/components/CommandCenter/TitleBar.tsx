@@ -12,6 +12,9 @@ import {
   Upload,
   GitPullRequest,
   Loader2,
+  Check,
+  FolderPlus,
+  AlertTriangle,
 } from 'lucide-react';
 import { TrafficLights } from '../ui/TrafficLights';
 
@@ -20,11 +23,27 @@ export interface GitDiffStats {
   deletions: number;
 }
 
+export interface WorkspaceItem {
+  id: string;
+  name: string;
+  rootPath: string;
+  health?: 'healthy' | 'missing' | 'inaccessible';
+  healthMessage?: string | null;
+}
+
 export interface TitleBarProps {
   workspaceName?: string;
   /** Optional label + handler for a workspace selector pill on the right */
   workspaceSelectorLabel?: string;
   onWorkspaceSelectorClick?: () => void;
+  /** All available workspaces for dropdown */
+  workspaceItems?: WorkspaceItem[];
+  /** Currently active workspace ID */
+  activeWorkspaceId?: string | null;
+  /** Called when user selects a workspace from dropdown */
+  onWorkspaceSelect?: (workspaceId: string) => void;
+  /** Called when user clicks 'Add project' in dropdown */
+  onAddWorkspace?: () => void;
   /** Active thread title shown in the center */
   threadTitle?: string;
   /** Optional extra content rendered in the center */
@@ -53,6 +72,10 @@ export function TitleBar({
   workspaceName = 'Numezis Desktop',
   workspaceSelectorLabel,
   onWorkspaceSelectorClick,
+  workspaceItems,
+  activeWorkspaceId,
+  onWorkspaceSelect,
+  onAddWorkspace,
   threadTitle,
   center,
   gitDiffStats,
@@ -71,19 +94,24 @@ export function TitleBar({
   onRun,
 }: TitleBarProps) {
   const [gitMenuOpen, setGitMenuOpen] = useState(false);
+  const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const gitMenuRef = useRef<HTMLDivElement>(null);
+  const wsMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
-    if (!gitMenuOpen) return;
+    if (!gitMenuOpen && !wsMenuOpen) return;
     function handleClick(e: MouseEvent) {
-      if (gitMenuRef.current && !gitMenuRef.current.contains(e.target as Node)) {
+      if (gitMenuOpen && gitMenuRef.current && !gitMenuRef.current.contains(e.target as Node)) {
         setGitMenuOpen(false);
+      }
+      if (wsMenuOpen && wsMenuRef.current && !wsMenuRef.current.contains(e.target as Node)) {
+        setWsMenuOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [gitMenuOpen]);
+  }, [gitMenuOpen, wsMenuOpen]);
 
   const hasGitActions = onCommit || onPush || onCreatePR;
 
@@ -110,8 +138,78 @@ export function TitleBar({
 
       {/* Right: action buttons */}
       <div className="flex items-center gap-1 app-region-no-drag flex-shrink-0">
-        {/* Workspace selector pill */}
-        {workspaceSelectorLabel && onWorkspaceSelectorClick && (
+        {/* Workspace selector dropdown */}
+        {workspaceSelectorLabel && (workspaceItems && workspaceItems.length > 0 ? (
+          <div className="relative" ref={wsMenuRef}>
+            <button
+              type="button"
+              onClick={() => setWsMenuOpen((p) => !p)}
+              className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-all duration-150 ${
+                wsMenuOpen
+                  ? 'bg-white/[0.08] text-text-primary'
+                  : 'text-text-muted hover:text-text-primary hover:bg-white/[0.06]'
+              }`}
+              title="Select workspace"
+            >
+              <span className="truncate max-w-[140px]">{workspaceSelectorLabel}</span>
+              <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-150 ${wsMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {wsMenuOpen && (
+              <div className="absolute right-0 top-full mt-1.5 z-50 min-w-[260px] max-w-[340px] rounded-lg border border-white/[0.08] py-1" style={{ backgroundColor: '#1c1c20', boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.35)' }}>
+                <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                  Workspaces
+                </div>
+
+                {workspaceItems.map((ws) => {
+                  const isActive = ws.id === activeWorkspaceId;
+                  const isHealthy = (ws.health ?? 'healthy') === 'healthy';
+                  return (
+                    <button
+                      key={ws.id}
+                      type="button"
+                      onClick={() => {
+                        setWsMenuOpen(false);
+                        if (!isActive && onWorkspaceSelect) onWorkspaceSelect(ws.id);
+                      }}
+                      disabled={!isHealthy}
+                      className={`flex items-center gap-2.5 w-full px-3 py-2 text-left transition-all duration-150 disabled:opacity-50 ${
+                        isActive
+                          ? 'bg-white/[0.06] text-text-primary'
+                          : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.06]'
+                      }`}
+                    >
+                      <div className="w-4 flex-shrink-0 flex items-center justify-center">
+                        {isActive && <Check className="h-3 w-3 text-accent-cyan" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-medium truncate">{ws.name}</div>
+                        <div className="text-[10px] text-text-muted truncate">{ws.rootPath}</div>
+                      </div>
+                      {!isHealthy && (
+                        <AlertTriangle className="h-3 w-3 text-status-warning flex-shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+
+                {onAddWorkspace && (
+                  <>
+                    <div className="my-1 mx-2 border-t border-white/[0.06]" />
+                    <button
+                      type="button"
+                      onClick={() => { setWsMenuOpen(false); onAddWorkspace(); }}
+                      className="flex items-center gap-2.5 w-full px-3 py-2 text-[12px] text-text-secondary hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150"
+                    >
+                      <FolderPlus className="h-3.5 w-3.5" />
+                      <span>Add new project</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ) : onWorkspaceSelectorClick && (
           <button
             type="button"
             onClick={onWorkspaceSelectorClick}
@@ -121,7 +219,7 @@ export function TitleBar({
             <span className="truncate max-w-[140px]">{workspaceSelectorLabel}</span>
             <ChevronDown className="h-2.5 w-2.5" />
           </button>
-        )}
+        ))}
 
         {/* Run */}
         {onRun && (

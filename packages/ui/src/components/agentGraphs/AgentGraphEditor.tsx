@@ -304,6 +304,25 @@ export function AgentGraphEditor({
         };
     }, [nodes, edges, execution, stateDefaults, graphId]);
 
+    const handleResetToDefault = async () => {
+        if (!confirm("Reset all nodes to default prompts and tools? This cannot be undone.")) return;
+        try {
+            const res = await fetch(`/api/agent-graphs/${graphId}/reset`, { method: "POST" });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || "Failed to reset");
+            }
+            const data = await res.json();
+            if (data.graph) {
+                setNodes(data.graph.nodes ?? []);
+                setEdges(normalizeEdges(data.graph.edges ?? []));
+                if (data.graph.execution) setExecution(data.graph.execution);
+            }
+        } catch (err: any) {
+            alert(err.message || "Failed to reset to default");
+        }
+    };
+
     return (
         <div className="flex h-full min-h-0">
             <div className="flex min-w-0 flex-1 flex-col">
@@ -556,7 +575,7 @@ export function AgentGraphEditor({
                     )}
                 </Panel>
 
-                <NodeInspector node={selectedNode} onChange={handleUpdateSelectedNode} onDelete={handleDeleteNode} />
+                <NodeInspector node={selectedNode} onChange={handleUpdateSelectedNode} onDelete={handleDeleteNode} onResetPrompt={handleResetToDefault} />
 
                 <Panel className="mt-4 p-3">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Notes</div>

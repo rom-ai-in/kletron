@@ -11,17 +11,17 @@ export async function GET(
     req: NextRequest,
     { params }: { params: { id: string } }
 ) {
-  const auth = await requireAppRouteAuth(req);
-  if (!auth) {
-    return new Response(JSON.stringify({"error": "Unauthorized"}), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+    const auth = await requireAppRouteAuth(req);
+    if (!auth) {
+        return new Response(JSON.stringify({ "error": "Unauthorized" }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
 
     const automationId = params.id;
 
-    const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+    const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null, { requireExplicitWorkspace: true });
     if (!workspace || !workspace._id) {
         return new Response("Workspace not configured", { status: 400 });
     }
@@ -38,7 +38,7 @@ export async function GET(
     const stream = new ReadableStream({
         async start(controller) {
             // Send initial connection event
-            const initEvent = `data: ${JSON.stringify({ type: "connected", automationId })}\n\n`;
+            const initEvent = `data: ${JSON.stringify({ type: "connected", automationId, workspaceId })}\n\n`;
             controller.enqueue(encoder.encode(initEvent));
 
             // Poll for automation updates
@@ -63,6 +63,7 @@ export async function GET(
                         const update = {
                             type: "progress",
                             automationId,
+                            workspaceId,
                             status,
                             currentStageIndex,
                             findingsCount,
@@ -76,6 +77,7 @@ export async function GET(
                             const finalEvent = `data: ${JSON.stringify({
                                 type: "automation_complete",
                                 automationId,
+                                workspaceId,
                                 status,
                             })}\n\n`;
                             controller.enqueue(encoder.encode(finalEvent));

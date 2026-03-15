@@ -46,6 +46,7 @@ export type ChatEvent = {
   toolArgs?: string;
   toolOutput?: string;
   toolCallId?: string;
+  isError?: boolean;
   timestamp?: string;
   metadata?: Record<string, unknown>;
   thoughts?: string[];
@@ -70,6 +71,7 @@ export type ServerAgentEvent = {
   toolCallId?: string;
   toolArgs?: string;
   toolOutput?: string;
+  isError?: boolean;
   timestamp?: string;
   metadata?: Record<string, unknown>;
   thoughts?: string[];

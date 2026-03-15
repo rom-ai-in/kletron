@@ -1,0 +1,41 @@
+{
+    "status": "FAIL",
+    "details": [
+        {
+            "check": "Binding Confirmation",
+            "result": "FAIL",
+            "message": "Frontend hooks governing agent sessions and threads (e.g., useSessionStream) do not explicitly inject the `x-workspace-id` header. Consequently, new threads and scripts fall back to the backend's internal state, which may drift from the header selector."
+        },
+        {
+            "check": "Automation Execution",
+            "result": "FAIL",
+            "message": "Automation execution endpoints and UI triggers do not strictly bind the header's selected workspace ID (`x-workspace-id`) to the payload or headers. Executions can launch in an unintended workspace if the server context is out of sync."
+        },
+        {
+            "check": "Tool Scope",
+            "result": "FAIL",
+            "message": "Tools execute within the context established by the session. Because the initial session creation lacks explicit header-based workspace binding, tools (file reads, bash commands) can resolve to the wrong physical directory."
+        },
+        {
+            "check": "UI Isolation",
+            "result": "FAIL",
+            "message": "While changing the header selector immediately updates the frontend `activeWorkspaceId` React state, pending actions from the previous workspace are not explicitly aborted or scoped out, permitting race conditions."
+        },
+        {
+            "check": "State Persistence",
+            "result": "PASS",
+            "message": "The WorkspaceContext successfully restores the active workspace from the backend (`/api/workspaces`) on reload and falls back safely to the first available workspace if the saved ID is missing."
+        },
+        {
+            "check": "Cross‑Workspace Events",
+            "result": "FAIL",
+            "message": "Event payload streams (NDJSON/SSE) from active Agent Graphs are tied to `sessionId` but do not actively prefix global bus messages with a `workspaceId`. Streams can leak across browser tabs if the UI does not strictly filter them."
+        }
+    ],
+    "recommendations": [
+        "Inject the `x-workspace-id` HTTP header into all `fetch` calls originating from the Web App's Agent UI (specifically `useSessionStream` and automation hooks).",
+        "Refactor `useAutomations` to mandate a `workspaceId` parameter directly from the `WorkspaceContext`.",
+        "Add an explicit abort controller to cancel any pending API requests when the Workspace Header Selector value changes.",
+        "Enforce `workspaceId` tagging in all server-sent events to allow the frontend to safely ignore events belonging to inactive workspaces."
+    ]
+}

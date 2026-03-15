@@ -137,7 +137,8 @@ export async function POST(request: Request) {
       const sendChunk = (chunk: StreamChunk) => {
         if (clientDisconnected) return; // client gone, skip writing
         try {
-          controller.enqueue(textEncoder.encode(`${JSON.stringify(chunk)}\n`));
+          const taggedChunk = { ...chunk, workspaceId: workspace._id?.toString() };
+          controller.enqueue(textEncoder.encode(`${JSON.stringify(taggedChunk)}\n`));
         } catch {
           clientDisconnected = true;
         }
@@ -170,7 +171,7 @@ export async function POST(request: Request) {
           await agentGraphRunService.updateRunStatus(runId, "FAILED", {
             endedAt: new Date(),
             error: (error as Error)?.message ?? "Internal failure",
-          } as any).catch(() => {});
+          } as any).catch(() => { });
         }
       } finally {
         console.log(`[sessions/create] Stream ended for ${runId} (clientDisconnected=${clientDisconnected})`);
@@ -181,7 +182,7 @@ export async function POST(request: Request) {
             console.warn(`[sessions/create] Client disconnected, force-completing run ${runId}`);
             await agentGraphRunService.updateRunStatus(runId, "COMPLETED", {
               endedAt: new Date(),
-            } as any).catch(() => {});
+            } as any).catch(() => { });
           }
         }
         try { controller.close(); } catch { /* already closed */ }
@@ -259,18 +260,11 @@ export async function GET(request: Request) {
       const sanitized = sanitizeTitle(noThoughts);
       if (sanitized) {
         if (/\bwe need to\b|<think>|\bfinal answer\b/i.test(raw)) {
-          // #region agent log
-          fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:'sessions-list',hypothesisId:'H1',location:'apps/web/app/api/sessions/route.ts:cleanTitle',message:'Title sanitized directly',data:{raw:raw.slice(0,120),sanitized},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
         }
         return sanitized;
       }
       const fallback = heuristicTitle(noThoughts || stripped);
-      if (/\bwe need to\b|<think>|\bfinal answer\b/i.test(raw) || /\bwe need to\b/i.test(fallback)) {
-        // #region agent log
-        fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:'sessions-list',hypothesisId:'H1',location:'apps/web/app/api/sessions/route.ts:cleanTitle',message:'Title fallback used',data:{raw:raw.slice(0,120),noThoughts:noThoughts.slice(0,120),fallback},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-      }
+
       return fallback || "Untitled";
     };
 
@@ -287,9 +281,7 @@ export async function GET(request: Request) {
       tokenUsage: run.tokenUsage ?? null,
     }));
 
-    // #region agent log
-    fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:'sessions-list',hypothesisId:'H6',location:'apps/web/app/api/sessions/route.ts:GET',message:'Sessions list emitted',data:{count:sessions.length,suspiciousCount:sessions.filter((s)=>/\bwe need to\b|\bfinal answer\b|<think>/i.test(String(s.title ?? ''))).length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+
 
     return NextResponse.json(sessions);
   } catch (error) {

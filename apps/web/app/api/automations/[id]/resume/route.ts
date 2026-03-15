@@ -23,7 +23,7 @@ export async function POST(
     try {
         const automationId = params.id;
 
-        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null, { requireExplicitWorkspace: true });
         const workspaceId = workspace?._id?.toString();
         if (!workspace || !workspaceId) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });

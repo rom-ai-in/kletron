@@ -35,10 +35,12 @@ export function NodeInspector({
     node,
     onChange,
     onDelete,
+    onResetPrompt,
 }: {
     node: AgentNodeEditorValue | null;
     onChange: (next: AgentNodeEditorValue) => void;
     onDelete?: (nodeId: string) => void;
+    onResetPrompt?: () => void;
 }) {
     const [tools, setTools] = useState<ToolMeta[]>([]);
     const [toolSearch, setToolSearch] = useState("");
@@ -240,7 +242,18 @@ export function NodeInspector({
             </Panel>
 
             <Panel className="space-y-2 p-4">
-                <div className="text-sm font-semibold text-text-primary">System prompt</div>
+                <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold text-text-primary">System prompt</div>
+                    {onResetPrompt && (
+                        <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={onResetPrompt}
+                        >
+                            Reset to default
+                        </Button>
+                    )}
+                </div>
                 <textarea
                     value={node.react.systemPrompt}
                     onChange={(e) => onChange({ ...node, react: { ...node.react, systemPrompt: e.target.value } })}

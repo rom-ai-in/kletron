@@ -20,6 +20,7 @@ import { Button } from "@numezis/ui/components/design-system";
 import { AutomationBuilderModal } from "../AutomationBuilderModal";
 import type { AutomationDefinition, AutomationTriggerType } from "@numezis/shared/automationTypes";
 import { cn } from "@numezis/shared/utils/cn";
+import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 
 // Helper for status icons
 const StatusIcon = ({ status }: { status: string }) => {
@@ -43,6 +44,7 @@ export function AutomationListSidebar() {
     const params = useParams();
     const pathname = usePathname();
     const activeId = params?.id as string;
+    const { activeWorkspaceId } = useWorkspace() ?? {};
 
     // State
     const [automations, setAutomations] = useState<AutomationDefinition[]>([]);
@@ -58,7 +60,9 @@ export function AutomationListSidebar() {
         setLoading(true);
         setApiError(null);
         try {
-            const res = await fetch("/api/automations");
+            const headers: Record<string, string> = {};
+            if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+            const res = await fetch("/api/automations", { headers });
             if (res.ok) {
                 const data = await res.json();
                 setAutomations(data.automations || data.chains || []);
@@ -84,7 +88,8 @@ export function AutomationListSidebar() {
             }
         }, 10000); // 10s polling
         return () => clearInterval(interval);
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeWorkspaceId]);
 
     // Filter logic
     const filteredAutomations = automations.filter(automation => {

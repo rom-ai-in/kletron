@@ -7,11 +7,7 @@
 
 import type { AgentWorkflowResult, Finding } from "./types";
 import {
-    createFormattedReport as legacyCreateFormattedReport,
-    createSummaryCard,
-    formatFindingsTable,
-    createProgressReport,
-    generateJsonSummary
+    createSummaryCard
 } from "./reportFormatting";
 import {
     createHtmlReport,

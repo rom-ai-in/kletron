@@ -55,9 +55,6 @@ export async function GET(request: Request, { params }: { params: { id: string }
           /\bwe need to produce a short chat title\b/i.test(cleaned)
         ) {
           if (original && (leakedMetaPattern.test(original) || /\bwe need to\b|\bfinal answer\b|<think>/i.test(original))) {
-            // #region agent log
-            fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0c540e'},body:JSON.stringify({sessionId:'0c540e',runId:params.id,hypothesisId:'H3',location:'apps/web/app/api/sessions/[id]/route.ts:history-map',message:'History event blanked by sanitizer',data:{eventId:event?.id,kind:event?.kind,original:original.slice(0,180),cleaned:cleaned.slice(0,180)},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
           }
           return { ...event, content: "" };
         }

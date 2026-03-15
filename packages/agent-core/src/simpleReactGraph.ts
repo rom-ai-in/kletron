@@ -8,8 +8,8 @@ import {
 } from "@langchain/langgraph";
 
 import { streamReactAgentMessages } from "./reactAgentRunner";
+import { simpleReactSystemPrompt } from "@numezis/server/services/agentGraphPresets";
 const simpleReactPhaseId = "simple_react";
-const simpleReactSystemPrompt = "You are a helpful AI assistant.";
 import { allMcpTools } from "./tools/mcpTools";
 
 const simpleReactTools = allMcpTools;

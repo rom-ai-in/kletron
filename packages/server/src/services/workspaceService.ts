@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { ObjectId } from "mongodb";
 import { getDatabase } from "../lib/db";
-import { getConfigSafe, saveConfig } from "../config";
+import { getConfigSafe, saveConfig, getProjectRoot } from "../config";
 
 export type WorkspaceStatus = "active" | "archived";
 export type WorkspaceHealthStatus = "healthy" | "missing" | "inaccessible";
@@ -272,6 +272,15 @@ export async function createWorkspace(input: {
 
   const existing = await getWorkspaceByRootPath(normalized, input.ownerId);
   if (existing) {
+    if (existing.status === "archived") {
+      const collection = await getWorkspaceCollection();
+      await collection.updateOne(
+        { _id: existing._id },
+        { $set: { status: "active", updatedAt: new Date(), ...(input.name && { name: input.name }) } }
+      );
+      existing.status = "active";
+      if (input.name) existing.name = input.name;
+    }
     return existing;
   }
 
@@ -461,7 +470,7 @@ export async function syncConfigJson(ownerId?: string) {
     // workspace root paths plus the active root.  This is used by the MCP
     // server purely as an allowlist / discovery set, NOT for selecting the
     // active workspace.
-    const configDir = path.resolve(process.cwd(), "config");
+    const configDir = path.resolve(getProjectRoot(), "config");
     const configJsonPath = path.join(configDir, "config.json");
 
     if (!fs.existsSync(configDir)) {
@@ -502,10 +511,11 @@ export async function syncConfigJson(ownerId?: string) {
 export async function resolveWorkspaceFromRequest(
   request: Request,
   ownerId: string,
-  body?: Record<string, unknown> | null
+  body?: Record<string, unknown> | null,
+  options?: { requireExplicitWorkspace?: boolean }
 ): Promise<Workspace | null> {
   try {
-    return await resolveWorkspaceFromRequestStrict(request, ownerId, body);
+    return await resolveWorkspaceFromRequestStrict(request, ownerId, body, options);
   } catch (error) {
     if (asWorkspaceResolutionError(error)) {
       return null;
@@ -517,7 +527,8 @@ export async function resolveWorkspaceFromRequest(
 export async function resolveWorkspaceFromRequestStrict(
   request: Request,
   ownerId: string,
-  body?: Record<string, unknown> | null
+  body?: Record<string, unknown> | null,
+  options?: { requireExplicitWorkspace?: boolean }
 ): Promise<Workspace | null> {
   const url = new URL(request.url);
   const headerId = request.headers.get("x-workspace-id");
@@ -529,9 +540,11 @@ export async function resolveWorkspaceFromRequestStrict(
   let workspace: Workspace | null = null;
   if (id) {
     workspace = await getWorkspaceById(id, ownerId);
-  } else {
+  } else if (!options?.requireExplicitWorkspace) {
     const activeId = await getActiveWorkspaceId(ownerId);
     workspace = activeId ? await getWorkspaceById(activeId, ownerId) : null;
+  } else {
+    throw new Error("Explicit workspaceId is required in headers or query parameters for this operation to prevent cross-workspace data leakage.");
   }
   if (!workspace) return null;
   return assertWorkspaceHealthy(workspace);

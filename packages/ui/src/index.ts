@@ -61,6 +61,7 @@ export {
     // Agent
     ThinkingBubble, ThinkingList,
     ToolLog,
+    ToolBatchAccordion,
     DiffApproval,
     ContextChips, createFileChip, createFolderChip, createAgentChip, createModelChip, createTagChip,
     InlineCompletion, MultiLineCompletion, useInlineCompletion,

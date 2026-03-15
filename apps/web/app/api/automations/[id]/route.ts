@@ -71,7 +71,7 @@ export async function GET(
     try {
         const automationId = params.id;
 
-        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null, { requireExplicitWorkspace: true });
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
@@ -141,7 +141,7 @@ export async function DELETE(
     try {
         const automationId = params.id;
 
-        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null, { requireExplicitWorkspace: true });
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
@@ -203,7 +203,7 @@ export async function PUT(
 
         const { config } = validation.data;
 
-        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, body);
+        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, body, { requireExplicitWorkspace: true });
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }

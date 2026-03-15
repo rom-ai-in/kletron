@@ -41,7 +41,7 @@ export default function ChangesPage() {
 }
 
 function ChangesPageContent() {
-    const { activeWorkspace } = useWorkspace();
+    const { activeWorkspace, activeWorkspaceId } = useWorkspace();
     const [path, setPath] = useState("src/");
     const [granularity, setGranularity] = useState<"hour" | "day" | "week">("day");
 
@@ -71,7 +71,10 @@ function ChangesPageContent() {
             params.set("end", new Date(currentEnd).toISOString());
             params.set("granularity", granularity);
 
-            const res = await fetch(`/api/git-diffs?${params.toString()}`);
+            const headers: Record<string, string> = {};
+            if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+
+            const res = await fetch(`/api/git-diffs?${params.toString()}`, { headers });
             if (!res.ok) {
                 const data = await res.json();
                 throw new Error(data.error || "Failed to fetch diffs");
@@ -85,9 +88,13 @@ function ChangesPageContent() {
         }
     };
 
+    // Refetch when the active workspace changes
     useEffect(() => {
+        setPath("src/");
+        setDiffs([]);
         void fetchDiffs();
-    }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeWorkspaceId]);
 
     const getBucketKey = (dateStr: string) => {
         const d = new Date(dateStr);
@@ -168,6 +175,7 @@ function ChangesPageContent() {
                             value={path}
                             onChange={(newPath) => setPath(newPath)}
                             placeholder="Select target folder..."
+                            workspaceId={activeWorkspaceId ?? undefined}
                         />
                     </div>
 

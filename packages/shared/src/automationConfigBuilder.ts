@@ -561,7 +561,190 @@ export class AutomationConfigBuilder {
                 },
             ],
         },
+
+        /**
+         * Feature Audit (A43) — Single feature template
+         * Duration: ~30 min per feature
+         */
+        FEATURE_AUDIT: {
+            name: "Feature Audit (A43) — [FOCUS]",
+            description:
+                "Complete A43 domain/feature audit with inventory reconstruction, deep audit across 13 axes, verdict, and remediation plan. Replace [FOCUS] with the target feature (e.g. sales/invoices).",
+            stages: [
+                {
+                    id: "fa-focus",
+                    name: "Feature Audit: [FOCUS]",
+                    prompt: AutomationConfigBuilder.buildFeatureAuditPrompt("[FOCUS]"),
+                    graphId: "audit",
+                    llmProvider: "azure",
+                    // NO contextFromPreviousStages → fresh LLM context guaranteed
+                },
+            ],
+        },
     };
+
+    /**
+     * All auditable features extracted from the A43 canonical inventory.
+     * Only includes features with status = implemented_and_auditable.
+     */
+    static readonly AUDITABLE_FEATURES: { focus: string; label: string; domain: string }[] = [
+        // ─── Foundation ─────────────────────────────────────────
+        { focus: "foundation/contacts", label: "Contacts", domain: "foundation" },
+
+        // ─── Sales (core + subfeatures from §2 + §4) ───────────
+        { focus: "sales/invoices", label: "Sales Invoices", domain: "sales" },
+        { focus: "sales/orders", label: "Sales Orders", domain: "sales" },
+        { focus: "sales/quotes", label: "Sales Quotes", domain: "sales" },
+        { focus: "sales/credit-notes", label: "Sales Credit Notes", domain: "sales" },
+        { focus: "sales/sales-config", label: "Sales Config", domain: "sales" },
+        { focus: "sales/approval-workflows", label: "Sales Approval Workflows", domain: "sales" },
+        { focus: "sales/pricelists", label: "Sales Pricelists", domain: "sales" },
+        { focus: "sales/communications", label: "Sales Communications", domain: "sales" },
+        { focus: "sales/invoice-reminder-rules", label: "Invoice Reminder Rules", domain: "sales" },
+        { focus: "sales/payment-terms", label: "Sales Payment Terms", domain: "sales" },
+        { focus: "sales/delivery-terms", label: "Sales Delivery Terms", domain: "sales" },
+        { focus: "sales/documents", label: "Sales Documents", domain: "sales" },
+        { focus: "sales/integration", label: "Sales Integration", domain: "sales" },
+        { focus: "sales/reporting", label: "Sales Reporting", domain: "sales" },
+
+        // ─── Purchases (core + subfeatures from §2 + §4) ───────
+        { focus: "purchases/expenses", label: "Expenses", domain: "purchases" },
+        { focus: "purchases/bills", label: "Supplier Bills", domain: "purchases" },
+        { focus: "purchases/purchase-orders", label: "Purchase Orders", domain: "purchases" },
+        { focus: "purchases/expense-reports", label: "Expense Reports", domain: "purchases" },
+        { focus: "purchases/budgets", label: "Purchase Budgets", domain: "purchases" },
+        { focus: "purchases/credit-notes", label: "Purchase Credit Notes", domain: "purchases" },
+        { focus: "purchases/vendor-management", label: "Vendor Management", domain: "purchases" },
+        { focus: "purchases/purchase-config", label: "Purchase Config", domain: "purchases" },
+        { focus: "purchases/purchase-ocr", label: "Purchase OCR", domain: "purchases" },
+        { focus: "purchases/approval-workflows", label: "Purchase Approval Workflows", domain: "purchases" },
+        { focus: "purchases/bill-reminder-rules", label: "Bill Reminder Rules", domain: "purchases" },
+        { focus: "purchases/expense-categories", label: "Expense Categories", domain: "purchases" },
+        { focus: "purchases/payment-terms", label: "Purchase Payment Terms", domain: "purchases" },
+        { focus: "purchases/delivery-terms", label: "Purchase Delivery Terms", domain: "purchases" },
+        { focus: "purchases/documents", label: "Purchase Documents", domain: "purchases" },
+        { focus: "purchases/integration", label: "Purchase Integration", domain: "purchases" },
+        { focus: "purchases/reporting", label: "Purchase Reporting", domain: "purchases" },
+
+        // ─── Accounting (core + subfeatures from §2 + §4) ──────
+        { focus: "accounting/banking", label: "Banking & Reconciliation", domain: "accounting" },
+        { focus: "accounting/ledger", label: "Ledger & Accounting Core", domain: "accounting" },
+        { focus: "accounting/fixed-assets", label: "Fixed Assets", domain: "accounting" },
+        { focus: "accounting/compliance", label: "Fiscal Compliance", domain: "accounting" },
+        { focus: "accounting/closing", label: "Closing Operations", domain: "accounting" },
+        { focus: "accounting/accounting-config", label: "Accounting Config", domain: "accounting" },
+        { focus: "accounting/currency", label: "Currency & Exchange Rates", domain: "accounting" },
+        { focus: "accounting/governance", label: "Accounting Governance", domain: "accounting" },
+        { focus: "accounting/default-account-mappings", label: "Default Account Mappings", domain: "accounting" },
+        { focus: "accounting/closing-policies", label: "Closing Policies", domain: "accounting" },
+        { focus: "accounting/approval-workflows", label: "Accounting Approval Workflows", domain: "accounting" },
+        { focus: "accounting/reminder-rules", label: "Accounting Reminder Rules", domain: "accounting" },
+        { focus: "accounting/integration", label: "Accounting Integration", domain: "accounting" },
+
+        // ─── Projects (core + subfeatures from §2 + §4) ────────
+        { focus: "projects/projects", label: "Projects Core", domain: "projects" },
+        { focus: "projects/project-tasks", label: "Project Tasks", domain: "projects" },
+        { focus: "projects/project-expenses", label: "Project Expenses", domain: "projects" },
+        { focus: "projects/time-entries", label: "Time Entries", domain: "projects" },
+        { focus: "projects/budget", label: "Project Budget", domain: "projects" },
+        { focus: "projects/portfolio", label: "Project Portfolio", domain: "projects" },
+        { focus: "projects/projects-config", label: "Projects Config", domain: "projects" },
+        { focus: "projects/invoicing", label: "Project Invoicing", domain: "projects" },
+        { focus: "projects/approvals", label: "Project Approvals", domain: "projects" },
+        { focus: "projects/reporting", label: "Project Reporting", domain: "projects" },
+
+        // ─── HR (core + subfeatures from §2 + §4) ──────────────
+        { focus: "hr/employees", label: "HR Employees", domain: "hr" },
+        { focus: "hr/payroll", label: "Payroll", domain: "hr" },
+        { focus: "hr/leave-management", label: "Leave Management", domain: "hr" },
+        { focus: "hr/hr-config", label: "HR Config", domain: "hr" },
+        { focus: "hr/payroll-declarations", label: "Payroll Declarations", domain: "hr" },
+        { focus: "hr/payroll-config", label: "Payroll Config", domain: "hr" },
+        { focus: "hr/catalogs", label: "HR Catalogs", domain: "hr" },
+        { focus: "hr/time-tracking", label: "HR Time Tracking", domain: "hr" },
+        { focus: "hr/payroll-ch", label: "Payroll CH (Switzerland)", domain: "hr" },
+        { focus: "hr/integration", label: "HR Integration", domain: "hr" },
+        { focus: "hr/reporting", label: "HR Reporting", domain: "hr" },
+        { focus: "hr/documents", label: "HR Documents", domain: "hr" },
+
+        // ─── Inventory (core + subfeatures from §2 + §4) ───────
+        { focus: "inventory/products", label: "Products", domain: "inventory" },
+        { focus: "inventory/stock", label: "Stock Overview", domain: "inventory" },
+        { focus: "inventory/warehouses", label: "Warehouses", domain: "inventory" },
+        { focus: "inventory/transfers", label: "Inventory Transfers", domain: "inventory" },
+        { focus: "inventory/adjustments", label: "Inventory Adjustments", domain: "inventory" },
+        { focus: "inventory/returns", label: "Inventory Returns", domain: "inventory" },
+        { focus: "inventory/costing", label: "Inventory Costing", domain: "inventory" },
+        { focus: "inventory/stocktake", label: "Stocktake", domain: "inventory" },
+        { focus: "inventory/replenishment", label: "Replenishment", domain: "inventory" },
+        { focus: "inventory/inventory-config", label: "Inventory Config", domain: "inventory" },
+        { focus: "inventory/categories", label: "Product Categories", domain: "inventory" },
+        { focus: "inventory/tracking", label: "Tracking & Traceability", domain: "inventory" },
+        { focus: "inventory/valuation", label: "Inventory Valuation", domain: "inventory" },
+        { focus: "inventory/reporting", label: "Inventory Reporting", domain: "inventory" },
+        { focus: "inventory/integration", label: "Inventory Integration", domain: "inventory" },
+
+        // ─── Communication (core + subfeatures from §2 + §4) ───
+        { focus: "communication/approvals", label: "Approval Workflows", domain: "communication" },
+        { focus: "communication/tasks", label: "Tasks", domain: "communication" },
+        { focus: "communication/documents", label: "Document Management", domain: "communication" },
+        { focus: "communication/communication-config", label: "Communication Config", domain: "communication" },
+        { focus: "communication/comments", label: "Comments", domain: "communication" },
+        { focus: "communication/pitch-deck", label: "Pitch Deck", domain: "communication" },
+        { focus: "communication/documents-config", label: "Documents Config", domain: "communication" },
+        { focus: "communication/inbound-email", label: "Inbound Email", domain: "communication" },
+
+        // ─── AI (§2 + §3 + §4) ─────────────────────────────────
+        { focus: "ai/agents", label: "Unified Agents", domain: "ai" },
+        { focus: "ai/ai-config", label: "AI Config", domain: "ai" },
+        { focus: "ai/ai-governance", label: "AI Governance (Models/Runs/Stats)", domain: "ai" },
+        { focus: "ai/ai-models", label: "AI Models Catalog", domain: "ai" },
+        { focus: "ai/ai-model-usage", label: "AI Model Usage", domain: "ai" },
+
+        // ─── System ─────────────────────────────────────────────
+        { focus: "notifications/notifications", label: "Notifications", domain: "system" },
+        { focus: "notifications/channels", label: "Notification Channels", domain: "system" },
+
+        // ─── Management (§3 — repo extension inventory) ────────
+        { focus: "management/company-access", label: "Company Access (Users/Groups/Permissions)", domain: "management" },
+        { focus: "management/tenant-access", label: "Tenant Access", domain: "management" },
+        { focus: "management/partner-access", label: "Partner Access", domain: "management" },
+        { focus: "management/superadmin-access", label: "Superadmin Access", domain: "management" },
+        { focus: "management/partner-management", label: "Partner Management", domain: "management" },
+        { focus: "management/companies", label: "Company Management", domain: "management" },
+        { focus: "management/modules", label: "Module Authorization", domain: "management" },
+        { focus: "management/billing", label: "Billing Settings", domain: "management" },
+        { focus: "management/settings", label: "General Settings", domain: "management" },
+        { focus: "management/profile", label: "Profile & Account", domain: "management" },
+
+        // ─── Transversal (§3 — cross-cutting features) ─────────
+        { focus: "transversal/portal-shell", label: "Portal Shell", domain: "transversal" },
+        { focus: "transversal/communication-inbox", label: "Communication Inbox", domain: "transversal" },
+        { focus: "transversal/approval-policies", label: "Approval Policies", domain: "transversal" },
+        { focus: "transversal/reporting", label: "Shared Reporting", domain: "transversal" },
+        { focus: "transversal/documents-engine", label: "Documents Engine", domain: "transversal" },
+        { focus: "transversal/compliance-calendar", label: "Compliance Calendar", domain: "transversal" },
+        { focus: "transversal/delivery-payment-terms", label: "Delivery/Payment Terms & Reminders", domain: "transversal" },
+
+        // ─── Governance (§3 — superadmin/ops features) ──────────
+        { focus: "governance/countries", label: "Countries Hub", domain: "governance" },
+        { focus: "governance/compliance-knowledge", label: "Compliance Knowledge", domain: "governance" },
+        { focus: "governance/i18n-ops", label: "i18n Ops", domain: "governance" },
+        { focus: "governance/ops-errors-cron", label: "Ops/Errors/Cron", domain: "governance" },
+        { focus: "governance/documents-observability", label: "Documents Observability", domain: "governance" },
+        { focus: "governance/rbac-analytics", label: "RBAC Analytics", domain: "governance" },
+        { focus: "governance/seeding-reconciliation", label: "Seeding & Reconciliation", domain: "governance" },
+        { focus: "governance/partner-client-links", label: "Partner-Client Links & Impersonation", domain: "governance" },
+
+        // ─── Internal (§3 — internal workspace features) ────────
+        { focus: "internal/marketing-blog", label: "Marketing Blog", domain: "internal" },
+        { focus: "internal/social-media", label: "Social Media", domain: "internal" },
+        { focus: "internal/crm-prospecting", label: "CRM & Prospecting", domain: "internal" },
+        { focus: "internal/zefix", label: "Zefix Operations", domain: "internal" },
+
+        // ─── Auth (§3 — session/identity flows) ─────────────────
+        { focus: "auth/auth-flows", label: "Auth Flows (Login/MFA/SSO)", domain: "auth" },
+    ];
 
     /**
      * Build an automation from a preset or custom configuration
@@ -582,6 +765,180 @@ export class AutomationConfigBuilder {
     /** @deprecated Use buildAutomation instead */
     static buildChain(input: string | Partial<AutomationDefinition>): Partial<AutomationDefinition> {
         return this.buildAutomation(input as any);
+    }
+
+    /**
+     * Build a self-contained A43 feature audit prompt for a given focus.
+     * The prompt includes all rules, axes, and output format so that each
+     * stage can run with a completely fresh LLM context.
+     */
+    static buildFeatureAuditPrompt(focus: string): string {
+        return [
+            `# A43 Feature Audit — Focus: ${focus}`,
+            "",
+            "You are performing a comprehensive A43 domain/feature audit.",
+            `Your FOCUS is: **${focus}**`,
+            "",
+            "## Phase 1: Inventory Reconstruction",
+            "",
+            "Before any code review, reconstruct the expected scope for this focus:",
+            "1. Read \`packages/shared-ts/src/modules.ts\` to find the matching ModuleKey(s)",
+            "2. Read the relevant API domain folder: \`apps/api/src/domain/${focus.split('/')[0]}/${focus.split('/').slice(1).join('/')}\`",
+            "3. Check the navigation registry: \`apps/api/src/services/navigation.registry.ts\` and \`apps/api/src/services/navigation-registry/*.ts\`",
+            "4. Check frontend routes: \`apps/web/app/**/*\` for \`page.tsx\`, \`route.ts\`, \`layout.tsx\`",
+            "5. Produce a Focus Inventory Map with:",
+            "   - All API endpoints/services for this feature",
+            "   - All frontend routes",
+            "   - Navigation registry entries",
+            "   - Forms and schemas",
+            "   - Related config/policies",
+            "",
+            "Classify each surface as: implemented_and_auditable | implemented_partial | api_only | ui_only | doc_only_or_planned | infrastructure_or_config",
+            "",
+            "Detect drifts: registry_without_ui, ui_without_registry, api_without_ui, doc_without_code, code_without_doc, module_registry_mismatch",
+            "",
+            "## Phase 2: Deep Audit (13 Mandatory Axes)",
+            "",
+            "For each axis, read the actual source files and produce findings:",
+            "",
+            "1. **Architecture** — Domain structure, service boundaries, dependency direction",
+            "2. **Backend** — Business logic, invariants, state transitions, race conditions",
+            "3. **API** — Contracts, validation, auth guards, error codes, pagination, idempotency",
+            "4. **Frontend** — Component architecture, routing, SSR/CSR, error boundaries",
+            "5. **TypeScript/ESM** — Type safety, branded types, schema strictness, exports",
+            "6. **Forms** — Form governance, validation, schema alignment, field coverage",
+            "7. **Lifecycles** — State machines, transitions, approval flows, status tracking",
+            "8. **User Intent** — Does the feature deliver what a user expects?",
+            "9. **Journey** — End-to-end flow from creation to completion",
+            "10. **UX/UI** — Accessibility, empty/loading/error states, feedback, consistency",
+            "11. **i18n** — Translation coverage, key consistency, missing keys, hardcoded strings",
+            "12. **Security** — Auth, authorization, input validation, data exposure, least privilege",
+            "13. **Tests** — Coverage gaps, missing unit/integration tests, critical untested paths",
+            "",
+            "## Phase 3: Verdict & Report",
+            "",
+            "Produce a structured report with:",
+            "",
+            "### Verdict: PASS or BLOCK",
+            "BLOCK if any P0 finding exists (security vulnerability, data loss risk, broken critical flow).",
+            "",
+            "### Scoreboard",
+            "Rate each of the 13 axes: ✅ PASS | ⚠️ WARNING | ❌ FAIL",
+            "",
+            "### Findings (numbered, prioritized)",
+            "For each finding:",
+            "- **ID**: F1, F2, ...",
+            "- **Severity**: P0 (BLOQUANT) | P1 (HIGH) | P2 (MEDIUM) | P3 (LOW)",
+            "- **Axis**: which of the 13 axes",
+            "- **File**: exact file path",
+            "- **Lines**: line range",
+            "- **Description**: what is wrong",
+            "- **Evidence**: code snippet or proof",
+            "- **Fix**: concrete remediation",
+            "",
+            "### Gaps Matrix",
+            "List any inventory drifts or missing surfaces detected in Phase 1.",
+            "",
+            "### Remediation Plan",
+            "Group fixes into:",
+            "- **Sprint 0** (immediate): P0 blockers",
+            "- **Sprint 1** (next): P1 high-priority",
+            "- **Sprint 2** (planned): P2-P3 improvements",
+            "",
+            "## Scope Rules",
+            "",
+            "- Source precedence: modules.ts > API domain > navigation registry > FE routes > docs",
+            "- Exclude: node_modules, .next, dist, build, .git, __test__/demo-module",
+            "- Do NOT audit features outside the focus scope",
+            "- Use read_file, search_code, list_files, describe_structure extensively",
+            "- Read at minimum 10+ source files before concluding",
+        ].join("\n");
+    }
+
+    /**
+     * Build a complete automation config for auditing a single feature.
+     * The stage runs with a fresh LLM context (no contextFromPreviousStages).
+     */
+    static buildFeatureAuditForFocus(focus: string): Partial<AutomationDefinition> {
+        const label = this.AUDITABLE_FEATURES.find(f => f.focus === focus)?.label ?? focus;
+        return {
+            name: `A43 Feature Audit — ${label}`,
+            description: `Complete A43 audit for ${focus}: inventory reconstruction, 13-axis deep audit, verdict, and remediation plan.`,
+            stages: [
+                {
+                    id: `fa-${focus.replace(/\//g, "-")}`,
+                    name: `Feature Audit: ${label}`,
+                    prompt: this.buildFeatureAuditPrompt(focus),
+                    graphId: "audit",
+                    llmProvider: "vllm",
+                    // NO contextFromPreviousStages → fresh LLM context guaranteed
+                },
+            ],
+        };
+    }
+
+    /**
+     * Build a batch automation config that audits multiple features sequentially.
+     * Each stage is a complete, self-contained feature audit with a fresh LLM context.
+     * No contextFromPreviousStages between stages — context isolation guaranteed.
+     *
+     * @param focuses - Array of feature focus strings (e.g. ["sales/invoices", "purchases/bills"])
+     * @param options - Optional domain filter or custom name
+     */
+    static buildFeatureAuditBatch(
+        focuses: string[],
+        options?: { name?: string; domain?: string }
+    ): Partial<AutomationDefinition> {
+        const filteredFocuses = options?.domain
+            ? focuses.filter(f => {
+                const entry = this.AUDITABLE_FEATURES.find(af => af.focus === f);
+                return entry?.domain === options.domain;
+            })
+            : focuses;
+
+        const domainLabel = options?.domain ? ` (${options.domain})` : "";
+        const name = options?.name ?? `A43 Feature Audit Batch${domainLabel} — ${filteredFocuses.length} features`;
+
+        return {
+            name,
+            description: `Complete A43 audit for ${filteredFocuses.length} features: ${filteredFocuses.join(", ")}. Each feature runs with a fresh LLM context.`,
+            stages: filteredFocuses.map((focus) => {
+                const label = this.AUDITABLE_FEATURES.find(f => f.focus === focus)?.label ?? focus;
+                return {
+                    id: `fa-${focus.replace(/\//g, "-")}`,
+                    name: `Feature Audit: ${label}`,
+                    prompt: this.buildFeatureAuditPrompt(focus),
+                    graphId: "audit",
+                    llmProvider: "vllm" as const,
+                    // NO contextFromPreviousStages → fresh LLM context guaranteed
+                    // NO skipIf → each feature runs unconditionally
+                };
+            }),
+        };
+    }
+
+    /**
+     * Build a batch automation for all auditable features in a given domain.
+     */
+    static buildFeatureAuditByDomain(domain: string): Partial<AutomationDefinition> {
+        const domainFeatures = this.AUDITABLE_FEATURES.filter(f => f.domain === domain);
+        if (domainFeatures.length === 0) {
+            throw new Error(`No auditable features found for domain: ${domain}`);
+        }
+        return this.buildFeatureAuditBatch(
+            domainFeatures.map(f => f.focus),
+            { domain }
+        );
+    }
+
+    /**
+     * Build a batch automation for ALL auditable features.
+     */
+    static buildFullFeatureAudit(): Partial<AutomationDefinition> {
+        return this.buildFeatureAuditBatch(
+            this.AUDITABLE_FEATURES.map(f => f.focus),
+            { name: `A43 Full Feature Audit — ${this.AUDITABLE_FEATURES.length} features` }
+        );
     }
 
     private static ensurePresetPrompts(preset: Partial<AutomationDefinition>): Partial<AutomationDefinition> {
@@ -779,6 +1136,10 @@ export class AutomationConfigBuilder {
             MONGO_INDEX_AUDIT: "~1 hour",
             DOC_QUALITY_AUDIT: "~30 mins",
             CONTINUOUS_IMPROVEMENT: "~2 hours",
+            FEATURE_AUDIT: "~30 min per feature",
+            BUSINESS_ANALYSIS_FULL: "~1 hour",
+            QUICK_FEATURE_BRAINSTORM: "~15 mins",
+            COMPETITIVE_DEEP_DIVE: "~30 mins",
         };
 
         return {

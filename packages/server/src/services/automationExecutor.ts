@@ -364,7 +364,11 @@ export class AutomationExecutor {
         if (workspaceId) {
             const workspaceObjectId = toObjectId(workspaceId);
             if (!workspaceObjectId) return null;
-            query.workspaceId = workspaceObjectId;
+            // Match workspace-scoped OR global automations (no workspaceId)
+            query.$or = [
+                { workspaceId: workspaceObjectId },
+                { workspaceId: { $exists: false } },
+            ];
         }
         const chain = await db
             .collection(COLLECTION_NAME)
@@ -383,7 +387,14 @@ export class AutomationExecutor {
         if (filter?.workspaceId) {
             const workspaceObjectId = toObjectId(filter.workspaceId);
             if (!workspaceObjectId) return [];
-            query.workspaceId = workspaceObjectId;
+            // Include workspace-scoped automations AND global ones (no workspaceId)
+            query.$and = [
+                ...(query.$and || []),
+                { $or: [
+                    { workspaceId: workspaceObjectId },
+                    { workspaceId: { $exists: false } },
+                ] },
+            ];
         }
 
         if (filter?.status) {
@@ -391,9 +402,12 @@ export class AutomationExecutor {
         }
 
         if (filter?.search) {
-            query.$or = [
-                { name: { $regex: filter.search, $options: "i" } },
-                { description: { $regex: filter.search, $options: "i" } },
+            query.$and = [
+                ...(query.$and || []),
+                { $or: [
+                    { name: { $regex: filter.search, $options: "i" } },
+                    { description: { $regex: filter.search, $options: "i" } },
+                ] },
             ];
         }
 
@@ -1533,6 +1547,48 @@ export class AutomationExecutor {
         }
 
         return automations;
+    }
+
+    /**
+     * Ensure that default feature audit automations exist in the database.
+     * Seeds one automation per domain from the AUDITABLE_FEATURES list.
+     * Safe to call multiple times — skips if already exists by name.
+     *
+     * @param workspaceId - Optional workspace to scope the seeded automation
+     */
+    async ensureDefaultAutomations(workspaceId?: string): Promise<{ created: string[]; skipped: string[] }> {
+        const { AutomationConfigBuilder } = await import("@numezis/shared/automationConfigBuilder");
+        const db = await getDb();
+
+        const config = AutomationConfigBuilder.buildFullFeatureAudit();
+        if (!config.name || !config.stages?.length) {
+            return { created: [], skipped: [] };
+        }
+
+        // Direct name equality check (avoids regex issues with special chars)
+        const query: Record<string, unknown> = { name: config.name };
+        if (workspaceId) {
+            const wid = toObjectId(workspaceId);
+            if (wid) query.workspaceId = wid;
+        }
+        const existing = await db.collection(COLLECTION_NAME).findOne(query);
+
+        if (existing) {
+            console.info(`[AutomationExecutor] Skipped (already exists): ${config.name} — ${config.stages.length} stages`);
+            return { created: [], skipped: [config.name] };
+        }
+
+        const id = await this.createAutomation({
+            ...config,
+            name: config.name,
+            description: config.description ?? "",
+            stages: config.stages,
+            triggerType: "manual",
+            ...(workspaceId ? { workspaceId } : {}),
+        } as any);
+
+        console.info(`[AutomationExecutor] Seeded automation: ${config.name} — ${config.stages.length} stages (${id})`);
+        return { created: [config.name], skipped: [] };
     }
 }
 

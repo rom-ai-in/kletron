@@ -4,7 +4,8 @@ import type { ConversationHistoryItem, ThreadLiveStatus } from "../types";
 export function useThreads(
   backendUrlTrimmed: string,
   backendReady: boolean,
-  getAccessToken: () => Promise<string | null>
+  getAccessToken: () => Promise<string | null>,
+  activeWorkspaceId: string | null
 ) {
   const [threads, setThreads] = useState<ConversationHistoryItem[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(false);
@@ -21,9 +22,10 @@ export function useThreads(
     setThreadsLoading(true);
     setThreadsError(null);
     try {
-      const res = await fetch(`${backendUrlTrimmed}/api/sessions?limit=50`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+
+      const res = await fetch(`${backendUrlTrimmed}/api/sessions?limit=50`, { headers });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || `Failed to load threads (${res.status})`);
@@ -76,6 +78,7 @@ export function useThreads(
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          ...(activeWorkspaceId ? { "x-workspace-id": activeWorkspaceId } : {}),
         },
         body: JSON.stringify({ title: nextTitle }),
       });
@@ -106,7 +109,10 @@ export function useThreads(
       if (!token) throw new Error("Authentication expired.");
       const res = await fetch(`${backendUrlTrimmed}/api/sessions/${encodeURIComponent(threadId)}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(activeWorkspaceId ? { "x-workspace-id": activeWorkspaceId } : {}),
+        },
       });
       if (!res.ok) {
         const text = await res.text();
@@ -133,7 +139,13 @@ export function useThreads(
       if (!token) throw new Error("Authentication expired.");
       const res = await fetch(
         `${backendUrlTrimmed}/api/sessions/${encodeURIComponent(threadId)}?action=delete`,
-        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...(activeWorkspaceId ? { "x-workspace-id": activeWorkspaceId } : {}),
+          },
+        }
       );
       if (!res.ok) {
         const text = await res.text();
@@ -163,9 +175,10 @@ export function useThreads(
     const token = await getAccessToken();
     if (!token) return;
     try {
-      const res = await fetch(`${backendUrlTrimmed}/api/sessions?limit=50`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+
+      const res = await fetch(`${backendUrlTrimmed}/api/sessions?limit=50`, { headers });
       if (!res.ok) return;
       const data = await res.json();
       const list = Array.isArray(data) ? (data as ConversationHistoryItem[]) : [];

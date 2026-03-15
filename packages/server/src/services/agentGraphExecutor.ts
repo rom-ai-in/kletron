@@ -412,6 +412,8 @@ function createAgentEvent(
     const normalizedRole = role.toLowerCase();
     const messageType = typeof message.type === "string" ? message.type.toLowerCase() : "";
     const isToolResult = messageType === "tool";
+    const toolMessageStatus = isToolResult ? (message as any).status : undefined;
+    const isToolError = toolMessageStatus === "error";
     const hasToolCalls =
         Boolean(extra.additional_kwargs?.function_call) ||
         Boolean(extra.additional_kwargs?.tool_calls?.length) ||
@@ -482,6 +484,7 @@ function createAgentEvent(
         content,
         toolNote,
         toolArgs,
+        isError: isToolError || undefined,
         thoughts: thoughts?.length ? thoughts : undefined,
         timestamp: new Date().toISOString(),
     };
@@ -790,25 +793,35 @@ function convertConversationHistoryToMessages(events: AgentEvent[]): BaseMessage
         if (event.kind === "user") {
             const content = sanitizeEventContent(event.content);
             if (!content) continue;
-            messages.push(new HumanMessage(content));
+            messages.push(new HumanMessage({ content, id: event.id }));
         } else if (event.kind === "system") {
             const content = sanitizeEventContent(event.content);
             if (!content) continue;
-            messages.push(new SystemMessage(content));
+            messages.push(new SystemMessage({ content, id: event.id }));
         } else if (isAiToolCallEvent(event)) {
             // AI message that issues tool calls (new kind="assistant" or legacy kind="tool")
             const toolName = event.toolName || event.name;
             const content = sanitizeEventContent(event.content);
-            const msg = new AIMessage(content || "");
+            const msg = new AIMessage({ content: content || "", id: event.id });
             if (toolName && event.toolArgs) {
                 try {
+                    // toolArgs may be a string (normal) or an object (after MongoDB round-trip)
+                    const parsedArgs = typeof event.toolArgs === "string"
+                        ? JSON.parse(event.toolArgs || "{}")
+                        : (typeof event.toolArgs === "object" ? event.toolArgs : {});
                     (msg as any).tool_calls = [{
                         id: event.toolCallId || `call_${Date.now()}`,
                         name: toolName,
-                        args: JSON.parse(event.toolArgs || "{}"),
+                        args: parsedArgs,
                     }];
                 } catch {
-                    // ignore parse errors
+                    // If parse fails, still create a tool_call with empty args
+                    // so the message structure remains valid for the LLM
+                    (msg as any).tool_calls = [{
+                        id: event.toolCallId || `call_${Date.now()}`,
+                        name: toolName,
+                        args: {},
+                    }];
                 }
             }
             messages.push(msg);
@@ -816,11 +829,11 @@ function convertConversationHistoryToMessages(events: AgentEvent[]): BaseMessage
             // Pure text assistant message (no tool calls)
             const content = sanitizeEventContent(event.content);
             if (!content) continue;
-            messages.push(new AIMessage(content));
+            messages.push(new AIMessage({ content, id: event.id }));
         } else if (event.kind === "tool") {
             // Tool result
             const content = sanitizeEventContent(event.content);
-            messages.push(new ToolMessage(content || "", event.toolCallId || ""));
+            messages.push(new ToolMessage({ content: content || "", tool_call_id: event.toolCallId || "", id: event.id }));
         }
     }
     return messages;
@@ -870,125 +883,125 @@ export class AgentGraphExecutor {
 
         return await runWithWorkspaceContext(workspace, async () => {
 
-        // ── Check for checkpoint-based resume ────────────────────────────
-        // If the run was interrupted (PAUSED with checkpoint metadata),
-        // resume from the checkpoint instead of re-executing from scratch.
-        const checkpoint = (run.state as any)?.checkpoint;
-        const isInterruptedResume =
-            run.status === "PAUSED" &&
-            checkpoint?.status === "awaiting_approval" &&
-            checkpoint?.threadId;
+            // ── Check for checkpoint-based resume ────────────────────────────
+            // If the run was interrupted (PAUSED with checkpoint metadata),
+            // resume from the checkpoint instead of re-executing from scratch.
+            const checkpoint = (run.state as any)?.checkpoint;
+            const isInterruptedResume =
+                run.status === "PAUSED" &&
+                checkpoint?.status === "awaiting_approval" &&
+                checkpoint?.threadId;
 
-        if (isInterruptedResume) {
-            console.log(`[AgentGraphExecutor] Resuming from checkpoint: threadId=${checkpoint.threadId}, nodeId=${checkpoint.nodeId}`);
+            if (isInterruptedResume) {
+                console.log(`[AgentGraphExecutor] Resuming from checkpoint: threadId=${checkpoint.threadId}, nodeId=${checkpoint.nodeId}`);
 
-            // ── Graph version guard ──────────────────────────────────────
-            // If the graph definition changed since the checkpoint was taken,
-            // resuming could produce undefined behaviour.  We warn and fall
-            // through to the standard multi-turn continuation instead.
-            let graphChanged = false;
-            if (checkpoint.graphHash) {
-                const currentGraph = await agentGraphService.getGraph(run.graphId.toString());
-                if (currentGraph) {
-                    const currentHash = computeGraphHash(currentGraph.nodes, currentGraph.edges);
-                    if (currentHash !== checkpoint.graphHash) {
-                        console.warn(
-                            `[AgentGraphExecutor] Graph definition changed since checkpoint ` +
-                            `(saved=${checkpoint.graphHash}, current=${currentHash}). ` +
-                            `Cannot safely resume — falling back to fresh run.`
-                        );
-                        graphChanged = true;
+                // ── Graph version guard ──────────────────────────────────────
+                // If the graph definition changed since the checkpoint was taken,
+                // resuming could produce undefined behaviour.  We warn and fall
+                // through to the standard multi-turn continuation instead.
+                let graphChanged = false;
+                if (checkpoint.graphHash) {
+                    const currentGraph = await agentGraphService.getGraph(run.graphId.toString());
+                    if (currentGraph) {
+                        const currentHash = computeGraphHash(currentGraph.nodes, currentGraph.edges);
+                        if (currentHash !== checkpoint.graphHash) {
+                            console.warn(
+                                `[AgentGraphExecutor] Graph definition changed since checkpoint ` +
+                                `(saved=${checkpoint.graphHash}, current=${currentHash}). ` +
+                                `Cannot safely resume — falling back to fresh run.`
+                            );
+                            graphChanged = true;
+                        }
                     }
                 }
-            }
 
-            if (!graphChanged) {
-                // Clear checkpoint metadata and mark as resuming
-                const updatedState = {
-                    ...run.state,
-                    checkpoint: {
-                        ...checkpoint,
-                        status: "approved",
-                        approvedAt: new Date().toISOString(),
-                        approvalMessage: message,
-                    },
-                };
+                if (!graphChanged) {
+                    // Clear checkpoint metadata and mark as resuming
+                    const updatedState = {
+                        ...run.state,
+                        checkpoint: {
+                            ...checkpoint,
+                            status: "approved",
+                            approvedAt: new Date().toISOString(),
+                            approvalMessage: message,
+                        },
+                    };
 
-                // Append user approval to conversation history
-                const history = updatedState.conversationHistory ?? [];
-                history.push({
-                    id: `event-approve-${Date.now()}`,
-                    phaseId: "user",
-                    phaseLabel: "User approval",
-                    kind: "user" as const,
-                    role: "user",
-                    content: message,
-                    timestamp: new Date().toISOString(),
-                });
-                updatedState.conversationHistory = history;
+                    // Append user approval to conversation history
+                    const history = updatedState.conversationHistory ?? [];
+                    history.push({
+                        id: `event-approve-${Date.now()}`,
+                        phaseId: "user",
+                        phaseLabel: "User approval",
+                        kind: "user" as const,
+                        role: "user",
+                        content: message,
+                        timestamp: new Date().toISOString(),
+                    });
+                    updatedState.conversationHistory = history;
 
-                // Reset only the interrupted node to PENDING
-                const resetNodeStatuses: Record<string, any> = { ...run.nodeStatuses };
-                if (checkpoint.nodeId) {
-                    resetNodeStatuses[checkpoint.nodeId] = "PENDING";
+                    // Reset only the interrupted node to PENDING
+                    const resetNodeStatuses: Record<string, any> = { ...run.nodeStatuses };
+                    if (checkpoint.nodeId) {
+                        resetNodeStatuses[checkpoint.nodeId] = "PENDING";
+                    }
+
+                    await agentGraphRunService.updateRunStatus(runId, "PENDING", {
+                        nodeStatuses: resetNodeStatuses,
+                        state: updatedState,
+                        endedAt: undefined,
+                        error: undefined,
+                    } as any);
+
+                    await agentGraphRunService.incrementConversationTurns(runId);
+
+                    return this.executeRunStreaming(runId, {
+                        ...opts,
+                        enableCheckpoints: true,
+                        resumeFromCheckpoint: true,
+                    });
                 }
-
-                await agentGraphRunService.updateRunStatus(runId, "PENDING", {
-                    nodeStatuses: resetNodeStatuses,
-                    state: updatedState,
-                    endedAt: undefined,
-                    error: undefined,
-                } as any);
-
-                await agentGraphRunService.incrementConversationTurns(runId);
-
-                return this.executeRunStreaming(runId, {
-                    ...opts,
-                    enableCheckpoints: true,
-                    resumeFromCheckpoint: true,
-                });
+                // graphChanged=true → fall through to standard multi-turn continuation below
             }
-            // graphChanged=true → fall through to standard multi-turn continuation below
-        }
 
-        // ── Standard multi-turn continuation ─────────────────────────────
+            // ── Standard multi-turn continuation ─────────────────────────────
 
-        // Append user message to conversation history
-        const history = run.state.conversationHistory ?? [];
-        history.push({
-            id: `event-continue-${Date.now()}`,
-            phaseId: "user",
-            phaseLabel: "User input",
-            kind: "user",
-            role: "user",
-            content: message,
-            timestamp: new Date().toISOString(),
-        });
+            // Append user message to conversation history
+            const history = run.state.conversationHistory ?? [];
+            history.push({
+                id: `event-continue-${Date.now()}`,
+                phaseId: "user",
+                phaseLabel: "User input",
+                kind: "user",
+                role: "user",
+                content: message,
+                timestamp: new Date().toISOString(),
+            });
 
-        // Update state with new mission and conversation history
-        const updatedState = {
-            ...run.state,
-            mission: message,
-            userInput: message,
-            conversationHistory: history,
-        };
+            // Update state with new mission and conversation history
+            const updatedState = {
+                ...run.state,
+                mission: message,
+                userInput: message,
+                conversationHistory: history,
+            };
 
-        // Reset node statuses for re-execution
-        const resetNodeStatuses: Record<string, any> = {};
-        for (const nodeId of run.nodeOrder) {
-            resetNodeStatuses[nodeId] = "PENDING";
-        }
+            // Reset node statuses for re-execution
+            const resetNodeStatuses: Record<string, any> = {};
+            for (const nodeId of run.nodeOrder) {
+                resetNodeStatuses[nodeId] = "PENDING";
+            }
 
-        await agentGraphRunService.updateRunStatus(runId, "PENDING", {
-            nodeStatuses: resetNodeStatuses,
-            state: updatedState,
-            endedAt: undefined,
-            error: undefined,
-        } as any);
+            await agentGraphRunService.updateRunStatus(runId, "PENDING", {
+                nodeStatuses: resetNodeStatuses,
+                state: updatedState,
+                endedAt: undefined,
+                error: undefined,
+            } as any);
 
-        await agentGraphRunService.incrementConversationTurns(runId);
+            await agentGraphRunService.incrementConversationTurns(runId);
 
-        return this.executeRunStreaming(runId, opts);
+            return this.executeRunStreaming(runId, opts);
         });
     }
 
@@ -1027,900 +1040,1127 @@ export class AgentGraphExecutor {
         }
 
         return await runWithWorkspaceContext(workspace, async () => {
-        // Ensure context is ready before we start
-        const contextGraphStore = await ensureContextGraphReady(
-            workspace._id!.toString(),
-            workspace.rootPath
-        );
+            // Ensure context is ready before we start
+            const contextGraphStore = await ensureContextGraphReady(
+                workspace._id!.toString(),
+                workspace.rootPath
+            );
 
-        // ── Checkpoint saver ─────────────────────────────────────────────
-        // Lazily resolve the checkpoint saver.  If it fails (e.g. MongoDB is
-        // unavailable) we continue without checkpoints.
-        const enableCheckpoints = opts?.enableCheckpoints !== false; // on by default
-        let checkpointer: import("@langchain/langgraph").BaseCheckpointSaver | undefined;
-        if (enableCheckpoints) {
-            try {
-                checkpointer = await getCheckpointSaver();
-            } catch (err) {
-                console.warn("[AgentGraph] Checkpointer unavailable, continuing without:", (err as Error)?.message);
-            }
-        }
-
-        const shouldAbort = opts?.shouldAbort;
-        const abortController = new AbortController();
-        let abortReason: AgentWorkflowAbortReason | null = null;
-        let lastAbortCheck = 0;
-        const ABORT_CHECK_INTERVAL_MS = 500;
-
-        const checkAbortReason = async () => {
-            if (abortReason) return abortReason;
-            if (!shouldAbort) return null;
-            const now = Date.now();
-            if (now - lastAbortCheck < ABORT_CHECK_INTERVAL_MS) return null;
-            lastAbortCheck = now;
-            const reason = await shouldAbort();
-            if (reason) {
-                abortReason = reason;
-                if (!abortController.signal.aborted) {
-                    abortController.abort();
+            // ── Checkpoint saver ─────────────────────────────────────────────
+            // Lazily resolve the checkpoint saver.  If it fails (e.g. MongoDB is
+            // unavailable) we continue without checkpoints.
+            const enableCheckpoints = opts?.enableCheckpoints !== false; // on by default
+            let checkpointer: import("@langchain/langgraph").BaseCheckpointSaver | undefined;
+            if (enableCheckpoints) {
+                try {
+                    checkpointer = await getCheckpointSaver();
+                } catch (err) {
+                    console.warn("[AgentGraph] Checkpointer unavailable, continuing without:", (err as Error)?.message);
                 }
             }
-            return abortReason;
-        };
 
-        const ensureNotAborted = async () => {
-            const reason = await checkAbortReason();
-            if (reason) {
-                throw new AgentWorkflowAbortError(reason);
-            }
-        };
+            const shouldAbort = opts?.shouldAbort;
+            const abortController = new AbortController();
+            let abortReason: AgentWorkflowAbortReason | null = null;
+            let lastAbortCheck = 0;
+            const ABORT_CHECK_INTERVAL_MS = 500;
 
-        let auditContextConfig: { enabled: boolean; context: AuditContext | null } | null = null;
-        try {
-            auditContextConfig = await getAuditContextConfig(workspace._id!.toString());
-        } catch (err) {
-            console.warn("[AgentGraph] Failed to load audit context config:", err);
-        }
-        const contextInjectionEnabled = auditContextConfig?.enabled !== false;
-        const auditContext = contextInjectionEnabled ? auditContextConfig?.context ?? null : null;
-
-        let graph = await agentGraphService.getGraph(run.graphId.toString());
-        if (!graph) {
-            // Graph was deleted — fall back to first available graph
-            const allGraphs = await agentGraphService.listGraphs();
-            graph = allGraphs[0] ?? null;
-            if (!graph) throw new Error(`No agent graphs available`);
-            console.warn(`[AgentGraph] Graph ${run.graphId.toString()} not found, falling back to "${graph.name}"`);
-        }
-
-        const executionMode = resolveExecutionMode(graph);
-        const timelineNodeIds = (run.nodeOrder?.length ? run.nodeOrder : getGraphNodeOrder(graph)).slice();
-        if (!run.nodeOrder?.length) {
-            await agentGraphRunService.setNodeOrder(runId, timelineNodeIds);
-        }
-
-        const state = cloneValue(run.state ?? { nodes: {} });
-        if (!state.nodes) state.nodes = {};
-        const workspaceObjectId =
-            workspace._id && ObjectId.isValid(workspace._id.toString()) ? new ObjectId(workspace._id.toString()) : undefined;
-        const rootDir = workspace.rootPath;
-
-        const persistState = async () => {
-            await agentGraphRunService.updateRunState(runId, cloneValue(state));
-        };
-
-        const normalizeTaskStatus = (value: string) => {
-            if (value === "todo" || value === "done" || value === "in_progress") return value;
-            return "todo";
-        };
-
-        const applyTodosUpdate = (tasks: Array<Record<string, unknown>>, currentTaskId?: string) => {
-            const normalized = tasks.map((task, index) => {
-                const id = typeof task.id === "string" && task.id ? task.id : `task-${index + 1}`;
-                const title = typeof task.title === "string" ? task.title : `Task ${index + 1}`;
-                const status = normalizeTaskStatus(typeof task.status === "string" ? task.status : "todo");
-                return { id, title, status };
-            });
-            (state as any).taskQueue = normalized;
-            const nextId =
-                typeof currentTaskId === "string" && currentTaskId
-                    ? currentTaskId
-                    : normalized.find((t) => t.status !== "done")?.id ?? "";
-            (state as any).currentTaskId = nextId;
-        };
-
-        const stableStringify = (value: unknown): string => {
-            if (value === null || typeof value !== "object") return JSON.stringify(value);
-            if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-            const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
-            return `{${entries.map(([key, val]) => `${JSON.stringify(key)}:${stableStringify(val)}`).join(",")}}`;
-        };
-
-        const buildApprovalKey = (toolName: string, args: Record<string, unknown>) => {
-            return `${toolName}:${stableStringify(args)}`;
-        };
-
-        const findApprovalByKey = (items: Array<Record<string, unknown>>, key: string) => {
-            return items.find((item) => {
-                const existingKey =
-                    typeof item.key === "string"
-                        ? String(item.key)
-                        : buildApprovalKey(String(item.toolName ?? ""), (item.args as Record<string, unknown>) ?? {});
-                return existingKey === key;
-            });
-        };
-
-        const ensurePlannerOutput = (value: unknown, missionText: string) => {
-            if (!value || typeof value !== "object") return value;
-            const output = value as Record<string, any>;
-            const rawTasks = Array.isArray(output.taskQueue) ? output.taskQueue : [];
-            const normalized = rawTasks.map((task: any, index: number) => {
-                const id = typeof task?.id === "string" && task.id ? task.id : `task-${index + 1}`;
-                const title = typeof task?.title === "string" && task.title ? task.title : `Task ${index + 1}`;
-                const status = normalizeTaskStatus(typeof task?.status === "string" ? task.status : "todo");
-                return { id, title, status };
-            });
-            const minTasks = 3;
-            if (normalized.length < minTasks) {
-                const safeMission = missionText?.trim() || "the request";
-                const fallbackTasks = [
-                    { id: `task-${normalized.length + 1}`, title: `Locate relevant files and entry points for ${safeMission}.`, status: "todo" },
-                    { id: `task-${normalized.length + 2}`, title: "Inspect implementation details and gather evidence.", status: "todo" },
-                    { id: `task-${normalized.length + 3}`, title: "Summarize findings and propose improvements.", status: "todo" },
-                ];
-                const needed = Math.max(0, minTasks - normalized.length);
-                normalized.push(...fallbackTasks.slice(0, needed));
-            }
-            output.taskQueue = normalized;
-            if (!output.currentTaskId || typeof output.currentTaskId !== "string") {
-                output.currentTaskId = normalized.find((t) => t.status !== "done")?.id ?? "";
-            }
-            const planIsEmpty =
-                !output.plan ||
-                (typeof output.plan === "object" &&
-                    !Array.isArray(output.plan) &&
-                    Object.keys(output.plan as Record<string, unknown>).length === 0);
-            if (planIsEmpty) {
-                output.plan = {
-                    summary: "Auto-generated plan (planner output was empty).",
-                    steps: normalized.map((task) => task.title),
-                };
-            }
-            return output;
-        };
-
-        // ── write_todos deduplication & loop guard ────────────────────────
-        let lastTodosHash: string | null = null;
-        let consecutiveTodosDuplicates = 0;
-        const MAX_CONSECUTIVE_TODOS_DUPLICATES = 2;
-
-        const writeTodosTool = createTool(
-            async (input: { tasks: Array<{ id?: string; title?: string; status?: string }>; currentTaskId?: string }) => {
-                const tasks = Array.isArray(input.tasks) ? input.tasks : [];
-
-                // Compute a stable hash of the incoming payload to detect duplicates
-                const payloadHash = stableStringify({ tasks, currentTaskId: input.currentTaskId });
-                if (payloadHash === lastTodosHash) {
-                    consecutiveTodosDuplicates++;
-                    if (consecutiveTodosDuplicates >= MAX_CONSECUTIVE_TODOS_DUPLICATES) {
-                        return JSON.stringify(
-                            {
-                                updated: false,
-                                warning: `Duplicate write_todos call detected ${consecutiveTodosDuplicates} times in a row. The task queue is already up to date — stop calling write_todos and proceed with actual work using other tools.`,
-                                currentTaskId: (state as any).currentTaskId ?? "",
-                                taskCount: Array.isArray((state as any).taskQueue) ? (state as any).taskQueue.length : 0,
-                            },
-                            null,
-                            2
-                        );
+            const checkAbortReason = async () => {
+                if (abortReason) return abortReason;
+                if (!shouldAbort) return null;
+                const now = Date.now();
+                if (now - lastAbortCheck < ABORT_CHECK_INTERVAL_MS) return null;
+                lastAbortCheck = now;
+                const reason = await shouldAbort();
+                if (reason) {
+                    abortReason = reason;
+                    if (!abortController.signal.aborted) {
+                        abortController.abort();
                     }
-                } else {
-                    consecutiveTodosDuplicates = 0;
                 }
-                lastTodosHash = payloadHash;
-
-                applyTodosUpdate(tasks as Array<Record<string, unknown>>, input.currentTaskId);
-                await persistState();
-                return JSON.stringify(
-                    {
-                        updated: true,
-                        currentTaskId: (state as any).currentTaskId ?? "",
-                        taskCount: Array.isArray((state as any).taskQueue) ? (state as any).taskQueue.length : 0,
-                    },
-                    null,
-                    2
-                );
-            },
-            {
-                name: "write_todos",
-                description: "Update the task queue and current task pointer for this agent run. Do NOT call this repeatedly with the same payload — the tool will reject duplicates.",
-                schema: z.object({
-                    tasks: z
-                        .array(
-                            z.object({
-                                id: z.string().optional(),
-                                title: z.string().optional(),
-                                status: z.enum(["todo", "in_progress", "done"]).optional(),
-                            })
-                        )
-                        .default([]),
-                    currentTaskId: z.string().optional(),
-                }),
-            }
-        );
-
-        const localTools = [writeTodosTool];
-
-        const runSubGraph = async (message: string, graphId: string) => {
-            const subGraph = await agentGraphService.getGraph(graphId);
-            if (!subGraph) {
-                throw new Error(`Subgraph ${graphId} not found`);
-            }
-            if (run.graphId?.toString?.() === graphId) {
-                throw new Error("Subgraph cannot reference the current graph");
-            }
-            const nodeOrder = getGraphNodeOrder(subGraph);
-            const subRunId = await agentGraphRunService.createRun(graphId, workspace._id?.toString(), runSource);
-            const initialNodeStatuses: Record<string, any> = {};
-            for (const node of subGraph.nodes) {
-                initialNodeStatuses[node.id] = "PENDING";
-            }
-            await agentGraphRunService.updateRunStatus(subRunId, "RUNNING", {
-                nodeOrder,
-                nodeStatuses: initialNodeStatuses,
-                state: buildInitialState(subGraph, message),
-            } as any);
-
-            return await this.executeRunStreaming(subRunId, {
-                llmSelectionOverride: opts?.llmSelectionOverride,
-            });
-        };
-        if (auditContext) {
-            const existingContext = (state as any).context;
-            if (existingContext && typeof existingContext === "object" && !Array.isArray(existingContext)) {
-                (state as any).context = { ...(existingContext as Record<string, unknown>), audit: auditContext };
-            } else {
-                (state as any).context = auditContext;
-            }
-        }
-        const nodeRunCounts: Record<string, number> = {
-            ...(state.execution?.runsByNode ?? {}),
-        };
-        let totalSteps = typeof state.execution?.step === "number" ? state.execution.step : 0;
-        const executionHistory = Array.isArray(state.execution?.history) ? [...state.execution!.history!] : [];
-        state.execution = {
-            ...(state.execution ?? {}),
-            mode: executionMode,
-            step: totalSteps,
-            runsByNode: nodeRunCounts,
-            history: executionHistory,
-        };
-
-        await agentGraphRunService.updateRunStatus(runId, "RUNNING", {});
-
-        // Initialize token usage tracking for this run
-        tokenUsageService.startRunTracking(runId);
-
-        const globalTimeline: TimelineEvent[] = timelineNodeIds.map((id) => {
-            const node = graph.nodes.find((n) => n.id === id);
-            return {
-                id,
-                label: node?.label ?? id,
-                status: "pending",
-                summary: "Pending",
-                details: graph.description ?? "",
-                systemPrompt: node?.react?.systemPrompt ?? "",
-                thoughtLog: [],
+                return abortReason;
             };
-        });
 
-        // Initialize conversation history in state if not present
-        if (!state.conversationHistory) {
-            state.conversationHistory = [];
-        }
+            const ensureNotAborted = async () => {
+                const reason = await checkAbortReason();
+                if (reason) {
+                    throw new AgentWorkflowAbortError(reason);
+                }
+            };
 
-        const globalEventStream: AgentEvent[] = [];
-        // Offset counter by existing conversation history length so IDs are
-        // unique across multi-turn continuations (each turn starts from where
-        // the previous one left off instead of event-0 again).
-        let globalEventCounter = state.conversationHistory?.length ?? 0;
-        const nextGlobalEventId = () => `event-${globalEventCounter++}`;
+            let auditContextConfig: { enabled: boolean; context: AuditContext | null } | null = null;
+            try {
+                auditContextConfig = await getAuditContextConfig(workspace._id!.toString());
+            } catch (err) {
+                console.warn("[AgentGraph] Failed to load audit context config:", err);
+            }
+            const contextInjectionEnabled = auditContextConfig?.enabled !== false;
+            const auditContext = contextInjectionEnabled ? auditContextConfig?.context ?? null : null;
 
-        // For multi-turn continuations, continueRun already pushed the user
-        // event to conversationHistory (with id "event-continue-{ts}").
-        // Reuse that event for globalEventStream so IDs stay consistent
-        // between the stream and the persisted conversation history.
-        const missionContent = typeof state.mission === "string" ? state.mission : "";
-        const lastHistoryEvent = state.conversationHistory.length > 0
-            ? state.conversationHistory[state.conversationHistory.length - 1]
-            : null;
-        const existingUserEvent =
-            lastHistoryEvent &&
-            lastHistoryEvent.kind === "user" &&
-            lastHistoryEvent.content === missionContent
-                ? lastHistoryEvent
-                : null;
+            let graph = await agentGraphService.getGraph(run.graphId.toString());
+            if (!graph) {
+                // Graph was deleted — fall back to first available graph
+                const allGraphs = await agentGraphService.listGraphs();
+                graph = allGraphs[0] ?? null;
+                if (!graph) throw new Error(`No agent graphs available`);
+                console.warn(`[AgentGraph] Graph ${run.graphId.toString()} not found, falling back to "${graph.name}"`);
+            }
 
-        const initialUserEvent: AgentEvent = existingUserEvent ?? {
-            id: nextGlobalEventId(),
-            phaseId: "user",
-            phaseLabel: "User input",
-            kind: "user",
-            role: "user",
-            content: missionContent,
-            timestamp: new Date().toISOString(),
-        };
-        globalEventStream.push(initialUserEvent);
+            const executionMode = resolveExecutionMode(graph);
+            const timelineNodeIds = (run.nodeOrder?.length ? run.nodeOrder : getGraphNodeOrder(graph)).slice();
+            if (!run.nodeOrder?.length) {
+                await agentGraphRunService.setNodeOrder(runId, timelineNodeIds);
+            }
 
-        // Add the initial user event to conversation history (only for the first turn
-        // when no existing event was found)
-        if (!existingUserEvent) {
-            state.conversationHistory.push(initialUserEvent);
-        }
+            const state = cloneValue(run.state ?? { nodes: {} });
+            if (!state.nodes) state.nodes = {};
+            const workspaceObjectId =
+                workspace._id && ObjectId.isValid(workspace._id.toString()) ? new ObjectId(workspace._id.toString()) : undefined;
+            const rootDir = workspace.rootPath;
 
-        const emitUpdate = async () => {
-            if (!opts?.onUpdate) return;
-            // Include running token usage in meta
-            const runningTokenUsage = tokenUsageService.getRunAccumulatedUsage(runId);
-            const outputs = createPlaceholderOutputs({
-                mission: typeof state.mission === "string" ? state.mission : "",
-                report: JSON.stringify(state.nodes ?? {}, null, 2),
-                meta: {
-                    runId,
-                    graphId: run.graphId.toString(),
-                    state: cloneValue(state),
-                    tokenUsage: runningTokenUsage,
-                },
-            });
-            await opts.onUpdate({
-                timeline: cloneValue(globalTimeline),
-                eventStream: cloneValue(globalEventStream),
-                outputs,
-            });
-        };
+            const persistState = async () => {
+                await agentGraphRunService.updateRunState(runId, cloneValue(state));
+            };
 
-        await emitUpdate();
+            const normalizeTaskStatus = (value: string) => {
+                if (value === "todo" || value === "done" || value === "in_progress") return value;
+                return "todo";
+            };
 
-        const pendingNodeIds =
-            executionMode === "dag" ? timelineNodeIds.slice() : getEntryNodeIds(graph);
-        const maxIterations = graph.execution?.maxIterations ?? 200;
-        const maxNodeRuns = graph.execution?.maxNodeRuns ?? 20;
+            const applyTodosUpdate = (tasks: Array<Record<string, unknown>>, currentTaskId?: string) => {
+                const normalized = tasks.map((task, index) => {
+                    const id = typeof task.id === "string" && task.id ? task.id : `task-${index + 1}`;
+                    const title = typeof task.title === "string" ? task.title : `Task ${index + 1}`;
+                    const status = normalizeTaskStatus(typeof task.status === "string" ? task.status : "todo");
+                    return { id, title, status };
+                });
+                (state as any).taskQueue = normalized;
+                const nextId =
+                    typeof currentTaskId === "string" && currentTaskId
+                        ? currentTaskId
+                        : normalized.find((t) => t.status !== "done")?.id ?? "";
+                (state as any).currentTaskId = nextId;
+            };
 
-        const selectNextNodes = (currentId: string) => {
-            if (executionMode !== "state_machine") return [];
-            const matched: string[] = [];
-            const seen = new Set<string>();
-            const outgoing = graph.edges.filter((e) => e.source === currentId);
-            for (const edge of outgoing) {
-                if (evaluateCondition(edge.condition, state)) {
-                    if (!seen.has(edge.target)) {
-                        matched.push(edge.target);
-                        seen.add(edge.target);
+            const stableStringify = (value: unknown): string => {
+                if (value === null || typeof value !== "object") return JSON.stringify(value);
+                if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+                const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+                return `{${entries.map(([key, val]) => `${JSON.stringify(key)}:${stableStringify(val)}`).join(",")}}`;
+            };
+
+            const buildApprovalKey = (toolName: string, args: Record<string, unknown>) => {
+                return `${toolName}:${stableStringify(args)}`;
+            };
+
+            const findApprovalByKey = (items: Array<Record<string, unknown>>, key: string) => {
+                return items.find((item) => {
+                    const existingKey =
+                        typeof item.key === "string"
+                            ? String(item.key)
+                            : buildApprovalKey(String(item.toolName ?? ""), (item.args as Record<string, unknown>) ?? {});
+                    return existingKey === key;
+                });
+            };
+
+            const ensurePlannerOutput = (value: unknown, missionText: string) => {
+                if (!value || typeof value !== "object") return value;
+                const output = value as Record<string, any>;
+                const rawTasks = Array.isArray(output.taskQueue) ? output.taskQueue : [];
+                const normalized = rawTasks.map((task: any, index: number) => {
+                    const id = typeof task?.id === "string" && task.id ? task.id : `task-${index + 1}`;
+                    const title = typeof task?.title === "string" && task.title ? task.title : `Task ${index + 1}`;
+                    const status = normalizeTaskStatus(typeof task?.status === "string" ? task.status : "todo");
+                    return { id, title, status };
+                });
+                const minTasks = 3;
+                if (normalized.length < minTasks) {
+                    const safeMission = missionText?.trim() || "the request";
+                    const fallbackTasks = [
+                        { id: `task-${normalized.length + 1}`, title: `Locate relevant files and entry points for ${safeMission}.`, status: "todo" },
+                        { id: `task-${normalized.length + 2}`, title: "Inspect implementation details and gather evidence.", status: "todo" },
+                        { id: `task-${normalized.length + 3}`, title: "Summarize findings and propose improvements.", status: "todo" },
+                    ];
+                    const needed = Math.max(0, minTasks - normalized.length);
+                    normalized.push(...fallbackTasks.slice(0, needed));
+                }
+                output.taskQueue = normalized;
+                if (!output.currentTaskId || typeof output.currentTaskId !== "string") {
+                    output.currentTaskId = normalized.find((t) => t.status !== "done")?.id ?? "";
+                }
+                const planIsEmpty =
+                    !output.plan ||
+                    (typeof output.plan === "object" &&
+                        !Array.isArray(output.plan) &&
+                        Object.keys(output.plan as Record<string, unknown>).length === 0);
+                if (planIsEmpty) {
+                    output.plan = {
+                        summary: "Auto-generated plan (planner output was empty).",
+                        steps: normalized.map((task) => task.title),
+                    };
+                }
+                return output;
+            };
+
+            // ── write_todos deduplication & loop guard ────────────────────────
+            let lastTodosHash: string | null = null;
+            let consecutiveTodosDuplicates = 0;
+            const MAX_CONSECUTIVE_TODOS_DUPLICATES = 2;
+
+            const writeTodosTool = createTool(
+                async (input: { tasks: Array<{ id?: string; title?: string; status?: string }>; currentTaskId?: string }) => {
+                    const tasks = Array.isArray(input.tasks) ? input.tasks : [];
+
+                    // Compute a stable hash of the incoming payload to detect duplicates
+                    const payloadHash = stableStringify({ tasks, currentTaskId: input.currentTaskId });
+                    if (payloadHash === lastTodosHash) {
+                        consecutiveTodosDuplicates++;
+                        if (consecutiveTodosDuplicates >= MAX_CONSECUTIVE_TODOS_DUPLICATES) {
+                            return JSON.stringify(
+                                {
+                                    updated: false,
+                                    warning: `Duplicate write_todos call detected ${consecutiveTodosDuplicates} times in a row. The task queue is already up to date — stop calling write_todos and proceed with actual work using other tools.`,
+                                    currentTaskId: (state as any).currentTaskId ?? "",
+                                    taskCount: Array.isArray((state as any).taskQueue) ? (state as any).taskQueue.length : 0,
+                                },
+                                null,
+                                2
+                            );
+                        }
+                    } else {
+                        consecutiveTodosDuplicates = 0;
                     }
+                    lastTodosHash = payloadHash;
+
+                    applyTodosUpdate(tasks as Array<Record<string, unknown>>, input.currentTaskId);
+                    await persistState();
+                    return JSON.stringify(
+                        {
+                            updated: true,
+                            currentTaskId: (state as any).currentTaskId ?? "",
+                            taskCount: Array.isArray((state as any).taskQueue) ? (state as any).taskQueue.length : 0,
+                        },
+                        null,
+                        2
+                    );
+                },
+                {
+                    name: "write_todos",
+                    description: "Update the task queue and current task pointer for this agent run. Do NOT call this repeatedly with the same payload — the tool will reject duplicates.",
+                    schema: z.object({
+                        tasks: z
+                            .array(
+                                z.object({
+                                    id: z.string().optional(),
+                                    title: z.string().optional(),
+                                    status: z.enum(["todo", "in_progress", "done"]).optional(),
+                                })
+                            )
+                            .default([]),
+                        currentTaskId: z.string().optional(),
+                    }),
+                }
+            );
+
+            const localTools = [writeTodosTool];
+
+            const runSubGraph = async (message: string, graphId: string) => {
+                const subGraph = await agentGraphService.getGraph(graphId);
+                if (!subGraph) {
+                    throw new Error(`Subgraph ${graphId} not found`);
+                }
+                if (run.graphId?.toString?.() === graphId) {
+                    throw new Error("Subgraph cannot reference the current graph");
+                }
+                const nodeOrder = getGraphNodeOrder(subGraph);
+                const subRunId = await agentGraphRunService.createRun(graphId, workspace._id?.toString(), runSource);
+                const initialNodeStatuses: Record<string, any> = {};
+                for (const node of subGraph.nodes) {
+                    initialNodeStatuses[node.id] = "PENDING";
+                }
+                await agentGraphRunService.updateRunStatus(subRunId, "RUNNING", {
+                    nodeOrder,
+                    nodeStatuses: initialNodeStatuses,
+                    state: buildInitialState(subGraph, message),
+                } as any);
+
+                return await this.executeRunStreaming(subRunId, {
+                    llmSelectionOverride: opts?.llmSelectionOverride,
+                });
+            };
+            if (auditContext) {
+                const existingContext = (state as any).context;
+                if (existingContext && typeof existingContext === "object" && !Array.isArray(existingContext)) {
+                    (state as any).context = { ...(existingContext as Record<string, unknown>), audit: auditContext };
+                } else {
+                    (state as any).context = auditContext;
                 }
             }
-            return matched;
-        };
-
-        while (pendingNodeIds.length) {
-            await ensureNotAborted();
-            const nodeId = pendingNodeIds.shift()!;
-            const node = graph.nodes.find((n) => n.id === nodeId);
-            if (!node) {
-                await agentGraphRunService.updateRunStatus(runId, "FAILED", {
-                    endedAt: new Date(),
-                    error: `Missing node ${nodeId} in graph definition`,
-                } as any);
-                const failureResult: AgentWorkflowResult = {
-                    sessionId: runId,
-                    timeline: globalTimeline,
-                    conclusion: "Run failed (missing node).",
-                    outputs: createPlaceholderOutputs({
-                        mission: typeof state.mission === "string" ? state.mission : "",
-                        report: `ERROR: Missing node ${nodeId} in graph definition`,
-                        meta: { runId, graphId: run.graphId.toString() },
-                    }),
-                    eventStream: globalEventStream,
-                };
-                await emitUpdate();
-                return failureResult;
-            }
-
-            totalSteps += 1;
-            nodeRunCounts[nodeId] = (nodeRunCounts[nodeId] ?? 0) + 1;
+            const nodeRunCounts: Record<string, number> = {
+                ...(state.execution?.runsByNode ?? {}),
+            };
+            let totalSteps = typeof state.execution?.step === "number" ? state.execution.step : 0;
+            const executionHistory = Array.isArray(state.execution?.history) ? [...state.execution!.history!] : [];
             state.execution = {
                 ...(state.execution ?? {}),
                 mode: executionMode,
                 step: totalSteps,
                 runsByNode: nodeRunCounts,
-                history: [...executionHistory, nodeId],
-                lastNodeId: nodeId,
+                history: executionHistory,
             };
-            executionHistory.push(nodeId);
-            if (totalSteps > maxIterations) {
-                const message = `Max iterations exceeded (${maxIterations}).`;
-                await agentGraphRunService.updateRunStatus(runId, "FAILED", {
-                    endedAt: new Date(),
-                    error: message,
-                } as any);
-                const failureResult: AgentWorkflowResult = {
-                    sessionId: runId,
-                    timeline: globalTimeline,
-                    conclusion: "Run failed (max iterations).",
-                    outputs: createPlaceholderOutputs({
-                        mission: typeof state.mission === "string" ? state.mission : "",
-                        report: `ERROR: ${message}`,
-                        meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
-                    }),
-                    eventStream: globalEventStream,
+
+            await agentGraphRunService.updateRunStatus(runId, "RUNNING", {});
+
+            // Initialize token usage tracking for this run
+            tokenUsageService.startRunTracking(runId);
+
+            const globalTimeline: TimelineEvent[] = timelineNodeIds.map((id) => {
+                const node = graph.nodes.find((n) => n.id === id);
+                return {
+                    id,
+                    label: node?.label ?? id,
+                    status: "pending",
+                    summary: "Pending",
+                    details: graph.description ?? "",
+                    systemPrompt: node?.react?.systemPrompt ?? "",
+                    thoughtLog: [],
                 };
-                await emitUpdate();
-                return failureResult;
-            }
-            if (nodeRunCounts[nodeId] > maxNodeRuns) {
-                const message = `Max node executions exceeded for ${nodeId} (${maxNodeRuns}).`;
-                await agentGraphRunService.updateRunStatus(runId, "FAILED", {
-                    endedAt: new Date(),
-                    error: message,
-                } as any);
-                const failureResult: AgentWorkflowResult = {
-                    sessionId: runId,
-                    timeline: globalTimeline,
-                    conclusion: "Run failed (max node runs).",
-                    outputs: createPlaceholderOutputs({
-                        mission: typeof state.mission === "string" ? state.mission : "",
-                        report: `ERROR: ${message}`,
-                        meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
-                    }),
-                    eventStream: globalEventStream,
-                };
-                await emitUpdate();
-                return failureResult;
+            });
+
+            // Initialize conversation history in state if not present
+            if (!state.conversationHistory) {
+                state.conversationHistory = [];
             }
 
-            await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "RUNNING");
-            const timelineEntry = globalTimeline.find((t) => t.id === nodeId);
-            if (timelineEntry) {
-                timelineEntry.status = "running";
-                timelineEntry.summary = "Running";
-                timelineEntry.startedAt = new Date().toISOString();
-            }
-            await emitUpdate();
+            const globalEventStream: AgentEvent[] = [];
+            // Offset counter by existing conversation history length so IDs are
+            // unique across multi-turn continuations (each turn starts from where
+            // the previous one left off instead of event-0 again).
+            let globalEventCounter = state.conversationHistory?.length ?? 0;
+            const nextGlobalEventId = () => `event-${globalEventCounter++}`;
 
-            const timeline = createSessionTimeline(node);
-            const eventStream: AgentEvent[] = [];
-            // Use globalEventCounter to ensure unique IDs across all events in globalEventStream
-            const nextEventId = () => nextGlobalEventId();
+            // For multi-turn continuations, continueRun already pushed the user
+            // event to conversationHistory (with id "event-continue-{ts}").
+            // Reuse that event for globalEventStream so IDs stay consistent
+            // between the stream and the persisted conversation history.
+            const missionContent = typeof state.mission === "string" ? state.mission : "";
+            const lastHistoryEvent = state.conversationHistory.length > 0
+                ? state.conversationHistory[state.conversationHistory.length - 1]
+                : null;
+            const existingUserEvent =
+                lastHistoryEvent &&
+                    lastHistoryEvent.kind === "user" &&
+                    lastHistoryEvent.content === missionContent
+                    ? lastHistoryEvent
+                    : null;
 
-            const userPrompt = renderUserPrompt(node.react.userPromptTemplate, state);
-            const systemEvent: AgentEvent = {
-                id: nextEventId(),
-                phaseId: node.id,
-                phaseLabel: node.label,
-                kind: "system",
-                role: "system",
-                content: node.react.systemPrompt,
-                timestamp: new Date().toISOString(),
-            };
-            const userEvent: AgentEvent = {
-                id: nextEventId(),
-                phaseId: node.id,
-                phaseLabel: node.label,
+            const initialUserEvent: AgentEvent = existingUserEvent ?? {
+                id: nextGlobalEventId(),
+                phaseId: "user",
+                phaseLabel: "User input",
                 kind: "user",
                 role: "user",
-                content: userPrompt,
+                content: missionContent,
                 timestamp: new Date().toISOString(),
             };
-            eventStream.push(systemEvent, userEvent);
+            globalEventStream.push(initialUserEvent);
 
-            const flushUpdate = async () => {
-                await emitUpdate();
+            // Add the initial user event to conversation history (only for the first turn
+            // when no existing event was found)
+            if (!existingUserEvent) {
+                state.conversationHistory.push(initialUserEvent);
+            }
+
+            const emitUpdate = async () => {
+                if (!opts?.onUpdate) return;
+                // Include running token usage in meta
+                const runningTokenUsage = tokenUsageService.getRunAccumulatedUsage(runId);
+                const outputs = createPlaceholderOutputs({
+                    mission: typeof state.mission === "string" ? state.mission : "",
+                    report: JSON.stringify(state.nodes ?? {}, null, 2),
+                    meta: {
+                        runId,
+                        graphId: run.graphId.toString(),
+                        state: cloneValue(state),
+                        tokenUsage: runningTokenUsage,
+                    },
+                });
+                await opts.onUpdate({
+                    timeline: cloneValue(globalTimeline),
+                    eventStream: cloneValue(globalEventStream),
+                    outputs,
+                });
             };
 
-            await flushUpdate();
+            await emitUpdate();
 
-            try {
-                const nodeKind = node.kind ?? "react";
+            const pendingNodeIds =
+                executionMode === "dag" ? timelineNodeIds.slice() : getEntryNodeIds(graph);
+            const maxIterations = graph.execution?.maxIterations ?? 200;
+            const maxNodeRuns = graph.execution?.maxNodeRuns ?? 20;
 
-                // ---------------------------------------------------------
-                // 2.5. Skills Injection (NEW)
-                // ---------------------------------------------------------
-                const skillIds = node.react.skillIds ?? [];
-                let skillPromptPrefix = "";
-                let skillTools: string[] = [];
-                if (skillIds.length > 0) {
-                    try {
-                        const resolvedSkills = await skillRegistry.getSkills(skillIds);
-                        skillPromptPrefix = resolvedSkills
-                            .map((s) => s.resolvedSystemPrompt)
-                            .filter(Boolean)
-                            .join("\n\n---\n\n");
-                        skillTools = [...new Set(resolvedSkills.flatMap((s) => s.resolvedTools))];
-                    } catch (err) {
-                        console.warn(`[AgentGraph] Failed to load skills ${skillIds.join(", ")}:`, err);
+            const selectNextNodes = (currentId: string) => {
+                if (executionMode !== "state_machine") return [];
+                const matched: string[] = [];
+                const seen = new Set<string>();
+                const outgoing = graph.edges.filter((e) => e.source === currentId);
+                for (const edge of outgoing) {
+                    if (evaluateCondition(edge.condition, state)) {
+                        if (!seen.has(edge.target)) {
+                            matched.push(edge.target);
+                            seen.add(edge.target);
+                        }
                     }
                 }
-                // Merge skill tools with node-defined tools
-                const mergedToolNames = [...new Set([...(node.react.toolNames ?? []), ...skillTools, "write_todos"])];
-                const selectedTools = selectToolsByName(mergedToolNames, localTools);
-                const toolInvokerMap = new Map<string, (input: Record<string, unknown>) => Promise<string>>();
+                return matched;
+            };
 
-                // ── Tool call deduplication ──────────────────────────────────
-                // Track recent read-only tool calls to avoid identical re-invocations.
-                // Write tools (write_file, execute_bash, str_replace_editor) are NOT
-                // deduplicated since they have side effects.
-                const DEDUP_CACHE_MAX = 50;
-                const READ_ONLY_DEDUP_TOOLS = new Set([
-                    "list_files", "read_file", "read_file_range", "search_code",
-                    "repo_metrics", "dependency_info", "describe_structure",
-                    "git_log", "git_diff", "git_grep", "git_blame",
-                    "semantic_code_search", "structural_search", "symbols_list",
-                    "find_symbol", "go_to_definition", "references", "find_references",
-                    "todo_search", "bootstrap_context", "web_search", "fetch_url",
-                    "output_format", "write_todos",
-                ]);
-                const toolCallCache = new Map<string, string>();
-                let toolCallCount = 0;
+            while (pendingNodeIds.length) {
+                await ensureNotAborted();
+                const nodeId = pendingNodeIds.shift()!;
+                const node = graph.nodes.find((n) => n.id === nodeId);
+                if (!node) {
+                    await agentGraphRunService.updateRunStatus(runId, "FAILED", {
+                        endedAt: new Date(),
+                        error: `Missing node ${nodeId} in graph definition`,
+                    } as any);
+                    const failureResult: AgentWorkflowResult = {
+                        sessionId: runId,
+                        timeline: globalTimeline,
+                        conclusion: "Run failed (missing node).",
+                        outputs: createPlaceholderOutputs({
+                            mission: typeof state.mission === "string" ? state.mission : "",
+                            report: `ERROR: Missing node ${nodeId} in graph definition`,
+                            meta: { runId, graphId: run.graphId.toString() },
+                        }),
+                        eventStream: globalEventStream,
+                    };
+                    await emitUpdate();
+                    return failureResult;
+                }
 
-                const invokeBaseTool = async (baseTool: any, input: unknown) => {
-                    if (typeof baseTool?.invoke === "function") {
-                        return await baseTool.invoke(input);
-                    }
-                    if (typeof baseTool?.call === "function") {
-                        return await baseTool.call(input);
-                    }
-                    if (typeof baseTool?.func === "function") {
-                        return await baseTool.func(input);
-                    }
-                    throw new Error(`Tool ${String(baseTool?.name ?? "unknown")} is not callable`);
+                totalSteps += 1;
+                nodeRunCounts[nodeId] = (nodeRunCounts[nodeId] ?? 0) + 1;
+                state.execution = {
+                    ...(state.execution ?? {}),
+                    mode: executionMode,
+                    step: totalSteps,
+                    runsByNode: nodeRunCounts,
+                    history: [...executionHistory, nodeId],
+                    lastNodeId: nodeId,
+                };
+                executionHistory.push(nodeId);
+                if (totalSteps > maxIterations) {
+                    const message = `Max iterations exceeded (${maxIterations}).`;
+                    await agentGraphRunService.updateRunStatus(runId, "FAILED", {
+                        endedAt: new Date(),
+                        error: message,
+                    } as any);
+                    const failureResult: AgentWorkflowResult = {
+                        sessionId: runId,
+                        timeline: globalTimeline,
+                        conclusion: "Run failed (max iterations).",
+                        outputs: createPlaceholderOutputs({
+                            mission: typeof state.mission === "string" ? state.mission : "",
+                            report: `ERROR: ${message}`,
+                            meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
+                        }),
+                        eventStream: globalEventStream,
+                    };
+                    await emitUpdate();
+                    return failureResult;
+                }
+                if (nodeRunCounts[nodeId] > maxNodeRuns) {
+                    const message = `Max node executions exceeded for ${nodeId} (${maxNodeRuns}).`;
+                    await agentGraphRunService.updateRunStatus(runId, "FAILED", {
+                        endedAt: new Date(),
+                        error: message,
+                    } as any);
+                    const failureResult: AgentWorkflowResult = {
+                        sessionId: runId,
+                        timeline: globalTimeline,
+                        conclusion: "Run failed (max node runs).",
+                        outputs: createPlaceholderOutputs({
+                            mission: typeof state.mission === "string" ? state.mission : "",
+                            report: `ERROR: ${message}`,
+                            meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
+                        }),
+                        eventStream: globalEventStream,
+                    };
+                    await emitUpdate();
+                    return failureResult;
+                }
+
+                await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "RUNNING");
+                const timelineEntry = globalTimeline.find((t) => t.id === nodeId);
+                if (timelineEntry) {
+                    timelineEntry.status = "running";
+                    timelineEntry.summary = "Running";
+                    timelineEntry.startedAt = new Date().toISOString();
+                }
+                await emitUpdate();
+
+                const timeline = createSessionTimeline(node);
+                const eventStream: AgentEvent[] = [];
+                // Use globalEventCounter to ensure unique IDs across all events in globalEventStream
+                const nextEventId = () => nextGlobalEventId();
+
+                const userPrompt = renderUserPrompt(node.react.userPromptTemplate, state);
+                const systemEvent: AgentEvent = {
+                    id: nextEventId(),
+                    phaseId: node.id,
+                    phaseLabel: node.label,
+                    kind: "system",
+                    role: "system",
+                    content: node.react.systemPrompt,
+                    timestamp: new Date().toISOString(),
+                };
+                const userEvent: AgentEvent = {
+                    id: nextEventId(),
+                    phaseId: node.id,
+                    phaseLabel: node.label,
+                    kind: "user",
+                    role: "user",
+                    content: userPrompt,
+                    timestamp: new Date().toISOString(),
+                };
+                eventStream.push(systemEvent, userEvent);
+
+                const flushUpdate = async () => {
+                    await emitUpdate();
                 };
 
-                const handleMemoryTool = async (toolName: string, input: Record<string, unknown>) => {
-                    if (!workspaceObjectId) return null;
-                    const memoryPath = extractMemoryPath(toolName, input);
-                    if (!memoryPath) return null;
-                    try {
-                        if (toolName === "list_files") {
-                            const items = await agentMemoryService.list(memoryPath, workspaceObjectId);
-                            if (!items.length) return `No memory entries found under ${memoryPath}`;
-                            return items
-                                .map((item) => `${item.path} (size: ${item.size}, updated: ${item.updatedAt.toISOString()})`)
-                                .join("\n");
+                await flushUpdate();
+
+                try {
+                    const nodeKind = node.kind ?? "react";
+
+                    // ---------------------------------------------------------
+                    // 2.5. Skills Injection (NEW)
+                    // ---------------------------------------------------------
+                    const skillIds = node.react.skillIds ?? [];
+                    let skillPromptPrefix = "";
+                    let skillTools: string[] = [];
+                    if (skillIds.length > 0) {
+                        try {
+                            const resolvedSkills = await skillRegistry.getSkills(skillIds);
+                            skillPromptPrefix = resolvedSkills
+                                .map((s) => s.resolvedSystemPrompt)
+                                .filter(Boolean)
+                                .join("\n\n---\n\n");
+                            skillTools = [...new Set(resolvedSkills.flatMap((s) => s.resolvedTools))];
+                        } catch (err) {
+                            console.warn(`[AgentGraph] Failed to load skills ${skillIds.join(", ")}:`, err);
                         }
-                        if (toolName === "read_file") {
-                            return await agentMemoryService.read(memoryPath, workspaceObjectId);
-                        }
-                        if (toolName === "read_file_range") {
-                            const content = await agentMemoryService.read(memoryPath, workspaceObjectId);
-                            const start = Math.max(1, Number(input.startLine ?? 1));
-                            const end = Math.max(start, Number(input.endLine ?? start));
-                            const lines = content.split("\n");
-                            const slice = lines.slice(start - 1, end);
-                            return slice.map((line, idx) => `${start + idx}: ${line}`).join("\n");
-                        }
-                        if (toolName === "write_file") {
-                            const content = typeof input.content === "string" ? input.content : "";
-                            await agentMemoryService.write(memoryPath, content, workspaceObjectId);
-                            return `Memory updated at ${memoryPath} (${content.length} chars).`;
-                        }
-                        return null;
-                    } catch (err) {
-                        return `Memory error: ${(err as Error)?.message ?? String(err)}`;
                     }
-                };
+                    // Merge skill tools with node-defined tools
+                    const mergedToolNames = [...new Set([...(node.react.toolNames ?? []), ...skillTools, "write_todos"])];
+                    const selectedTools = selectToolsByName(mergedToolNames, localTools);
+                    const toolInvokerMap = new Map<string, (input: Record<string, unknown>) => Promise<string>>();
 
-                const wrapTool = (baseTool: any) => {
-                    const name = String(baseTool?.name ?? "unknown");
-                    const description = baseTool?.description ?? "";
-                    const schema = baseTool?.schema ?? z.any();
-                    const returnDirect = (baseTool as any)?.returnDirect;
-                    const wrapped = createTool(
-                        async (input: Record<string, unknown>) => {
-                            await ensureNotAborted();
-                            toolCallCount++;
+                    // ── Tool call deduplication ──────────────────────────────────
+                    // Track recent read-only tool calls to avoid identical re-invocations.
+                    // Write tools (write_file, execute_bash, str_replace_editor) are NOT
+                    // deduplicated since they have side effects.
+                    const DEDUP_CACHE_MAX = 50;
+                    const READ_ONLY_DEDUP_TOOLS = new Set([
+                        "list_files", "read_file", "read_file_range", "search_code",
+                        "repo_metrics", "dependency_info", "describe_structure",
+                        "git_log", "git_diff", "git_grep", "git_blame",
+                        "semantic_code_search", "structural_search", "symbols_list",
+                        "find_symbol", "go_to_definition", "references", "find_references",
+                        "todo_search", "bootstrap_context", "web_search", "fetch_url",
+                        "output_format", "write_todos",
+                    ]);
+                    const toolCallCache = new Map<string, string>();
+                    let toolCallCount = 0;
 
-                            // ── Dedup: return cached result for identical read-only calls ──
-                            if (READ_ONLY_DEDUP_TOOLS.has(name) && name !== "write_todos") {
-                                const cacheKey = `${name}:${stableStringify(input)}`;
-                                const cached = toolCallCache.get(cacheKey);
-                                if (cached !== undefined) {
-                                    return `[Cached — identical call was already made this turn]\n${cached}`;
-                                }
+                    const invokeBaseTool = async (baseTool: any, input: unknown) => {
+                        if (typeof baseTool?.invoke === "function") {
+                            return await baseTool.invoke(input);
+                        }
+                        if (typeof baseTool?.call === "function") {
+                            return await baseTool.call(input);
+                        }
+                        if (typeof baseTool?.func === "function") {
+                            return await baseTool.func(input);
+                        }
+                        throw new Error(`Tool ${String(baseTool?.name ?? "unknown")} is not callable`);
+                    };
+
+                    const handleMemoryTool = async (toolName: string, input: Record<string, unknown>) => {
+                        if (!workspaceObjectId) return null;
+                        const memoryPath = extractMemoryPath(toolName, input);
+                        if (!memoryPath) return null;
+                        try {
+                            if (toolName === "list_files") {
+                                const items = await agentMemoryService.list(memoryPath, workspaceObjectId);
+                                if (!items.length) return `No memory entries found under ${memoryPath}`;
+                                return items
+                                    .map((item) => `${item.path} (size: ${item.size}, updated: ${item.updatedAt.toISOString()})`)
+                                    .join("\n");
                             }
+                            if (toolName === "read_file") {
+                                return await agentMemoryService.read(memoryPath, workspaceObjectId);
+                            }
+                            if (toolName === "read_file_range") {
+                                const content = await agentMemoryService.read(memoryPath, workspaceObjectId);
+                                const start = Math.max(1, Number(input.startLine ?? 1));
+                                const end = Math.max(start, Number(input.endLine ?? start));
+                                const lines = content.split("\n");
+                                const slice = lines.slice(start - 1, end);
+                                return slice.map((line, idx) => `${start + idx}: ${line}`).join("\n");
+                            }
+                            if (toolName === "write_file") {
+                                const content = typeof input.content === "string" ? input.content : "";
+                                await agentMemoryService.write(memoryPath, content, workspaceObjectId);
+                                return `Memory updated at ${memoryPath} (${content.length} chars).`;
+                            }
+                            return null;
+                        } catch (err) {
+                            return `Memory error: ${(err as Error)?.message ?? String(err)}`;
+                        }
+                    };
 
-                            const memoryResult = await handleMemoryTool(name, input);
-                            if (memoryResult !== null) {
-                                const evicted = await maybeEvictToolResult({
+                    const wrapTool = (baseTool: any) => {
+                        const name = String(baseTool?.name ?? "unknown");
+                        const description = baseTool?.description ?? "";
+                        const schema = baseTool?.schema ?? z.any();
+                        const returnDirect = (baseTool as any)?.returnDirect;
+                        const wrapped = createTool(
+                            async (input: Record<string, unknown>) => {
+                                await ensureNotAborted();
+                                toolCallCount++;
+
+                                // ── Dedup: return cached result for identical read-only calls ──
+                                if (READ_ONLY_DEDUP_TOOLS.has(name) && name !== "write_todos") {
+                                    const cacheKey = `${name}:${stableStringify(input)}`;
+                                    const cached = toolCallCache.get(cacheKey);
+                                    if (cached !== undefined) {
+                                        return `[Cached — identical call was already made this turn]\n${cached}`;
+                                    }
+                                }
+
+                                const memoryResult = await handleMemoryTool(name, input);
+                                if (memoryResult !== null) {
+                                    const evicted = await maybeEvictToolResult({
+                                        rootDir,
+                                        runId,
+                                        nodeId: node.id,
+                                        toolName: name,
+                                        rawResult: memoryResult,
+                                    });
+                                    // Cache memory results too
+                                    if (READ_ONLY_DEDUP_TOOLS.has(name) && name !== "write_todos" && typeof evicted === "string") {
+                                        const cacheKey = `${name}:${stableStringify(input)}`;
+                                        if (toolCallCache.size >= DEDUP_CACHE_MAX) {
+                                            const firstKey = toolCallCache.keys().next().value;
+                                            if (firstKey !== undefined) toolCallCache.delete(firstKey);
+                                        }
+                                        toolCallCache.set(cacheKey, evicted.slice(0, TOOL_RESULT_PREVIEW_CHARS));
+                                    }
+                                    return evicted;
+                                }
+
+                                const policy = getToolApprovalPolicy({ source: runSource, toolName: name });
+                                console.info(
+                                    `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} decision=${policy.decision} reason="${policy.reason}"`
+                                );
+
+                                if (policy.decision !== "auto_approve") {
+                                    if (policy.normalizedSource === "automation") {
+                                        console.warn(
+                                            `[ToolApprovalPolicy] Blocking automation tool call runId=${runId} tool=${name} decision=${policy.decision}`
+                                        );
+                                        throw new Error(
+                                            `Tool ${name} requires manual approval and is not allowed in automation runs.`
+                                        );
+                                    }
+                                    if (policy.decision === "deny") {
+                                        throw new Error(`Tool ${name} is denied by approval policy.`);
+                                    }
+                                    const descriptionText =
+                                        name === "write_file"
+                                            ? `Write file ${String(input?.filePath ?? "")}`
+                                            : name === "str_replace_editor"
+                                                ? `Edit file ${String((input as any)?.filePath ?? (input as any)?.path ?? "")}`
+                                                : name === "execute_bash"
+                                                    ? `Execute command ${String(input?.command ?? "")}`
+                                                    : `Run ${name}`;
+                                    const approvals = (state as any).approvals ?? {};
+                                    const pending = Array.isArray(approvals.pending) ? approvals.pending.slice() : [];
+                                    const granted = Array.isArray(approvals.granted) ? approvals.granted.slice() : [];
+                                    const approvalKey = buildApprovalKey(name, input);
+
+                                    const existingPending = findApprovalByKey(pending, approvalKey);
+                                    if (existingPending) {
+                                        return `Approval already pending (ID: ${existingPending.id}).`;
+                                    }
+                                    const existingGranted = findApprovalByKey(granted, approvalKey);
+                                    if (existingGranted) {
+                                        const result = typeof existingGranted.result === "string" ? existingGranted.result : "";
+                                        if (result) return result;
+                                        if (typeof existingGranted.evictedPath === "string" && existingGranted.evictedPath) {
+                                            return `Result already available at ${existingGranted.evictedPath}`;
+                                        }
+                                        return `Approval already granted (ID: ${existingGranted.id}).`;
+                                    }
+
+                                    const edit = safeEditGate.proposeEdit(
+                                        runId,
+                                        name,
+                                        input,
+                                        descriptionText,
+                                        workspaceObjectId?.toString()
+                                    );
+                                    pending.push({
+                                        id: edit.id,
+                                        toolName: edit.toolName,
+                                        args: edit.args,
+                                        status: edit.status,
+                                        createdAt: edit.createdAt,
+                                        description: edit.description,
+                                        key: approvalKey,
+                                    });
+                                    (state as any).approvals = { ...approvals, pending };
+                                    await persistState();
+                                    console.info(
+                                        `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} action=queued_for_approval approvalId=${edit.id}`
+                                    );
+                                    return `Approval required. Proposed ${name} with ID ${edit.id}.`;
+                                }
+
+                                console.info(
+                                    `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} action=auto_approved_execute`
+                                );
+
+                                const result = await invokeBaseTool(baseTool, input);
+                                const finalResult = await maybeEvictToolResult({
                                     rootDir,
                                     runId,
                                     nodeId: node.id,
                                     toolName: name,
-                                    rawResult: memoryResult,
+                                    rawResult: result,
                                 });
-                                // Cache memory results too
-                                if (READ_ONLY_DEDUP_TOOLS.has(name) && name !== "write_todos" && typeof evicted === "string") {
+
+                                // Cache read-only results for dedup
+                                if (READ_ONLY_DEDUP_TOOLS.has(name) && name !== "write_todos" && typeof finalResult === "string") {
                                     const cacheKey = `${name}:${stableStringify(input)}`;
                                     if (toolCallCache.size >= DEDUP_CACHE_MAX) {
+                                        // Evict oldest entry
                                         const firstKey = toolCallCache.keys().next().value;
                                         if (firstKey !== undefined) toolCallCache.delete(firstKey);
                                     }
-                                    toolCallCache.set(cacheKey, evicted.slice(0, TOOL_RESULT_PREVIEW_CHARS));
+                                    toolCallCache.set(cacheKey, finalResult.slice(0, TOOL_RESULT_PREVIEW_CHARS));
                                 }
-                                return evicted;
+
+                                return finalResult;
+                            },
+                            { name, description, schema, returnDirect }
+                        );
+                        toolInvokerMap.set(name, async (input: Record<string, unknown>) => {
+                            return await wrapped.invoke(input);
+                        });
+                        return wrapped;
+                    };
+
+                    const tools = selectedTools.map(wrapTool);
+
+                    const builtMessageEvents: AgentEvent[] = [];
+                    // Track the last "final answer" assistant event (no tool calls).
+                    // When the ReAct loop produces multiple consecutive non-tool-call
+                    // assistant messages (e.g. the real answer followed by a reflexive
+                    // self-assessment), we REPLACE the previous one so only the last
+                    // final answer is visible in the chat.
+                    let lastFinalAnswerEventId: string | null = null;
+
+                    const replaceEventById = (targetId: string, replacement: AgentEvent) => {
+                        const replaceIn = (arr: AgentEvent[]) => {
+                            const idx = arr.findIndex((e) => e.id === targetId);
+                            if (idx !== -1) arr[idx] = replacement;
+                        };
+                        replaceIn(builtMessageEvents);
+                        replaceIn(eventStream);
+                        replaceIn(globalEventStream);
+                        replaceIn(state.conversationHistory!);
+                    };
+
+                    const pushEvent = (event: AgentEvent) => {
+                        builtMessageEvents.push(event);
+                        eventStream.push(event);
+                        globalEventStream.push(event);
+                        state.conversationHistory!.push(event);
+                    };
+                    const handleStreamingMessage = async (message: BaseMessage) => {
+                        await ensureNotAborted();
+
+                        // For AI messages with multiple tool calls, create one event per
+                        // tool call so that each call pairs correctly with its result.
+                        const allCalls = extractAllToolCalls(message);
+                        if (allCalls.length > 1) {
+                            lastFinalAnswerEventId = null; // tool-call resets the tracker
+                            const messageContent = describeMessageContent(message);
+                            for (const tc of allCalls) {
+                                const tcEvent: AgentEvent = {
+                                    id: nextEventId(),
+                                    phaseId: node.id,
+                                    phaseLabel: node.label,
+                                    kind: "assistant",
+                                    role: "assistant",
+                                    name: tc.name,
+                                    toolCallId: tc.toolCallId,
+                                    content: "",
+                                    toolNote: messageContent || undefined,
+                                    toolArgs: tc.args,
+                                    timestamp: new Date().toISOString(),
+                                };
+                                pushEvent(tcEvent);
                             }
+                            await flushUpdate();
+                            return;
+                        }
 
-                            const policy = getToolApprovalPolicy({ source: runSource, toolName: name });
-                            console.info(
-                                `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} decision=${policy.decision} reason="${policy.reason}"`
-                            );
+                        // Single or zero tool calls: use standard createAgentEvent
+                        const event = createAgentEvent(message, node.id, node.label, nextEventId());
 
-                            if (policy.decision !== "auto_approve") {
-                                if (policy.normalizedSource === "automation") {
-                                    console.warn(
-                                        `[ToolApprovalPolicy] Blocking automation tool call runId=${runId} tool=${name} decision=${policy.decision}`
-                                    );
-                                    throw new Error(
-                                        `Tool ${name} requires manual approval and is not allowed in automation runs.`
-                                    );
-                                }
-                                if (policy.decision === "deny") {
-                                    throw new Error(`Tool ${name} is denied by approval policy.`);
-                                }
-                                const descriptionText =
-                                    name === "write_file"
-                                        ? `Write file ${String(input?.filePath ?? "")}`
-                                        : name === "str_replace_editor"
-                                        ? `Edit file ${String((input as any)?.filePath ?? (input as any)?.path ?? "")}`
-                                        : name === "execute_bash"
-                                        ? `Execute command ${String(input?.command ?? "")}`
-                                        : `Run ${name}`;
-                                const approvals = (state as any).approvals ?? {};
-                                const pending = Array.isArray(approvals.pending) ? approvals.pending.slice() : [];
-                                const granted = Array.isArray(approvals.granted) ? approvals.granted.slice() : [];
-                                const approvalKey = buildApprovalKey(name, input);
+                        // Determine if this is a tool-call event or a "final answer" event
+                        const isToolCallEvent = !!(event.name || event.toolArgs || event.toolCallId);
+                        const isToolResultEvent = event.kind === "tool";
 
-                                const existingPending = findApprovalByKey(pending, approvalKey);
-                                if (existingPending) {
-                                    return `Approval already pending (ID: ${existingPending.id}).`;
-                                }
-                                const existingGranted = findApprovalByKey(granted, approvalKey);
-                                if (existingGranted) {
-                                    const result = typeof existingGranted.result === "string" ? existingGranted.result : "";
-                                    if (result) return result;
-                                    if (typeof existingGranted.evictedPath === "string" && existingGranted.evictedPath) {
-                                        return `Result already available at ${existingGranted.evictedPath}`;
-                                    }
-                                    return `Approval already granted (ID: ${existingGranted.id}).`;
-                                }
-
-                                const edit = safeEditGate.proposeEdit(
-                                    runId,
-                                    name,
-                                    input,
-                                    descriptionText,
-                                    workspaceObjectId?.toString()
-                                );
-                                pending.push({
-                                    id: edit.id,
-                                    toolName: edit.toolName,
-                                    args: edit.args,
-                                    status: edit.status,
-                                    createdAt: edit.createdAt,
-                                    description: edit.description,
-                                    key: approvalKey,
-                                });
-                                (state as any).approvals = { ...approvals, pending };
-                                await persistState();
-                                console.info(
-                                    `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} action=queued_for_approval approvalId=${edit.id}`
-                                );
-                                return `Approval required. Proposed ${name} with ID ${edit.id}.`;
+                        if (isToolCallEvent || isToolResultEvent) {
+                            // Tool-related events are always pushed normally
+                            lastFinalAnswerEventId = null;
+                            pushEvent(event);
+                        } else if (event.kind === "assistant") {
+                            // Non-tool-call assistant message = "final answer" candidate.
+                            // If we already have one, REPLACE it (the LLM refined its answer).
+                            if (lastFinalAnswerEventId) {
+                                replaceEventById(lastFinalAnswerEventId, event);
+                            } else {
+                                pushEvent(event);
                             }
+                            lastFinalAnswerEventId = event.id;
+                        } else {
+                            // Other event kinds (user, system): push normally
+                            pushEvent(event);
+                        }
 
-                            console.info(
-                                `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} action=auto_approved_execute`
-                            );
+                        await flushUpdate();
+                    };
 
-                            const result = await invokeBaseTool(baseTool, input);
-                            const finalResult = await maybeEvictToolResult({
+                    // ---------------------------------------------------------
+                    // 3. Smart Context Injection (New Architecture)
+                    // ---------------------------------------------------------
+                    let contextBlock = "";
+                    if (contextInjectionEnabled) {
+                        // We rank context based on the rendered user prompt + editor state
+                        const editorState = getEditorStateManager(workspace._id!.toString()).getCurrentState();
+                        const ranker = new ContextRanker(contextGraphStore);
+                        const rankedContext = await ranker.rank({
+                            userPrompt: userPrompt, // Using existing `userPrompt`
+                            editorState,
+                            limit: 15, // Retrieve top 15 most relevant
+                            tokenBudget: 30000 // Reserve budget
+                        });
+
+                        // Format the context for the System Prompt
+                        contextBlock = `\n\n## ACTIVE CONTEXT (Auto-Detected)\n`;
+                        if (editorState.activeFile) {
+                            contextBlock += `- Current File: ${editorState.activeFile}\n`;
+                        }
+
+                        if (rankedContext.length > 0) {
+                            contextBlock += `\nThe following files are likely relevant to your task:\n`;
+                            for (const item of rankedContext) {
+                                const rel = (item.score * 100).toFixed(0);
+                                const reasonText = Array.isArray(item.reasons) ? item.reasons.join(", ") : "";
+                                contextBlock += `- ${item.node.id} (Relevance: ${rel}% - ${reasonText})\n`;
+                                // Future: Inject snippets here if budget allows
+                            }
+                        } else {
+                            contextBlock += `No specific relevant files detected in context graph.\n`;
+                        }
+                    }
+
+                    // Compose final system prompt: skills prefix + base prompt + context
+                    const renderedSystemPrompt = renderUserPrompt(node.react.systemPrompt, state);
+                    const baseSystemPrompt = skillPromptPrefix
+                        ? `${skillPromptPrefix}\n\n---\n\n${renderedSystemPrompt}`
+                        : renderedSystemPrompt;
+                    const auditContextPrompt = auditContext ? formatAuditContextPrompt(auditContext) : null;
+                    const taskQueue = Array.isArray((state as any).taskQueue) ? (state as any).taskQueue : [];
+                    const currentTaskId = typeof (state as any).currentTaskId === "string" ? (state as any).currentTaskId : "";
+                    const taskContextBlock = [
+                        "\n\n## PLAN & TASK QUEUE",
+                        `Current task id: ${currentTaskId || "(none)"}`,
+                        `Task queue: ${JSON.stringify(taskQueue, null, 2)}`,
+                        "Use write_todos to create or update the task queue when the mission requires multiple steps.",
+                        "IMPORTANT: Do NOT call write_todos repeatedly with the same payload. Call it once, then proceed with actual work.",
+                    ].join("\n");
+
+                    // ── Workspace awareness block ────────────────────────────────
+                    // Prevents the agent from asking "how do I access the repo?"
+                    const workspaceContextBlock = [
+                        "\n\n## WORKSPACE ENVIRONMENT",
+                        `You are running inside the repository at: ${rootDir}`,
+                        `Workspace ID: ${workspace._id?.toString() ?? "default"}`,
+                        "You already have full filesystem access via tools (list_files, read_file, search_code, etc.).",
+                        "Do NOT ask the user for repository access — you already have it.",
+                        "Do NOT re-plan if you have already created a plan — proceed with execution.",
+                        "",
+                        "## ANTI-LOOPING RULES",
+                        "- Never call the same tool with identical arguments more than once per turn. Reuse prior results.",
+                        "- Never call write_todos more than twice without making progress on actual tasks between calls.",
+                        "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
+                        "- Focus on PRODUCING OUTPUT, not endlessly planning. After gathering information, synthesize and report.",
+                    ].join("\n");
+
+                    const enhancedSystemPrompt = `${baseSystemPrompt}${workspaceContextBlock}${contextBlock}${taskContextBlock}${auditContextPrompt ? `\n\n${auditContextPrompt}` : ""}`;
+
+                    // Update timeline with the ACTUAL prompt used (including context)
+                    if (timeline[0]) {
+                        timeline[0].systemPrompt = enhancedSystemPrompt;
+                    }
+
+                    // ---------------------------------------------------------
+                    // 4. Execution
+                    // ---------------------------------------------------------
+                    // this.ensureActiveEvent("assistant"); // Commented out as `this` context is `AgentGraphExecutor` not a React component.
+
+                    // We'll capture the *new* messages from this turn
+                    let validated: unknown;
+                    if (nodeKind === "router") {
+                        const routerNote: AgentEvent = {
+                            id: nextEventId(),
+                            phaseId: node.id,
+                            phaseLabel: node.label,
+                            kind: "assistant",
+                            role: "assistant",
+                            content: "Router node executed. Evaluating outgoing conditions.",
+                            timestamp: new Date().toISOString(),
+                        };
+                        eventStream.push(routerNote);
+                        globalEventStream.push(routerNote);
+                        await flushUpdate();
+                        const schemaId = node.output.schemaId as keyof typeof nodeOutputSchemaRegistry;
+                        const schema = nodeOutputSchemaRegistry[schemaId];
+                        if (!schema) {
+                            throw new Error(`Unknown schemaId: ${node.output.schemaId}`);
+                        }
+                        validated = schema.parse({
+                            route: "conditional_edges",
+                            timestamp: new Date().toISOString(),
+                        });
+                    } else if (nodeKind === "delegate") {
+                        const delegateConfig = node.delegate ?? { mode: "react" };
+                        const delegateInput = userPrompt;
+                        let rawResult = "";
+
+                        if (delegateConfig.mode === "graph") {
+                            if (!delegateConfig.graphId) {
+                                throw new Error(`Delegate node ${node.id} requires delegate.graphId`);
+                            }
+                            const delegateRun = await runSubGraph(delegateInput, delegateConfig.graphId);
+                            rawResult = typeof delegateRun.outputs?.report === "string"
+                                ? delegateRun.outputs.report
+                                : JSON.stringify(delegateRun.outputs ?? {}, null, 2);
+                        } else {
+                            const delegateResult = await streamReactAgentMessages({
+                                name: `Delegate:${node.id}`,
+                                systemPrompt: enhancedSystemPrompt,
+                                userPrompt: delegateInput,
+                                tools,
+                                llmSelection: opts?.llmSelectionOverride ?? node.react.llmSelection,
+                                abortSignal: abortController.signal,
+                                getAbortReason: () => abortReason,
+                                shouldAbort: checkAbortReason,
+                                onTokenUsage: async (usage, model) => {
+                                    await tokenUsageService.logUsage({
+                                        timestamp: new Date(),
+                                        provider: (opts?.llmSelectionOverride?.provider ?? node.react.llmSelection?.provider ?? "unknown") as any,
+                                        model,
+                                        usage,
+                                        ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
+                                        runId: new ObjectId(runId),
+                                        nodeId: node.id,
+                                        callType: "delegate_agent",
+                                    });
+                                },
+                            });
+                            const delegateMessages = delegateResult.messages ?? [];
+                            const delegateFinal =
+                                delegateMessages
+                                    .slice()
+                                    .reverse()
+                                    .find((message) => {
+                                        const role = typeof (message as any).role === "string" ? String((message as any).role).toLowerCase() : "";
+                                        const type = typeof message.type === "string" ? message.type.toLowerCase() : "";
+                                        return role === "assistant" || type === "ai" || type === "assistant";
+                                    }) ?? delegateMessages.at(-1);
+                            rawResult = delegateFinal ? describeMessageContent(delegateFinal) : "";
+                        }
+
+                        if (rawResult.length > TOOL_RESULT_EVICT_CHARS) {
+                            const relativePath = await writeEvictedToolResult({
                                 rootDir,
                                 runId,
                                 nodeId: node.id,
-                                toolName: name,
-                                rawResult: result,
+                                toolName: "delegate_result",
+                                content: rawResult,
                             });
+                            rawResult = `Delegate result evicted to ${relativePath}. Use read_file to inspect.`;
+                        }
 
-                            // Cache read-only results for dedup
-                            if (READ_ONLY_DEDUP_TOOLS.has(name) && name !== "write_todos" && typeof finalResult === "string") {
-                                const cacheKey = `${name}:${stableStringify(input)}`;
-                                if (toolCallCache.size >= DEDUP_CACHE_MAX) {
-                                    // Evict oldest entry
-                                    const firstKey = toolCallCache.keys().next().value;
-                                    if (firstKey !== undefined) toolCallCache.delete(firstKey);
-                                }
-                                toolCallCache.set(cacheKey, finalResult.slice(0, TOOL_RESULT_PREVIEW_CHARS));
-                            }
+                        const schemaId = node.output.schemaId as keyof typeof nodeOutputSchemaRegistry;
+                        const schema = nodeOutputSchemaRegistry[schemaId];
+                        if (!schema) {
+                            throw new Error(`Unknown schemaId: ${node.output.schemaId}`);
+                        }
 
-                            return finalResult;
-                        },
-                        { name, description, schema, returnDirect }
-                    );
-                    toolInvokerMap.set(name, async (input: Record<string, unknown>) => {
-                        return await wrapped.invoke(input);
-                    });
-                    return wrapped;
-                };
-
-                const tools = selectedTools.map(wrapTool);
-
-                const builtMessageEvents: AgentEvent[] = [];
-                const pushEvent = (event: AgentEvent) => {
-                    builtMessageEvents.push(event);
-                    eventStream.push(event);
-                    globalEventStream.push(event);
-                    state.conversationHistory!.push(event);
-                };
-                const handleStreamingMessage = async (message: BaseMessage) => {
-                    await ensureNotAborted();
-
-                    // For AI messages with multiple tool calls, create one event per
-                    // tool call so that each call pairs correctly with its result.
-                    const allCalls = extractAllToolCalls(message);
-                    if (allCalls.length > 1) {
-                        const messageContent = describeMessageContent(message);
-                        for (const tc of allCalls) {
-                            const tcEvent: AgentEvent = {
+                        let parsed: unknown;
+                        if (delegateConfig.summaryPrompt && delegateConfig.summaryPrompt.trim().length > 0) {
+                            const summaryPrompt = renderUserPrompt(delegateConfig.summaryPrompt, state);
+                            const summaryResult = await streamReactAgentMessages({
+                                name: `DelegateSummary:${node.id}`,
+                                systemPrompt: summaryPrompt,
+                                userPrompt: rawResult,
+                                tools: [],
+                                llmSelection: delegateConfig.summaryLlmSelection ?? node.react.llmSelection,
+                                abortSignal: abortController.signal,
+                                getAbortReason: () => abortReason,
+                                shouldAbort: checkAbortReason,
+                                onTokenUsage: async (usage, model) => {
+                                    await tokenUsageService.logUsage({
+                                        timestamp: new Date(),
+                                        provider: (delegateConfig.summaryLlmSelection?.provider ?? node.react.llmSelection?.provider ?? "unknown") as any,
+                                        model,
+                                        usage,
+                                        ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
+                                        runId: new ObjectId(runId),
+                                        nodeId: node.id,
+                                        callType: "delegate_summary",
+                                    });
+                                },
+                            });
+                            const summaryMessages = summaryResult.messages ?? [];
+                            const summaryFinal =
+                                summaryMessages
+                                    .slice()
+                                    .reverse()
+                                    .find((message) => {
+                                        const role = typeof (message as any).role === "string" ? String((message as any).role).toLowerCase() : "";
+                                        const type = typeof message.type === "string" ? message.type.toLowerCase() : "";
+                                        return role === "assistant" || type === "ai" || type === "assistant";
+                                    }) ?? summaryMessages.at(-1);
+                            const summaryContent = summaryFinal ? describeMessageContent(summaryFinal) : "";
+                            const summaryEvent: AgentEvent = {
                                 id: nextEventId(),
                                 phaseId: node.id,
                                 phaseLabel: node.label,
                                 kind: "assistant",
                                 role: "assistant",
-                                name: tc.name,
-                                toolCallId: tc.toolCallId,
-                                content: "",
-                                toolNote: messageContent || undefined,
-                                toolArgs: tc.args,
+                                content: summaryContent,
                                 timestamp: new Date().toISOString(),
                             };
-                            pushEvent(tcEvent);
+                            eventStream.push(summaryEvent);
+                            globalEventStream.push(summaryEvent);
+                            await flushUpdate();
+                            parsed = parseJsonOutput(summaryContent);
+                        } else {
+                            parsed = {
+                                summary: rawResult.slice(0, 4000),
+                                raw: rawResult,
+                            };
+                            const summaryEvent: AgentEvent = {
+                                id: nextEventId(),
+                                phaseId: node.id,
+                                phaseLabel: node.label,
+                                kind: "assistant",
+                                role: "assistant",
+                                content: JSON.stringify(parsed, null, 2),
+                                timestamp: new Date().toISOString(),
+                            };
+                            eventStream.push(summaryEvent);
+                            globalEventStream.push(summaryEvent);
+                            await flushUpdate();
                         }
-                        await flushUpdate();
-                        return;
-                    }
 
-                    // Single or zero tool calls: use standard createAgentEvent
-                    const event = createAgentEvent(message, node.id, node.label, nextEventId());
-                    pushEvent(event);
-                    await flushUpdate();
-                };
-
-                // ---------------------------------------------------------
-                // 3. Smart Context Injection (New Architecture)
-                // ---------------------------------------------------------
-                let contextBlock = "";
-                if (contextInjectionEnabled) {
-                    // We rank context based on the rendered user prompt + editor state
-                    const editorState = getEditorStateManager(workspace._id!.toString()).getCurrentState();
-                    const ranker = new ContextRanker(contextGraphStore);
-                    const rankedContext = await ranker.rank({
-                        userPrompt: userPrompt, // Using existing `userPrompt`
-                        editorState,
-                        limit: 15, // Retrieve top 15 most relevant
-                        tokenBudget: 30000 // Reserve budget
-                    });
-
-                    // Format the context for the System Prompt
-                    contextBlock = `\n\n## ACTIVE CONTEXT (Auto-Detected)\n`;
-                    if (editorState.activeFile) {
-                        contextBlock += `- Current File: ${editorState.activeFile}\n`;
-                    }
-
-                    if (rankedContext.length > 0) {
-                        contextBlock += `\nThe following files are likely relevant to your task:\n`;
-                        for (const item of rankedContext) {
-                            const rel = (item.score * 100).toFixed(0);
-                            const reasonText = typeof item.reason === "string" ? item.reason : "";
-                            contextBlock += `- ${item.node.id} (Relevance: ${rel}% - ${reasonText})\n`;
-                            // Future: Inject snippets here if budget allows
-                        }
+                        validated = schema.parse(parsed);
                     } else {
-                        contextBlock += `No specific relevant files detected in context graph.\n`;
-                    }
-                }
-
-                // Compose final system prompt: skills prefix + base prompt + context
-                const renderedSystemPrompt = renderUserPrompt(node.react.systemPrompt, state);
-                const baseSystemPrompt = skillPromptPrefix
-                    ? `${skillPromptPrefix}\n\n---\n\n${renderedSystemPrompt}`
-                    : renderedSystemPrompt;
-                const auditContextPrompt = auditContext ? formatAuditContextPrompt(auditContext) : null;
-                const taskQueue = Array.isArray((state as any).taskQueue) ? (state as any).taskQueue : [];
-                const currentTaskId = typeof (state as any).currentTaskId === "string" ? (state as any).currentTaskId : "";
-                const taskContextBlock = [
-                    "\n\n## PLAN & TASK QUEUE",
-                    `Current task id: ${currentTaskId || "(none)"}`,
-                    `Task queue: ${JSON.stringify(taskQueue, null, 2)}`,
-                    "Use write_todos to create or update the task queue when the mission requires multiple steps.",
-                    "IMPORTANT: Do NOT call write_todos repeatedly with the same payload. Call it once, then proceed with actual work.",
-                ].join("\n");
-
-                // ── Workspace awareness block ────────────────────────────────
-                // Prevents the agent from asking "how do I access the repo?"
-                const workspaceContextBlock = [
-                    "\n\n## WORKSPACE ENVIRONMENT",
-                    `You are running inside the repository at: ${rootDir}`,
-                    `Workspace ID: ${workspace._id?.toString() ?? "default"}`,
-                    "You already have full filesystem access via tools (list_files, read_file, search_code, etc.).",
-                    "Do NOT ask the user for repository access — you already have it.",
-                    "Do NOT re-plan if you have already created a plan — proceed with execution.",
-                    "",
-                    "## ANTI-LOOPING RULES",
-                    "- Never call the same tool with identical arguments more than once per turn. Reuse prior results.",
-                    "- Never call write_todos more than twice without making progress on actual tasks between calls.",
-                    "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
-                    "- Focus on PRODUCING OUTPUT, not endlessly planning. After gathering information, synthesize and report.",
-                ].join("\n");
-
-                const enhancedSystemPrompt = `${baseSystemPrompt}${workspaceContextBlock}${contextBlock}${taskContextBlock}${auditContextPrompt ? `\n\n${auditContextPrompt}` : ""}`;
-
-                // Update timeline with the ACTUAL prompt used (including context)
-                if (timeline[0]) {
-                    timeline[0].systemPrompt = enhancedSystemPrompt;
-                }
-
-                // ---------------------------------------------------------
-                // 4. Execution
-                // ---------------------------------------------------------
-                // this.ensureActiveEvent("assistant"); // Commented out as `this` context is `AgentGraphExecutor` not a React component.
-
-                // We'll capture the *new* messages from this turn
-                let validated: unknown;
-                if (nodeKind === "router") {
-                    const routerNote: AgentEvent = {
-                        id: nextEventId(),
-                        phaseId: node.id,
-                        phaseLabel: node.label,
-                        kind: "assistant",
-                        role: "assistant",
-                        content: "Router node executed. Evaluating outgoing conditions.",
-                        timestamp: new Date().toISOString(),
-                    };
-                    eventStream.push(routerNote);
-                    globalEventStream.push(routerNote);
-                    await flushUpdate();
-                    const schemaId = node.output.schemaId as keyof typeof nodeOutputSchemaRegistry;
-                    const schema = nodeOutputSchemaRegistry[schemaId];
-                    if (!schema) {
-                        throw new Error(`Unknown schemaId: ${node.output.schemaId}`);
-                    }
-                    validated = schema.parse({
-                        route: "conditional_edges",
-                        timestamp: new Date().toISOString(),
-                    });
-                } else if (nodeKind === "delegate") {
-                    const delegateConfig = node.delegate ?? { mode: "react" };
-                    const delegateInput = userPrompt;
-                    let rawResult = "";
-
-                    if (delegateConfig.mode === "graph") {
-                        if (!delegateConfig.graphId) {
-                            throw new Error(`Delegate node ${node.id} requires delegate.graphId`);
+                        // Build extraMessages from prior conversation history for multi-turn
+                        const priorHistory = state.conversationHistory ?? [];
+                        // Keep only a recent window to avoid replaying stale/noisy history.
+                        const historyWindow = priorHistory.slice(-60);
+                        
+                        // Prevent sending consecutive identical user messages.
+                        // reactAgentRunner will append `opts.userPrompt` (which evaluates to state.mission).
+                        // If the last history event is exactly this mission prompt, remove it from passed history.
+                        const validHistory = [...historyWindow];
+                        if (validHistory.length > 0) {
+                            const lastEvent = validHistory[validHistory.length - 1];
+                            const missionText = typeof state.mission === "string" ? state.mission : "";
+                            if (lastEvent.kind === "user" && lastEvent.content === missionText) {
+                                validHistory.pop();
+                            }
                         }
-                        const delegateRun = await runSubGraph(delegateInput, delegateConfig.graphId);
-                        rawResult = typeof delegateRun.outputs?.report === "string"
-                            ? delegateRun.outputs.report
-                            : JSON.stringify(delegateRun.outputs ?? {}, null, 2);
-                    } else {
-                        const delegateResult = await streamReactAgentMessages({
-                            name: `Delegate:${node.id}`,
+
+                        // Convert to BaseMessages, filtering out system messages (system prompt is already injected)
+                        const convertedHistory = validHistory.length > 0
+                            ? convertConversationHistoryToMessages(validHistory).filter(m => m.getType() !== "system")
+                            : [];
+                        const extraMessages = convertedHistory.length > 0 ? convertedHistory : undefined;
+                        
+                        // Diagnostic logging for multi-turn debugging
+                        if (priorHistory.length > 0) {
+                            const msgSummary = (convertedHistory || []).map(m => {
+                                const type = m.getType();
+                                const content = typeof m.content === "string" ? m.content.slice(0, 60) : JSON.stringify(m.content).slice(0, 60);
+                                const tc = (m as any).tool_calls;
+                                return `${type}(${content}${tc?.length ? `, tool_calls=${tc.length}` : ''})`;
+                            });
+                            console.log(`[AgentGraphExecutor] Multi-turn extraMessages: ${convertedHistory.length} messages from ${priorHistory.length} history events`);
+                            console.log(`[AgentGraphExecutor] extraMessages summary: ${msgSummary.join(' → ')}`);
+                            console.log(`[AgentGraphExecutor] userPrompt will be: "${userPrompt.slice(0, 80)}"`);
+                        }
+
+                        // ── Checkpoint / Resume ──────────────────────────────
+                        // Each (run, node) gets a unique LangGraph thread_id so
+                        // checkpoints are scoped correctly.
+                        const threadId = checkpointer ? `${runId}:${node.id}` : undefined;
+                        const shouldResume = !!(
+                            opts?.resumeFromCheckpoint &&
+                            checkpointer &&
+                            threadId &&
+                            (await hasCheckpoint(threadId))
+                        );
+
+                        // Read the per-node interruptBeforeTools config.
+                        // Only meaningful when checkpointing is active.
+                        const interruptBeforeTools = !!(
+                            checkpointer &&
+                            node.react.interruptBeforeTools
+                        );
+
+                        const result = await streamReactAgentMessages({
+                            name: `GraphNode:${node.id}`,
                             systemPrompt: enhancedSystemPrompt,
-                            userPrompt: delegateInput,
+                            userPrompt: userPrompt,
                             tools,
                             llmSelection: opts?.llmSelectionOverride ?? node.react.llmSelection,
+                            extraMessages: shouldResume ? undefined : extraMessages,
+                            onMessage: handleStreamingMessage,
+                            // Forward text deltas for progressive streaming
+                            onTextDelta: opts?.onTextDelta,
                             abortSignal: abortController.signal,
                             getAbortReason: () => abortReason,
                             shouldAbort: checkAbortReason,
+                            // Checkpoint / persistence
+                            checkpointer,
+                            threadId,
+                            interruptBeforeTools,
+                            resumeFromCheckpoint: shouldResume,
                             onTokenUsage: async (usage, model) => {
+                                // Log individual usage to MongoDB and accumulate in-memory
                                 await tokenUsageService.logUsage({
                                     timestamp: new Date(),
                                     provider: (opts?.llmSelectionOverride?.provider ?? node.react.llmSelection?.provider ?? "unknown") as any,
@@ -1929,391 +2169,238 @@ export class AgentGraphExecutor {
                                     ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
                                     runId: new ObjectId(runId),
                                     nodeId: node.id,
-                                    callType: "delegate_agent",
+                                    callType: "react_agent",
                                 });
                             },
                         });
-                        const delegateMessages = delegateResult.messages ?? [];
-                        const delegateFinal =
-                            delegateMessages
-                                .slice()
-                                .reverse()
-                                .find((message) => {
-                                    const role = typeof (message as any).role === "string" ? String((message as any).role).toLowerCase() : "";
-                                    const type = typeof message.type === "string" ? message.type.toLowerCase() : "";
-                                    return role === "assistant" || type === "ai" || type === "assistant";
-                                }) ?? delegateMessages.at(-1);
-                        rawResult = delegateFinal ? describeMessageContent(delegateFinal) : "";
-                    }
 
-                    if (rawResult.length > TOOL_RESULT_EVICT_CHARS) {
-                        const relativePath = await writeEvictedToolResult({
-                            rootDir,
-                            runId,
-                            nodeId: node.id,
-                            toolName: "delegate_result",
-                            content: rawResult,
-                        });
-                        rawResult = `Delegate result evicted to ${relativePath}. Use read_file to inspect.`;
-                    }
-
-                    const schemaId = node.output.schemaId as keyof typeof nodeOutputSchemaRegistry;
-                    const schema = nodeOutputSchemaRegistry[schemaId];
-                    if (!schema) {
-                        throw new Error(`Unknown schemaId: ${node.output.schemaId}`);
-                    }
-
-                    let parsed: unknown;
-                    if (delegateConfig.summaryPrompt && delegateConfig.summaryPrompt.trim().length > 0) {
-                        const summaryPrompt = renderUserPrompt(delegateConfig.summaryPrompt, state);
-                        const summaryResult = await streamReactAgentMessages({
-                            name: `DelegateSummary:${node.id}`,
-                            systemPrompt: summaryPrompt,
-                            userPrompt: rawResult,
-                            tools: [],
-                            llmSelection: delegateConfig.summaryLlmSelection ?? node.react.llmSelection,
-                            abortSignal: abortController.signal,
-                            getAbortReason: () => abortReason,
-                            shouldAbort: checkAbortReason,
-                            onTokenUsage: async (usage, model) => {
-                                await tokenUsageService.logUsage({
-                                    timestamp: new Date(),
-                                    provider: (delegateConfig.summaryLlmSelection?.provider ?? node.react.llmSelection?.provider ?? "unknown") as any,
-                                    model,
-                                    usage,
-                                    ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
-                                    runId: new ObjectId(runId),
-                                    nodeId: node.id,
-                                    callType: "delegate_summary",
-                                });
-                            },
-                        });
-                        const summaryMessages = summaryResult.messages ?? [];
-                        const summaryFinal =
-                            summaryMessages
-                                .slice()
-                                .reverse()
-                                .find((message) => {
-                                    const role = typeof (message as any).role === "string" ? String((message as any).role).toLowerCase() : "";
-                                    const type = typeof message.type === "string" ? message.type.toLowerCase() : "";
-                                    return role === "assistant" || type === "ai" || type === "assistant";
-                                }) ?? summaryMessages.at(-1);
-                        const summaryContent = summaryFinal ? describeMessageContent(summaryFinal) : "";
-                        const summaryEvent: AgentEvent = {
-                            id: nextEventId(),
-                            phaseId: node.id,
-                            phaseLabel: node.label,
-                            kind: "assistant",
-                            role: "assistant",
-                            content: summaryContent,
-                            timestamp: new Date().toISOString(),
-                        };
-                        eventStream.push(summaryEvent);
-                        globalEventStream.push(summaryEvent);
-                        await flushUpdate();
-                        parsed = parseJsonOutput(summaryContent);
-                    } else {
-                        parsed = {
-                            summary: rawResult.slice(0, 4000),
-                            raw: rawResult,
-                        };
-                        const summaryEvent: AgentEvent = {
-                            id: nextEventId(),
-                            phaseId: node.id,
-                            phaseLabel: node.label,
-                            kind: "assistant",
-                            role: "assistant",
-                            content: JSON.stringify(parsed, null, 2),
-                            timestamp: new Date().toISOString(),
-                        };
-                        eventStream.push(summaryEvent);
-                        globalEventStream.push(summaryEvent);
-                        await flushUpdate();
-                    }
-
-                    validated = schema.parse(parsed);
-                } else {
-                    // Build extraMessages from prior conversation history for multi-turn
-                    const priorHistory = state.conversationHistory ?? [];
-                    // Keep only a recent window to avoid replaying stale/noisy history.
-                    const historyWindow = priorHistory.slice(-60);
-                    const extraMessages = priorHistory.length > 0
-                        ? convertConversationHistoryToMessages(historyWindow).filter(m => m.getType() !== "system")
-                        : undefined;
-
-                    // ── Checkpoint / Resume ──────────────────────────────
-                    // Each (run, node) gets a unique LangGraph thread_id so
-                    // checkpoints are scoped correctly.
-                    const threadId = checkpointer ? `${runId}:${node.id}` : undefined;
-                    const shouldResume = !!(
-                        opts?.resumeFromCheckpoint &&
-                        checkpointer &&
-                        threadId &&
-                        (await hasCheckpoint(threadId))
-                    );
-
-                    // Read the per-node interruptBeforeTools config.
-                    // Only meaningful when checkpointing is active.
-                    const interruptBeforeTools = !!(
-                        checkpointer &&
-                        node.react.interruptBeforeTools
-                    );
-
-                    const result = await streamReactAgentMessages({
-                        name: `GraphNode:${node.id}`,
-                        systemPrompt: enhancedSystemPrompt,
-                        userPrompt: userPrompt,
-                        tools,
-                        llmSelection: opts?.llmSelectionOverride ?? node.react.llmSelection,
-                        extraMessages: shouldResume ? undefined : extraMessages,
-                        onMessage: handleStreamingMessage,
-                        // Forward text deltas for progressive streaming
-                        onTextDelta: opts?.onTextDelta,
-                        abortSignal: abortController.signal,
-                        getAbortReason: () => abortReason,
-                        shouldAbort: checkAbortReason,
-                        // Checkpoint / persistence
-                        checkpointer,
-                        threadId,
-                        interruptBeforeTools,
-                        resumeFromCheckpoint: shouldResume,
-                        onTokenUsage: async (usage, model) => {
-                            // Log individual usage to MongoDB and accumulate in-memory
-                            await tokenUsageService.logUsage({
-                                timestamp: new Date(),
-                                provider: (opts?.llmSelectionOverride?.provider ?? node.react.llmSelection?.provider ?? "unknown") as any,
-                                model,
-                                usage,
-                                ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
-                                runId: new ObjectId(runId),
+                        // ── Handle interrupt (human-in-the-loop) ─────────────
+                        if (result.interrupted) {
+                            console.log(`[AgentGraph] Node ${node.id} interrupted (checkpoint saved). Awaiting human approval.`);
+                            await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "RUNNING");
+                            await agentGraphRunService.updateRunStatus(runId, "PAUSED", {
+                                error: `Interrupted at node ${node.id}: awaiting approval.`,
+                            } as any);
+                            // Update state with checkpoint info (including graph hash for version guard)
+                            (state as any).checkpoint = {
+                                threadId,
                                 nodeId: node.id,
-                                callType: "react_agent",
-                            });
-                        },
-                    });
+                                interruptedAt: new Date().toISOString(),
+                                status: "awaiting_approval",
+                                graphHash: computeGraphHash(graph.nodes, graph.edges),
+                            };
+                            await agentGraphRunService.updateRunState(runId, cloneValue(state));
 
-                    // ── Handle interrupt (human-in-the-loop) ─────────────
-                    if (result.interrupted) {
-                        console.log(`[AgentGraph] Node ${node.id} interrupted (checkpoint saved). Awaiting human approval.`);
-                        await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "RUNNING");
-                        await agentGraphRunService.updateRunStatus(runId, "PAUSED", {
-                            error: `Interrupted at node ${node.id}: awaiting approval.`,
+                            if (timelineEntry) {
+                                timelineEntry.status = "running";
+                                timelineEntry.summary = "Paused — awaiting approval";
+                            }
+                            await emitUpdate();
+
+                            // Return partial result; the caller will see status=PAUSED
+                            const { summary: partialTokenUsage } = tokenUsageService.finalizeRunTracking(runId);
+                            await agentGraphRunService.updateRunTokenUsage(runId, partialTokenUsage);
+                            return {
+                                sessionId: runId,
+                                timeline: globalTimeline,
+                                conclusion: "Run paused (human-in-the-loop interrupt).",
+                                outputs: createPlaceholderOutputs({
+                                    mission: typeof state.mission === "string" ? state.mission : "",
+                                    report: "Awaiting human approval to continue.",
+                                    meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state), interrupted: true },
+                                }),
+                                eventStream: globalEventStream,
+                            };
+                        }
+
+                        const finalAgentEvent =
+                            builtMessageEvents.slice().reverse().find((event) => event.kind === "assistant") ??
+                            builtMessageEvents.at(-1);
+                        const finalContent = finalAgentEvent?.content ?? "";
+
+                        const schemaId = node.output.schemaId as keyof typeof nodeOutputSchemaRegistry;
+                        const schema = nodeOutputSchemaRegistry[schemaId];
+                        if (!schema) {
+                            throw new Error(`Unknown schemaId: ${node.output.schemaId}`);
+                        }
+
+                        if (schemaId === "conversational") {
+                            // Conversational nodes: wrap the agent's text response directly.
+                            // No JSON parsing — the LLM output is natural language.
+                            validated = schema.parse({ response: finalContent, rawContent: finalContent });
+                        } else {
+                            let parsed: unknown = parseJsonOutput(finalContent);
+                            parsed = await maybeExecuteJsonActionTool({
+                                schemaId: String(schemaId),
+                                parsed,
+                                allowedToolNames: node.react.toolNames ?? [],
+                                phaseId: node.id,
+                                phaseLabel: node.label,
+                                makeEventId: nextGlobalEventId,
+                                pushEvent: (event) => {
+                                    globalEventStream.push(event);
+                                    eventStream.push(event);
+                                },
+                                invokeToolByName: async (name, args) => {
+                                    const invoker = toolInvokerMap.get(name);
+                                    if (!invoker) {
+                                        return `Tool ${name} is not available in this node.`;
+                                    }
+                                    return await invoker(args);
+                                },
+                                ensureActive: ensureNotAborted,
+                            });
+                            validated = schema.parse(parsed);
+                            if (node.output?.schemaId === "cursor_planner_output") {
+                                const missionText =
+                                    (typeof (state as any).mission === "string" && (state as any).mission) ||
+                                    (typeof (state as any).userInput === "string" && (state as any).userInput) ||
+                                    "";
+                                validated = ensurePlannerOutput(validated, missionText) as typeof validated;
+                            }
+                        }
+                    }
+
+                    state.nodes[node.id] = validated as any;
+                    if (node.output?.statePath) {
+                        setNestedValue(state as any, node.output.statePath, validated, {
+                            merge: node.output?.stateMerge,
+                        });
+                    }
+                    await agentGraphRunService.updateRunState(runId, cloneValue(state));
+                    await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "COMPLETED");
+
+                    // Persist node-level token usage
+                    const nodeTokenUsage = tokenUsageService.getNodeUsage(runId, nodeId);
+                    await agentGraphRunService.updateNodeTokenUsage(runId, nodeId, nodeTokenUsage);
+
+                    timeline[0].status = "success";
+                    timeline[0].summary = "Node execution (done)";
+                    timeline[0].endedAt = new Date().toISOString();
+                    await flushUpdate();
+
+                    if (timelineEntry) {
+                        timelineEntry.status = "success";
+                        timelineEntry.summary = "Done";
+                        timelineEntry.endedAt = new Date().toISOString();
+                        timelineEntry.tokenUsage = nodeTokenUsage.totalTokens > 0 ? {
+                            inputTokens: nodeTokenUsage.inputTokens,
+                            outputTokens: nodeTokenUsage.outputTokens,
+                            totalTokens: nodeTokenUsage.totalTokens,
+                        } : undefined;
+                    }
+                    await emitUpdate();
+
+                    const finalResult: AgentWorkflowResult = {
+                        sessionId: runId,
+                        timeline,
+                        conclusion: "Node completed.",
+                        outputs: createPlaceholderOutputs({
+                            mission: typeof state.mission === "string" ? state.mission : "",
+                            report: JSON.stringify(validated, null, 2),
+                            meta: { runId, nodeId: node.id },
+                        }),
+                        eventStream,
+                    };
+
+                    if (executionMode === "state_machine") {
+                        const nextNodes = selectNextNodes(nodeId);
+                        if (nextNodes.length) {
+                            pendingNodeIds.push(...nextNodes);
+                        }
+                    }
+                } catch (err: any) {
+                    if (err instanceof AgentWorkflowAbortError || err?.name === "AgentWorkflowAbortError") {
+                        const reason: AgentWorkflowAbortReason = err.reason ?? "PAUSED";
+                        const status = reason === "CANCELLED" ? "CANCELLED" : "PAUSED";
+                        const { summary: runTokenUsage } = tokenUsageService.finalizeRunTracking(runId);
+                        await agentGraphRunService.updateRunTokenUsage(runId, runTokenUsage);
+                        await agentGraphRunService.updateRunStatus(runId, status as any, {
+                            endedAt: new Date(),
+                            error: err?.message ?? String(err),
                         } as any);
-                        // Update state with checkpoint info (including graph hash for version guard)
-                        (state as any).checkpoint = {
-                            threadId,
-                            nodeId: node.id,
-                            interruptedAt: new Date().toISOString(),
-                            status: "awaiting_approval",
-                            graphHash: computeGraphHash(graph.nodes, graph.edges),
-                        };
-                        await agentGraphRunService.updateRunState(runId, cloneValue(state));
 
                         if (timelineEntry) {
-                            timelineEntry.status = "running";
-                            timelineEntry.summary = "Paused — awaiting approval";
+                            timelineEntry.status = "error";
+                            timelineEntry.summary = reason === "PAUSED" ? "Paused" : "Cancelled";
+                            timelineEntry.endedAt = new Date().toISOString();
                         }
                         await emitUpdate();
-
-                        // Return partial result; the caller will see status=PAUSED
-                        const { summary: partialTokenUsage } = tokenUsageService.finalizeRunTracking(runId);
-                        await agentGraphRunService.updateRunTokenUsage(runId, partialTokenUsage);
-                        return {
-                            sessionId: runId,
-                            timeline: globalTimeline,
-                            conclusion: "Run paused (human-in-the-loop interrupt).",
-                            outputs: createPlaceholderOutputs({
-                                mission: typeof state.mission === "string" ? state.mission : "",
-                                report: "Awaiting human approval to continue.",
-                                meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state), interrupted: true },
-                            }),
-                            eventStream: globalEventStream,
-                        };
+                        throw err;
                     }
 
-                    const finalAgentEvent =
-                        builtMessageEvents.slice().reverse().find((event) => event.kind === "assistant") ??
-                        builtMessageEvents.at(-1);
-                    const finalContent = finalAgentEvent?.content ?? "";
-
-                    const schemaId = node.output.schemaId as keyof typeof nodeOutputSchemaRegistry;
-                    const schema = nodeOutputSchemaRegistry[schemaId];
-                    if (!schema) {
-                        throw new Error(`Unknown schemaId: ${node.output.schemaId}`);
+                    let errorMessage = err?.message ?? String(err);
+                    if (errorMessage.includes("fetch failed") || errorMessage.includes("Failed to fetch")) {
+                        errorMessage = "Failed to connect to the local LLM provider. Please ensure Ollama, LM Studio, or vLLM is running and configured correctly.";
                     }
 
-                    if (schemaId === "conversational") {
-                        // Conversational nodes: wrap the agent's text response directly.
-                        // No JSON parsing — the LLM output is natural language.
-                        validated = schema.parse({ response: finalContent, rawContent: finalContent });
-                    } else {
-                        let parsed: unknown = parseJsonOutput(finalContent);
-                        parsed = await maybeExecuteJsonActionTool({
-                            schemaId: String(schemaId),
-                            parsed,
-                            allowedToolNames: node.react.toolNames ?? [],
-                            phaseId: node.id,
-                            phaseLabel: node.label,
-                            makeEventId: nextGlobalEventId,
-                            pushEvent: (event) => {
-                                globalEventStream.push(event);
-                                eventStream.push(event);
-                            },
-                            invokeToolByName: async (name, args) => {
-                                const invoker = toolInvokerMap.get(name);
-                                if (!invoker) {
-                                    return `Tool ${name} is not available in this node.`;
-                                }
-                                return await invoker(args);
-                            },
-                            ensureActive: ensureNotAborted,
-                        });
-                        validated = schema.parse(parsed);
-                        if (node.output?.schemaId === "cursor_planner_output") {
-                            const missionText =
-                                (typeof (state as any).mission === "string" && (state as any).mission) ||
-                                (typeof (state as any).userInput === "string" && (state as any).userInput) ||
-                                "";
-                            validated = ensurePlannerOutput(validated, missionText) as typeof validated;
-                        }
-                    }
-                }
-
-                state.nodes[node.id] = validated as any;
-                if (node.output?.statePath) {
-                    setNestedValue(state as any, node.output.statePath, validated, {
-                        merge: node.output?.stateMerge,
-                    });
-                }
-                await agentGraphRunService.updateRunState(runId, cloneValue(state));
-                await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "COMPLETED");
-
-                // Persist node-level token usage
-                const nodeTokenUsage = tokenUsageService.getNodeUsage(runId, nodeId);
-                await agentGraphRunService.updateNodeTokenUsage(runId, nodeId, nodeTokenUsage);
-
-                timeline[0].status = "success";
-                timeline[0].summary = "Node execution (done)";
-                timeline[0].endedAt = new Date().toISOString();
-                await flushUpdate();
-
-                if (timelineEntry) {
-                    timelineEntry.status = "success";
-                    timelineEntry.summary = "Done";
-                    timelineEntry.endedAt = new Date().toISOString();
-                    timelineEntry.tokenUsage = nodeTokenUsage.totalTokens > 0 ? {
-                        inputTokens: nodeTokenUsage.inputTokens,
-                        outputTokens: nodeTokenUsage.outputTokens,
-                        totalTokens: nodeTokenUsage.totalTokens,
-                    } : undefined;
-                }
-                await emitUpdate();
-
-                const finalResult: AgentWorkflowResult = {
-                    sessionId: runId,
-                    timeline,
-                    conclusion: "Node completed.",
-                    outputs: createPlaceholderOutputs({
-                        mission: typeof state.mission === "string" ? state.mission : "",
-                        report: JSON.stringify(validated, null, 2),
-                        meta: { runId, nodeId: node.id },
-                    }),
-                    eventStream,
-                };
-
-                if (executionMode === "state_machine") {
-                    const nextNodes = selectNextNodes(nodeId);
-                    if (nextNodes.length) {
-                        pendingNodeIds.push(...nextNodes);
-                    }
-                }
-            } catch (err: any) {
-                if (err instanceof AgentWorkflowAbortError || err?.name === "AgentWorkflowAbortError") {
-                    const reason: AgentWorkflowAbortReason = err.reason ?? "PAUSED";
-                    const status = reason === "CANCELLED" ? "CANCELLED" : "PAUSED";
-                    const { summary: runTokenUsage } = tokenUsageService.finalizeRunTracking(runId);
-                    await agentGraphRunService.updateRunTokenUsage(runId, runTokenUsage);
-                    await agentGraphRunService.updateRunStatus(runId, status as any, {
+                    await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "FAILED");
+                    await agentGraphRunService.updateRunStatus(runId, "FAILED", {
                         endedAt: new Date(),
-                        error: err?.message ?? String(err),
+                        error: errorMessage,
                     } as any);
+
+                    timeline[0].status = "error";
+                    timeline[0].summary = `Failed: ${errorMessage}`;
+                    timeline[0].endedAt = new Date().toISOString();
+                    await flushUpdate();
 
                     if (timelineEntry) {
                         timelineEntry.status = "error";
-                        timelineEntry.summary = reason === "PAUSED" ? "Paused" : "Cancelled";
+                        timelineEntry.summary = `Failed: ${errorMessage}`;
                         timelineEntry.endedAt = new Date().toISOString();
                     }
                     await emitUpdate();
-                    throw err;
+
+                    const finalResult: AgentWorkflowResult = {
+                        sessionId: runId,
+                        timeline,
+                        conclusion: "Node failed.",
+                        outputs: createPlaceholderOutputs({
+                            mission: typeof state.mission === "string" ? state.mission : "",
+                            report: `ERROR: ${errorMessage}`,
+                            meta: { runId, nodeId: node.id },
+                        }),
+                        eventStream,
+                    };
+                    return {
+                        sessionId: runId,
+                        timeline: globalTimeline,
+                        conclusion: "Run failed.",
+                        outputs: createPlaceholderOutputs({
+                            mission: typeof state.mission === "string" ? state.mission : "",
+                            report: `ERROR: ${errorMessage}`,
+                            meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
+                        }),
+                        eventStream: globalEventStream,
+                    };
                 }
-
-                await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "FAILED");
-                await agentGraphRunService.updateRunStatus(runId, "FAILED", {
-                    endedAt: new Date(),
-                    error: err?.message ?? String(err),
-                } as any);
-
-                timeline[0].status = "error";
-                timeline[0].summary = `Failed: ${err?.message ?? "unknown error"}`;
-                timeline[0].endedAt = new Date().toISOString();
-                await flushUpdate();
-
-                if (timelineEntry) {
-                    timelineEntry.status = "error";
-                    timelineEntry.summary = `Failed: ${err?.message ?? "unknown error"}`;
-                    timelineEntry.endedAt = new Date().toISOString();
-                }
-                await emitUpdate();
-
-                const finalResult: AgentWorkflowResult = {
-                    sessionId: runId,
-                    timeline,
-                    conclusion: "Node failed.",
-                    outputs: createPlaceholderOutputs({
-                        mission: typeof state.mission === "string" ? state.mission : "",
-                        report: `ERROR: ${err?.message ?? String(err)}`,
-                        meta: { runId, nodeId: node.id },
-                    }),
-                    eventStream,
-                };
-                return {
-                    sessionId: runId,
-                    timeline: globalTimeline,
-                    conclusion: "Run failed.",
-                    outputs: createPlaceholderOutputs({
-                        mission: typeof state.mission === "string" ? state.mission : "",
-                        report: `ERROR: ${err?.message ?? String(err)}`,
-                        meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
-                    }),
-                    eventStream: globalEventStream,
-                };
             }
-        }
 
-        // Finalize token usage tracking and persist run-level summary
-        const { summary: runTokenUsage } = tokenUsageService.finalizeRunTracking(runId);
-        await agentGraphRunService.updateRunTokenUsage(runId, runTokenUsage);
+            // Finalize token usage tracking and persist run-level summary
+            const { summary: runTokenUsage } = tokenUsageService.finalizeRunTracking(runId);
+            await agentGraphRunService.updateRunTokenUsage(runId, runTokenUsage);
 
-        await agentGraphRunService.updateRunStatus(runId, "COMPLETED", {
-            endedAt: new Date(),
-        } as any);
+            await agentGraphRunService.updateRunStatus(runId, "COMPLETED", {
+                endedAt: new Date(),
+            } as any);
 
-        // Enhance the workflow result with formatted outputs and metrics
-        const enhancedResult = enhanceWorkflowResult({
-            sessionId: runId,
-            timeline: globalTimeline,
-            conclusion: "Run completed.",
-            outputs: createPlaceholderOutputs({
-                mission: typeof state.mission === "string" ? state.mission : "",
-                report: JSON.stringify(state.nodes ?? {}, null, 2),
-                meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
-            }),
-            eventStream: globalEventStream,
-        });
+            // Enhance the workflow result with formatted outputs and metrics
+            const enhancedResult = enhanceWorkflowResult({
+                sessionId: runId,
+                timeline: globalTimeline,
+                conclusion: "Run completed.",
+                outputs: createPlaceholderOutputs({
+                    mission: typeof state.mission === "string" ? state.mission : "",
+                    report: JSON.stringify(state.nodes ?? {}, null, 2),
+                    meta: { runId, graphId: run.graphId.toString(), state: cloneValue(state) },
+                }),
+                eventStream: globalEventStream,
+            });
 
-        const successResult = enhancedResult;
-        await emitUpdate();
-        return successResult;
+            const successResult = enhancedResult;
+            await emitUpdate();
+            return successResult;
         });
     }
 }

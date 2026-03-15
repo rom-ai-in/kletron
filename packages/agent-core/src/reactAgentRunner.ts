@@ -134,6 +134,22 @@ export async function streamReactAgentMessages(
     };
   }
 
+  // Diagnostic logging for multi-turn debugging
+  if (input && (input as any).messages) {
+    const msgs = (input as any).messages as any[];
+    console.log(`[ReactAgentRunner] Sending ${msgs.length} messages to LLM (name=${opts.name}):`);
+    for (let i = 0; i < msgs.length; i++) {
+      const m = msgs[i];
+      const type = m.getType?.() ?? m.type ?? m.role ?? 'unknown';
+      const content = typeof m.content === 'string' ? m.content.slice(0, 80) : JSON.stringify(m.content ?? '').slice(0, 80);
+      const tc = m.tool_calls?.length ?? 0;
+      const tcId = m.tool_call_id ?? '';
+      console.log(`  [${i}] ${type}: "${content}"${tc ? ` (tool_calls=${tc})` : ''}${tcId ? ` (tool_call_id=${tcId})` : ''}`);
+    }
+  } else {
+    console.log(`[ReactAgentRunner] Input is ${input === null ? 'null (resume)' : 'empty'} (name=${opts.name})`);
+  }
+
   const stream = await agent.stream(
     input as any,
     streamConfig,
@@ -142,6 +158,18 @@ export async function streamReactAgentMessages(
   const seenMessageIds = new Set<string>();
   const seenUsageIds = new Set<string>(); // Track which messages we've extracted usage from
   const accumulatedMessages: BaseMessage[] = [];
+
+  // Seed with extra messages to perform correct deduplication of historical multi-turn data
+  if (opts.extraMessages && opts.extraMessages.length > 0) {
+    for (const msg of opts.extraMessages) {
+      if (typeof msg.id === "string") {
+        seenMessageIds.add(msg.id);
+        seenUsageIds.add(msg.id);
+      }
+      accumulatedMessages.push(msg);
+    }
+  }
+
   let lastState: { messages?: BaseMessage[] } | undefined;
 
   // Accumulated token usage across all messages

@@ -7,6 +7,9 @@ export interface FolderTreePickerProps {
     value: string;
     onChange: (path: string) => void;
     placeholder?: string;
+    /** Optional workspace ID – if provided, the header x-workspace-id is sent with
+     *  API calls so the server resolves the correct workspace root. */
+    workspaceId?: string;
 }
 
 interface TreeItem {
@@ -18,7 +21,7 @@ interface TreeItem {
     isLoading?: boolean;
 }
 
-export function FolderTreePicker({ value, onChange, placeholder }: FolderTreePickerProps) {
+export function FolderTreePicker({ value, onChange, placeholder, workspaceId }: FolderTreePickerProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [tree, setTree] = useState<TreeItem[]>([]);
     const [search, setSearch] = useState("");
@@ -30,6 +33,16 @@ export function FolderTreePicker({ value, onChange, placeholder }: FolderTreePic
             void fetchNode("");
         }
     }, [isOpen]);
+
+    // Reset tree when workspace changes
+    useEffect(() => {
+        setTree([]);
+        setSearch("");
+        if (isOpen) {
+            void fetchNode("");
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [workspaceId]);
 
     // Close on click outside
     useEffect(() => {
@@ -49,7 +62,10 @@ export function FolderTreePicker({ value, onChange, placeholder }: FolderTreePic
             if (nodePath) {
                 queryParams.set('root', nodePath);
             }
-            const res = await fetch(`/api/fs/tree${queryParams.toString() ? '?' + queryParams.toString() : ''}`);
+            const headers: Record<string, string> = {};
+            if (workspaceId) headers['x-workspace-id'] = workspaceId;
+
+            const res = await fetch(`/api/fs/tree${queryParams.toString() ? '?' + queryParams.toString() : ''}`, { headers });
             const data = await res.json();
 
             // The API returns an array of TreeNode objects directly

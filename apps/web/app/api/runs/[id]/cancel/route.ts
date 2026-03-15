@@ -23,11 +23,9 @@ export async function POST(
     const runId = params.id;
 
     const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null);
-    if (!workspace || !workspace._id) {
-      return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
-    }
+    const workspaceId = workspace?._id?.toString();
 
-    const run = await automationExecutor.getRun(runId, workspace._id.toString());
+    const run = await automationExecutor.getRun(runId, workspaceId);
     if (!run) {
       return NextResponse.json({ error: "Execution run not found" }, { status: 404 });
     }

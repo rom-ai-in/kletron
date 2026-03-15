@@ -18,7 +18,7 @@ import {
   DurationDisplay,
 } from "@numezis/ui/components/Agent/metrics";
 import { useAgentSession } from "@numezis/ui/hooks/useAgentSession";
-import { useSessionStream } from "@numezis/ui/hooks/useSessionStream";
+import { useSessionStream, normalizeMessage } from "@numezis/ui/hooks/useSessionStream";
 import { useSessionEdits } from "@numezis/ui/hooks/useSessionEdits";
 import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
 import {
@@ -280,18 +280,11 @@ export default function AgentPage() {
       const res = await fetch("/api/sessions?limit=50&excludeSource=automation");
       if (res.ok) {
         const data = await res.json();
-        // #region agent log
-        fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c540e' }, body: JSON.stringify({ sessionId: '0c540e', runId: 'agent-page', hypothesisId: 'H6', location: 'apps/web/app/app/agent/page.tsx:fetchSessions', message: 'Client fetched sessions', data: { isArray: Array.isArray(data), count: Array.isArray(data) ? data.length : -1 }, timestamp: Date.now() }) }).catch(() => { });
-        // #endregion
         const suspiciousTitles = (Array.isArray(data) ? data : [])
           .map((s: any) => String(s?.title ?? ""))
           .filter((t: string) => /\bwe need to\b|\bfinal answer\b|<think>/i.test(t))
           .slice(0, 6);
-        if (suspiciousTitles.length > 0) {
-          // #region agent log
-          fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c540e' }, body: JSON.stringify({ sessionId: '0c540e', runId: 'agent-page', hypothesisId: 'H5', location: 'apps/web/app/app/agent/page.tsx:fetchSessions', message: 'Suspicious titles received by client', data: { count: suspiciousTitles.length, samples: suspiciousTitles }, timestamp: Date.now() }) }).catch(() => { });
-          // #endregion
-        }
+
         setSessions(Array.isArray(data) ? data : []);
       }
     } catch (e) {
@@ -410,7 +403,7 @@ export default function AgentPage() {
           // and also deduplicate by role+content to handle ID mismatches.
           const rawMessages = data.conversationHistory
             .filter((e: any) => e.kind === "user" || e.kind === "assistant" || e.kind === "tool")
-            .map((e: any) => ({
+            .map((e: any) => normalizeMessage({
               id: e.id,
               role: e.kind === "tool" ? "tool" : e.kind,
               content: e.content ?? "",
@@ -419,6 +412,7 @@ export default function AgentPage() {
               toolArgs: typeof e.toolArgs === "string" ? e.toolArgs : e.toolArgs ? JSON.stringify(e.toolArgs) : undefined,
               toolOutput: e.kind === "tool" ? e.content : undefined,
               toolCallId: e.toolCallId,
+              isError: e.isError,
               thoughts: e.thoughts,
             }));
 
@@ -742,6 +736,7 @@ export default function AgentPage() {
         toolArgs: m.toolArgs,
         toolOutput: m.role === "tool" ? (m.toolOutput ?? m.content) : m.toolOutput,
         toolCallId: m.toolCallId,
+        isError: m.isError,
         thoughts: m.thoughts,
         timestamp: m.timestamp,
       };
