@@ -1767,23 +1767,17 @@ export class AgentGraphExecutor {
                     const tools = selectedTools.map(wrapTool);
 
                     const builtMessageEvents: AgentEvent[] = [];
-                    // Track the last "final answer" assistant event (no tool calls).
-                    // When the ReAct loop produces multiple consecutive non-tool-call
-                    // assistant messages (e.g. the real answer followed by a reflexive
-                    // self-assessment), we REPLACE the previous one so only the last
-                    // final answer is visible in the chat.
-                    let lastFinalAnswerEventId: string | null = null;
 
-                    const replaceEventById = (targetId: string, replacement: AgentEvent) => {
-                        const replaceIn = (arr: AgentEvent[]) => {
-                            const idx = arr.findIndex((e) => e.id === targetId);
-                            if (idx !== -1) arr[idx] = replacement;
-                        };
-                        replaceIn(builtMessageEvents);
-                        replaceIn(eventStream);
-                        replaceIn(globalEventStream);
-                        replaceIn(state.conversationHistory!);
-                    };
+                    // ── Pre-existing history guard ────────────────────────
+                    // Snapshot content fingerprints from conversation history
+                    // BEFORE this node execution. Any streaming message whose
+                    // content matches a prior event is a replayed historical
+                    // message and must be silently skipped.
+                    const priorContentFingerprints = new Set<string>();
+                    for (const h of state.conversationHistory!) {
+                        const fp = `${h.kind}:${(h.content ?? "").trim().slice(0, 500)}`;
+                        if (fp.length > 6) priorContentFingerprints.add(fp); // skip trivially empty
+                    }
 
                     const pushEvent = (event: AgentEvent) => {
                         builtMessageEvents.push(event);
@@ -1798,7 +1792,6 @@ export class AgentGraphExecutor {
                         // tool call so that each call pairs correctly with its result.
                         const allCalls = extractAllToolCalls(message);
                         if (allCalls.length > 1) {
-                            lastFinalAnswerEventId = null; // tool-call resets the tracker
                             const messageContent = describeMessageContent(message);
                             for (const tc of allCalls) {
                                 const tcEvent: AgentEvent = {
@@ -1814,6 +1807,9 @@ export class AgentGraphExecutor {
                                     toolArgs: tc.args,
                                     timestamp: new Date().toISOString(),
                                 };
+                                // Skip if this tool-call event matches a prior history entry
+                                const tcFp = `assistant:${(tcEvent.content ?? "").trim().slice(0, 500)}`;
+                                if (tc.name && priorContentFingerprints.has(tcFp)) continue;
                                 pushEvent(tcEvent);
                             }
                             await flushUpdate();
@@ -1823,28 +1819,17 @@ export class AgentGraphExecutor {
                         // Single or zero tool calls: use standard createAgentEvent
                         const event = createAgentEvent(message, node.id, node.label, nextEventId());
 
-                        // Determine if this is a tool-call event or a "final answer" event
-                        const isToolCallEvent = !!(event.name || event.toolArgs || event.toolCallId);
-                        const isToolResultEvent = event.kind === "tool";
-
-                        if (isToolCallEvent || isToolResultEvent) {
-                            // Tool-related events are always pushed normally
-                            lastFinalAnswerEventId = null;
-                            pushEvent(event);
-                        } else if (event.kind === "assistant") {
-                            // Non-tool-call assistant message = "final answer" candidate.
-                            // If we already have one, REPLACE it (the LLM refined its answer).
-                            if (lastFinalAnswerEventId) {
-                                replaceEventById(lastFinalAnswerEventId, event);
-                            } else {
-                                pushEvent(event);
-                            }
-                            lastFinalAnswerEventId = event.id;
-                        } else {
-                            // Other event kinds (user, system): push normally
-                            pushEvent(event);
+                        // Skip events whose content already exists in the
+                        // pre-existing conversation history (replayed history)
+                        const eventFp = `${event.kind}:${(event.content ?? "").trim().slice(0, 500)}`;
+                        if (
+                            eventFp.length > 6 &&
+                            priorContentFingerprints.has(eventFp)
+                        ) {
+                            return; // silently skip — this is a replayed history message
                         }
 
+                        pushEvent(event);
                         await flushUpdate();
                     };
 

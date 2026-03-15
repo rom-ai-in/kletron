@@ -486,16 +486,25 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 }
             }
 
-            // Final pass: remove consecutive same-role same-content in merged result
-            // (catches duplicates between existing messages and new stream messages)
+            // Final pass: remove duplicate assistant messages in merged result.
+            // For assistant messages, use content-based dedup (catches duplicates
+            // even when tool events separate them, e.g. replayed history).
+            // For other roles, keep consecutive dedup only.
             const deduped: Message[] = [];
+            const seenAssistantContent = new Set<string>();
             for (const msg of result) {
-                if (deduped.length > 0) {
+                if (msg.role === 'assistant' && !msg.toolName && !msg.toolArgs) {
+                    // Content-based dedup for non-tool-call assistant messages
+                    const key = (msg.content ?? '').trim();
+                    if (key && seenAssistantContent.has(key)) continue;
+                    if (key) seenAssistantContent.add(key);
+                } else if (deduped.length > 0) {
+                    // Consecutive dedup for tool/user/system messages
                     const prev = deduped[deduped.length - 1];
                     if (
                         prev.role === msg.role &&
-                        (prev.content ?? "").trim() === (msg.content ?? "").trim() &&
-                        (prev.content ?? "").trim() !== ""
+                        (prev.content ?? '').trim() === (msg.content ?? '').trim() &&
+                        (prev.content ?? '').trim() !== ''
                     ) {
                         continue;
                     }

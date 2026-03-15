@@ -1,6 +1,5 @@
 /**
- * Seed a 3-feature test automation + refresh full 127-feature automation, both with vllm.
- * Run: npx tsx scripts/seed-test-3-features.ts
+ * Re-seed both automations with lmstudio provider.
  */
 import dotenv from "dotenv";
 dotenv.config();
@@ -12,23 +11,19 @@ import { getDb, closeDb } from "@numezis/server/lib/db";
 async function main() {
     const db = await getDb();
 
-    // 1) Delete old 127-feature automation (has azure provider from old seed)
+    // Clean all A43 automations
     const del = await db.collection("audit_chains").deleteMany({ name: /^A43/ });
-    console.log("Cleaned old A43 automations:", del.deletedCount);
+    console.log("Cleaned:", del.deletedCount);
 
-    // 2) Re-seed the full 127-feature automation (now with vllm)
+    // Re-seed full 127
     const fullResult = await automationExecutor.ensureDefaultAutomations();
     console.log("Full audit:", fullResult.created.length ? "Created" : "Skipped");
 
-    // 3) Create a 3-feature TEST automation using vllm
+    // Create 3-feature test
     const testFeatures = ["foundation/contacts", "sales/invoices", "accounting/banking"];
     const config = AutomationConfigBuilder.buildFeatureAuditBatch(testFeatures, {
-        name: "A43 Test — 3 Feature Audit (vllm)"
+        name: "A43 Test — 3 Feature Audit"
     });
-
-    // Delete if already exists
-    await db.collection("audit_chains").deleteMany({ name: config.name });
-
     const id = await automationExecutor.createAutomation({
         ...config,
         name: config.name!,
@@ -36,18 +31,16 @@ async function main() {
         stages: config.stages!,
         triggerType: "manual",
     } as any);
-    console.log("Test automation created:", config.name, "- ID:", id);
+    console.log("Test automation created:", id);
 
-    // 4) Verify
+    // Verify
     const all = await db.collection("audit_chains").find({ name: /^A43/ }).toArray();
-    console.log("\nFinal state:");
+    console.log("\nResult:");
     for (const a of all) {
         const stages = (a as any).stages || [];
-        const provider = stages[0]?.llmProvider || "unknown";
-        console.log("  -", a.name, "-", stages.length, "stages - provider:", provider);
+        console.log(" ", a.name, "-", stages.length, "stages - provider:", stages[0]?.llmProvider);
     }
 
     await closeDb();
 }
-
 main();

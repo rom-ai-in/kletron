@@ -159,6 +159,22 @@ export async function streamReactAgentMessages(
   const seenUsageIds = new Set<string>(); // Track which messages we've extracted usage from
   const accumulatedMessages: BaseMessage[] = [];
 
+  // Content-based fingerprint dedup — catches duplicates even when
+  // LangGraph reassigns or transforms message IDs internally.
+  const seenContentFingerprints = new Set<string>();
+  const contentFingerprint = (message: BaseMessage): string => {
+    const type = message.getType?.() ?? (message as any).role ?? "unknown";
+    const content = typeof message.content === "string"
+      ? message.content
+      : JSON.stringify(message.content ?? "");
+    const toolCalls = (message as any).tool_calls;
+    const toolCallId = (message as any).tool_call_id ?? "";
+    // Include tool_call info to distinguish tool-call AI messages from pure text ones
+    const tcSuffix = toolCalls?.length ? `:tc=${toolCalls.map((t: any) => t.name).join(",")}` : "";
+    const tcIdSuffix = toolCallId ? `:tcid=${toolCallId}` : "";
+    return `${type}:${content.slice(0, 500)}${tcSuffix}${tcIdSuffix}`;
+  };
+
   // Seed with extra messages to perform correct deduplication of historical multi-turn data
   if (opts.extraMessages && opts.extraMessages.length > 0) {
     for (const msg of opts.extraMessages) {
@@ -166,6 +182,7 @@ export async function streamReactAgentMessages(
         seenMessageIds.add(msg.id);
         seenUsageIds.add(msg.id);
       }
+      seenContentFingerprints.add(contentFingerprint(msg));
       accumulatedMessages.push(msg);
     }
   }
@@ -210,15 +227,24 @@ export async function streamReactAgentMessages(
           ? message.id
           : `${(message as any).role ?? "unknown"}-${typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "")}-${accumulatedMessages.length}`;
 
+      // Check content fingerprint as a secondary dedup (catches ID reassignment)
+      const fp = contentFingerprint(message);
+      const isKnownByContent = seenContentFingerprints.has(fp);
+
       // Process message for event stream
-      if (!seenMessageIds.has(idKey)) {
+      if (!seenMessageIds.has(idKey) && !isKnownByContent) {
         seenMessageIds.add(idKey);
+        seenContentFingerprints.add(fp);
         accumulatedMessages.push(message);
         if (opts.onMessage) {
           if (shouldEmitToCallback(message)) {
             await opts.onMessage(message);
           }
         }
+      } else if (!seenMessageIds.has(idKey)) {
+        // Content was already seen but ID is new — still track the ID
+        // to avoid redundant checks on next snapshot
+        seenMessageIds.add(idKey);
       }
 
       // Extract token usage (only once per message)

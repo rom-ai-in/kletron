@@ -850,7 +850,20 @@ export class AutomationExecutor {
                         },
                     };
                 }
-                throw error;
+                // Convert raw errors to a failed StageResult instead of aborting the pipeline
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                console.error(`[AutomationExecutor] Stage ${stage.id} (${stage.name}) threw an error:`, errorMsg);
+                stageResult = {
+                    stageId: stage.id,
+                    stageName: stage.name,
+                    sessionId: "",
+                    success: false,
+                    findings: [],
+                    claims: [],
+                    tasks: [],
+                    duration: Date.now() - startTime,
+                    error: errorMsg,
+                };
             }
             results.push(stageResult);
 
@@ -865,7 +878,7 @@ export class AutomationExecutor {
                 findings: stageResult.findings,
             });
 
-            // Handle failures
+            // Handle failures — continue to next stage (stages are independent)
             if (!stageResult.success) {
                 if (
                     stage.retryOnFailure &&
@@ -876,23 +889,29 @@ export class AutomationExecutor {
                     i--;
                     results[results.length - 1].retries = (stageResult.retries || 0) + 1;
                 } else {
-                    // Fail entire run
-                    await this.updateRunStatus(runId, "FAILED", {
-                        endedAt: new Date(),
-                    }, run.workspaceId?.toString());
-                    await this.updateAutomationStatus(run.chainId.toString(), "FAILED", undefined, run.workspaceId?.toString());
-                    throw new Error(`Stage ${stage.id} failed: ${stageResult.error}`);
+                    // Log failure but CONTINUE to the next stage (don't abort the pipeline)
+                    console.warn(`[AutomationExecutor] Stage ${stage.id} failed: ${stageResult.error}. Continuing to next stage...`);
                 }
             }
         }
+
+        // Check for any stage failures
+        const failedStages = results.filter((r) => !r.success);
+        const hasFailures = failedStages.length > 0;
 
         // Aggregate results
         const aggregation = await this.aggregateResults(chain._id!.toString(), results);
 
         const totalDuration = Date.now() - startTime;
 
-        // Update final run state
-        await this.updateRunStatus(runId, "COMPLETED", {
+        // Determine final status — COMPLETED if all stages passed, FAILED if any failed
+        const finalStatus: AutomationStatus = hasFailures ? "FAILED" : "COMPLETED";
+        const failureInfo = hasFailures
+            ? { failedStages: failedStages.map((r) => ({ stageId: r.stageId, stageName: r.stageName, error: r.error })) }
+            : {};
+
+        // Update final run state — always persist results regardless of failures
+        await this.updateRunStatus(runId, finalStatus, {
             endedAt: new Date(),
             aggregatedFindings: aggregation.findings,
             crossStageInsights: aggregation.insights,
@@ -916,7 +935,7 @@ export class AutomationExecutor {
         }, run.workspaceId?.toString());
 
         // Also update parent automation status
-        await this.updateAutomationStatus(chain._id!.toString(), "COMPLETED", undefined, run.workspaceId?.toString());
+        await this.updateAutomationStatus(chain._id!.toString(), finalStatus, undefined, run.workspaceId?.toString());
 
         return {
             chainId: chain._id!.toString(),

@@ -870,7 +870,7 @@ export class AutomationConfigBuilder {
                     name: `Feature Audit: ${label}`,
                     prompt: this.buildFeatureAuditPrompt(focus),
                     graphId: "audit",
-                    llmProvider: "vllm",
+                    llmProvider: "lmstudio",
                     // NO contextFromPreviousStages → fresh LLM context guaranteed
                 },
             ],
@@ -909,7 +909,7 @@ export class AutomationConfigBuilder {
                     name: `Feature Audit: ${label}`,
                     prompt: this.buildFeatureAuditPrompt(focus),
                     graphId: "audit",
-                    llmProvider: "vllm" as const,
+                    llmProvider: "lmstudio" as const,
                     // NO contextFromPreviousStages → fresh LLM context guaranteed
                     // NO skipIf → each feature runs unconditionally
                 };
