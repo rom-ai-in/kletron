@@ -277,20 +277,16 @@ export default function AgentPage() {
   // ── Fetch sessions (current workspace only) ─────────────────────────
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await fetch("/api/sessions?limit=50&excludeSource=automation");
+      const wsQuery = activeWorkspaceId ? `&workspaceId=${activeWorkspaceId}` : '';
+      const res = await fetch(`/api/sessions?limit=50&excludeSource=automation${wsQuery}`);
       if (res.ok) {
         const data = await res.json();
-        const suspiciousTitles = (Array.isArray(data) ? data : [])
-          .map((s: any) => String(s?.title ?? ""))
-          .filter((t: string) => /\bwe need to\b|\bfinal answer\b|<think>/i.test(t))
-          .slice(0, 6);
-
         setSessions(Array.isArray(data) ? data : []);
       }
     } catch (e) {
       console.error("Failed to fetch sessions:", e);
     }
-  }, []);
+  }, [activeWorkspaceId]);
 
   const handleSessionCreated = useCallback((runId: string, _graphId: string) => {
     setActiveSessionId(runId);

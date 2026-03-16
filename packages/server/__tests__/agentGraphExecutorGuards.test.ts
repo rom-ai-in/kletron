@@ -248,10 +248,10 @@ describe("tool call cache (deduplication)", () => {
 });
 
 describe("tool approval policy guard coverage", () => {
-    it("treats execute_bash and str_replace_editor as read-only auto-approve for agent", () => {
+    it("treats str_replace_editor as read-only auto-approve and execute_bash as execution requiring approval for agent", () => {
         const executePolicy = getToolApprovalPolicy({ source: "agent", toolName: "execute_bash" });
         const replacePolicy = getToolApprovalPolicy({ source: "agent", toolName: "str_replace_editor" });
-        assert.equal(executePolicy.decision, "auto_approve");
+        assert.equal(executePolicy.decision, "requires_approval");
         assert.equal(replacePolicy.decision, "auto_approve");
     });
 

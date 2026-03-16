@@ -203,16 +203,55 @@ async function claimLegacyWorkspaces(ownerId: string) {
   );
 }
 
+// Guard to avoid re-running seed logic on every listWorkspaces call
+const _seededOwners = new Set<string>();
+
 export async function listWorkspaces(ownerId: string): Promise<Workspace[]> {
   try {
     await claimLegacyWorkspaces(ownerId);
     const collection = await getWorkspaceCollection();
     // Return all non-archived workspaces for the owner
-    return collection.find({ status: { $ne: "archived" }, ownerId }).sort({ updatedAt: -1 }).toArray();
+    let workspaces = await collection.find({ status: { $ne: "archived" }, ownerId }).sort({ updatedAt: -1 }).toArray();
+
+    // Auto-seed: ensure config.workingFolder is always persisted in the DB.
+    // This runs once per process per ownerId to avoid repeated checks.
+    if (!_seededOwners.has(ownerId)) {
+      _seededOwners.add(ownerId);
+
+      if (workspaces.length === 0) {
+        // No workspaces at all — bootstrap from legacy config
+        const bootstrapped = await bootstrapFromLegacyConfig(ownerId);
+        if (bootstrapped) {
+          workspaces = await collection.find({ status: { $ne: "archived" }, ownerId }).sort({ updatedAt: -1 }).toArray();
+        }
+      } else {
+        // Has workspaces — but check if config.workingFolder is missing
+        const config = await getConfigSafe();
+        if (config?.workingFolder) {
+          const normalizedConfigPath = path.resolve(config.workingFolder);
+          const alreadyExists = workspaces.some(
+            (ws) => path.resolve(ws.rootPath) === normalizedConfigPath
+          );
+          if (!alreadyExists && fs.existsSync(normalizedConfigPath)) {
+            try {
+              await createWorkspace({
+                ownerId,
+                rootPath: normalizedConfigPath,
+                name: path.basename(normalizedConfigPath),
+              });
+              workspaces = await collection.find({ status: { $ne: "archived" }, ownerId }).sort({ updatedAt: -1 }).toArray();
+            } catch (seedErr) {
+              console.warn("[Workspace] Failed to seed config.workingFolder:", (seedErr as Error)?.message);
+            }
+          }
+        }
+      }
+    }
+
+    return workspaces;
   } catch (error) {
-    console.warn("[Workspace] listWorkspaces fallback:", (error as Error)?.message ?? error);
-    const fallback = await getFallbackWorkspace(ownerId);
-    return fallback ? [fallback] : [];
+    console.error("[Workspace] listWorkspaces error:", (error as Error)?.message ?? error);
+    return [];
   }
 }
 
@@ -221,9 +260,8 @@ export async function listAllWorkspaces(): Promise<Workspace[]> {
     const collection = await getWorkspaceCollection();
     return collection.find({ status: { $ne: "archived" } }).sort({ updatedAt: -1 }).toArray();
   } catch (error) {
-    console.warn("[Workspace] listAllWorkspaces fallback:", (error as Error)?.message ?? error);
-    const fallback = await getFallbackWorkspace();
-    return fallback ? [fallback] : [];
+    console.error("[Workspace] listAllWorkspaces error:", (error as Error)?.message ?? error);
+    return [];
   }
 }
 
@@ -234,9 +272,8 @@ export async function getWorkspaceById(id: string, ownerId: string): Promise<Wor
     const collection = await getWorkspaceCollection();
     return collection.findOne({ _id: new ObjectId(id), ownerId });
   } catch (error) {
-    console.warn("[Workspace] getWorkspaceById fallback:", (error as Error)?.message ?? error);
-    if (id !== FALLBACK_WORKSPACE_ID) return null;
-    return await getFallbackWorkspace(ownerId);
+    console.error("[Workspace] getWorkspaceById error:", (error as Error)?.message ?? error);
+    return null;
   }
 }
 
@@ -246,9 +283,8 @@ export async function getWorkspaceByIdUnsafe(id: string): Promise<Workspace | nu
     const collection = await getWorkspaceCollection();
     return collection.findOne({ _id: new ObjectId(id) });
   } catch (error) {
-    console.warn("[Workspace] getWorkspaceByIdUnsafe fallback:", (error as Error)?.message ?? error);
-    if (id !== FALLBACK_WORKSPACE_ID) return null;
-    return await getFallbackWorkspace();
+    console.error("[Workspace] getWorkspaceByIdUnsafe error:", (error as Error)?.message ?? error);
+    return null;
   }
 }
 
@@ -389,9 +425,8 @@ export async function getActiveWorkspaceId(ownerId: string): Promise<string | nu
     await setActiveWorkspaceId(ownerId, legacyId);
     return legacyId;
   } catch (error) {
-    console.warn("[Workspace] getActiveWorkspaceId fallback:", (error as Error)?.message ?? error);
-    const fallback = await getFallbackWorkspace(ownerId);
-    return fallback ? FALLBACK_WORKSPACE_ID : null;
+    console.error("[Workspace] getActiveWorkspaceId error:", (error as Error)?.message ?? error);
+    return null;
   }
 }
 
@@ -404,8 +439,8 @@ export async function getActiveWorkspace(ownerId: string): Promise<Workspace | n
     }
     return bootstrapFromLegacyConfig(ownerId);
   } catch (error) {
-    console.warn("[Workspace] getActiveWorkspace fallback:", (error as Error)?.message ?? error);
-    return await getFallbackWorkspace(ownerId);
+    console.error("[Workspace] getActiveWorkspace error:", (error as Error)?.message ?? error);
+    return null;
   }
 }
 

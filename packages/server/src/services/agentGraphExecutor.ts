@@ -1662,7 +1662,14 @@ export class AgentGraphExecutor {
                                     return evicted;
                                 }
 
-                                const policy = getToolApprovalPolicy({ source: runSource, toolName: name });
+
+                                const policy = getToolApprovalPolicy({
+                                    source: runSource,
+                                    toolName: name,
+                                    ...(name === "execute_bash" && typeof input?.command === "string"
+                                        ? { command: input.command as string }
+                                        : {}),
+                                });
                                 console.info(
                                     `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} decision=${policy.decision} reason="${policy.reason}"`
                                 );

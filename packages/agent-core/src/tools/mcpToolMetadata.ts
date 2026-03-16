@@ -193,9 +193,9 @@ export const mcpToolMetadata: McpToolMeta[] = [
   {
     name: "execute_bash",
     label: "Execute bash",
-    description: "Safe emulation of a minimal shell subset (find/grep/rg/ls/cat). Prefer list_files/read_file/search_code/git_grep when possible and avoid repeating commands.",
+    description: "Execute a bash command in the workspace directory. Captures stdout/stderr with timeout. Use for running tests, builds, linters, and shell operations.",
     file: "apps/mcp-server/tools/executeBash.js",
-    categories: ["compat", "fs"],
+    categories: ["execution", "fs"],
   },
   {
     name: "output_format",

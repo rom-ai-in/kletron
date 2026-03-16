@@ -794,22 +794,22 @@ export const strReplaceEditorTool = tool(
 );
 
 export const executeBashTool = tool(
-  async (input: { path?: string; command: string; maxResults?: number }) => {
+  async (input: { path?: string; command: string; timeoutMs?: number }) => {
     return formatResult(
       await callMcpTool("execute_bash", {
         path: input.path,
         command: input.command,
-        maxResults: input.maxResults,
+        timeoutMs: input.timeoutMs,
       })
     );
   },
   {
     name: "execute_bash",
-    description: "Safe emulation of a minimal shell subset (find/grep/rg/ls/cat).",
+    description: "Execute a bash command in the workspace. Use for running tests, builds, linters, and shell operations that other tools cannot perform.",
     schema: z.object({
       path: z.string().optional(),
       command: z.string(),
-      maxResults: z.number().int().positive().optional(),
+      timeoutMs: z.number().int().positive().optional(),
     }),
   }
 );

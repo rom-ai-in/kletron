@@ -92,7 +92,10 @@ export default function App() {
   const workspace = useWorkspace(backendUrlTrimmed, auth.getAccessToken);
   const projectsHook = useProjects(workspace.workspace?.path, workspace.workspace?.name);
 
-  const activeWorkspaceId = workspace.workspaceSummary?.id ?? projectsHook.activeProjectId ?? null;
+  // activeWorkspaceId MUST be a backend-issued workspace ID (from workspaceSummary).
+  // Never fall back to projectsHook.activeProjectId — that's a local-only concept
+  // and sending it as x-workspace-id would break all API scoping.
+  const activeWorkspaceId = workspace.workspaceSummary?.id ?? null;
 
   const models = useModels(backendUrlTrimmed, backendReady, auth.getAccessToken);
   const threads = useThreads(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
@@ -230,6 +233,19 @@ export default function App() {
     conversation.resetConversation();
     diffs.resetDiffs();
   }, [backendUrlTrimmed, workspace.workspace?.path]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reload threads when active workspace changes (e.g. after switchWorkspaceById or addProject)
+  const prevActiveWsIdRef = useRef(activeWorkspaceId);
+  useEffect(() => {
+    if (activeWorkspaceId && activeWorkspaceId !== prevActiveWsIdRef.current) {
+      prevActiveWsIdRef.current = activeWorkspaceId;
+      threads.resetThreads();
+      conversation.resetConversation();
+      diffs.resetDiffs();
+      threads.setConversationId(null);
+      void threads.loadThreads();
+    }
+  }, [activeWorkspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh LLM config whenever the user opens Settings (config may have changed in the web UI)
   useEffect(() => {
@@ -432,22 +448,39 @@ export default function App() {
       const folderPath: string = result.path;
       const folderName: string = result.name || folderPath.split("/").pop() || "Project";
       projectsHook.addProject(folderName, folderPath);
-      // Switch workspace to the newly added project
-      switchWorkspaceTo(folderPath, folderName);
-      // Also register on the backend and refresh the list
-      try {
-        const token = await auth.getAccessToken();
-        if (token) {
-          await fetch(`${backendUrlTrimmed}/api/workspaces`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ rootPath: folderPath, name: folderName }),
-          });
-          await workspace.refreshAllWorkspaces();
-        }
-      } catch { /* ignore backend registration errors */ }
-    } catch {
-      // ignore — user cancelled or Electron API unavailable
+      // Register on the backend, switch to the new workspace, and refresh
+      const token = await auth.getAccessToken();
+      if (!token) {
+        toast.error("Not authenticated", "Please sign in to add a workspace.");
+        return;
+      }
+      const createRes = await fetch(`${backendUrlTrimmed}/api/workspaces`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ rootPath: folderPath, name: folderName }),
+      });
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({}));
+        toast.error("Failed to create workspace", (err as any)?.error ?? `Server returned ${createRes.status}`);
+        return;
+      }
+      const data = await createRes.json();
+      const newWsId = data?.workspace?.id;
+      if (newWsId) {
+        // Switch backend active workspace to the new one
+        await workspace.switchWorkspaceById(newWsId);
+      }
+      await workspace.refreshAllWorkspaces();
+      await workspace.loadWorkspaceSummary();
+      // Reset threads and conversation for the new workspace
+      threads.resetThreads();
+      conversation.resetConversation();
+      diffs.resetDiffs();
+      threads.setConversationId(null);
+      toast.info("Workspace added", `Now working in ${folderName}`);
+    } catch (err) {
+      console.error("[handleAddProject] Error:", err);
+      toast.error("Failed to add workspace", (err as Error)?.message ?? "Unknown error");
     }
   }
 

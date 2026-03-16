@@ -1,181 +1,89 @@
-import path from "path";
-import { minimatch } from "minimatch";
-import fs from "fs/promises";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import { resolveRepoPath } from "./pathUtils.js";
 
-import { listFiles } from "./listFiles.js";
-import { readFile } from "./readFile.js";
-import { searchCode } from "./searchCode.js";
-import { ensurePathInside, resolveRepoPath } from "./pathUtils.js";
+const execFileAsync = promisify(execFile);
 
-const MAX_TOTAL_RESULTS = 200; // Hard cap defensive
-
-function stripQuotes(text) {
-  const t = text.trim();
-  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
-    return t.slice(1, -1);
-  }
-  return t;
-}
-
-function splitPipe(command) {
-  const parts = command.split("|").map((p) => p.trim());
-  return { left: parts[0] || "", right: parts[1] || "" };
-}
-
-function parseFind(command) {
-  // Very small subset: find <dir> -type f -name "<pattern>"
-  const tokens = command.split(/\s+/).filter(Boolean);
-  const dir = tokens[1] && !tokens[1].startsWith("-") ? stripQuotes(tokens[1]) : ".";
-
-  const nameIndex = tokens.findIndex((t) => t === "-name");
-  const namePattern = nameIndex >= 0 ? stripQuotes(tokens[nameIndex + 1] || "") : null;
-
-  const maxDepthIndex = tokens.findIndex((t) => t === "-maxdepth");
-  const maxDepth = maxDepthIndex >= 0 ? Number(tokens[maxDepthIndex + 1]) : null;
-
-  return { dir, namePattern, maxDepth };
-}
-
-function parseGrep(command) {
-  // grep -r "query" <dir>
-  const tokens = command.split(/\s+/).filter(Boolean);
-  const queryToken = tokens.find((t) => t.startsWith('"') || t.startsWith("'")) || tokens[2];
-  const query = stripQuotes(queryToken || "");
-  const lastToken = tokens[tokens.length - 1];
-  const dir = lastToken && !lastToken.startsWith("-") && lastToken !== queryToken ? stripQuotes(lastToken) : ".";
-  return { query, dir };
-}
-
-function parseCat(command) {
-  const tokens = command.split(/\s+/).filter(Boolean);
-  return { filePath: tokens[1] || "" };
-}
-
-function parseHead(rightSide) {
-  // head -n 10 / head -10
-  if (!rightSide) return null;
-  const tokens = rightSide.split(/\s+/).filter(Boolean);
-  if (!tokens.length || tokens[0] !== "head") return null;
-  const nIndex = tokens.findIndex((t) => t === "-n");
-  if (nIndex >= 0) return Number(tokens[nIndex + 1]);
-  const short = tokens.find((t) => /^-\d+$/.test(t));
-  if (short) return Number(short.slice(1));
-  return null;
-}
-
-function resolveEmulatedPath({ root, provided }) {
-  if (!provided || provided === "." || provided === "./") return { absolute: root, relativePrefix: "" };
-  const absolute = path.isAbsolute(provided) ? path.resolve(provided) : path.resolve(root, provided);
-  ensurePathInside(root, absolute);
-  const relativePrefix = path.relative(root, absolute).replace(/\\/g, "/");
-  const prefix = relativePrefix ? `${relativePrefix.replace(/\/$/, "")}/` : "";
-  return { absolute, relativePrefix: prefix };
-}
+const MAX_OUTPUT = 100_000; // 100KB max capture
+const DEFAULT_TIMEOUT = 120_000; // 120s default
+const MAX_TIMEOUT = 300_000; // 5min hard cap
 
 export const executeBash = {
   description:
-    "Compatibility shim for agents that call `execute_bash`. This MCP server does NOT execute arbitrary shell. It emulates a small safe subset (find/grep/rg/ls/cat) using existing tools. Enforces strict path safety.",
+    "Execute a bash command in the workspace directory. Captures stdout/stderr with timeout. Use for running tests, builds, linters, and shell operations that other tools cannot perform.",
   inputSchema: {
     type: "object",
     properties: {
-      path: { type: "string", description: "Repository root (optional if defaultDir is configured)." },
-      command: { type: "string", description: "Command to emulate (limited subset only)." },
-      maxResults: { type: "number" },
+      command: {
+        type: "string",
+        description: "The bash command to run.",
+      },
+      path: {
+        type: "string",
+        description: "Working directory (defaults to repo root).",
+      },
+      timeoutMs: {
+        type: "number",
+        description:
+          "Timeout in ms (default: 120000, max: 300000).",
+      },
     },
     required: ["command"],
   },
-  async run({ path: repoPath, command, maxResults = 500 } = {}) {
-    const root = resolveRepoPath(repoPath);
-    const raw = command.trim();
-    const { left, right } = splitPipe(raw);
-    const headLimit = parseHead(right);
-    const effectiveMaxResults = Math.min(
-      MAX_TOTAL_RESULTS,
-      Number.isFinite(headLimit) ? Math.max(1, Math.trunc(headLimit)) : maxResults
+  async run({ command, path: repoPath, timeoutMs } = {}) {
+    const cwd = resolveRepoPath(repoPath);
+    const timeout = Math.min(
+      Math.max(1000, Number(timeoutMs) || DEFAULT_TIMEOUT),
+      MAX_TIMEOUT
     );
-    const cmd = left;
 
-    if (cmd.startsWith("find ")) {
-      const { dir, namePattern, maxDepth } = parseFind(cmd);
-      const files = await listFiles.run({ path: root }); // This lists ALL files recursively properly scoped
-      let filtered = files;
+    try {
+      const { stdout, stderr } = await execFileAsync(
+        "/bin/bash",
+        ["-c", command],
+        {
+          cwd,
+          timeout,
+          maxBuffer: MAX_OUTPUT,
+          env: { ...process.env, TERM: "dumb" },
+        }
+      );
 
-      const { relativePrefix } = resolveEmulatedPath({ root, provided: dir });
-      if (relativePrefix) {
-        filtered = filtered.filter((f) => f.startsWith(relativePrefix));
-      }
-
-      if (Number.isFinite(maxDepth) && maxDepth >= 0) {
-        const base = relativePrefix ? relativePrefix.replace(/\/$/, "") : "";
-        filtered = filtered.filter((f) => {
-          const relative = base ? f.slice(base.length + 1) : f;
-          const depth = relative.split("/").length - 1;
-          return depth <= maxDepth;
-        });
-      }
-
-      if (namePattern) {
-        filtered = filtered.filter((f) => minimatch(f.split("/").pop() || "", namePattern));
-      }
+      const combined = [
+        stdout ? stdout.trimEnd() : "",
+        stderr ? `\n[stderr]\n${stderr.trimEnd()}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
 
       return {
         ok: true,
-        emulated: "find",
-        files: filtered.slice(0, Math.max(1, Math.trunc(effectiveMaxResults))),
-        truncated: filtered.length > effectiveMaxResults,
+        exitCode: 0,
+        output: combined.slice(0, MAX_OUTPUT),
+        truncated: combined.length > MAX_OUTPUT,
       };
-    }
+    } catch (err) {
+      const exitCode =
+        err.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+          ? null
+          : (err.exitCode ?? err.code ?? 1);
+      const stdout = err.stdout ? err.stdout.trimEnd() : "";
+      const stderr = err.stderr ? err.stderr.trimEnd() : "";
+      const combined = [
+        stdout,
+        stderr ? `\n[stderr]\n${stderr}` : "",
+        err.killed ? "\n[killed: timeout exceeded]" : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
 
-    if (cmd.startsWith("grep ")) {
-      const { query, dir } = parseGrep(cmd);
-      // Ensure dir is inside root
-      const { absolute } = resolveEmulatedPath({ root, provided: dir });
-
-      return await searchCode.run({ path: absolute, query, maxResults: effectiveMaxResults });
-    }
-
-    if (cmd.startsWith("rg ")) {
-      // Attempt: rg -n "query" <dir>
-      const match = cmd.match(/rg\s+(?:-n\s+)?(["'])(.+?)\1\s*(.*)$/);
-      const query = match ? match[2] : "";
-      const dir = match ? match[3].trim() : ".";
-
-      const { absolute } = resolveEmulatedPath({ root, provided: dir });
-
-      return await searchCode.run({ path: absolute, query, maxResults: effectiveMaxResults });
-    }
-
-    if (cmd.startsWith("ls")) {
-      // ls [-la] [path]
-      const tokens = cmd.split(/\s+/).filter(Boolean);
-      const target = tokens.find((t, idx) => idx > 0 && !t.startsWith("-"));
-      const { absolute } = resolveEmulatedPath({ root, provided: target || "." });
-      const stat = await fs.stat(absolute);
-      if (!stat.isDirectory()) {
-        return { ok: true, emulated: "ls", files: [path.relative(root, absolute)] };
-      }
-      const entries = await fs.readdir(absolute, { withFileTypes: true });
-      const names = entries.map((e) => e.name);
       return {
-        ok: true,
-        emulated: "ls",
-        cwd: path.relative(root, absolute) || ".",
-        files: names.slice(0, Math.max(1, Math.trunc(effectiveMaxResults))),
-        truncated: names.length > effectiveMaxResults,
+        ok: false,
+        exitCode,
+        output: combined.slice(0, MAX_OUTPUT),
+        truncated: combined.length > MAX_OUTPUT,
+        killed: !!err.killed,
       };
     }
-
-    if (cmd.startsWith("cat ")) {
-      const { filePath } = parseCat(cmd);
-      // Ensure filePath is inside root via readFile tool (which calls resolveRepoPath/ensurePathInside theoretically? No, it calls readFile.run)
-      // readFile.run handles it.
-      return await readFile.run({ repoPath: root, filePath });
-    }
-
-    return {
-      ok: false,
-      error:
-        "execute_bash is a safe emulation only (no real shell). Supported: find, grep -r, rg, ls, cat. Use list_files/search_code/git_grep/read_file for reliable behavior.",
-    };
   },
 };
