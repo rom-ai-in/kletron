@@ -401,7 +401,16 @@ function resolveWorkspace(cwd?: string): string {
 }
 
 ipcMain.handle("git:status", async (_event, cwd?: string) => {
-  return getGitStatus(resolveWorkspace(cwd));
+  try {
+    return await getGitStatus(resolveWorkspace(cwd));
+  } catch (error) {
+    // Non-git directories: return null silently instead of spamming the console
+    const msg = (error as Error)?.message ?? "";
+    if (msg.includes("not a git repository")) {
+      return null;
+    }
+    throw error;
+  }
 });
 
 ipcMain.handle("git:commit", async (_event, message: string, cwd?: string) => {

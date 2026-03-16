@@ -37,45 +37,33 @@ export type LoginSession = {
   startedAt: number;
 };
 
-export type ChatEvent = {
-  id?: string;
-  kind: "user" | "assistant" | "tool" | "system" | "error";
-  role?: "user" | "assistant" | "tool" | "system";
-  content?: string;
-  toolName?: string;
-  toolArgs?: string;
-  toolOutput?: string;
-  toolCallId?: string;
-  isError?: boolean;
-  timestamp?: string;
-  metadata?: Record<string, unknown>;
-  thoughts?: string[];
-  /** Single block of long-form reasoning (alternative to thoughts array) */
-  thinking?: string;
-  messageIndex?: number | null;
-  local?: boolean;
-};
+// ─── Chat Types (canonical from @numezis/shared) ─────────────────────────────
+// Import shared types so they're available locally, then re-export.
+import type {
+    ChatEvent as _ChatEvent,
+    ChatEventKind as _ChatEventKind,
+    RenderItem as _RenderItem,
+    ServerAgentEvent as _ServerAgentEvent,
+    StreamingState as _StreamingState,
+    StreamStatus as _StreamStatus,
+    StreamChunk as _StreamChunk,
+    ThreadLiveStatus as _ThreadLiveStatus,
+    ConversationHistoryItem as _ConversationHistoryItem,
+    ConversationDetail as _ConversationDetail,
+    Message as _Message,
+} from '@numezis/shared/chatTypes';
 
-export type RenderItem =
-  | { type: "event"; event: ChatEvent }
-  | { type: "tools"; events: ChatEvent[] };
-
-export type ServerAgentEvent = {
-  id?: string;
-  kind?: "system" | "user" | "assistant" | "tool";
-  role?: string;
-  content?: string;
-  /** Tool name — set by backend guessToolName() */
-  name?: string;
-  toolName?: string;
-  toolCallId?: string;
-  toolArgs?: string;
-  toolOutput?: string;
-  isError?: boolean;
-  timestamp?: string;
-  metadata?: Record<string, unknown>;
-  thoughts?: string[];
-};
+export type ChatEvent = _ChatEvent;
+export type ChatEventKind = _ChatEventKind;
+export type RenderItem = _RenderItem;
+export type ServerAgentEvent = _ServerAgentEvent;
+export type StreamingState = _StreamingState;
+export type StreamStatus = _StreamStatus;
+export type StreamChunk = _StreamChunk;
+export type ThreadLiveStatus = _ThreadLiveStatus;
+export type ConversationHistoryItem = _ConversationHistoryItem;
+export type ConversationDetail = _ConversationDetail;
+export type Message = _Message;
 
 export type DiffHunk = {
   id: string;
@@ -115,22 +103,11 @@ export type PreviewLine = {
   text: string;
 };
 
-export type StreamingState = "idle" | "streaming" | "stopped" | "error";
+// StreamingState re-exported from @numezis/shared/chatTypes above
 
 export type WorkspaceInfo = { path: string; name: string };
 
-export type ConversationHistoryItem = {
-  id: string;
-  title: string;
-  updatedAt?: string;
-  status?: "active" | "archived";
-  lastRole?: "user" | "assistant" | "system" | "tool";
-};
-
-export type ConversationDetail = ConversationHistoryItem & {
-  messages?: Array<ServerAgentEvent & { kind?: string; role?: string; content?: string }>;
-  conversationHistory?: Array<ServerAgentEvent & { kind?: string; role?: string; content?: string }>;
-};
+// ConversationHistoryItem and ConversationDetail re-exported from @numezis/shared/chatTypes above
 
 export type AgentGraphSummary = {
   id: string;
@@ -239,7 +216,7 @@ export type Project = {
 };
 
 /** Extended thread with project association and live status */
-export type ThreadLiveStatus = "running" | "completed" | "idle" | "waiting" | "error";
+// ThreadLiveStatus re-exported from @numezis/shared/chatTypes above
 
 export type ThreadWithStatus = ConversationHistoryItem & {
   projectId?: string;
@@ -273,9 +250,6 @@ export type SlashCommand = {
   action: () => void;
   category?: string;
 };
-
-/** Personality mode */
-export type PersonalityMode = "pragmatic" | "empathetic";
 
 /** Skill definition */
 export type Skill = {

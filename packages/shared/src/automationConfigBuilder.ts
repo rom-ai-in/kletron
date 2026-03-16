@@ -908,7 +908,7 @@ export class AutomationConfigBuilder {
                     id: `fa-${focus.replace(/\//g, "-")}`,
                     name: `Feature Audit: ${label}`,
                     prompt: this.buildFeatureAuditPrompt(focus),
-                    graphId: "audit",
+                    graphId: "simple_react",
                     llmProvider: "lmstudio" as const,
                     // NO contextFromPreviousStages → fresh LLM context guaranteed
                     // NO skipIf → each feature runs unconditionally

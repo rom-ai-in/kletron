@@ -7,29 +7,11 @@ import { MarkdownRenderer } from '../Agent/MarkdownRenderer';
 import { ThinkingBubble } from '../Agent/ThinkingBubble';
 import { ThoughtsPanel } from '../Agent/ThoughtsPanel';
 import { Textarea } from '../design-system';
+import type { ChatEvent, RenderItem } from '@numezis/shared/chatTypes';
+import { isToolCallEvent, pairToolEvents } from '../../lib/toolPairing';
 
-
-export interface ChatEvent {
-  id?: string;
-  kind: 'user' | 'assistant' | 'tool' | 'system' | 'error';
-  role?: string;
-  content?: string;
-  toolName?: string;
-  toolArgs?: string;
-  toolOutput?: string;
-  toolCallId?: string;
-  timestamp?: string;
-  metadata?: Record<string, unknown>;
-  thoughts?: string[];
-  /** Single block of long-form reasoning (alternative to thoughts array) */
-  thinking?: string;
-  messageIndex?: number | null;
-  local?: boolean;
-}
-
-export type RenderItem =
-  | { type: 'event'; event: ChatEvent }
-  | { type: 'tools'; events: ChatEvent[] };
+// Re-export for backward compatibility
+export type { ChatEvent, RenderItem };
 
 export interface ConversationCenterProps {
   renderItems: RenderItem[];
@@ -140,46 +122,7 @@ export function ConversationCenter({
         {/* Messages */}
         {renderItems.map((item, idx) => {
           if (item.type === 'tools') {
-            // Pair tool-call events with their results.
-            // Handles both NEW data (AI call → kind="assistant") and
-            // LEGACY data (AI call → kind="tool" with toolArgs and empty content).
-            // Uses toolCallId/toolName matching (not sequential order) for multi-tool-call support.
-            const isCall = (e: ChatEvent) =>
-              (e.kind === 'assistant' && Boolean(e.toolName)) ||
-              (e.kind === 'tool' && Boolean(e.toolArgs) && !e.content?.trim());
-
-            const calls: ChatEvent[] = [];
-            const results: ChatEvent[] = [];
-            for (const e of item.events) {
-              if (isCall(e)) calls.push(e);
-              else results.push(e);
-            }
-
-            const pairs: { call?: ChatEvent; result?: ChatEvent }[] = [];
-            const usedResults = new Set<number>();
-            for (const call of calls) {
-              let matchIdx = -1;
-              if (call.toolCallId) {
-                matchIdx = results.findIndex((r, i) => !usedResults.has(i) && r.toolCallId === call.toolCallId);
-              }
-              if (matchIdx === -1 && call.toolName) {
-                matchIdx = results.findIndex((r, i) => !usedResults.has(i) && r.toolName === call.toolName);
-              }
-              if (matchIdx === -1) {
-                matchIdx = results.findIndex((_, i) => !usedResults.has(i));
-              }
-              if (matchIdx >= 0) {
-                usedResults.add(matchIdx);
-                pairs.push({ call, result: results[matchIdx] });
-              } else {
-                pairs.push({ call });
-              }
-            }
-            for (let i = 0; i < results.length; i++) {
-              if (!usedResults.has(i)) {
-                pairs.push({ result: results[i] });
-              }
-            }
+            const pairs = pairToolEvents(item.events);
             return (
               <div key={`tools-${idx}`}>
                 {pairs.map((pair, i) => (

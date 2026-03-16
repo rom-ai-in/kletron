@@ -10,6 +10,36 @@ import { agentGraphRunService } from "@numezis/server/services/agentGraphRunServ
 import { SafeEditGate } from "@numezis/server/services/agent/SafeEditGate";
 import { McpClient } from "@numezis/mcp-client/client";
 
+/**
+ * Fire-and-forget: resume the agent loop after a successful tool approval.
+ */
+async function resumeAgentAfterApproval(
+    runId: string,
+    executionSummaries: Array<{ toolName: string; result?: string; evictedPath?: string }>
+) {
+    try {
+        const run = await agentGraphRunService.getRun(runId);
+        if (!run) return;
+        if (run.status === "RUNNING") {
+            console.log(`[approvals] Run ${runId} still RUNNING, skipping resume`);
+            return;
+        }
+        const parts = executionSummaries.map((s) => {
+            const resultSnippet = s.evictedPath
+                ? `Result evicted to file ${s.evictedPath}`
+                : (s.result ?? "OK").slice(0, 2000);
+            return `Tool \`${s.toolName}\` was approved and executed successfully.\nResult:\n${resultSnippet}`;
+        });
+        const message = parts.join("\n\n---\n\n") + "\n\nPlease continue with the task.";
+        const { agentGraphExecutor } = await import("@numezis/server/services/agentGraphExecutor");
+        console.log(`[approvals] Resuming agent after approval for run ${runId}`);
+        await agentGraphExecutor.continueRun(runId, message, {});
+        console.log(`[approvals] ✓ Agent resumed successfully for run ${runId}`);
+    } catch (err) {
+        console.error(`[approvals] ✗ Failed to resume agent after approval for ${runId}:`, (err as Error)?.message);
+    }
+}
+
 const safeEditGate = SafeEditGate.getInstance();
 
 const EVICT_CHARS = Number.isFinite(Number.parseInt(process.env.TOOL_RESULT_EVICT_CHARS ?? "", 10))
@@ -225,6 +255,16 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
                 };
             }
             const approvals = await updateRunApprovals({ pending, granted });
+
+            // Fire-and-forget: resume the agent loop
+            if (executionResult?.executed) {
+                void resumeAgentAfterApproval(params.runId, [{
+                    toolName: edit.toolName,
+                    result: executionResult.result,
+                    evictedPath: executionResult.evictedPath,
+                }]);
+            }
+
             return NextResponse.json({ approved: executionResult?.executed ? edit : null, executionResult, approvals }, {
                 status: executionResult?.executed ? 200 : 502,
             });
@@ -293,6 +333,16 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
                 }
             }
             const approvals = await updateRunApprovals({ pending, granted });
+
+            // Fire-and-forget: resume the agent loop
+            const executedEdits = edits.filter((e: any) => granted.some((g: any) => g.id === e.id));
+            if (executedEdits.length > 0) {
+                void resumeAgentAfterApproval(params.runId, executedEdits.map((e: any) => {
+                    const g = granted.find((g: any) => g.id === e.id) as any;
+                    return { toolName: String(e.toolName), result: String(g?.result ?? ""), evictedPath: g?.evictedPath as string | undefined };
+                }));
+            }
+
             return NextResponse.json({ approved: edits, approvals }, { status: 200 });
         }
         if (action === "reject_all") {

@@ -4,10 +4,7 @@ import { agentGraphService } from "@numezis/server/services/agentGraphService";
 import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
 import {
     buildSimpleReactAgentGraph,
-    buildDiamondFlowAgentGraph,
-    buildPresentationGeneratorProGraph,
     buildDriftAnalysisGraph,
-    buildAutomationsGraph,
     buildCoderAgentGraph,
     buildExplorerAgentGraph,
     buildPlannerAgentGraph,
@@ -17,14 +14,11 @@ import {
 /** Map of graph name → builder for all preset graphs. */
 const PRESET_BUILDERS: Record<string, () => ReturnType<typeof buildSimpleReactAgentGraph>> = {
     "Simple ReAct (agent graph)": buildSimpleReactAgentGraph,
-    "Diamond flow (agent graph)": buildDiamondFlowAgentGraph,
-    "Presentation Generator Pro": buildPresentationGeneratorProGraph,
     "Drift Analysis (agent graph)": buildDriftAnalysisGraph,
-    "Automations (agent graph)": buildAutomationsGraph,
-    "Coder (agent graph)": buildCoderAgentGraph,
-    "Explorer (agent graph)": buildExplorerAgentGraph,
-    "Planner (agent graph)": buildPlannerAgentGraph,
-    "Business Analyst (agent graph)": buildBusinessAnalystGraph,
+    "Coder Agent (agent graph)": buildCoderAgentGraph,
+    "Explorer Agent (agent graph)": buildExplorerAgentGraph,
+    "Planner Agent (agent graph)": buildPlannerAgentGraph,
+    "Business Analyst": buildBusinessAnalystGraph,
 };
 
 /**

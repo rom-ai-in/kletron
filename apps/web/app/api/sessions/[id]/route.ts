@@ -10,6 +10,7 @@ import {
   stripSystemPrefix,
   stripThoughtContent,
 } from "@numezis/server/services/titleSanitizer";
+import { containsMetaLeakage } from "@numezis/shared/contentSanitizer";
 
 /**
  * GET /api/sessions/[id] - Get session details with conversation history and graph info.
@@ -46,16 +47,13 @@ export async function GET(request: Request, { params }: { params: { id: string }
       .map((event) => {
         const original = typeof event?.content === "string" ? event.content : "";
         const cleaned = sanitizeAssistantVisibleContent(stripThoughtContent(original)).trim();
-        const leakedMetaPattern =
-          /\bgiven the pattern\b|\bapproval required\b|\bwe can proceed to output a final answer\b|\bthe user asked to\b|\bwe must not make further tool calls\b|\bnow,\s*the user wants to know\b|\bprovide (a )?structured analysis\b|\bproceed to final\b|\bthis should satisfy the user request\b/i;
+        // Use shared containsMetaLeakage from contentSanitizer instead of inline regex
         if (
           !cleaned ||
-          leakedMetaPattern.test(cleaned) ||
+          containsMetaLeakage(cleaned) ||
           /\brespond with only the title\b/i.test(cleaned) ||
           /\bwe need to produce a short chat title\b/i.test(cleaned)
         ) {
-          if (original && (leakedMetaPattern.test(original) || /\bwe need to\b|\bfinal answer\b|<think>/i.test(original))) {
-          }
           return { ...event, content: "" };
         }
         return cleaned === original ? event : { ...event, content: cleaned };

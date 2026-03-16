@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import {
-  ChevronLeft, Settings, Brain, Zap, Eye, User,
+  ChevronLeft, Settings, Brain, Eye,
   Wrench, GitBranch, Paperclip, ChevronUp, ChevronDown, TerminalSquare,
 } from "lucide-react";
 
@@ -54,7 +54,7 @@ import { useDiffs } from "../hooks/useDiffs";
 import { useModels } from "../hooks/useModels";
 import { useGit } from "../hooks/useGit";
 import { useProjects } from "../hooks/useProjects";
-import { usePersonality } from "../hooks/usePersonality";
+
 import { useSkills } from "../hooks/useSkills";
 
 // Utils & types
@@ -108,7 +108,7 @@ export default function App() {
     activeWorkspaceId
   );
   const git = useGit(workspace.workspace?.path ?? null, backendUrlTrimmed, auth.getAccessToken);
-  const personality = usePersonality();
+
   const skillsHook = useSkills(backendUrlTrimmed, backendReady, auth.getAccessToken);
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -386,11 +386,9 @@ export default function App() {
   // Slash commands
   const slashCommands: SlashCommandItem[] = useMemo(() => [
     { id: "plan", label: "plan", description: "Toggle Plan Mode (read-only proposals)", icon: <Eye className="h-3.5 w-3.5" />, action: () => setPlanMode((p) => !p) },
-    { id: "personality-pragmatic", label: "personality pragmatic", description: "Terse, execution-focused style", icon: <Zap className="h-3.5 w-3.5" />, category: "Personality", action: () => personality.setPersonality("pragmatic") },
-    { id: "personality-empathetic", label: "personality empathetic", description: "Conversational, explanatory style", icon: <User className="h-3.5 w-3.5" />, category: "Personality", action: () => personality.setPersonality("empathetic") },
     { id: "skills", label: "skills", description: "Open Skills settings", icon: <Wrench className="h-3.5 w-3.5" />, action: () => { settings.setActiveView("settings"); settings.setActiveSettingsSection("skills"); } },
     { id: "worktree", label: "worktree", description: "Manage Git worktrees", icon: <GitBranch className="h-3.5 w-3.5" />, action: () => { settings.setActiveView("settings"); settings.setActiveSettingsSection("worktrees"); } },
-  ], [personality, settings]);
+  ], [settings]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // HANDLERS
@@ -534,19 +532,12 @@ export default function App() {
       return;
     }
 
-    void conversation.sendMessage({
-      personalityPrefix: personality.getSystemPromptPrefix(),
-      planMode,
-    });
+    void conversation.sendMessage({ planMode });
   }
 
   /** Send a specific text directly (used by queue dequeue). */
   function sendTextDirectly(text: string) {
-    void conversation.sendMessage({
-      personalityPrefix: personality.getSystemPromptPrefix(),
-      planMode,
-      text,
-    });
+    void conversation.sendMessage({ planMode, text });
   }
 
   // ── Message Queue handlers ────────────────────────────────────────────────
@@ -665,7 +656,7 @@ export default function App() {
     await conversation.replayFromMessage(
       conversation.editingMessageIndex,
       draft,
-      { personalityPrefix: personality.getSystemPromptPrefix(), planMode }
+      { planMode }
     );
 
     setReplayImpact(null);
@@ -674,7 +665,7 @@ export default function App() {
     // The replayFromMessage sets input — now trigger send
     // We need a small delay for state to propagate, then auto-send
     setTimeout(() => {
-      conversation.sendMessage({ personalityPrefix: personality.getSystemPromptPrefix(), planMode });
+      conversation.sendMessage({ planMode });
     }, 50);
   }
 
@@ -794,18 +785,11 @@ export default function App() {
               {/* Personalization */}
               {settings.activeSettingsSection === "personalization" && (
                 <section className="space-y-3">
-                  <h2 className="text-sm font-semibold text-text-primary">Appearance & Personality</h2>
+                  <h2 className="text-sm font-semibold text-text-primary">Appearance</h2>
                   <div className="glass-card divide-y divide-border-subtle rounded-md">
                     <div className="flex items-center justify-between gap-4 px-3 py-2">
                       <div><div className="text-sm font-medium text-text-primary">Compact density</div><div className="text-xs text-text-muted">Reduce padding across the interface.</div></div>
                       <Toggle size="sm" checked={settings.settingsToggles.compactDensity} onChange={(c) => settings.setSettingsToggles((p) => ({ ...p, compactDensity: c }))} />
-                    </div>
-                    <div className="flex items-center justify-between gap-4 px-3 py-2">
-                      <div><div className="text-sm font-medium text-text-primary">Personality mode</div><div className="text-xs text-text-muted">Controls the agent's communication style.</div></div>
-                      <div className="flex items-center gap-1 rounded-md border border-border-subtle bg-bg-app p-0.5">
-                        <button type="button" onClick={() => personality.setPersonality("pragmatic")} className={`px-2 py-1 rounded text-xs transition ${personality.personality === "pragmatic" ? "bg-state-selected text-text-primary" : "text-text-muted hover:text-text-primary"}`}>Pragmatic</button>
-                        <button type="button" onClick={() => personality.setPersonality("empathetic")} className={`px-2 py-1 rounded text-xs transition ${personality.personality === "empathetic" ? "bg-state-selected text-text-primary" : "text-text-muted hover:text-text-primary"}`}>Empathetic</button>
-                      </div>
                     </div>
                   </div>
                 </section>
@@ -1004,6 +988,7 @@ export default function App() {
             projects={sidebarProjects}
             activeThreadId={threads.conversationId}
             activeProjectId={workspace.workspace?.path ?? null}
+            loading={workspace.switching || threads.threadsLoading}
             onThreadSelect={handleThreadSelect}
             onNewThreadInProject={handleNewThreadInProject}
             onAddProject={handleAddProject}
@@ -1152,7 +1137,7 @@ export default function App() {
 
           {/* ── Collapsible Terminal Panel (below input bar) ── */}
           {terminalVisible && (
-            <div className="border-t border-glass-border flex flex-col" style={{ height: 220 }}>
+            <div className="border-t border-white/[0.06] flex flex-col" style={{ height: 220 }}>
               <div className="flex items-center justify-between px-3 py-1 glass-titlebar flex-shrink-0">
                 <div className="flex items-center gap-1.5">
                   <TerminalSquare className="h-3 w-3 text-text-muted" />

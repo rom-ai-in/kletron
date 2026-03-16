@@ -1,173 +1,19 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { AgentEvent, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent } from '@numezis/shared/types';
+import type { Message, StreamStatus, StreamChunk } from '@numezis/shared/chatTypes';
+import { extractThoughtsFromContent, sanitizeVisibleAssistantContent, normalizeMessage } from '@numezis/shared/contentSanitizer';
 
-// ─── Shared Types (previously in useAgentStream) ─────────────────────────────
+// Re-export for backward compatibility
+export type { Message, StreamStatus };
+export { normalizeMessage };
 
-export interface Message {
-    id: string;
-    role: 'user' | 'assistant' | 'system' | 'tool';
-    content: string;
-    timestamp: string;
-    toolName?: string;
-    toolArgs?: string;
-    toolOutput?: string;
-    toolCallId?: string;
-    isError?: boolean;
-    thoughts?: string[];
-    thinking?: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    metadata?: Record<string, any>;
-}
-
-export type StreamStatus = "idle" | "streaming" | "stopped" | "error";
-
-// ─── Utility Functions ───────────────────────────────────────────────────────
-
-function extractThoughtsFromContent(content: string): { content: string; thoughts: string[] } {
-    if (!content) {
-        return { content, thoughts: [] };
-    }
-
-    const thoughts: string[] = [];
-    let cleaned = content;
-
-    const addThoughts = (block: string) => {
-        const lines = block
-            .split(/\r?\n/)
-            .map((line) => line.trim())
-            .filter(Boolean);
-        const bulletLines = lines.filter((line) => /^([-*]|\d+\.|\d+\))\s+/.test(line));
-        if (bulletLines.length > 0) {
-            bulletLines.forEach((line) => {
-                thoughts.push(line.replace(/^([-*]|\d+\.|\d+\))\s+/, "").trim());
-            });
-            return;
-        }
-        if (lines.length > 1) {
-            thoughts.push(...lines);
-            return;
-        }
-        if (block.trim()) {
-            thoughts.push(block.trim());
-        }
-    };
-
-    // Extract explicit <think> blocks
-    const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
-    let match: RegExpExecArray | null;
-    while ((match = thinkRegex.exec(cleaned)) !== null) {
-        addThoughts(match[1]);
-    }
-    cleaned = cleaned.replace(thinkRegex, "").trim();
-
-    // Split on explicit Final/Answer markers
-    const finalRegex = /(?:^|\n)\s*(final|answer)\s*:\s*/i;
-    const finalMatch = cleaned.match(finalRegex);
-    if (finalMatch && finalMatch.index !== undefined) {
-        const before = cleaned.slice(0, finalMatch.index).trim();
-        const after = cleaned.slice(finalMatch.index + finalMatch[0].length).trim();
-        if (after && before) {
-            addThoughts(before);
-            cleaned = after;
-        }
-    }
-
-    // Heuristic: if first paragraph looks like reasoning, split it out
-    const cueRegex = /\b(we need to|we should|we have|the user|user wants|goal|plan|approach|next step|tool|call|let's|i will)\b/i;
-    const paragraphs = cleaned.split(/\n\s*\n/);
-    if (paragraphs.length >= 2) {
-        const first = paragraphs[0].trim();
-        const rest = paragraphs.slice(1).join("\n\n").trim();
-        if (rest && cueRegex.test(first)) {
-            addThoughts(first);
-            cleaned = rest;
-        }
-    }
-
-    // Guardrail: if policy/prompt-like leakage is present, hide it from visible content.
-    if (/\brespond with only the title\b/i.test(cleaned) || /\bshort chat title\b/i.test(cleaned)) {
-        addThoughts(cleaned);
-        cleaned = "";
-    }
-
-    if (!cleaned.trim() && thoughts.length > 0) {
-        cleaned = "";
-    }
-
-    return { content: cleaned, thoughts };
-}
-
-function sanitizeVisibleAssistantContent(content: string): string {
-    if (!content) return "";
-    const paragraphs = content
-        .replace(/<think>[\s\S]*?<\/think>/gi, " ")
-        .split(/\n{2,}/)
-        .map((part) => part.trim())
-        .filter(Boolean);
-    if (!paragraphs.length) return "";
-
-    const metaPatterns = [
-        /\bwe must obey policy\b/i,
-        /\bfinal answer in ["']?final["']? channel\b/i,
-        /\bwe should provide a thorough analysis\b/i,
-        /\bwe need to include the analysis and final answer\b/i,
-        /\bthe user wrote\b/i,
-        /\bnow,\s*we need to determine\b/i,
-        /\bnow,\s*final answer\b/i,
-        /\bgiven the pattern\b/i,
-        /\bapproval required\b/i,
-        /\bwe can proceed to output a final answer\b/i,
-        /\bthe user asked to\b/i,
-        /\bwe must not make further tool calls\b/i,
-        /\bcopy-?paste exactly\b/i,
-        /\bthis should satisfy the user request\b/i,
-        /\bnow,\s*the user wants to know\b/i,
-        /\bprovide (a )?structured analysis\b/i,
-        /\bproceed to final\b/i,
-    ];
-
-    const seen = new Set<string>();
-    const kept: string[] = [];
-    for (const paragraph of paragraphs) {
-        if (metaPatterns.some((pattern) => pattern.test(paragraph))) {
-            continue;
-        }
-        const key = paragraph.replace(/\s+/g, " ").trim().toLowerCase();
-        if (key.length >= 80 && seen.has(key)) continue;
-        if (key.length >= 80) seen.add(key);
-        kept.push(paragraph);
-    }
-    return kept.join("\n\n").trim();
-}
-
-export function normalizeMessage(msg: Message): Message {
-    if (msg.role !== 'assistant' || !msg.content) return msg;
-    const visibleContent = sanitizeVisibleAssistantContent(msg.content);
-    if (!visibleContent) {
-        return {
-            ...msg,
-            content: "",
-            thoughts: msg.thoughts ?? [],
-        };
-    }
-    if (msg.thoughts && msg.thoughts.length > 0) return msg;
-    const extracted = extractThoughtsFromContent(visibleContent);
-    if (extracted.thoughts.length === 0) return msg;
-    return {
-        ...msg,
-        content: extracted.content,
-        thoughts: extracted.thoughts,
-    };
-}
+// ─── Utility Functions (imported from @numezis/shared/contentSanitizer) ─────
+// extractThoughtsFromContent, sanitizeVisibleAssistantContent, normalizeMessage
+// are now imported above from the shared module.
 
 // ─── Types ──────────────────────────────────────────────────────────────────
+// StreamChunk is now imported from @numezis/shared/chatTypes above.
 
-type StreamChunk =
-    | { type: "init"; payload: { runId: string; graphId: string } }
-    | { type: "update"; payload: AgentWorkflowUpdate }
-    | { type: "text_delta"; payload: { content: string } }
-    | { type: "final"; payload: AgentWorkflowResult }
-    | { type: "error"; payload: { message: string } };
 
 export type TokenUsageForDisplay = {
     totalInputTokens: number;
@@ -382,10 +228,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         }
 
         const normalizedContent = e.kind === "assistant" ? sanitizeVisibleAssistantContent(content) : content;
+        // Meta-reasoning content that was sanitized is logged at warn level (replaces debug-fetch instrumentation)
         if (e.kind === "assistant" && /\bwe need to\b|\bfinal answer\b|<think>/i.test(content) && normalizedContent !== content) {
-            // #region agent log
-            fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c540e' }, body: JSON.stringify({ sessionId: '0c540e', runId: sessionId ?? 'unknown', hypothesisId: 'H2', location: 'packages/ui/src/hooks/useSessionStream.ts:eventToMessage', message: 'Assistant content sanitized in eventToMessage', data: { eventId: e.id, before: content.slice(0, 180), after: normalizedContent.slice(0, 180), kind: e.kind }, timestamp: Date.now() }) }).catch(() => { });
-            // #endregion
+            console.warn('[useSessionStream] Assistant content sanitized in eventToMessage', { eventId: e.id, kind: e.kind });
         }
         return normalizeMessage({
             id: e.id,
@@ -553,10 +398,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                     } else if (chunk.type === "text_delta") {
                         // Progressive text streaming — accumulate and flush to state
                         streamingTextRef.current += chunk.payload.content;
+                        // Meta-reasoning in text deltas is logged at warn level (replaces debug-fetch instrumentation)
                         if (/\bwe need to\b|\bfinal answer\b|<think>/i.test(chunk.payload.content ?? "")) {
-                            // #region agent log
-                            fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c540e' }, body: JSON.stringify({ sessionId: '0c540e', runId: sessionId ?? 'new-session', hypothesisId: 'H4', location: 'packages/ui/src/hooks/useSessionStream.ts:text-delta', message: 'Suspicious text delta observed', data: { delta: (chunk.payload.content ?? '').slice(0, 180), accumulated: streamingTextRef.current.slice(0, 180) }, timestamp: Date.now() }) }).catch(() => { });
-                            // #endregion
+                            console.warn('[useSessionStream] Suspicious text delta observed', { delta: (chunk.payload.content ?? '').slice(0, 80) });
                         }
                         setStreamingText(streamingTextRef.current);
                     } else if (chunk.type === "update") {
@@ -589,9 +433,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                             }
                         }
                     } else if (chunk.type === "final") {
-                        // #region agent log
-                        fetch('http://127.0.0.1:7622/ingest/c818cb08-12c6-4da0-b6be-f7b2dc27eba3', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0c540e' }, body: JSON.stringify({ sessionId: '0c540e', runId: sessionId ?? 'new-session', hypothesisId: 'H6', location: 'packages/ui/src/hooks/useSessionStream.ts:final-chunk', message: 'Final chunk received', data: { eventStreamCount: chunk.payload.eventStream?.length ?? 0, timelineCount: chunk.payload.timeline?.length ?? 0 }, timestamp: Date.now() }) }).catch(() => { });
-                        // #endregion
+                        // Final chunk logging (replaces debug-fetch instrumentation)
+                        console.debug('[useSessionStream] Final chunk received', { eventStreamCount: chunk.payload.eventStream?.length ?? 0 });
                         // Clear any residual streaming text
                         streamingTextRef.current = '';
                         setStreamingText('');

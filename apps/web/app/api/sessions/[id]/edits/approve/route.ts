@@ -61,6 +61,40 @@ async function maybeEvictResult(rootDir: string, runId: string, toolName: string
 }
 
 /**
+ * Fire-and-forget: resume the agent loop after a successful tool approval.
+ * The LLM receives a synthetic user message describing what was executed and
+ * the result, then continues its reasoning.
+ */
+async function resumeAgentAfterApproval(
+  runId: string,
+  executionSummaries: Array<{ toolName: string; result?: string; evictedPath?: string }>
+) {
+  try {
+    const run = await agentGraphRunService.getRun(runId);
+    if (!run) return;
+    if (run.status === "RUNNING") {
+      console.log(`[edits/approve] Run ${runId} still RUNNING, skipping resume`);
+      return;
+    }
+
+    const parts = executionSummaries.map((s) => {
+      const resultSnippet = s.evictedPath
+        ? `Result evicted to file ${s.evictedPath}`
+        : (s.result ?? "OK").slice(0, 2000);
+      return `Tool \`${s.toolName}\` was approved and executed successfully.\nResult:\n${resultSnippet}`;
+    });
+    const message = parts.join("\n\n---\n\n") + "\n\nPlease continue with the task.";
+
+    const { agentGraphExecutor } = await import("@numezis/server/services/agentGraphExecutor");
+    console.log(`[edits/approve] Resuming agent after approval for run ${runId}`);
+    await agentGraphExecutor.continueRun(runId, message, {});
+    console.log(`[edits/approve] ✓ Agent resumed successfully for run ${runId}`);
+  } catch (err) {
+    console.error(`[edits/approve] ✗ Failed to resume agent after approval for ${runId}:`, (err as Error)?.message);
+  }
+}
+
+/**
  * POST /api/sessions/[id]/edits/approve - Approve edit(s).
  * Body: { editId: string } or { action: "all" }
  */
@@ -128,6 +162,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
       const pending = Array.isArray(run.state?.approvals?.pending) ? [...run.state.approvals.pending as any[]] : [];
       const granted = Array.isArray(run.state?.approvals?.granted) ? [...run.state.approvals.granted as any[]] : [];
+      const executionSummaries: Array<{ toolName: string; result?: string; evictedPath?: string }> = [];
+
       for (const edit of edits) {
         let executionResult: any;
         try { executionResult = await executeEdit(edit); } catch (err) {
@@ -142,6 +178,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
             result: executionResult.result ?? executionResult.message ?? "",
             evictedPath: executionResult.evictedPath ?? undefined,
           });
+          executionSummaries.push({
+            toolName: edit.toolName,
+            result: executionResult.result,
+            evictedPath: executionResult.evictedPath,
+          });
         } else if (idx >= 0) {
           pending[idx] = {
             ...pending[idx],
@@ -152,6 +193,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
         }
       }
       const approvals = await updateRunApprovals({ pending, granted });
+
+      // Fire-and-forget: resume the agent loop
+      if (executionSummaries.length > 0) {
+        void resumeAgentAfterApproval(params.id, executionSummaries);
+      }
+
       return NextResponse.json({ approved: edits, approvals });
     }
 
@@ -192,6 +239,16 @@ export async function POST(request: Request, { params }: { params: { id: string 
       };
     }
     const approvals = await updateRunApprovals({ pending, granted });
+
+    // Fire-and-forget: resume the agent loop
+    if (executionResult?.executed) {
+      void resumeAgentAfterApproval(params.id, [{
+        toolName: edit.toolName,
+        result: executionResult.result,
+        evictedPath: executionResult.evictedPath,
+      }]);
+    }
+
     return NextResponse.json({ approved: executionResult?.executed ? edit : null, executionResult, approvals }, {
       status: executionResult?.executed ? 200 : 502,
     });

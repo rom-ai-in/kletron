@@ -42,6 +42,8 @@ export interface ProjectSidebarProps {
   projects: SidebarProject[];
   activeThreadId?: string | null;
   activeProjectId?: string | null;
+  /** Show skeleton loading state (e.g. during workspace switch) */
+  loading?: boolean;
   onThreadSelect?: (threadId: string) => void;
   /** Create a new thread inside a specific project */
   onNewThreadInProject?: (projectId: string) => void;
@@ -90,6 +92,7 @@ export function ProjectSidebar({
   projects,
   activeThreadId,
   activeProjectId,
+  loading = false,
   onThreadSelect,
   onNewThreadInProject,
   onAddProject,
@@ -214,6 +217,28 @@ export function ProjectSidebar({
 
       {/* ── Project & Thread List ── */}
       <div className="flex-1 overflow-y-auto scrollbar-elegant">
+        {loading ? (
+          /* Skeleton loading state */
+          <div className="px-3 py-2 space-y-1 animate-in fade-in duration-200">
+            {/* Skeleton project header */}
+            <div className="flex items-center gap-1.5 py-2 mt-1">
+              <div className="h-3 w-3 rounded bg-bg-elevated animate-pulse flex-shrink-0" />
+              <div className="h-3.5 w-3.5 rounded bg-bg-elevated animate-pulse flex-shrink-0" />
+              <div className="h-3 w-24 rounded bg-bg-elevated animate-pulse" />
+            </div>
+            {/* Skeleton thread rows */}
+            {[75, 60, 85, 50, 70].map((width, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-2 pl-9 pr-2 py-1.5 border-l-2 border-l-transparent"
+              >
+                <div className="h-3 rounded bg-bg-elevated animate-pulse flex-1" style={{ maxWidth: `${width}%` }} />
+                <div className="h-3 w-6 rounded bg-bg-elevated animate-pulse flex-shrink-0" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <>
         {projects.map((project) => {
           const isCollapsed = collapsedProjects.has(project.id);
           const showContextMenu = contextMenuProjectId === project.id;
@@ -385,6 +410,8 @@ export function ProjectSidebar({
             <span className="text-xs">No projects yet</span>
             <span className="text-[10px] mt-1">Add a project folder to get started</span>
           </div>
+        )}
+          </>
         )}
       </div>
 

@@ -5,131 +5,15 @@ import { cn } from '../../lib/utils';
 import { MessageBubble, SystemMessage } from './ChatMessage';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ToolInvocation } from './ToolInvocation';
-import { ToolBatchAccordion, ToolPair } from './ToolBatchAccordion';
+import { ToolBatchAccordion } from './ToolBatchAccordion';
+import type { ToolPair } from './ToolBatchAccordion';
 import { ThoughtsPanel } from './ThoughtsPanel';
+import type { ChatEvent, RenderItem } from '@numezis/shared/chatTypes';
+import { groupEvents, pairToolEvents } from '../../lib/toolPairing';
 
-/* ═══════════════════════════════════════════════════════════════════════════
- * Types
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-export interface ChatEvent {
-    id: string;
-    kind: 'user' | 'assistant' | 'tool' | 'system';
-    content?: string;
-    toolName?: string;
-    toolArgs?: string;
-    toolOutput?: string;
-    toolCallId?: string;
-    /** Whether this tool result is an error (explicit signal from the server) */
-    isError?: boolean;
-    thoughts?: string[];
-    thinking?: string;
-    timestamp?: string;
-    /** Opaque index for edit controls — passed through to actions slot */
-    messageIndex?: number;
-}
-
-export type RenderItem =
-    | { type: 'event'; event: ChatEvent }
-    | { type: 'tools'; events: ChatEvent[] };
-
-/* ═══════════════════════════════════════════════════════════════════════════
- * Helpers — detect tool call vs tool result events.
- * Handles BOTH new data (AI tool-call → kind="assistant") and legacy data
- * (AI tool-call → kind="tool" with toolArgs and empty content).
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-/** Is this an AI message that issues a tool call (vs a tool result)? */
-function isToolCallEvent(e: ChatEvent): boolean {
-    // New format: assistant events with tool info
-    if (e.kind === 'assistant' && Boolean(e.toolName)) return true;
-    // Legacy format: kind="tool" with toolArgs and no meaningful content
-    if (e.kind === 'tool' && e.toolArgs && !e.content?.trim()) return true;
-    return false;
-}
-
-/** Is this a tool-related event (call or result)? */
-function isToolRelatedEvent(e: ChatEvent): boolean {
-    if (isToolCallEvent(e)) return true;
-    if (e.kind === 'tool') return true;
-    return false;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
- * groupEvents — pairs consecutive tool call / result events, separates
- * user and assistant text messages.
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-export function groupEvents(events: ChatEvent[]): RenderItem[] {
-    const items: RenderItem[] = [];
-    let toolBuffer: ChatEvent[] = [];
-
-    const flushTools = () => {
-        if (toolBuffer.length > 0) {
-            items.push({ type: 'tools', events: toolBuffer });
-            toolBuffer = [];
-        }
-    };
-
-    for (const event of events) {
-        if (isToolRelatedEvent(event)) {
-            toolBuffer.push(event);
-            continue;
-        }
-        flushTools();
-        items.push({ type: 'event', event });
-    }
-    flushTools();
-    return items;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
- * pairToolEvents — given a buffer of tool events, pair each assistant call
- * with its corresponding tool result.
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-function pairToolEvents(events: ChatEvent[]): ToolPair[] {
-    // Separate calls from results
-    const calls: ChatEvent[] = [];
-    const results: ChatEvent[] = [];
-    for (const e of events) {
-        if (isToolCallEvent(e)) calls.push(e);
-        else results.push(e);
-    }
-
-    const pairs: ToolPair[] = [];
-    const usedResults = new Set<number>();
-
-    for (const call of calls) {
-        // Try to match by toolCallId first, then by toolName
-        let matchIdx = -1;
-        if (call.toolCallId) {
-            matchIdx = results.findIndex((r, i) => !usedResults.has(i) && r.toolCallId === call.toolCallId);
-        }
-        if (matchIdx === -1 && call.toolName) {
-            matchIdx = results.findIndex((r, i) => !usedResults.has(i) && r.toolName === call.toolName);
-        }
-        if (matchIdx === -1) {
-            // Grab the first unused result as a fallback
-            matchIdx = results.findIndex((_, i) => !usedResults.has(i));
-        }
-        if (matchIdx >= 0) {
-            usedResults.add(matchIdx);
-            pairs.push({ call, result: results[matchIdx] });
-        } else {
-            pairs.push({ call });
-        }
-    }
-
-    // Any unmatched results become their own pairs
-    for (let i = 0; i < results.length; i++) {
-        if (!usedResults.has(i)) {
-            pairs.push({ result: results[i] });
-        }
-    }
-
-    return pairs;
-}
+// Re-export for backward compatibility
+export type { ChatEvent, RenderItem };
+export { groupEvents };
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * MessageList — scrollable chat container with auto-scroll
@@ -397,7 +281,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
 
                 {event.content && (
                     <MessageBubble
-                        role={event.kind}
+                        role={event.kind === 'error' ? 'system' : event.kind}
                         content={event.content}
                         timestamp={event.timestamp}
                         actions={messageActions?.(event)}

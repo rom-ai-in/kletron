@@ -4,6 +4,7 @@ import { getDb } from "../lib/db";
 import { runWorkflow } from "@numezis/agent-core/workflows";
 import { AgentWorkflowAbortError } from "@numezis/agent-core/reactAgentRunner";
 import { auditService } from "./auditService";
+import { getWorkspaceByIdUnsafe, listAllWorkspaces } from "./workspaceService";
 import type {
     AutomationDefinition,
     AutomationStatus,
@@ -738,6 +739,18 @@ export class AutomationExecutor {
         const results: StageResult[] = [];
         const startTime = Date.now();
         const runWorkspaceId = run.workspaceId?.toString();
+
+        // Resolve workspace root path for prompt injection
+        let workspaceRootPath: string | undefined;
+        try {
+            const workspace = runWorkspaceId
+                ? await getWorkspaceByIdUnsafe(runWorkspaceId)
+                : (await listAllWorkspaces())[0];
+            workspaceRootPath = workspace?.rootPath;
+        } catch {
+            // Non-fatal: prompts will just lack the workspace path
+        }
+
         const shouldAbort = (() => {
             let lastCheck = 0;
             let cachedReason: AgentWorkflowAbortReason | null = null;
@@ -805,7 +818,7 @@ export class AutomationExecutor {
             }
 
             const context = this.buildStageContext(stage, results);
-            const userPrompt = this.buildUserPrompt(stage, context);
+            const userPrompt = this.buildUserPrompt(stage, context, workspaceRootPath);
             const auditSessionId = await auditService.createSession(userPrompt);
             if (auditSessionId) {
                 await this.updateRunProgress(runId, i, auditSessionId, run.workspaceId?.toString());
@@ -1165,13 +1178,23 @@ export class AutomationExecutor {
      * Build user prompt with context.
      * Wraps the stage prompt with instructions that force thorough, iterative analysis.
      */
-    private buildUserPrompt(stage: AutomationStageConfig, context: any): string {
+    private buildUserPrompt(stage: AutomationStageConfig, context: any, workspaceRootPath?: string): string {
         const basePrompt = stage.prompt?.trim();
         if (!basePrompt) {
             throw new Error(`Stage ${stage.id} has an empty prompt`);
         }
 
         const parts: string[] = [];
+
+        // Inject workspace targeting so the agent knows which project to operate on
+        if (workspaceRootPath) {
+            parts.push("## TARGET WORKSPACE");
+            parts.push(`You are auditing the project located at: ${workspaceRootPath}`);
+            parts.push(`All file paths in this task are relative to this root directory.`);
+            parts.push(`When using tools like list_files, read_file, search_code, execute_bash, etc., always target this directory.`);
+            parts.push(`Do NOT search or modify files outside of: ${workspaceRootPath}`);
+            parts.push("");
+        }
 
         parts.push("## TASK");
         parts.push(basePrompt);
@@ -1186,6 +1209,7 @@ export class AutomationExecutor {
         parts.push("## EXECUTION INSTRUCTIONS");
         parts.push([
             "You MUST perform a thorough, multi-step analysis. Do NOT stop after one tool call.",
+            ...(workspaceRootPath ? [`IMPORTANT: All operations MUST target the project at ${workspaceRootPath}. Do NOT explore or reference other directories.`] : []),
             "1. Start by listing the project structure (describe_structure or list_files).",
             "2. Identify the files most relevant to this audit stage.",
             "3. Read at least 5-10 key source files using read_file or read_file_range.",

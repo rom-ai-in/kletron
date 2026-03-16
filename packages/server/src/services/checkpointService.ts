@@ -5,10 +5,13 @@
  * all agent graph runs.  Each run uses a unique `thread_id` (the runId)
  * so that checkpoints are namespaced per-run.
  *
+ * Uses a **dedicated** MongoClient with `strict: false` so that TTL indexes
+ * and other admin commands work on Atlas (the app's main client uses `strict: true`).
+ *
  * The service also exposes helpers to list, inspect and clean-up checkpoints.
  */
 import { MongoDBSaver } from "@langchain/langgraph-checkpoint-mongodb";
-import { getMongoClient } from "../lib/db";
+import { MongoClient, ServerApiVersion } from "mongodb";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -30,13 +33,48 @@ export type CheckpointMetadata = {
 
 let _saver: MongoDBSaver | null = null;
 let _saverPromise: Promise<MongoDBSaver> | null = null;
+let _checkpointClient: MongoClient | null = null;
+let _checkpointClientPromise: Promise<MongoClient> | null = null;
+
+/**
+ * Return the dedicated MongoClient for checkpoints (strict: false).
+ * Creates it lazily on first call.  Promise-based guard prevents race
+ * conditions when multiple callers invoke this concurrently.
+ */
+async function getCheckpointClient(): Promise<MongoClient> {
+    if (_checkpointClient) return _checkpointClient;
+    if (_checkpointClientPromise) return _checkpointClientPromise;
+
+    _checkpointClientPromise = (async () => {
+        const uri = process.env.MONGODB_URI ?? "";
+        if (!uri) throw new Error("MONGODB_URI not set");
+
+        const client = new MongoClient(uri, {
+            // strict: false so createIndex, distinct, collStats etc. work on Atlas
+            serverApi: { version: ServerApiVersion.v1, strict: false, deprecationErrors: true },
+            auth: process.env.MONGODB_USER && process.env.MONGODB_PASS
+                ? { username: process.env.MONGODB_USER, password: process.env.MONGODB_PASS }
+                : undefined,
+        });
+        await client.connect();
+        _checkpointClient = client;
+        return client;
+    })();
+
+    try {
+        return await _checkpointClientPromise;
+    } catch (err) {
+        _checkpointClientPromise = null; // Allow retry on failure
+        throw err;
+    }
+}
 
 /**
  * Return (or lazily create) the singleton `MongoDBSaver`.
  *
- * The saver reuses the application's existing `MongoClient` so we do not
- * open a second connection.  Checkpoints are stored in the
- * `langgraph_checkpoints` collection (MongoDBSaver default).
+ * Uses a **dedicated** MongoClient with `strict: false` because the main
+ * app client uses `strict: true`, which blocks `createIndex` and other
+ * admin commands needed for TTL cleanup.
  */
 export async function getCheckpointSaver(): Promise<MongoDBSaver> {
     if (_saver) return _saver;
@@ -44,23 +82,22 @@ export async function getCheckpointSaver(): Promise<MongoDBSaver> {
 
     _saverPromise = (async () => {
         try {
-            const client = await getMongoClient();
+            const client = await getCheckpointClient();
             const dbName =
                 process.env.MONGODB_DB ||
                 process.env.MONGODB_DB_NAME ||
                 "numezis_coder";
 
-            // Cast needed because the app's `mongodb` version and the
-            // checkpoint package's bundled `mongodb` version may differ
-            // slightly at the type level, even though they are compatible.
             _saver = new MongoDBSaver({
                 client: client as any,
                 dbName,
             });
-            console.log("[CheckpointService] MongoDBSaver initialized.");
+            console.log("[CheckpointService] MongoDBSaver initialized (strict: false client).");
 
-            // Best-effort: create TTL indexes for automatic checkpoint cleanup
-            ensureCheckpointIndexes().catch(() => {});
+            // Create TTL indexes for automatic checkpoint cleanup
+            ensureCheckpointIndexes().catch((err) => {
+                console.warn("[CheckpointService] TTL index creation failed:", (err as Error)?.message);
+            });
 
             return _saver;
         } catch (err) {
@@ -153,7 +190,7 @@ async function deleteSingleThread(saver: MongoDBSaver, threadId: string): Promis
 export async function deleteThreadCheckpoints(runId: string): Promise<void> {
     try {
         const saver = await getCheckpointSaver();
-        const client = await getMongoClient();
+        const client = await getCheckpointClient();
         const dbName =
             process.env.MONGODB_DB ||
             process.env.MONGODB_DB_NAME ||
@@ -204,19 +241,19 @@ function escapeRegex(str: string): string {
 
 // ─── TTL Cleanup ──────────────────────────────────────────────────────────────
 
-/** Default checkpoint retention period: 7 days (in seconds). */
+/** Default checkpoint retention period: 2 days (in seconds). */
 const CHECKPOINT_TTL_SECONDS =
-    Number(process.env.CHECKPOINT_TTL_SECONDS) || 7 * 24 * 60 * 60;
+    Number(process.env.CHECKPOINT_TTL_SECONDS) || 2 * 24 * 60 * 60;
 
 /**
  * Ensure MongoDB TTL indexes exist on checkpoint collections so that old
  * checkpoint documents are automatically removed after `CHECKPOINT_TTL_SECONDS`.
  *
- * Call this once at startup (best-effort — failures are logged and swallowed).
+ * Uses the dedicated non-strict MongoClient so `createIndex` works on Atlas.
  */
 export async function ensureCheckpointIndexes(): Promise<void> {
     try {
-        const client = await getMongoClient();
+        const client = await getCheckpointClient();
         const dbName =
             process.env.MONGODB_DB ||
             process.env.MONGODB_DB_NAME ||
@@ -234,11 +271,12 @@ export async function ensureCheckpointIndexes(): Promise<void> {
                     { created_at: 1 },
                     { expireAfterSeconds: CHECKPOINT_TTL_SECONDS, background: true }
                 );
-            } catch {
-                // Index may already exist with different options — safe to skip
+                console.log(`[CheckpointService] TTL index created on ${colName} (${CHECKPOINT_TTL_SECONDS}s).`);
+            } catch (indexErr) {
+                // Index may already exist with different options
+                console.warn(`[CheckpointService] TTL index on ${colName}:`, (indexErr as Error)?.message);
             }
         }
-        console.log(`[CheckpointService] TTL indexes ensured (${CHECKPOINT_TTL_SECONDS}s retention).`);
     } catch (err) {
         console.warn("[CheckpointService] Failed to ensure TTL indexes:", (err as Error)?.message);
     }

@@ -25,7 +25,7 @@ export function useThreads(
       const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
       if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
 
-      const res = await fetch(`${backendUrlTrimmed}/api/sessions?limit=50`, { headers });
+      const res = await fetch(`${backendUrlTrimmed}/api/sessions?limit=50&excludeSource=automation`, { headers });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || `Failed to load threads (${res.status})`);
@@ -92,8 +92,8 @@ export function useThreads(
         )
       );
       cancelEditThread();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.warn('[useThreads] Failed to save thread title', err);
     } finally {
       setEditingThreadSaving(false);
     }
@@ -122,8 +122,8 @@ export function useThreads(
       if (conversationId === threadId) {
         setConversationId(null);
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.warn('[useThreads] Failed to archive thread', err);
     } finally {
       setThreadActionId(null);
     }
@@ -155,8 +155,8 @@ export function useThreads(
       if (conversationId === threadId) {
         setConversationId(null);
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.warn('[useThreads] Failed to delete thread', err);
     } finally {
       setThreadActionId(null);
     }
@@ -178,7 +178,7 @@ export function useThreads(
       const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
       if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
 
-      const res = await fetch(`${backendUrlTrimmed}/api/sessions?limit=50`, { headers });
+      const res = await fetch(`${backendUrlTrimmed}/api/sessions?limit=50&excludeSource=automation`, { headers });
       if (!res.ok) return;
       const data = await res.json();
       const list = Array.isArray(data) ? (data as ConversationHistoryItem[]) : [];
@@ -191,8 +191,8 @@ export function useThreads(
         });
         return changed ? active : prev;
       });
-    } catch {
-      // silent polling failure
+    } catch (err) {
+      console.warn('[useThreads] Thread status poll failed', err);
     }
   }, [backendUrlTrimmed, backendReady, getAccessToken, threads.length]);
 

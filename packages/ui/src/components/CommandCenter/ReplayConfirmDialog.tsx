@@ -139,7 +139,7 @@ function FileDiffCard({ fc, index }: { fc: FileChange; index: number }) {
   const lineCount = fc.newContent ? fc.newContent.split('\n').length : 0;
 
   return (
-    <div className="rounded-lg border border-glass-border overflow-hidden">
+    <div className="rounded-lg border border-white/[0.06] overflow-hidden">
       {/* File header */}
       <button
         type="button"
@@ -176,7 +176,7 @@ function FileDiffCard({ fc, index }: { fc: FileChange; index: number }) {
 
       {/* Diff content */}
       {expanded && hasDiff && (
-        <div className="border-t border-glass-border bg-black/20 max-h-[250px] overflow-y-auto scrollbar-elegant overflow-x-auto">
+        <div className="border-t border-white/[0.06] bg-black/20 max-h-[250px] overflow-y-auto scrollbar-elegant overflow-x-auto">
           {fc.diffLines && fc.diffLines.length > 0 ? (
             fc.diffLines.map((line, i) => <DiffLineView key={i} line={line} />)
           ) : fc.newContent && fc.action === 'created' ? (
@@ -264,7 +264,7 @@ export function ReplayConfirmDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="relative w-full max-w-2xl mx-4 rounded-xl glass-elevated overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-glass-border">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.06]">
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-yellow-500/10">
             <RotateCcw className="w-4 h-4 text-yellow-400" />
           </div>
@@ -290,9 +290,9 @@ export function ReplayConfirmDialog({
             <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
               Edited message
             </div>
-            <div className="rounded-lg border border-glass-border overflow-hidden">
+            <div className="rounded-lg border border-white/[0.06] overflow-hidden">
               {impact.originalContent !== impact.newContent && (
-                <div className="px-3 py-2 bg-red-500/5 border-b border-glass-border">
+                <div className="px-3 py-2 bg-red-500/5 border-b border-white/[0.06]">
                   <div className="text-[10px] font-medium text-red-400 mb-1">Before</div>
                   <div className="text-xs text-text-muted line-through whitespace-pre-wrap break-words max-h-20 overflow-y-auto">
                     {impact.originalContent}
@@ -316,7 +316,7 @@ export function ReplayConfirmDialog({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {impact.messagesRemoved > 0 && (
-                  <div className="flex items-center gap-2 rounded-lg border border-glass-border px-3 py-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-2">
                     <MessageSquare className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
                     <span className="text-xs text-text-secondary">
                       <span className="font-semibold text-text-primary">{impact.messagesRemoved}</span> message{impact.messagesRemoved > 1 ? 's' : ''}
@@ -324,7 +324,7 @@ export function ReplayConfirmDialog({
                   </div>
                 )}
                 {impact.toolCallsRemoved > 0 && (
-                  <div className="flex items-center gap-2 rounded-lg border border-glass-border px-3 py-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-2">
                     <Wrench className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
                     <span className="text-xs text-text-secondary">
                       <span className="font-semibold text-text-primary">{impact.toolCallsRemoved}</span> tool call{impact.toolCallsRemoved > 1 ? 's' : ''}
@@ -373,14 +373,14 @@ export function ReplayConfirmDialog({
 
           {/* No impact — last message */}
           {!hasImpact && (
-            <div className="rounded-lg border border-glass-border px-3 py-2 text-xs text-text-muted">
+            <div className="rounded-lg border border-white/[0.06] px-3 py-2 text-xs text-text-muted">
               This is the last message in the thread — nothing will be removed.
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-glass-border">
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-white/[0.06]">
           <button
             type="button"
             onClick={onCancel}

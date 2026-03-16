@@ -11,7 +11,7 @@ import { useWorkspace } from "../hooks/useWorkspace";
 import { useConversation } from "../hooks/useConversation";
 import { useDiffs } from "../hooks/useDiffs";
 import { useModels } from "../hooks/useModels";
-import { usePersonality } from "../hooks/usePersonality";
+
 
 export interface PopoutConversationProps {
   threadId: string;
@@ -27,7 +27,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
   const workspace = useWorkspace(backendUrlTrimmed, auth.getAccessToken);
   const models = useModels(backendUrlTrimmed, backendReady, auth.getAccessToken);
   const diffs = useDiffs(workspace.workspace);
-  const personality = usePersonality();
+
 
   const [conversationId, setConversationId] = useState<string | null>(threadId);
 
@@ -115,9 +115,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
       <InputBar
         value={conversation.input}
         onChange={conversation.setInput}
-        onSend={() => void conversation.sendMessage({
-          personalityPrefix: personality.getSystemPromptPrefix(),
-        })}
+        onSend={() => void conversation.sendMessage()}
         onStop={conversation.stopStreaming}
         sending={conversation.streaming}
         disabled={conversation.streaming || !backendReady || !auth.auth?.accessToken}
@@ -125,7 +123,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            void conversation.sendMessage({ personalityPrefix: personality.getSystemPromptPrefix() });
+            void conversation.sendMessage();
           }
         }}
         connected={backendConnected}

@@ -215,7 +215,7 @@ export function useConversation(
     }
   }
 
-  async function sendMessage(options?: { personalityPrefix?: string; planMode?: boolean; text?: string }) {
+  async function sendMessage(options?: { planMode?: boolean; text?: string }) {
     const trimmed = (options?.text ?? input).trim();
     if (!trimmed || streaming) return;
     if (!backendReady) {
@@ -268,9 +268,7 @@ export function useConversation(
       const url = isNewSession
         ? `${backendUrlTrimmed}/api/sessions`
         : `${backendUrlTrimmed}/api/sessions/${conversationId}/chat`;
-      const messageContent = options?.personalityPrefix
-        ? `[System: ${options.personalityPrefix}]\n\n${trimmed}`
-        : trimmed;
+      const messageContent = trimmed;
       const body = isNewSession
         ? {
           graphId: selectedGraph || undefined,
@@ -551,8 +549,8 @@ export function useConversation(
         fetch(`${backendUrlTrimmed}/api/sessions/${conversationId}/stop`, {
           method: "POST",
           headers,
-        }).catch(() => { });
-      }).catch(() => { });
+        }).catch((err) => { console.warn('[useConversation] Failed to send stop signal', err); });
+      }).catch((err) => { console.warn('[useConversation] Failed to get access token for stop', err); });
     }
   }
 
@@ -650,7 +648,7 @@ export function useConversation(
   async function replayFromMessage(
     messageIndex: number,
     newContent: string,
-    options?: { personalityPrefix?: string; planMode?: boolean }
+    options?: { planMode?: boolean }
   ) {
     if (!conversationId) return;
     const token = await getAccessToken();

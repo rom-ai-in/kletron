@@ -16,6 +16,10 @@ export function ensurePathInside(root, target) {
 }
 
 export function resolveRepoPath(providedPath) {
+    // Re-read config.json on every call so new workspaces are picked up
+    // without needing to restart the MCP server process.
+    config.reload();
+
     const defaultDir = config.defaultDir;
 
     if (!defaultDir && !providedPath) {

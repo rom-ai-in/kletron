@@ -2,10 +2,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "../lib/db";
 import type { AgentGraphDefinition } from "./agentGraphTypes";
 import {
-    buildDiamondFlowAgentGraph,
     buildDriftAnalysisGraph,
-    buildAutomationsGraph,
-    buildPresentationGeneratorProGraph,
     buildSimpleReactAgentGraph,
     buildCoderAgentGraph,
     buildExplorerAgentGraph,
@@ -18,11 +15,14 @@ const fallbackGraphs = new Map<string, AgentGraphDefinition>();
 let fallbackEnabled = false;
 let fallbackWarned = false;
 
-// Graphs that should no longer appear in default lists / UI
 const HIDDEN_GRAPH_NAMES = new Set<string>([
+    // Legacy graph names — if they still lurk in the DB they are hidden from lists
     "Cursor-like Robust Loop (agent graph)",
     "Complete Deep Agent (agent graph)",
     "Continuous Improvement (agent graph)",
+    "Diamond flow (agent graph)",
+    "Presentation Generator Pro",
+    "Automations (agent graph)",
 ]);
 
 function warnFallback(error: unknown) {
@@ -48,10 +48,7 @@ function ensureFallbackGraphs() {
     const now = new Date();
     const entries: Array<{ id: string; graph: Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> }> = [
         { id: "000000000000000000000002", graph: buildSimpleReactAgentGraph() },
-        { id: "000000000000000000000003", graph: buildDiamondFlowAgentGraph() },
-        { id: "000000000000000000000004", graph: buildPresentationGeneratorProGraph() },
         { id: "000000000000000000000006", graph: buildDriftAnalysisGraph() },
-        { id: "000000000000000000000007", graph: buildAutomationsGraph() },
         { id: "000000000000000000000008", graph: buildCoderAgentGraph() },
         { id: "000000000000000000000009", graph: buildExplorerAgentGraph() },
         { id: "00000000000000000000000a", graph: buildPlannerAgentGraph() },

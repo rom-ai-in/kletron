@@ -25,6 +25,8 @@ export function useWorkspace(
   });
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  /** True while a workspace switch (switchWorkspaceById) is in progress */
+  const [switching, setSwitching] = useState(false);
   const [allWorkspaces, setAllWorkspaces] = useState<BackendWorkspace[]>([]);
 
   // Track whether the workspace was explicitly set by the user/app (thread select,
@@ -118,6 +120,7 @@ export function useWorkspace(
   async function switchWorkspaceById(id: string) {
     const token = await getAccessToken();
     if (!token) return;
+    setSwitching(true);
     try {
       const res = await fetch(`${backendUrlTrimmed}/api/workspaces/${id}/select`, {
         method: 'POST',
@@ -134,6 +137,8 @@ export function useWorkspace(
       await refreshAllWorkspaces();
     } catch {
       // ignore
+    } finally {
+      setSwitching(false);
     }
   }
 
@@ -149,6 +154,7 @@ export function useWorkspace(
     setWorkspace,
     workspaceSummary,
     workspaceLoading,
+    switching,
     loadWorkspaceSummary,
     selectWorkspace,
     allowBackendSync,

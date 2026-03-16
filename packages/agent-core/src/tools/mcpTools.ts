@@ -6,6 +6,25 @@ import { McpClient } from "@numezis/mcp-client/client";
 import { getConfig } from "@numezis/server/config";
 import { getWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
 
+// ── LLM-tolerant Zod helpers ────────────────────────────────────────────────
+// Many LLMs (especially local ones via LM Studio) send "True"/"False" strings
+// or stringified numbers instead of native JSON types.  These preprocessors
+// normalise the values so Zod validation doesn't reject valid intent.
+
+/** Accept `true`, `false`, `"true"`, `"True"`, `"false"`, `"False"`, `"1"`, `"0"`. */
+const laxBool = () =>
+  z.preprocess((val) => {
+    if (typeof val === "boolean") return val;
+    if (typeof val === "string") {
+      const lower = val.toLowerCase().trim();
+      if (lower === "true" || lower === "1") return true;
+      if (lower === "false" || lower === "0") return false;
+    }
+    if (typeof val === "number") return val !== 0;
+    return val; // let Zod reject anything truly invalid
+  }, z.boolean());
+
+
 const formatResult = (raw: unknown) => {
   if (typeof raw === "string") return raw;
   if (Array.isArray(raw)) {
@@ -229,7 +248,7 @@ export const gitDiffTool = tool(
       path: z.string().optional(),
       from: z.string().optional(),
       to: z.string().optional(),
-      staged: z.boolean().optional(),
+      staged: laxBool().optional(),
       filePath: z.string().optional(),
     }),
   }
@@ -286,9 +305,9 @@ export const gitGrepTool = tool(
     schema: z.object({
       path: z.string().optional(),
       query: z.string(),
-      regex: z.boolean().optional(),
-      caseSensitive: z.boolean().optional(),
-      wholeWord: z.boolean().optional(),
+      regex: laxBool().optional(),
+      caseSensitive: laxBool().optional(),
+      wholeWord: laxBool().optional(),
       globs: z.array(z.string()).optional(),
       maxResults: z.number().int().positive().optional(),
     }),
@@ -393,7 +412,7 @@ export const symbolsListTool = tool(
       path: z.string().optional(),
       globs: z.array(z.string()).optional(),
       query: z.string().optional(),
-      exportedOnly: z.boolean().optional(),
+      exportedOnly: laxBool().optional(),
       maxResults: z.number().int().positive().optional(),
       maxFiles: z.number().int().positive().optional(),
       cacheTtlMs: z.number().int().positive().optional(),
@@ -425,7 +444,7 @@ export const findSymbolTool = tool(
     schema: z.object({
       path: z.string().optional(),
       query: z.string(),
-      exportedOnly: z.boolean().optional(),
+      exportedOnly: laxBool().optional(),
       maxResults: z.number().int().positive().optional(),
       globs: z.array(z.string()).optional(),
     }),
@@ -572,9 +591,9 @@ export const webSearchTool = tool(
       query: z.string(),
       maxResults: z.number().int().positive().optional(),
       searchDepth: z.string().optional(),
-      includeAnswer: z.boolean().optional(),
-      includeRawContent: z.boolean().optional(),
-      includeImages: z.boolean().optional(),
+      includeAnswer: laxBool().optional(),
+      includeRawContent: laxBool().optional(),
+      includeImages: laxBool().optional(),
       timeoutMs: z.number().int().positive().optional(),
     }),
   }
@@ -710,8 +729,8 @@ export const locateUiFeatureTool = tool(
     schema: z.object({
       path: z.string().optional(),
       queries: z.array(z.string()),
-      regex: z.boolean().optional(),
-      caseSensitive: z.boolean().optional(),
+      regex: laxBool().optional(),
+      caseSensitive: laxBool().optional(),
       globs: z.array(z.string()).optional(),
       ignore: z.array(z.string()).optional(),
       maxResultsPerQuery: z.number().int().positive().optional(),
@@ -747,8 +766,8 @@ export const writeFileTool = tool(
       repoPath: z.string().optional(),
       filePath: z.string(),
       content: z.string(),
-      createDirs: z.boolean().optional(),
-      overwrite: z.boolean().optional(),
+      createDirs: laxBool().optional(),
+      overwrite: laxBool().optional(),
     }),
   }
 );

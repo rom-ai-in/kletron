@@ -30,7 +30,7 @@ import { getToolApprovalPolicy } from "./toolApprovalPolicy";
 import { sanitizeAssistantVisibleContent, stripThoughtContent } from "./titleSanitizer";
 
 // --- Checkpoint Imports ---
-import { getCheckpointSaver, hasCheckpoint, computeGraphHash, ensureCheckpointIndexes } from "./checkpointService";
+import { getCheckpointSaver, hasCheckpoint, computeGraphHash, ensureCheckpointIndexes, deleteThreadCheckpoints } from "./checkpointService";
 
 // --- Context Management Imports ---
 import { getContextGraphStore } from "@numezis/server/context/graph/ContextGraphStore";
@@ -1047,9 +1047,10 @@ export class AgentGraphExecutor {
             );
 
             // ── Checkpoint saver ─────────────────────────────────────────────
-            // Lazily resolve the checkpoint saver.  If it fails (e.g. MongoDB is
-            // unavailable) we continue without checkpoints.
-            const enableCheckpoints = opts?.enableCheckpoints !== false; // on by default
+            // Only enable checkpoints when explicitly requested (e.g. when a
+            // node has interruptBeforeTools configured for human-in-the-loop).
+            // Default OFF to avoid wasteful storage on every run.
+            const enableCheckpoints = opts?.enableCheckpoints === true;
             let checkpointer: import("@langchain/langgraph").BaseCheckpointSaver | undefined;
             if (enableCheckpoints) {
                 try {
@@ -1058,6 +1059,16 @@ export class AgentGraphExecutor {
                     console.warn("[AgentGraph] Checkpointer unavailable, continuing without:", (err as Error)?.message);
                 }
             }
+
+            // Helper: clean up checkpoint data for this run (fire-and-forget).
+            // Called on COMPLETED and FAILED — NOT on PAUSED (needs checkpoints for resume).
+            const cleanupCheckpoints = () => {
+                if (checkpointer) {
+                    deleteThreadCheckpoints(runId).catch((err) =>
+                        console.warn(`[AgentGraph] Checkpoint cleanup for ${runId} failed:`, (err as Error)?.message)
+                    );
+                }
+            };
 
             const shouldAbort = opts?.shouldAbort;
             const abortController = new AbortController();
@@ -1436,6 +1447,7 @@ export class AgentGraphExecutor {
                         eventStream: globalEventStream,
                     };
                     await emitUpdate();
+                    cleanupCheckpoints();
                     return failureResult;
                 }
 
@@ -1468,6 +1480,7 @@ export class AgentGraphExecutor {
                         eventStream: globalEventStream,
                     };
                     await emitUpdate();
+                    cleanupCheckpoints();
                     return failureResult;
                 }
                 if (nodeRunCounts[nodeId] > maxNodeRuns) {
@@ -1488,6 +1501,7 @@ export class AgentGraphExecutor {
                         eventStream: globalEventStream,
                     };
                     await emitUpdate();
+                    cleanupCheckpoints();
                     return failureResult;
                 }
 
@@ -2355,6 +2369,7 @@ export class AgentGraphExecutor {
                         }),
                         eventStream,
                     };
+                    cleanupCheckpoints();
                     return {
                         sessionId: runId,
                         timeline: globalTimeline,
@@ -2392,6 +2407,7 @@ export class AgentGraphExecutor {
 
             const successResult = enhancedResult;
             await emitUpdate();
+            cleanupCheckpoints();
             return successResult;
         });
     }

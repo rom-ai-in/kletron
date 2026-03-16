@@ -29,7 +29,7 @@ export function SearchPanel({ files, onFileOpen }: SearchPanelProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search files…"
-            className="w-full rounded-md glass-input py-1.5 pl-8 pr-8 text-xs text-text-primary placeholder:text-text-muted focus:border-glass-border-strong focus:outline-none"
+            className="w-full rounded-md glass-input py-1.5 pl-8 pr-8 text-xs text-text-primary placeholder:text-text-muted focus:border-white/[0.12] focus:outline-none"
             autoFocus
           />
           {query && (

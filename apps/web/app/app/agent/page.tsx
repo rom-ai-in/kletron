@@ -226,11 +226,12 @@ export default function AgentPage() {
     count: 0,
   });
 
-  // ── Workspace context ──────────────────────────────────────────────────
+  // ── Workspace context ────────────────────────────────────────────────────────────
   const {
     workspaces,
     activeWorkspaceId,
     activeWorkspace,
+    switching: workspaceSwitching,
     error: workspaceError,
     switchWorkspace,
     refreshWorkspaces,
@@ -583,13 +584,26 @@ export default function AgentPage() {
   }, [streamStatus, activeSessionId, fetchSessions, loadSessionDetail]);
 
   // Re-fetch sessions when active workspace changes (ensures sidebar stays current)
+  // Only clear the current session when the switch was user-initiated
+  // (workspaceSwitching=true). Passive refreshWorkspaces polling should NOT
+  // clear the active session — this prevents the desktop app's workspace
+  // changes from nuking the web app's conversation mid-flow.
   const prevWorkspaceRef = useRef(activeWorkspaceId);
   useEffect(() => {
     if (activeWorkspaceId && activeWorkspaceId !== prevWorkspaceRef.current) {
       prevWorkspaceRef.current = activeWorkspaceId;
+      if (workspaceSwitching) {
+        // Explicit user-initiated switch — clear stale session
+        handleStop();
+        setActiveSessionId(null);
+        setSessionDetail(null);
+        setMessages([]);
+        setHistoryPage({ total: 0, start: 0, end: 0, hasOlder: false });
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      }
       void fetchSessions();
     }
-  }, [activeWorkspaceId, fetchSessions]);
+  }, [activeWorkspaceId, workspaceSwitching, fetchSessions, handleStop, setMessages]);
 
   // ── Session actions ───────────────────────────────────────────────────
   const handleNewSession = useCallback(() => {
@@ -949,6 +963,7 @@ export default function AgentPage() {
       projects={sidebarProjects}
       activeThreadId={activeSessionId}
       activeProjectId={activeWorkspaceId}
+      loading={workspaceSwitching}
       onThreadSelect={handleSelectSession}
       onNewThreadInProject={() => { void handleNewSessionInActiveWorkspace(); }}
       onRenameThread={(id, title) => void handleRenameSession(id, title)}
@@ -962,6 +977,7 @@ export default function AgentPage() {
     sidebarProjects,
     activeSessionId,
     activeWorkspaceId,
+    workspaceSwitching,
     handleSelectSession,
     handleNewSessionInActiveWorkspace,
     handleRenameSession,
@@ -1058,7 +1074,28 @@ export default function AgentPage() {
       >
         {activeGraphIsSimple ? (
           <div className="max-w-3xl mx-auto h-full min-h-0 flex flex-col">
-            {messages.length === 0 && !sending && (
+            {workspaceSwitching ? (
+              /* Skeleton loading state while workspace is switching */
+              <div className="max-w-3xl mx-auto px-2 py-8 space-y-6 animate-pulse">
+                {/* Skeleton user message */}
+                <div className="flex justify-end">
+                  <div className="h-10 w-3/5 rounded-xl bg-bg-elevated" />
+                </div>
+                {/* Skeleton assistant response */}
+                <div className="space-y-2">
+                  <div className="h-4 w-4/5 rounded bg-bg-elevated" />
+                  <div className="h-4 w-3/4 rounded bg-bg-elevated" />
+                  <div className="h-4 w-2/3 rounded bg-bg-elevated" />
+                </div>
+                {/* Skeleton tool call */}
+                <div className="h-16 w-full rounded-lg bg-bg-elevated" />
+                {/* Skeleton assistant response */}
+                <div className="space-y-2">
+                  <div className="h-4 w-5/6 rounded bg-bg-elevated" />
+                  <div className="h-4 w-3/5 rounded bg-bg-elevated" />
+                </div>
+              </div>
+            ) : messages.length === 0 && !sending && (
               <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                 <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>
                 <p className="text-[13px] text-center max-w-md">

@@ -45,7 +45,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
             setPendingEditCounts({});
 
         } catch (e) {
-            console.error(e);
+            console.warn('[ConversationList] Failed to fetch conversations', e);
         } finally {
             setLoading(false);
         }
@@ -62,7 +62,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
             await fetch(`/api/sessions/${id}?action=delete`, { method: 'DELETE' });
             void fetchData();
         } catch (e) {
-            console.error(e);
+            console.warn('[ConversationList] Failed to delete conversation', e);
         }
     };
 
@@ -73,7 +73,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
             await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
             void fetchData();
         } catch (e) {
-            console.error(e);
+            console.warn('[ConversationList] Failed to archive conversation', e);
         }
     };
 
@@ -120,7 +120,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, cu
             });
             setConversations(prev => prev.map(c => c.id === convId ? { ...c, title: editingTitle.trim() } : c));
         } catch (e) {
-            console.error(e);
+            console.warn('[ConversationList] Failed to save title', e);
         } finally {
             setEditingId(null);
         }

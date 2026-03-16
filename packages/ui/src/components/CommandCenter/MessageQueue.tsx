@@ -68,7 +68,7 @@ export function MessageQueue({
   }
 
   return (
-    <div className={`border-t border-glass-border bg-bg-surface/50 ${className}`}>
+    <div className={`border-t border-white/[0.06] bg-bg-surface/50 ${className}`}>
       {/* Header */}
       <button
         type="button"

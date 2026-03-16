@@ -29,6 +29,8 @@ interface WorkspaceContextValue {
   activeWorkspace: WorkspaceSummary | null;
   /** Whether workspace data is loading */
   loading: boolean;
+  /** True while a workspace switch is in progress */
+  switching: boolean;
   /** Error message from the last workspace operation (null if none) */
   error: string | null;
   /** True when at least one workspace is unhealthy */
@@ -51,6 +53,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [switching, setSwitching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   /** Monotonic counter to guard against stale workspace-switch responses */
@@ -108,6 +111,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     // before the API call completes. This prevents stale workspaceId
     // from being sent when creating new sessions.
     setActiveWorkspaceId(id);
+    setSwitching(true);
     try {
       const res = await fetch(`/api/workspaces/${id}/select`, { method: 'POST' });
       if (!res.ok) {
@@ -124,6 +128,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         // Revert optimistic update on failure
         setActiveWorkspaceId(previousId);
         setError((e as Error).message ?? 'Failed to switch workspace');
+      }
+    } finally {
+      if (mountedRef.current && switchCounterRef.current === myCounter) {
+        setSwitching(false);
       }
     }
   }, [activeWorkspaceId]);
@@ -197,6 +205,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         activeWorkspaceId,
         activeWorkspace,
         loading,
+        switching,
         error,
         hasWorkspaceHealthIssues,
         switchWorkspace,
