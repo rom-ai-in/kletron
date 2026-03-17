@@ -45,7 +45,7 @@ export function useDiffs(workspace: WorkspaceInfo | null) {
     if (!diff) return;
     if (!workspace) return;
     try {
-      await window.numezis.applyFileChange(diff.filePath, diff.targetContent);
+      await window.kletron.applyFileChange(diff.filePath, diff.targetContent);
       setDiffs((prev) => prev.filter((d) => d.editId !== diffId));
     } catch {
       // ignore
@@ -60,7 +60,7 @@ export function useDiffs(workspace: WorkspaceInfo | null) {
 
     const updatedBase = applyHunksToContent(diff.baseContent, [hunk]);
     try {
-      await window.numezis.applyFileChange(diff.filePath, updatedBase);
+      await window.kletron.applyFileChange(diff.filePath, updatedBase);
     } catch {
       return;
     }

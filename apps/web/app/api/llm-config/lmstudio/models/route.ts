@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLlmConfig } from "@numezis/server/services/llmConfigService";
-import { config as envConfig } from "@numezis/server/config";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { getLlmConfig } from "@kletron/server/services/llmConfigService";
+import { config as envConfig } from "@kletron/server/config";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 export const dynamic = "force-dynamic";
 

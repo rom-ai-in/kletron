@@ -21,7 +21,7 @@ import {
     TabsList,
     TabTrigger,
     TabContent,
-} from "@numezis/ui/components/design-system";
+} from "@kletron/ui/components/design-system";
 
 import { DocCard, DocCode, DocRules, DocSection } from "../../components/DocBlocks";
 import { InspectButton } from "../../components/Inspector";
@@ -31,7 +31,7 @@ export default function DesignSystemPatternsPage() {
     const [tab, setTab] = useState("details");
     const [formState, setFormState] = useState({
         name: "Design System",
-        description: "Shared UI primitives for Numezis",
+        description: "Shared UI primitives for Kletron",
         approvals: true,
         notify: false,
     });

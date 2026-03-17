@@ -1,6 +1,6 @@
 import "dotenv/config";
-import * as driftModule from "@numezis/server/services/driftAnalysisWorker";
-import * as db from "@numezis/server/lib/db";
+import * as driftModule from "@kletron/server/services/driftAnalysisWorker";
+import * as db from "@kletron/server/lib/db";
 
 async function main() {
     console.log("[DriftWorker] Starting...");

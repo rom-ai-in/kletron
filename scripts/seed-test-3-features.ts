@@ -4,9 +4,9 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { automationExecutor } from "@numezis/server/services/automationExecutor";
-import { AutomationConfigBuilder } from "@numezis/shared/automationConfigBuilder";
-import { getDb, closeDb } from "@numezis/server/lib/db";
+import { automationExecutor } from "@kletron/server/services/automationExecutor";
+import { AutomationConfigBuilder } from "@kletron/shared/automationConfigBuilder";
+import { getDb, closeDb } from "@kletron/server/lib/db";
 
 async function main() {
     const db = await getDb();

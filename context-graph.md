@@ -6,7 +6,7 @@ Le **graph de contexte** sert de mémoire structurée du dépôt : fichiers, sym
 ## 2. Architecture du graphe
 - `ContextGraphStore` (`src/context/graph/ContextGraphStore.ts`) stocke les *ContextNode* et *ContextEdge* en mémoire avec adjacence, métadonnées et stats dynamiques. Les nœuds ont une clé `id` (chemin absolu pour les fichiers) et des champs `metadata`/`stats` mis à jour lorsqu'ils sont vus ou modifiés.  
 - Les arêtes typiques (`imports`, `referenced_in`, `contains`, etc.) relient des nœuds autour des dépendances et du flot structurel. L'API `getNeighborhood` fournit un voisinage en N sauts pour guider la proximité pendant le classement.
-- La persistance JSON s'effectue dans `.numezis/context_graph.json`, ce qui permet de recharger rapidement le graphe entre deux runs (`load`/`save`).
+- La persistance JSON s'effectue dans `.kletron/context_graph.json`, ce qui permet de recharger rapidement le graphe entre deux runs (`load`/`save`).
 
 ## 3. Construction initiale et mise à jour
 - `ContextScanner` (`src/context/graph/ContextScanner.ts`) balaie l'arborescence (*fast-glob* sur `.ts/.tsx/.js/.jsx/.md/.json` en excluant `node_modules/.git/.next`) pour créer un nœud par fichier. Il analyse ensuite les `import ... from` relatifs pour ajouter des arêtes `imports` (avec résolution de suffixes) et enrichir le graphe en une passe.

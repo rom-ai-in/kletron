@@ -32,14 +32,14 @@ export interface ThemeProviderProps {
     children: ReactNode;
     /** Default theme if nothing is stored. Defaults to 'dark'. */
     defaultTheme?: Theme;
-    /** localStorage key for persistence. Defaults to 'numezis-theme'. */
+    /** localStorage key for persistence. Defaults to 'kletron-theme'. */
     storageKey?: string;
 }
 
 export function ThemeProvider({
     children,
     defaultTheme = 'dark',
-    storageKey = 'numezis-theme',
+    storageKey = 'kletron-theme',
 }: ThemeProviderProps) {
     const [theme, setThemeState] = useState<Theme>(defaultTheme);
     const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(
@@ -126,4 +126,4 @@ export function useTheme(): ThemeContextValue {
  * Usage in Next.js layout.tsx:
  * <script dangerouslySetInnerHTML={{ __html: themeScript }} />
  */
-export const themeScript = `(function(){try{var t=localStorage.getItem('numezis-theme')||'dark';var r=t==='system'?(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'):t;document.documentElement.classList.add(r)}catch(e){}})();`;
+export const themeScript = `(function(){try{var t=localStorage.getItem('kletron-theme')||'dark';var r=t==='system'?(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'):t;document.documentElement.classList.add(r)}catch(e){}})();`;

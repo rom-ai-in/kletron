@@ -335,7 +335,7 @@ describe("system prompt anti-loop content verification", () => {
         assert.ok(simpleReactSystemPrompt.includes("write_todos **ONCE**"));
         assert.ok(simpleReactSystemPrompt.includes("Never recreate the same queue"));
         assert.ok(simpleReactSystemPrompt.includes("Stop tool usage and produce the final answer"));
-        assert.ok(simpleReactSystemPrompt.includes("Numezis Code"));
+        assert.ok(simpleReactSystemPrompt.includes("Kletron"));
         assert.ok(simpleReactSystemPrompt.includes("Repository First Principle"));
     });
 });

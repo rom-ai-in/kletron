@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateOllamaConfig } from "@numezis/server/services/llmConfigService";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { updateOllamaConfig } from "@kletron/server/services/llmConfigService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 export const dynamic = "force-dynamic";
 

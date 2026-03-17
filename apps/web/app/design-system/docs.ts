@@ -705,9 +705,9 @@ export const componentDocs: Record<string, ComponentDoc> = {
     codeEditor: {
         id: "codeEditor",
         name: "CodeEditor",
-        summary: "Monaco-based code editor with Numezis dark/light themes, syntax highlighting, and Cmd+S save support.",
+        summary: "Monaco-based code editor with Kletron dark/light themes, syntax highlighting, and Cmd+S save support.",
         usage: `<CodeEditor value={code} filename="App.tsx" onChange={update} onSave={save} />`,
-        props: ["value: string", "language?: string", "filename?: string", "onChange?: (value) => void", "readOnly?: boolean", "theme?: 'numezis-dark' | 'numezis-light'", "minimap?: boolean", "onSave?: (value) => void"],
+        props: ["value: string", "language?: string", "filename?: string", "onChange?: (value) => void", "readOnly?: boolean", "theme?: 'kletron-dark' | 'kletron-light'", "minimap?: boolean", "onSave?: (value) => void"],
         tokens: ["colors.editor", "colors.editorGutter", "colors.diffEditor"],
         states: ["editing", "readonly", "focused"],
     },

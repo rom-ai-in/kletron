@@ -1,11 +1,11 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { automationExecutor } from "@numezis/server/services/automationExecutor";
-import { AutomationConfigBuilder } from "@numezis/shared/automationConfigBuilder";
-import { LLM_PROVIDERS } from "@numezis/shared/schemas/llmConfig.schema";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
+import { automationExecutor } from "@kletron/server/services/automationExecutor";
+import { AutomationConfigBuilder } from "@kletron/shared/automationConfigBuilder";
+import { LLM_PROVIDERS } from "@kletron/shared/schemas/llmConfig.schema";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 /**
  * Zod schema for creating an automation

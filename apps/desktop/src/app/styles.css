@@ -1,5 +1,5 @@
-@import '@numezis/ui/styles/tokens.css';
-@import '@numezis/ui/styles/scrollbar.css';
+@import '@kletron/ui/styles/tokens.css';
+@import '@kletron/ui/styles/scrollbar.css';
 
 @tailwind base;
 @tailwind components;

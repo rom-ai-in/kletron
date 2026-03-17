@@ -1,18 +1,18 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type { AgentEvent, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent } from '@numezis/shared/types';
-import type { Message, StreamStatus, StreamChunk } from '@numezis/shared/chatTypes';
-import { extractThoughtsFromContent, sanitizeVisibleAssistantContent, normalizeMessage } from '@numezis/shared/contentSanitizer';
+import type { AgentEvent, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent } from '@kletron/shared/types';
+import type { Message, StreamStatus, StreamChunk } from '@kletron/shared/chatTypes';
+import { extractThoughtsFromContent, sanitizeVisibleAssistantContent, normalizeMessage } from '@kletron/shared/contentSanitizer';
 
 // Re-export for backward compatibility
 export type { Message, StreamStatus };
 export { normalizeMessage };
 
-// ─── Utility Functions (imported from @numezis/shared/contentSanitizer) ─────
+// ─── Utility Functions (imported from @kletron/shared/contentSanitizer) ─────
 // extractThoughtsFromContent, sanitizeVisibleAssistantContent, normalizeMessage
 // are now imported above from the shared module.
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-// StreamChunk is now imported from @numezis/shared/chatTypes above.
+// StreamChunk is now imported from @kletron/shared/chatTypes above.
 
 
 export type TokenUsageForDisplay = {

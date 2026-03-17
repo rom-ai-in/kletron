@@ -1,10 +1,10 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { businessAnalystService } from "@numezis/server/services/businessAnalystService";
-import { FeatureProposalCreateSchema } from "@numezis/shared/businessAnalystTypes";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { businessAnalystService } from "@kletron/server/services/businessAnalystService";
+import { FeatureProposalCreateSchema } from "@kletron/shared/businessAnalystTypes";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 const BulkImportSchema = z.object({
     features: z.array(FeatureProposalCreateSchema).min(1).max(200),

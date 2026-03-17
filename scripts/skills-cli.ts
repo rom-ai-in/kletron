@@ -1,7 +1,7 @@
 #!/usr/bin/env npx ts-node --transpile-only
 
 /**
- * Numezis Skills CLI
+ * Kletron Skills CLI
  * 
  * Usage:
  *   npx ts-node scripts/skills-cli.ts list
@@ -288,7 +288,7 @@ switch (command) {
         break;
     default:
         console.log(`
-Numezis Skills CLI
+Kletron Skills CLI
 
 Usage:
   npx ts-node scripts/skills-cli.ts <command> [args]

@@ -1,10 +1,10 @@
 // app/api/auth/validate-token/route.ts
 // Validates an API token and returns user info (MongoDB version)
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@numezis/server/lib/supabase/supabaseAdmin';
-import { hashApiToken } from '@numezis/server/lib/auth/apiTokens';
-import * as apiTokenService from '@numezis/server/services/apiTokenService';
-import * as userProfileService from '@numezis/server/services/userProfileService';
+import { getSupabaseAdminClient } from '@kletron/server/lib/supabase/supabaseAdmin';
+import { hashApiToken } from '@kletron/server/lib/auth/apiTokens';
+import * as apiTokenService from '@kletron/server/services/apiTokenService';
+import * as userProfileService from '@kletron/server/services/userProfileService';
 
 export async function POST(request: Request) {
     try {

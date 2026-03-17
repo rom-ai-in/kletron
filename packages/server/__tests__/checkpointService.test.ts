@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import {
     buildThreadConfig,
     computeGraphHash,
-} from "@numezis/server/services/checkpointService";
+} from "@kletron/server/services/checkpointService";
 
 // ─── buildThreadConfig ──────────────────────────────────────────────────────
 

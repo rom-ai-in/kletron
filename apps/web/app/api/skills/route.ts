@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { skillRegistry } from "@numezis/agent-core/skills/registry";
+import { skillRegistry } from "@kletron/agent-core/skills/registry";
 
 /**
  * GET /api/skills

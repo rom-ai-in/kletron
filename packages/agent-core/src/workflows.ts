@@ -1,9 +1,9 @@
-import type { AgentWorkflowOptions, AgentWorkflowResult } from "@numezis/shared/types";
-import type { AgentGraphDefinition } from "@numezis/server/services/agentGraphTypes";
-import { agentGraphService } from "@numezis/server/services/agentGraphService";
-import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
-import { getGraphNodeOrder, buildInitialState } from "@numezis/server/services/agentGraphRuntime";
-import { agentGraphExecutor } from "@numezis/server/services/agentGraphExecutor";
+import type { AgentWorkflowOptions, AgentWorkflowResult } from "@kletron/shared/types";
+import type { AgentGraphDefinition } from "@kletron/server/services/agentGraphTypes";
+import { agentGraphService } from "@kletron/server/services/agentGraphService";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
+import { getGraphNodeOrder, buildInitialState } from "@kletron/server/services/agentGraphRuntime";
+import { agentGraphExecutor } from "@kletron/server/services/agentGraphExecutor";
 
 const OBJECTID_RE = /^[0-9a-fA-F]{24}$/;
 

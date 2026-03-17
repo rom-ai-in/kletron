@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@numezis/ui/components/design-system";
-import { AuditContext } from "@numezis/shared/documentContext";
+import { Button } from "@kletron/ui/components/design-system";
+import { AuditContext } from "@kletron/shared/documentContext";
 
 type AuditContextFormProps = {
     initialContext: AuditContext;

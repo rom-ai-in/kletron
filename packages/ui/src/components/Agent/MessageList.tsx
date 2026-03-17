@@ -8,7 +8,7 @@ import { ToolInvocation } from './ToolInvocation';
 import { ToolBatchAccordion } from './ToolBatchAccordion';
 import type { ToolPair } from './ToolBatchAccordion';
 import { ThoughtsPanel } from './ThoughtsPanel';
-import type { ChatEvent, RenderItem } from '@numezis/shared/chatTypes';
+import type { ChatEvent, RenderItem } from '@kletron/shared/chatTypes';
 import { groupEvents, pairToolEvents } from '../../lib/toolPairing';
 
 // Re-export for backward compatibility

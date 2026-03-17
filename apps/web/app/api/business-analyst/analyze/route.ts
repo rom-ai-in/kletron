@@ -1,11 +1,11 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { automationExecutor } from "@numezis/server/services/automationExecutor";
-import { AutomationConfigBuilder } from "@numezis/shared/automationConfigBuilder";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
-import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
+import { automationExecutor } from "@kletron/server/services/automationExecutor";
+import { AutomationConfigBuilder } from "@kletron/shared/automationConfigBuilder";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
+import { runWithWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 
 const AnalyzeSchema = z.object({
     preset: z.enum([

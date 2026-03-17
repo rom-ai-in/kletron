@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Folder, AlertCircle, Check, Loader2, FolderOpen, ChevronUp, ChevronRight, Plus } from 'lucide-react';
-import { Button, Panel } from '@numezis/ui/components/design-system';
+import { Button, Panel } from '@kletron/ui/components/design-system';
 
 export interface InlineAddWorkspaceFormProps {
     onCreated?: (workspace: { id: string; name: string; rootPath: string }) => void;

@@ -1,13 +1,13 @@
 // Design System Component Exports - v4.0
-// Central barrel file for the Numezis Design System
+// Central barrel file for the Kletron Design System
 
 // =============================================================================
 // DESIGN TOKENS (v4.0)
 // =============================================================================
 
 // Re-export all tokens for convenient access
-export { tokens, colors, spacing, radius, typography, motion, shadows, zIndex } from '@numezis/ui/tokens';
-export type { Tokens, SpacingToken, RadiusToken, FontFamily, FontSize, Shadow, ZIndex } from '@numezis/ui/tokens';
+export { tokens, colors, spacing, radius, typography, motion, shadows, zIndex } from '@kletron/ui/tokens';
+export type { Tokens, SpacingToken, RadiusToken, FontFamily, FontSize, Shadow, ZIndex } from '@kletron/ui/tokens';
 
 // =============================================================================
 // CORE UI COMPONENTS

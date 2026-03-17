@@ -21,33 +21,33 @@ import {
     LLMSelector,
     SettingsPanel,
     WorktreeManager,
-} from "@numezis/ui/components/design-system";
-import type { ContextChip } from "@numezis/ui/components/design-system";
+} from "@kletron/ui/components/design-system";
+import type { ContextChip } from "@kletron/ui/components/design-system";
 
 // Command Center components
-import { TitleBar } from "@numezis/ui/components/CommandCenter/TitleBar";
-import { ProjectSidebar } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
-import type { SidebarProject } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
-import { ConversationTabs } from "@numezis/ui/components/CommandCenter/ConversationTabs";
-import type { ConversationTabItem } from "@numezis/ui/components/CommandCenter/ConversationTabs";
-import { ConversationCenter } from "@numezis/ui/components/CommandCenter/ConversationCenter";
-import type { RenderItem } from "@numezis/ui/components/CommandCenter/ConversationCenter";
-import { InputBar } from "@numezis/ui/components/CommandCenter/InputBar";
-import { ProjectUtilitySidebar } from "@numezis/ui/components/CommandCenter/ProjectUtilitySidebar";
-import type { PendingDiffItem, FileLink } from "@numezis/ui/components/CommandCenter/ProjectUtilitySidebar";
-import { InlineDiffReview } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
-import type { InlineDiff } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
-import { SlashCommandMenu } from "@numezis/ui/components/CommandCenter/SlashCommandMenu";
-import type { SlashCommandItem } from "@numezis/ui/components/CommandCenter/SlashCommandMenu";
-import { MultimodalMenu } from "@numezis/ui/components/CommandCenter/MultimodalMenu";
-import { ReviewQueue } from "@numezis/ui/components/CommandCenter/ReviewQueue";
-import type { ReviewQueueItem } from "@numezis/ui/components/CommandCenter/ReviewQueue";
-import { SkillsManager } from "@numezis/ui/components/CommandCenter/SkillsManager";
-import type { Skill } from "@numezis/ui/components/CommandCenter/SkillsManager";
-import { AutomationsDashboard } from "@numezis/ui/components/CommandCenter/AutomationsDashboard";
-import type { Automation } from "@numezis/ui/components/CommandCenter/AutomationsDashboard";
-import { AgentGraphSelector } from "@numezis/ui/components/CommandCenter/AgentGraphSelector";
-import type { AgentGraph } from "@numezis/ui/components/CommandCenter/AgentGraphSelector";
+import { TitleBar } from "@kletron/ui/components/CommandCenter/TitleBar";
+import { ProjectSidebar } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import type { SidebarProject } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import { ConversationTabs } from "@kletron/ui/components/CommandCenter/ConversationTabs";
+import type { ConversationTabItem } from "@kletron/ui/components/CommandCenter/ConversationTabs";
+import { ConversationCenter } from "@kletron/ui/components/CommandCenter/ConversationCenter";
+import type { RenderItem } from "@kletron/ui/components/CommandCenter/ConversationCenter";
+import { InputBar } from "@kletron/ui/components/CommandCenter/InputBar";
+import { ProjectUtilitySidebar } from "@kletron/ui/components/CommandCenter/ProjectUtilitySidebar";
+import type { PendingDiffItem, FileLink } from "@kletron/ui/components/CommandCenter/ProjectUtilitySidebar";
+import { InlineDiffReview } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
+import type { InlineDiff } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
+import { SlashCommandMenu } from "@kletron/ui/components/CommandCenter/SlashCommandMenu";
+import type { SlashCommandItem } from "@kletron/ui/components/CommandCenter/SlashCommandMenu";
+import { MultimodalMenu } from "@kletron/ui/components/CommandCenter/MultimodalMenu";
+import { ReviewQueue } from "@kletron/ui/components/CommandCenter/ReviewQueue";
+import type { ReviewQueueItem } from "@kletron/ui/components/CommandCenter/ReviewQueue";
+import { SkillsManager } from "@kletron/ui/components/CommandCenter/SkillsManager";
+import type { Skill } from "@kletron/ui/components/CommandCenter/SkillsManager";
+import { AutomationsDashboard } from "@kletron/ui/components/CommandCenter/AutomationsDashboard";
+import type { Automation } from "@kletron/ui/components/CommandCenter/AutomationsDashboard";
+import { AgentGraphSelector } from "@kletron/ui/components/CommandCenter/AgentGraphSelector";
+import type { AgentGraph } from "@kletron/ui/components/CommandCenter/AgentGraphSelector";
 
 import { DocCard, DocCode, DocRules, DocSection } from "../../components/DocBlocks";
 import { InspectButton } from "../../components/Inspector";
@@ -58,7 +58,7 @@ import { componentDocs } from "../../docs";
 const sampleProjects: SidebarProject[] = [
     {
         id: "proj-1",
-        name: "numezis-coder-mcp",
+        name: "kletron",
         threads: [
             { id: "thread-1", title: "Command Center layout", updatedAt: new Date().toISOString(), liveStatus: "running" },
             { id: "thread-2", title: "Design system alignment", updatedAt: new Date(Date.now() - 6 * 60000).toISOString(), liveStatus: "waiting" },
@@ -120,14 +120,14 @@ const sampleInlineDiffs: InlineDiff[] = [
                 newLines: 8,
                 lines: [
                     " import { useEffect, useMemo, useRef, useState } from 'react';",
-                    "-import { ActivityBar } from '@numezis/ui/components/design-system';",
-                    "-import { FileBrowser } from '@numezis/ui/components/design-system';",
-                    "-import { CodeEditor } from '@numezis/ui/components/design-system';",
-                    "+import { TitleBar } from '@numezis/ui/components/CommandCenter/TitleBar';",
-                    "+import { ProjectSidebar } from '@numezis/ui/components/CommandCenter/ProjectSidebar';",
-                    "+import { ConversationCenter } from '@numezis/ui/components/CommandCenter/ConversationCenter';",
-                    "+import { InputBar } from '@numezis/ui/components/CommandCenter/InputBar';",
-                    "+import { ProjectUtilitySidebar } from '@numezis/ui/components/CommandCenter/ProjectUtilitySidebar';",
+                    "-import { ActivityBar } from '@kletron/ui/components/design-system';",
+                    "-import { FileBrowser } from '@kletron/ui/components/design-system';",
+                    "-import { CodeEditor } from '@kletron/ui/components/design-system';",
+                    "+import { TitleBar } from '@kletron/ui/components/CommandCenter/TitleBar';",
+                    "+import { ProjectSidebar } from '@kletron/ui/components/CommandCenter/ProjectSidebar';",
+                    "+import { ConversationCenter } from '@kletron/ui/components/CommandCenter/ConversationCenter';",
+                    "+import { InputBar } from '@kletron/ui/components/CommandCenter/InputBar';",
+                    "+import { ProjectUtilitySidebar } from '@kletron/ui/components/CommandCenter/ProjectUtilitySidebar';",
                 ],
             },
         ],
@@ -143,8 +143,8 @@ const sampleSlashCommands: SlashCommandItem[] = [
 ];
 
 const sampleReviewQueue: ReviewQueueItem[] = [
-    { threadId: "thread-1", threadTitle: "Command Center layout", projectName: "numezis-coder-mcp", pendingDiffCount: 3, completedAt: new Date(Date.now() - 120000).toISOString() },
-    { threadId: "thread-4", threadTitle: "Deploy pipeline", projectName: "numezis-coder-mcp", pendingDiffCount: 1, completedAt: new Date(Date.now() - 600000).toISOString() },
+    { threadId: "thread-1", threadTitle: "Command Center layout", projectName: "kletron", pendingDiffCount: 3, completedAt: new Date(Date.now() - 120000).toISOString() },
+    { threadId: "thread-4", threadTitle: "Deploy pipeline", projectName: "kletron", pendingDiffCount: 1, completedAt: new Date(Date.now() - 600000).toISOString() },
 ];
 
 const sampleSkills: Skill[] = [
@@ -246,7 +246,7 @@ export default function DesignSystemMacAppPage() {
                     <div className="rounded-xl border border-border-subtle glass-demo-bg h-[640px] overflow-hidden flex flex-col">
                         {/* Title Bar — uses glass-titlebar */}
                         <TitleBar
-                            workspaceName="numezis-coder-mcp"
+                            workspaceName="kletron"
                             onOpen={() => {}}
                             onCommit={() => {}}
                             onToggleTerminal={() => {}}
@@ -356,7 +356,7 @@ export default function DesignSystemMacAppPage() {
                 <DocCard title="TitleBar" actions={<InspectButton doc={componentDocs.titleBar} />}>
                     <div className="rounded-lg border border-border-subtle overflow-hidden">
                         <TitleBar
-                            workspaceName="numezis-coder-mcp"
+                            workspaceName="kletron"
                             onOpen={() => {}}
                             onCommit={() => {}}
                             onToggleTerminal={() => {}}

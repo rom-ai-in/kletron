@@ -17,7 +17,7 @@ import { RunnableConfig } from "@langchain/core/runnables";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-import { getChatModel, type LlmSelection } from "@numezis/server/llm";
+import { getChatModel, type LlmSelection } from "@kletron/server/llm";
 import { allMcpTools } from "../tools/mcpTools";
 import {
   actionReportPrompt,
@@ -37,12 +37,12 @@ import type {
   AgentWorkflowResult,
   AgentWorkflowUpdate,
   TimelineEvent,
-} from "@numezis/shared/types";
+} from "@kletron/shared/types";
 import {
   deepResearchPhaseConfig,
   deepResearchPhaseOrder,
   type DeepResearchPhaseKey,
-} from "@numezis/shared/graphCatalog";
+} from "@kletron/shared/graphCatalog";
 
 const defaultDeepResearchConfig = {
   allowClarification: true,

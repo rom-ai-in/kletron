@@ -7,11 +7,11 @@ import {
     createEmptyTokenUsageSummary,
     addTokenUsage,
     accumulateUsage,
-} from '@numezis/server/services/tokenUsageTypes';
-import { TokenUsageService } from '@numezis/server/services/tokenUsageService';
+} from '@kletron/server/services/tokenUsageTypes';
+import { TokenUsageService } from '@kletron/server/services/tokenUsageService';
 
 // Mock MongoDB
-vi.mock('@numezis/server/lib/db', () => ({
+vi.mock('@kletron/server/lib/db', () => ({
     getDb: vi.fn(() => Promise.resolve({
         collection: () => ({
             insertOne: vi.fn().mockResolvedValue({ insertedId: new ObjectId() }),

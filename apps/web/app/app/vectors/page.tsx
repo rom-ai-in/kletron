@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Panel } from "@numezis/ui/components/ui/Panel";
-import { Button } from "@numezis/ui/components/ui/Button";
-import { Modal } from "@numezis/ui/components/ui/Modal";
-import { EmptyState, ErrorState } from "@numezis/ui/components/ui/EmptyState";
-import { Skeleton } from "@numezis/ui/components/ui/Skeleton";
+import { Panel } from "@kletron/ui/components/ui/Panel";
+import { Button } from "@kletron/ui/components/ui/Button";
+import { Modal } from "@kletron/ui/components/ui/Modal";
+import { EmptyState, ErrorState } from "@kletron/ui/components/ui/EmptyState";
+import { Skeleton } from "@kletron/ui/components/ui/Skeleton";
 import {
     Database,
     Settings,
@@ -20,9 +20,9 @@ import {
     FileCode,
     Play
 } from "lucide-react";
-import { useLlmHealth } from "@numezis/ui/hooks/useLlmHealth";
-import { RequireWorkspace } from "@numezis/ui/components/workspace/RequireWorkspace";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+import { useLlmHealth } from "@kletron/ui/hooks/useLlmHealth";
+import { RequireWorkspace } from "@kletron/ui/components/workspace/RequireWorkspace";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
     azure: "Azure OpenAI",
@@ -33,7 +33,7 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
     ollama: "Ollama",
 };
 
-const VECTORS_CACHE_KEY = "numezis-vectors-cache";
+const VECTORS_CACHE_KEY = "kletron-vectors-cache";
 
 type IndexStatus = {
     isIndexing: boolean;

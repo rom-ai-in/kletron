@@ -56,7 +56,7 @@ export function useWorkspace(
 
   useEffect(() => {
     if (!workspace?.path) return;
-    window.numezis.setWorkspace(workspace.path).catch(() => undefined);
+    window.kletron.setWorkspace(workspace.path).catch(() => undefined);
   }, [workspace?.path]);
 
   async function loadWorkspaceSummary() {
@@ -143,7 +143,7 @@ export function useWorkspace(
   }
 
   async function selectWorkspace() {
-    const result = await window.numezis.selectWorkspace();
+    const result = await window.kletron.selectWorkspace();
     if (result) {
       setWorkspace(result);
     }

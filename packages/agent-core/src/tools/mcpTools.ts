@@ -2,9 +2,9 @@ import path from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-import { McpClient } from "@numezis/mcp-client/client";
-import { getConfig } from "@numezis/server/config";
-import { getWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
+import { McpClient } from "@kletron/mcp-client/client";
+import { getConfig } from "@kletron/server/config";
+import { getWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 
 // ── LLM-tolerant Zod helpers ────────────────────────────────────────────────
 // Many LLMs (especially local ones via LM Studio) send "True"/"False" strings
@@ -870,7 +870,7 @@ export const outputFormatTool = tool(
   }
 );
 
-import { semanticSearch } from "@numezis/server/services/vectorService";
+import { semanticSearch } from "@kletron/server/services/vectorService";
 
 export const semanticCodeSearchTool = tool(
   async (input: {

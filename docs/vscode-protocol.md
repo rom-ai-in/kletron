@@ -1,7 +1,7 @@
 # VS Code Extension – Backend Protocol
 
 ## Overview
-The extension talks to the existing Next.js API, so every request is prefixed with `backendUrl` (stored in `numezis.backendUrl`). The `BackendClient` utility adds `Content-Type: application/json` to all requests and an optional `Authorization: Bearer ...` header when `numezis.apiToken` is configured.
+The extension talks to the existing Next.js API, so every request is prefixed with `backendUrl` (stored in `kletron.backendUrl`). The `BackendClient` utility adds `Content-Type: application/json` to all requests and an optional `Authorization: Bearer ...` header when `kletron.apiToken` is configured.
 
 ## Endpoints Used
 ```

@@ -1,5 +1,5 @@
 /**
- * Numezis Design System - Glass / Frosted Surface Tokens
+ * Kletron Design System - Glass / Frosted Surface Tokens
  *
  * Semi-transparent surfaces for macOS vibrancy and CSS backdrop-filter.
  * Use the corresponding CSS variables via Tailwind classes (e.g. `bg-glass-sidebar`)

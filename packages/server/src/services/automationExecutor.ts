@@ -1,8 +1,8 @@
 import { ObjectId } from "mongodb";
 import { randomBytes } from "node:crypto";
 import { getDb } from "../lib/db";
-import { runWorkflow } from "@numezis/agent-core/workflows";
-import { AgentWorkflowAbortError } from "@numezis/agent-core/reactAgentRunner";
+import { runWorkflow } from "@kletron/agent-core/workflows";
+import { AgentWorkflowAbortError } from "@kletron/agent-core/reactAgentRunner";
 import { auditService } from "./auditService";
 import { getWorkspaceByIdUnsafe, listAllWorkspaces } from "./workspaceService";
 import type {
@@ -16,10 +16,10 @@ import type {
     Insight,
     AutomationStageConfig,
     AutomationRun,
-} from "@numezis/shared/automationTypes";
-import type { AgentWorkflowAbortReason } from "@numezis/shared/types";
-import type { Claim as WorkflowClaim, Task as WorkflowTask, AgentWorkflowResult, AgentEvent } from "@numezis/shared/types";
-import { computeNextRun } from "@numezis/shared/cronUtils";
+} from "@kletron/shared/automationTypes";
+import type { AgentWorkflowAbortReason } from "@kletron/shared/types";
+import type { Claim as WorkflowClaim, Task as WorkflowTask, AgentWorkflowResult, AgentEvent } from "@kletron/shared/types";
+import { computeNextRun } from "@kletron/shared/cronUtils";
 
 const COLLECTION_NAME = "audit_chains"; // Legacy collection name - kept for backward compatibility
 const RUNS_COLLECTION = "audit_runs"; // Legacy collection name - kept for backward compatibility
@@ -1600,7 +1600,7 @@ export class AutomationExecutor {
      * @param workspaceId - Optional workspace to scope the seeded automation
      */
     async ensureDefaultAutomations(workspaceId?: string): Promise<{ created: string[]; skipped: string[] }> {
-        const { AutomationConfigBuilder } = await import("@numezis/shared/automationConfigBuilder");
+        const { AutomationConfigBuilder } = await import("@kletron/shared/automationConfigBuilder");
         const db = await getDb();
 
         const config = AutomationConfigBuilder.buildFullFeatureAudit();

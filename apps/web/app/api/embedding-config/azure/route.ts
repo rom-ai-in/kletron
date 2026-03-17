@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateAzureEmbeddingConfig } from "@numezis/server/services/embeddingConfigService";
-import { AzureEmbeddingConfigSchema } from "@numezis/shared/schemas/embeddingConfig.schema";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { updateAzureEmbeddingConfig } from "@kletron/server/services/embeddingConfigService";
+import { AzureEmbeddingConfigSchema } from "@kletron/shared/schemas/embeddingConfig.schema";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 export async function PUT(request: NextRequest) {
     const auth = await requireAppRouteAuth(request);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateGeminiConfig } from "@numezis/server/services/llmConfigService";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { updateGeminiConfig } from "@kletron/server/services/llmConfigService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 export const dynamic = "force-dynamic";
 

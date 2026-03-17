@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Modal, Button, Skeleton, Panel, SelectableRow, Selector } from "@numezis/ui/components/design-system";
-import type { SelectorOption } from "@numezis/ui/components/design-system";
-import { AutomationConfigBuilder } from "@numezis/shared/automationConfigBuilder";
-import type { AutomationDefinition, AutomationStageConfig, AutomationTriggerType, GitEventType } from "@numezis/shared/automationTypes";
-import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
-import { describeCron } from "@numezis/shared/cronUtils";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+import { Modal, Button, Skeleton, Panel, SelectableRow, Selector } from "@kletron/ui/components/design-system";
+import type { SelectorOption } from "@kletron/ui/components/design-system";
+import { AutomationConfigBuilder } from "@kletron/shared/automationConfigBuilder";
+import type { AutomationDefinition, AutomationStageConfig, AutomationTriggerType, GitEventType } from "@kletron/shared/automationTypes";
+import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
+import { describeCron } from "@kletron/shared/cronUtils";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 
 type GraphOption = { id: string; name: string; description?: string };
 type LlmProviderOption = { id: LlmProviderType; label: string; model?: string };

@@ -3,8 +3,8 @@
 // Password reset request page - aligned with app branding, using design system components
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useAuth } from '@numezis/ui/context/AuthContext';
-import { Input, Button } from '@numezis/ui/components/design-system';
+import { useAuth } from '@kletron/ui/context/AuthContext';
+import { Input, Button } from '@kletron/ui/components/design-system';
 
 export default function ResetPasswordPage() {
     const [email, setEmail] = useState('');

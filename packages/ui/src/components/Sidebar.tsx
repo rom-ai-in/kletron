@@ -118,7 +118,7 @@ export function Sidebar() {
     }, [profile, user]);
 
     const displayEmail = useMemo(() => {
-        return user?.email || 'account@numezis.ch';
+        return user?.email || 'account@kletron.ch';
     }, [user]);
 
     const avatarGradient = useMemo(() => {
@@ -148,7 +148,7 @@ export function Sidebar() {
                 </Link>
                 {!isCollapsed && (
                     <span className="text-sm font-semibold tracking-tight text-text-primary whitespace-nowrap overflow-hidden transition-opacity duration-300">
-                        Numezis Code
+                        Kletron
                     </span>
                 )}
                 <button

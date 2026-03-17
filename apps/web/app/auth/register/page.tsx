@@ -4,8 +4,8 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@numezis/ui/context/AuthContext';
-import { Input, PasswordInput, Button } from '@numezis/ui/components/design-system';
+import { useAuth } from '@kletron/ui/context/AuthContext';
+import { Input, PasswordInput, Button } from '@kletron/ui/components/design-system';
 
 export default function RegisterPage() {
     const [email, setEmail] = useState('');
@@ -87,7 +87,7 @@ export default function RegisterPage() {
                         <span className="text-xl">🧠</span>
                     </Link>
                     <h1 className="text-xl font-medium text-text-primary">Create account</h1>
-                    <p className="text-sm text-text-muted mt-1">Get started with Numezis Code</p>
+                    <p className="text-sm text-text-muted mt-1">Get started with Kletron</p>
                 </div>
 
                 <div className="bg-bg-surface border border-border-subtle rounded-lg p-6">

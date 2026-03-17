@@ -1,13 +1,13 @@
 import { ObjectId } from "mongodb";
 import { getDb } from "../lib/db";
-import type { AgentWorkflowResult, TimelineEvent, AgentEvent } from "@numezis/shared/types";
+import type { AgentWorkflowResult, TimelineEvent, AgentEvent } from "@kletron/shared/types";
 import {
     type AccessMode,
     isCompanyAccessMode,
     isTenantAccessMode,
     isPartnerAccessMode,
     isSuperadminAccessMode
-} from "@numezis/shared/accessMode";
+} from "@kletron/shared/accessMode";
 import { Filter } from "mongodb";
 
 export type AuditSessionStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";

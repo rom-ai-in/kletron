@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLlmConfig, resetToDefaultConfig, updateDefaultProvider } from "@numezis/server/services/llmConfigService";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { LLM_PROVIDERS, type LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
+import { getLlmConfig, resetToDefaultConfig, updateDefaultProvider } from "@kletron/server/services/llmConfigService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { LLM_PROVIDERS, type LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 
 export const dynamic = "force-dynamic";
 

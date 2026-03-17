@@ -9,14 +9,14 @@ import { getDatabase } from "./lib/db";
 // Use __filename and __dirname equivalents in ESM, or fallback to standard in CJS.
 // We are in TS transpiled to commonjs / esm, so we'll use a robust approach
 export function getProjectRoot(): string {
-  // Walk up from this file's directory until we find package.json containing "numezis-code"
+  // Walk up from this file's directory until we find package.json containing "kletron"
   // This file is in packages/server/src/config.ts or packages/server/dist/config.js
   let currentDir = __dirname;
   while (currentDir !== path.parse(currentDir).root) {
     if (fs.existsSync(path.join(currentDir, "package.json"))) {
       try {
         const pkg = JSON.parse(fs.readFileSync(path.join(currentDir, "package.json"), "utf-8"));
-        if (pkg.name === "numezis-code" || pkg.workspaces) {
+        if (pkg.name === "kletron" || pkg.workspaces) {
           return currentDir;
         }
       } catch {

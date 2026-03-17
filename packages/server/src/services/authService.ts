@@ -2,7 +2,7 @@
 // Core authentication service for Supabase auth operations
 import { getSupabaseClient } from '../lib/supabase/supabaseClient';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
-import type { SignUpData, SignInData, AuthResponse, UserProfile, UserContext } from '@numezis/shared/supabase/types';
+import type { SignUpData, SignInData, AuthResponse, UserProfile, UserContext } from '@kletron/shared/supabase/types';
 
 export class AuthService {
     private supabase = getSupabaseClient();

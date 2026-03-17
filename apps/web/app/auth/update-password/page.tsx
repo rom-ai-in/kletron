@@ -4,8 +4,8 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@numezis/ui/context/AuthContext';
-import { PasswordInput, Button } from '@numezis/ui/components/design-system';
+import { useAuth } from '@kletron/ui/context/AuthContext';
+import { PasswordInput, Button } from '@kletron/ui/components/design-system';
 
 export default function UpdatePasswordPage() {
     const [password, setPassword] = useState('');

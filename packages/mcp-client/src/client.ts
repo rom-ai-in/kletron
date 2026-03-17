@@ -8,7 +8,7 @@ import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { EventSource } from "eventsource";
 
-import { getConfig } from "@numezis/server/config";
+import { getConfig } from "@kletron/server/config";
 
 type ToolResultContent = {
   text?: string;
@@ -49,7 +49,7 @@ export class McpClient {
       })();
 
     const client = new Client(
-      { name: "numezis-mcp-client", version: "1.0.0" },
+      { name: "kletron-mcp-client", version: "1.0.0" },
       {
         capabilities: {
           tools: {},
@@ -80,10 +80,10 @@ export class McpClient {
 
     if (!isDisabled && !isNextWorker && !(globalThis as any).__MCP_SERVICES_INITIALIZED__) {
       try {
-        const { startWatcher } = await import("@numezis/server/services/autoIndexer");
-        const { startAutoIndexScheduler } = await import("@numezis/server/services/autoIndexScheduler");
-        const { startAutomationScheduler } = await import("@numezis/server/services/automationScheduler");
-        const { listAllWorkspaces, validateWorkspaceRoot } = await import("@numezis/server/services/workspaceService");
+        const { startWatcher } = await import("@kletron/server/services/autoIndexer");
+        const { startAutoIndexScheduler } = await import("@kletron/server/services/autoIndexScheduler");
+        const { startAutomationScheduler } = await import("@kletron/server/services/automationScheduler");
+        const { listAllWorkspaces, validateWorkspaceRoot } = await import("@kletron/server/services/workspaceService");
 
         console.log("[AutoIndex] Initializing services...");
         (globalThis as any).__MCP_SERVICES_INITIALIZED__ = true;
@@ -112,7 +112,7 @@ export class McpClient {
 
   async callTool(name: string, args: Record<string, unknown> = {}) {
     if (name === "semantic_code_search") {
-      const { semanticSearch } = await import("@numezis/server/services/vectorService");
+      const { semanticSearch } = await import("@kletron/server/services/vectorService");
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { query, ...options } = args;
       if (typeof query !== "string") {
@@ -159,8 +159,8 @@ export class McpClient {
     // 1. Stop background services if they were initialized in this process
     if ((globalThis as any).__MCP_SERVICES_INITIALIZED__) {
       try {
-        const { stopWatcher } = await import("@numezis/server/services/autoIndexer");
-        const { stopAutoIndexScheduler } = await import("@numezis/server/services/autoIndexScheduler");
+        const { stopWatcher } = await import("@kletron/server/services/autoIndexer");
+        const { stopAutoIndexScheduler } = await import("@kletron/server/services/autoIndexScheduler");
         stopWatcher();
         stopAutoIndexScheduler();
         (globalThis as any).__MCP_SERVICES_INITIALIZED__ = false;

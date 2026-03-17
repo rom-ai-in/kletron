@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { automationExecutor } from "@numezis/server/services/automationExecutor";
+import { automationExecutor } from "@kletron/server/services/automationExecutor";
 
 /**
  * POST /api/automations/[id]/webhook

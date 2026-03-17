@@ -7,20 +7,20 @@ import {
   ChatInput,
   Selector,
   WorkspaceLayout,
-} from "@numezis/ui/components/design-system";
-import { ProjectSidebar } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
-import type { SidebarProject, SidebarThread, ThreadLiveStatus } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
-import { AddWorkspaceModal } from "@numezis/ui/components/CommandCenter/AddWorkspaceModal";
-import { TimelinePanel } from "@numezis/ui/components/Agent/TimelinePanel";
-import { EventCard } from "@numezis/ui/components/Agent/EventCard";
+} from "@kletron/ui/components/design-system";
+import { ProjectSidebar } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import type { SidebarProject, SidebarThread, ThreadLiveStatus } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import { AddWorkspaceModal } from "@kletron/ui/components/CommandCenter/AddWorkspaceModal";
+import { TimelinePanel } from "@kletron/ui/components/Agent/TimelinePanel";
+import { EventCard } from "@kletron/ui/components/Agent/EventCard";
 import {
   TokenUsageDisplay,
   DurationDisplay,
-} from "@numezis/ui/components/Agent/metrics";
-import { useAgentSession } from "@numezis/ui/hooks/useAgentSession";
-import { useSessionStream, normalizeMessage } from "@numezis/ui/hooks/useSessionStream";
-import { useSessionEdits } from "@numezis/ui/hooks/useSessionEdits";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+} from "@kletron/ui/components/Agent/metrics";
+import { useAgentSession } from "@kletron/ui/hooks/useAgentSession";
+import { useSessionStream, normalizeMessage } from "@kletron/ui/hooks/useSessionStream";
+import { useSessionEdits } from "@kletron/ui/hooks/useSessionEdits";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 import {
   Loader2,
   Folder,
@@ -28,9 +28,9 @@ import {
 } from "lucide-react";
 
 // For simple chat view - reuse existing components (groups tool events, renders collapsible tool cards)
-import { MessageList, type ChatEvent } from "@numezis/ui/components/Agent/MessageList";
-import { MessageQueue } from "@numezis/ui/components/CommandCenter/MessageQueue";
-import type { QueuedMessageItem } from "@numezis/ui/components/CommandCenter/MessageQueue";
+import { MessageList, type ChatEvent } from "@kletron/ui/components/Agent/MessageList";
+import { MessageQueue } from "@kletron/ui/components/CommandCenter/MessageQueue";
+import type { QueuedMessageItem } from "@kletron/ui/components/CommandCenter/MessageQueue";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

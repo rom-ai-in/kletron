@@ -25,7 +25,7 @@ export default function DesignSystemShell({ children }: { children: ReactNode })
                     <div className="flex items-center gap-3">
                         <span className="text-2xl">🧠</span>
                         <div>
-                            <h1 className="text-lg font-semibold text-text-primary">Numezis Design System</h1>
+                            <h1 className="text-lg font-semibold text-text-primary">Kletron Design System</h1>
                             <p className="text-xs text-text-muted">Cursor-Level UI Reference • v4.0</p>
                             <p className="text-[10px] text-status-warning-text uppercase tracking-[0.2em] mt-1">
                                 Mac App preview—expect the UI to evolve.
@@ -67,7 +67,7 @@ export default function DesignSystemShell({ children }: { children: ReactNode })
 
             <footer className="border-t border-border-subtle bg-bg-surface mt-16">
                 <div className="max-w-7xl mx-auto px-6 py-6 text-center">
-                    <p className="text-xs text-text-muted">🧠 Numezis Design System v4.0 • Custom Mac App Edition • February 2026</p>
+                    <p className="text-xs text-text-muted">🧠 Kletron Design System v4.0 • Custom Mac App Edition • February 2026</p>
                 </div>
             </footer>
         </div>

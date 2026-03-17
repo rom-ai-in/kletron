@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "node:path";
-import { McpClient } from "@numezis/mcp-client/client";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
+import { McpClient } from "@kletron/mcp-client/client";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 export async function POST(req: NextRequest) {
     const auth = await requireAppRouteAuth(req);

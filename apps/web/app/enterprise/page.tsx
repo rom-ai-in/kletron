@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useAuth } from '@numezis/ui/context/AuthContext';
-import { MarketingHeader, MarketingFooter } from '@numezis/ui/components/design-system';
+import { useAuth } from '@kletron/ui/context/AuthContext';
+import { MarketingHeader, MarketingFooter } from '@kletron/ui/components/design-system';
 
 const pillars = [
     {
@@ -19,7 +19,7 @@ const pillars = [
     {
         icon: '🏛️',
         title: 'EU AI Act Ready',
-        description: 'Numezis Code is designed with the EU AI Act in mind. Full transparency in AI decision-making, audit trails, and human oversight built into every workflow.',
+        description: 'Kletron is designed with the EU AI Act in mind. Full transparency in AI decision-making, audit trails, and human oversight built into every workflow.',
         details: [
             'Complete AI audit trails',
             'Human-in-the-loop controls',
@@ -30,7 +30,7 @@ const pillars = [
     {
         icon: '🔒',
         title: 'Zero Data Leakage',
-        description: 'Your source code is your most valuable IP. With Numezis, no code is ever used for model training. Self-hosted options ensure nothing leaves your perimeter.',
+        description: 'Your source code is your most valuable IP. With Kletron, no code is ever used for model training. Self-hosted options ensure nothing leaves your perimeter.',
         details: [
             'No training on customer code',
             'End-to-end encryption in transit',
@@ -68,7 +68,7 @@ const deploymentOptions = [
         icon: '🏢',
         name: 'Self-Hosted',
         badge: 'Maximum Control',
-        description: 'Deploy Numezis Code in your own infrastructure. Full control over data, networking, and access policies.',
+        description: 'Deploy Kletron in your own infrastructure. Full control over data, networking, and access policies.',
         features: [
             'Your infrastructure, your rules',
             'Air-gapped deployment support',
@@ -80,11 +80,11 @@ const deploymentOptions = [
         icon: '🔐',
         name: 'Private Cloud',
         badge: 'Dedicated',
-        description: 'Dedicated Numezis instance running in an isolated environment, managed by our team with your compliance requirements.',
+        description: 'Dedicated Kletron instance running in an isolated environment, managed by our team with your compliance requirements.',
         features: [
             'Dedicated compute & storage',
             'Custom data residency',
-            'Managed by Numezis team',
+            'Managed by Kletron team',
             'Tailored compliance configuration',
         ],
     },
@@ -113,7 +113,7 @@ const useCases = [
         icon: '🏦',
         sector: 'Financial Services',
         title: 'Regulated code, sovereign AI',
-        description: 'Banks and fintechs across Europe use Numezis Code to accelerate development while meeting BaFin, FINMA, and ECB regulatory requirements. Self-hosted deployment ensures no code leaves your network.',
+        description: 'Banks and fintechs across Europe use Kletron to accelerate development while meeting BaFin, FINMA, and ECB regulatory requirements. Self-hosted deployment ensures no code leaves your network.',
     },
     {
         icon: '🏥',
@@ -125,19 +125,19 @@ const useCases = [
         icon: '🏛️',
         sector: 'Public Sector & Defense',
         title: 'Digital sovereignty guaranteed',
-        description: 'Government agencies and defense contractors require absolute control over their development tools. Numezis Code offers air-gapped deployment with zero external dependencies.',
+        description: 'Government agencies and defense contractors require absolute control over their development tools. Kletron offers air-gapped deployment with zero external dependencies.',
     },
     {
         icon: '🚗',
         sector: 'Automotive & Manufacturing',
         title: 'Protect industrial IP',
-        description: 'From autonomous driving algorithms to smart factory code, European manufacturers trust Numezis Code to keep their competitive advantage within EU jurisdiction.',
+        description: 'From autonomous driving algorithms to smart factory code, European manufacturers trust Kletron to keep their competitive advantage within EU jurisdiction.',
     },
 ];
 
 const testimonials = [
     {
-        quote: 'We evaluated Cursor, Copilot, and Windsurf — none could guarantee our code stays in the EU. Numezis was the only option our CISO approved.',
+        quote: 'We evaluated Cursor, Copilot, and Windsurf — none could guarantee our code stays in the EU. Kletron was the only option our CISO approved.',
         author: 'Head of Engineering',
         company: 'European Fintech (Series B)',
     },
@@ -147,7 +147,7 @@ const testimonials = [
         company: 'German Automotive OEM',
     },
     {
-        quote: 'GDPR compliance isn\'t a checkbox for us — it\'s the law. Numezis Code is the first AI coding tool we could deploy without months of legal review.',
+        quote: 'GDPR compliance isn\'t a checkbox for us — it\'s the law. Kletron is the first AI coding tool we could deploy without months of legal review.',
         author: 'DPO',
         company: 'Nordic Insurance Group',
     },
@@ -229,7 +229,7 @@ export default function EnterprisePage() {
 
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
                         <a
-                            href="mailto:enterprise@numezis.com?subject=Numezis%20Code%20Enterprise%20Inquiry"
+                            href="mailto:enterprise@kletron.com?subject=Kletron%20Code%20Enterprise%20Inquiry"
                             className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-6 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
                         >
                             Contact Enterprise Sales
@@ -272,7 +272,7 @@ export default function EnterprisePage() {
                 <div className="max-w-5xl mx-auto">
                     <div className="text-center mb-16">
                         <h2 className="text-2xl sm:text-3xl font-semibold text-text-primary mb-3">
-                            Why EU Enterprises Choose Numezis
+                            Why EU Enterprises Choose Kletron
                         </h2>
                         <p className="text-sm text-text-muted max-w-lg mx-auto">
                             Every feature is built with European regulatory requirements and data sovereignty at its core.
@@ -354,11 +354,11 @@ export default function EnterprisePage() {
                             </div>
                         </div>
 
-                        {/* Numezis */}
+                        {/* Kletron */}
                         <div className="p-6 rounded-lg border border-status-success-border bg-status-success-bg/30">
                             <div className="flex items-center gap-2 mb-4">
                                 <span className="text-lg">🇪🇺</span>
-                                <h3 className="text-sm font-semibold text-text-primary">Numezis Code</h3>
+                                <h3 className="text-sm font-semibold text-text-primary">Kletron</h3>
                                 <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-status-success-bg text-status-success-text border border-status-success-border">
                                     Compliant
                                 </span>
@@ -470,7 +470,7 @@ export default function EnterprisePage() {
                         </h2>
                         <p className="text-sm text-text-muted max-w-lg mx-auto">
                             From banking to healthcare, European enterprises in highly regulated sectors
-                            rely on Numezis Code.
+                            rely on Kletron.
                         </p>
                     </div>
 
@@ -568,7 +568,7 @@ export default function EnterprisePage() {
                                 <p className="text-xs text-text-muted mb-4">Tailored to your organisation</p>
                                 <div className="flex flex-col gap-2">
                                     <a
-                                        href="mailto:enterprise@numezis.com?subject=Numezis%20Code%20Enterprise%20Inquiry"
+                                        href="mailto:enterprise@kletron.com?subject=Kletron%20Code%20Enterprise%20Inquiry"
                                         className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-5 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
                                     >
                                         Contact Sales
@@ -577,7 +577,7 @@ export default function EnterprisePage() {
                                         </svg>
                                     </a>
                                     <a
-                                        href="mailto:enterprise@numezis.com?subject=Numezis%20Code%20Enterprise%20Demo%20Request"
+                                        href="mailto:enterprise@kletron.com?subject=Kletron%20Code%20Enterprise%20Demo%20Request"
                                         className="inline-flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-bg-elevated hover:bg-state-hover px-5 py-2.5 text-sm font-medium text-text-primary transition-colors"
                                     >
                                         Request a Demo
@@ -596,12 +596,12 @@ export default function EnterprisePage() {
                         Ready for <span className="text-text-secondary">sovereign AI coding</span>?
                     </h2>
                     <p className="text-sm text-text-muted mb-8">
-                        Join leading European enterprises that trust Numezis Code for compliant,
+                        Join leading European enterprises that trust Kletron for compliant,
                         secure, and powerful AI-assisted development.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
                         <a
-                            href="mailto:enterprise@numezis.com?subject=Numezis%20Code%20Enterprise%20Inquiry"
+                            href="mailto:enterprise@kletron.com?subject=Kletron%20Code%20Enterprise%20Inquiry"
                             className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-6 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
                         >
                             Talk to Enterprise Sales

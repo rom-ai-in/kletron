@@ -1,4 +1,4 @@
-import { evaluateCondition, validateCondition } from "@numezis/server/services/agentGraphConditions";
+import { evaluateCondition, validateCondition } from "@kletron/server/services/agentGraphConditions";
 
 describe("agentGraphConditions", () => {
     const state = {

@@ -91,6 +91,6 @@ const api = {
   popOutThread: (threadId: string, title: string): Promise<number> => ipcRenderer.invoke("app:popOutThread", { threadId, title }),
 };
 
-contextBridge.exposeInMainWorld("numezis", api);
+contextBridge.exposeInMainWorld("kletron", api);
 
-export type NumezisAPI = typeof api;
+export type KletronAPI = typeof api;

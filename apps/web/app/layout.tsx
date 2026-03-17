@@ -1,12 +1,12 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 
-import { AuthProvider } from "@numezis/ui/context/AuthContext";
-import { AppShell } from "@numezis/ui/components/AppShell";
-import { ThemeProvider, themeScript } from "@numezis/ui/hooks/useTheme";
+import { AuthProvider } from "@kletron/ui/context/AuthContext";
+import { AppShell } from "@kletron/ui/components/AppShell";
+import { ThemeProvider, themeScript } from "@kletron/ui/hooks/useTheme";
 
 export const metadata = {
-  title: "Numezis Code",
+  title: "Kletron",
   description: "Agent dashboard with timeline and chat for the MCP stack.",
 };
 

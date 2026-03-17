@@ -1,5 +1,5 @@
 {
-  "name": "@numezis/cli",
+  "name": "@kletron/cli",
   "private": true,
   "version": "1.0.0",
   "scripts": {
@@ -7,7 +7,7 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "@numezis/agent-core": "file:../../packages/agent-core",
-    "@numezis/server": "file:../../packages/server"
+    "@kletron/agent-core": "file:../../packages/agent-core",
+    "@kletron/server": "file:../../packages/server"
   }
 }

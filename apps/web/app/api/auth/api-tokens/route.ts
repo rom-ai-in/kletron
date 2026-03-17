@@ -1,10 +1,10 @@
 // app/api/auth/api-tokens/route.ts
 // API route for managing extension API tokens (MongoDB version)
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@numezis/server/lib/supabase/supabaseServer';
-import { createRawApiToken, hashApiToken } from '@numezis/server/lib/auth/apiTokens';
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import * as apiTokenService from '@numezis/server/services/apiTokenService';
+import { createRouteHandlerClient } from '@kletron/server/lib/supabase/supabaseServer';
+import { createRawApiToken, hashApiToken } from '@kletron/server/lib/auth/apiTokens';
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import * as apiTokenService from '@kletron/server/services/apiTokenService';
 
 export async function GET(request: Request) {
     const auth = await requireAppRouteAuth(request);

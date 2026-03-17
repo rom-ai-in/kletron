@@ -1,7 +1,7 @@
 // src/__tests__/services/subscriptionService.test.ts
 // Unit tests for subscription service (plan limits and helpers)
 import { describe, it, expect } from 'vitest';
-import { getPlanLimits, type PlanId, type PlanLimits } from '@numezis/server/services/subscriptionService';
+import { getPlanLimits, type PlanId, type PlanLimits } from '@kletron/server/services/subscriptionService';
 
 describe('subscriptionService', () => {
     describe('getPlanLimits', () => {

@@ -14,7 +14,7 @@ export interface DiffEditorProps {
     readOnly?: boolean;
     onAccept?: () => void;
     onReject?: () => void;
-    theme?: 'numezis-dark' | 'numezis-light';
+    theme?: 'kletron-dark' | 'kletron-light';
     className?: string;
 }
 
@@ -27,7 +27,7 @@ export function DiffEditorComponent({
     readOnly = true,
     onAccept,
     onReject,
-    theme = 'numezis-dark',
+    theme = 'kletron-dark',
     className = '',
 }: DiffEditorProps) {
     const editorRef = useRef<editor.IStandaloneDiffEditor | null>(null);

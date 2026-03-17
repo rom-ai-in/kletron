@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractJsonObject, stripCodeFences, removeTrailingCommasOutsideStrings } from '@numezis/server/lib/jsonExtract';
+import { extractJsonObject, stripCodeFences, removeTrailingCommasOutsideStrings } from '@kletron/server/lib/jsonExtract';
 
 describe('jsonExtract', () => {
     describe('stripCodeFences', () => {

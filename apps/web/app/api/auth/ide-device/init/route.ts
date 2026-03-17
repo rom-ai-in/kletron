@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
-import { createIdeDeviceSession, getDeviceByUserCode } from '@numezis/server/services/ideDeviceService';
+import { createIdeDeviceSession, getDeviceByUserCode } from '@kletron/server/services/ideDeviceService';
 
 const DEVICE_CODE_TTL_MS = 10 * 60 * 1000;
 const POLL_INTERVAL_SECONDS = 5;

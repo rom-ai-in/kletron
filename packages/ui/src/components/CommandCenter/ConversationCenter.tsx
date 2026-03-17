@@ -7,7 +7,7 @@ import { MarkdownRenderer } from '../Agent/MarkdownRenderer';
 import { ThinkingBubble } from '../Agent/ThinkingBubble';
 import { ThoughtsPanel } from '../Agent/ThoughtsPanel';
 import { Textarea } from '../design-system';
-import type { ChatEvent, RenderItem } from '@numezis/shared/chatTypes';
+import type { ChatEvent, RenderItem } from '@kletron/shared/chatTypes';
 import { isToolCallEvent, pairToolEvents } from '../../lib/toolPairing';
 
 // Re-export for backward compatibility

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
-import { SafeEditGate } from "@numezis/server/services/agent/SafeEditGate";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
+import { SafeEditGate } from "@kletron/server/services/agent/SafeEditGate";
 
 const safeEditGate = SafeEditGate.getInstance();
 

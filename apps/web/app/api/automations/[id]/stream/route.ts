@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { automationExecutor } from "@numezis/server/services/automationExecutor";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { automationExecutor } from "@kletron/server/services/automationExecutor";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 /**
  * GET /api/automations/[id]/stream

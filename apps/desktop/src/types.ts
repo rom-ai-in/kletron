@@ -1,4 +1,4 @@
-// Shared types for the Numezis Desktop application
+// Shared types for the Kletron Desktop application
 
 export type ActiveView = "app" | "settings";
 export type SettingsSectionId =
@@ -37,7 +37,7 @@ export type LoginSession = {
   startedAt: number;
 };
 
-// ─── Chat Types (canonical from @numezis/shared) ─────────────────────────────
+// ─── Chat Types (canonical from @kletron/shared) ─────────────────────────────
 // Import shared types so they're available locally, then re-export.
 import type {
     ChatEvent as _ChatEvent,
@@ -51,7 +51,7 @@ import type {
     ConversationHistoryItem as _ConversationHistoryItem,
     ConversationDetail as _ConversationDetail,
     Message as _Message,
-} from '@numezis/shared/chatTypes';
+} from '@kletron/shared/chatTypes';
 
 export type ChatEvent = _ChatEvent;
 export type ChatEventKind = _ChatEventKind;
@@ -103,11 +103,11 @@ export type PreviewLine = {
   text: string;
 };
 
-// StreamingState re-exported from @numezis/shared/chatTypes above
+// StreamingState re-exported from @kletron/shared/chatTypes above
 
 export type WorkspaceInfo = { path: string; name: string };
 
-// ConversationHistoryItem and ConversationDetail re-exported from @numezis/shared/chatTypes above
+// ConversationHistoryItem and ConversationDetail re-exported from @kletron/shared/chatTypes above
 
 export type AgentGraphSummary = {
   id: string;
@@ -216,7 +216,7 @@ export type Project = {
 };
 
 /** Extended thread with project association and live status */
-// ThreadLiveStatus re-exported from @numezis/shared/chatTypes above
+// ThreadLiveStatus re-exported from @kletron/shared/chatTypes above
 
 export type ThreadWithStatus = ConversationHistoryItem & {
   projectId?: string;

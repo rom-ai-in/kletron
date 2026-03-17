@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateOllamaEmbeddingConfig } from "@numezis/server/services/embeddingConfigService";
-import { validateOllamaEmbeddingConfig } from "@numezis/shared/schemas/embeddingConfig.schema";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { updateOllamaEmbeddingConfig } from "@kletron/server/services/embeddingConfigService";
+import { validateOllamaEmbeddingConfig } from "@kletron/shared/schemas/embeddingConfig.schema";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 export async function PUT(request: NextRequest) {
     try {

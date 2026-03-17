@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useAuth } from '@numezis/ui/context/AuthContext';
+import { useAuth } from '@kletron/ui/context/AuthContext';
 import Link from 'next/link';
 import {
     Shield,
@@ -14,7 +14,7 @@ import {
     ExternalLink,
     Check
 } from 'lucide-react';
-import { Input, Button } from '@numezis/ui/components/design-system';
+import { Input, Button } from '@kletron/ui/components/design-system';
 
 export default function PrivacyDataPage() {
     const { user } = useAuth();
@@ -41,7 +41,7 @@ export default function PrivacyDataPage() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `numezis-data-export-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `kletron-data-export-${new Date().toISOString().split('T')[0]}.json`;
         a.click();
         URL.revokeObjectURL(url);
     };
@@ -67,7 +67,7 @@ export default function PrivacyDataPage() {
                 </div>
 
                 <p className="text-sm text-text-secondary mb-4">
-                    As a Numezis Code user, you have full control over your personal data.
+                    As a Kletron user, you have full control over your personal data.
                     We are committed to GDPR compliance and Swiss data protection standards.
                 </p>
 
@@ -190,7 +190,7 @@ export default function PrivacyDataPage() {
                     <div>
                         <h3 className="text-sm font-semibold text-status-error-text">Delete Account</h3>
                         <p className="text-xs text-text-muted mt-1">
-                            Permanently delete your Numezis Code account and all associated data.
+                            Permanently delete your Kletron account and all associated data.
                         </p>
                     </div>
                 </div>
@@ -258,7 +258,7 @@ export default function PrivacyDataPage() {
                 <p className="text-xs text-text-secondary">
                     <strong className="text-text-primary">Questions about your data?</strong>{' '}
                     Contact our Data Protection Officer at{' '}
-                    <a href="mailto:dpo@numezis.com" className="text-status-success-text hover:underline">dpo@numezis.com</a>
+                    <a href="mailto:dpo@kletron.com" className="text-status-success-text hover:underline">dpo@kletron.com</a>
                 </p>
             </div>
         </div>

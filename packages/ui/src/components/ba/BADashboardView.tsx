@@ -13,9 +13,9 @@ import {
     ArrowRight,
     ListChecks,
 } from "lucide-react";
-import { Panel, Button, Badge } from "@numezis/ui/components/design-system";
-import type { BADashboardSummary, FeatureProposal, FeatureType } from "@numezis/shared/businessAnalystTypes";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+import { Panel, Button, Badge } from "@kletron/ui/components/design-system";
+import type { BADashboardSummary, FeatureProposal, FeatureType } from "@kletron/shared/businessAnalystTypes";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 
 // ---------------------------------------------------------------------------
 // API helpers

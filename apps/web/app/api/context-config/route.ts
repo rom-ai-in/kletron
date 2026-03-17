@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getDb } from "@numezis/server/lib/db";
-import { normalizeAuditContext, type AuditContext } from "@numezis/shared/documentContext";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { getDb } from "@kletron/server/lib/db";
+import { normalizeAuditContext, type AuditContext } from "@kletron/shared/documentContext";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

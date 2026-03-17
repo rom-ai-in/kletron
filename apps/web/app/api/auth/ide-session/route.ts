@@ -3,9 +3,9 @@
 // Allows IDE to poll for auth completion using a unique device session ID
 
 import { NextRequest, NextResponse } from 'next/server';
-import { generateIdeTokens } from '@numezis/server/lib/auth/ideTokens';
+import { generateIdeTokens } from '@kletron/server/lib/auth/ideTokens';
 import { webcrypto } from 'crypto';
-import { consumeIdeSession, getIdeSession, initIdeSession, storeIdeSession } from '@numezis/server/services/ideSessionService';
+import { consumeIdeSession, getIdeSession, initIdeSession, storeIdeSession } from '@kletron/server/services/ideSessionService';
 
 interface DeviceSessionResponse {
     success: boolean;

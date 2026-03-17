@@ -1,9 +1,9 @@
 // app/api/auth/me/route.ts
 // API route to get current user information (MongoDB version)
 import { NextResponse } from 'next/server';
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { getSupabaseAdminClient } from "@numezis/server/lib/supabase/supabaseAdmin";
-import * as userProfileService from '@numezis/server/services/userProfileService';
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { getSupabaseAdminClient } from "@kletron/server/lib/supabase/supabaseAdmin";
+import * as userProfileService from '@kletron/server/services/userProfileService';
 
 // UUID v4 regex for validating user IDs before calling Supabase
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

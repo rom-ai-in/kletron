@@ -1,8 +1,8 @@
-# Numezis Code Design System
+# Kletron Design System
 
 ## Overview
 
-Numezis Code follows a **subdued, Cursor-like aesthetic** with muted colors, minimal visual noise, and a focus on content over decoration. The design prioritizes:
+Kletron follows a **subdued, Cursor-like aesthetic** with muted colors, minimal visual noise, and a focus on content over decoration. The design prioritizes:
 
 - **Clarity over flash** — No vibrant gradients or attention-grabbing effects
 - **Consistency** — Same visual language across all pages and components

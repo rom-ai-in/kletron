@@ -1,11 +1,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { runRepoAnalysis } from "@numezis/agent-core/agents/repoScannerAgent";
-import { getLlmConfig } from "@numezis/server/services/llmConfigService";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
-import { getContextGraphStore } from "@numezis/server/context/graph/ContextGraphStore";
-import { ContextScanner } from "@numezis/server/context/graph/ContextScanner";
+import { runRepoAnalysis } from "@kletron/agent-core/agents/repoScannerAgent";
+import { getLlmConfig } from "@kletron/server/services/llmConfigService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
+import { getContextGraphStore } from "@kletron/server/context/graph/ContextGraphStore";
+import { ContextScanner } from "@kletron/server/context/graph/ContextScanner";
 
 // Ensure dynamic route
 export const dynamic = "force-dynamic";

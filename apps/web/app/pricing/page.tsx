@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { Apple } from 'lucide-react';
 import { useState } from 'react';
-import { useAuth } from '@numezis/ui/context/AuthContext';
-import { useSubscription } from '@numezis/ui/hooks/useSubscription';
-import { MarketingHeader, MarketingFooter } from '@numezis/ui/components/design-system';
+import { useAuth } from '@kletron/ui/context/AuthContext';
+import { useSubscription } from '@kletron/ui/hooks/useSubscription';
+import { MarketingHeader, MarketingFooter } from '@kletron/ui/components/design-system';
 
 const downloadUrl = '/auth/register' // Download after account creation
 
@@ -15,7 +15,7 @@ const tiers = [
         id: 'free',
         name: 'Starter',
         price: '0',
-        description: 'Great for trying out Numezis Code with your own API keys.',
+        description: 'Great for trying out Kletron with your own API keys.',
         highlight: false,
         cta: 'Start Free',
         ctaLink: '/auth/register',
@@ -253,7 +253,7 @@ export default function PricingPage() {
 
                     <p className="text-base text-text-muted mb-4 max-w-xl mx-auto leading-relaxed">
                         Choose hosted AI models with simple token pricing, or use your existing API keys.
-                        Either way, you get an early look at Numezis Code while the macOS experience matures.
+                        Either way, you get an early look at Kletron while the macOS experience matures.
                     </p>
                     <p className="text-xs text-status-warning-text uppercase tracking-[0.2em] mb-8">
                         Early access preview • Expect the usual quirks while we polish the desktop app.
@@ -390,7 +390,7 @@ export default function PricingPage() {
                                 <div className="text-2xl font-bold text-text-primary mb-2">Custom Pricing</div>
                                 <p className="text-xs text-text-muted mb-4">Tailored to your organization</p>
                                 <a
-                                    href="mailto:enterprise@numezis.com?subject=Numezis%20Code%20Enterprise%20Inquiry"
+                                    href="mailto:enterprise@kletron.com?subject=Kletron%20Code%20Enterprise%20Inquiry"
                                     className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-5 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
                                 >
                                     Contact Sales
@@ -452,7 +452,7 @@ export default function PricingPage() {
                             <div className="w-10 h-10 rounded-lg bg-bg-elevated border border-border-subtle flex items-center justify-center mb-4">
                                 <span className="text-lg">☁️</span>
                             </div>
-                            <h3 className="text-base font-semibold text-text-primary mb-2">Numezis Hosted</h3>
+                            <h3 className="text-base font-semibold text-text-primary mb-2">Kletron Hosted</h3>
                             <p className="text-xs text-text-muted mb-4">
                                 We handle everything — optimized models, prompt caching, EU infrastructure. Just code.
                             </p>
@@ -542,7 +542,7 @@ export default function PricingPage() {
                             className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-5 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
                         >
                             <Apple className="w-4 h-4" />
-                            Download Numezis Code — Free
+                            Download Kletron — Free
                         </Link>
                         <Link
                             href="/auth/register"

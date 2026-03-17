@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
-import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 /**
  * POST /api/sessions/[id]/stop - Mark a running session as COMPLETED.

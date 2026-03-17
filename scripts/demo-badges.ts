@@ -5,8 +5,8 @@ const BASE_URL = 'http://localhost:3000/api/editor';
 async function demo() {
     console.log('Populating Editor State for Badge Demo...\n');
 
-    const testFile1 = '/Users/romainmagnin/Desktop/numezis-coder-mcp/app/page.tsx';
-    const testFile2 = '/Users/romainmagnin/Desktop/numezis-coder-mcp/docs/vscode-ui.md';
+    const testFile1 = '/Users/romainmagnin/Desktop/kletron/app/page.tsx';
+    const testFile2 = '/Users/romainmagnin/Desktop/kletron/docs/vscode-ui.md';
 
     // Scenario 1: Agent working on app/page.tsx (blue badge)
     console.log('1. Agent claiming app/page.tsx...');

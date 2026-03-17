@@ -60,7 +60,7 @@ export function useGit(
     try {
       setGitLoading(true);
       setGitError(null);
-      const status = await window.numezis.gitStatus(cwd);
+      const status = await window.kletron.gitStatus(cwd);
       if (g !== gen()) return; // stale — workspace changed while awaiting
       setGitStatus(status);
     } catch (error) {
@@ -111,7 +111,7 @@ export function useGit(
     const g = gen();
     setCommitting(true);
     try {
-      await window.numezis.gitCommit(message, cwd);
+      await window.kletron.gitCommit(message, cwd);
       if (g !== gen()) return;
       setCommitMessage("");
       await refreshStatus();
@@ -131,7 +131,7 @@ export function useGit(
     const g = gen();
     setCommitting(true);
     try {
-      await window.numezis.gitCommitStaged(message, cwd);
+      await window.kletron.gitCommitStaged(message, cwd);
       if (g !== gen()) return;
       setCommitMessage("");
       await refreshStatus();
@@ -150,7 +150,7 @@ export function useGit(
     if (!cwd) return;
     const g = gen();
     try {
-      await window.numezis.gitStageFile(filePath, cwd);
+      await window.kletron.gitStageFile(filePath, cwd);
       if (g !== gen()) return;
       await refreshStatus();
     } catch (error) {
@@ -164,7 +164,7 @@ export function useGit(
     if (!cwd) return;
     const g = gen();
     try {
-      await window.numezis.gitStageAll(cwd);
+      await window.kletron.gitStageAll(cwd);
       if (g !== gen()) return;
       await refreshStatus();
     } catch (error) {
@@ -178,7 +178,7 @@ export function useGit(
     if (!cwd) return;
     const g = gen();
     try {
-      await window.numezis.gitUnstageFile(filePath, cwd);
+      await window.kletron.gitUnstageFile(filePath, cwd);
       if (g !== gen()) return;
       await refreshStatus();
     } catch (error) {
@@ -192,7 +192,7 @@ export function useGit(
     if (!cwd) return;
     const g = gen();
     try {
-      await window.numezis.gitUnstageAll(cwd);
+      await window.kletron.gitUnstageAll(cwd);
       if (g !== gen()) return;
       await refreshStatus();
     } catch (error) {
@@ -208,7 +208,7 @@ export function useGit(
     if (!cwd) return;
     const g = gen();
     try {
-      await window.numezis.gitRevertFile(filePath, cwd);
+      await window.kletron.gitRevertFile(filePath, cwd);
       if (g !== gen()) return;
       await refreshStatus();
     } catch (error) {
@@ -222,7 +222,7 @@ export function useGit(
     if (!cwd) return;
     const g = gen();
     try {
-      await window.numezis.gitRevertAll(cwd);
+      await window.kletron.gitRevertAll(cwd);
       if (g !== gen()) return;
       await refreshStatus();
     } catch (error) {
@@ -241,8 +241,8 @@ export function useGit(
     setSelectedDiffPath(filePath);
     try {
       const content = staged
-        ? await window.numezis.gitDiffStaged(filePath, cwd)
-        : await window.numezis.gitDiff(filePath, cwd);
+        ? await window.kletron.gitDiffStaged(filePath, cwd)
+        : await window.kletron.gitDiff(filePath, cwd);
       if (g !== gen()) return;
       setSelectedDiffContent(content);
     } catch (error) {
@@ -280,7 +280,7 @@ export function useGit(
       const batch = files.slice(i, i + batchSize);
       const promises = batch.map(async (f) => {
         try {
-          const diff = await window.numezis.gitDiff(f.path, cwd);
+          const diff = await window.kletron.gitDiff(f.path, cwd);
           return { path: f.path, diff };
         } catch {
           return { path: f.path, diff: null };
@@ -310,7 +310,7 @@ export function useGit(
     setPushing(true);
     setPushResult(null);
     try {
-      const result = await window.numezis.gitPush(remote, branch, cwd);
+      const result = await window.kletron.gitPush(remote, branch, cwd);
       if (g !== gen()) return;
       setPushResult(result);
       await refreshStatus();
@@ -331,7 +331,7 @@ export function useGit(
     setCreatingPR(true);
     setPRResult(null);
     try {
-      const result = await window.numezis.gitCreatePR(title, body, base, cwd);
+      const result = await window.kletron.gitCreatePR(title, body, base, cwd);
       if (g !== gen()) return null;
       setPRResult(result);
       return result;
@@ -351,7 +351,7 @@ export function useGit(
     if (!cwd) return;
     const g = gen();
     try {
-      await window.numezis.gitCheckout(branch, cwd);
+      await window.kletron.gitCheckout(branch, cwd);
       if (g !== gen()) return;
       await refreshStatus();
     } catch (error) {
@@ -365,7 +365,7 @@ export function useGit(
     if (!cwd) return;
     const g = gen();
     try {
-      await window.numezis.gitCreateBranch(name, cwd);
+      await window.kletron.gitCreateBranch(name, cwd);
       if (g !== gen()) return;
       await refreshStatus();
     } catch (error) {

@@ -26,7 +26,7 @@ export function useFileExplorer(workspacePath: string | null) {
     if (!workspacePath) return;
     try {
       setLoading(true);
-      const entries = await window.numezis.listFiles(relativePath, 1);
+      const entries = await window.kletron.listFiles(relativePath, 1);
       if (relativePath === "") {
         setFiles(entries);
       } else {
@@ -118,7 +118,7 @@ export function useFileExplorer(workspacePath: string | null) {
     }
 
     try {
-      const content = await window.numezis.readFile(filePath);
+      const content = await window.kletron.readFile(filePath);
 
       // Detect binary content that slipped through extension check
       if (looksLikeBinaryContent(content)) {
@@ -169,7 +169,7 @@ export function useFileExplorer(workspacePath: string | null) {
     const file = openFiles.find((f) => f.path === filePath);
     if (!file) return;
     try {
-      await window.numezis.writeFile(filePath, file.content);
+      await window.kletron.writeFile(filePath, file.content);
       setOpenFiles((prev) =>
         prev.map((f) => (f.path === filePath ? { ...f, originalContent: file.content } : f))
       );

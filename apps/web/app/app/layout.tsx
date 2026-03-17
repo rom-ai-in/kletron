@@ -3,11 +3,11 @@
 // Layout for authenticated /app/* pages with Sidebar
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@numezis/ui/context/AuthContext';
-import { WorkspaceProvider } from '@numezis/ui/context/WorkspaceContext';
-import { Sidebar } from '@numezis/ui/components/Sidebar';
-import { AppHeader } from '@numezis/ui/components/AppHeader';
-import { BreadcrumbOverridesProvider } from '@numezis/ui/components/ui/BreadcrumbOverridesProvider';
+import { useAuth } from '@kletron/ui/context/AuthContext';
+import { WorkspaceProvider } from '@kletron/ui/context/WorkspaceContext';
+import { Sidebar } from '@kletron/ui/components/Sidebar';
+import { AppHeader } from '@kletron/ui/components/AppHeader';
+import { BreadcrumbOverridesProvider } from '@kletron/ui/components/ui/BreadcrumbOverridesProvider';
 
 interface AppLayoutProps {
     children: React.ReactNode;

@@ -2,7 +2,7 @@
 // Handle Stripe Webhooks
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { constructWebhookEvent, getPlanFromPriceId } from '@numezis/server/services/stripeService';
+import { constructWebhookEvent, getPlanFromPriceId } from '@kletron/server/services/stripeService';
 import {
     upsertSubscription,
     updateSubscriptionStatus,
@@ -10,7 +10,7 @@ import {
     type SubscriptionStatus,
     type BillingPeriod,
     type PlanId
-} from '@numezis/server/services/subscriptionService';
+} from '@kletron/server/services/subscriptionService';
 
 // Disable body parsing for webhook signature verification
 export const runtime = 'nodejs';

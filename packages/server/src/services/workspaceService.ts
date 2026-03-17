@@ -476,7 +476,7 @@ export async function bootstrapFromLegacyConfig(ownerId: string): Promise<Worksp
 
 async function reloadMcpClientBestEffort() {
   try {
-    const { McpClient } = await import("@numezis/mcp-client/client");
+    const { McpClient } = await import("@kletron/mcp-client/client");
     await McpClient.reloadInstance();
   } catch (error) {
     // Non-fatal: config is already persisted, reload can fail in contexts

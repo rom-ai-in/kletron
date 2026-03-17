@@ -6,7 +6,7 @@
 //
 // Consumers: MessageList.tsx, ConversationCenter.tsx, useConversation.ts
 
-import type { ChatEvent, RenderItem } from '@numezis/shared/chatTypes';
+import type { ChatEvent, RenderItem } from '@kletron/shared/chatTypes';
 
 // Re-export types for convenience
 export type { ChatEvent, RenderItem };

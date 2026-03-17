@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { skillRegistry } from "@numezis/agent-core/skills/registry";
+import { skillRegistry } from "@kletron/agent-core/skills/registry";
 
 type Params = { params: Promise<{ skillId: string }> };
 

@@ -12,8 +12,8 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { AutomationConfigBuilder } from "@numezis/shared/automationConfigBuilder";
-import { getDb, closeDb } from "@numezis/server/lib/db";
+import { AutomationConfigBuilder } from "@kletron/shared/automationConfigBuilder";
+import { getDb, closeDb } from "@kletron/server/lib/db";
 
 // ── Canonical inventory anchors (from A43 sections 2, 3, 4) ──
 // Every implemented_and_auditable or implemented_partial feature from the inventory

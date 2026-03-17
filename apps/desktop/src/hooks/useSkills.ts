@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import type { Skill } from "../types";
 
-const SKILLS_STORAGE_KEY = "numezis.desktop.skills";
+const SKILLS_STORAGE_KEY = "kletron.desktop.skills";
 
 export function useSkills(
   backendUrlTrimmed: string,

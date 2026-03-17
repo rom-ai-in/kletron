@@ -81,7 +81,7 @@ export default function IdeCallbackClient() {
                 }
 
                 // Build deep link URL
-                // Format: numezis-code://numezis.auth/callback?accessToken=...&refreshToken=...&expiresAt=...
+                // Format: kletron://kletron.auth/callback?accessToken=...&refreshToken=...&expiresAt=...
                 const params = new URLSearchParams({
                     accessToken: data.accessToken,
                     refreshToken: data.refreshToken,
@@ -97,7 +97,7 @@ export default function IdeCallbackClient() {
                     params.set('state', stateParam);
                 }
 
-                const ideUrl = `numezis-code://numezis.auth/callback?${params.toString()}`;
+                const ideUrl = `kletron://kletron.auth/callback?${params.toString()}`;
                 console.log('[IDE Callback] Deep link URL generated:', ideUrl.substring(0, 100) + '...');
                 console.log('[IDE Callback] Full URL length:', ideUrl.length);
 
@@ -152,7 +152,7 @@ export default function IdeCallbackClient() {
                     <>
                         <div className="w-12 h-12 mx-auto mb-4 border-2 border-status-success-border border-t-transparent rounded-full animate-spin" />
                         <h1 className="text-xl font-semibold text-text-primary mb-2">
-                            Connecting to Numezis Code...
+                            Connecting to Kletron...
                         </h1>
                         <p className="text-text-muted text-sm">
                             Please wait while we authenticate your IDE.
@@ -171,7 +171,7 @@ export default function IdeCallbackClient() {
                             Authentication Successful!
                         </h1>
                         <p className="text-text-muted text-sm mb-6">
-                            Redirecting to Numezis Code IDE...
+                            Redirecting to Kletron IDE...
                         </p>
                         <p className="text-xs text-text-muted mb-4">
                             If the IDE doesn&apos;t open automatically:
@@ -183,7 +183,7 @@ export default function IdeCallbackClient() {
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                             </svg>
-                            Open Numezis Code
+                            Open Kletron
                         </a>
                         {loopbackUrl && (
                             <a

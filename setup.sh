@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-echo "🛠️  Setting up Numezis TS LangGraph"
+echo "🛠️  Setting up Kletron"
 
 if [ ! -f "package-lock.json" ]; then
   npm install

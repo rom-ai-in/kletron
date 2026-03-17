@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
-import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
-import type { TokenUsage, TokenUsageSummary } from "@numezis/shared/tokenUsageTypes";
+import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
+import type { TokenUsage, TokenUsageSummary } from "@kletron/shared/tokenUsageTypes";
 
 /**
  * Automation execution status

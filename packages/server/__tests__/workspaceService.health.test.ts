@@ -7,7 +7,7 @@ import {
   validateWorkspaceRoot,
   WorkspaceResolutionError,
   type Workspace,
-} from "@numezis/server/services/workspaceService";
+} from "@kletron/server/services/workspaceService";
 
 const tempDirs: string[] = [];
 

@@ -1,11 +1,11 @@
 /**
- * Numezis Design System - Shadow Tokens
+ * Kletron Design System - Shadow Tokens
  * 
  * Box shadow definitions for elevation hierarchy.
  * Matches Tailwind config shadows.
  * 
  * @example
- * import { shadows } from '@numezis/ui/tokens';
+ * import { shadows } from '@kletron/ui/tokens';
  * <div style={{ boxShadow: shadows.md }} />
  * 
  * // Prefer Tailwind classes
@@ -42,7 +42,7 @@ export const glows = {
     primary: '0 0 30px rgba(14, 165, 233, 0.3), 0 0 60px rgba(99, 102, 241, 0.15)',
     /** EU blue glow */
     eu: '0 0 30px rgba(37, 99, 235, 0.25), 0 0 60px rgba(37, 99, 235, 0.1)',
-    /** Numezis brand glow */
+    /** Kletron brand glow */
     brand: '0 0 20px rgba(57, 148, 188, 0.4)',
     /** Success glow */
     success: '0 0 20px rgba(34, 197, 94, 0.3)',

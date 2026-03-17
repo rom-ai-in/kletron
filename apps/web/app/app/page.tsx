@@ -12,10 +12,10 @@ import {
   Panel,
   EmptyState,
   LoadingState,
-} from "@numezis/ui/components/design-system";
-import { TokenUsageDisplay, type TokenUsageSummary } from "@numezis/ui/components/Agent/metrics";
-import { useLlmHealth } from "@numezis/ui/hooks/useLlmHealth";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+} from "@kletron/ui/components/design-system";
+import { TokenUsageDisplay, type TokenUsageSummary } from "@kletron/ui/components/Agent/metrics";
+import { useLlmHealth } from "@kletron/ui/hooks/useLlmHealth";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 import {
   ArrowUpRight,
   CheckCircle2,

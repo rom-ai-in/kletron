@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import os from "node:os";
 import path from "node:path";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 type RepoSummary = {
   id: number;
@@ -18,9 +18,9 @@ type RepoSummary = {
 
 function getReposRoot() {
   return (
-    process.env.NUMEZIS_REPOS_DIR ||
+    process.env.KLETRON_REPOS_DIR ||
     process.env.GITHUB_REPOS_DIR ||
-    path.join(os.homedir(), "numezis-repos")
+    path.join(os.homedir(), "kletron-repos")
   );
 }
 
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "numezis-code",
+        "User-Agent": "kletron",
       },
     });
 

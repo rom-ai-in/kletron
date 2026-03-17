@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useAuth } from '@numezis/ui/context/AuthContext';
+import { useAuth } from '@kletron/ui/context/AuthContext';
 
 type Status = 'idle' | 'submitting' | 'success' | 'error';
 
@@ -79,7 +79,7 @@ export default function IdeDeviceClient() {
             <div className="w-full max-w-md bg-bg-surface border border-border-subtle rounded-lg p-8">
                 <div className="text-center mb-6">
                     <div className="text-3xl mb-2">🧠</div>
-                    <h1 className="text-xl font-semibold text-text-primary">Connect Numezis Code</h1>
+                    <h1 className="text-xl font-semibold text-text-primary">Connect Kletron</h1>
                     <p className="text-sm text-text-muted mt-2">
                         Enter the code shown in your IDE to finish sign-in.
                     </p>
@@ -106,7 +106,7 @@ export default function IdeDeviceClient() {
 
                     {status === 'success' ? (
                         <div className="bg-status-success-bg border border-status-success-border rounded px-3 py-2 text-xs text-status-success-text">
-                            Success! You can return to Numezis Code.
+                            Success! You can return to Kletron.
                         </div>
                     ) : (
                         <button

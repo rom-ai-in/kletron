@@ -23,11 +23,11 @@ export default defineConfig(async (): Promise<UserConfig> => {
     resolve: {
       alias: [
         {
-          find: /^@numezis\/ui/,
+          find: /^@kletron\/ui/,
           replacement: path.resolve(__dirname, "../../packages/ui/src"),
         },
         {
-          find: /^@numezis\/server/,
+          find: /^@kletron\/server/,
           replacement: path.resolve(__dirname, "../../packages/server/src"),
         },
         // ── Next.js shims for Electron ────────────────────────────────────

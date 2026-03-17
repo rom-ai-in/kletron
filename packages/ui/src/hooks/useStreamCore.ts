@@ -7,7 +7,7 @@
 //  - Message event deduplication (ID-based + content fingerprint)
 //  - Stream lifecycle management (abort, reconnect)
 
-import type { StreamChunk } from '@numezis/shared/chatTypes';
+import type { StreamChunk } from '@kletron/shared/chatTypes';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NDJSON Parser — shared between desktop and web streaming implementations

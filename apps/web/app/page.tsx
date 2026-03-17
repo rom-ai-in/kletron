@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { Apple } from 'lucide-react';
-import { useAuth } from '@numezis/ui/context/AuthContext';
-import { MarketingHeader, MarketingFooter } from '@numezis/ui/components/design-system';
+import { useAuth } from '@kletron/ui/context/AuthContext';
+import { MarketingHeader, MarketingFooter } from '@kletron/ui/components/design-system';
 
 const downloadUrl = '/pricing' // Points to pricing page with download links
 
@@ -49,7 +49,7 @@ const features = [
     id: 'graph-editor',
     title: 'Visual Graph Editor',
     subtitle: 'Build AI workflows visually',
-    description: 'Unlike Cursor or Copilot, Numezis Code offers a true visual graph editor. Design complex agent workflows, chain tools, and visualize execution paths.',
+    description: 'Unlike Cursor or Copilot, Kletron offers a true visual graph editor. Design complex agent workflows, chain tools, and visualize execution paths.',
     bullets: ['Drag & drop workflow builder', 'Real-time execution view', 'Reusable agent templates', 'Conditional branching'],
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -199,18 +199,18 @@ export default function HomePage() {
                 <span className="w-2.5 h-2.5 rounded-full bg-status-success/60" />
               </div>
               <div className="flex-1 text-center">
-                <span className="text-[10px] text-text-muted font-mono">Numezis Code — AI-Powered IDE</span>
+                <span className="text-[10px] text-text-muted font-mono">Kletron — AI-Powered IDE</span>
               </div>
             </div>
             {/* Code content */}
             <div className="p-4 font-mono text-xs text-left">
               <div className="flex gap-3 text-text-muted mb-1.5">
                 <span className="w-4 text-right opacity-50">1</span>
-                <span className="text-text-muted">// 🚀 Numezis Deep Agent analyzing your codebase...</span>
+                <span className="text-text-muted">// 🚀 Kletron Deep Agent analyzing your codebase...</span>
               </div>
               <div className="flex gap-3 text-text-muted mb-1.5">
                 <span className="w-4 text-right opacity-50">2</span>
-                <span><span className="text-text-secondary">const</span> agent = <span className="text-text-secondary">await</span> numezis.createDeepAgent{'({'}</span>
+                <span><span className="text-text-secondary">const</span> agent = <span className="text-text-secondary">await</span> kletron.createDeepAgent{'({'}</span>
               </div>
               <div className="flex gap-3 text-text-muted mb-1.5">
                 <span className="w-4 text-right opacity-50">3</span>
@@ -262,7 +262,7 @@ export default function HomePage() {
               Everything you need to ship faster
             </h2>
             <p className="text-sm text-text-muted max-w-lg mx-auto">
-              From intelligent agents to visual workflows, Numezis Code gives you superpowers
+              From intelligent agents to visual workflows, Kletron gives you superpowers
               without compromising on privacy or control.
             </p>
           </div>
@@ -317,7 +317,7 @@ export default function HomePage() {
             </h2>
             <p className="text-sm text-text-muted max-w-lg mx-auto">
               In a world of surveillance capitalism, we chose a different path.
-              Numezis Code is built by Europeans, for Europeans, with no backdoors.
+              Kletron is built by Europeans, for Europeans, with no backdoors.
             </p>
           </div>
 
@@ -341,7 +341,7 @@ export default function HomePage() {
               While US-based tools are subject to the CLOUD Act and FISA 702...
             </p>
             <p className="text-sm font-medium text-text-primary">
-              Your code with Numezis never leaves <span className="text-text-secondary">European jurisdiction</span>.
+              Your code with Kletron never leaves <span className="text-text-secondary">European jurisdiction</span>.
             </p>
           </div>
         </div>
@@ -383,7 +383,7 @@ export default function HomePage() {
             {/* CTA strip */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4 border-t border-border-subtle">
               <p className="text-xs text-text-muted">
-                Numezis Code: <span className="text-text-secondary">Swiss HQ</span> • <span className="text-text-secondary">EU data centers</span> • <span className="text-text-secondary">No US parent</span>
+                Kletron: <span className="text-text-secondary">Swiss HQ</span> • <span className="text-text-secondary">EU data centers</span> • <span className="text-text-secondary">No US parent</span>
               </p>
             </div>
           </div>
@@ -396,7 +396,7 @@ export default function HomePage() {
           {/* Section Header */}
           <div className="text-center mb-12">
             <h2 className="text-2xl sm:text-3xl font-semibold text-text-primary mb-3">
-              How Numezis Code Compares
+              How Kletron Compares
             </h2>
             <p className="text-sm text-text-muted max-w-lg mx-auto">
               See why European tech leaders are switching from US-based AI coding tools.
@@ -405,7 +405,7 @@ export default function HomePage() {
 
           {/* Comparison Cards */}
           <div className="grid lg:grid-cols-5 gap-4">
-            {/* Numezis Column - Highlighted */}
+            {/* Kletron Column - Highlighted */}
             <div className="lg:col-span-1 p-5 rounded-xl border-2 border-status-success-border bg-status-success-bg relative">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-status-success text-white">
@@ -414,7 +414,7 @@ export default function HomePage() {
               </div>
               <div className="text-center mb-4 pt-2">
                 <span className="text-3xl">🧠</span>
-                <h3 className="text-sm font-bold text-text-primary mt-2">Numezis Code</h3>
+                <h3 className="text-sm font-bold text-text-primary mt-2">Kletron</h3>
                 <p className="text-[10px] text-status-success-text font-medium">European • Swiss HQ</p>
               </div>
               <div className="space-y-2.5">
@@ -827,7 +827,7 @@ export default function HomePage() {
           </h2>
           <p className="text-sm text-text-muted mb-8">
             From Swiss fintech to German automotive, leading European companies choose
-            Numezis Code for AI-assisted development without compromise.
+            Kletron for AI-assisted development without compromise.
           </p>
           <div className="flex flex-wrap justify-center gap-6 text-text-muted">
             {['Swiss Startups', 'German Enterprise', 'French Scale-ups', 'Nordic Tech'].map((segment) => (

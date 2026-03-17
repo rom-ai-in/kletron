@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { TimelineEvent } from "@numezis/shared/types";
+import type { TimelineEvent } from "@kletron/shared/types";
 import { DurationDisplay, TokenUsageDisplay, formatDuration, formatTokenCount } from "./metrics";
 import type { TokenUsageSummary } from "./metrics";
 

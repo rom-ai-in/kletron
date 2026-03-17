@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { ConversationCenter } from "@numezis/ui/components/CommandCenter/ConversationCenter";
-import { InputBar } from "@numezis/ui/components/CommandCenter/InputBar";
-import { InlineDiffReview } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
-import type { InlineDiff } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
-import { LLMSelector } from "@numezis/ui/components/design-system";
+import { ConversationCenter } from "@kletron/ui/components/CommandCenter/ConversationCenter";
+import { InputBar } from "@kletron/ui/components/CommandCenter/InputBar";
+import { InlineDiffReview } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
+import type { InlineDiff } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
+import { LLMSelector } from "@kletron/ui/components/design-system";
 
 import { useAuth } from "../hooks/useAuth";
 import { useSettings } from "../hooks/useSettings";
@@ -104,7 +104,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
               onAccept={(editId) => diffs.applyAllDiff(editId)}
               onReject={(editId) => diffs.rejectAllDiff(editId)}
               onOpenInIDE={(filePath) => {
-                try { (window as any).numezis?.openInVSCode?.(filePath); } catch { /* ignore */ }
+                try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
               }}
             />
           ) : undefined

@@ -142,7 +142,7 @@ export function WorktreeManager({
                             type="button"
                             onClick={async () => {
                                 try {
-                                    const result = await (window as any).numezis?.selectWorkspace?.();
+                                    const result = await (window as any).kletron?.selectWorkspace?.();
                                     if (result && result.path) {
                                         setNewPath(result.path);
                                     }

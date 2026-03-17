@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Copy, Check } from "lucide-react";
-import { Modal, Skeleton } from "@numezis/ui/components/design-system";
-import type { AgentEvent } from "@numezis/shared/types";
+import { Modal, Skeleton } from "@kletron/ui/components/design-system";
+import type { AgentEvent } from "@kletron/shared/types";
 
 interface StageDetailModalProps {
     isOpen: boolean;

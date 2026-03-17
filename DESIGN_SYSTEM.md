@@ -1,6 +1,6 @@
-# Numezis Design System - Documentation Complète
+# Kletron Design System - Documentation Complète
 
-> Guide complet de la stratégie de design, UI/UX, construction des pages, formulaires, composants, typographie, et conventions de style du projet Numezis.
+> Guide complet de la stratégie de design, UI/UX, construction des pages, formulaires, composants, typographie, et conventions de style du projet Kletron.
 
 ---
 
@@ -37,7 +37,7 @@
 ### Monorepo Structure
 
 ```
-numezis-coder-mcp/
+kletron-coder-mcp/
 ├── apps/
 │   ├── web/            → Application Next.js (web)
 │   └── desktop/        → Application Electron (desktop)
@@ -48,7 +48,7 @@ numezis-coder-mcp/
 │   └── agent-core/     → Logique agent IA
 ```
 
-### Package UI (`@numezis/ui`)
+### Package UI (`@kletron/ui`)
 
 Le package `packages/ui/` est le **coeur du design system**. Il est consommé par les deux apps (web et desktop).
 
@@ -101,7 +101,7 @@ packages/ui/src/
 ### Esthétique Visuelle
 
 - **Zinc Scale** comme base de gris (du `#09090b` au `#e4e4e7`)
-- **Teal Accent** (`#3994BC`) comme couleur brand Numezis
+- **Teal Accent** (`#3994BC`) comme couleur brand Kletron
 - **Violet/Sky/Emerald** pour les états sémantiques de l'agent IA
 - **Très faible contraste** pour les bordures (5-12% blanc)
 - **Backdrop blur** intensif avec saturation et brightness
@@ -150,11 +150,11 @@ tokens/*.ts (source)  →  scripts/generate-css.ts  →  styles/tokens.css (outp
 <div style={{ background: 'var(--bg-surface)' }} />
 
 // 3. Via TypeScript import (pour styles inline / runtime)
-import { colors, spacing } from '@numezis/ui/tokens';
+import { colors, spacing } from '@kletron/ui/tokens';
 <div style={{ background: colors.bgSurface, padding: spacing.base }} />
 
 // 4. Via l'objet unifié
-import { tokens } from '@numezis/ui/tokens';
+import { tokens } from '@kletron/ui/tokens';
 const bg = tokens.colors.bgSurface;
 ```
 
@@ -220,9 +220,9 @@ const bg = tokens.colors.bgSurface;
 
 | Token | Hex | Usage |
 |---|---|---|
-| `--numezis-accent` | `#3994BC` | Accent principal Numezis (teal) |
-| `--numezis-accent-hover` | `#3E9BC4` | État hover de l'accent |
-| `--numezis-accent-muted` | `#3994BC26` | Background subtle accent |
+| `--kletron-accent` | `#3994BC` | Accent principal Kletron (teal) |
+| `--kletron-accent-hover` | `#3E9BC4` | État hover de l'accent |
+| `--kletron-accent-muted` | `#3994BC26` | Background subtle accent |
 
 ### Couleurs Diff (Code)
 
@@ -453,7 +453,7 @@ componentRadius.dropdown // 8px (lg) — Menus dropdown
 ```css
 glow-primary:  /* Sky + Indigo mix */
 glow-eu:       /* EU blue */
-glow-brand:    /* Numezis teal #3994BC */
+glow-brand:    /* Kletron teal #3994BC */
 glow-success:  /* Emerald */
 glow-error:    /* Rose */
 glow-thinking: /* Violet */
@@ -788,7 +788,7 @@ LAYOUT.selector.maxLabelWidth // max-w-[120px]
 ### Button
 
 ```tsx
-import { Button } from '@numezis/ui';
+import { Button } from '@kletron/ui';
 
 // Variantes
 <Button variant="primary">Primary</Button>    // bg-selected, border subtle
@@ -813,7 +813,7 @@ import { Button } from '@numezis/ui';
 ### Card
 
 ```tsx
-import { Card, CardHeader, CardContent, CardFooter, StatCard, FeatureCard } from '@numezis/ui';
+import { Card, CardHeader, CardContent, CardFooter, StatCard, FeatureCard } from '@kletron/ui';
 
 // Variantes
 <Card variant="default">...</Card>    // bg-surface, border-subtle
@@ -846,7 +846,7 @@ import { Card, CardHeader, CardContent, CardFooter, StatCard, FeatureCard } from
 ### Badge
 
 ```tsx
-import { Badge, StatusBadge, LoadingBadge } from '@numezis/ui';
+import { Badge, StatusBadge, LoadingBadge } from '@kletron/ui';
 
 // Variantes
 <Badge variant="default">Default</Badge>
@@ -874,7 +874,7 @@ import { Badge, StatusBadge, LoadingBadge } from '@numezis/ui';
 ### Modal
 
 ```tsx
-import { Modal } from '@numezis/ui';
+import { Modal } from '@kletron/ui';
 
 <Modal
   open={isOpen}
@@ -897,7 +897,7 @@ import { Modal } from '@numezis/ui';
 ### Tabs
 
 ```tsx
-import { Tabs, TabsList, TabTrigger, TabContent } from '@numezis/ui';
+import { Tabs, TabsList, TabTrigger, TabContent } from '@kletron/ui';
 
 <Tabs defaultValue="tab1" variant="default">
   <TabsList>
@@ -918,7 +918,7 @@ variant="segment"   // Segmented control
 ### Toast
 
 ```tsx
-import { ToastProvider, useToast } from '@numezis/ui';
+import { ToastProvider, useToast } from '@kletron/ui';
 
 // Dans le layout
 <ToastProvider>
@@ -953,7 +953,7 @@ addToast({ type: 'success', message: 'Saved!' });
 ### Input
 
 ```tsx
-import { Input, SearchInput, PasswordInput } from '@numezis/ui';
+import { Input, SearchInput, PasswordInput } from '@kletron/ui';
 
 // Tailles
 <Input size="sm" />   // h-8,  text-xs
@@ -1017,14 +1017,14 @@ import { Input, SearchInput, PasswordInput } from '@numezis/ui';
 ### Textarea
 
 ```tsx
-import { Textarea } from '@numezis/ui';
+import { Textarea } from '@kletron/ui';
 <Textarea rows={4} placeholder="Describe..." />
 ```
 
 ### Toggle / Switch
 
 ```tsx
-import { Toggle, Switch } from '@numezis/ui';
+import { Toggle, Switch } from '@kletron/ui';
 <Toggle checked={value} onChange={setValue} />
 <Switch checked={value} onChange={setValue} />
 ```
@@ -1032,7 +1032,7 @@ import { Toggle, Switch } from '@numezis/ui';
 ### Checkbox
 
 ```tsx
-import { Checkbox, CheckboxGroup, CheckboxGroupItem } from '@numezis/ui';
+import { Checkbox, CheckboxGroup, CheckboxGroupItem } from '@kletron/ui';
 
 <Checkbox checked={val} onChange={setVal} label="Accept terms" />
 
@@ -1045,7 +1045,7 @@ import { Checkbox, CheckboxGroup, CheckboxGroupItem } from '@numezis/ui';
 ### Radio
 
 ```tsx
-import { Radio, RadioGroup } from '@numezis/ui';
+import { Radio, RadioGroup } from '@kletron/ui';
 
 <RadioGroup value={val} onChange={setVal}>
   <Radio value="option1" label="Option 1" />
@@ -1077,7 +1077,7 @@ import { Radio, RadioGroup } from '@numezis/ui';
 ### ThinkingBubble / ThinkingList
 
 ```tsx
-import { ThinkingBubble, ThinkingList } from '@numezis/ui';
+import { ThinkingBubble, ThinkingList } from '@kletron/ui';
 ```
 
 Affiche l'état de réflexion de l'agent IA avec animation violette.
@@ -1103,7 +1103,7 @@ Interface d'approbation de diffs proposés par l'agent.
 Chips contextuels pour fichiers, dossiers, agents, modèles :
 
 ```tsx
-import { createFileChip, createFolderChip, createAgentChip } from '@numezis/ui';
+import { createFileChip, createFolderChip, createAgentChip } from '@kletron/ui';
 ```
 
 ### InlineCompletion / MultiLineCompletion
@@ -1228,7 +1228,7 @@ interface ButtonProps extends VariantProps<typeof buttonVariants> {
 Les définitions CVA sont exportées pour permettre la composition :
 
 ```tsx
-import { buttonVariants, badgeVariants } from '@numezis/ui';
+import { buttonVariants, badgeVariants } from '@kletron/ui';
 
 // Utiliser les classes dans un composant custom
 <a className={buttonVariants({ variant: 'ghost', size: 'sm' })}>Link</a>
@@ -1407,7 +1407,7 @@ export function TabTrigger({ value, children }) {
 
 ```tsx
 // Pour créer des données complexes de composants
-import { createFileChip, createFolderChip } from '@numezis/ui';
+import { createFileChip, createFolderChip } from '@kletron/ui';
 
 const chips = [
   createFileChip('src/App.tsx'),
@@ -1439,41 +1439,41 @@ Le mode compact est togglable dans les settings et ajuste les paddings/gaps de l
 
 ## 23. Imports & Utilisation
 
-### Depuis `@numezis/ui`
+### Depuis `@kletron/ui`
 
 ```tsx
 // Composants
-import { Button, Card, Input, Badge, Modal, Tabs } from '@numezis/ui';
+import { Button, Card, Input, Badge, Modal, Tabs } from '@kletron/ui';
 
 // Types
-import type { Size, Variant, StatusVariant } from '@numezis/ui';
+import type { Size, Variant, StatusVariant } from '@kletron/ui';
 
 // Constantes de layout
-import { LAYOUT, FONT_SIZES } from '@numezis/ui';
+import { LAYOUT, FONT_SIZES } from '@kletron/ui';
 
 // Variantes CVA (pour composition)
-import { buttonVariants, badgeVariants } from '@numezis/ui';
+import { buttonVariants, badgeVariants } from '@kletron/ui';
 
 // Tokens
-import { tokens, colors, spacing, typography, motion, shadows, zIndex } from '@numezis/ui';
+import { tokens, colors, spacing, typography, motion, shadows, zIndex } from '@kletron/ui';
 
 // Command Center
-import { TitleBar, ProjectSidebar, InputBar } from '@numezis/ui';
+import { TitleBar, ProjectSidebar, InputBar } from '@kletron/ui';
 ```
 
-### Depuis `@numezis/ui/tokens`
+### Depuis `@kletron/ui/tokens`
 
 ```tsx
-import { colors, spacing, radius, typography, motion, shadows, zIndex, glass } from '@numezis/ui/tokens';
-import { rawColors, rawRadius, rawDuration } from '@numezis/ui/tokens';
-import { componentSpacing, componentRadius, componentShadows } from '@numezis/ui/tokens';
-import { textStyles, fontFamily, fontSize, fontWeight } from '@numezis/ui/tokens';
+import { colors, spacing, radius, typography, motion, shadows, zIndex, glass } from '@kletron/ui/tokens';
+import { rawColors, rawRadius, rawDuration } from '@kletron/ui/tokens';
+import { componentSpacing, componentRadius, componentShadows } from '@kletron/ui/tokens';
+import { textStyles, fontFamily, fontSize, fontWeight } from '@kletron/ui/tokens';
 ```
 
 ### Utilitaire `cn()`
 
 ```tsx
-import { cn } from '@numezis/ui/lib/utils';
+import { cn } from '@kletron/ui/lib/utils';
 
 // Merge conditionnel de classes
 className={cn(
@@ -1489,7 +1489,7 @@ className={cn(
 ## Résumé Visuel
 
 ```
-Numezis Design System
+Kletron Design System
 │
 ├── 🎨 Couleurs     → Zinc dark + Teal accent + Agent semantic colors
 ├── 📐 Spacing      → 4px base, 14 niveaux (0→96px)

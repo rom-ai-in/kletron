@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MarketingHeader, MarketingFooter } from '@numezis/ui/components/design-system';
+import { MarketingHeader, MarketingFooter } from '@kletron/ui/components/design-system';
 
 export default function PrivacyPolicyPage() {
     return (
@@ -16,7 +16,7 @@ export default function PrivacyPolicyPage() {
                         <h1 className="text-3xl font-bold text-text-primary mb-4">Privacy Policy</h1>
                         <div className="p-4 rounded-lg border border-status-success-border bg-status-success-bg mb-6">
                             <p className="text-sm text-text-secondary">
-                                <span className="text-status-success-text font-medium">🇨🇭 Swiss-Grade Privacy:</span> Numezis Technologies SA
+                                <span className="text-status-success-text font-medium">🇨🇭 Swiss-Grade Privacy:</span> Kletron SA
                                 is a Swiss company. Your data is processed under Swiss and EU data protection laws —
                                 among the strictest in the world.
                             </p>
@@ -27,9 +27,9 @@ export default function PrivacyPolicyPage() {
                         <p>The data controller for your personal data is:</p>
                         <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface mt-2">
                             <p className="text-text-secondary">
-                                <strong>Numezis Technologies SA</strong><br />
+                                <strong>Kletron SA</strong><br />
                                 Geneva, Switzerland<br />
-                                <a href="mailto:privacy@numezis.com" className="text-status-success-text hover:underline">privacy@numezis.com</a>
+                                <a href="mailto:privacy@kletron.com" className="text-status-success-text hover:underline">privacy@kletron.com</a>
                             </p>
                         </div>
                     </Section>
@@ -127,7 +127,7 @@ export default function PrivacyPolicyPage() {
                             ))}
                         </div>
                         <p className="mt-3">
-                            To exercise these rights, email <a href="mailto:privacy@numezis.com" className="text-status-success-text hover:underline">privacy@numezis.com</a>.
+                            To exercise these rights, email <a href="mailto:privacy@kletron.com" className="text-status-success-text hover:underline">privacy@kletron.com</a>.
                         </p>
                     </Section>
 
@@ -161,8 +161,8 @@ export default function PrivacyPolicyPage() {
                         <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface mt-2">
                             <p className="text-text-secondary text-sm">
                                 <strong>Data Protection Officer</strong><br />
-                                Numezis Technologies SA<br />
-                                <a href="mailto:dpo@numezis.com" className="text-status-success-text hover:underline">dpo@numezis.com</a>
+                                Kletron SA<br />
+                                <a href="mailto:dpo@kletron.com" className="text-status-success-text hover:underline">dpo@kletron.com</a>
                             </p>
                         </div>
                         <p className="mt-3">

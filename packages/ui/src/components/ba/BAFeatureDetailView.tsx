@@ -18,9 +18,9 @@ import {
     Layers,
     Tag,
 } from "lucide-react";
-import { Panel, Button, Badge } from "@numezis/ui/components/design-system";
-import { MarkdownRenderer } from "@numezis/ui/components/Agent/MarkdownRenderer";
-import type { FeatureProposal, FeatureType, FeatureStatus } from "@numezis/shared/businessAnalystTypes";
+import { Panel, Button, Badge } from "@kletron/ui/components/design-system";
+import { MarkdownRenderer } from "@kletron/ui/components/Agent/MarkdownRenderer";
+import type { FeatureProposal, FeatureType, FeatureStatus } from "@kletron/shared/businessAnalystTypes";
 
 // ---------------------------------------------------------------------------
 // API helpers

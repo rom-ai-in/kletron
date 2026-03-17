@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { SubscriptionResponse, Subscription, PlanId, PlanLimits } from "@numezis/shared/subscriptionTypes";
+import type { SubscriptionResponse, Subscription, PlanId, PlanLimits } from "@kletron/shared/subscriptionTypes";
 
 interface UseSubscriptionReturn {
     subscription: Subscription | null;

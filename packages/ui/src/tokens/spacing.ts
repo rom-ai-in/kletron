@@ -1,11 +1,11 @@
 /**
- * Numezis Design System - Spacing Tokens
+ * Kletron Design System - Spacing Tokens
  * 
  * 4px base scale following common UI patterns.
  * Use these for consistent spacing across the application.
  * 
  * @example
- * import { spacing } from '@numezis/ui/tokens';
+ * import { spacing } from '@kletron/ui/tokens';
  * <div style={{ padding: spacing.md, gap: spacing.sm }} />
  * 
  * // Prefer Tailwind classes

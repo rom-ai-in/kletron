@@ -1,11 +1,11 @@
 /**
- * Numezis Design System - Z-Index Tokens
+ * Kletron Design System - Z-Index Tokens
  * 
  * Layering scale for stacking contexts.
  * Use these to maintain consistent z-index hierarchy.
  * 
  * @example
- * import { zIndex } from '@numezis/ui/tokens';
+ * import { zIndex } from '@kletron/ui/tokens';
  * <div style={{ zIndex: zIndex.dropdown }} />
  */
 

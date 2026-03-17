@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Sparkles, Save, RotateCcw, Monitor, Cloud, Check, Globe, Bot, Cpu, Server, Power, PowerOff, Download, Zap, Loader2, CheckCircle2, XCircle, AlertCircle, List } from "lucide-react";
-import { Panel, Button } from "@numezis/ui/components/design-system";
-import type { LlmConfig, LMStudioConfig, LMStudioModelConfig, VLLMConfig, VLLMModelConfig } from "@numezis/shared/schemas/llmConfig.schema";
-import { MODEL_RECOMMENDATIONS, LLM_PROVIDERS, type LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
+import { Panel, Button } from "@kletron/ui/components/design-system";
+import type { LlmConfig, LMStudioConfig, LMStudioModelConfig, VLLMConfig, VLLMModelConfig } from "@kletron/shared/schemas/llmConfig.schema";
+import { MODEL_RECOMMENDATIONS, LLM_PROVIDERS, type LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 
 // Provider metadata for display
 const PROVIDERS = [

@@ -284,8 +284,8 @@ export default function FullIDELayout() {
             {/* Title Bar */}
             <div className="h-8 flex items-center justify-between px-4 bg-[var(--vscode-input-border)] border-b border-zinc-700">
                 <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-zinc-300">Numezis Code</span>
-                    <span className="text-[10px] text-zinc-500">— numezis-coder-mcp</span>
+                    <span className="text-sm font-medium text-zinc-300">Kletron</span>
+                    <span className="text-[10px] text-zinc-500">— kletron</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="text-[10px] px-2 py-0.5 rounded bg-status-success-bg text-status-success-text border border-status-success-border">Connected</span>

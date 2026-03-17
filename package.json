@@ -1,5 +1,5 @@
 {
-  "name": "numezis-code",
+  "name": "kletron",
   "version": "1.0.0",
   "type": "module",
   "description": "LangGraph-based TS agentic coder backed by the GitHub MCP server.",

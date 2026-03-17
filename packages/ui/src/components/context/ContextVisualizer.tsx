@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { FileText, Bot, GitCommit, Globe, RefreshCw as RefreshIcon, Hash, Code, Eye, Edit2 } from "lucide-react";
-import type { ContextNode } from "@numezis/shared/context/graph/ContextGraphTypes";
+import type { ContextNode } from "@kletron/shared/context/graph/ContextGraphTypes";
 
 // --- Types ---
 interface ContextHUDProps {

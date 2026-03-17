@@ -3,9 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import simpleGit from "simple-git";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { setActiveWorkspaceFromPath } from "@numezis/server/services/workspaceService";
-import { McpClient } from "@numezis/mcp-client/client";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { setActiveWorkspaceFromPath } from "@kletron/server/services/workspaceService";
+import { McpClient } from "@kletron/mcp-client/client";
 
 type CloneRequest = {
   repoUrl?: string;
@@ -21,9 +21,9 @@ type ParsedRepo = {
 
 function getReposRoot() {
   return (
-    process.env.NUMEZIS_REPOS_DIR ||
+    process.env.KLETRON_REPOS_DIR ||
     process.env.GITHUB_REPOS_DIR ||
-    path.join(os.homedir(), "numezis-repos")
+    path.join(os.homedir(), "kletron-repos")
   );
 }
 

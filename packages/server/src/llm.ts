@@ -4,7 +4,7 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatOllama } from "@langchain/ollama";
 
 import { getLlmConfig } from "./services/llmConfigService";
-import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
+import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 
 export type LlmProvider = LlmProviderType;
 

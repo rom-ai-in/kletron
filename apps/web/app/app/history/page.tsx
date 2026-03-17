@@ -11,10 +11,10 @@ import {
   LoadingState,
   ErrorState,
   EmptyState,
-} from "@numezis/ui/components/design-system";
+} from "@kletron/ui/components/design-system";
 import { History } from "lucide-react";
-import { RequireWorkspace } from "@numezis/ui/components/workspace/RequireWorkspace";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+import { RequireWorkspace } from "@kletron/ui/components/workspace/RequireWorkspace";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 
 type HistoryRunItem = {
   id: string;

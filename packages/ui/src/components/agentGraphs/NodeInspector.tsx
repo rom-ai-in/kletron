@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Panel } from "../ui/Panel";
 import { Button } from "../ui/Button";
-import { nodeOutputSchemaOptions } from "@numezis/shared/nodeOutputSchemas";
+import { nodeOutputSchemaOptions } from "@kletron/shared/nodeOutputSchemas";
 
 type ToolMeta = {
     name: string;

@@ -1,11 +1,11 @@
 // src/lib/auth/apiAuth.ts
 // Shared API auth helpers for app and pages routes (MongoDB version)
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createRouteHandlerClient } from '@numezis/server/lib/supabase/supabaseServer';
-import { createPagesSupabaseClient } from '@numezis/server/lib/supabase/supabasePages';
-import { getSupabaseAdminClient } from '@numezis/server/lib/supabase/supabaseAdmin';
+import { createRouteHandlerClient } from '@kletron/server/lib/supabase/supabaseServer';
+import { createPagesSupabaseClient } from '@kletron/server/lib/supabase/supabasePages';
+import { getSupabaseAdminClient } from '@kletron/server/lib/supabase/supabaseAdmin';
 import { API_TOKEN_PREFIX, hashApiToken } from './apiTokens';
-import * as apiTokenService from '@numezis/server/services/apiTokenService';
+import * as apiTokenService from '@kletron/server/services/apiTokenService';
 import { jwtVerify } from 'jose';
 
 export type AuthResult = {
@@ -14,8 +14,8 @@ export type AuthResult = {
 };
 
 const DEV_AUTH_BYPASS =
-    process.env.NUMEZIS_AUTH_BYPASS === 'true' ||
-    (process.env.NODE_ENV !== 'production' && process.env.NUMEZIS_AUTH_BYPASS !== 'false');
+    process.env.KLETRON_AUTH_BYPASS === 'true' ||
+    (process.env.NODE_ENV !== 'production' && process.env.KLETRON_AUTH_BYPASS !== 'false');
 
 function getDevBypassAuth(request?: Request): AuthResult | null {
     if (!DEV_AUTH_BYPASS) return null;
@@ -26,7 +26,7 @@ function getDevBypassAuth(request?: Request): AuthResult | null {
         if (!isLocalhost) return null;
     }
     return {
-        userId: process.env.NUMEZIS_DEV_USER_ID || 'dev-user',
+        userId: process.env.KLETRON_DEV_USER_ID || 'dev-user',
         authType: 'session',
     };
 }
@@ -96,7 +96,7 @@ async function verifyBearerToken(token: string): Promise<AuthResult | null> {
 
 export async function getAppRouteAuth(request: Request): Promise<AuthResult | null> {
     const devBypass = getDevBypassAuth(request);
-    if (devBypass && process.env.NUMEZIS_AUTH_BYPASS === 'true') {
+    if (devBypass && process.env.KLETRON_AUTH_BYPASS === 'true') {
         return devBypass;
     }
     try {
@@ -122,9 +122,9 @@ export async function requireAppRouteAuth(request: Request) {
 
 export async function getPagesRouteAuth(req: NextApiRequest): Promise<AuthResult | null> {
     const devBypass = DEV_AUTH_BYPASS
-        ? { userId: process.env.NUMEZIS_DEV_USER_ID || 'dev-user', authType: 'session' as const }
+        ? { userId: process.env.KLETRON_DEV_USER_ID || 'dev-user', authType: 'session' as const }
         : null;
-    if (devBypass && process.env.NUMEZIS_AUTH_BYPASS === 'true') {
+    if (devBypass && process.env.KLETRON_AUTH_BYPASS === 'true') {
         return devBypass;
     }
     try {

@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Panel, Button } from "@numezis/ui/components/design-system";
-import type { AutomationDefinition, AutomationRun, AutomationStatus } from "@numezis/shared/automationTypes";
-import type { AgentEvent } from "@numezis/shared/types";
-import { StageDetailModal } from "@numezis/ui/components/StageDetailModal";
+import { Panel, Button } from "@kletron/ui/components/design-system";
+import type { AutomationDefinition, AutomationRun, AutomationStatus } from "@kletron/shared/automationTypes";
+import type { AgentEvent } from "@kletron/shared/types";
+import { StageDetailModal } from "@kletron/ui/components/StageDetailModal";
 
 interface RunDetailPageProps {
     params: { id: string };

@@ -1,8 +1,8 @@
 // app/api/user-preferences/route.ts
 // API route for user preferences (LLM & Graph selection persistence)
 import { NextResponse } from 'next/server';
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import * as userPreferencesService from '@numezis/server/services/userPreferencesService';
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import * as userPreferencesService from '@kletron/server/services/userPreferencesService';
 
 /**
  * GET /api/user-preferences

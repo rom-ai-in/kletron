@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { getToolApprovalConfig, saveToolApprovalConfig } from "@numezis/server/config";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { getToolApprovalConfig, saveToolApprovalConfig } from "@kletron/server/config";
 
 /**
  * GET /api/config/tool-approval — Return current tool approval config.

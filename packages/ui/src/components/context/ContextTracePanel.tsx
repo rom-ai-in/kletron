@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { Search, Calculator, Zap, FileText, Hash, ArrowRight, AlertCircle } from "lucide-react";
-import { Button } from "@numezis/ui/components/design-system";
-import { RankedContextItem } from "@numezis/shared/context/graph/ContextGraphTypes";
+import { Button } from "@kletron/ui/components/design-system";
+import { RankedContextItem } from "@kletron/shared/context/graph/ContextGraphTypes";
 
 export function ContextTracePanel() {
     const [prompt, setPrompt] = useState("");

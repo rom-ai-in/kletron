@@ -9,11 +9,11 @@ const DEFAULT_DEV_CORS_ORIGINS = [
     "http://localhost:8080",
     "http://127.0.0.1:8080",
     "file://",
-    "numezis-code://"
+    "kletron://"
 ];
 
 function parseCorsAllowlist(): string[] {
-    const raw = process.env.NUMEZIS_CORS_ALLOWLIST;
+    const raw = process.env.KLETRON_CORS_ALLOWLIST;
     if (raw && raw.trim().length > 0) {
         return raw.split(",").map((value) => value.trim()).filter(Boolean);
     }
@@ -69,8 +69,8 @@ export async function middleware(request: NextRequest) {
     const response = NextResponse.next();
 
     const bypassAuth =
-        process.env.NUMEZIS_AUTH_BYPASS === "true" ||
-        (process.env.NODE_ENV !== "production" && process.env.NUMEZIS_AUTH_BYPASS !== "false");
+        process.env.KLETRON_AUTH_BYPASS === "true" ||
+        (process.env.NODE_ENV !== "production" && process.env.KLETRON_AUTH_BYPASS !== "false");
     if (bypassAuth) {
         return response;
     }

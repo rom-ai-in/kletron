@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { semanticSearch } from "@numezis/server/services/vectorService";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
+import { semanticSearch } from "@kletron/server/services/vectorService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 export async function POST(request: NextRequest) {
     const auth = await requireAppRouteAuth(request);

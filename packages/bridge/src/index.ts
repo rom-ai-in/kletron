@@ -283,7 +283,7 @@ export async function gitCreatePR(
 }
 
 export async function gitCloneRepo(repoUrl: string, targetRoot?: string, branch?: string): Promise<CloneResult> {
-  const root = targetRoot || path.join(os.homedir(), "numezis-repos");
+  const root = targetRoot || path.join(os.homedir(), "kletron-repos");
   const repoName = repoUrl.split("/").pop()?.replace(/\.git$/i, "") || "repo";
   const repoPath = path.join(root, repoName);
 

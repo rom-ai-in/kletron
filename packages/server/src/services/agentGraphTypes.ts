@@ -1,7 +1,7 @@
 import type { ObjectId } from "mongodb";
-import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
+import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
-import type { AgentEvent } from "@numezis/shared/types";
+import type { AgentEvent } from "@kletron/shared/types";
 
 export type AgentGraphStatus = "PENDING" | "RUNNING" | "PAUSED" | "CANCELLED" | "COMPLETED" | "FAILED";
 

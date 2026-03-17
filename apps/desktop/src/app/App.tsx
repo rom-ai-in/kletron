@@ -15,34 +15,34 @@ import {
   ContextChips,
   createFileChip,
   useToast,
-} from "@numezis/ui/components/design-system";
-import type { ContextChip } from "@numezis/ui/components/design-system";
+} from "@kletron/ui/components/design-system";
+import type { ContextChip } from "@kletron/ui/components/design-system";
 
 // Terminal component
-import { Terminal } from "@numezis/ui/components/Terminal";
+import { Terminal } from "@kletron/ui/components/Terminal";
 
 // Command Center components
-import { TitleBar } from "@numezis/ui/components/CommandCenter/TitleBar";
-import { ProjectSidebar } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
-import type { SidebarProject } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
-import { ConversationCenter } from "@numezis/ui/components/CommandCenter/ConversationCenter";
-import { InputBar } from "@numezis/ui/components/CommandCenter/InputBar";
-import { MessageQueue } from "@numezis/ui/components/CommandCenter/MessageQueue";
-import { ProjectUtilitySidebar } from "@numezis/ui/components/CommandCenter/ProjectUtilitySidebar";
-import type { PendingDiffItem, FileLink, GitSidebarData } from "@numezis/ui/components/CommandCenter/ProjectUtilitySidebar";
-import { UncommittedChangesPanel } from "@numezis/ui/components/CommandCenter/UncommittedChangesPanel";
-import type { FileDiffData } from "@numezis/ui/components/CommandCenter/UncommittedChangesPanel";
-import { InlineDiffReview } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
-import type { InlineDiff } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
-import { SlashCommandMenu } from "@numezis/ui/components/CommandCenter/SlashCommandMenu";
-import type { SlashCommandItem } from "@numezis/ui/components/CommandCenter/SlashCommandMenu";
-import { MultimodalMenu } from "@numezis/ui/components/CommandCenter/MultimodalMenu";
-import { SkillsManager } from "@numezis/ui/components/CommandCenter/SkillsManager";
-import { AutomationsDashboard } from "@numezis/ui/components/CommandCenter/AutomationsDashboard";
-import { AgentGraphSelector } from "@numezis/ui/components/CommandCenter/AgentGraphSelector";
-import type { AgentGraph } from "@numezis/ui/components/CommandCenter/AgentGraphSelector";
-import { ReplayConfirmDialog } from "@numezis/ui/components/CommandCenter/ReplayConfirmDialog";
-import type { ReplayImpact } from "@numezis/ui/components/CommandCenter/ReplayConfirmDialog";
+import { TitleBar } from "@kletron/ui/components/CommandCenter/TitleBar";
+import { ProjectSidebar } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import type { SidebarProject } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import { ConversationCenter } from "@kletron/ui/components/CommandCenter/ConversationCenter";
+import { InputBar } from "@kletron/ui/components/CommandCenter/InputBar";
+import { MessageQueue } from "@kletron/ui/components/CommandCenter/MessageQueue";
+import { ProjectUtilitySidebar } from "@kletron/ui/components/CommandCenter/ProjectUtilitySidebar";
+import type { PendingDiffItem, FileLink, GitSidebarData } from "@kletron/ui/components/CommandCenter/ProjectUtilitySidebar";
+import { UncommittedChangesPanel } from "@kletron/ui/components/CommandCenter/UncommittedChangesPanel";
+import type { FileDiffData } from "@kletron/ui/components/CommandCenter/UncommittedChangesPanel";
+import { InlineDiffReview } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
+import type { InlineDiff } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
+import { SlashCommandMenu } from "@kletron/ui/components/CommandCenter/SlashCommandMenu";
+import type { SlashCommandItem } from "@kletron/ui/components/CommandCenter/SlashCommandMenu";
+import { MultimodalMenu } from "@kletron/ui/components/CommandCenter/MultimodalMenu";
+import { SkillsManager } from "@kletron/ui/components/CommandCenter/SkillsManager";
+import { AutomationsDashboard } from "@kletron/ui/components/CommandCenter/AutomationsDashboard";
+import { AgentGraphSelector } from "@kletron/ui/components/CommandCenter/AgentGraphSelector";
+import type { AgentGraph } from "@kletron/ui/components/CommandCenter/AgentGraphSelector";
+import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
+import type { ReplayImpact } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
 
 // Hooks
 import { useAuth } from "../hooks/useAuth";
@@ -441,7 +441,7 @@ export default function App() {
 
   async function handleAddProject() {
     try {
-      const result = await (window as any).numezis?.selectWorkspace?.();
+      const result = await (window as any).kletron?.selectWorkspace?.();
       if (!result) return; // user cancelled the dialog
       const folderPath: string = result.path;
       const folderName: string = result.name || folderPath.split("/").pop() || "Project";
@@ -734,8 +734,8 @@ export default function App() {
                     <h2 className="text-sm font-semibold text-text-primary">Backend</h2>
                     <div className="glass-card divide-y divide-border-subtle rounded-md">
                       <div className="flex items-center justify-between gap-4 px-3 py-2">
-                        <div><div className="text-sm font-medium text-text-primary">Backend URL</div><div className="text-xs text-text-muted">Connect to your Numezis backend.</div></div>
-                        <input value={settings.backendUrl} onChange={(e) => settings.setBackendUrl(e.target.value)} className="w-56 rounded-md border border-border-subtle bg-bg-app px-2 py-1 text-xs text-text-primary" placeholder="https://app.numezis.com" />
+                        <div><div className="text-sm font-medium text-text-primary">Backend URL</div><div className="text-xs text-text-muted">Connect to your Kletron backend.</div></div>
+                        <input value={settings.backendUrl} onChange={(e) => settings.setBackendUrl(e.target.value)} className="w-56 rounded-md border border-border-subtle bg-bg-app px-2 py-1 text-xs text-text-primary" placeholder="https://app.kletron.com" />
                       </div>
                       <div className="flex items-center justify-between gap-4 px-3 py-2">
                         <div className="text-sm font-medium text-text-primary">Connection status</div>
@@ -935,7 +935,7 @@ export default function App() {
     <div className="flex h-screen flex-col text-text-primary">
       {/* ── Title Bar ── */}
       <TitleBar
-        workspaceName={workspace.workspace?.name || workspace.workspace?.path?.split("/").pop() || "Numezis Desktop"}
+        workspaceName={workspace.workspace?.name || workspace.workspace?.path?.split("/").pop() || "Kletron Desktop"}
         workspaceSelectorLabel={workspace.workspace?.name || workspace.workspace?.path?.split("/").pop() || "Select workspace"}
         onWorkspaceSelectorClick={() => { void workspace.selectWorkspace(); }}
         workspaceItems={workspace.allWorkspaces}
@@ -944,7 +944,7 @@ export default function App() {
         onAddWorkspace={handleAddProject}
         showTrafficLights={false}
         onOpen={() => {
-          try { (window as any).numezis?.openInVSCode?.(); } catch { /* ignore */ }
+          try { (window as any).kletron?.openInVSCode?.(); } catch { /* ignore */ }
         }}
         onCommit={() => {
           // Focus the right sidebar git section to write commit message
@@ -957,7 +957,7 @@ export default function App() {
           void git.push().then(() =>
             git.createPR(title).then((result) => {
               if (result?.url) {
-                try { (window as any).numezis?.openExternal?.(result.url); } catch { /* ignore */ }
+                try { (window as any).kletron?.openExternal?.(result.url); } catch { /* ignore */ }
               }
             })
           );
@@ -1031,7 +1031,7 @@ export default function App() {
                   onAccept={(editId) => diffs.applyAllDiff(editId)}
                   onReject={(editId) => diffs.rejectAllDiff(editId)}
                   onOpenInIDE={(filePath) => {
-                    try { (window as any).numezis?.openInVSCode?.(filePath); } catch { /* ignore */ }
+                    try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
                   }}
                   onRequestIteration={handleRequestIteration}
                 />
@@ -1054,7 +1054,7 @@ export default function App() {
               onClose={() => setMultimodalOpen(false)}
               onIncludeFile={async () => {
                 try {
-                  const paths = await (window as any).numezis?.pickFile?.();
+                  const paths = await (window as any).kletron?.pickFile?.();
                   if (Array.isArray(paths)) {
                     for (const p of paths) {
                       const filename = p.split("/").pop() || p;
@@ -1065,7 +1065,7 @@ export default function App() {
               }}
               onTakeScreenshot={async () => {
                 try {
-                  await (window as any).numezis?.captureScreenshot?.();
+                  await (window as any).kletron?.captureScreenshot?.();
                 } catch { /* ignore */ }
               }}
             />
@@ -1167,7 +1167,7 @@ export default function App() {
               loading={git.allDiffsLoading}
               onClose={() => setChangesVisible(false)}
               onOpenInIDE={(p) => {
-                try { (window as any).numezis?.openInVSCode?.(p); } catch { /* ignore */ }
+                try { (window as any).kletron?.openInVSCode?.(p); } catch { /* ignore */ }
               }}
               onStageFile={(p) => { void git.stageFile(p).then(() => git.fetchAllDiffs()); }}
               onRevertFile={(p) => { void git.revertFile(p).then(() => git.fetchAllDiffs()); }}
@@ -1188,7 +1188,7 @@ export default function App() {
             onAcceptDiff={(editId) => diffs.applyAllDiff(editId)}
             onRejectDiff={(editId) => diffs.rejectAllDiff(editId)}
             onOpenInIDE={(filePath) => {
-              try { (window as any).numezis?.openInVSCode?.(filePath); } catch { /* ignore */ }
+              try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
             }}
             gitData={gitSidebarData}
             onGitCommit={(msg) => git.commit(msg)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { BAConfigView } from "@numezis/ui/components/config/BAConfigView";
+import { BAConfigView } from "@kletron/ui/components/config/BAConfigView";
 
 export default function BAConfigPage() {
     return <BAConfigView />;

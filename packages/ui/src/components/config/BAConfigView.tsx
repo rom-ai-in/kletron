@@ -16,8 +16,8 @@ import {
     Sparkles,
     Settings,
 } from "lucide-react";
-import { Panel, Button, Badge } from "@numezis/ui/components/design-system";
-import type { BusinessContext, UserPersona, Competitor } from "@numezis/shared/businessContext";
+import { Panel, Button, Badge } from "@kletron/ui/components/design-system";
+import type { BusinessContext, UserPersona, Competitor } from "@kletron/shared/businessContext";
 
 // ---------------------------------------------------------------------------
 // API helpers

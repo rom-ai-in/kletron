@@ -6,24 +6,24 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { HumanMessage, SystemMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
-import type { AgentEvent, AgentEventKind, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent, AgentWorkflowAbortReason, Finding } from "@numezis/shared/types";
-import { enhanceWorkflowResult } from "@numezis/shared/reportUtils";
-import { streamReactAgentMessages, AgentWorkflowAbortError } from "@numezis/agent-core/reactAgentRunner";
-import { allMcpTools } from "@numezis/agent-core/tools/mcpTools";
+import type { AgentEvent, AgentEventKind, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent, AgentWorkflowAbortReason, Finding } from "@kletron/shared/types";
+import { enhanceWorkflowResult } from "@kletron/shared/reportUtils";
+import { streamReactAgentMessages, AgentWorkflowAbortError } from "@kletron/agent-core/reactAgentRunner";
+import { allMcpTools } from "@kletron/agent-core/tools/mcpTools";
 import { agentGraphRunService } from "./agentGraphRunService";
 import { agentGraphService } from "./agentGraphService";
 import type { AgentGraphNode } from "./agentGraphTypes";
-import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
-import { nodeOutputSchemaRegistry } from "@numezis/shared/nodeOutputSchemas";
+import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
+import { nodeOutputSchemaRegistry } from "@kletron/shared/nodeOutputSchemas";
 import { parseJsonOutput, renderUserPrompt } from "./agentGraphUtils";
 import { evaluateCondition } from "./agentGraphConditions";
 import { buildInitialState, getEntryNodeIds, getGraphNodeOrder, resolveExecutionMode } from "./agentGraphRuntime";
 import { setNestedValue } from "./agentGraphState";
-import { skillRegistry } from "@numezis/agent-core/skills/registry";
+import { skillRegistry } from "@kletron/agent-core/skills/registry";
 import { tokenUsageService } from "./tokenUsageService";
 import { ObjectId } from "mongodb";
-import { getAuditContextConfig } from "@numezis/server/services/auditContextService";
-import { formatAuditContextPrompt, type AuditContext } from "@numezis/shared/documentContext";
+import { getAuditContextConfig } from "@kletron/server/services/auditContextService";
+import { formatAuditContextPrompt, type AuditContext } from "@kletron/shared/documentContext";
 import { agentMemoryService } from "./agentMemoryService";
 import { SafeEditGate } from "./agent/SafeEditGate";
 import { getToolApprovalPolicy } from "./toolApprovalPolicy";
@@ -33,12 +33,12 @@ import { sanitizeAssistantVisibleContent, stripThoughtContent } from "./titleSan
 import { getCheckpointSaver, hasCheckpoint, computeGraphHash, ensureCheckpointIndexes, deleteThreadCheckpoints } from "./checkpointService";
 
 // --- Context Management Imports ---
-import { getContextGraphStore } from "@numezis/server/context/graph/ContextGraphStore";
-import { ContextRanker } from "@numezis/server/context/graph/ContextRanker";
-import { getEditorStateManager } from "@numezis/server/context/graph/EditorStateManager";
-import { ContextScanner } from "@numezis/server/context/graph/ContextScanner";
+import { getContextGraphStore } from "@kletron/server/context/graph/ContextGraphStore";
+import { ContextRanker } from "@kletron/server/context/graph/ContextRanker";
+import { getEditorStateManager } from "@kletron/server/context/graph/EditorStateManager";
+import { ContextScanner } from "@kletron/server/context/graph/ContextScanner";
 import { getWorkspaceByIdUnsafe, listAllWorkspaces } from "./workspaceService";
-import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
+import { runWithWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 
 
 const cloneValue = <T>(value: T): T => {
@@ -98,7 +98,7 @@ const writeEvictedToolResult = async (opts: {
     toolName: string;
     content: string;
 }) => {
-    const relativeDir = path.join(".numezis", "agent-cache", opts.runId);
+    const relativeDir = path.join(".kletron", "agent-cache", opts.runId);
     const dir = path.join(opts.rootDir, relativeDir);
     await mkdir(dir, { recursive: true });
     const safeTool = opts.toolName.replace(/[^a-zA-Z0-9._-]/g, "_");

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateDefaultEmbeddingProvider, getEmbeddingConfig, resetEmbeddingToEnvConfig } from "@numezis/server/services/embeddingConfigService";
-import { EMBEDDING_PROVIDERS, EmbeddingProviderType } from "@numezis/shared/schemas/embeddingConfig.schema";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { updateDefaultEmbeddingProvider, getEmbeddingConfig, resetEmbeddingToEnvConfig } from "@kletron/server/services/embeddingConfigService";
+import { EMBEDDING_PROVIDERS, EmbeddingProviderType } from "@kletron/shared/schemas/embeddingConfig.schema";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 function logDuration(method: string, status: number, startTime: number) {
     const duration = Date.now() - startTime;

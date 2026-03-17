@@ -1,7 +1,7 @@
 // app/api/auth/signin/route.ts
 // API route for user sign in
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@numezis/server/lib/supabase/supabaseServer';
+import { createRouteHandlerClient } from '@kletron/server/lib/supabase/supabaseServer';
 
 export async function POST(request: Request) {
     try {

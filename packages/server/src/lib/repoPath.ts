@@ -1,5 +1,5 @@
-import { McpClient } from "@numezis/mcp-client/client";
-import { TargetFile } from "@numezis/shared/agentSchemas";
+import { McpClient } from "@kletron/mcp-client/client";
+import { TargetFile } from "@kletron/shared/agentSchemas";
 
 /**
  * Checks if a file exists in the repository using the MCP `read_file` tool.

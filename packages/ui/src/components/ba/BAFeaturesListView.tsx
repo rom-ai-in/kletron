@@ -13,19 +13,19 @@ import {
     ChevronRight,
     ListChecks,
 } from "lucide-react";
-import { Panel, Button, Badge } from "@numezis/ui/components/design-system";
+import { Panel, Button, Badge } from "@kletron/ui/components/design-system";
 import type {
     FeatureProposal,
     FeatureType,
     FeatureStatus,
     FeatureSource,
-} from "@numezis/shared/businessAnalystTypes";
+} from "@kletron/shared/businessAnalystTypes";
 import {
     FEATURE_TYPES,
     FEATURE_STATUSES,
     FEATURE_SOURCES,
-} from "@numezis/shared/businessAnalystTypes";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+} from "@kletron/shared/businessAnalystTypes";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 
 // ---------------------------------------------------------------------------
 // API helpers

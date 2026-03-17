@@ -1,9 +1,9 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
-import { refreshIndexStatus } from "@numezis/server/services/indexerService";
-import { getSchedulerStatus } from "@numezis/server/services/autoIndexScheduler";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
+import { refreshIndexStatus } from "@kletron/server/services/indexerService";
+import { getSchedulerStatus } from "@kletron/server/services/autoIndexScheduler";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 /**
  * GET /api/vectors — Lightweight index status endpoint.

@@ -2,8 +2,8 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./app/App";
 import PopoutConversation from "./app/PopoutConversation";
-import { ThemeProvider } from "@numezis/ui/hooks/useTheme";
-import { ToastProvider } from "@numezis/ui/components/design-system";
+import { ThemeProvider } from "@kletron/ui/hooks/useTheme";
+import { ToastProvider } from "@kletron/ui/components/design-system";
 import "./app/styles.css";
 
 /**

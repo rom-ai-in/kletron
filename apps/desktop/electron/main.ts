@@ -25,7 +25,7 @@ import {
   listFiles,
   readFile,
   writeFile
-} from "@numezis/bridge";
+} from "@kletron/bridge";
 
 const currentFile = __filename;
 const currentDir = __dirname;
@@ -261,9 +261,9 @@ async function setupAutoUpdates() {
 
 app.on("ready", () => {
   if (process.defaultApp && process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient("numezis-code", process.execPath, [path.resolve(process.argv[1])]);
+    app.setAsDefaultProtocolClient("kletron", process.execPath, [path.resolve(process.argv[1])]);
   } else {
-    app.setAsDefaultProtocolClient("numezis-code");
+    app.setAsDefaultProtocolClient("kletron");
   }
   if (process.platform === "darwin") {
     const dockIcon = loadAppIcon();

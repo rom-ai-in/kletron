@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useAuth } from '@numezis/ui/context/AuthContext';
-import { PasswordInput, Button, Badge } from '@numezis/ui/components/design-system';
+import { useAuth } from '@kletron/ui/context/AuthContext';
+import { PasswordInput, Button, Badge } from '@kletron/ui/components/design-system';
 import {
     KeyRound,
     Smartphone,

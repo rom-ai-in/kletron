@@ -1,5 +1,5 @@
 {
-  "name": "@numezis/desktop",
+  "name": "@kletron/desktop",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -13,7 +13,7 @@
     "publish:mac": "electron-builder --mac --publish always"
   },
   "dependencies": {
-    "@numezis/ui": "*",
+    "@kletron/ui": "*",
     "@monaco-editor/react": "^4.7.0",
     "clsx": "^2.1.1",
     "diff": "^5.2.0",
@@ -37,8 +37,8 @@
     "vite": "^5.4.6"
   },
   "build": {
-    "appId": "com.numezis.desktop",
-    "productName": "Numezis Desktop",
+    "appId": "com.kletron.desktop",
+    "productName": "Kletron",
     "directories": {
       "output": "dist-desktop",
       "buildResources": "build"
@@ -62,9 +62,9 @@
     "asar": true,
     "protocols": [
       {
-        "name": "Numezis Desktop",
+        "name": "Kletron",
         "schemes": [
-          "numezis-code"
+          "kletron"
         ]
       }
     ],
@@ -103,7 +103,7 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "https://updates.numezis.com/desktop"
+        "url": "https://updates.kletron.com/desktop"
       }
     ],
     "afterSign": "scripts/notarize.cjs"

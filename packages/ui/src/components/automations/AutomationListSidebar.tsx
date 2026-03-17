@@ -16,11 +16,11 @@ import {
     GitBranch,
     Hand,
 } from "lucide-react";
-import { Button } from "@numezis/ui/components/design-system";
+import { Button } from "@kletron/ui/components/design-system";
 import { AutomationBuilderModal } from "../AutomationBuilderModal";
-import type { AutomationDefinition, AutomationTriggerType } from "@numezis/shared/automationTypes";
-import { cn } from "@numezis/shared/utils/cn";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+import type { AutomationDefinition, AutomationTriggerType } from "@kletron/shared/automationTypes";
+import { cn } from "@kletron/shared/utils/cn";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 
 // Helper for status icons
 const StatusIcon = ({ status }: { status: string }) => {

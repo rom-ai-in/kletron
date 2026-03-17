@@ -1,11 +1,11 @@
 /**
- * Numezis Design System - Typography Tokens
+ * Kletron Design System - Typography Tokens
  * 
  * Font families, sizes, weights, and line heights.
  * Matches the typography defined in globals.css.
  * 
  * @example
- * import { typography as t } from '@numezis/ui/tokens';
+ * import { typography as t } from '@kletron/ui/tokens';
  * <h1 style={{ fontFamily: t.fontFamily.display, fontSize: t.fontSize.xl }}>Title</h1>
  * 
  * // Prefer Tailwind classes

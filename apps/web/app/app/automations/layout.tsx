@@ -1,7 +1,7 @@
 "use client";
 
-import { AutomationListSidebar } from "@numezis/ui/components/automations/AutomationListSidebar";
-import { RequireWorkspace } from "@numezis/ui/components/workspace/RequireWorkspace";
+import { AutomationListSidebar } from "@kletron/ui/components/automations/AutomationListSidebar";
+import { RequireWorkspace } from "@kletron/ui/components/workspace/RequireWorkspace";
 
 export default function AutomationsLayout({
     children,

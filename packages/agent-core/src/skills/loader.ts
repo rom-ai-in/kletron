@@ -1,8 +1,8 @@
 import { promises as fs } from "fs";
 import path from "path";
 import matter from "gray-matter";
-import { getConfig } from "@numezis/server/config";
-import { getWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
+import { getConfig } from "@kletron/server/config";
+import { getWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 import type {
     SkillDefinition,
     ResolvedSkill,

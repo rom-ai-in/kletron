@@ -3,8 +3,8 @@
 import { useState, useCallback } from "react";
 import { ArrowLeft, Folder, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { Panel, Button } from "@numezis/ui/components/design-system";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+import { Panel, Button } from "@kletron/ui/components/design-system";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 import { InlineAddWorkspaceForm } from "./InlineAddWorkspaceForm";
 
 export default function WorkspaceConfigPage() {

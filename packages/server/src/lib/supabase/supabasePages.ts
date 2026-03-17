@@ -2,7 +2,7 @@
 // Supabase server client for Next.js pages API routes
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import type { NextApiRequest } from 'next';
-import type { Database } from '@numezis/shared/supabase/types';
+import type { Database } from '@kletron/shared/supabase/types';
 
 export function createPagesSupabaseClient(req: NextApiRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

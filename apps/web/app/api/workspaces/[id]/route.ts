@@ -1,8 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { deleteWorkspace, getWorkspaceById, toWorkspaceSummary, getActiveWorkspaceId } from "@numezis/server/services/workspaceService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { deleteWorkspace, getWorkspaceById, toWorkspaceSummary, getActiveWorkspaceId } from "@kletron/server/services/workspaceService";
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const auth = await requireAppRouteAuth(request);

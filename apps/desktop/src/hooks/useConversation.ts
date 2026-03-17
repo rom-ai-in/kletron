@@ -10,7 +10,7 @@ import type {
   StreamingState,
   WorkspaceInfo,
 } from "../types";
-import type { ReplayImpact } from "@numezis/ui";
+import type { ReplayImpact } from "@kletron/ui";
 import { buildHunks, normalizeContent, wait } from "../utils";
 import { computeReplayImpactPure } from "../replayImpact";
 
@@ -94,7 +94,7 @@ export function useConversation(
 
         let baseContent = "";
         try {
-          baseContent = await window.numezis.readFile(filePath);
+          baseContent = await window.kletron.readFile(filePath);
         } catch {
           baseContent = "";
         }

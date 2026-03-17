@@ -11,14 +11,14 @@ export const auditPrompts: AuditPromptOption[] = [
     id: "i18n",
     name: "Localization readiness audit",
     description:
-      "Audit the i18n layer for data parity, placeholder safety, hardcoded strings, usage hygiene, resilience, and monitoring in the Numezis ERP.",
+      "Audit the i18n layer for data parity, placeholder safety, hardcoded strings, usage hygiene, resilience, and monitoring in the Kletron ERP.",
     focus: [
       "JSON parity + placeholder coverage",
       "Code + interpolation safety",
       "Architecture/resilience plan",
     ],
     prompt: [
-      "Tu es Expert Linguistique & Architecte i18n pour un ERP critique (Numezis).",
+      "Tu es Expert Linguistique & Architecte i18n pour un ERP critique (Kletron).",
       "Mission: auditer la solidité, la complétude et la résilience de la couche d'internationalisation afin de garantir que l'application est 100% Localization-Ready, sans dette technique linguistique, et capable de scaler à 10+ langues.",
       "Sources de vérité: docs/01-architecture/core/internationalization-standards.md, packages/i18n/README.md, docs/02-development/i18n/translation-completion-strategy.md, docs/02-development/quality/quality-architecture.md (section « i18n Placeholder Values »), docs/02-development/i18n/translator-guide.md (section « Placeholder Values »), docs/02-development/rules/backend-rules-and-checklist.md (section i18n), docs/02-development/rules/frontend-rules-and-checklist.md (section i18n).",
       "Périmètre: 1) intégrité des JSONs (parité en/fr/de/it, hiérarchie/domain.module.component, interpolations cohérentes); 2) placeholders, commandes npm run i18n:check-placeholder-values et npm run i18n:analyze-placeholders, priorisation (CRITICAL/HIGH/MEDIUM/LOW) et valeurs vides/manquantes; 3) strings hardcodées et interpolations manuelles côté front/back; 4) architecture & usages (helpers, fallback, changement de langue, typage, chunking, crash prevention); 5) résilience/perf (monitoring des placeholders, plan de correction).",
@@ -36,7 +36,7 @@ export const auditPrompts: AuditPromptOption[] = [
       "Discoverability/navigation matrix",
     ],
     prompt: [
-      "Tu es un auditeur senior Architecture & Patterns pour le monorepo Numezis.",
+      "Tu es un auditeur senior Architecture & Patterns pour le monorepo Kletron.",
       "Mission: auditer exhaustivement la cohérence architecturale entre les modules (structure, organisation, nommage, services, repositories, routes, découvrabilité) et dénoncer uniquement les incohérences architecturales (pas les features métières optionnelles).",
       "Sources de vérité: docs/01-architecture/development/domain-structure-template.md, docs/02-development/module-creation-guide.md, docs/01-architecture/core/domain-model.md, docs/01-architecture/portal/portal-architecture.md, packages/shared-ts/src/modules.ts, docs/04-features/14-reporting/ARCHITECTURE.md, docs/09-ui-ux/04-product/feature-discoverability-rule.md, docs/01-architecture/navigation/navigation-rules.md, apps/api/src/services/navigation.registry.ts.",
       "Scope: apps/api/src/domain/**/*, apps/api/src/repositories/**/*, apps/api/src/routes/portals/**/*, apps/web/app/[locale]/(client)/**/*, registry navigation et comparaisons Purchase vs Sales, Accounting vs HR, Projects vs Inventory.",
@@ -55,7 +55,7 @@ export const auditPrompts: AuditPromptOption[] = [
       "Zero custom code + layouts",
     ],
     prompt: [
-      "Tu es un auditeur senior Design System + Architecture Frontend pour le monorepo Numezis.",
+      "Tu es un auditeur senior Design System + Architecture Frontend pour le monorepo Kletron.",
       "Mission: exécuter un full-compliance-audit de l'utilisation du design system dans tous les composants et pages, en garantissant qu'aucun code custom ne contourne les primitives, tokens ou layouts standards.",
       "Sources de vérité: docs/09-ui-ux/01-pages/page-scenarios-simplified.md, docs/09-ui-ux/04-components/component-reference.md, docs/09-ui-ux/00-foundations/design-system/ADOPTION-STATUS.md, docs/09-ui-ux/00-foundations/design-system-usage.md, docs/09-ui-ux/00-foundations/design-system/color-system.md, docs/09-ui-ux/00-foundations/design-system/badge-system.md, docs/09-ui-ux/04-components/component-usage-guide.md, docs/09-ui-ux/01-pages/accepted-patterns.md, docs/09-ui-ux/00-foundations/ux-philosophy.md (section Mobile-First), docs/09-ui-ux/05-portals/client-portal-patterns.md, docs/02-development/i18n/translation-completion-strategy.md, .cursor/rules/frontend-rules.mdc (section i18n, Mobile-First, TypeScript, zero any).",
       "Scope: apps/web/components/ui/*, components/shared/*, components/views/*, components/patterns/*, composants métiers, et pages apps/web/app/**/page.tsx.",

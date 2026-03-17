@@ -1,8 +1,8 @@
 export const dynamic = "force-dynamic";
-import { resolveLlmSelection } from "@numezis/server/llm";
-import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@numezis/shared/types";
-import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { resolveLlmSelection } from "@kletron/server/llm";
+import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@kletron/shared/types";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 const textEncoder = new TextEncoder();
 
@@ -116,7 +116,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       console.log(`[sessions/chat] Stream started for run ${params.id}`);
 
       try {
-        const { agentGraphExecutor } = await import("@numezis/server/services/agentGraphExecutor");
+        const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
         console.log(`[sessions/chat] Calling continueRun for ${params.id}...`);
         const result = await agentGraphExecutor.continueRun(params.id, message, {
           onUpdate: async (update) => {

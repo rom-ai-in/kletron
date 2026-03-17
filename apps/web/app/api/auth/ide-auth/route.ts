@@ -3,8 +3,8 @@
 // Exchanges a Supabase session for long-lived IDE tokens
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@numezis/server/lib/supabase/supabaseServer';
-import { generateIdeTokens } from '@numezis/server/lib/auth/ideTokens';
+import { createServerSupabaseClient } from '@kletron/server/lib/supabase/supabaseServer';
+import { generateIdeTokens } from '@kletron/server/lib/auth/ideTokens';
 
 interface IDEAuthResponse {
     success: boolean;

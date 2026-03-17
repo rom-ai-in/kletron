@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { parseJsonOutput, stripCodeFences } from "@numezis/server/services/agentGraphUtils";
+import { parseJsonOutput, stripCodeFences } from "@kletron/server/services/agentGraphUtils";
 
 describe("agentGraphUtils.stripCodeFences", () => {
     it("removes markdown json fences", () => {

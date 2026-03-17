@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { getBreadcrumbItems } from "@numezis/shared/breadcrumbs";
-import { useBreadcrumbOverrides } from "@numezis/ui/components/ui/BreadcrumbOverridesProvider";
+import { getBreadcrumbItems } from "@kletron/shared/breadcrumbs";
+import { useBreadcrumbOverrides } from "@kletron/ui/components/ui/BreadcrumbOverridesProvider";
 
 export function Breadcrumbs() {
   const pathname = usePathname() || "/";

@@ -1,4 +1,4 @@
-import { agentGraphService } from "@numezis/server/services/agentGraphService";
+import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import {
   buildSimpleReactAgentGraph,
   buildDriftAnalysisGraph,
@@ -6,8 +6,8 @@ import {
   buildExplorerAgentGraph,
   buildPlannerAgentGraph,
   buildBusinessAnalystGraph,
-} from "@numezis/server/services/agentGraphPresets";
-import * as db from "@numezis/server/lib/db";
+} from "@kletron/server/services/agentGraphPresets";
+import * as db from "@kletron/server/lib/db";
 
 type GraphPreset = {
   name: string;

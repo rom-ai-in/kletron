@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MarketingHeader, MarketingFooter } from '@numezis/ui/components/design-system';
+import { MarketingHeader, MarketingFooter } from '@kletron/ui/components/design-system';
 
 export default function TermsOfServicePage() {
     return (
@@ -15,14 +15,14 @@ export default function TermsOfServicePage() {
                         <p className="text-xs text-text-muted mb-2">Last updated: February 2, 2026</p>
                         <h1 className="text-3xl font-bold text-text-primary mb-4">Terms of Service</h1>
                         <p className="text-sm text-text-muted">
-                            These Terms of Service (&quot;Terms&quot;) govern your use of Numezis Code, operated by Numezis Technologies SA,
+                            These Terms of Service (&quot;Terms&quot;) govern your use of Kletron, operated by Kletron SA,
                             a Swiss company headquartered in Switzerland.
                         </p>
                     </div>
 
                     <Section title="1. Acceptance of Terms">
                         <p>
-                            By accessing or using Numezis Code (the &quot;Service&quot;), you agree to be bound by these Terms.
+                            By accessing or using Kletron (the &quot;Service&quot;), you agree to be bound by these Terms.
                             If you do not agree to these Terms, you may not use the Service.
                         </p>
                         <p>
@@ -33,7 +33,7 @@ export default function TermsOfServicePage() {
 
                     <Section title="2. Description of Service">
                         <p>
-                            Numezis Code is an AI-powered coding assistant provided as a desktop IDE and web platform.
+                            Kletron is an AI-powered coding assistant provided as a desktop IDE and web platform.
                             The Service includes:
                         </p>
                         <ul>
@@ -100,7 +100,7 @@ export default function TermsOfServicePage() {
                         </p>
                         <p>
                             <strong>6.2 Our Service:</strong> The Service, including its software, design, and documentation,
-                            is owned by Numezis Technologies SA and protected by intellectual property laws.
+                            is owned by Kletron SA and protected by intellectual property laws.
                         </p>
                         <p>
                             <strong>6.3 Feedback:</strong> Any feedback you provide may be used by us to improve the Service
@@ -133,7 +133,7 @@ export default function TermsOfServicePage() {
 
                     <Section title="9. Limitation of Liability">
                         <p>
-                            TO THE MAXIMUM EXTENT PERMITTED BY LAW, NUMEZIS TECHNOLOGIES SA SHALL NOT BE LIABLE FOR:
+                            TO THE MAXIMUM EXTENT PERMITTED BY LAW, KLETRON SA SHALL NOT BE LIABLE FOR:
                         </p>
                         <ul>
                             <li>Indirect, incidental, or consequential damages</li>
@@ -175,10 +175,10 @@ export default function TermsOfServicePage() {
                         <p>For questions about these Terms, please contact:</p>
                         <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface mt-4">
                             <p className="text-text-secondary">
-                                <strong>Numezis Technologies SA</strong><br />
+                                <strong>Kletron SA</strong><br />
                                 Legal Department<br />
                                 Geneva, Switzerland<br />
-                                <a href="mailto:legal@numezis.com" className="text-status-success-text hover:underline">legal@numezis.com</a>
+                                <a href="mailto:legal@kletron.com" className="text-status-success-text hover:underline">legal@kletron.com</a>
                             </p>
                         </div>
                     </Section>

@@ -71,7 +71,7 @@ export async function getDb(dbName?: string) {
     const defaultDb =
         process.env.MONGODB_DB ||
         process.env.MONGODB_DB_NAME ||
-        "numezis_coder";
+        "kletron";
     return connectedClient.db(dbName || defaultDb); // Default DB name if not specified
 }
 

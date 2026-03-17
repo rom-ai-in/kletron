@@ -4,7 +4,7 @@
  * Extracted from useConversation so it can be unit-tested without React.
  */
 
-import type { FileChange, ReplayImpact } from "@numezis/ui";
+import type { FileChange, ReplayImpact } from "@kletron/ui";
 
 /**
  * Minimal event shape needed by the impact computation.

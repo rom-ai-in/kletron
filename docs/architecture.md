@@ -23,7 +23,7 @@
 2. APIs call `packages/server` services.
 3. Server services orchestrate `packages/agent-core` workflows.
 4. Agent tooling uses `packages/mcp-client` to call `apps/mcp-server` tools.
-5. Outputs are written under `.numezis/` in the target repo.
+5. Outputs are written under `.kletron/` in the target repo.
 
 ## Ownership
 - Agent logic: `packages/agent-core`

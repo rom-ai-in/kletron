@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
-import type { AgentEvent, AgentEventKind } from "@numezis/shared/types";
+import type { AgentEvent, AgentEventKind } from "@kletron/shared/types";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 // ─── Constants ──────────────────────────────────────────────────────────────

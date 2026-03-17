@@ -4,9 +4,9 @@
 // although API routes in Next.js Dev specificly might re-evaluate.
 // We'll attach it to the global object.
 
-import { EditorState } from "@numezis/shared/types/editor";
+import { EditorState } from "@kletron/shared/types/editor";
 
-const GLOBAL_KEY = '__NUMEZIS_EDITOR_STORE__';
+const GLOBAL_KEY = '__KLETRON_EDITOR_STORE__';
 
 const defaultState: EditorState = {
     openFiles: [],

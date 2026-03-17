@@ -14,7 +14,7 @@ fi
 
 echo ""
 echo "2. Checking workspaces collection..."
-MONGODB_URI="mongodb://localhost:27017/numezis_coder" npm run db-shell -- --eval '
+MONGODB_URI="mongodb://localhost:27017/kletron" npm run db-shell -- --eval '
   const workspaces = await db.workspaces.find({}).toArray();
   console.log("Total workspaces:", workspaces.length);
   workspaces.forEach((w, i) => {
@@ -30,7 +30,7 @@ MONGODB_URI="mongodb://localhost:27017/numezis_coder" npm run db-shell -- --eval
 
 echo ""
 echo "3. Checking workspace_state collection..."
-MONGODB_URI="mongodb://localhost:27017/numezis_coder" npm run db-shell -- --eval '
+MONGODB_URI="mongodb://localhost:27017/kletron" npm run db-shell -- --eval '
   const state = await db.workspace_state.find({}).toArray();
   console.log("State documents:", state.length);
   state.forEach((s, i) => {
@@ -44,7 +44,7 @@ MONGODB_URI="mongodb://localhost:27017/numezis_coder" npm run db-shell -- --eval
 
 echo ""
 echo "4. Checking workspace_configs collection..."
-MONGODB_URI="mongodb://localhost:27017/numezis_coder" npm run db-shell -- --eval '
+MONGODB_URI="mongodb://localhost:27017/kletron" npm run db-shell -- --eval '
   const configs = await db.workspace_configs.find({}).toArray();
   console.log("Config documents:", configs.length);
   configs.forEach((c, i) => {

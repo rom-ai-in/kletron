@@ -31,7 +31,7 @@ import {
     componentShadows,
     zIndex,
     layerIndex,
-} from "@numezis/ui/tokens";
+} from "@kletron/ui/tokens";
 
 import { DocCard, DocCode, DocRules, DocSection, DocSubSection } from "../../components/DocBlocks";
 
@@ -53,7 +53,7 @@ export default function DesignSystemFoundationPage() {
                 />
                 <DocCode
                     code={`// Tokens (TS)
-import { colors, spacing, typography } from "@numezis/ui/tokens";
+import { colors, spacing, typography } from "@kletron/ui/tokens";
 
 // Prefer Tailwind (CSS vars)
 <div className="bg-bg-surface text-text-primary border border-border-subtle" />`}

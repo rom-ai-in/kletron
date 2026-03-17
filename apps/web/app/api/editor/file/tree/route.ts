@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import pathModule from "path";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 export async function GET(request: Request) {
   const auth = await requireAppRouteAuth(request);

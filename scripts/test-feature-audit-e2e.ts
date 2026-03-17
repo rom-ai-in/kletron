@@ -10,9 +10,9 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { AutomationConfigBuilder } from "@numezis/shared/automationConfigBuilder";
-import { automationExecutor } from "@numezis/server/services/automationExecutor";
-import { getDb, closeDb } from "@numezis/server/lib/db";
+import { AutomationConfigBuilder } from "@kletron/shared/automationConfigBuilder";
+import { automationExecutor } from "@kletron/server/services/automationExecutor";
+import { getDb, closeDb } from "@kletron/server/lib/db";
 
 const TEST_FEATURES = [
     "foundation/contacts",     // Small, well-bounded feature (foundation domain)
