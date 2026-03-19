@@ -92,7 +92,7 @@ export function useModels(
           description: g.description,
           updatedAt: g.updatedAt,
         }))
-        .filter((g) => g.id); // discard entries without a usable id
+        .filter((g: any) => g.id); // discard entries without a usable id
       setGraphs(list);
       if (list.length > 0) {
         // Use functional updater to avoid stale closure — never overwrite

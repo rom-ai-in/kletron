@@ -50,7 +50,10 @@ type WorkspaceStateDoc = {
   updatedAt?: Date;
 };
 
-const normalizeRootPath = (rootPath: string) => path.resolve(rootPath.trim());
+const normalizeRootPath = (rootPath: string) => {
+  const trimmed = rootPath.trim();
+  return path.isAbsolute(trimmed) ? path.normalize(trimmed) : path.resolve(getProjectRoot(), trimmed);
+};
 
 function ensureDirectory(rootPath: string) {
   if (!fs.existsSync(rootPath) || !fs.statSync(rootPath).isDirectory()) {
@@ -498,7 +501,9 @@ export async function syncConfigJson(ownerId?: string) {
     // 1) Persist the active workspace root as the canonical workingFolder
     // in the workspace config collection and mirror it to config/config.json.
     if (activeRoot) {
-      await saveConfig({ workingFolder: path.resolve(activeRoot) });
+      const trimmed = activeRoot.trim();
+      const normalizedRoot = path.isAbsolute(trimmed) ? path.normalize(trimmed) : path.resolve(getProjectRoot(), trimmed);
+      await saveConfig({ workingFolder: normalizedRoot });
     }
 
     // 2) Ensure config/config.json.workspaceRoots is the union of all known
@@ -528,10 +533,12 @@ export async function syncConfigJson(ownerId?: string) {
         : []
     );
     for (const root of workspaceRoots) {
-      rootSet.add(path.resolve(root));
+      const trimmed = root.trim();
+      rootSet.add(path.isAbsolute(trimmed) ? path.normalize(trimmed) : path.resolve(getProjectRoot(), trimmed));
     }
     if (activeRoot) {
-      rootSet.add(path.resolve(activeRoot));
+      const trimmed = activeRoot.trim();
+      rootSet.add(path.isAbsolute(trimmed) ? path.normalize(trimmed) : path.resolve(getProjectRoot(), trimmed));
     }
 
     existingConfig.workspaceRoots = Array.from(rootSet);

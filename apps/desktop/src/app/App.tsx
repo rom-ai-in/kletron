@@ -25,7 +25,9 @@ import { Terminal } from "@kletron/ui/components/Terminal";
 import { TitleBar } from "@kletron/ui/components/CommandCenter/TitleBar";
 import { ProjectSidebar } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
 import type { SidebarProject } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
-import { ConversationCenter } from "@kletron/ui/components/CommandCenter/ConversationCenter";
+import { MessageList } from "@kletron/ui/components/Agent/MessageList";
+import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
+import { useMessageEdit } from "@kletron/ui/hooks/useMessageEdit";
 import { InputBar } from "@kletron/ui/components/CommandCenter/InputBar";
 import { MessageQueue } from "@kletron/ui/components/CommandCenter/MessageQueue";
 import { ProjectUtilitySidebar } from "@kletron/ui/components/CommandCenter/ProjectUtilitySidebar";
@@ -128,9 +130,12 @@ export default function App() {
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   const [automations, setAutomations] = useState<Automation[]>([]);
-  const [replayImpact, setReplayImpact] = useState<ReplayImpact | null>(null);
-  const [replayDialogOpen, setReplayDialogOpen] = useState(false);
-  const [replayLoading, setReplayLoading] = useState(false);
+  const editControl = useMessageEdit({
+    sessionId: threads.conversationId,
+    events: conversation.conversationEvents,
+    streaming: conversation.streaming,
+    onTruncateAndResend: conversation.truncateAndResend,
+  });
   const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -615,64 +620,7 @@ export default function App() {
     conversation.setInput(`${prefix}${comment}`);
   }
 
-  // ── Replay (edit & resend) flow ─────────────────────────────────────────────
-  function handleResendEdit() {
-    if (conversation.editingMessageIndex === null) return;
-    const draft = conversation.editingMessageDraft.trim();
-    if (!draft) return;
 
-    // Find the original content of the message being edited
-    const originalEvent = conversation.conversationEvents.find(
-      (e) => e.messageIndex === conversation.editingMessageIndex
-    );
-    const originalContent = originalEvent?.content ?? "";
-
-    // Compute what will be lost
-    const impact = conversation.computeReplayImpact(
-      conversation.editingMessageIndex,
-      originalContent,
-      draft
-    );
-
-    // If there's nothing after this message (it's the last user message), just replay directly
-    if (impact.messagesRemoved === 0 && impact.toolCallsRemoved === 0 && impact.fileChanges.length === 0) {
-      void executeReplay();
-      return;
-    }
-
-    // Show confirmation dialog
-    setReplayImpact(impact);
-    setReplayDialogOpen(true);
-  }
-
-  async function executeReplay() {
-    if (conversation.editingMessageIndex === null) return;
-    const draft = conversation.editingMessageDraft.trim();
-    if (!draft) return;
-
-    setReplayLoading(true);
-    setReplayDialogOpen(false);
-
-    await conversation.replayFromMessage(
-      conversation.editingMessageIndex,
-      draft,
-      { planMode }
-    );
-
-    setReplayImpact(null);
-    setReplayLoading(false);
-
-    // The replayFromMessage sets input — now trigger send
-    // We need a small delay for state to propagate, then auto-send
-    setTimeout(() => {
-      conversation.sendMessage({ planMode });
-    }, 50);
-  }
-
-  function cancelReplay() {
-    setReplayDialogOpen(false);
-    setReplayImpact(null);
-  }
 
   // Auto-add new conversation to tabs
   useEffect(() => {
@@ -1006,38 +954,35 @@ export default function App() {
         {/* Center: Conversation Workspace */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Conversation Messages */}
-          <ConversationCenter
-            renderItems={conversation.renderItems}
-            streaming={conversation.streaming}
-            streamHasEvents={conversation.streamHasEvents}
-            streamingText={conversation.streamingText}
-            sendError={conversation.sendError}
-            conversationLoading={conversation.conversationLoading}
-            conversationId={threads.conversationId}
-            threadTitle={activeThreadTitle}
-            threadUpdatedAt={activeThread?.updatedAt ? formatRelativeTime(activeThread.updatedAt) : undefined}
-            editingMessageIndex={conversation.editingMessageIndex}
-            editingMessageDraft={conversation.editingMessageDraft}
-            editingMessageSaving={conversation.editingMessageSaving}
-            editingMessageError={conversation.editingMessageError}
-            onStartEdit={conversation.startEditMessage}
-            onResendEdit={handleResendEdit}
-            onCancelEdit={conversation.cancelEditMessage}
-            onEditDraftChange={conversation.setEditingMessageDraft}
-            diffReview={
-              inlineDiffs.length > 0 ? (
-                <InlineDiffReview
-                  diffs={inlineDiffs}
-                  onAccept={(editId) => diffs.applyAllDiff(editId)}
-                  onReject={(editId) => diffs.rejectAllDiff(editId)}
-                  onOpenInIDE={(filePath) => {
-                    try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
-                  }}
-                  onRequestIteration={handleRequestIteration}
+          <div className="flex-1 overflow-y-auto scrollbar-elegant flex flex-col">
+            <MessageList
+              events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
+              streaming={conversation.streaming}
+              streamingText={conversation.streamingText}
+              messageActions={(event) => (
+                <MessageActions
+                  event={event}
+                  onStartEdit={() => editControl.startEditMessage(event.messageIndex!, event.content ?? "")}
                 />
-              ) : undefined
-            }
-          />
+              )}
+            />
+            {inlineDiffs.length > 0 && (
+              <InlineDiffReview
+                diffs={inlineDiffs}
+                onAccept={(editId) => diffs.applyAllDiff(editId)}
+                onReject={(editId) => diffs.rejectAllDiff(editId)}
+                onOpenInIDE={(filePath) => {
+                  try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
+                }}
+                onRequestIteration={handleRequestIteration}
+              />
+            )}
+            {conversation.sendError && (
+              <div className="mx-4 my-2 rounded border border-status-error-border bg-status-error-bg px-3 py-2 text-[12px] text-status-error-text">
+                {conversation.sendError}
+              </div>
+            )}
+          </div>
 
           {/* Input Bar */}
           <div className="relative">
@@ -1214,11 +1159,11 @@ export default function App() {
 
       {/* Replay Confirmation Dialog */}
       <ReplayConfirmDialog
-        open={replayDialogOpen}
-        impact={replayImpact}
-        onConfirm={executeReplay}
-        onCancel={cancelReplay}
-        loading={replayLoading}
+        open={editControl.replayDialogOpen}
+        impact={editControl.replayImpact}
+        onConfirm={() => void editControl.executeReplay()}
+        onCancel={editControl.cancelReplay}
+        loading={editControl.editingMessageSaving}
       />
     </div>
   );

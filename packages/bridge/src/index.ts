@@ -95,6 +95,7 @@ export async function readFile(workspacePath: string, relativePath: string): Pro
 
 export async function writeFile(workspacePath: string, relativePath: string, content: string): Promise<void> {
   const resolved = resolveWorkspacePath(workspacePath, relativePath);
+  await fs.mkdir(path.dirname(resolved), { recursive: true });
   await fs.writeFile(resolved, content, "utf-8");
 }
 

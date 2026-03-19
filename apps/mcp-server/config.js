@@ -20,7 +20,8 @@ function getWorkingFolderFromConfig() {
       const raw = fs.readFileSync(configFilePath, "utf-8");
       const data = JSON.parse(raw);
       if (data.workingFolder && data.workingFolder.trim()) {
-        return path.resolve(data.workingFolder);
+        const folder = data.workingFolder.trim();
+        return path.isAbsolute(folder) ? path.normalize(folder) : path.resolve(projectRoot, folder);
       }
     }
   } catch (e) {
@@ -35,17 +36,21 @@ function getWorkspaceRootsFromConfig() {
       const raw = fs.readFileSync(configFilePath, "utf-8");
       const data = JSON.parse(raw);
       if (Array.isArray(data.workspaceRoots) && data.workspaceRoots.length > 0) {
-        return data.workspaceRoots.map((root) => path.resolve(root));
+        return data.workspaceRoots.map((root) => {
+            const trimmed = root.trim();
+            return path.isAbsolute(trimmed) ? path.normalize(trimmed) : path.resolve(projectRoot, trimmed);
+        });
       }
       if (data.workingFolder && data.workingFolder.trim()) {
-        return [path.resolve(data.workingFolder)];
+        const folder = data.workingFolder.trim();
+        return [path.isAbsolute(folder) ? path.normalize(folder) : path.resolve(projectRoot, folder)];
       }
     }
   } catch (e) {
     console.warn(`[MCP Config] Failed to read workspace roots:`, e.message);
   }
   const fallback = getWorkingFolderFromConfig();
-  return fallback ? [path.resolve(fallback)] : [];
+  return fallback ? [path.isAbsolute(fallback) ? path.normalize(fallback) : path.resolve(projectRoot, fallback)] : [];
 }
 
 // Read fetch allowlist from both config.json and env vars

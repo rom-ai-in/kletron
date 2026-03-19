@@ -75,6 +75,11 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Ensure columns exist in case the table was created previously without them
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS full_name VARCHAR(255);
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+
 -- Enable RLS
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 
@@ -124,6 +129,7 @@ CREATE INDEX IF NOT EXISTS idx_api_tokens_token_hash ON public.api_tokens(token_
 -- =====================================================
 
 -- Tenants: Users can read tenants they belong to
+DROP POLICY IF EXISTS "Users can view their tenant" ON public.tenants;
 CREATE POLICY "Users can view their tenant" ON public.tenants
     FOR SELECT
     USING (
@@ -136,6 +142,7 @@ CREATE POLICY "Users can view their tenant" ON public.tenants
     );
 
 -- Companies: Users can read companies they belong to
+DROP POLICY IF EXISTS "Users can view their company" ON public.companies;
 CREATE POLICY "Users can view their company" ON public.companies
     FOR SELECT
     USING (
@@ -147,6 +154,7 @@ CREATE POLICY "Users can view their company" ON public.companies
     );
 
 -- Groups: Users can read groups they belong to
+DROP POLICY IF EXISTS "Users can view their groups" ON public.groups;
 CREATE POLICY "Users can view their groups" ON public.groups
     FOR SELECT
     USING (
@@ -157,15 +165,18 @@ CREATE POLICY "Users can view their groups" ON public.groups
     );
 
 -- User Profiles: Users can read and update their own profile
+DROP POLICY IF EXISTS "Users can view own profile" ON public.user_profiles;
 CREATE POLICY "Users can view own profile" ON public.user_profiles
     FOR SELECT
     USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can update own profile" ON public.user_profiles;
 CREATE POLICY "Users can update own profile" ON public.user_profiles
     FOR UPDATE
     USING (auth.uid() = id);
 
 -- User Profiles: Users can view profiles in their groups
+DROP POLICY IF EXISTS "Users can view profiles in their groups" ON public.user_profiles;
 CREATE POLICY "Users can view profiles in their groups" ON public.user_profiles
     FOR SELECT
     USING (
@@ -177,11 +188,13 @@ CREATE POLICY "Users can view profiles in their groups" ON public.user_profiles
     );
 
 -- User Groups: Users can view their own group memberships
+DROP POLICY IF EXISTS "Users can view own group memberships" ON public.user_groups;
 CREATE POLICY "Users can view own group memberships" ON public.user_groups
     FOR SELECT
     USING (user_id = auth.uid());
 
 -- API Tokens: Users can manage their own tokens
+DROP POLICY IF EXISTS "Users can manage own api tokens" ON public.api_tokens;
 CREATE POLICY "Users can manage own api tokens" ON public.api_tokens
     FOR ALL
     USING (user_id = auth.uid())
