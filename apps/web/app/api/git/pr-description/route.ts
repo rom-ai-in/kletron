@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { getChatModel } from "@kletron/server/llm";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 /**
  * POST /api/git/pr-description
@@ -19,6 +20,9 @@ export async function POST(request: Request) {
 
     try {
         const payload = await request.json();
+
+        // Resolve workspace to ensure MCP config is in sync
+        await resolveWorkspaceFromRequest(request, auth.userId, payload);
         const { diff, title } = payload as { diff: string; title?: string };
 
         if (!diff || typeof diff !== "string") {

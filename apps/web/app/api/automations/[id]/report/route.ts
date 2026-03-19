@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { automationExecutor } from "@kletron/server/services/automationExecutor";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 /**
  * GET /api/automations/[id]/report
@@ -22,7 +22,7 @@ export async function GET(
     try {
         const automationId = params.id;
 
-        const workspace = await resolveWorkspaceFromRequest(req, auth.userId, null, { requireExplicitWorkspace: true });
+        const workspace = await resolveWorkspaceFromRequestStrict(req, auth.userId, null);
         if (!workspace || !workspace._id) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
@@ -55,6 +55,10 @@ export async function GET(
             { status: 200 }
         );
     } catch (error) {
+        const workspaceError = workspaceErrorToHttp(error);
+        if (workspaceError) {
+            return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+        }
         console.error(`[API /api/automations/${params.id}/report GET] Error:`, error);
         return NextResponse.json(
             { error: "Failed to get report" },
@@ -62,3 +66,4 @@ export async function GET(
         );
     }
 }
+

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@kletron/server/lib/db";
+import { ObjectId } from "mongodb";
 
 export const dynamic = "force-dynamic";
 
-import { config } from "@kletron/server/config";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 export async function GET(request: Request) {
     const auth = await requireAppRouteAuth(request);
@@ -16,19 +17,19 @@ export async function GET(request: Request) {
     }
 
     try {
-        const debugInfo = {
-            uriExists: !!config.mongo.uri,
-            userExists: !!config.mongo.user,
-            passLen: config.mongo.pass?.length,
-            passPreview: config.mongo.pass?.slice(0, 3) + "..." + config.mongo.pass?.slice(-3),
-        };
-        console.log("Debug Mongo Config:", debugInfo);
+        const workspace = await resolveWorkspaceFromRequest(request, auth.userId, null);
         const db = await getDb();
+
+        // Scope audit sessions to the active workspace
+        const filter: Record<string, unknown> = {};
+        if (workspace?._id) {
+            filter.workspaceId = new ObjectId(workspace._id.toString());
+        }
 
         // Project only necessary fields for the list view to optimize bandwidth
         const sessions = await db
             .collection("audit_sessions")
-            .find({})
+            .find(filter)
             .project({
                 _id: 1,
                 prompt: 1,
@@ -46,15 +47,7 @@ export async function GET(request: Request) {
     } catch (error) {
         console.error("Failed to fetch audit sessions:", error);
         return NextResponse.json(
-            {
-                error: error instanceof Error ? error.message : "Unknown error",
-                debug: {
-                    uriExists: !!config.mongo.uri,
-                    userExists: !!config.mongo.user,
-                    passLen: config.mongo.pass?.length,
-                    // passPreview: config.mongo.pass?.slice(0, 3) + "..." + config.mongo.pass?.slice(-3) // Validated
-                }
-            },
+            { error: error instanceof Error ? error.message : "Unknown error" },
             { status: 500 }
         );
     }

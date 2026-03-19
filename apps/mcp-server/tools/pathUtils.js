@@ -2,6 +2,8 @@ import path from "path";
 import { config } from "../config.js";
 
 export function ensurePathInside(root, target) {
+    // Always reload to pick up workspace changes (e.g. after a workspace switch)
+    config.reload();
     const allowedRoots = Array.isArray(config.workspaceRoots) && config.workspaceRoots.length > 0
         ? config.workspaceRoots
         : root ? [root] : [];

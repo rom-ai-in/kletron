@@ -17,6 +17,15 @@ export function runWithWorkspaceContext<T>(
   workspace: Workspace,
   fn: () => Promise<T> | T
 ): Promise<T> | T {
+  // Ensure MCP config.json allowlist contains this workspace root before
+  // any downstream tool calls.  Lazy import to avoid circular deps.
+  try {
+    const { ensureWorkspaceInConfigJson } = require("../services/workspaceService");
+    ensureWorkspaceInConfigJson(workspace.rootPath);
+  } catch {
+    // Non-fatal: module may not be available in all contexts
+  }
+
   const workspaceId = workspace._id?.toString() ?? "";
   return storage.run(
     {

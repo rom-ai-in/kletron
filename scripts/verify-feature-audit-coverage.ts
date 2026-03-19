@@ -216,7 +216,7 @@ async function main() {
             const actual = config.stages?.length ?? 0;
             const nameOk = config.name?.includes(domain);
             const ok = actual === expected && nameOk;
-            console.log(`   ${ok ? "✅" : "❌"} ${domain.padEnd(20)} stages=${actual}/${expected} name=${nameOk ? "OK" : "FAIL"}`);
+            console.log(`   ${ok ? "✅" : "❌"} ${domain.padEnd(20)} stages=${actual}/${expected} name=${nameOk ? "OK" : "FAIL"}`);;
             if (!ok) domainErrors++;
         } catch (e) {
             console.log(`   ❌ ${domain.padEnd(20)} ERROR: ${(e as Error).message}`);

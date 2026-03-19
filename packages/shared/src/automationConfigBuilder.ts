@@ -855,9 +855,250 @@ export class AutomationConfigBuilder {
         ].join("\n");
     }
 
+    // ── Multi-Stage A43 Prompt Builders ──────────────────────────────────────
+    // Each stage is self-contained with focused instructions so local LLMs
+    // (like Nemotron 3 Nano) don't saturate their reasoning capacity.
+    // Context passes between stages only via structured findings (contextFromPreviousStages).
+
+    /**
+     * Stage 1: Inventory Reconstruction
+     * Small, deterministic task — reads modules.ts, API domain, nav registry, FE routes.
+     * Outputs a structured inventory map.
+     */
+    static buildInventoryPrompt(focus: string): string {
+        return [
+            `# A43 Inventory Reconstruction — Focus: ${focus}`,
+            "",
+            `Your ONLY task is to reconstruct the complete inventory for: **${focus}**`,
+            "",
+            "## Steps",
+            "",
+            "1. Read \`packages/shared-ts/src/modules.ts\` to find the matching ModuleKey(s)",
+            `2. Read the relevant API domain folder: \`apps/api/src/domain/${focus.split('/')[0]}/${focus.split('/').slice(1).join('/')}\``,
+            "3. List all files in that domain folder using list_files",
+            "4. Check the navigation registry: \`apps/api/src/services/navigation.registry.ts\` and \`apps/api/src/services/navigation-registry/*.ts\`",
+            "5. Check frontend routes: search for relevant \`page.tsx\`, \`route.ts\`, \`layout.tsx\` files",
+            "",
+            "## Required Output",
+            "",
+            "Produce a structured report with:",
+            "",
+            "### Focus Inventory Map",
+            "For each discovered surface, list:",
+            "- **File path** (exact path)",
+            "- **Type**: api_endpoint | api_service | api_schema | frontend_route | frontend_component | navigation_entry | config | policy",
+            "- **Status**: implemented_and_auditable | implemented_partial | api_only | ui_only | doc_only_or_planned | infrastructure_or_config",
+            "",
+            "### Drift Detection",
+            "Flag any: registry_without_ui, ui_without_registry, api_without_ui, doc_without_code, code_without_doc, module_registry_mismatch",
+            "",
+            "### Summary Statistics",
+            "- Total API files found",
+            "- Total frontend files found",
+            "- Total navigation entries",
+            "- Total schemas/forms",
+            "",
+            "## Scope Rules",
+            "- Exclude: node_modules, .next, dist, build, .git, __test__/demo-module",
+            "- Use read_file, list_files, search_code, describe_structure",
+            `- ONLY inventory files related to ${focus} — do NOT audit other features`,
+            "- Read at minimum 5 source files to confirm inventory",
+        ].join("\n");
+    }
+
+    /**
+     * Stage 2: Deep Audit — Structural Axes (1-6)
+     * Receives inventory from Stage 1 as context.
+     */
+    static buildStructuralAuditPrompt(focus: string): string {
+        return [
+            `# A43 Structural Audit — Focus: ${focus}`,
+            "",
+            `You are auditing the STRUCTURAL aspects of: **${focus}**`,
+            "",
+            "## Context",
+            "You have been provided with an inventory map from the previous stage.",
+            "Use the file paths listed in the inventory to read and audit the actual source code.",
+            "",
+            "## Audit Axes (6 Structural Axes)",
+            "",
+            "For each axis, read the relevant source files and produce findings:",
+            "",
+            "1. **Architecture** — Domain structure, service boundaries, dependency direction, separation of concerns",
+            "2. **Backend** — Business logic correctness, invariants, state transitions, race conditions, error handling",
+            "3. **API** — Contracts, validation schemas, auth guards, error codes, pagination, idempotency",
+            "4. **Frontend** — Component architecture, routing, SSR/CSR, error boundaries, state management",
+            "5. **TypeScript/ESM** — Type safety, branded types, schema strictness, exports, module boundaries",
+            "6. **Forms** — Form governance, validation rules, schema alignment, field coverage, Zod schemas",
+            "",
+            "## Required Output Format",
+            "",
+            "For each finding:",
+            "- **ID**: SF1, SF2, ... (Structural Finding)",
+            "- **Severity**: P0 (BLOQUANT) | P1 (HIGH) | P2 (MEDIUM) | P3 (LOW)",
+            "- **Axis**: which of the 6 axes",
+            "- **File**: exact file path",
+            "- **Lines**: line range",
+            "- **Description**: what is wrong",
+            "- **Evidence**: code snippet or proof",
+            "- **Fix**: concrete remediation",
+            "",
+            "## Scope Rules",
+            "- Read the files identified in the inventory context",
+            "- Read at minimum 8 source files before concluding",
+            `- ONLY audit files related to ${focus}`,
+            "- Exclude: node_modules, .next, dist, build, .git",
+        ].join("\n");
+    }
+
+    /**
+     * Stage 3: Deep Audit — Behavioral Axes (7-13)
+     * Receives inventory from Stage 1 as context.
+     */
+    static buildBehavioralAuditPrompt(focus: string): string {
+        return [
+            `# A43 Behavioral Audit — Focus: ${focus}`,
+            "",
+            `You are auditing the BEHAVIORAL and UX aspects of: **${focus}**`,
+            "",
+            "## Context",
+            "You have been provided with an inventory map from the previous stage.",
+            "Use the file paths listed in the inventory to read and audit the actual source code.",
+            "",
+            "## Audit Axes (7 Behavioral Axes)",
+            "",
+            "For each axis, read the relevant source files and produce findings:",
+            "",
+            "7. **Lifecycles** — State machines, transitions, approval flows, status tracking, workflow completeness",
+            "8. **User Intent** — Does the feature deliver what a user expects? Missing capabilities?",
+            "9. **Journey** — End-to-end flow from creation to completion, happy path and error paths",
+            "10. **UX/UI** — Accessibility, empty/loading/error states, user feedback, design consistency",
+            "11. **i18n** — Translation coverage, key consistency, missing keys, hardcoded strings",
+            "12. **Security** — Auth, authorization, input validation, data exposure, least privilege",
+            "13. **Tests** — Coverage gaps, missing unit/integration tests, critical untested paths",
+            "",
+            "## Required Output Format",
+            "",
+            "For each finding:",
+            "- **ID**: BF1, BF2, ... (Behavioral Finding)",
+            "- **Severity**: P0 (BLOQUANT) | P1 (HIGH) | P2 (MEDIUM) | P3 (LOW)",
+            "- **Axis**: which of the 7 axes",
+            "- **File**: exact file path",
+            "- **Lines**: line range",
+            "- **Description**: what is wrong",
+            "- **Evidence**: code snippet or proof",
+            "- **Fix**: concrete remediation",
+            "",
+            "## Scope Rules",
+            "- Read the files identified in the inventory context",
+            "- Read at minimum 8 source files before concluding",
+            `- ONLY audit files related to ${focus}`,
+            "- Exclude: node_modules, .next, dist, build, .git",
+        ].join("\n");
+    }
+
+    /**
+     * Stage 4: Verdict & Report
+     * Receives findings from Stage 2 and Stage 3 as context.
+     * Pure synthesis — no file reading needed.
+     */
+    static buildVerdictPrompt(focus: string): string {
+        return [
+            `# A43 Verdict & Report — Focus: ${focus}`,
+            "",
+            `Generate the final A43 audit verdict for: **${focus}**`,
+            "",
+            "## Context",
+            "You have been provided with:",
+            "- Structural findings (axes 1-6) from a previous audit stage",
+            "- Behavioral findings (axes 7-13) from a previous audit stage",
+            "",
+            "Synthesize these findings into the final report. Do NOT re-read source files — all evidence is in the provided findings.",
+            "",
+            "## Required Output",
+            "",
+            "### Verdict: PASS or BLOCK",
+            "BLOCK if any P0 finding exists (security vulnerability, data loss risk, broken critical flow).",
+            "",
+            "### Scoreboard",
+            "Rate each of the 13 axes: ✅ PASS | ⚠️ WARNING | ❌ FAIL",
+            "1. Architecture, 2. Backend, 3. API, 4. Frontend, 5. TypeScript/ESM, 6. Forms,",
+            "7. Lifecycles, 8. User Intent, 9. Journey, 10. UX/UI, 11. i18n, 12. Security, 13. Tests",
+            "",
+            "### All Findings (consolidated, prioritized)",
+            "Merge structural and behavioral findings into a single numbered list, sorted by severity.",
+            "Re-number as F1, F2, F3, ... preserving the original details.",
+            "",
+            "### Gaps Matrix",
+            "List any inventory drifts or missing surfaces detected.",
+            "",
+            "### Remediation Plan",
+            "Group fixes into:",
+            "- **Sprint 0** (immediate): P0 blockers",
+            "- **Sprint 1** (next): P1 high-priority",
+            "- **Sprint 2** (planned): P2-P3 improvements",
+            "",
+            "### Statistics",
+            "- Total findings by severity",
+            "- Axes with most issues",
+            "- Estimated remediation effort",
+        ].join("\n");
+    }
+
+    /**
+     * Build a multi-stage automation config for a single feature audit.
+     * Decomposes the monolithic A43 audit into 4 context-isolated stages
+     * optimized for local LLMs (Nemotron, etc.) that degrade with long ReAct loops.
+     *
+     * Stage 1: Inventory Reconstruction (~5 tool calls)
+     * Stage 2: Structural Audit, axes 1-6 (~10 tool calls)
+     * Stage 3: Behavioral Audit, axes 7-13 (~10 tool calls)
+     * Stage 4: Verdict & Report (~0 tool calls, pure synthesis)
+     */
+    static buildFeatureAuditMultiStage(focus: string): AutomationStageConfig[] {
+        const slug = focus.replace(/\//g, "-");
+        return [
+            {
+                id: `fa-${slug}-inventory`,
+                name: `Inventory: ${focus}`,
+                prompt: this.buildInventoryPrompt(focus),
+                graphId: "simple_react",
+                llmProvider: "lmstudio" as const,
+                // Fresh context — no dependencies
+            },
+            {
+                id: `fa-${slug}-structural`,
+                name: `Structural Audit: ${focus}`,
+                prompt: this.buildStructuralAuditPrompt(focus),
+                graphId: "simple_react",
+                llmProvider: "lmstudio" as const,
+                contextFromPreviousStages: [`fa-${slug}-inventory.findings`],
+            },
+            {
+                id: `fa-${slug}-behavioral`,
+                name: `Behavioral Audit: ${focus}`,
+                prompt: this.buildBehavioralAuditPrompt(focus),
+                graphId: "simple_react",
+                llmProvider: "lmstudio" as const,
+                contextFromPreviousStages: [`fa-${slug}-inventory.findings`],
+            },
+            {
+                id: `fa-${slug}-verdict`,
+                name: `Verdict: ${focus}`,
+                prompt: this.buildVerdictPrompt(focus),
+                graphId: "simple_react",
+                llmProvider: "lmstudio" as const,
+                contextFromPreviousStages: [
+                    `fa-${slug}-structural.findings`,
+                    `fa-${slug}-behavioral.findings`,
+                ],
+            },
+        ];
+    }
+
     /**
      * Build a complete automation config for auditing a single feature.
-     * The stage runs with a fresh LLM context (no contextFromPreviousStages).
+     * One stage = one full audit. Context resets between stages in batch mode.
      */
     static buildFeatureAuditForFocus(focus: string): Partial<AutomationDefinition> {
         const label = this.AUDITABLE_FEATURES.find(f => f.focus === focus)?.label ?? focus;
@@ -869,9 +1110,9 @@ export class AutomationConfigBuilder {
                     id: `fa-${focus.replace(/\//g, "-")}`,
                     name: `Feature Audit: ${label}`,
                     prompt: this.buildFeatureAuditPrompt(focus),
-                    graphId: "audit",
+                    graphId: "simple_react",
                     llmProvider: "lmstudio",
-                    // NO contextFromPreviousStages → fresh LLM context guaranteed
+                    // NO contextFromPreviousStages → fresh LLM context per feature
                 },
             ],
         };
@@ -879,7 +1120,7 @@ export class AutomationConfigBuilder {
 
     /**
      * Build a batch automation config that audits multiple features sequentially.
-     * Each stage is a complete, self-contained feature audit with a fresh LLM context.
+     * Each feature is a single self-contained stage with a fresh LLM context.
      * No contextFromPreviousStages between stages — context isolation guaranteed.
      *
      * @param focuses - Array of feature focus strings (e.g. ["sales/invoices", "purchases/bills"])
@@ -910,8 +1151,7 @@ export class AutomationConfigBuilder {
                     prompt: this.buildFeatureAuditPrompt(focus),
                     graphId: "simple_react",
                     llmProvider: "lmstudio" as const,
-                    // NO contextFromPreviousStages → fresh LLM context guaranteed
-                    // NO skipIf → each feature runs unconditionally
+                    // NO contextFromPreviousStages → fresh LLM context per feature
                 };
             }),
         };

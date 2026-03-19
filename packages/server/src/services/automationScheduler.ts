@@ -7,6 +7,8 @@
 
 import { automationExecutor } from "./automationExecutor";
 import { acquireLock, releaseLock } from "./lockService";
+import { getWorkspaceByIdUnsafe, listAllWorkspaces } from "./workspaceService";
+import { runWithWorkspaceContext } from "../workspace/workspaceContext";
 
 const LOCK_PREFIX = "automation-scheduler";
 const POLL_INTERVAL_MS = 60_000; // 60 seconds
@@ -139,17 +141,39 @@ async function pollScheduledAutomations(): Promise<void> {
                 // Increment schedule count (updates lastScheduledAt, computes nextScheduledAt)
                 await automationExecutor.incrementScheduleCount(automationId);
 
-                // Start a new run in background
+                // Resolve workspace for the automation to set proper AsyncLocalStorage context
                 const workspaceId = fresh.workspaceId?.toString();
+                let workspace;
+                try {
+                    workspace = workspaceId
+                        ? await getWorkspaceByIdUnsafe(workspaceId)
+                        : (await listAllWorkspaces())[0];
+                } catch {
+                    // Non-fatal: proceed without workspace context
+                }
+
+                // Start a new run in background
                 const runId = await automationExecutor.startNewRun(automationId, workspaceId);
 
-                // Execute run without awaiting (fire-and-forget)
-                automationExecutor.executeRun(runId).catch((error) => {
-                    console.error(
-                        `[AutomationScheduler] Run ${runId} (automation ${automationId}) failed:`,
-                        error
-                    );
-                });
+                // Execute run without awaiting (fire-and-forget), wrapped in workspace context
+                if (workspace) {
+                    runWithWorkspaceContext(workspace, () => {
+                        automationExecutor.executeRun(runId).catch((error) => {
+                            console.error(
+                                `[AutomationScheduler] Run ${runId} (automation ${automationId}) failed:`,
+                                error
+                            );
+                        });
+                    });
+                } else {
+                    // Fallback: execute without workspace context (best-effort)
+                    automationExecutor.executeRun(runId).catch((error) => {
+                        console.error(
+                            `[AutomationScheduler] Run ${runId} (automation ${automationId}) failed:`,
+                            error
+                        );
+                    });
+                }
 
                 state.executionsTriggered++;
             } catch (error) {
@@ -167,3 +191,4 @@ async function pollScheduledAutomations(): Promise<void> {
         state.isRunning = false;
     }
 }
+

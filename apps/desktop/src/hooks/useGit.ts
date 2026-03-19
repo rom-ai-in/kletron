@@ -377,14 +377,47 @@ export function useGit(
   // ── Generate commit message (generation-safe) ─────────────────────────────
 
   async function generateCommitMessage() {
+    const cwd = cwdRef.current;
+    if (!cwd) return;
     const g = gen();
     const token = await getAccessToken();
     if (!token) return;
     if (g !== gen()) return;
     setGeneratingMessage(true);
     try {
+      // Collect the combined diff to send to the API
+      let combinedDiff = "";
+      try {
+        // Prefer staged diff for commit message generation
+        const stagedFiles = gitStatus?.staged ?? [];
+        if (stagedFiles.length > 0) {
+          const diffs = await Promise.all(
+            stagedFiles.map((f) => window.kletron.gitDiffStaged(f.path, cwd).catch(() => ""))
+          );
+          combinedDiff = diffs.filter(Boolean).join("\n");
+        }
+        // Fall back to unstaged diffs if nothing is staged
+        if (!combinedDiff) {
+          const unstagedFiles = gitStatus?.unstaged ?? gitStatus?.modified ?? [];
+          const files = Array.isArray(unstagedFiles) ? unstagedFiles : [];
+          const diffs = await Promise.all(
+            files.map((f: any) => window.kletron.gitDiff(typeof f === "string" ? f : f.path, cwd).catch(() => ""))
+          );
+          combinedDiff = diffs.filter(Boolean).join("\n");
+        }
+      } catch {
+        // If diff collection fails, bail out
+      }
+      if (g !== gen()) return;
+      if (!combinedDiff) return;
+
       const res = await fetch(`${backendUrlTrimmed}/api/git/commit-message`, {
-        headers: { Authorization: `Bearer ${token}` },
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ diff: combinedDiff }),
       });
       if (g !== gen()) return;
       if (res.ok) {

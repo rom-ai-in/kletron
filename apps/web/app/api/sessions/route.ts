@@ -307,16 +307,38 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "No session IDs provided" }, { status: 400 });
   }
 
+  // Resolve workspace to scope the operation
+  let workspace;
   try {
+    workspace = await resolveWorkspaceFromRequestStrict(request, auth.userId, body as any);
+  } catch (error) {
+    const workspaceError = workspaceErrorToHttp(error);
+    if (workspaceError) {
+      return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+    }
+    throw error;
+  }
+
+  try {
+    let processedCount = 0;
     for (const id of ids) {
+      // Verify session belongs to the caller's workspace before acting
+      const run = await agentGraphRunService.getRun(id);
+      if (!run) continue;
+      if (workspace?._id && run.workspaceId?.toString() !== workspace._id.toString()) {
+        continue; // Skip sessions from other workspaces
+      }
+
       if (action === "delete") {
         await agentGraphRunService.deleteRun(id);
       } else {
         await agentGraphRunService.archiveRun(id);
       }
+      processedCount++;
     }
-    return NextResponse.json({ success: true, count: ids.length });
+    return NextResponse.json({ success: true, count: processedCount });
   } catch (error) {
     return NextResponse.json({ error: (error as Error)?.message ?? "Failed to process sessions" }, { status: 500 });
   }
 }
+

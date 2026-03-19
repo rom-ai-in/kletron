@@ -398,15 +398,19 @@ export async function setActiveWorkspaceId(ownerId: string, id: string | null): 
     );
   }
 
+  let activatedRoot: string | undefined;
   if (id) {
     const collection = await getWorkspaceCollection();
     await collection.updateOne(
       { _id: new ObjectId(id), ownerId },
       { $set: { lastUsed: new Date(), updatedAt: new Date() } }
     );
+    // Look up the workspace root to pass it explicitly to syncConfigJson
+    const ws = await getWorkspaceByIdUnsafe(id);
+    activatedRoot = ws?.rootPath;
   }
 
-  await syncConfigJson(ownerId);
+  await syncConfigJson(ownerId, activatedRoot);
 }
 
 export async function getActiveWorkspaceId(ownerId: string): Promise<string | null> {
@@ -485,7 +489,7 @@ async function reloadMcpClientBestEffort() {
   }
 }
 
-export async function syncConfigJson(ownerId?: string) {
+export async function syncConfigJson(ownerId?: string, explicitActiveRoot?: string) {
   try {
     const workspaceList = await listAllWorkspaces();
     const activeWorkspace =
@@ -493,7 +497,9 @@ export async function syncConfigJson(ownerId?: string) {
         ? await getActiveWorkspace(ownerId)
         : (workspaceList.find((ws) => validateWorkspaceRoot(ws).status === "healthy") ?? workspaceList[0] ?? null);
 
-    const activeRoot = activeWorkspace?.rootPath;
+    // Prefer the explicitly provided root (from a just-completed workspace switch)
+    // over the DB-derived one, to avoid stale data.
+    const activeRoot = explicitActiveRoot ?? activeWorkspace?.rootPath;
 
     // 1) Persist the active workspace root as the canonical workingFolder
     // in the workspace config collection and mirror it to config/config.json.
@@ -543,6 +549,70 @@ export async function syncConfigJson(ownerId?: string) {
   }
 }
 
+/**
+ * Lightweight, synchronous check that the given workspace root is present
+ * in `config/config.json`'s `workspaceRoots` array AND that `workingFolder`
+ * points to it.  Avoids any DB calls — only does file I/O when needed.
+ *
+ * A simple in-memory set prevents repeated writes for the same root within
+ * a single process lifetime.
+ */
+const _configJsonSyncedRoots = new Set<string>();
+
+export function ensureWorkspaceInConfigJson(rootPath: string): void {
+  try {
+    const normalizedRoot = path.resolve(rootPath);
+    // Fast path: already synced in this process
+    if (_configJsonSyncedRoots.has(normalizedRoot)) return;
+
+    const configDir = path.resolve(getProjectRoot(), "config");
+    const configJsonPath = path.join(configDir, "config.json");
+
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+
+    let existingConfig: Record<string, unknown> = {};
+    if (fs.existsSync(configJsonPath)) {
+      try {
+        existingConfig = JSON.parse(fs.readFileSync(configJsonPath, "utf-8"));
+      } catch {
+        existingConfig = {};
+      }
+    }
+
+    const roots: string[] = Array.isArray(existingConfig.workspaceRoots)
+      ? (existingConfig.workspaceRoots as string[])
+      : [];
+
+    const alreadyHasRoot = roots.some((r) => path.resolve(r) === normalizedRoot);
+    const currentWorkingFolder = typeof existingConfig.workingFolder === "string"
+      ? path.resolve(existingConfig.workingFolder)
+      : null;
+    const workingFolderCorrect = currentWorkingFolder === normalizedRoot;
+
+    if (alreadyHasRoot && workingFolderCorrect) {
+      _configJsonSyncedRoots.add(normalizedRoot);
+      return; // Already correct
+    }
+
+    // Update workspaceRoots if needed
+    if (!alreadyHasRoot) {
+      roots.push(normalizedRoot);
+      existingConfig.workspaceRoots = roots;
+    }
+
+    // Always set workingFolder to the active workspace
+    existingConfig.workingFolder = normalizedRoot;
+
+    fs.writeFileSync(configJsonPath, JSON.stringify(existingConfig, null, 2), "utf-8");
+    _configJsonSyncedRoots.add(normalizedRoot);
+    console.log(`[Workspace] ensureWorkspaceInConfigJson: synced ${normalizedRoot}`);
+  } catch (error) {
+    console.warn("[Workspace] ensureWorkspaceInConfigJson error:", (error as Error)?.message ?? error);
+  }
+}
+
 export async function resolveWorkspaceFromRequest(
   request: Request,
   ownerId: string,
@@ -582,6 +652,11 @@ export async function resolveWorkspaceFromRequestStrict(
     throw new Error("Explicit workspaceId is required in headers or query parameters for this operation to prevent cross-workspace data leakage.");
   }
   if (!workspace) return null;
+
+  // Ensure MCP config.json allowlist contains this workspace root
+  // before any downstream tool calls happen.
+  ensureWorkspaceInConfigJson(workspace.rootPath);
+
   return assertWorkspaceHealthy(workspace);
 }
 
