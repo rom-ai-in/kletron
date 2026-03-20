@@ -17,6 +17,7 @@ import {
     UserCircle,
     LogOut,
     TrendingUp,
+    Building2,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
@@ -66,6 +67,11 @@ const navItems = [
         label: "Configuration",
         icon: Settings,
         href: "/app/config",
+    },
+    {
+        label: "Organization",
+        icon: Building2,
+        href: "/app/organization",
     }
 ];
 

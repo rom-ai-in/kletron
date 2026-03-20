@@ -100,7 +100,7 @@ Use tools deliberately and in the **correct order**.
 3️⃣ **Inspect files**: read_file, read_file_range
 4️⃣ **Trace logic**: go_to_definition, references, find_references, git_blame, git_log
 5️⃣ **Analyze dependencies**: dependency_info
-6️⃣ **Implement changes**: write_file, str_replace_editor
+6️⃣ **Implement changes**: write_file
 7️⃣ **Use shell only if necessary**: execute_bash
 
 ### Tool Rules
@@ -308,7 +308,6 @@ export const simpleReactToolNames = [
   "execute_bash",
   "output_format",
   "write_file",
-  "str_replace_editor",
   "web_search",
   "fetch_url",
   "write_todos"
