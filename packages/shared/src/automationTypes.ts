@@ -11,6 +11,12 @@ export type AutomationStatus = "PENDING" | "RUNNING" | "PAUSED" | "COMPLETED" | 
 export type ChainStatus = AutomationStatus;
 
 /**
+ * Structured error classification for failed automation stages.
+ * Used for diagnostics, notifications, and retry decisions.
+ */
+export type AutomationErrorKind = "LLM_TIMEOUT" | "LLM_ERROR" | "TOOL_BLOCKED" | "EVIDENCE_GATE" | "UNKNOWN";
+
+/**
  * Graph ID — references an AgentGraphDefinition stored in MongoDB.
  * This is a string (typically a MongoDB ObjectId or a legacy preset key).
  */
@@ -36,6 +42,8 @@ export interface AutomationStageConfig {
     contextFromPreviousStages?: string[];
     /** JavaScript expression to evaluate; skip stage if true */
     skipIf?: string;
+    /** Stage-level timeout in milliseconds (default: 600000 = 10 min) */
+    timeoutMs?: number;
     /** Retry failed stage with fallback LLM */
     retryOnFailure?: boolean;
     /** Max retry attempts (default: 3) */
@@ -402,6 +410,8 @@ export interface StageResult {
     success: boolean;
     /** Error message if failed */
     error?: string;
+    /** Structured error classification */
+    errorKind?: AutomationErrorKind;
     /** Findings from this stage */
     findings: Finding[];
     /** Raw claims from investigation phase */
@@ -461,6 +471,12 @@ export interface AutomationProgress {
     status: "PENDING" | "RUNNING" | "SKIPPED" | "COMPLETED" | "FAILED";
     /** Current findings count */
     findings?: Finding[];
+    /** Error message when status is FAILED */
+    error?: string;
+    /** Structured error classification */
+    errorKind?: AutomationErrorKind;
+    /** Human-readable stage name */
+    stageName?: string;
 }
 
 /** @deprecated Use AutomationProgress instead */

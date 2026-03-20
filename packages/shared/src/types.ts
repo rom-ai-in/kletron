@@ -117,7 +117,7 @@ export type AgentWorkflowUpdate = {
     outputs?: AgentWorkflowResult["outputs"];
 };
 
-export type AgentWorkflowAbortReason = "PAUSED" | "CANCELLED";
+export type AgentWorkflowAbortReason = "PAUSED" | "CANCELLED" | "TIMEOUT";
 
 /**
  * Checkpoint metadata included in workflow results when a run is

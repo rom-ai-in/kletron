@@ -16,6 +16,7 @@ import type {
     Insight,
     AutomationStageConfig,
     AutomationRun,
+    AutomationErrorKind,
 } from "@kletron/shared/automationTypes";
 import type { AgentWorkflowAbortReason } from "@kletron/shared/types";
 import type { Claim as WorkflowClaim, Task as WorkflowTask, AgentWorkflowResult, AgentEvent } from "@kletron/shared/types";
@@ -23,6 +24,21 @@ import { computeNextRun } from "@kletron/shared/cronUtils";
 
 const COLLECTION_NAME = "audit_chains"; // Legacy collection name - kept for backward compatibility
 const RUNS_COLLECTION = "audit_runs"; // Legacy collection name - kept for backward compatibility
+
+/** Default per-stage timeout: 10 minutes. Override per-stage via `stage.timeoutMs`. */
+const DEFAULT_STAGE_TIMEOUT_MS = 600_000;
+
+/**
+ * Classify a stage error into a structured category for diagnostics and UI.
+ */
+function classifyStageError(error: unknown, blockerReason?: string | null): AutomationErrorKind {
+    if (error instanceof AgentWorkflowAbortError && (error as any).reason === "TIMEOUT") return "LLM_TIMEOUT";
+    const msg = error instanceof Error ? error.message : String(error ?? "");
+    if (/rate.?limit|429|503|502|gateway.?timeout|ECONNRESET|ETIMEDOUT/i.test(msg)) return "LLM_ERROR";
+    if (blockerReason || /tool.*blocked|outside.*configured.*directories|not accessible/i.test(msg)) return "TOOL_BLOCKED";
+    if (/insufficient audit evidence/i.test(msg)) return "EVIDENCE_GATE";
+    return "UNKNOWN";
+}
 
 /**
  * Parse findings from a markdown/text report produced by a conversational agent.
@@ -826,7 +842,8 @@ export class AutomationExecutor {
                 await this.updateRunStageIndex(runId, i, run.workspaceId?.toString());
             }
 
-            // Execute stage
+            // Execute stage with timeout
+            const stageTimeoutMs = stage.timeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
             let stageResult: StageResult;
             try {
                 stageResult = await this.executeStage(chain._id!.toString(), stage, results, {
@@ -834,6 +851,7 @@ export class AutomationExecutor {
                     auditSessionId,
                     workspaceId: runWorkspaceId,
                     shouldAbort,
+                    stageTimeoutMs,
                 });
             } catch (error) {
                 if (error instanceof AgentWorkflowAbortError || (error as any)?.name === "AgentWorkflowAbortError") {
@@ -865,7 +883,8 @@ export class AutomationExecutor {
                 }
                 // Convert raw errors to a failed StageResult instead of aborting the pipeline
                 const errorMsg = error instanceof Error ? error.message : String(error);
-                console.error(`[AutomationExecutor] Stage ${stage.id} (${stage.name}) threw an error:`, errorMsg);
+                const errorKind = classifyStageError(error);
+                console.error(`[AutomationExecutor] Stage ${stage.id} (${stage.name}) threw an error [${errorKind}]:`, errorMsg);
                 stageResult = {
                     stageId: stage.id,
                     stageName: stage.name,
@@ -876,6 +895,7 @@ export class AutomationExecutor {
                     tasks: [],
                     duration: Date.now() - startTime,
                     error: errorMsg,
+                    errorKind,
                 };
             }
             results.push(stageResult);
@@ -883,12 +903,17 @@ export class AutomationExecutor {
             // Update run progress
             await this.updateRunStageIndex(runId, i + 1, run.workspaceId?.toString());
 
-            // Notify progress
+            // Notify progress — include error details for failed stages so the UI can display them
             onProgress?.({
                 chainId: chain._id!.toString(),
                 stageIndex: i,
                 status: stageResult.success ? "COMPLETED" : "FAILED",
                 findings: stageResult.findings,
+                ...(stageResult.success ? {} : {
+                    error: stageResult.error,
+                    errorKind: stageResult.errorKind,
+                    stageName: stage.name,
+                }),
             });
 
             // Handle failures — continue to next stage (stages are independent)
@@ -970,6 +995,8 @@ export class AutomationExecutor {
             auditSessionId?: string;
             workspaceId?: string;
             shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
+            /** Per-stage timeout in ms. If elapsed, the stage is aborted with reason TIMEOUT. */
+            stageTimeoutMs?: number;
         }
     ): Promise<StageResult> {
         const startTime = Date.now();
@@ -980,8 +1007,25 @@ export class AutomationExecutor {
             const userPrompt = prepared?.userPrompt ?? this.buildUserPrompt(stage, context);
             const auditSessionId = prepared?.auditSessionId || "";
 
-            console.info(`[AutomationExecutor] Executing stage: ${stage.name} (Graph: ${stage.graphId})`);
+            const stageTimeoutMs = prepared?.stageTimeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
+            console.info(`[AutomationExecutor] Executing stage: ${stage.name} (Graph: ${stage.graphId}, timeout: ${stageTimeoutMs}ms)`);
             console.info(`[AutomationExecutor] Input: ${userPrompt.substring(0, 100)}...`);
+
+            // Build a combined shouldAbort that checks both user-initiated aborts AND stage timeouts
+            const stageDeadline = Date.now() + stageTimeoutMs;
+            const combinedShouldAbort = async (): Promise<AgentWorkflowAbortReason | null> => {
+                // Check user-initiated abort first
+                if (prepared?.shouldAbort) {
+                    const userAbort = await prepared.shouldAbort();
+                    if (userAbort) return userAbort;
+                }
+                // Check stage timeout
+                if (Date.now() >= stageDeadline) {
+                    console.warn(`[AutomationExecutor] Stage ${stage.name} timed out after ${stageTimeoutMs}ms`);
+                    return "TIMEOUT";
+                }
+                return null;
+            };
 
             // Execute the selected graph workflow
             const workflowResult = await runWorkflow(userPrompt, stage.graphId, {
@@ -991,7 +1035,7 @@ export class AutomationExecutor {
                 },
                 workspaceId: prepared?.workspaceId,
                 source: "automation",
-                shouldAbort: prepared?.shouldAbort,
+                shouldAbort: combinedShouldAbort,
                 ...(auditSessionId
                     ? {
                         onUpdate: async (update) => {
@@ -1062,6 +1106,7 @@ export class AutomationExecutor {
                     sessionId: sessionIdForLogs,
                     success: false,
                     error: blockerReason,
+                    errorKind: classifyStageError(new Error(blockerReason), blockerReason),
                     findings: [],
                     claims,
                     tasks,
@@ -1083,6 +1128,7 @@ export class AutomationExecutor {
                     sessionId: sessionIdForLogs,
                     success: false,
                     error: evidenceGateError,
+                    errorKind: "EVIDENCE_GATE" as AutomationErrorKind,
                     findings: [],
                     claims,
                     tasks,
@@ -1104,9 +1150,49 @@ export class AutomationExecutor {
             };
         } catch (error) {
             if (error instanceof AgentWorkflowAbortError || (error as any)?.name === "AgentWorkflowAbortError") {
+                const reason: AgentWorkflowAbortReason = (error as any).reason ?? "PAUSED";
+                // TIMEOUT aborts are stage-level failures — convert to a failed StageResult
+                // instead of re-throwing (which would pause/cancel the entire run).
+                if (reason === "TIMEOUT") {
+                    const timeoutMs = prepared?.stageTimeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
+                    const errorMsg = `Stage "${stage.name}" timed out after ${Math.round(timeoutMs / 1000)}s — the LLM did not complete in time`;
+                    console.error(`[AutomationExecutor] ${errorMsg}`);
+                    if (prepared?.auditSessionId) {
+                        const fallbackResult: AgentWorkflowResult = {
+                            sessionId: prepared.auditSessionId,
+                            timeline: [],
+                            conclusion: "Stage timed out.",
+                            outputs: {
+                                context: {},
+                                target_files: [],
+                                raw_claims: [],
+                                verified_findings: [],
+                                findings: [],
+                                tasks: [],
+                                report: `TIMEOUT: ${errorMsg}`,
+                            },
+                            eventStream: [],
+                        };
+                        await auditService.completeSession(prepared.auditSessionId, fallbackResult, new Error(errorMsg));
+                    }
+                    return {
+                        stageId: stage.id,
+                        stageName: stage.name,
+                        sessionId: prepared?.auditSessionId ?? "",
+                        success: false,
+                        error: errorMsg,
+                        errorKind: "LLM_TIMEOUT" as AutomationErrorKind,
+                        findings: [],
+                        claims: [],
+                        tasks: [],
+                        duration: Date.now() - startTime,
+                    };
+                }
+                // PAUSED / CANCELLED — re-throw so the pipeline loop handles them
                 throw error;
             }
-            console.error(`[AutomationExecutor] Stage ${stage.id} failed:`, error);
+            const errorKind = classifyStageError(error);
+            console.error(`[AutomationExecutor] Stage ${stage.id} failed [${errorKind}]:`, error);
             if (prepared?.auditSessionId) {
                 const message = error instanceof Error ? error.message : String(error);
                 const fallbackResult: AgentWorkflowResult = {
@@ -1132,6 +1218,7 @@ export class AutomationExecutor {
                 sessionId: prepared?.auditSessionId ?? "",
                 success: false,
                 error: error instanceof Error ? error.message : String(error),
+                errorKind,
                 findings: [],
                 claims: [],
                 tasks: [],
@@ -1487,6 +1574,36 @@ export class AutomationExecutor {
         if (!latestRun) throw new Error(`No run found for automation ${chainId} to cancel`);
         await this.cancelRun(latestRun._id!.toString());
         return { runId: latestRun._id!.toString() };
+    }
+
+    /**
+     * Retry a failed run, optionally from a specific stage.
+     * If `fromStageIndex` is not provided, retries from the stage where the run failed.
+     */
+    async retryRun(
+        runId: string,
+        fromStageIndex?: number,
+        onProgress?: (update: AutomationProgress) => void
+    ): Promise<AutomationResult> {
+        const run = await this.getRun(runId);
+        if (!run) throw new Error(`Run ${runId} not found`);
+
+        if (run.status !== "FAILED" && run.status !== "COMPLETED" && run.status !== "CANCELLED") {
+            throw new Error(`Run ${runId} is ${run.status}. Can only retry FAILED, COMPLETED, or CANCELLED runs.`);
+        }
+
+        const resumeIndex = fromStageIndex ?? Math.max(0, run.currentStageIndex - 1);
+        const workspaceId = run.workspaceId?.toString();
+
+        console.info(`[AutomationExecutor] Retrying run ${runId} from stage index ${resumeIndex}`);
+
+        // Reset run status and stage index for re-execution
+        await this.updateRunStatus(runId, "RUNNING", { endedAt: undefined } as any, workspaceId);
+        await this.updateRunStageIndex(runId, resumeIndex, workspaceId);
+        // Also update parent automation
+        await this.updateAutomationStatus(run.chainId.toString(), "RUNNING", undefined, workspaceId);
+
+        return this.executeRun(runId, onProgress);
     }
 
     /**
