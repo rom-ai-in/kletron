@@ -315,27 +315,42 @@ export async function gitDiffNumstat(workspacePath: string): Promise<DiffNumstat
   return { additions, deletions };
 }
 
-/** Create a PR using the `gh` CLI (must be installed and authenticated) */
+/** Create a PR using the `gh` CLI (must be installed and authenticated).
+ *  Uses execFileSync (no shell) to prevent injection attacks. */
 export async function gitCreatePR(
   workspacePath: string,
   title: string,
   body?: string,
   base?: string,
 ): Promise<{ url: string; number: number }> {
-  const { execSync } = await import("node:child_process");
-  const args = ["gh", "pr", "create", "--title", title];
+  const { execFileSync } = await import("node:child_process");
+
+  // 1. Verify gh CLI is available
+  try {
+    execFileSync("gh", ["--version"], { encoding: "utf-8", timeout: 5_000, stdio: "pipe" });
+  } catch {
+    throw new Error(
+      "GitHub CLI (gh) is not installed or not in PATH. " +
+      "Install it from https://cli.github.com and run `gh auth login` to authenticate."
+    );
+  }
+
+  // 2. Build args array — execFileSync passes each arg directly, no shell interpolation
+  const args = ["pr", "create", "--title", title];
   if (body) args.push("--body", body);
   if (base) args.push("--base", base);
   args.push("--fill");
-  const output = execSync(args.join(" "), {
+
+  const output = execFileSync("gh", args, {
     cwd: workspacePath,
     encoding: "utf-8",
     timeout: 30_000,
+    stdio: ["pipe", "pipe", "pipe"],
   }).trim();
 
-  // gh pr create outputs the PR URL on success
-  const urlMatch = output.match(/https:\/\/github\.com\/[^\s]+/);
-  const numberMatch = output.match(/\/pull\/(\d+)/);
+  // 3. Parse the PR URL from output — support any git host (GitHub, GitLab, Bitbucket, etc.)
+  const urlMatch = output.match(/https?:\/\/[^\s]+/);
+  const numberMatch = output.match(/\/pull\/(\d+)/) || output.match(/\/merge_requests\/(\d+)/);
   return {
     url: urlMatch?.[0] || output,
     number: numberMatch ? parseInt(numberMatch[1], 10) : 0,
