@@ -13,10 +13,10 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const TENANT_NAME = "Numezis";
-const TENANT_SLUG = "numezis";
-const COMPANY_NAME = "Numezis SAS";
-const COMPANY_SLUG = "numezis-sas";
+const TENANT_NAME = "Kletron";
+const TENANT_SLUG = "kletron";
+const COMPANY_NAME = "Kletron SAS";
+const COMPANY_SLUG = "kletron-sas";
 const GROUP_NAME = "Engineering";
 const GROUP_DESC = "Core engineering team";
 

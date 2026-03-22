@@ -1,5 +1,5 @@
 -- =====================================================
--- Supabase Schema for Numezis Code Multi-Tenant Auth System
+-- Supabase Schema for Kletron Multi-Tenant Auth System
 -- =====================================================
 -- Data Model: Tenant → Company → Group → User
 -- Run this in Supabase SQL Editor

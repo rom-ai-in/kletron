@@ -5,10 +5,10 @@ import { NextResponse } from 'next/server';
 import { requireAppRouteAuth } from '@kletron/server/lib/auth/apiAuth';
 import { getSupabaseAdminClient } from '@kletron/server/lib/supabase/supabaseAdmin';
 
-const DEFAULT_TENANT_NAME = 'Numezis';
-const DEFAULT_TENANT_SLUG = 'numezis';
-const DEFAULT_COMPANY_NAME = 'Numezis SAS';
-const DEFAULT_COMPANY_SLUG = 'numezis-sas';
+const DEFAULT_TENANT_NAME = 'Kletron';
+const DEFAULT_TENANT_SLUG = 'kletron';
+const DEFAULT_COMPANY_NAME = 'Kletron SAS';
+const DEFAULT_COMPANY_SLUG = 'kletron-sas';
 const DEFAULT_GROUP_NAME = 'Engineering';
 const DEFAULT_GROUP_DESC = 'Core engineering team';
 

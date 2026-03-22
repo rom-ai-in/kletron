@@ -1,5 +1,5 @@
 /**
- * One-time migration: copy all data from numezis_coder DB → kletron DB.
+ * One-time migration: copy all data from old numezis_coder DB → kletron DB.
  * Run: npx tsx scripts/migrate-db-rename.ts
  */
 import { MongoClient, ServerApiVersion } from "mongodb";

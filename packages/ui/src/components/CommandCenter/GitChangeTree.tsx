@@ -92,60 +92,55 @@ function getFileIcon(filename: string): React.ReactNode {
 
 /** Build a hierarchical tree from a flat list of file paths */
 function buildTree(files: GitFileChangeItem[]): TreeNode[] {
-  const root: Map<string, TreeNode> = new Map();
+  // Use a recursive map structure for efficient lookups during construction
+  interface BuildNode {
+    node: TreeNode;
+    childrenMap: Map<string, BuildNode>;
+  }
+
+  const rootMap = new Map<string, BuildNode>();
 
   for (const file of files) {
     const parts = file.path.split('/');
-    let currentLevel = root;
+    let currentMap = rootMap;
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       const isLast = i === parts.length - 1;
       const currentPath = parts.slice(0, i + 1).join('/');
 
-      if (!currentLevel.has(part)) {
-        const node: TreeNode = {
+      if (!currentMap.has(part)) {
+        const treeNode: TreeNode = {
           name: part,
           path: currentPath,
           isDirectory: !isLast,
           children: [],
           file: isLast ? file : undefined,
         };
-        currentLevel.set(part, node);
+        currentMap.set(part, { node: treeNode, childrenMap: new Map() });
       }
 
-      const node = currentLevel.get(part)!;
-      if (!isLast) {
-        // Convert node children array to a map for navigation
-        const childMap = new Map<string, TreeNode>();
-        for (const child of node.children) {
-          childMap.set(child.name, child);
-        }
-        // Process next level
-        const nextPart = parts[i + 1];
-        const nextPath = parts.slice(0, i + 2).join('/');
-        const nextIsLast = i + 1 === parts.length - 1;
+      const entry = currentMap.get(part)!;
 
-        if (!childMap.has(nextPart)) {
-          const childNode: TreeNode = {
-            name: nextPart,
-            path: nextPath,
-            isDirectory: !nextIsLast,
-            children: [],
-            file: nextIsLast ? file : undefined,
-          };
-          node.children.push(childNode);
-          childMap.set(nextPart, childNode);
-        } else if (nextIsLast) {
-          // Update existing leaf node with file data
-          childMap.get(nextPart)!.file = file;
-        }
-        // Skip to inner level via childMap next iteration
-        currentLevel = childMap;
-        // Skip the next iteration since we already processed it
-        i++;
+      if (isLast) {
+        // Ensure leaf has the file data (in case the directory node was created first)
+        entry.node.file = file;
+        entry.node.isDirectory = false;
+      } else {
+        // Descend into the next level
+        currentMap = entry.childrenMap;
       }
     }
+  }
+
+  // Convert the build structure into the final TreeNode[] arrays
+  function materialize(map: Map<string, BuildNode>): TreeNode[] {
+    const result: TreeNode[] = [];
+    for (const entry of map.values()) {
+      entry.node.children = materialize(entry.childrenMap);
+      result.push(entry.node);
+    }
+    return result;
   }
 
   // Sort: directories first, then alphabetical
@@ -158,7 +153,7 @@ function buildTree(files: GitFileChangeItem[]): TreeNode[] {
       });
   }
 
-  return sortNodes(Array.from(root.values()));
+  return sortNodes(materialize(rootMap));
 }
 
 /** Flatten single-child directory chains (e.g. "src/components" instead of src > components) */

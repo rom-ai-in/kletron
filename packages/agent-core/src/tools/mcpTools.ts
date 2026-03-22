@@ -784,38 +784,54 @@ export const writeFileTool = tool(
 export const strReplaceEditorTool = tool(
   async (input: {
     repoPath?: string;
+    command?: string;
     path?: string;
     filePath?: string;
-    action?: string;
-    operation?: string;
+    old_str?: string;
+    new_str?: string;
+    file_text?: string;
+    insert_line?: number;
     startLine?: number;
     endLine?: number;
+    view_range?: number[];
     maxBytes?: number;
   }, config: any) => {
     return formatResult(
       await callMcpTool("str_replace_editor", {
         repoPath: input.repoPath,
+        command: input.command,
         path: input.path,
         filePath: input.filePath,
-        action: input.action,
-        operation: input.operation,
+        old_str: input.old_str,
+        new_str: input.new_str,
+        file_text: input.file_text,
+        insert_line: input.insert_line,
         startLine: input.startLine,
         endLine: input.endLine,
+        view_range: input.view_range,
         maxBytes: input.maxBytes,
       }, config)
     );
   },
   {
     name: "str_replace_editor",
-    description: "Read-only compatibility shim for str_replace_editor.",
+    description:
+      "File editor tool. Commands: view (read file), create (new file), str_replace (replace exact unique text), insert (add lines after a line number), undo_edit (revert last edit). Use str_replace for surgical edits with old_str/new_str.",
     schema: z.object({
       repoPath: z.string().optional(),
-      path: z.string().optional(),
-      filePath: z.string().optional(),
-      action: z.string().optional(),
-      operation: z.string().optional(),
-      startLine: z.number().int().positive().optional(),
-      endLine: z.number().int().positive().optional(),
+      command: z.enum(["view", "create", "str_replace", "insert", "undo_edit"]).optional()
+        .describe("Command to execute. Defaults to view."),
+      path: z.string().optional().describe("File path (absolute or relative to repo root)."),
+      filePath: z.string().optional().describe("Alias for path."),
+      old_str: z.string().optional().describe("Exact text to replace (must match once). Required for str_replace."),
+      new_str: z.string().optional().describe("Replacement text. Required for str_replace and insert."),
+      file_text: z.string().optional().describe("Full file content. Required for create."),
+      insert_line: z.number().int().nonnegative().optional()
+        .describe("Line number after which to insert (0 = beginning). Required for insert."),
+      startLine: z.number().int().positive().optional().describe("Start line for view range."),
+      endLine: z.number().int().positive().optional().describe("End line for view range."),
+      view_range: z.array(z.number().int().positive()).optional()
+        .describe("Optional [startLine, endLine] array for view command."),
       maxBytes: z.number().int().positive().optional(),
     }),
   }

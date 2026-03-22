@@ -511,7 +511,7 @@ The MCP server exposes **28 tools** organized by category. All tools are registe
 
 | Tool | Description |
 |------|-------------|
-| `str_replace_editor` | Read-only compatibility shim for editor operations |
+| `str_replace_editor` | File editor: view, create, str_replace, insert, undo_edit |
 | `execute_bash` | Safe emulation of minimal shell subset (find/grep/rg/ls/cat) |
 | `output_format` | Compatibility shim for output formatting |
 

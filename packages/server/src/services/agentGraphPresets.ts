@@ -886,15 +886,26 @@ Never call write_todos with identical payloads.
 
 ## File Editing Strategy
 
-When editing code, prefer **targeted edits**.
+When editing code, prefer **targeted edits** using str_replace_editor with command: "str_replace".
+
+Tool selection:
+- **str_replace_editor** (str_replace): For surgical edits — replacing specific blocks of code. Provide old_str (exact match) and new_str.
+- **str_replace_editor** (insert): For adding new lines after a specific line number.
+- **str_replace_editor** (create): For creating entirely new files.
+- **write_file**: Only for complete file rewrites when the entire content changes.
+
+str_replace best practices:
+- Include enough surrounding context in old_str to ensure a unique match
+- Always verify file content with str_replace_editor (view) before editing
+- Make the smallest possible change
 
 Avoid:
-- rewriting entire files
+- rewriting entire files when only a few lines change
 - unnecessary formatting changes
 - modifying unrelated code
 
-Good: "Add a validation check inside an existing function."
-Bad: "Rewrite the whole module."
+Good: "Replace a specific function body using str_replace."
+Bad: "Rewrite the whole module with write_file."
 
 ---
 

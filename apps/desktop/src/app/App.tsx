@@ -34,6 +34,8 @@ import { ProjectUtilitySidebar } from "@kletron/ui/components/CommandCenter/Proj
 import type { PendingDiffItem, FileLink, GitSidebarData } from "@kletron/ui/components/CommandCenter/ProjectUtilitySidebar";
 import { UncommittedChangesPanel } from "@kletron/ui/components/CommandCenter/UncommittedChangesPanel";
 import type { FileDiffData } from "@kletron/ui/components/CommandCenter/UncommittedChangesPanel";
+import { ResizeHandle } from "@kletron/ui/components/CommandCenter/ResizeHandle";
+import { useResizablePanel } from "@kletron/ui/hooks/useResizablePanel";
 import { InlineDiffReview } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
 import type { InlineDiff } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
 import { SlashCommandMenu } from "@kletron/ui/components/CommandCenter/SlashCommandMenu";
@@ -112,6 +114,11 @@ export default function App() {
   const git = useGit(workspace.workspace?.path ?? null, backendUrlTrimmed, auth.getAccessToken);
 
   const skillsHook = useSkills(backendUrlTrimmed, backendReady, auth.getAccessToken);
+
+  // ── Resizable panels ──────────────────────────────────────────────────────
+  const leftPanel = useResizablePanel({ storageKey: 'left-sidebar', defaultWidth: 260, minWidth: 180, maxWidth: 400, direction: 'left' });
+  const rightPanel = useResizablePanel({ storageKey: 'right-sidebar', defaultWidth: 300, minWidth: 220, maxWidth: 500, direction: 'right' });
+  const changesPanel = useResizablePanel({ storageKey: 'changes-panel', defaultWidth: 480, minWidth: 320, maxWidth: 720, direction: 'right' });
 
   // ═══════════════════════════════════════════════════════════════════════════
   // UI STATE
@@ -922,16 +929,14 @@ export default function App() {
           });
         }}
         changesVisible={changesVisible}
-        gitDiffStats={git.gitStatus ? {
-          additions: git.gitStatus.created.length + git.gitStatus.modified.length,
-          deletions: git.gitStatus.deleted.length,
-        } : undefined}
+        gitDiffStats={git.diffStats ?? undefined}
       />
 
       {/* ── Three-Pane Body ── */}
       <div className="flex flex-1 min-h-0 relative">
         {/* Left Sidebar: Project Navigation */}
         {sidebarVisible && (
+          <>
           <ProjectSidebar
             projects={sidebarProjects}
             activeThreadId={threads.conversationId}
@@ -948,7 +953,14 @@ export default function App() {
             }}
             onArchiveThread={(threadId) => void threads.archiveThread(threadId)}
             onDeleteThread={(threadId) => void threads.deleteThread(threadId)}
+            style={{ width: leftPanel.width }}
           />
+          <ResizeHandle
+            onMouseDown={leftPanel.startDrag}
+            onDoubleClick={leftPanel.resetToDefault}
+            active={leftPanel.isDragging}
+          />
+          </>
         )}
 
         {/* Center: Conversation Workspace */}
@@ -1106,7 +1118,13 @@ export default function App() {
 
         {/* Middle Panel: Uncommitted Changes Diffs */}
         {changesVisible && (
-          <div className="w-[480px] min-w-[360px] max-w-[640px] flex-shrink-0">
+          <>
+          <ResizeHandle
+            onMouseDown={changesPanel.startDrag}
+            onDoubleClick={changesPanel.resetToDefault}
+            active={changesPanel.isDragging}
+          />
+          <div className="flex-shrink-0" style={{ width: changesPanel.width }}>
             <UncommittedChangesPanel
               fileDiffs={uncommittedFileDiffs}
               loading={git.allDiffsLoading}
@@ -1120,10 +1138,17 @@ export default function App() {
               onStageAll={() => { void git.stageAll().then(() => git.fetchAllDiffs()); }}
             />
           </div>
+          </>
         )}
 
         {/* Right Sidebar: Source Control */}
         {rightSidebarVisible && (
+          <>
+          <ResizeHandle
+            onMouseDown={rightPanel.startDrag}
+            onDoubleClick={rightPanel.resetToDefault}
+            active={rightPanel.isDragging}
+          />
           <ProjectUtilitySidebar
             fileLinks={fileLinks}
             pendingDiffs={pendingDiffItems}
@@ -1153,7 +1178,9 @@ export default function App() {
               void git.fetchAllDiffs();
             }}
             selectedDiffPath={git.selectedDiffPath}
+            style={{ width: rightPanel.width }}
           />
+          </>
         )}
       </div>
 

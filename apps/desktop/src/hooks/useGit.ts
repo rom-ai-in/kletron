@@ -32,6 +32,7 @@ export function useGit(
   const [diffLoading, setDiffLoading] = useState(false);
   const [allDiffs, setAllDiffs] = useState<Map<string, string | null>>(new Map());
   const [allDiffsLoading, setAllDiffsLoading] = useState(false);
+  const [diffStats, setDiffStats] = useState<{ additions: number; deletions: number } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Generation counter — incremented on every workspace switch ────────────
@@ -60,9 +61,13 @@ export function useGit(
     try {
       setGitLoading(true);
       setGitError(null);
-      const status = await window.kletron.gitStatus(cwd);
+      const [status, numstat] = await Promise.all([
+        window.kletron.gitStatus(cwd),
+        window.kletron.gitDiffNumstat(cwd).catch(() => null),
+      ]);
       if (g !== gen()) return; // stale — workspace changed while awaiting
       setGitStatus(status);
+      setDiffStats(numstat);
     } catch (error) {
       if (g !== gen()) return;
       setGitError((error as Error)?.message || "Failed to get git status");
@@ -378,13 +383,20 @@ export function useGit(
 
   async function generateCommitMessage() {
     const g = gen();
+    const cwd = cwdRef.current;
+    if (!cwd) return;
     const token = await getAccessToken();
     if (!token) return;
     if (g !== gen()) return;
     setGeneratingMessage(true);
     try {
+      // Gather the current diff to send to the AI
+      const diff = await window.kletron.gitDiff(undefined, cwd);
+      if (g !== gen()) return;
       const res = await fetch(`${backendUrlTrimmed}/api/git/commit-message`, {
-        headers: { Authorization: `Bearer ${token}` },
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ diff }),
       });
       if (g !== gen()) return;
       if (res.ok) {
@@ -419,6 +431,7 @@ export function useGit(
     totalChanges,
     stagedCount,
     unstagedCount,
+    diffStats,
     // Actions
     refreshStatus,
     commit,
