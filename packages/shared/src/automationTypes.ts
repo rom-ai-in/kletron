@@ -293,6 +293,35 @@ export interface Insight {
 }
 
 /**
+ * Persisted summary of a single stage execution result.
+ * Stored on the AutomationRun document for frontend display.
+ */
+export interface PersistedStageResult {
+    /** Stage ID */
+    stageId: string;
+    /** Stage name */
+    stageName: string;
+    /** Audit session ID */
+    sessionId: string;
+    /** Whether stage succeeded */
+    success: boolean;
+    /** Error message if failed */
+    error?: string;
+    /** Structured error classification */
+    errorKind?: AutomationErrorKind;
+    /** Number of findings from this stage */
+    findingsCount: number;
+    /** Number of claims from this stage */
+    claimsCount: number;
+    /** Number of tasks from this stage */
+    tasksCount: number;
+    /** Raw report/output text from the workflow (rendered as markdown in the UI) */
+    rawOutput?: string;
+    /** Execution duration in milliseconds */
+    duration: number;
+}
+
+/**
  * Main automation entity stored in MongoDB
  * (Legacy collection name: audit_chains)
  */
@@ -380,6 +409,8 @@ export interface AutomationRun {
     crossStageInsights: Insight[];
     /** Final aggregated report */
     finalReport?: string;
+    /** Per-stage execution results for structured display */
+    stageResults?: PersistedStageResult[];
     /** Execution metadata */
     metadata?: {
         totalDuration: number;

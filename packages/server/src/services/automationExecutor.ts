@@ -17,6 +17,7 @@ import type {
     AutomationStageConfig,
     AutomationRun,
     AutomationErrorKind,
+    PersistedStageResult,
 } from "@kletron/shared/automationTypes";
 import type { AgentWorkflowAbortReason } from "@kletron/shared/types";
 import type { Claim as WorkflowClaim, Task as WorkflowTask, AgentWorkflowResult, AgentEvent } from "@kletron/shared/types";
@@ -65,7 +66,11 @@ function parseFindingsFromText(
 
     // Split on numbered items: "### 1)", "1)", "### Finding 1:", etc.
     // Each section runs until the next numbered item or end-of-string.
-    const sectionPattern = /(?:^|\n)(?:#{1,4}\s+)?(?:Finding\s+)?\d+[.):][\s\S]*?(?=\n(?:#{1,4}\s+)?(?:Finding\s+)?\d+[.):]|$)/g;
+    /**
+     * Regex that matches any numbered finding (e.g., "1)", "1.", "Finding 1:")
+     * or bulleted finding (e.g., "- [BLOQUANT]", "* Finding:").
+     */
+    const sectionPattern = /(?:^|\n)(?:#{1,4}\s+)?(?:Finding\s+)?(?:\d+[.):]|[-*]\s+(?:Finding\s+)?|\[[A-Z]+\])[\s\S]*?(?=\n(?:#{1,4}\s+)?(?:Finding\s+)?(?:\d+[.):]|[-*]\s+(?:Finding\s+)?|\[[A-Z]+\])|$)/g;
     const sections = text.match(sectionPattern);
     if (!sections || sections.length === 0) {
         console.info(`[parseFindingsFromText] No numbered sections found in ${text.length}-char report`);
@@ -82,6 +87,7 @@ function parseFindingsFromText(
         const titleClean = firstLine
             .replace(/^#{1,4}\s*/, "")
             .replace(/^(?:Finding\s+)?\d+[.):\s]+/, "")
+            .replace(/^[-*]\s+(?:Finding\s+)?/, "")
             .replace(/\*\*/g, "")
             .trim();
         if (!titleClean) continue;
@@ -184,8 +190,10 @@ function detectToolExecutionBlockers(workflowResult: AgentWorkflowResult, report
     return null;
 }
 
-function parseJsonObject(raw?: string): Record<string, unknown> | null {
-    if (!raw || typeof raw !== "string") return null;
+function parseJsonObject(raw?: string | Record<string, unknown>): Record<string, unknown> | null {
+    if (!raw) return null;
+    if (typeof raw === "object") return raw as Record<string, unknown>;
+    if (typeof raw !== "string") return null;
     try {
         const parsed = JSON.parse(raw);
         return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
@@ -220,12 +228,16 @@ function collectAuditEvidence(workflowResult: AgentWorkflowResult) {
         if (lower === "read_file" || lower === "read_file_range") {
             fileReadOps += 1;
             const args = parseJsonObject(event.toolArgs);
-            const filePath = typeof args?.filePath === "string"
-                ? args.filePath
-                : typeof args?.path === "string"
-                    ? args.path
-                    : "";
-            if (filePath) filesRead.add(filePath);
+            if (args) {
+                const filePath = typeof args.filePath === "string"
+                    ? args.filePath
+                    : typeof args.path === "string"
+                        ? args.path
+                        : "";
+                if (filePath && typeof filePath === "string" && filePath.length > 0) {
+                    filesRead.add(filePath);
+                }
+            }
         }
 
         if (
@@ -234,9 +246,19 @@ function collectAuditEvidence(workflowResult: AgentWorkflowResult) {
             lower === "git_grep" ||
             lower === "structural_search" ||
             lower === "symbols_list" ||
-            lower === "find_symbol"
+            lower === "find_symbol" ||
+            lower === "grep_search" ||
+            lower === "find_by_name"
         ) {
             searchOps += 1;
+            // Also attempt to track unique files from search results if it's a direct file search
+            const args = parseJsonObject(event.toolArgs);
+            if (args && (typeof args.path === "string" || typeof args.filePath === "string")) {
+                const p = (args.path || args.filePath) as string;
+                if (p && !p.includes("*") && !p.includes("?")) { // skip patterns
+                    filesRead.add(p);
+                }
+            }
         }
 
         if (lower === "list_files" || lower === "describe_structure" || lower === "repo_metrics") {
@@ -264,16 +286,41 @@ function evaluateZeroFindingEvidenceGate(params: {
     if (params.findingsCount > 0) return null;
 
     const evidence = collectAuditEvidence(params.workflowResult);
+
+    // Hardcoded thresholds for "lazy agent" detection
+    const thresholds = {
+        toolCalls: 8,
+        structureOps: 1,
+        searchOps: 2,
+        fileReadOps: 3,
+        filesReadUnique: 3,
+    };
+
+    // If result has claims or tasks, it's generally considered credible even with zero findings
+    if (params.claimsCount >= 3 || params.tasksCount >= 2) return null;
+
+    // Detect "Synthesis" or "Recommendation" stages — they naturally perform fewer tool calls
+    // as they synthesize findings from previous stages.
+    const isSynthesisStage = /synthesis|recommendation|aggregate|summary|report/i.test(params.workflowResult.sessionId || "");
+
+    // If the agent made many tool calls (> 20) but they are mostly not file reads,
+    // it's likely not "lazy" (e.g., doing deep research or complex transformations).
+    if (evidence.toolCalls >= 20 && evidence.toolErrors / evidence.toolCalls < 0.2) return null;
+
+    // Be more lenient on fileReadOps if total tool calls are high or it's a synthesis stage
+    const effectiveFilesReadUnique = (evidence.filesReadUnique === 0 && (evidence.fileReadOps >= 5 || isSynthesisStage))
+        ? 3 // Mock pass
+        : evidence.filesReadUnique;
+
     const checks = [
-        evidence.toolCalls >= 8,
-        evidence.structureOps >= 1,
-        evidence.searchOps >= 2,
-        evidence.fileReadOps >= 3 || evidence.filesReadUnique >= 3,
+        evidence.toolCalls >= (isSynthesisStage ? 4 : thresholds.toolCalls),
+        evidence.structureOps >= (isSynthesisStage ? 0 : thresholds.structureOps),
+        evidence.searchOps >= (isSynthesisStage ? 1 : thresholds.searchOps),
+        (evidence.fileReadOps >= (isSynthesisStage ? 1 : thresholds.fileReadOps) || effectiveFilesReadUnique >= thresholds.filesReadUnique),
         evidence.toolErrors <= Math.floor(Math.max(evidence.toolCalls, 1) * 0.4),
     ];
 
-    const hasReasonableSubstance = params.claimsCount >= 3 || params.tasksCount >= 2;
-    const passed = checks.every(Boolean) && hasReasonableSubstance;
+    const passed = checks.every(Boolean);
     if (passed) return null;
 
     return [
@@ -948,12 +995,28 @@ export class AutomationExecutor {
             ? { failedStages: failedStages.map((r) => ({ stageId: r.stageId, stageName: r.stageName, error: r.error })) }
             : {};
 
+        // Build persisted stage results for frontend display
+        const persistedStageResults: PersistedStageResult[] = results.map((r) => ({
+            stageId: r.stageId,
+            stageName: r.stageName,
+            sessionId: r.sessionId,
+            success: r.success,
+            error: r.error,
+            errorKind: r.errorKind,
+            findingsCount: r.findings.length,
+            claimsCount: r.claims.length,
+            tasksCount: r.tasks.length,
+            rawOutput: r.rawOutput,
+            duration: r.duration,
+        }));
+
         // Update final run state — always persist results regardless of failures
         await this.updateRunStatus(runId, finalStatus, {
             endedAt: new Date(),
             aggregatedFindings: aggregation.findings,
             crossStageInsights: aggregation.insights,
             finalReport: aggregation.report,
+            stageResults: persistedStageResults,
             metadata: {
                 totalDuration,
                 totalClaims: results.reduce((sum, r) => sum + r.claims.length, 0),

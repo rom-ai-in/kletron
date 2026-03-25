@@ -136,22 +136,28 @@ const maybeEvictToolResult = async (opts: {
     ].join("\n");
 };
 
-const describeMessageContent = (message: BaseMessage) => {
+const describeMessageContent = (message: BaseMessage): string => {
     if (typeof message.content === "string") {
         return message.content;
     }
     // Handle array content blocks (Claude format: [{type:"thinking",...},{type:"text",...}])
     if (Array.isArray(message.content)) {
         const textBlocks = (message.content as any[])
-            .filter((block) => block?.type === "text" && typeof block.text === "string")
-            .map((block) => block.text as string);
+            .filter((block) => block?.type === "text" && typeof (block as { text?: string }).text === "string")
+            .map((block) => (block as { text: string }).text);
         if (textBlocks.length > 0) {
             return textBlocks.join("\n");
         }
         // Fallback: concatenate all string-like content, skip thinking blocks
         const allText = (message.content as any[])
             .filter((block) => block?.type !== "thinking")
-            .map((block) => (typeof block === "string" ? block : block?.text ?? ""))
+            .map((block) => {
+                if (typeof block === "string") return block;
+                if (block && typeof block === "object" && "text" in block && typeof (block as { text?: string }).text === "string") {
+                    return (block as { text: string }).text;
+                }
+                return "";
+            })
             .filter(Boolean)
             .join("\n");
         if (allText) return allText;

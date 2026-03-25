@@ -4,15 +4,20 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Panel, Button } from "@kletron/ui/components/design-system";
-import type { AutomationDefinition, AutomationRun, AutomationStatus } from "@kletron/shared/automationTypes";
+import type { AutomationDefinition, AutomationRun, AutomationStatus, PersistedStageResult } from "@kletron/shared/automationTypes";
 import type { AgentEvent } from "@kletron/shared/types";
 import { StageDetailModal } from "@kletron/ui/components/StageDetailModal";
+import { FindingsExplorer } from "@kletron/ui/components/FindingsExplorer";
+import { ReportMarkdownRenderer } from "@kletron/ui/components/ReportMarkdownRenderer";
+import { ChevronDown, ChevronRight, Clock, FileText, BarChart3, Layers, Search as SearchIcon, Download } from "lucide-react";
 
 interface RunDetailPageProps {
     params: { id: string };
 }
 
 const POLL_INTERVAL_MS = 4000;
+
+type TabId = "overview" | "stages" | "findings" | "report";
 
 export default function RunDetailPage({ params }: RunDetailPageProps) {
     const router = useRouter();
@@ -24,6 +29,9 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
     const [refreshError, setRefreshError] = useState("");
     const [selectedStage, setSelectedStage] = useState<{ id: string; name: string; sessionId: string; status: string } | null>(null);
     const [isCancelling, setIsCancelling] = useState(false);
+    const [activeTab, setActiveTab] = useState<TabId>("overview");
+
+    // Live logs state
     const [liveSessionId, setLiveSessionId] = useState<string | null>(null);
     const [liveStageId, setLiveStageId] = useState<string | null>(null);
     const [liveStageName, setLiveStageName] = useState<string | null>(null);
@@ -32,6 +40,9 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
     const [liveError, setLiveError] = useState("");
     const [liveLastUpdated, setLiveLastUpdated] = useState<string | null>(null);
     const [autoOpenedSessionId, setAutoOpenedSessionId] = useState<string | null>(null);
+
+    // Expanded stages for accordion
+    const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set());
 
     const pickLiveSession = (runData: AutomationRun, automationData: AutomationDefinition | null) => {
         const stageCount = automationData?.stages?.length ?? 0;
@@ -182,6 +193,26 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
         }
     };
 
+    const handleExportMarkdown = () => {
+        if (!run?.finalReport) return;
+        const blob = new Blob([run.finalReport], { type: "text/markdown" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `run-${params.id.slice(0, 8)}-report.md`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const toggleStage = (idx: number) => {
+        setExpandedStages((prev) => {
+            const next = new Set(prev);
+            if (next.has(idx)) next.delete(idx);
+            else next.add(idx);
+            return next;
+        });
+    };
+
     if (loading) {
         return (
             <div className="flex h-full items-center justify-center p-12">
@@ -198,6 +229,8 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
             </div>
         );
     }
+
+    const stageResults: PersistedStageResult[] = (run as any).stageResults || [];
 
     return (
         <div className="flex h-full flex-col bg-bg-app">
@@ -246,19 +279,54 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                 </div>
             </div>
 
+            {/* Tabs */}
+            <div className="flex items-center border-b border-border-subtle bg-bg-surface px-6">
+                {([
+                    { id: "overview" as TabId, label: "Overview", icon: BarChart3 },
+                    { id: "stages" as TabId, label: "Stages", icon: Layers },
+                    { id: "findings" as TabId, label: `Findings (${run.aggregatedFindings.length})`, icon: SearchIcon },
+                    { id: "report" as TabId, label: "Report", icon: FileText },
+                ]).map(({ id, label, icon: Icon }) => (
+                    <button
+                        key={id}
+                        onClick={() => setActiveTab(id)}
+                        className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+                            activeTab === id
+                                ? "border-text-primary text-text-primary"
+                                : "border-transparent text-text-muted hover:text-text-secondary"
+                        }`}
+                    >
+                        <Icon className="h-3.5 w-3.5" />
+                        {label}
+                    </button>
+                ))}
+            </div>
+
             {/* Content */}
             <div className="flex-1 overflow-y-auto scrollbar-elegant p-6 text-text-primary">
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                    <div className="space-y-4 lg:col-span-2">
+                {selectedStage && (
+                    <StageDetailModal
+                        isOpen={!!selectedStage}
+                        onClose={() => setSelectedStage(null)}
+                        stageId={selectedStage.id}
+                        stageName={selectedStage.name}
+                        sessionId={selectedStage.sessionId}
+                        status={selectedStage.status}
+                    />
+                )}
+
+                {/* OVERVIEW TAB */}
+                {activeTab === "overview" && (
+                    <div className="space-y-6">
                         {/* Summary Stats */}
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                             <StatBox label="Findings" value={run.aggregatedFindings.length} />
                             <StatBox label="Claims" value={run.metadata?.totalClaims || 0} />
                             <StatBox label="Verified" value={run.metadata?.totalVerified || 0} />
                             <StatBox label="Status" value={run.status} />
                         </div>
 
-                        {/* Stages View (Simplified) */}
+                        {/* Execution Stages Timeline */}
                         <Panel className="p-4">
                             <h2 className="mb-4 text-sm font-semibold text-text-primary">Execution Stages</h2>
                             <div className="space-y-3">
@@ -273,6 +341,9 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                         : "PENDING";
 
                                     const sessionId = run.sessionIds?.[index];
+                                    const stageResult = stageResults[index];
+                                    const duration = stageResult?.duration ? `${(stageResult.duration / 1000 / 60).toFixed(1)}m` : "";
+                                    const findingsCount = stageResult?.findingsCount ?? 0;
 
                                     return (
                                         <button
@@ -293,13 +364,28 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                                 : "border-border-subtle hover:bg-state-hover"
                                                 } ${!sessionId ? "cursor-default opacity-50" : "cursor-pointer"}`}
                                         >
-                                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-elevated text-[10px] font-bold">
-                                                {isCompleted || (run.status === "COMPLETED" && isCurrent) ? "✅" : index + 1}
+                                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-elevated text-[10px] font-bold flex-none">
+                                                {isCompleted || (run.status === "COMPLETED") ? (
+                                                    <span className="text-status-success-text">✓</span>
+                                                ) : (
+                                                    index + 1
+                                                )}
                                             </div>
-                                            <div className="flex-1">
+                                            <div className="flex-1 min-w-0">
                                                 <div className="flex items-center justify-between gap-2">
-                                                    <div className="text-sm font-medium">{stage.name}</div>
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="text-sm font-medium truncate">{stage.name}</div>
+                                                    <div className="flex items-center gap-2 flex-none">
+                                                        {duration && (
+                                                            <span className="flex items-center gap-0.5 text-[10px] text-text-muted">
+                                                                <Clock className="h-2.5 w-2.5" />
+                                                                {duration}
+                                                            </span>
+                                                        )}
+                                                        {findingsCount > 0 && (
+                                                            <span className="rounded bg-zinc-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-400">
+                                                                {findingsCount} findings
+                                                            </span>
+                                                        )}
                                                         {isCurrent && sessionId && (
                                                             <button
                                                                 type="button"
@@ -335,23 +421,13 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                             </div>
                         </Panel>
 
-                        {selectedStage && (
-                            <StageDetailModal
-                                isOpen={!!selectedStage}
-                                onClose={() => setSelectedStage(null)}
-                                stageId={selectedStage.id}
-                                stageName={selectedStage.name}
-                                sessionId={selectedStage.sessionId}
-                                status={selectedStage.status}
-                            />
-                        )}
-
+                        {/* Live Logs */}
                         <Panel className="p-4">
                             <div className="flex items-center justify-between mb-3">
                                 <div>
                                     <h2 className="text-sm font-semibold text-text-primary">Live Logs</h2>
                                     <p className="text-xs text-text-muted">
-                                        {liveStageName ? `Current stage: ${liveStageName}` : (run.status === "RUNNING" ? "Waiting for stage logs..." : "No active stage yet")}
+                                        {liveStageName ? `Current stage: ${liveStageName}` : (run.status === "RUNNING" ? "Waiting for stage logs..." : "No active stage")}
                                     </p>
                                     {liveLastUpdated && (
                                         <p className="text-[10px] text-text-muted">
@@ -420,56 +496,23 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                             )}
                         </Panel>
 
-                        {/* Final Report */}
-                        {run.finalReport && (
-                            <Panel className="p-4">
-                                <h2 className="mb-4 text-sm font-semibold text-text-primary">Final Report</h2>
-                                <div className="prose prose-invert prose-sm max-w-none">
-                                    <pre className="whitespace-pre-wrap rounded-lg bg-bg-elevated p-4 text-xs text-text-secondary leading-relaxed">
-                                        {run.finalReport}
-                                    </pre>
-                                </div>
-                            </Panel>
-                        )}
-
-                        {/* Findings */}
-                        {run.aggregatedFindings.length > 0 && (
-                            <Panel className="p-4">
-                                <h2 className="mb-4 text-sm font-semibold text-text-primary">Findings ({run.aggregatedFindings.length})</h2>
-                                <div className="space-y-4">
-                                    {run.aggregatedFindings.map((finding, idx) => (
-                                        <div key={idx} className="rounded-lg border border-border-subtle bg-bg-surface p-3">
-                                            <div className="flex items-start justify-between">
-                                                <h3 className="text-sm font-medium">{finding.type} Finding</h3>
-                                                <span className={`rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase ${finding.type === "BLOQUANT" ? "bg-status-error-bg text-status-error-text" :
-                                                    finding.type === "WARNING" ? "bg-zinc-500/10 text-zinc-400" :
-                                                        "bg-zinc-400/10 text-zinc-300"
-                                                    }`}>
-                                                    {finding.type}
-                                                </span>
-                                            </div>
-                                            <p className="mt-1 text-xs text-text-muted">{finding.description}</p>
-                                            {finding.file && (
-                                                <div className="mt-2 text-[10px] font-mono text-text-muted">
-                                                    {finding.file}{finding.lineStart ? `:${finding.lineStart}` : ""}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            </Panel>
-                        )}
-                    </div>
-
-                    <div className="space-y-4">
-                        {/* Insights */}
+                        {/* Cross-Stage Insights */}
                         {run.crossStageInsights.length > 0 && (
                             <Panel className="p-4">
                                 <h2 className="mb-4 text-sm font-semibold text-text-primary">Cross-Stage Insights</h2>
                                 <div className="space-y-3">
                                     {run.crossStageInsights.map((insight, idx) => (
                                         <div key={idx} className="rounded-md border border-border-subtle p-3">
-                                            <div className="text-xs font-medium">{insight.title}</div>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+                                                    insight.priority === "CRITICAL" ? "bg-red-500/15 text-red-400" :
+                                                    insight.priority === "HIGH" ? "bg-amber-500/15 text-amber-400" :
+                                                    "bg-zinc-400/10 text-zinc-400"
+                                                }`}>
+                                                    {insight.type}
+                                                </span>
+                                                <span className="text-xs font-medium text-text-primary">{insight.title}</span>
+                                            </div>
                                             <p className="mt-1 text-[10px] text-text-muted">{insight.description}</p>
                                         </div>
                                     ))}
@@ -508,14 +551,140 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                     <span className="text-text-muted">Total Stages</span>
                                     <span className="text-text-secondary">{automation.stages.length}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-text-muted">Last Active Stage</span>
-                                    <span className="text-text-secondary"># {run.currentStageIndex + 1}</span>
-                                </div>
+                                {run.metadata?.totalDuration && (
+                                    <div className="flex justify-between">
+                                        <span className="text-text-muted">Total Duration</span>
+                                        <span className="text-text-secondary">{(run.metadata.totalDuration / 1000 / 60).toFixed(1)}m</span>
+                                    </div>
+                                )}
                             </div>
                         </Panel>
                     </div>
-                </div>
+                )}
+
+                {/* STAGES TAB */}
+                {activeTab === "stages" && (
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-sm font-semibold text-text-primary">Stage Outputs</h2>
+                            <span className="text-[10px] text-text-muted">{automation.stages.length} stages</span>
+                        </div>
+                        {automation.stages.map((stage, index) => {
+                            const stageResult = stageResults[index];
+                            const isExpanded = expandedStages.has(index);
+                            const sessionId = run.sessionIds?.[index];
+                            const currentIndex = Math.min(run.currentStageIndex, Math.max(automation.stages.length - 1, 0));
+                            const isCompleted = run.status === "COMPLETED" || index < currentIndex;
+                            const stageStatus: AutomationStatus = isCompleted ? "COMPLETED" : "PENDING";
+                            const hasOutput = stageResult?.rawOutput && stageResult.rawOutput.length > 0;
+
+                            return (
+                                <Panel key={stage.id} className="overflow-hidden">
+                                    {/* Stage header */}
+                                    <button
+                                        onClick={() => toggleStage(index)}
+                                        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-state-hover transition"
+                                    >
+                                        {isExpanded ? <ChevronDown className="h-4 w-4 text-text-muted flex-none" /> : <ChevronRight className="h-4 w-4 text-text-muted flex-none" />}
+                                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-elevated text-[10px] font-bold flex-none">
+                                            {isCompleted ? <span className="text-status-success-text">✓</span> : index + 1}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="text-sm font-medium text-text-primary truncate">{stage.name}</span>
+                                                <div className="flex items-center gap-2 flex-none">
+                                                    {stageResult?.duration && (
+                                                        <span className="flex items-center gap-0.5 text-[10px] text-text-muted">
+                                                            <Clock className="h-2.5 w-2.5" />
+                                                            {(stageResult.duration / 1000 / 60).toFixed(1)}m
+                                                        </span>
+                                                    )}
+                                                    {(stageResult?.findingsCount ?? 0) > 0 && (
+                                                        <span className="rounded bg-zinc-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-400">
+                                                            {stageResult!.findingsCount} findings
+                                                        </span>
+                                                    )}
+                                                    <StatusBadge status={stageResult?.success ? "COMPLETED" : stageResult?.error ? "FAILED" : stageStatus} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </button>
+
+                                    {/* Stage content */}
+                                    {isExpanded && (
+                                        <div className="border-t border-border-subtle">
+                                            {/* Action buttons */}
+                                            <div className="flex items-center gap-2 px-4 py-2 bg-bg-elevated/30 border-b border-border-subtle">
+                                                {sessionId && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="secondary"
+                                                        onClick={() => setSelectedStage({
+                                                            id: stage.id,
+                                                            name: stage.name,
+                                                            sessionId,
+                                                            status: stageStatus
+                                                        })}
+                                                    >
+                                                        View Execution Logs
+                                                    </Button>
+                                                )}
+                                                {stageResult?.error && (
+                                                    <span className="text-[10px] text-status-error-text">Error: {stageResult.error}</span>
+                                                )}
+                                            </div>
+
+                                            {/* Raw output rendered as markdown */}
+                                            {hasOutput ? (
+                                                <div className="px-4 py-4 max-h-[600px] overflow-y-auto scrollbar-elegant">
+                                                    <ReportMarkdownRenderer content={stageResult!.rawOutput!} />
+                                                </div>
+                                            ) : (
+                                                <div className="px-4 py-6 text-center text-xs text-text-muted">
+                                                    {stageResult ? "No output captured for this stage." : "Stage has not been executed yet."}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </Panel>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {/* FINDINGS TAB */}
+                {activeTab === "findings" && (
+                    <FindingsExplorer
+                        findings={run.aggregatedFindings}
+                        stages={automation.stages.map((s) => ({ id: s.id, name: s.name }))}
+                    />
+                )}
+
+                {/* REPORT TAB */}
+                {activeTab === "report" && (
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-sm font-semibold text-text-primary">Final Report</h2>
+                            {run.finalReport && (
+                                <Button size="sm" variant="secondary" onClick={handleExportMarkdown}>
+                                    <Download className="h-3.5 w-3.5 mr-1" />
+                                    Export Markdown
+                                </Button>
+                            )}
+                        </div>
+                        {run.finalReport ? (
+                            <Panel className="p-6">
+                                <ReportMarkdownRenderer content={run.finalReport} />
+                            </Panel>
+                        ) : (
+                            <Panel className="p-8 text-center">
+                                <div className="text-sm text-text-muted">
+                                    {run.status === "COMPLETED" ? "No report was generated for this run." : "Report will be available after all stages complete."}
+                                </div>
+                            </Panel>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -58,9 +58,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   // Allow continuing completed, failed, paused, or cancelled runs directly.
   // For any other status (RUNNING, PENDING): if they've been in that state for
-  // > 30 seconds, consider them stale and force-complete them so the user can
+  // > 5 seconds, consider them stale and force-complete them so the user can
   // continue the conversation.
-  const STALE_RUN_MS = 30 * 1000; // 30 seconds (reduced from 2 min for better UX)
+  const STALE_RUN_MS = 5 * 1000; // 5 seconds (reduced from 30s for better UX)
   const allowedStatuses = ["COMPLETED", "FAILED", "PAUSED", "CANCELLED"];
 
   if (!allowedStatuses.includes(run.status)) {
