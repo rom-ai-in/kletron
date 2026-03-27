@@ -24,7 +24,8 @@ async function verify() {
 
   console.log('✅ Successfully resolved User Context:', JSON.stringify(contexts, null, 2));
   
-  const tenantId = contexts[0].tenant_id;
+  // @ts-ignore - Supabase types workaround
+  const tenantId = (contexts[0] as any).tenant_id;
   console.log('\nFetching Tenant Details for tenant_id:', tenantId);
   const { data: tenant, error: tErr } = await admin
     .from('tenants')

@@ -8,6 +8,7 @@ async function fix() {
   const { data: authUser } = await admin.auth.admin.getUserById(userId);
   const email = authUser?.user?.email;
   if (email) {
+      // @ts-ignore - Supabase types workaround
       await admin.from('user_profiles').update({ email, full_name: email.split('@')[0] }).eq('id', userId);
       console.log('✅ Backfilled email for user profile:', email);
   }

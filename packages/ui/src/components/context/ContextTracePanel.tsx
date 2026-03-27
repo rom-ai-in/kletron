@@ -121,13 +121,13 @@ export function ContextTracePanel() {
                         <div className="flex justify-between items-start mb-2">
                             <div className="flex items-center gap-2 min-w-0">
                                 <div className="p-1 rounded bg-status-info-bg text-status-info-text shrink-0">
-                                    {item.node.type === "symbol" ? <Hash size={12} /> : <FileText size={12} />}
+                                    {item.type === "symbol" ? <Hash size={12} /> : <FileText size={12} />}
                                 </div>
                                 <span
                                     className="text-xs font-semibold truncate max-w-[180px] text-text-primary"
-                                    title={item.node.id}
+                                    title={item.id}
                                 >
-                                    {item.node.label.split("/").pop()}
+                                    {item.label.split("/").pop()}
                                 </span>
                             </div>
                             <span
@@ -143,8 +143,8 @@ export function ContextTracePanel() {
                         </div>
 
                         {/* Full Path */}
-                        <p className="text-[10px] text-text-muted font-mono truncate mb-2" title={item.node.label}>
-                            {item.node.label}
+                        <p className="text-[10px] text-text-muted font-mono truncate mb-2" title={item.label}>
+                            {item.label}
                         </p>
 
                         {/* Reasons */}
