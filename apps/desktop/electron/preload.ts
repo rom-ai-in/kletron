@@ -85,12 +85,13 @@ const api = {
   gitCommitStaged: (message: string, cwd?: string): Promise<string> => ipcRenderer.invoke("git:commitStaged", message, cwd),
   gitPush: (remote?: string, branch?: string, cwd?: string): Promise<string> => ipcRenderer.invoke("git:push", remote, branch, cwd),
   gitCreatePR: (title: string, body?: string, base?: string, cwd?: string): Promise<{ url: string; number: number }> => ipcRenderer.invoke("git:createPR", title, body, base, cwd),
+  gitDiffNumstat: (cwd?: string): Promise<{ additions: number; deletions: number }> => ipcRenderer.invoke("git:diffNumstat", cwd),
   // Command Center
   pickFile: (): Promise<string[]> => ipcRenderer.invoke("app:pickFile"),
   captureScreenshot: (): Promise<string | null> => ipcRenderer.invoke("app:captureScreenshot"),
   popOutThread: (threadId: string, title: string): Promise<number> => ipcRenderer.invoke("app:popOutThread", { threadId, title }),
 };
 
-contextBridge.exposeInMainWorld("numezis", api);
+contextBridge.exposeInMainWorld("kletron", api);
 
-export type NumezisAPI = typeof api;
+export type KletronAPI = typeof api;

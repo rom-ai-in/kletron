@@ -1,11 +1,11 @@
 /**
- * Numezis Design System - Main Entry Point
+ * Kletron Design System - Main Entry Point
  *
  * Re-exports all components, tokens, and types.
- * Import from '@numezis/ui' for convenient access.
+ * Import from '@kletron/ui' for convenient access.
  *
  * @example
- * import { Button, Badge, tokens } from '@numezis/ui';
+ * import { Button, Badge, tokens } from '@kletron/ui';
  */
 
 // Design tokens

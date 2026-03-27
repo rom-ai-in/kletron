@@ -1,8 +1,8 @@
 import type { ObjectId } from "mongodb";
-import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
-import type { TokenUsage, TokenUsageSummary } from "@numezis/shared/tokenUsageTypes";
+import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
+import type { TokenUsage, TokenUsageSummary } from "@kletron/shared/tokenUsageTypes";
 
-export type { TokenUsage, TokenUsageSummary } from "@numezis/shared/tokenUsageTypes";
+export type { TokenUsage, TokenUsageSummary } from "@kletron/shared/tokenUsageTypes";
 
 /**
  * Create a zero-initialized TokenUsage object

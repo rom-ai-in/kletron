@@ -86,7 +86,7 @@ export async function getCheckpointSaver(): Promise<MongoDBSaver> {
             const dbName =
                 process.env.MONGODB_DB ||
                 process.env.MONGODB_DB_NAME ||
-                "numezis_coder";
+                "kletron";
 
             _saver = new MongoDBSaver({
                 client: client as any,
@@ -194,7 +194,7 @@ export async function deleteThreadCheckpoints(runId: string): Promise<void> {
         const dbName =
             process.env.MONGODB_DB ||
             process.env.MONGODB_DB_NAME ||
-            "numezis_coder";
+            "kletron";
         const db = client.db(dbName);
 
         // MongoDBSaver uses two collections by default:
@@ -257,7 +257,7 @@ export async function ensureCheckpointIndexes(): Promise<void> {
         const dbName =
             process.env.MONGODB_DB ||
             process.env.MONGODB_DB_NAME ||
-            "numezis_coder";
+            "kletron";
         const db = client.db(dbName);
 
         // The MongoDBSaver stores a `created_at` (or `updated_at`) timestamp

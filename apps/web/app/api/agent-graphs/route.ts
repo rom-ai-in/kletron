@@ -2,13 +2,13 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { agentGraphService } from "@numezis/server/services/agentGraphService";
-import { topoSortAgentGraph } from "@numezis/server/services/agentGraphTopo";
-import { validateCondition } from "@numezis/server/services/agentGraphConditions";
-import { resolveExecutionMode } from "@numezis/server/services/agentGraphRuntime";
-import { nodeOutputSchemaRegistry } from "@numezis/shared/nodeOutputSchemas";
-import { allMcpTools } from "@numezis/agent-core/tools/mcpTools";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { agentGraphService } from "@kletron/server/services/agentGraphService";
+import { topoSortAgentGraph } from "@kletron/server/services/agentGraphTopo";
+import { validateCondition } from "@kletron/server/services/agentGraphConditions";
+import { resolveExecutionMode } from "@kletron/server/services/agentGraphRuntime";
+import { nodeOutputSchemaRegistry } from "@kletron/shared/nodeOutputSchemas";
+import { allMcpTools } from "@kletron/agent-core/tools/mcpTools";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 // Allowed tool names for agent graph nodes.
 // Includes all MCP-backed tools plus special in-process tools like `write_todos`

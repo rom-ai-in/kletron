@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { topoSortAgentGraph } from "@numezis/server/services/agentGraphTopo";
+import { topoSortAgentGraph } from "@kletron/server/services/agentGraphTopo";
 
 describe("agentGraphTopo", () => {
     it("returns a valid topological order for a simple DAG", () => {

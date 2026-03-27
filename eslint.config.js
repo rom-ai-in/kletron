@@ -72,15 +72,15 @@ export default [
         "warn",
         {
           selector: "JSXOpeningElement[name.name='button']",
-          message: "Use <Button> from @numezis/ui instead of raw <button>.",
+          message: "Use <Button> from @kletron/ui instead of raw <button>.",
         },
         {
           selector: "JSXOpeningElement[name.name='input']",
-          message: "Use <Input> or <PasswordInput> from @numezis/ui instead of raw <input>.",
+          message: "Use <Input> or <PasswordInput> from @kletron/ui instead of raw <input>.",
         },
         {
           selector: "JSXOpeningElement[name.name='select']",
-          message: "Use <Selector> from @numezis/ui instead of raw <select>.",
+          message: "Use <Selector> from @kletron/ui instead of raw <select>.",
         },
         {
           selector: "Literal[value=/(?:^|\\s)(?:bg|text|border|ring|from|via|to|divide|placeholder|decoration)-(?:red|green|blue|amber|emerald|rose|orange|yellow|purple|pink|teal|cyan|lime|indigo|violet|fuchsia|sky)-\\d/]",

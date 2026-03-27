@@ -1,4 +1,4 @@
-import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
+import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SKILL DEFINITION TYPES

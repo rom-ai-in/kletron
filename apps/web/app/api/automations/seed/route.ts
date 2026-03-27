@@ -1,8 +1,8 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import { automationExecutor } from "@numezis/server/services/automationExecutor";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
+import { automationExecutor } from "@kletron/server/services/automationExecutor";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 /**
  * POST /api/automations/seed

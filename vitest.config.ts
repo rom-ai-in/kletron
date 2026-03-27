@@ -4,11 +4,11 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
     resolve: {
         alias: {
-            '@numezis/shared': path.resolve(__dirname, 'packages/shared/src'),
-            '@numezis/ui': path.resolve(__dirname, 'packages/ui/src'),
-            '@numezis/server': path.resolve(__dirname, 'packages/server/src'),
-            '@numezis/agent-core': path.resolve(__dirname, 'packages/agent-core/src'),
-            '@numezis/mcp-client': path.resolve(__dirname, 'packages/mcp-client/src'),
+            '@kletron/shared': path.resolve(__dirname, 'packages/shared/src'),
+            '@kletron/ui': path.resolve(__dirname, 'packages/ui/src'),
+            '@kletron/server': path.resolve(__dirname, 'packages/server/src'),
+            '@kletron/agent-core': path.resolve(__dirname, 'packages/agent-core/src'),
+            '@kletron/mcp-client': path.resolve(__dirname, 'packages/mcp-client/src'),
         },
     },
     test: {

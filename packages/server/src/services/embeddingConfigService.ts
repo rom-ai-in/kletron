@@ -17,7 +17,7 @@ import {
     OllamaEmbeddingConfigSchema,
     EmbeddingProviderType,
     EMBEDDING_PROVIDERS,
-} from "@numezis/shared/schemas/embeddingConfig.schema";
+} from "@kletron/shared/schemas/embeddingConfig.schema";
 import { config } from "../config";
 
 const COLLECTION_NAME = "embedding_configs";

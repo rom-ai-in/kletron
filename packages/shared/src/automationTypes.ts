@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
-import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
-import type { TokenUsage, TokenUsageSummary } from "@numezis/shared/tokenUsageTypes";
+import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
+import type { TokenUsage, TokenUsageSummary } from "@kletron/shared/tokenUsageTypes";
 
 /**
  * Automation execution status
@@ -9,6 +9,12 @@ export type AutomationStatus = "PENDING" | "RUNNING" | "PAUSED" | "COMPLETED" | 
 
 /** @deprecated Use AutomationStatus instead */
 export type ChainStatus = AutomationStatus;
+
+/**
+ * Structured error classification for failed automation stages.
+ * Used for diagnostics, notifications, and retry decisions.
+ */
+export type AutomationErrorKind = "LLM_TIMEOUT" | "LLM_ERROR" | "TOOL_BLOCKED" | "EVIDENCE_GATE" | "UNKNOWN";
 
 /**
  * Graph ID — references an AgentGraphDefinition stored in MongoDB.
@@ -36,6 +42,8 @@ export interface AutomationStageConfig {
     contextFromPreviousStages?: string[];
     /** JavaScript expression to evaluate; skip stage if true */
     skipIf?: string;
+    /** Stage-level timeout in milliseconds (default: 600000 = 10 min) */
+    timeoutMs?: number;
     /** Retry failed stage with fallback LLM */
     retryOnFailure?: boolean;
     /** Max retry attempts (default: 3) */
@@ -285,6 +293,35 @@ export interface Insight {
 }
 
 /**
+ * Persisted summary of a single stage execution result.
+ * Stored on the AutomationRun document for frontend display.
+ */
+export interface PersistedStageResult {
+    /** Stage ID */
+    stageId: string;
+    /** Stage name */
+    stageName: string;
+    /** Audit session ID */
+    sessionId: string;
+    /** Whether stage succeeded */
+    success: boolean;
+    /** Error message if failed */
+    error?: string;
+    /** Structured error classification */
+    errorKind?: AutomationErrorKind;
+    /** Number of findings from this stage */
+    findingsCount: number;
+    /** Number of claims from this stage */
+    claimsCount: number;
+    /** Number of tasks from this stage */
+    tasksCount: number;
+    /** Raw report/output text from the workflow (rendered as markdown in the UI) */
+    rawOutput?: string;
+    /** Execution duration in milliseconds */
+    duration: number;
+}
+
+/**
  * Main automation entity stored in MongoDB
  * (Legacy collection name: audit_chains)
  */
@@ -372,6 +409,8 @@ export interface AutomationRun {
     crossStageInsights: Insight[];
     /** Final aggregated report */
     finalReport?: string;
+    /** Per-stage execution results for structured display */
+    stageResults?: PersistedStageResult[];
     /** Execution metadata */
     metadata?: {
         totalDuration: number;
@@ -402,6 +441,8 @@ export interface StageResult {
     success: boolean;
     /** Error message if failed */
     error?: string;
+    /** Structured error classification */
+    errorKind?: AutomationErrorKind;
     /** Findings from this stage */
     findings: Finding[];
     /** Raw claims from investigation phase */
@@ -461,6 +502,12 @@ export interface AutomationProgress {
     status: "PENDING" | "RUNNING" | "SKIPPED" | "COMPLETED" | "FAILED";
     /** Current findings count */
     findings?: Finding[];
+    /** Error message when status is FAILED */
+    error?: string;
+    /** Structured error classification */
+    errorKind?: AutomationErrorKind;
+    /** Human-readable stage name */
+    stageName?: string;
 }
 
 /** @deprecated Use AutomationProgress instead */

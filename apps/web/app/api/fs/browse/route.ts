@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 /**
  * GET /api/fs/browse?path=/some/dir

@@ -1,9 +1,9 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import { businessAnalystService } from "@numezis/server/services/businessAnalystService";
-import { MarketAnalysisCreateSchema } from "@numezis/shared/businessAnalystTypes";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { businessAnalystService } from "@kletron/server/services/businessAnalystService";
+import { MarketAnalysisCreateSchema } from "@kletron/shared/businessAnalystTypes";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 /**
  * GET /api/business-analyst/market-analysis

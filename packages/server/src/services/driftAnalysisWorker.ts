@@ -1,16 +1,16 @@
 import { ObjectId } from "mongodb";
-import { getDb } from "@numezis/server/lib/db";
-import { resolveResolvedLlmInfo, type LlmSelection, getChatModel } from "@numezis/server/llm";
-import { DEFAULT_DRIFT_STAGES } from "@numezis/shared/driftStages";
-import { McpClient } from "@numezis/mcp-client/client";
-import { extractJsonObject } from "@numezis/server/lib/jsonExtract";
+import { getDb } from "@kletron/server/lib/db";
+import { resolveResolvedLlmInfo, type LlmSelection, getChatModel } from "@kletron/server/llm";
+import { DEFAULT_DRIFT_STAGES } from "@kletron/shared/driftStages";
+import { McpClient } from "@kletron/mcp-client/client";
+import { extractJsonObject } from "@kletron/server/lib/jsonExtract";
 import { z } from "zod";
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import type { ResolvedLlmInfo } from "@numezis/server/llm";
-import { getDiffForCommit } from "@numezis/server/services/gitLocalService";
-import { getWorkspaceByIdUnsafe } from "@numezis/server/services/workspaceService";
-import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
+import type { ResolvedLlmInfo } from "@kletron/server/llm";
+import { getDiffForCommit } from "@kletron/server/services/gitLocalService";
+import { getWorkspaceByIdUnsafe } from "@kletron/server/services/workspaceService";
+import { runWithWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 
 export type DriftJobStatus = "queued" | "running" | "success" | "error" | "cancelled";
 

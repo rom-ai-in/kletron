@@ -1,7 +1,7 @@
 "use client";
 
-import type { AutomationDefinition, AutomationStatus, AutomationTriggerType } from "@numezis/shared/automationTypes";
-import { Panel, Button } from "@numezis/ui/components/design-system";
+import type { AutomationDefinition, AutomationStatus, AutomationTriggerType } from "@kletron/shared/automationTypes";
+import { Panel, Button } from "@kletron/ui/components/design-system";
 
 interface AutomationCardProps {
     automation: AutomationDefinition;

@@ -1,7 +1,7 @@
 "use client";
 
 import { Brain, Cpu, Database } from "lucide-react";
-import { Tabs, TabsList, TabTrigger, TabContent } from "@numezis/ui/components/design-system";
+import { Tabs, TabsList, TabTrigger, TabContent } from "@kletron/ui/components/design-system";
 import { LlmConfigView } from "./LlmConfigView";
 import { EmbeddingConfigView } from "./EmbeddingConfigView";
 

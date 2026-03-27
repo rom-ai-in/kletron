@@ -1,7 +1,7 @@
 "use client";
 
-import { BADashboardView } from "@numezis/ui/components/ba/BADashboardView";
-import { RequireWorkspace } from "@numezis/ui/components/workspace/RequireWorkspace";
+import { BADashboardView } from "@kletron/ui/components/ba/BADashboardView";
+import { RequireWorkspace } from "@kletron/ui/components/workspace/RequireWorkspace";
 
 export default function BusinessAnalystDashboardPage() {
     return (

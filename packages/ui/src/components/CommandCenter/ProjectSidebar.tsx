@@ -59,6 +59,7 @@ export interface ProjectSidebarProps {
   reviewQueueCount?: number;
   onReviewQueueClick?: () => void;
   className?: string;
+  style?: React.CSSProperties;
 }
 
 function StatusDot({ status }: { status: ThreadLiveStatus }) {
@@ -104,6 +105,7 @@ export function ProjectSidebar({
   reviewQueueCount = 0,
   onReviewQueueClick,
   className = '',
+  style,
 }: ProjectSidebarProps) {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
@@ -145,7 +147,7 @@ export function ProjectSidebar({
   }
 
   return (
-    <div className={`flex flex-col h-full w-[260px] flex-shrink-0 glass-sidebar ${className}`}>
+    <div className={`flex flex-col h-full flex-shrink-0 glass-sidebar ${className}`} style={{ width: 260, ...style }}>
       {/* ── Top section: Review queue + Add project ── */}
       <div className="flex flex-col border-b border-border-subtle">
         {/* Review Queue */}
@@ -415,17 +417,6 @@ export function ProjectSidebar({
         )}
       </div>
 
-      {/* Footer */}
-      <div className="border-t border-white/[0.06] px-3 py-2">
-        <button
-          type="button"
-          onClick={onSettings}
-          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] text-text-muted hover:bg-white/[0.04] hover:text-text-primary transition-all duration-150"
-        >
-          <Settings className="h-3.5 w-3.5" />
-          Settings
-        </button>
-      </div>
     </div>
   );
 }

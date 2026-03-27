@@ -1,12 +1,12 @@
 /**
- * Numezis Design System - Color Tokens
+ * Kletron Design System - Color Tokens
  * 
  * These TypeScript constants mirror the CSS variables defined in globals.css.
  * Use these for runtime color access or when CSS vars aren't available.
  * 
  * @example
  * // For inline styles (avoid if possible)
- * import { colors } from '@numezis/ui/tokens';
+ * import { colors } from '@kletron/ui/tokens';
  * <div style={{ background: colors.bgSurface }} />
  * 
  * // Prefer Tailwind classes
@@ -156,16 +156,16 @@ export const ide = {
 } as const;
 
 // =============================================================================
-// NUMEZIS BRAND COLORS
+// KLETRON BRAND COLORS
 // =============================================================================
 
 export const brand = {
-    /** #3994BC - Numezis teal accent */
-    accent: 'var(--numezis-accent)',
+    /** #3994BC - Kletron teal accent */
+    accent: 'var(--kletron-accent)',
     /** #3E9BC4 - Hover state */
-    accentHover: 'var(--numezis-accent-hover)',
+    accentHover: 'var(--kletron-accent-hover)',
     /** #3994BC26 - Muted/background accent */
-    accentMuted: 'var(--numezis-accent-muted)',
+    accentMuted: 'var(--kletron-accent-muted)',
 } as const;
 
 // =============================================================================

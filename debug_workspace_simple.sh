@@ -4,7 +4,7 @@ echo "=== Checking MongoDB for workspaces ==="
 echo ""
 
 echo "1. Checking workspaces collection..."
-mongosh "mongodb://localhost:27017/numezis_coder" --eval '
+mongosh "mongodb://localhost:27017/kletron" --eval '
   const workspaces = await db.workspaces.find({}).toArray();
   console.log("Total workspaces:", workspaces.length);
   workspaces.forEach((w, i) => {
@@ -20,7 +20,7 @@ mongosh "mongodb://localhost:27017/numezis_coder" --eval '
 
 echo ""
 echo "2. Checking workspace_state collection..."
-mongosh "mongodb://localhost:27017/numezis_coder" --eval '
+mongosh "mongodb://localhost:27017/kletron" --eval '
   const state = await db.workspace_state.find({}).toArray();
   console.log("State documents:", state.length);
   state.forEach((s, i) => {
@@ -34,7 +34,7 @@ mongosh "mongodb://localhost:27017/numezis_coder" --eval '
 
 echo ""
 echo "3. Checking workspace_configs collection..."
-mongosh "mongodb://localhost:27017/numezis_coder" --eval '
+mongosh "mongodb://localhost:27017/kletron" --eval '
   const configs = await db.workspace_configs.find({}).toArray();
   console.log("Config documents:", configs.length);
   configs.forEach((c, i) => {

@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PlayCircle, Trash2 } from "lucide-react";
 
-import { AgentGraphEditor } from "@numezis/ui/components/agentGraphs/AgentGraphEditor";
-import { Button, Skeleton } from "@numezis/ui/components/design-system";
+import { AgentGraphEditor } from "@kletron/ui/components/agentGraphs/AgentGraphEditor";
+import { Button, Skeleton } from "@kletron/ui/components/design-system";
 
 type AgentGraphDto = {
     _id?: string;

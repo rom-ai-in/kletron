@@ -1,7 +1,7 @@
 // src/__tests__/services/stripeService.test.ts
 // Unit tests for stripe service (non-API functions)
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getPriceId, getPlanFromPriceId } from '@numezis/server/services/stripeService';
+import { getPriceId, getPlanFromPriceId } from '@kletron/server/services/stripeService';
 
 describe('stripeService', () => {
     describe('getPriceId', () => {

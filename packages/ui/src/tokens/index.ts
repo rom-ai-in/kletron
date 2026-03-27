@@ -1,11 +1,11 @@
 /**
- * Numezis Design System - Token Exports
+ * Kletron Design System - Token Exports
  * 
  * Central barrel file for all design tokens.
  * Use this for consistent imports across the application.
  * 
  * @example
- * import { colors, spacing, typography, motion } from '@numezis/ui/tokens';
+ * import { colors, spacing, typography, motion } from '@kletron/ui/tokens';
  * 
  * // Access specific color values
  * const bg = colors.bgSurface;       // CSS var: var(--bg-surface)

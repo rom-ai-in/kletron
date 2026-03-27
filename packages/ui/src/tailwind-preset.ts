@@ -1,12 +1,12 @@
 /**
- * Numezis Design System - Shared Tailwind CSS Preset
+ * Kletron Design System - Shared Tailwind CSS Preset
  *
  * Single source of truth for Tailwind theme configuration.
  * Both apps/web and apps/desktop extend this preset.
  *
  * @example
  * // tailwind.config.js
- * import preset from '@numezis/ui/tailwind-preset';
+ * import preset from '@kletron/ui/tailwind-preset';
  * export default { presets: [preset], content: [...] };
  */
 import type { Config } from 'tailwindcss';
@@ -128,9 +128,9 @@ const preset: Partial<Config> = {
 
         // Brand colors
         brand: {
-          accent: 'var(--numezis-accent)',
-          accentHover: 'var(--numezis-accent-hover)',
-          accentMuted: 'var(--numezis-accent-muted)',
+          accent: 'var(--kletron-accent)',
+          accentHover: 'var(--kletron-accent-hover)',
+          accentMuted: 'var(--kletron-accent-muted)',
         },
 
         // Glass / frosted surface colors

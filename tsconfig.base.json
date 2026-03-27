@@ -16,18 +16,18 @@
     "isolatedModules": true,
     "baseUrl": ".",
     "paths": {
-      "@numezis/shared": ["packages/shared/src/index.ts"],
-      "@numezis/shared/*": ["packages/shared/src/*"],
-      "@numezis/ui": ["packages/ui/src/index.ts"],
-      "@numezis/ui/*": ["packages/ui/src/*"],
-      "@numezis/server": ["packages/server/src/index.ts"],
-      "@numezis/server/*": ["packages/server/src/*"],
-      "@numezis/agent-core": ["packages/agent-core/src/index.ts"],
-      "@numezis/agent-core/*": ["packages/agent-core/src/*"],
-      "@numezis/mcp-client": ["packages/mcp-client/src/index.ts"],
-      "@numezis/mcp-client/*": ["packages/mcp-client/src/*"],
-      "@numezis/bridge": ["packages/bridge/src/index.ts"],
-      "@numezis/bridge/*": ["packages/bridge/src/*"]
+      "@kletron/shared": ["packages/shared/src/index.ts"],
+      "@kletron/shared/*": ["packages/shared/src/*"],
+      "@kletron/ui": ["packages/ui/src/index.ts"],
+      "@kletron/ui/*": ["packages/ui/src/*"],
+      "@kletron/server": ["packages/server/src/index.ts"],
+      "@kletron/server/*": ["packages/server/src/*"],
+      "@kletron/agent-core": ["packages/agent-core/src/index.ts"],
+      "@kletron/agent-core/*": ["packages/agent-core/src/*"],
+      "@kletron/mcp-client": ["packages/mcp-client/src/index.ts"],
+      "@kletron/mcp-client/*": ["packages/mcp-client/src/*"],
+      "@kletron/bridge": ["packages/bridge/src/index.ts"],
+      "@kletron/bridge/*": ["packages/bridge/src/*"]
     }
   }
 }

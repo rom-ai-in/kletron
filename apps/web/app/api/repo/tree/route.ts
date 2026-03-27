@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { existsSync } from "node:fs";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 export async function GET(req: NextRequest) {
     const auth = await requireAppRouteAuth(req);

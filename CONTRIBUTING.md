@@ -14,7 +14,7 @@
 ## Boundaries
 - UI code must not import runtime server modules (types-only imports are fine).
 - Shared package stays pure (no filesystem, network, or DB code).
-- Prefer importing from `@numezis/*` aliases instead of deep relative paths.
+- Prefer importing from `@kletron/*` aliases instead of deep relative paths.
 
 ## Scripts
 - `npm run dev` launches MCP server + LangGraph dev + web UI.

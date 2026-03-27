@@ -1,8 +1,8 @@
 import { ObjectId } from "mongodb";
 import { randomBytes } from "node:crypto";
 import { getDb } from "../lib/db";
-import { runWorkflow } from "@numezis/agent-core/workflows";
-import { AgentWorkflowAbortError } from "@numezis/agent-core/reactAgentRunner";
+import { runWorkflow } from "@kletron/agent-core/workflows";
+import { AgentWorkflowAbortError } from "@kletron/agent-core/reactAgentRunner";
 import { auditService } from "./auditService";
 import { getWorkspaceByIdUnsafe, listAllWorkspaces } from "./workspaceService";
 import type {
@@ -16,13 +16,30 @@ import type {
     Insight,
     AutomationStageConfig,
     AutomationRun,
-} from "@numezis/shared/automationTypes";
-import type { AgentWorkflowAbortReason } from "@numezis/shared/types";
-import type { Claim as WorkflowClaim, Task as WorkflowTask, AgentWorkflowResult, AgentEvent } from "@numezis/shared/types";
-import { computeNextRun } from "@numezis/shared/cronUtils";
+    AutomationErrorKind,
+    PersistedStageResult,
+} from "@kletron/shared/automationTypes";
+import type { AgentWorkflowAbortReason } from "@kletron/shared/types";
+import type { Claim as WorkflowClaim, Task as WorkflowTask, AgentWorkflowResult, AgentEvent } from "@kletron/shared/types";
+import { computeNextRun } from "@kletron/shared/cronUtils";
 
 const COLLECTION_NAME = "audit_chains"; // Legacy collection name - kept for backward compatibility
 const RUNS_COLLECTION = "audit_runs"; // Legacy collection name - kept for backward compatibility
+
+/** Default per-stage timeout: 10 minutes. Override per-stage via `stage.timeoutMs`. */
+const DEFAULT_STAGE_TIMEOUT_MS = 600_000;
+
+/**
+ * Classify a stage error into a structured category for diagnostics and UI.
+ */
+function classifyStageError(error: unknown, blockerReason?: string | null): AutomationErrorKind {
+    if (error instanceof AgentWorkflowAbortError && (error as any).reason === "TIMEOUT") return "LLM_TIMEOUT";
+    const msg = error instanceof Error ? error.message : String(error ?? "");
+    if (/rate.?limit|429|503|502|gateway.?timeout|ECONNRESET|ETIMEDOUT/i.test(msg)) return "LLM_ERROR";
+    if (blockerReason || /tool.*blocked|outside.*configured.*directories|not accessible/i.test(msg)) return "TOOL_BLOCKED";
+    if (/insufficient audit evidence/i.test(msg)) return "EVIDENCE_GATE";
+    return "UNKNOWN";
+}
 
 /**
  * Parse findings from a markdown/text report produced by a conversational agent.
@@ -49,7 +66,11 @@ function parseFindingsFromText(
 
     // Split on numbered items: "### 1)", "1)", "### Finding 1:", etc.
     // Each section runs until the next numbered item or end-of-string.
-    const sectionPattern = /(?:^|\n)(?:#{1,4}\s+)?(?:Finding\s+)?\d+[.):][\s\S]*?(?=\n(?:#{1,4}\s+)?(?:Finding\s+)?\d+[.):]|$)/g;
+    /**
+     * Regex that matches any numbered finding (e.g., "1)", "1.", "Finding 1:")
+     * or bulleted finding (e.g., "- [BLOQUANT]", "* Finding:").
+     */
+    const sectionPattern = /(?:^|\n)(?:#{1,4}\s+)?(?:Finding\s+)?(?:\d+[.):]|[-*]\s+(?:Finding\s+)?|\[[A-Z]+\])[\s\S]*?(?=\n(?:#{1,4}\s+)?(?:Finding\s+)?(?:\d+[.):]|[-*]\s+(?:Finding\s+)?|\[[A-Z]+\])|$)/g;
     const sections = text.match(sectionPattern);
     if (!sections || sections.length === 0) {
         console.info(`[parseFindingsFromText] No numbered sections found in ${text.length}-char report`);
@@ -66,6 +87,7 @@ function parseFindingsFromText(
         const titleClean = firstLine
             .replace(/^#{1,4}\s*/, "")
             .replace(/^(?:Finding\s+)?\d+[.):\s]+/, "")
+            .replace(/^[-*]\s+(?:Finding\s+)?/, "")
             .replace(/\*\*/g, "")
             .trim();
         if (!titleClean) continue;
@@ -168,8 +190,10 @@ function detectToolExecutionBlockers(workflowResult: AgentWorkflowResult, report
     return null;
 }
 
-function parseJsonObject(raw?: string): Record<string, unknown> | null {
-    if (!raw || typeof raw !== "string") return null;
+function parseJsonObject(raw?: string | Record<string, unknown>): Record<string, unknown> | null {
+    if (!raw) return null;
+    if (typeof raw === "object") return raw as Record<string, unknown>;
+    if (typeof raw !== "string") return null;
     try {
         const parsed = JSON.parse(raw);
         return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
@@ -204,12 +228,16 @@ function collectAuditEvidence(workflowResult: AgentWorkflowResult) {
         if (lower === "read_file" || lower === "read_file_range") {
             fileReadOps += 1;
             const args = parseJsonObject(event.toolArgs);
-            const filePath = typeof args?.filePath === "string"
-                ? args.filePath
-                : typeof args?.path === "string"
-                    ? args.path
-                    : "";
-            if (filePath) filesRead.add(filePath);
+            if (args) {
+                const filePath = typeof args.filePath === "string"
+                    ? args.filePath
+                    : typeof args.path === "string"
+                        ? args.path
+                        : "";
+                if (filePath && typeof filePath === "string" && filePath.length > 0) {
+                    filesRead.add(filePath);
+                }
+            }
         }
 
         if (
@@ -218,9 +246,19 @@ function collectAuditEvidence(workflowResult: AgentWorkflowResult) {
             lower === "git_grep" ||
             lower === "structural_search" ||
             lower === "symbols_list" ||
-            lower === "find_symbol"
+            lower === "find_symbol" ||
+            lower === "grep_search" ||
+            lower === "find_by_name"
         ) {
             searchOps += 1;
+            // Also attempt to track unique files from search results if it's a direct file search
+            const args = parseJsonObject(event.toolArgs);
+            if (args && (typeof args.path === "string" || typeof args.filePath === "string")) {
+                const p = (args.path || args.filePath) as string;
+                if (p && !p.includes("*") && !p.includes("?")) { // skip patterns
+                    filesRead.add(p);
+                }
+            }
         }
 
         if (lower === "list_files" || lower === "describe_structure" || lower === "repo_metrics") {
@@ -248,16 +286,41 @@ function evaluateZeroFindingEvidenceGate(params: {
     if (params.findingsCount > 0) return null;
 
     const evidence = collectAuditEvidence(params.workflowResult);
+
+    // Hardcoded thresholds for "lazy agent" detection
+    const thresholds = {
+        toolCalls: 8,
+        structureOps: 1,
+        searchOps: 2,
+        fileReadOps: 3,
+        filesReadUnique: 3,
+    };
+
+    // If result has claims or tasks, it's generally considered credible even with zero findings
+    if (params.claimsCount >= 3 || params.tasksCount >= 2) return null;
+
+    // Detect "Synthesis" or "Recommendation" stages — they naturally perform fewer tool calls
+    // as they synthesize findings from previous stages.
+    const isSynthesisStage = /synthesis|recommendation|aggregate|summary|report/i.test(params.workflowResult.sessionId || "");
+
+    // If the agent made many tool calls (> 20) but they are mostly not file reads,
+    // it's likely not "lazy" (e.g., doing deep research or complex transformations).
+    if (evidence.toolCalls >= 20 && evidence.toolErrors / evidence.toolCalls < 0.2) return null;
+
+    // Be more lenient on fileReadOps if total tool calls are high or it's a synthesis stage
+    const effectiveFilesReadUnique = (evidence.filesReadUnique === 0 && (evidence.fileReadOps >= 5 || isSynthesisStage))
+        ? 3 // Mock pass
+        : evidence.filesReadUnique;
+
     const checks = [
-        evidence.toolCalls >= 8,
-        evidence.structureOps >= 1,
-        evidence.searchOps >= 2,
-        evidence.fileReadOps >= 3 || evidence.filesReadUnique >= 3,
+        evidence.toolCalls >= (isSynthesisStage ? 4 : thresholds.toolCalls),
+        evidence.structureOps >= (isSynthesisStage ? 0 : thresholds.structureOps),
+        evidence.searchOps >= (isSynthesisStage ? 1 : thresholds.searchOps),
+        (evidence.fileReadOps >= (isSynthesisStage ? 1 : thresholds.fileReadOps) || effectiveFilesReadUnique >= thresholds.filesReadUnique),
         evidence.toolErrors <= Math.floor(Math.max(evidence.toolCalls, 1) * 0.4),
     ];
 
-    const hasReasonableSubstance = params.claimsCount >= 3 || params.tasksCount >= 2;
-    const passed = checks.every(Boolean) && hasReasonableSubstance;
+    const passed = checks.every(Boolean);
     if (passed) return null;
 
     return [
@@ -826,7 +889,8 @@ export class AutomationExecutor {
                 await this.updateRunStageIndex(runId, i, run.workspaceId?.toString());
             }
 
-            // Execute stage
+            // Execute stage with timeout
+            const stageTimeoutMs = stage.timeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
             let stageResult: StageResult;
             try {
                 stageResult = await this.executeStage(chain._id!.toString(), stage, results, {
@@ -834,6 +898,7 @@ export class AutomationExecutor {
                     auditSessionId,
                     workspaceId: runWorkspaceId,
                     shouldAbort,
+                    stageTimeoutMs,
                 });
             } catch (error) {
                 if (error instanceof AgentWorkflowAbortError || (error as any)?.name === "AgentWorkflowAbortError") {
@@ -865,7 +930,8 @@ export class AutomationExecutor {
                 }
                 // Convert raw errors to a failed StageResult instead of aborting the pipeline
                 const errorMsg = error instanceof Error ? error.message : String(error);
-                console.error(`[AutomationExecutor] Stage ${stage.id} (${stage.name}) threw an error:`, errorMsg);
+                const errorKind = classifyStageError(error);
+                console.error(`[AutomationExecutor] Stage ${stage.id} (${stage.name}) threw an error [${errorKind}]:`, errorMsg);
                 stageResult = {
                     stageId: stage.id,
                     stageName: stage.name,
@@ -876,6 +942,7 @@ export class AutomationExecutor {
                     tasks: [],
                     duration: Date.now() - startTime,
                     error: errorMsg,
+                    errorKind,
                 };
             }
             results.push(stageResult);
@@ -883,12 +950,17 @@ export class AutomationExecutor {
             // Update run progress
             await this.updateRunStageIndex(runId, i + 1, run.workspaceId?.toString());
 
-            // Notify progress
+            // Notify progress — include error details for failed stages so the UI can display them
             onProgress?.({
                 chainId: chain._id!.toString(),
                 stageIndex: i,
                 status: stageResult.success ? "COMPLETED" : "FAILED",
                 findings: stageResult.findings,
+                ...(stageResult.success ? {} : {
+                    error: stageResult.error,
+                    errorKind: stageResult.errorKind,
+                    stageName: stage.name,
+                }),
             });
 
             // Handle failures — continue to next stage (stages are independent)
@@ -923,12 +995,28 @@ export class AutomationExecutor {
             ? { failedStages: failedStages.map((r) => ({ stageId: r.stageId, stageName: r.stageName, error: r.error })) }
             : {};
 
+        // Build persisted stage results for frontend display
+        const persistedStageResults: PersistedStageResult[] = results.map((r) => ({
+            stageId: r.stageId,
+            stageName: r.stageName,
+            sessionId: r.sessionId,
+            success: r.success,
+            error: r.error,
+            errorKind: r.errorKind,
+            findingsCount: r.findings.length,
+            claimsCount: r.claims.length,
+            tasksCount: r.tasks.length,
+            rawOutput: r.rawOutput,
+            duration: r.duration,
+        }));
+
         // Update final run state — always persist results regardless of failures
         await this.updateRunStatus(runId, finalStatus, {
             endedAt: new Date(),
             aggregatedFindings: aggregation.findings,
             crossStageInsights: aggregation.insights,
             finalReport: aggregation.report,
+            stageResults: persistedStageResults,
             metadata: {
                 totalDuration,
                 totalClaims: results.reduce((sum, r) => sum + r.claims.length, 0),
@@ -970,6 +1058,8 @@ export class AutomationExecutor {
             auditSessionId?: string;
             workspaceId?: string;
             shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
+            /** Per-stage timeout in ms. If elapsed, the stage is aborted with reason TIMEOUT. */
+            stageTimeoutMs?: number;
         }
     ): Promise<StageResult> {
         const startTime = Date.now();
@@ -980,8 +1070,25 @@ export class AutomationExecutor {
             const userPrompt = prepared?.userPrompt ?? this.buildUserPrompt(stage, context);
             const auditSessionId = prepared?.auditSessionId || "";
 
-            console.info(`[AutomationExecutor] Executing stage: ${stage.name} (Graph: ${stage.graphId})`);
+            const stageTimeoutMs = prepared?.stageTimeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
+            console.info(`[AutomationExecutor] Executing stage: ${stage.name} (Graph: ${stage.graphId}, timeout: ${stageTimeoutMs}ms)`);
             console.info(`[AutomationExecutor] Input: ${userPrompt.substring(0, 100)}...`);
+
+            // Build a combined shouldAbort that checks both user-initiated aborts AND stage timeouts
+            const stageDeadline = Date.now() + stageTimeoutMs;
+            const combinedShouldAbort = async (): Promise<AgentWorkflowAbortReason | null> => {
+                // Check user-initiated abort first
+                if (prepared?.shouldAbort) {
+                    const userAbort = await prepared.shouldAbort();
+                    if (userAbort) return userAbort;
+                }
+                // Check stage timeout
+                if (Date.now() >= stageDeadline) {
+                    console.warn(`[AutomationExecutor] Stage ${stage.name} timed out after ${stageTimeoutMs}ms`);
+                    return "TIMEOUT";
+                }
+                return null;
+            };
 
             // Execute the selected graph workflow
             const workflowResult = await runWorkflow(userPrompt, stage.graphId, {
@@ -991,7 +1098,7 @@ export class AutomationExecutor {
                 },
                 workspaceId: prepared?.workspaceId,
                 source: "automation",
-                shouldAbort: prepared?.shouldAbort,
+                shouldAbort: combinedShouldAbort,
                 ...(auditSessionId
                     ? {
                         onUpdate: async (update) => {
@@ -1062,6 +1169,7 @@ export class AutomationExecutor {
                     sessionId: sessionIdForLogs,
                     success: false,
                     error: blockerReason,
+                    errorKind: classifyStageError(new Error(blockerReason), blockerReason),
                     findings: [],
                     claims,
                     tasks,
@@ -1083,6 +1191,7 @@ export class AutomationExecutor {
                     sessionId: sessionIdForLogs,
                     success: false,
                     error: evidenceGateError,
+                    errorKind: "EVIDENCE_GATE" as AutomationErrorKind,
                     findings: [],
                     claims,
                     tasks,
@@ -1104,9 +1213,49 @@ export class AutomationExecutor {
             };
         } catch (error) {
             if (error instanceof AgentWorkflowAbortError || (error as any)?.name === "AgentWorkflowAbortError") {
+                const reason: AgentWorkflowAbortReason = (error as any).reason ?? "PAUSED";
+                // TIMEOUT aborts are stage-level failures — convert to a failed StageResult
+                // instead of re-throwing (which would pause/cancel the entire run).
+                if (reason === "TIMEOUT") {
+                    const timeoutMs = prepared?.stageTimeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
+                    const errorMsg = `Stage "${stage.name}" timed out after ${Math.round(timeoutMs / 1000)}s — the LLM did not complete in time`;
+                    console.error(`[AutomationExecutor] ${errorMsg}`);
+                    if (prepared?.auditSessionId) {
+                        const fallbackResult: AgentWorkflowResult = {
+                            sessionId: prepared.auditSessionId,
+                            timeline: [],
+                            conclusion: "Stage timed out.",
+                            outputs: {
+                                context: {},
+                                target_files: [],
+                                raw_claims: [],
+                                verified_findings: [],
+                                findings: [],
+                                tasks: [],
+                                report: `TIMEOUT: ${errorMsg}`,
+                            },
+                            eventStream: [],
+                        };
+                        await auditService.completeSession(prepared.auditSessionId, fallbackResult, new Error(errorMsg));
+                    }
+                    return {
+                        stageId: stage.id,
+                        stageName: stage.name,
+                        sessionId: prepared?.auditSessionId ?? "",
+                        success: false,
+                        error: errorMsg,
+                        errorKind: "LLM_TIMEOUT" as AutomationErrorKind,
+                        findings: [],
+                        claims: [],
+                        tasks: [],
+                        duration: Date.now() - startTime,
+                    };
+                }
+                // PAUSED / CANCELLED — re-throw so the pipeline loop handles them
                 throw error;
             }
-            console.error(`[AutomationExecutor] Stage ${stage.id} failed:`, error);
+            const errorKind = classifyStageError(error);
+            console.error(`[AutomationExecutor] Stage ${stage.id} failed [${errorKind}]:`, error);
             if (prepared?.auditSessionId) {
                 const message = error instanceof Error ? error.message : String(error);
                 const fallbackResult: AgentWorkflowResult = {
@@ -1132,6 +1281,7 @@ export class AutomationExecutor {
                 sessionId: prepared?.auditSessionId ?? "",
                 success: false,
                 error: error instanceof Error ? error.message : String(error),
+                errorKind,
                 findings: [],
                 claims: [],
                 tasks: [],
@@ -1490,6 +1640,36 @@ export class AutomationExecutor {
     }
 
     /**
+     * Retry a failed run, optionally from a specific stage.
+     * If `fromStageIndex` is not provided, retries from the stage where the run failed.
+     */
+    async retryRun(
+        runId: string,
+        fromStageIndex?: number,
+        onProgress?: (update: AutomationProgress) => void
+    ): Promise<AutomationResult> {
+        const run = await this.getRun(runId);
+        if (!run) throw new Error(`Run ${runId} not found`);
+
+        if (run.status !== "FAILED" && run.status !== "COMPLETED" && run.status !== "CANCELLED") {
+            throw new Error(`Run ${runId} is ${run.status}. Can only retry FAILED, COMPLETED, or CANCELLED runs.`);
+        }
+
+        const resumeIndex = fromStageIndex ?? Math.max(0, run.currentStageIndex - 1);
+        const workspaceId = run.workspaceId?.toString();
+
+        console.info(`[AutomationExecutor] Retrying run ${runId} from stage index ${resumeIndex}`);
+
+        // Reset run status and stage index for re-execution
+        await this.updateRunStatus(runId, "RUNNING", { endedAt: undefined } as any, workspaceId);
+        await this.updateRunStageIndex(runId, resumeIndex, workspaceId);
+        // Also update parent automation
+        await this.updateAutomationStatus(run.chainId.toString(), "RUNNING", undefined, workspaceId);
+
+        return this.executeRun(runId, onProgress);
+    }
+
+    /**
      * Delete an automation
      */
     async deleteAutomation(chainId: string, workspaceId?: string): Promise<void> {
@@ -1600,7 +1780,7 @@ export class AutomationExecutor {
      * @param workspaceId - Optional workspace to scope the seeded automation
      */
     async ensureDefaultAutomations(workspaceId?: string): Promise<{ created: string[]; skipped: string[] }> {
-        const { AutomationConfigBuilder } = await import("@numezis/shared/automationConfigBuilder");
+        const { AutomationConfigBuilder } = await import("@kletron/shared/automationConfigBuilder");
         const db = await getDb();
 
         const config = AutomationConfigBuilder.buildFullFeatureAudit();

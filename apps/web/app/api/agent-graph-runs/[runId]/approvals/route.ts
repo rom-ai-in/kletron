@@ -4,11 +4,11 @@ import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
-import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
-import { SafeEditGate } from "@numezis/server/services/agent/SafeEditGate";
-import { McpClient } from "@numezis/mcp-client/client";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
+import { SafeEditGate } from "@kletron/server/services/agent/SafeEditGate";
+import { McpClient } from "@kletron/mcp-client/client";
 
 /**
  * Fire-and-forget: resume the agent loop after a successful tool approval.
@@ -31,7 +31,7 @@ async function resumeAgentAfterApproval(
             return `Tool \`${s.toolName}\` was approved and executed successfully.\nResult:\n${resultSnippet}`;
         });
         const message = parts.join("\n\n---\n\n") + "\n\nPlease continue with the task.";
-        const { agentGraphExecutor } = await import("@numezis/server/services/agentGraphExecutor");
+        const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
         console.log(`[approvals] Resuming agent after approval for run ${runId}`);
         await agentGraphExecutor.continueRun(runId, message, {});
         console.log(`[approvals] ✓ Agent resumed successfully for run ${runId}`);
@@ -88,7 +88,7 @@ async function maybeEvictResult(rootDir: string, runId: string, toolName: string
     if (!content || content.length <= EVICT_CHARS) {
         return { content, evictedPath: null };
     }
-    const relativeDir = path.join(".numezis", "agent-cache", "approvals", runId);
+    const relativeDir = path.join(".kletron", "agent-cache", "approvals", runId);
     const dir = path.join(rootDir, relativeDir);
     await mkdir(dir, { recursive: true });
     const safeTool = toolName.replace(/[^a-zA-Z0-9._-]/g, "_");

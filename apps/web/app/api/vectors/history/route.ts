@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getVectorIndexRuns } from "@numezis/server/services/vectorHistoryService";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
+import { getVectorIndexRuns } from "@kletron/server/services/vectorHistoryService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 export const dynamic = 'force-dynamic';
 

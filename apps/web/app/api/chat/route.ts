@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { runWorkflow } from "@numezis/agent-core/workflows";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
-import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
+import { runWorkflow } from "@kletron/agent-core/workflows";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
+import { runWithWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 
 export async function POST(request: Request) {
   const auth = await requireAppRouteAuth(request);

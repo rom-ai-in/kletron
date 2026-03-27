@@ -1,6 +1,6 @@
 "use client";
 
-import { EmptyState } from "@numezis/ui/components/design-system";
+import { EmptyState } from "@kletron/ui/components/design-system";
 import { Layers } from "lucide-react";
 
 export default function AutomationsPage() {

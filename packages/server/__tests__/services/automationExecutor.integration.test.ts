@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { AutomationStageConfig, AutomationStatus } from "@numezis/shared/automationTypes";
+import type { AutomationStageConfig, AutomationStatus } from "@kletron/shared/automationTypes";
 
 // Valid MongoDB ObjectId format (24-character hex string)
 const VALID_AUTOMATION_ID = '507f1f77bcf86cd799439011';
@@ -25,7 +25,7 @@ const mockCollection = vi.fn().mockImplementation((name: string) => ({
 
 const mockDb = { collection: mockCollection };
 
-vi.mock('@numezis/server/lib/db', () => ({
+vi.mock('@kletron/server/lib/db', () => ({
     getDb: vi.fn().mockResolvedValue(mockDb),
 }));
 
@@ -55,7 +55,7 @@ describe('AutomationExecutor Integration', () => {
 
     describe('createAutomation', () => {
         it('should create an automation with valid configuration', async () => {
-            const { AutomationExecutor } = await import('@numezis/server/services/automationExecutor');
+            const { AutomationExecutor } = await import('@kletron/server/services/automationExecutor');
             const executor = new AutomationExecutor();
 
             const stages: AutomationStageConfig[] = [
@@ -104,7 +104,7 @@ describe('AutomationExecutor Integration', () => {
             };
             mockFindOne.mockResolvedValueOnce(mockAutomation);
 
-            const { AutomationExecutor } = await import('@numezis/server/services/automationExecutor');
+            const { AutomationExecutor } = await import('@kletron/server/services/automationExecutor');
             const executor = new AutomationExecutor();
 
             const automation = await executor.getAutomation(VALID_AUTOMATION_ID);
@@ -116,7 +116,7 @@ describe('AutomationExecutor Integration', () => {
         it('should return null for non-existent automation', async () => {
             mockFindOne.mockResolvedValueOnce(null);
 
-            const { AutomationExecutor } = await import('@numezis/server/services/automationExecutor');
+            const { AutomationExecutor } = await import('@kletron/server/services/automationExecutor');
             const executor = new AutomationExecutor();
 
             // Use a different valid ObjectId that doesn't exist
@@ -128,7 +128,7 @@ describe('AutomationExecutor Integration', () => {
 
     describe('updateAutomationStatus', () => {
         it('should update automation status', async () => {
-            const { AutomationExecutor } = await import('@numezis/server/services/automationExecutor');
+            const { AutomationExecutor } = await import('@kletron/server/services/automationExecutor');
             const executor = new AutomationExecutor();
 
             await executor.updateAutomationStatus(VALID_AUTOMATION_ID, 'RUNNING');
@@ -144,7 +144,7 @@ describe('AutomationExecutor Integration', () => {
 
     describe('deleteAutomation', () => {
         it('should delete an automation by ID', async () => {
-            const { AutomationExecutor } = await import('@numezis/server/services/automationExecutor');
+            const { AutomationExecutor } = await import('@kletron/server/services/automationExecutor');
             const executor = new AutomationExecutor();
 
             await executor.deleteAutomation(VALID_AUTOMATION_ID);

@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import { agentGraphService } from "@numezis/server/services/agentGraphService";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { agentGraphService } from "@kletron/server/services/agentGraphService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import {
     buildSimpleReactAgentGraph,
     buildDriftAnalysisGraph,
@@ -9,7 +9,7 @@ import {
     buildExplorerAgentGraph,
     buildPlannerAgentGraph,
     buildBusinessAnalystGraph,
-} from "@numezis/server/services/agentGraphPresets";
+} from "@kletron/server/services/agentGraphPresets";
 
 /** Map of graph name → builder for all preset graphs. */
 const PRESET_BUILDERS: Record<string, () => ReturnType<typeof buildSimpleReactAgentGraph>> = {

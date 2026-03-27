@@ -9,14 +9,14 @@ import { getDatabase } from "./lib/db";
 // Use __filename and __dirname equivalents in ESM, or fallback to standard in CJS.
 // We are in TS transpiled to commonjs / esm, so we'll use a robust approach
 export function getProjectRoot(): string {
-  // Walk up from this file's directory until we find package.json containing "numezis-code"
+  // Walk up from this file's directory until we find package.json containing "kletron"
   // This file is in packages/server/src/config.ts or packages/server/dist/config.js
-  let currentDir = __dirname;
+  let currentDir = typeof __dirname !== "undefined" ? __dirname : path.dirname(fileURLToPath(import.meta.url));
   while (currentDir !== path.parse(currentDir).root) {
     if (fs.existsSync(path.join(currentDir, "package.json"))) {
       try {
         const pkg = JSON.parse(fs.readFileSync(path.join(currentDir, "package.json"), "utf-8"));
-        if (pkg.name === "numezis-code" || pkg.workspaces) {
+        if (pkg.name === "kletron" || pkg.workspaces) {
           return currentDir;
         }
       } catch {
@@ -114,7 +114,7 @@ export async function loadConfig(): Promise<Config> {
         const data = JSON.parse(raw) as { workingFolder?: string };
         const fromFile = data.workingFolder?.trim() ?? "";
         if (fromFile) {
-          const normalized = path.resolve(fromFile);
+          const normalized = path.isAbsolute(fromFile) ? path.normalize(fromFile) : path.resolve(getProjectRoot(), fromFile);
           if (fs.existsSync(normalized) && fs.statSync(normalized).isDirectory()) {
             return { workingFolder: normalized };
           }
@@ -143,7 +143,8 @@ export async function loadConfig(): Promise<Config> {
   }
 
   // Runtime validation – check directory exists (no git requirement)
-  const dir = path.resolve(result.data.workingFolder);
+  const dirPath = result.data.workingFolder.trim();
+  const dir = path.isAbsolute(dirPath) ? path.normalize(dirPath) : path.resolve(getProjectRoot(), dirPath);
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
     throw new ConfigNotSetError(
       `Configured path does not exist or is not a directory: ${dir}`

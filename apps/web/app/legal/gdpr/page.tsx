@@ -14,7 +14,7 @@ import {
     Loader2,
     AlertCircle
 } from 'lucide-react';
-import { useSubscription } from '@numezis/ui/hooks/useSubscription';
+import { useSubscription } from '@kletron/ui/hooks/useSubscription';
 
 // Plan display configurations
 const planConfigs = {
@@ -338,7 +338,7 @@ function BillingPageContent() {
                 <p className="text-xs text-text-secondary">
                     <strong className="text-text-primary">Billing questions?</strong>{' '}
                     Contact us at{' '}
-                    <a href="mailto:billing@numezis.com" className="text-status-success-text hover:underline">billing@numezis.com</a>
+                    <a href="mailto:billing@kletron.com" className="text-status-success-text hover:underline">billing@kletron.com</a>
                 </p>
             </div>
         </div>

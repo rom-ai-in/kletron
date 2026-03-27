@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { consumeDeviceSession, getDeviceByDeviceCode } from '@numezis/server/services/ideDeviceService';
+import { consumeDeviceSession, getDeviceByDeviceCode } from '@kletron/server/services/ideDeviceService';
 
 export const dynamic = 'force-dynamic';
 

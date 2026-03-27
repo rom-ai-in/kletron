@@ -1,7 +1,7 @@
 // src/lib/supabase/supabaseAdmin.ts
 // Server-side Supabase admin client (service role) for secure operations
 import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@numezis/shared/supabase/types';
+import type { Database } from '@kletron/shared/supabase/types';
 
 let adminClient: ReturnType<typeof createClient<Database>> | null = null;
 

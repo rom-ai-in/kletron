@@ -2,12 +2,12 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { agentGraphService } from "@numezis/server/services/agentGraphService";
-import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
-import { getGraphNodeOrder, buildInitialState } from "@numezis/server/services/agentGraphRuntime";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
-import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
+import { agentGraphService } from "@kletron/server/services/agentGraphService";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
+import { getGraphNodeOrder, buildInitialState } from "@kletron/server/services/agentGraphRuntime";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
+import { runWithWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 
 const CreateRunSchema = z.object({
     mission: z.string().optional(),
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         // Execute in the background (best-effort). The executor updates the run record.
         void (async () => {
             try {
-                const { agentGraphExecutor } = await import("@numezis/server/services/agentGraphExecutor");
+                const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
                 await runWithWorkspaceContext(workspace, async () => {
                     await agentGraphExecutor.executeRun(runId);
                 });

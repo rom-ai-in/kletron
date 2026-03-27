@@ -1,11 +1,11 @@
 /**
- * Numezis Design System - Border Radius Tokens
+ * Kletron Design System - Border Radius Tokens
  * 
  * Consistent corner radii across the application.
  * Matches CSS variables and Tailwind config.
  * 
  * @example
- * import { radius } from '@numezis/ui/tokens';
+ * import { radius } from '@kletron/ui/tokens';
  * <div style={{ borderRadius: radius.md }} />
  * 
  * // Prefer Tailwind classes

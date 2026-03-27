@@ -1,11 +1,11 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import {
     getLatestCheckpoint,
     listCheckpoints,
-} from "@numezis/server/services/checkpointService";
+} from "@kletron/server/services/checkpointService";
 
 /**
  * GET /api/sessions/[id]/checkpoint

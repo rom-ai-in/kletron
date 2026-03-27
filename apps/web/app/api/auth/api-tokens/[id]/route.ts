@@ -1,9 +1,9 @@
 // app/api/auth/api-tokens/[id]/route.ts
 // API route for revoking extension API tokens (MongoDB version)
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@numezis/server/lib/supabase/supabaseServer';
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import * as apiTokenService from '@numezis/server/services/apiTokenService';
+import { createRouteHandlerClient } from '@kletron/server/lib/supabase/supabaseServer';
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import * as apiTokenService from '@kletron/server/services/apiTokenService';
 
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
     const auth = await requireAppRouteAuth(request);

@@ -1,16 +1,16 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
-import { agentGraphService } from "@numezis/server/services/agentGraphService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
+import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import {
   heuristicTitle,
   sanitizeAssistantVisibleContent,
   sanitizeTitle,
   stripSystemPrefix,
   stripThoughtContent,
-} from "@numezis/server/services/titleSanitizer";
-import { containsMetaLeakage } from "@numezis/shared/contentSanitizer";
+} from "@kletron/server/services/titleSanitizer";
+import { containsMetaLeakage } from "@kletron/shared/contentSanitizer";
 
 /**
  * GET /api/sessions/[id] - Get session details with conversation history and graph info.

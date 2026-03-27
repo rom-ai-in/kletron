@@ -1,8 +1,8 @@
 // app/api/stripe/checkout/route.ts
 // Create Stripe Checkout Session for subscription
 import { NextRequest, NextResponse } from 'next/server';
-import { createCheckoutSession } from '@numezis/server/services/stripeService';
-import { createServerSupabaseClient } from '@numezis/server/lib/supabase/supabaseServer';
+import { createCheckoutSession } from '@kletron/server/services/stripeService';
+import { createServerSupabaseClient } from '@kletron/server/lib/supabase/supabaseServer';
 
 export async function POST(request: NextRequest) {
     try {

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { automationExecutor } from "@numezis/server/services/automationExecutor";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
-import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
+import { automationExecutor } from "@kletron/server/services/automationExecutor";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
+import { runWithWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 
 /**
  * POST /api/automations/[id]/resume

@@ -1,18 +1,18 @@
-// Shared utility functions for the Numezis Desktop application
+// Shared utility functions for the Kletron Desktop application
 
 import { structuredPatch } from "diff";
 import type { DiffHunk, DiffRow, PreviewLine } from "./types";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-export const AUTH_STORAGE_KEY = "numezis.desktop.auth";
-export const BACKEND_STORAGE_KEY = "numezis.desktop.backendUrl";
-export const WORKSPACE_STORAGE_KEY = "numezis.desktop.workspace";
+export const AUTH_STORAGE_KEY = "kletron.desktop.auth";
+export const BACKEND_STORAGE_KEY = "kletron.desktop.backendUrl";
+export const WORKSPACE_STORAGE_KEY = "kletron.desktop.workspace";
 export const AUTH_LOGIN_TIMEOUT_MS = 6 * 60 * 1000;
 export const MAX_TOOL_PAYLOAD_CHARS = 8000;
 export const MAX_TOOL_PREVIEW_CHARS = 160;
 
-export const DEFAULT_BACKEND_URL = "https://app.numezis.com";
+export const DEFAULT_BACKEND_URL = "https://app.kletron.com";
 export const DEV_BACKEND_URL = "http://localhost:3000";
 
 export const SETTINGS_SECTIONS = [

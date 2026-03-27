@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, ChevronRight, Loader2, X, ShieldAlert, ShieldCheck, ClipboardCopy } from "lucide-react";
-import { Modal, Button } from "@numezis/ui/components/design-system";
-import type { LlmConfig, LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
-import { DEFAULT_DRIFT_STAGES } from "@numezis/shared/driftStages";
+import { Modal, Button } from "@kletron/ui/components/design-system";
+import type { LlmConfig, LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
+import { DEFAULT_DRIFT_STAGES } from "@kletron/shared/driftStages";
 
 type DriftJobStatus = {
     status: "queued" | "running" | "success" | "error" | "cancelled";

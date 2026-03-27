@@ -1,8 +1,8 @@
-# Numezis Code
+# Kletron
 
 **A TypeScript LangGraph multi-agent pipeline for AI-powered code analysis and generation, backed by a local MCP (Model Context Protocol) server.**
 
-Numezis Code provides multiple interfaces — a Next.js web dashboard, an Electron desktop app, and an interactive CLI — to orchestrate AI agents that can inspect, analyze, and modify codebases through a rich set of developer tools.
+Kletron provides multiple interfaces — a Next.js web dashboard, an Electron desktop app, and an interactive CLI — to orchestrate AI agents that can inspect, analyze, and modify codebases through a rich set of developer tools.
 
 ---
 
@@ -82,7 +82,7 @@ The system follows a layered architecture:
 This project uses **npm workspaces** to manage a TypeScript monorepo.
 
 ```
-numezis-coder-mcp/
+kletron-coder-mcp/
 ├── apps/
 │   ├── web/              # Next.js 14 web dashboard
 │   ├── desktop/          # Electron macOS desktop app
@@ -136,8 +136,8 @@ numezis-coder-mcp/
 ### Installation
 
 ```bash
-git clone <repo-url> numezis-coder-mcp
-cd numezis-coder-mcp
+git clone <repo-url> kletron-coder-mcp
+cd kletron-coder-mcp
 npm install
 ```
 
@@ -216,9 +216,9 @@ The web app is a **Next.js 14 App Router** application serving as the primary da
 
 - **Provider**: Supabase Auth (server-side)
 - **Middleware**: Protects `/app/*` routes, redirects unauthenticated users to `/auth/login` with a `redirect` query param
-- **CORS**: Configurable allowlist for `/api/*` routes via `NUMEZIS_CORS_ALLOWLIST` (defaults to localhost origins in dev)
+- **CORS**: Configurable allowlist for `/api/*` routes via `KLETRON_CORS_ALLOWLIST` (defaults to localhost origins in dev)
 - **IDE auth**: Supports device-based auth flow for IDE extensions via `/auth/ide-*` routes
-- **Dev bypass**: Auth is bypassed in non-production by default. Set `NUMEZIS_AUTH_BYPASS=false` to enforce auth in dev, or `=true` to explicitly bypass. API routes handle their own auth internally.
+- **Dev bypass**: Auth is bypassed in non-production by default. Set `KLETRON_AUTH_BYPASS=false` to enforce auth in dev, or `=true` to explicitly bypass. API routes handle their own auth internally.
 
 #### Styling
 
@@ -230,7 +230,7 @@ The web app is a **Next.js 14 App Router** application serving as the primary da
 
 ### Desktop App (`apps/desktop`)
 
-A **macOS Electron desktop application** providing a native-like experience for interacting with Numezis Code.
+A **macOS Electron desktop application** providing a native-like experience for interacting with Kletron.
 
 #### Key Features
 
@@ -238,25 +238,25 @@ A **macOS Electron desktop application** providing a native-like experience for 
 - **Workspace management** — Native folder picker for selecting workspaces
 - **File system access** — Direct read/write to workspace files
 - **Git integration** — Status, commit, branch, and clone operations
-- **Auto-updates** — Automatic update checking and installation from `updates.numezis.com`
-- **Deep linking** — `numezis-code://` protocol handler for auth callbacks and navigation
+- **Auto-updates** — Automatic update checking and installation from `updates.kletron.com`
+- **Deep linking** — `kletron://` protocol handler for auth callbacks and navigation
 - **VS Code integration** — Open files/folders directly in VS Code
 
 #### Build Configuration
 
 | Property | Value |
 |----------|-------|
-| App ID | `com.numezis.desktop` |
-| Product Name | Numezis Desktop |
+| App ID | `com.kletron.desktop` |
+| Product Name | Kletron |
 | Category | Developer Tools |
 | Targets | DMG, ZIP |
 | Hardened Runtime | Enabled |
 | Notarization | Post-sign via `scripts/notarize.cjs` |
-| Auto-update URL | `https://updates.numezis.com/desktop` |
+| Auto-update URL | `https://updates.kletron.com/desktop` |
 
 #### IPC API
 
-The desktop app exposes a `numezis` API to the renderer process via Electron's `contextBridge`:
+The desktop app exposes a `kletron` API to the renderer process via Electron's `contextBridge`:
 
 - **Workspace**: `selectWorkspace`, `setWorkspace`, `getWorkspace`
 - **App**: `openExternal`, `openInVSCode`, `getVersion`
@@ -313,7 +313,7 @@ npm start
 # Type "exit" to quit
 ```
 
-The CLI uses `@numezis/agent-core` for workflow execution and `@numezis/server` for backend services.
+The CLI uses `@kletron/agent-core` for workflow execution and `@kletron/server` for backend services.
 
 ---
 
@@ -511,11 +511,11 @@ The MCP server exposes **28 tools** organized by category. All tools are registe
 
 | Tool | Description |
 |------|-------------|
-| `str_replace_editor` | Read-only compatibility shim for editor operations |
+| `str_replace_editor` | File editor: view, create, str_replace, insert, undo_edit |
 | `execute_bash` | Safe emulation of minimal shell subset (find/grep/rg/ls/cat) |
 | `output_format` | Compatibility shim for output formatting |
 
-> **Note:** `semantic_code_search` is not an MCP server tool — it is handled at the `@numezis/mcp-client` level, which uses the vector service directly to bypass MCP for semantic search operations.
+> **Note:** `semantic_code_search` is not an MCP server tool — it is handled at the `@kletron/mcp-client` level, which uses the vector service directly to bypass MCP for semantic search operations.
 
 ---
 
@@ -570,10 +570,10 @@ Multi-stage audit workflows that can be configured with:
 
 ### Pipeline Outputs
 
-Agent artifacts are written into the target repo under `.numezis/`:
-- `.numezis/meta.json` — metadata and findings
-- `.numezis/tasks.json` — generated tasks
-- `.numezis/report.md` — analysis report
+Agent artifacts are written into the target repo under `.kletron/`:
+- `.kletron/meta.json` — metadata and findings
+- `.kletron/tasks.json` — generated tasks
+- `.kletron/report.md` — analysis report
 
 ---
 
@@ -663,7 +663,7 @@ Copy `env.example` to `.env` and fill in your values. See below for all supporte
 | `MCP_PORT` | No | MCP server port (default: `9000`) |
 | `LANGGRAPH_API_KEY` | No | LangGraph API key |
 | `GRAPH_RECURSION_LIMIT` | No | Override LangGraph recursion limit (default: `50`) |
-| `TOOL_RESULT_EVICT_CHARS` | No | Evict large tool outputs to `.numezis/agent-cache` (chars threshold) |
+| `TOOL_RESULT_EVICT_CHARS` | No | Evict large tool outputs to `.kletron/agent-cache` (chars threshold) |
 | `TOOL_RESULT_PREVIEW_CHARS` | No | Preview chars to keep inline when evicted |
 
 ### LangSmith (Tracing)
@@ -688,7 +688,7 @@ Copy `env.example` to `.env` and fill in your values. See below for all supporte
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GITHUB_TOKEN` | No | GitHub token for repo listing and cloning private repos |
-| `NUMEZIS_REPOS_DIR` | No | Directory where GitHub repos are cloned |
+| `KLETRON_REPOS_DIR` | No | Directory where GitHub repos are cloned |
 
 ### Stripe (Billing)
 
@@ -712,8 +712,8 @@ Copy `env.example` to `.env` and fill in your values. See below for all supporte
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `NUMEZIS_AUTH_BYPASS` | No | `true` to bypass auth, `false` to enforce (defaults to bypass in non-production) |
-| `NUMEZIS_CORS_ALLOWLIST` | No | Comma-separated allowed origins for `/api/*` CORS (defaults to localhost in dev) |
+| `KLETRON_AUTH_BYPASS` | No | `true` to bypass auth, `false` to enforce (defaults to bypass in non-production) |
+| `KLETRON_CORS_ALLOWLIST` | No | Comma-separated allowed origins for `/api/*` CORS (defaults to localhost in dev) |
 | `NEXT_PUBLIC_SKIP_AUTH` | No | Skip auth on the client side |
 | `DESIGN_SYSTEM_CODE` | No | Password for design system access |
 | `NEXT_PUBLIC_DESIGN_SYSTEM_PROTECT` | No | `false` to disable design system password protection |
@@ -768,7 +768,7 @@ See `CONTRIBUTING.md` for full guidelines. Quick summary:
 **Key rules:**
 - UI code must not import runtime server modules (types-only imports are fine).
 - The `shared` package stays pure — no filesystem, network, or DB code.
-- Prefer importing from `@numezis/*` aliases instead of deep relative paths.
+- Prefer importing from `@kletron/*` aliases instead of deep relative paths.
 
 ---
 

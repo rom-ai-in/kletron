@@ -1,8 +1,8 @@
 // app/api/auth/signout/route.ts
 // API route for user sign out
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@numezis/server/lib/supabase/supabaseServer';
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { createRouteHandlerClient } from '@kletron/server/lib/supabase/supabaseServer';
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 export async function POST(request: Request) {
     const auth = await requireAppRouteAuth(request);

@@ -7,20 +7,25 @@ import {
   ChatInput,
   Selector,
   WorkspaceLayout,
-} from "@numezis/ui/components/design-system";
-import { ProjectSidebar } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
-import type { SidebarProject, SidebarThread, ThreadLiveStatus } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
-import { AddWorkspaceModal } from "@numezis/ui/components/CommandCenter/AddWorkspaceModal";
-import { TimelinePanel } from "@numezis/ui/components/Agent/TimelinePanel";
-import { EventCard } from "@numezis/ui/components/Agent/EventCard";
+} from "@kletron/ui/components/design-system";
+import { ProjectSidebar } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import type { SidebarProject, SidebarThread, ThreadLiveStatus } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import { AddWorkspaceModal } from "@kletron/ui/components/CommandCenter/AddWorkspaceModal";
+import { TimelinePanel } from "@kletron/ui/components/Agent/TimelinePanel";
+import { EventCard } from "@kletron/ui/components/Agent/EventCard";
 import {
   TokenUsageDisplay,
   DurationDisplay,
-} from "@numezis/ui/components/Agent/metrics";
-import { useAgentSession } from "@numezis/ui/hooks/useAgentSession";
-import { useSessionStream, normalizeMessage } from "@numezis/ui/hooks/useSessionStream";
-import { useSessionEdits } from "@numezis/ui/hooks/useSessionEdits";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+} from "@kletron/ui/components/Agent/metrics";
+import { useAgentSession } from "@kletron/ui/hooks/useAgentSession";
+import { useSessionStream, normalizeMessage } from "@kletron/ui/hooks/useSessionStream";
+import { useSessionEdits } from "@kletron/ui/hooks/useSessionEdits";
+
+import { useMessageEdit } from "@kletron/ui/hooks/useMessageEdit";
+import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
+import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
+
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 import {
   Loader2,
   Folder,
@@ -28,9 +33,9 @@ import {
 } from "lucide-react";
 
 // For simple chat view - reuse existing components (groups tool events, renders collapsible tool cards)
-import { MessageList, type ChatEvent } from "@numezis/ui/components/Agent/MessageList";
-import { MessageQueue } from "@numezis/ui/components/CommandCenter/MessageQueue";
-import type { QueuedMessageItem } from "@numezis/ui/components/CommandCenter/MessageQueue";
+import { MessageList, type ChatEvent } from "@kletron/ui/components/Agent/MessageList";
+import { MessageQueue } from "@kletron/ui/components/CommandCenter/MessageQueue";
+import type { QueuedMessageItem } from "@kletron/ui/components/CommandCenter/MessageQueue";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -104,6 +109,7 @@ interface AgentComposerProps {
   resetKey: string;
   perfDebugEnabled?: boolean;
   onInputLatencySample?: (ms: number) => void;
+  editControl: ReturnType<typeof useMessageEdit>; // Added for editControl
 }
 
 const AgentComposer = memo(function AgentComposer({
@@ -121,6 +127,7 @@ const AgentComposer = memo(function AgentComposer({
   resetKey,
   perfDebugEnabled = false,
   onInputLatencySample,
+  editControl, // Added for editControl
 }: AgentComposerProps) {
   const [draft, setDraft] = useState("");
 
@@ -162,37 +169,48 @@ const AgentComposer = memo(function AgentComposer({
   }, [handleSend, onInputLatencySample, perfDebugEnabled]);
 
   return (
-    <ChatInput
-      value={draft}
-      onChange={setDraft}
-      onSend={handleSend}
-      onStop={sending ? onStop : undefined}
-      onKeyDown={handleKeyDown}
-      sending={sending}
-      placeholder={sending ? "Add a follow-up (queued until agent finishes)..." : "Ask anything…"}
-      containerClassName="max-w-3xl mx-auto"
-      footerLeft={
-        <div className="flex items-center gap-2">
-          <Selector
-            label="GRAPH"
-            value={selectedGraphId}
-            options={graphSelectOptions}
-            onSelect={onGraphChange}
-            size="sm"
-            direction="up"
-          />
-          <Selector
-            label="LLM"
-            value={llmProvider}
-            options={llmOptions}
-            onSelect={onLlmChange}
-            size="sm"
-            direction="up"
-            status={llmStatus}
-          />
-        </div>
-      }
-    />
+    <>
+      <ChatInput
+        value={draft}
+        onChange={setDraft}
+        onSend={handleSend}
+        onStop={sending ? onStop : undefined}
+        onKeyDown={handleKeyDown}
+        sending={sending}
+        placeholder={sending ? "Add a follow-up (queued until agent finishes)..." : "Ask anything…"}
+        containerClassName="max-w-3xl mx-auto"
+        footerLeft={
+          <div className="flex items-center gap-2">
+            <Selector
+              label="GRAPH"
+              value={selectedGraphId}
+              options={graphSelectOptions}
+              onSelect={onGraphChange}
+              size="sm"
+              direction="up"
+            />
+            <Selector
+              label="LLM"
+              value={llmProvider}
+              options={llmOptions}
+              onSelect={onLlmChange}
+              size="sm"
+              direction="up"
+              status={llmStatus}
+            />
+          </div>
+        }
+      />
+
+      {/* Replay Confirmation Dialog */}
+      <ReplayConfirmDialog
+        open={editControl.replayDialogOpen}
+        impact={editControl.replayImpact}
+        onConfirm={() => void editControl.executeReplay()}
+        onCancel={editControl.cancelReplay}
+        loading={editControl.editingMessageSaving}
+      />
+    </>
   );
 });
 
@@ -346,6 +364,25 @@ export default function AgentPage() {
     onSessionCreated: handleSessionCreated,
     onTitleGenerate: handleTitleGenerate,
   });
+
+  const truncateAndResend = useCallback(async (messageIndex: number, newContent: string) => {
+    if (!activeSessionId) return;
+    const res = await fetch(`/api/sessions/${activeSessionId}/truncate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ afterIndex: messageIndex }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `Failed to truncate conversation (${res.status})`);
+    }
+
+    setMessages((prev) =>
+      prev.filter((_, i) => i < messageIndex)
+    );
+
+    await handleSend({ text: newContent });
+  }, [activeSessionId, handleSend, setMessages]);
 
   const {
     pendingEdits,
@@ -737,7 +774,8 @@ export default function AgentPage() {
   // Includes a final consecutive-duplicate guard to catch any remaining dupes
   const chatEventsForView = useMemo<ChatEvent[]>(() => {
     const events: ChatEvent[] = [];
-    for (const m of messages) {
+    for (let i = 0; i < messages.length; i++) {
+      const m = messages[i];
       const evt: ChatEvent = {
         id: m.id,
         kind: m.role as ChatEvent["kind"],
@@ -749,6 +787,7 @@ export default function AgentPage() {
         isError: m.isError,
         thoughts: m.thoughts,
         timestamp: m.timestamp,
+        messageIndex: (m.role === 'user' || m.role === 'assistant') ? i : undefined,
       };
       // Skip consecutive same-kind same-content duplicates
       if (events.length > 0) {
@@ -766,6 +805,13 @@ export default function AgentPage() {
     return events;
   }, [messages]);
   const deferredChatEvents = useDeferredValue(chatEventsForView);
+
+  const editControl = useMessageEdit({
+    sessionId: activeSessionId,
+    events: chatEventsForView,
+    streaming: sending,
+    onTruncateAndResend: truncateAndResend,
+  });
 
   // ── Copy debug logs ──────────────────────────────────────────────────
   const [logsCopied, setLogsCopied] = useState(false);
@@ -1116,6 +1162,19 @@ export default function AgentPage() {
                 prefetchNearTop
                 onNearTop={handleLoadOlderMessages}
                 className="flex-1 min-h-0 p-0 px-2 py-4"
+                messageActions={(event) => (
+                  <MessageActions
+                    event={event}
+                    onStartEdit={() => editControl.startEditMessage(event.messageIndex!, event.content ?? "")}
+                  />
+                )}
+                editingMessageIndex={editControl.editingMessageIndex}
+                editingMessageDraft={editControl.editingMessageDraft}
+                editingMessageSaving={editControl.editingMessageSaving}
+                editingMessageError={editControl.editingMessageError}
+                onEditDraftChange={(draft) => editControl.setEditingMessageDraft(draft)}
+                onCancelEdit={editControl.cancelEditMessage}
+                onResendEdit={editControl.handleResendEdit}
               />
             )}
             {errorMessage && !sending && (
@@ -1187,6 +1246,7 @@ export default function AgentPage() {
           resetKey={activeSessionId ?? "new-session"}
           perfDebugEnabled={perfDebugEnabled}
           onInputLatencySample={handleInputLatencySample}
+          editControl={editControl}
         />
       </div>
     </div>

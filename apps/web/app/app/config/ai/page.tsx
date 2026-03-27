@@ -1,6 +1,6 @@
 "use client";
 
-import { AiConfigView } from "@numezis/ui/components/config/AiConfigView";
+import { AiConfigView } from "@kletron/ui/components/config/AiConfigView";
 
 export default function ConfigAiPage() {
     return <AiConfigView />;

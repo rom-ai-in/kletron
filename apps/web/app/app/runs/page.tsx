@@ -12,9 +12,9 @@ import {
     EmptyState,
     LoadingState,
     ErrorState,
-} from "@numezis/ui/components/design-system";
-import type { AutomationRun, AutomationStatus } from "@numezis/shared/automationTypes";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+} from "@kletron/ui/components/design-system";
+import type { AutomationRun, AutomationStatus } from "@kletron/shared/automationTypes";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 import { PlayCircle } from "lucide-react";
 
 type FilterStatus = "all" | "running" | "completed" | "failed" | "cancelled";

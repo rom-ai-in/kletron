@@ -34,7 +34,7 @@ interface IndexStatus {
 // In-memory status (persists across dev-mode HMR reloads via global symbol)
 // ---------------------------------------------------------------------------
 
-const statusKey = Symbol.for("numezis.indexer.status");
+const statusKey = Symbol.for("kletron.indexer.status");
 if (!(globalThis as any)[statusKey]) {
     (globalThis as any)[statusKey] = new Map<string, IndexStatus>();
 }
@@ -71,7 +71,7 @@ export function getIndexStatus(workspaceId: string, repoPath: string): IndexStat
 // ---------------------------------------------------------------------------
 
 const REFRESH_CACHE_TTL_MS = 30_000; // 30 seconds
-const refreshCacheKey = Symbol.for("numezis.indexer.refreshCache");
+const refreshCacheKey = Symbol.for("kletron.indexer.refreshCache");
 if (!(globalThis as any)[refreshCacheKey]) {
     (globalThis as any)[refreshCacheKey] = new Map<string, { data: IndexStatus; ts: number }>();
 }
@@ -89,7 +89,7 @@ export function invalidateRefreshCache(workspaceId: string): void {
 // ---------------------------------------------------------------------------
 
 const DISK_COUNT_CACHE_TTL_MS = 60_000; // 60 seconds
-const diskCountCacheKey = Symbol.for("numezis.indexer.diskCountCache");
+const diskCountCacheKey = Symbol.for("kletron.indexer.diskCountCache");
 if (!(globalThis as any)[diskCountCacheKey]) {
     (globalThis as any)[diskCountCacheKey] = new Map<string, { count: number; ts: number }>();
 }
@@ -151,7 +151,7 @@ async function loadStatusSnapshot(workspaceId: string): Promise<IndexStatus | nu
 // In-flight deduplication — coalesce concurrent calls for the same workspace
 // ---------------------------------------------------------------------------
 
-const inflightKey = Symbol.for("numezis.indexer.inflight");
+const inflightKey = Symbol.for("kletron.indexer.inflight");
 if (!(globalThis as any)[inflightKey]) {
     (globalThis as any)[inflightKey] = new Map<string, Promise<IndexStatus>>();
 }

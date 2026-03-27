@@ -15,12 +15,12 @@ import {
     AlertTriangle,
     ShieldAlert
 } from "lucide-react";
-import { Button, Panel, Breadcrumbs } from "@numezis/ui/components/design-system";
-import { FolderTreePicker } from "@numezis/ui/components/ui/FolderTreePicker";
-import { DriftAnalysisModal } from "@numezis/ui/components/drift/DriftAnalysisModal";
-import { RequireWorkspace } from "@numezis/ui/components/workspace/RequireWorkspace";
-import { ActiveWorkspaceBanner } from "@numezis/ui/components/workspace/ActiveWorkspaceBanner";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+import { Button, Panel, Breadcrumbs } from "@kletron/ui/components/design-system";
+import { FolderTreePicker } from "@kletron/ui/components/ui/FolderTreePicker";
+import { DriftAnalysisModal } from "@kletron/ui/components/drift/DriftAnalysisModal";
+import { RequireWorkspace } from "@kletron/ui/components/workspace/RequireWorkspace";
+import { ActiveWorkspaceBanner } from "@kletron/ui/components/workspace/ActiveWorkspaceBanner";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 
 export interface DiffChunk {
     sha: string;

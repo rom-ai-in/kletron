@@ -14,6 +14,7 @@ import {
   gitListBranches,
   gitDiff,
   gitDiffStaged,
+  gitDiffNumstat,
   gitStageFile,
   gitStageAll,
   gitUnstageFile,
@@ -25,7 +26,7 @@ import {
   listFiles,
   readFile,
   writeFile
-} from "@numezis/bridge";
+} from "@kletron/bridge";
 
 const currentFile = __filename;
 const currentDir = __dirname;
@@ -261,9 +262,9 @@ async function setupAutoUpdates() {
 
 app.on("ready", () => {
   if (process.defaultApp && process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient("numezis-code", process.execPath, [path.resolve(process.argv[1])]);
+    app.setAsDefaultProtocolClient("kletron", process.execPath, [path.resolve(process.argv[1])]);
   } else {
-    app.setAsDefaultProtocolClient("numezis-code");
+    app.setAsDefaultProtocolClient("kletron");
   }
   if (process.platform === "darwin") {
     const dockIcon = loadAppIcon();
@@ -477,6 +478,10 @@ ipcMain.handle("git:push", async (_event, remote?: string, branch?: string, cwd?
 
 ipcMain.handle("git:createPR", async (_event, title: string, body?: string, base?: string, cwd?: string) => {
   return gitCreatePR(resolveWorkspace(cwd), title, body, base);
+});
+
+ipcMain.handle("git:diffNumstat", async (_event, cwd?: string) => {
+  return gitDiffNumstat(resolveWorkspace(cwd));
 });
 
 // ── Command Center IPC ──────────────────────────────────────────────────────

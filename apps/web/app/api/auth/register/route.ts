@@ -1,8 +1,8 @@
 // app/api/auth/register/route.ts
 // API route for user registration
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@numezis/server/lib/supabase/supabaseServer';
-import { agentGraphService } from '@numezis/server/services/agentGraphService';
+import { createRouteHandlerClient } from '@kletron/server/lib/supabase/supabaseServer';
+import { agentGraphService } from '@kletron/server/services/agentGraphService';
 
 export async function POST(request: Request) {
     try {

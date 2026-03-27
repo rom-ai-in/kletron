@@ -1,11 +1,11 @@
 /**
- * Numezis Design System - Shared Component Types
+ * Kletron Design System - Shared Component Types
  *
  * Common type definitions for size, variant, and base props
  * used across all design system components.
  *
  * @example
- * import type { Size, Variant, ComponentBaseProps } from '@numezis/ui/types';
+ * import type { Size, Variant, ComponentBaseProps } from '@kletron/ui/types';
  */
 
 // =============================================================================

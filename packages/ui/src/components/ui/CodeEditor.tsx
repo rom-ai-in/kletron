@@ -15,7 +15,7 @@ export interface CodeEditorProps {
     filename?: string;
     onChange?: (value: string) => void;
     readOnly?: boolean;
-    theme?: 'numezis-dark' | 'numezis-light';
+    theme?: 'kletron-dark' | 'kletron-light';
     minimap?: boolean;
     lineNumbers?: boolean;
     wordWrap?: 'on' | 'off';
@@ -83,8 +83,8 @@ const monacoThemeColors = {
     },
 } as const;
 
-function defineNumezisThemes(monaco: any) {
-    monaco.editor.defineTheme('numezis-dark', {
+function defineKletronThemes(monaco: any) {
+    monaco.editor.defineTheme('kletron-dark', {
         base: 'vs-dark',
         inherit: true,
         rules: [
@@ -97,7 +97,7 @@ function defineNumezisThemes(monaco: any) {
         colors: monacoThemeColors.dark,
     });
 
-    monaco.editor.defineTheme('numezis-light', {
+    monaco.editor.defineTheme('kletron-light', {
         base: 'vs',
         inherit: true,
         rules: [
@@ -117,7 +117,7 @@ export function CodeEditor({
     filename,
     onChange,
     readOnly = false,
-    theme = 'numezis-dark',
+    theme = 'kletron-dark',
     minimap = true,
     lineNumbers = true,
     wordWrap = 'off',
@@ -131,7 +131,7 @@ export function CodeEditor({
 
     const handleMount: OnMount = useCallback((editor, monaco) => {
         editorRef.current = editor;
-        defineNumezisThemes(monaco);
+        defineKletronThemes(monaco);
         monaco.editor.setTheme(theme);
 
         // Cmd+S / Ctrl+S

@@ -95,6 +95,7 @@ export async function readFile(workspacePath: string, relativePath: string): Pro
 
 export async function writeFile(workspacePath: string, relativePath: string, content: string): Promise<void> {
   const resolved = resolveWorkspacePath(workspacePath, relativePath);
+  await fs.mkdir(path.dirname(resolved), { recursive: true });
   await fs.writeFile(resolved, content, "utf-8");
 }
 
@@ -114,6 +115,9 @@ export async function getGitStatus(workspacePath: string): Promise<GitStatus> {
   const staged: GitFileChange[] = [];
   const unstaged: GitFileChange[] = [];
 
+  // Build a lookup map for renames: new-path → old-path
+  const renameMap = new Map(status.renamed.map(r => [r.to, r.from]));
+
   for (const f of status.files) {
     const indexStatus = f.index;   // status in the staging area
     const wtStatus = f.working_dir; // status in the working tree
@@ -127,7 +131,7 @@ export async function getGitStatus(workspacePath: string): Promise<GitStatus> {
           : indexStatus === 'D' ? 'deleted'
           : indexStatus === 'R' ? 'renamed'
           : 'modified',
-        ...(indexStatus === 'R' ? { from: f.path } : {}),
+        ...(indexStatus === 'R' ? { from: renameMap.get(f.path) ?? f.path } : {}),
       });
     }
 
@@ -188,6 +192,19 @@ export async function gitListBranches(workspacePath: string): Promise<string[]> 
 export async function gitDiff(workspacePath: string, filePath?: string): Promise<string> {
   const git = getGit(workspacePath);
   if (filePath) {
+    // Check if the file is untracked — git diff returns nothing for untracked files
+    const status = await git.status(["--", filePath]);
+    const isUntracked = status.not_added.includes(filePath);
+    if (isUntracked) {
+      try {
+        return await git.diff(["--no-index", "--", "/dev/null", filePath]);
+      } catch (err: any) {
+        // git diff --no-index exits with code 1 when there ARE differences (expected)
+        if (err?.stdout) return err.stdout;
+        if (String(err).includes("exit code 1")) return err?.message ?? "";
+        throw err;
+      }
+    }
     return git.diff(["--", filePath]);
   }
   return git.diff();
@@ -217,25 +234,44 @@ export async function gitStageAll(workspacePath: string): Promise<void> {
 /** Unstage a specific file (git reset HEAD) */
 export async function gitUnstageFile(workspacePath: string, filePath: string): Promise<void> {
   const git = getGit(workspacePath);
-  await git.reset(["HEAD", "--", filePath]);
+  try {
+    await git.reset(["HEAD", "--", filePath]);
+  } catch {
+    // On a fresh repo with no commits, HEAD doesn't exist — use rm --cached
+    await git.raw(["rm", "--cached", "--", filePath]);
+  }
 }
 
 /** Unstage all files (git reset HEAD) */
 export async function gitUnstageAll(workspacePath: string): Promise<void> {
   const git = getGit(workspacePath);
-  await git.reset(["HEAD"]);
+  try {
+    await git.reset(["HEAD"]);
+  } catch {
+    // On a fresh repo with no commits, HEAD doesn't exist — use rm --cached
+    await git.raw(["rm", "--cached", "-r", "."]);
+  }
 }
 
 /** Revert a specific file (discard working tree changes) */
 export async function gitRevertFile(workspacePath: string, filePath: string): Promise<void> {
   const git = getGit(workspacePath);
-  await git.checkout(["--", filePath]);
+  // Check if the file is untracked — git checkout won't work for those
+  const status = await git.status(["--", filePath]);
+  if (status.not_added.includes(filePath)) {
+    await git.clean("f", ["--", filePath]);
+  } else {
+    await git.checkout(["--", filePath]);
+  }
 }
 
 /** Revert all working tree changes */
 export async function gitRevertAll(workspacePath: string): Promise<void> {
   const git = getGit(workspacePath);
+  // Discard tracked modifications
   await git.checkout(["--", "."]);
+  // Also remove untracked files
+  await git.clean("f", ["-d"]);
 }
 
 /** Commit only staged files (no git add .) */
@@ -255,27 +291,66 @@ export async function gitPush(workspacePath: string, remote = "origin", branch?:
   return `Pushed to ${remote}/${targetBranch}`;
 }
 
-/** Create a PR using the `gh` CLI (must be installed and authenticated) */
+/** Get line-level addition/deletion counts for all pending changes */
+export type DiffNumstat = { additions: number; deletions: number };
+
+export async function gitDiffNumstat(workspacePath: string): Promise<DiffNumstat> {
+  const git = getGit(workspacePath);
+  let additions = 0;
+  let deletions = 0;
+
+  // Unstaged changes
+  const unstaged = await git.diff(["--numstat"]);
+  // Staged changes
+  const staged = await git.diff(["--cached", "--numstat"]);
+
+  for (const line of [...unstaged.split("\n"), ...staged.split("\n")]) {
+    const match = line.match(/^(\d+|-)\t(\d+|-)\t/);
+    if (match) {
+      if (match[1] !== "-") additions += parseInt(match[1], 10);
+      if (match[2] !== "-") deletions += parseInt(match[2], 10);
+    }
+  }
+
+  return { additions, deletions };
+}
+
+/** Create a PR using the `gh` CLI (must be installed and authenticated).
+ *  Uses execFileSync (no shell) to prevent injection attacks. */
 export async function gitCreatePR(
   workspacePath: string,
   title: string,
   body?: string,
   base?: string,
 ): Promise<{ url: string; number: number }> {
-  const { execSync } = await import("node:child_process");
-  const args = ["gh", "pr", "create", "--title", title];
+  const { execFileSync } = await import("node:child_process");
+
+  // 1. Verify gh CLI is available
+  try {
+    execFileSync("gh", ["--version"], { encoding: "utf-8", timeout: 5_000, stdio: "pipe" });
+  } catch {
+    throw new Error(
+      "GitHub CLI (gh) is not installed or not in PATH. " +
+      "Install it from https://cli.github.com and run `gh auth login` to authenticate."
+    );
+  }
+
+  // 2. Build args array — execFileSync passes each arg directly, no shell interpolation
+  const args = ["pr", "create", "--title", title];
   if (body) args.push("--body", body);
   if (base) args.push("--base", base);
   args.push("--fill");
-  const output = execSync(args.join(" "), {
+
+  const output = execFileSync("gh", args, {
     cwd: workspacePath,
     encoding: "utf-8",
     timeout: 30_000,
+    stdio: ["pipe", "pipe", "pipe"],
   }).trim();
 
-  // gh pr create outputs the PR URL on success
-  const urlMatch = output.match(/https:\/\/github\.com\/[^\s]+/);
-  const numberMatch = output.match(/\/pull\/(\d+)/);
+  // 3. Parse the PR URL from output — support any git host (GitHub, GitLab, Bitbucket, etc.)
+  const urlMatch = output.match(/https?:\/\/[^\s]+/);
+  const numberMatch = output.match(/\/pull\/(\d+)/) || output.match(/\/merge_requests\/(\d+)/);
   return {
     url: urlMatch?.[0] || output,
     number: numberMatch ? parseInt(numberMatch[1], 10) : 0,
@@ -283,7 +358,7 @@ export async function gitCreatePR(
 }
 
 export async function gitCloneRepo(repoUrl: string, targetRoot?: string, branch?: string): Promise<CloneResult> {
-  const root = targetRoot || path.join(os.homedir(), "numezis-repos");
+  const root = targetRoot || path.join(os.homedir(), "kletron-repos");
   const repoName = repoUrl.split("/").pop()?.replace(/\.git$/i, "") || "repo";
   const repoPath = path.join(root, repoName);
 

@@ -8,7 +8,7 @@ import {
 } from "@langchain/langgraph";
 
 import { streamReactAgentMessages } from "./reactAgentRunner";
-import { simpleReactSystemPrompt } from "@numezis/server/services/agentGraphPresets";
+import { simpleReactSystemPrompt } from "@kletron/server/services/agentGraphPresets";
 const simpleReactPhaseId = "simple_react";
 import { allMcpTools } from "./tools/mcpTools";
 

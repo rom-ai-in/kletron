@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import type { DiffRequest, WorkspaceInfo } from "../types";
 import { applyHunksToContent, buildDiffRows, buildHunks } from "../utils";
+import { useToast } from "@kletron/ui/components/design-system";
 
 export function useDiffs(workspace: WorkspaceInfo | null) {
+  const toast = useToast();
   const [diffs, setDiffs] = useState<DiffRequest[]>([]);
   const [selectedDiffId, setSelectedDiffId] = useState<string | null>(null);
   const [selectedHunkId, setSelectedHunkId] = useState<string | null>(null);
@@ -45,10 +47,12 @@ export function useDiffs(workspace: WorkspaceInfo | null) {
     if (!diff) return;
     if (!workspace) return;
     try {
-      await window.numezis.applyFileChange(diff.filePath, diff.targetContent);
+      await window.kletron.applyFileChange(diff.filePath, diff.targetContent);
       setDiffs((prev) => prev.filter((d) => d.editId !== diffId));
-    } catch {
-      // ignore
+      toast.success("Applied changes", `Changes recursively applied for ${diff.filePath}`);
+    } catch (err: any) {
+      console.error("[applyAllDiff] Error:", err);
+      toast.error("Failed to apply change", err?.message || String(err));
     }
   }
 
@@ -60,8 +64,11 @@ export function useDiffs(workspace: WorkspaceInfo | null) {
 
     const updatedBase = applyHunksToContent(diff.baseContent, [hunk]);
     try {
-      await window.numezis.applyFileChange(diff.filePath, updatedBase);
-    } catch {
+      await window.kletron.applyFileChange(diff.filePath, updatedBase);
+      toast.success("Applied hunk", `Changes recursively applied for ${diff.filePath}`);
+    } catch (err: any) {
+      console.error("[applyHunk] Error:", err);
+      toast.error("Failed to apply hunk", err?.message || String(err));
       return;
     }
 

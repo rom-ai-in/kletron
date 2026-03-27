@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateLMStudioConfig } from "@numezis/server/services/llmConfigService";
-import { validateLMStudioConfig } from "@numezis/shared/schemas/llmConfig.schema";
+import { updateLMStudioConfig } from "@kletron/server/services/llmConfigService";
+import { validateLMStudioConfig } from "@kletron/shared/schemas/llmConfig.schema";
 import { z } from "zod";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 export const dynamic = "force-dynamic";
 

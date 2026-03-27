@@ -2,16 +2,17 @@ import { BaseMessage, SystemMessage } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
 
-import { getChatModel, type LlmSelection } from "@numezis/server/llm";
-import { config } from "@numezis/server/config";
-import type { TokenUsage } from "@numezis/server/services/tokenUsageTypes";
-import type { AgentWorkflowAbortReason } from "@numezis/shared/types";
+import { getChatModel, type LlmSelection } from "@kletron/server/llm";
+import { config } from "@kletron/server/config";
+import type { TokenUsage } from "@kletron/server/services/tokenUsageTypes";
+import type { AgentWorkflowAbortReason } from "@kletron/shared/types";
 
 export type StreamReactAgentOptions = {
   name: string;
   systemPrompt: string;
   userPrompt: string;
   tools: any[];
+  workspaceRoot?: string;
   llmSelection?: LlmSelection;
   extraMessages?: BaseMessage[];
   onMessage?: (message: BaseMessage) => Promise<void> | void;
@@ -129,8 +130,16 @@ export async function streamReactAgentMessages(
   // Thread configuration for checkpoint persistence
   if (opts.threadId) {
     streamConfig.configurable = {
+      ...(streamConfig.configurable || {}),
       thread_id: opts.threadId,
       checkpoint_ns: "",
+    };
+  }
+  
+  if (opts.workspaceRoot) {
+    streamConfig.configurable = {
+      ...(streamConfig.configurable || {}),
+      workspaceRoot: opts.workspaceRoot,
     };
   }
 

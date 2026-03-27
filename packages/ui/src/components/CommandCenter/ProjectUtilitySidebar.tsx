@@ -87,6 +87,7 @@ export interface ProjectUtilitySidebarProps {
   onViewFileDiff?: (file: GitFileChangeItem, staged: boolean) => void;
   selectedDiffPath?: string | null;
   className?: string;
+  style?: React.CSSProperties;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -113,6 +114,7 @@ export function ProjectUtilitySidebar({
   onViewFileDiff,
   selectedDiffPath,
   className = '',
+  style,
 }: ProjectUtilitySidebarProps) {
   const [activeTab, setActiveTab] = useState<SourceControlTab>('unstaged');
   const [filter, setFilter] = useState('');
@@ -135,7 +137,7 @@ export function ProjectUtilitySidebar({
   const isStaged = activeTab === 'staged';
 
   return (
-    <div className={`flex flex-col h-full w-[300px] flex-shrink-0 glass-sidebar border-l border-white/[0.06] ${className}`}>
+    <div className={`flex flex-col h-full flex-shrink-0 glass-sidebar border-l border-white/[0.06] ${className}`} style={{ width: 300, ...style }}>
 
       {/* ── Unstaged / Staged Pill Tabs ── */}
       <div className="flex items-center gap-2 px-2 py-2 border-b border-white/[0.06]">

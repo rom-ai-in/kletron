@@ -1,9 +1,9 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 
-import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 /**
  * GET /api/agent-graph-runs/[runId]

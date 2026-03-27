@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { recordVectorIndexRun, getVectorIndexRuns } from '@numezis/server/services/vectorHistoryService';
+import { recordVectorIndexRun, getVectorIndexRuns } from '@kletron/server/services/vectorHistoryService';
 import { Collection, Db } from 'mongodb';
 
 const { mockDb, mockCollection } = vi.hoisted(() => {
@@ -18,7 +18,7 @@ const { mockDb, mockCollection } = vi.hoisted(() => {
     };
 });
 
-vi.mock('@numezis/server/lib/db', () => ({
+vi.mock('@kletron/server/lib/db', () => ({
     getDatabase: vi.fn().mockResolvedValue(mockDb),
 }));
 

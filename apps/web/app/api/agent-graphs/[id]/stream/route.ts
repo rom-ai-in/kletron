@@ -1,11 +1,11 @@
 export const dynamic = "force-dynamic";
-import { resolveLlmSelection } from "@numezis/server/llm";
-import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@numezis/shared/types";
-import { agentGraphService } from "@numezis/server/services/agentGraphService";
-import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
-import { getGraphNodeOrder, buildInitialState } from "@numezis/server/services/agentGraphRuntime";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { resolveLlmSelection } from "@kletron/server/llm";
+import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@kletron/shared/types";
+import { agentGraphService } from "@kletron/server/services/agentGraphService";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
+import { getGraphNodeOrder, buildInitialState } from "@kletron/server/services/agentGraphRuntime";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 const textEncoder = new TextEncoder();
 
@@ -77,7 +77,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       sendChunk({ type: "init", payload: { runId, graphId: params.id } });
 
       try {
-        const { agentGraphExecutor } = await import("@numezis/server/services/agentGraphExecutor");
+        const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
         const result = await agentGraphExecutor.executeRunStreaming(runId, {
           onUpdate: async (update) => {
             sendChunk({ type: "update", payload: update });

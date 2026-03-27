@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@numezis/server/lib/db";
-import { type DriftJobDoc } from "@numezis/server/services/driftAnalysisWorker";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { DEFAULT_DRIFT_STAGES } from "@numezis/shared/driftStages";
-import { getEnabledProviders, getLlmConfig } from "@numezis/server/services/llmConfigService";
-import { LLM_PROVIDERS, type LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { getDb } from "@kletron/server/lib/db";
+import { type DriftJobDoc } from "@kletron/server/services/driftAnalysisWorker";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { DEFAULT_DRIFT_STAGES } from "@kletron/shared/driftStages";
+import { getEnabledProviders, getLlmConfig } from "@kletron/server/services/llmConfigService";
+import { LLM_PROVIDERS, type LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 export async function POST(req: Request) {
     const auth = await requireAppRouteAuth(req);

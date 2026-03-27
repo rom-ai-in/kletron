@@ -3,12 +3,14 @@
 import React, { useEffect, useRef, useMemo, useCallback, useLayoutEffect, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { MessageBubble, SystemMessage } from './ChatMessage';
+import { X, RotateCcw } from 'lucide-react';
+import { Textarea } from '../design-system';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ToolInvocation } from './ToolInvocation';
 import { ToolBatchAccordion } from './ToolBatchAccordion';
 import type { ToolPair } from './ToolBatchAccordion';
 import { ThoughtsPanel } from './ThoughtsPanel';
-import type { ChatEvent, RenderItem } from '@numezis/shared/chatTypes';
+import type { ChatEvent, RenderItem } from '@kletron/shared/chatTypes';
 import { groupEvents, pairToolEvents } from '../../lib/toolPairing';
 
 // Re-export for backward compatibility
@@ -48,6 +50,13 @@ export interface MessageListProps {
     prefetchNearTop?: boolean;
     /** Triggered when near top threshold is reached */
     onNearTop?: () => void;
+    editingMessageIndex?: number | null;
+    editingMessageDraft?: string;
+    editingMessageSaving?: boolean;
+    editingMessageError?: string | null;
+    onEditDraftChange?: (draft: string) => void;
+    onCancelEdit?: () => void;
+    onResendEdit?: () => void;
 }
 
 const MessageListInner: React.FC<MessageListProps> = ({
@@ -66,6 +75,13 @@ const MessageListInner: React.FC<MessageListProps> = ({
     virtualized = true,
     prefetchNearTop = false,
     onNearTop,
+    editingMessageIndex,
+    editingMessageDraft,
+    editingMessageSaving = false,
+    editingMessageError,
+    onEditDraftChange,
+    onCancelEdit,
+    onResendEdit,
 }) => {
     const bottomRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -262,6 +278,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
         if (event.kind === 'tool') return null;
 
         const isAssistant = event.kind === 'assistant';
+        const isUser = event.kind === 'user';
+        const isEditing = isUser && typeof event.messageIndex === 'number' && event.messageIndex === editingMessageIndex;
 
         return (
             <div key={event.id || `msg-${index}`} className={event.toolName ? 'mb-0' : 'mb-1'}>
@@ -279,17 +297,68 @@ const MessageListInner: React.FC<MessageListProps> = ({
                     </>
                 )}
 
-                {event.content && (
+                {isEditing ? (
+                    <div className="flex flex-col items-end">
+                        <div className="w-full max-w-[90%] rounded-xl border border-brand-primary/40 bg-bg-elevated text-text-primary ring-1 ring-brand-primary/20 px-4 py-3 shadow-sm space-y-2">
+                            <Textarea
+                                value={editingMessageDraft ?? ''}
+                                onChange={(e) => onEditDraftChange?.(e.target.value)}
+                                disabled={editingMessageSaving}
+                                noResize
+                                className="!bg-transparent !border-none !ring-0 !shadow-none !p-0 text-[14px] w-full"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                        e.preventDefault();
+                                        onResendEdit?.();
+                                    }
+                                    if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        onCancelEdit?.();
+                                    }
+                                }}
+                            />
+                            <div className="flex items-center justify-between pt-1 border-t border-border-subtle/50">
+                                <span className="text-[10px] text-text-muted">
+                                    <kbd className="px-1 py-0.5 rounded bg-bg-root border border-border-subtle text-[9px] font-mono">⌘↵</kbd> resend · <kbd className="px-1 py-0.5 rounded bg-bg-root border border-border-subtle text-[9px] font-mono">esc</kbd> cancel
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); onCancelEdit?.(); }}
+                                        disabled={editingMessageSaving}
+                                        className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
+                                    >
+                                        <X className="w-3 h-3" />
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); onResendEdit?.(); }}
+                                        disabled={editingMessageSaving}
+                                        className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-brand-primary text-white hover:bg-brand-primary/90 transition-colors disabled:opacity-50"
+                                    >
+                                        <RotateCcw className="w-3 h-3" />
+                                        Resend
+                                    </button>
+                                </div>
+                            </div>
+                            {editingMessageError && (
+                                <div className="text-[10px] text-status-error-text">{editingMessageError}</div>
+                            )}
+                        </div>
+                    </div>
+                ) : event.content ? (
                     <MessageBubble
                         role={event.kind === 'error' ? 'system' : event.kind}
                         content={event.content}
                         timestamp={event.timestamp}
                         actions={messageActions?.(event)}
                     />
-                )}
+                ) : null}
             </div>
         );
-    }, [compactTools, messageActions]);
+    }, [compactTools, messageActions, editingMessageIndex, editingMessageDraft, editingMessageSaving, editingMessageError, onEditDraftChange, onCancelEdit, onResendEdit]);
 
     return (
         <div

@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { ConversationCenter } from "@numezis/ui/components/CommandCenter/ConversationCenter";
-import { InputBar } from "@numezis/ui/components/CommandCenter/InputBar";
-import { InlineDiffReview } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
-import type { InlineDiff } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
-import { LLMSelector } from "@numezis/ui/components/design-system";
+import { MessageList } from "@kletron/ui/components/Agent/MessageList";
+import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
+import { useMessageEdit } from "@kletron/ui/hooks/useMessageEdit";
+import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
+import { InputBar } from "@kletron/ui/components/CommandCenter/InputBar";
+import { InlineDiffReview } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
+import type { InlineDiff } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
+import { LLMSelector } from "@kletron/ui/components/design-system";
 
 import { useAuth } from "../hooks/useAuth";
 import { useSettings } from "../hooks/useSettings";
@@ -45,6 +48,13 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
     diffs.setDiffs
   );
 
+  const editControl = useMessageEdit({
+    sessionId: conversationId,
+    events: conversation.conversationEvents,
+    streaming: conversation.streaming,
+    onTruncateAndResend: conversation.truncateAndResend,
+  });
+
   // Load conversation on mount
   useEffect(() => {
     if (threadId && auth.auth?.accessToken && backendReady) {
@@ -81,35 +91,41 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
       </header>
 
       {/* Conversation */}
-      <ConversationCenter
-        renderItems={conversation.renderItems}
-        streaming={conversation.streaming}
-        streamHasEvents={conversation.streamHasEvents}
-        streamingText={conversation.streamingText}
-        sendError={conversation.sendError}
-        conversationLoading={conversation.conversationLoading}
-        conversationId={conversationId}
-        editingMessageIndex={conversation.editingMessageIndex}
-        editingMessageDraft={conversation.editingMessageDraft}
-        editingMessageSaving={conversation.editingMessageSaving}
-        editingMessageError={conversation.editingMessageError}
-        onStartEdit={conversation.startEditMessage}
-        onResendEdit={conversation.saveEditedMessage}
-        onCancelEdit={conversation.cancelEditMessage}
-        onEditDraftChange={conversation.setEditingMessageDraft}
-        diffReview={
-          inlineDiffs.length > 0 ? (
-            <InlineDiffReview
-              diffs={inlineDiffs}
-              onAccept={(editId) => diffs.applyAllDiff(editId)}
-              onReject={(editId) => diffs.rejectAllDiff(editId)}
-              onOpenInIDE={(filePath) => {
-                try { (window as any).numezis?.openInVSCode?.(filePath); } catch { /* ignore */ }
-              }}
+      <div className="flex-1 overflow-y-auto scrollbar-elegant flex flex-col">
+        <MessageList
+          events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
+          streaming={conversation.streaming}
+          streamingText={conversation.streamingText}
+          messageActions={(event) => (
+            <MessageActions
+              event={event}
+              onStartEdit={() => editControl.startEditMessage(event.messageIndex!, event.content ?? "")}
             />
-          ) : undefined
-        }
-      />
+          )}
+          editingMessageIndex={editControl.editingMessageIndex}
+          editingMessageDraft={editControl.editingMessageDraft}
+          editingMessageSaving={editControl.editingMessageSaving}
+          editingMessageError={editControl.editingMessageError}
+          onEditDraftChange={(draft) => editControl.setEditingMessageDraft(draft)}
+          onCancelEdit={editControl.cancelEditMessage}
+          onResendEdit={editControl.handleResendEdit}
+        />
+        {inlineDiffs.length > 0 && (
+          <InlineDiffReview
+            diffs={inlineDiffs}
+            onAccept={(editId) => diffs.applyAllDiff(editId)}
+            onReject={(editId) => diffs.rejectAllDiff(editId)}
+            onOpenInIDE={(filePath) => {
+              try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
+            }}
+          />
+        )}
+        {conversation.sendError && (
+          <div className="mx-4 my-2 rounded border border-status-error-border bg-status-error-bg px-3 py-2 text-[12px] text-status-error-text">
+            {conversation.sendError}
+          </div>
+        )}
+      </div>
 
       {/* Input Bar */}
       <InputBar
@@ -138,6 +154,14 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
             compact
           />
         }
+      />
+      {/* Replay Confirmation Dialog */}
+      <ReplayConfirmDialog
+        open={editControl.replayDialogOpen}
+        impact={editControl.replayImpact}
+        onConfirm={() => void editControl.executeReplay()}
+        onCancel={editControl.cancelReplay}
+        loading={editControl.editingMessageSaving}
       />
     </div>
   );

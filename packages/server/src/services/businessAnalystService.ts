@@ -4,7 +4,7 @@ import type {
     BusinessContext,
     UserPersona,
     Competitor,
-} from "@numezis/shared/businessContext";
+} from "@kletron/shared/businessContext";
 import type {
     FeatureProposal,
     FeatureFilter,
@@ -12,7 +12,7 @@ import type {
     BADashboardSummary,
     FeatureType,
     FeatureStatus,
-} from "@numezis/shared/businessAnalystTypes";
+} from "@kletron/shared/businessAnalystTypes";
 
 // ---------------------------------------------------------------------------
 // Collection Names

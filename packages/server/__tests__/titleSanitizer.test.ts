@@ -4,7 +4,7 @@ import {
   sanitizeAssistantVisibleContent,
   sanitizeTitle,
   stripThoughtContent,
-} from "@numezis/server/services/titleSanitizer";
+} from "@kletron/server/services/titleSanitizer";
 
 describe("titleSanitizer", () => {
   it("removes think blocks and prompt leakage content", () => {

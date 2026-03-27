@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Copy, Check } from "lucide-react";
-import { Modal, Skeleton } from "@numezis/ui/components/design-system";
-import type { AgentEvent } from "@numezis/shared/types";
+import { Modal, Skeleton } from "@kletron/ui/components/design-system";
+import { ReportMarkdownRenderer } from "@kletron/ui/components/ReportMarkdownRenderer";
+import type { AgentEvent } from "@kletron/shared/types";
 
 interface StageDetailModalProps {
     isOpen: boolean;
@@ -12,6 +13,8 @@ interface StageDetailModalProps {
     stageName: string;
     sessionId?: string;
     status: string;
+    /** Optional raw output from the stage execution (rendered as markdown in "Stage Output" tab) */
+    rawOutput?: string;
 }
 
 export function StageDetailModal({
@@ -20,12 +23,13 @@ export function StageDetailModal({
     stageId,
     stageName,
     sessionId,
-    status
+    status,
+    rawOutput,
 }: StageDetailModalProps) {
     const [events, setEvents] = useState<AgentEvent[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
-    const [activeTab, setActiveTab] = useState<"logs" | "json">("logs");
+    const [activeTab, setActiveTab] = useState<"output" | "logs" | "json">(rawOutput ? "output" : "logs");
     const [copied, setCopied] = useState(false);
 
     useEffect(() => {
@@ -35,6 +39,13 @@ export function StageDetailModal({
             setEvents([]);
         }
     }, [isOpen, sessionId]);
+
+    // Reset active tab when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            setActiveTab(rawOutput ? "output" : "logs");
+        }
+    }, [isOpen, rawOutput]);
 
     const fetchSessionDetails = async () => {
         if (!sessionId) return;
@@ -59,11 +70,15 @@ export function StageDetailModal({
     };
 
     const handleCopy = async () => {
-        if (!events.length) return;
-
-        const text = activeTab === "json"
-            ? JSON.stringify(events, null, 2)
-            : events.map(e => `[${new Date(e.timestamp).toLocaleTimeString()}] ${e.kind.toUpperCase()} (${e.phaseLabel}): ${e.content || ""}`).join("\n");
+        let text = "";
+        if (activeTab === "output" && rawOutput) {
+            text = rawOutput;
+        } else if (activeTab === "json") {
+            text = JSON.stringify(events, null, 2);
+        } else {
+            text = events.map(e => `[${new Date(e.timestamp).toLocaleTimeString()}] ${e.kind.toUpperCase()} (${e.phaseLabel}): ${e.content || ""}`).join("\n");
+        }
+        if (!text) return;
 
         await navigator.clipboard.writeText(text);
         setCopied(true);
@@ -81,6 +96,17 @@ export function StageDetailModal({
             <div className="flex h-full flex-col">
                 {/* Tabs */}
                 <div className="flex items-center border-b border-border-subtle bg-bg-surface px-6 pt-2">
+                    {rawOutput && (
+                        <button
+                            onClick={() => setActiveTab("output")}
+                            className={`border-b-2 px-4 py-2 text-sm font-medium transition ${activeTab === "output"
+                                ? "border-text-primary text-text-primary"
+                                : "border-transparent text-text-muted hover:text-text-primary"
+                                }`}
+                        >
+                            Stage Output
+                        </button>
+                    )}
                     <button
                         onClick={() => setActiveTab("logs")}
                         className={`border-b-2 px-4 py-2 text-sm font-medium transition ${activeTab === "logs"
@@ -102,7 +128,7 @@ export function StageDetailModal({
 
                     <button
                         onClick={handleCopy}
-                        disabled={events.length === 0}
+                        disabled={activeTab === "output" ? !rawOutput : events.length === 0}
                         className="ml-auto mb-1 flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-text-muted hover:bg-bg-elevated hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Copy to clipboard"
                     >
@@ -113,7 +139,17 @@ export function StageDetailModal({
 
                 {/* Content */}
                 <div className="flex-1 relative min-h-0 bg-bg-app">
-                    {loading && (
+                    {/* Stage Output tab */}
+                    {activeTab === "output" && rawOutput && (
+                        <div className="absolute inset-0 overflow-y-auto p-6 scrollbar-elegant">
+                            <div className="mx-auto max-w-4xl">
+                                <ReportMarkdownRenderer content={rawOutput} />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Execution Log tab */}
+                    {activeTab === "logs" && loading && (
                         <div className="absolute inset-0 overflow-hidden p-4 space-y-4">
                             {[1, 2, 3, 4, 5].map((i) => (
                                 <div key={i} className="rounded-lg border border-border-subtle bg-bg-surface p-3">
@@ -133,13 +169,13 @@ export function StageDetailModal({
                         </div>
                     )}
 
-                    {error && (
+                    {activeTab === "logs" && error && (
                         <div className="absolute inset-0 flex items-center justify-center p-6">
                             <div className="text-center text-status-error-text">Error: {error}</div>
                         </div>
                     )}
 
-                    {!loading && !error && activeTab === "logs" && (
+                    {activeTab === "logs" && !loading && !error && (
                         <div className="absolute inset-0 overflow-y-auto p-4 scrollbar-elegant">
                             <div className="mx-auto max-w-4xl space-y-4">
                                 {events.map((event) => (
@@ -152,7 +188,7 @@ export function StageDetailModal({
                         </div>
                     )}
 
-                    {!loading && !error && activeTab === "json" && (
+                    {activeTab === "json" && !loading && !error && (
                         <div className="absolute inset-0 overflow-y-auto p-4 scrollbar-elegant">
                             <pre className="text-xs text-text-secondary whitespace-pre-wrap break-words font-mono">
                                 {JSON.stringify(events, null, 2)}

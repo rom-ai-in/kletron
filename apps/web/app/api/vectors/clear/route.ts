@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { clearVectors } from "@numezis/server/services/vectorService";
-import { invalidateRefreshCache } from "@numezis/server/services/indexerService";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
+import { clearVectors } from "@kletron/server/services/vectorService";
+import { invalidateRefreshCache } from "@kletron/server/services/indexerService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 export async function DELETE(request: Request) {
     const auth = await requireAppRouteAuth(request);

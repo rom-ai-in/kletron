@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { Plus, History } from "lucide-react";
-import { Breadcrumbs, Selector, type SelectorOption } from "@numezis/ui/components/design-system";
+import { Breadcrumbs, Selector, type SelectorOption } from "@kletron/ui/components/design-system";
 import { useWorkspace } from "../context/WorkspaceContext";
 
 export function AppHeader() {

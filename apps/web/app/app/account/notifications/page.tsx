@@ -10,7 +10,7 @@ import {
     Check,
     AlertCircle
 } from 'lucide-react';
-import { Button, Switch } from '@numezis/ui/components/design-system';
+import { Button, Switch } from '@kletron/ui/components/design-system';
 
 interface NotificationSetting {
     id: string;
@@ -65,7 +65,7 @@ export default function NotificationsPage() {
         },
         {
             id: 'newsletter',
-            title: 'Numezis Newsletter',
+            title: 'Kletron Newsletter',
             description: 'Monthly newsletter with AI development insights',
             icon: Mail,
             enabled: false,
@@ -142,7 +142,7 @@ export default function NotificationsPage() {
                     <h2 className="text-lg font-semibold text-text-primary">Notification Preferences</h2>
                 </div>
                 <p className="text-sm text-text-muted">
-                    Control which emails and notifications you receive from Numezis Code.
+                    Control which emails and notifications you receive from Kletron.
                 </p>
             </div>
 

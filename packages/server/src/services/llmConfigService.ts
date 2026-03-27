@@ -12,8 +12,8 @@ import type {
     OllamaConfig,
     VLLMConfig,
     LlmProviderType,
-} from "@numezis/shared/schemas/llmConfig.schema";
-import * as LlmSchema from "@numezis/shared/schemas/llmConfig.schema";
+} from "@kletron/shared/schemas/llmConfig.schema";
+import * as LlmSchema from "@kletron/shared/schemas/llmConfig.schema";
 
 const {
     validateLlmConfig,

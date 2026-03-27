@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import type { AgentDiff, DiffChunk } from "@numezis/shared/types/editor";
+import type { AgentDiff, DiffChunk } from "@kletron/shared/types/editor";
 
 // We need some Monaco types. Since we don't have the package installed in this context file easily without import,
 // we'll assume `any` for the editor instance or rely on generic types passed in, 

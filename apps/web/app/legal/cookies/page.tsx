@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MarketingHeader, MarketingFooter } from '@numezis/ui/components/design-system';
+import { MarketingHeader, MarketingFooter } from '@kletron/ui/components/design-system';
 
 export default function CookiePolicyPage() {
     return (
@@ -15,7 +15,7 @@ export default function CookiePolicyPage() {
                         <p className="text-xs text-text-muted mb-2">Last updated: February 2, 2026</p>
                         <h1 className="text-3xl font-bold text-text-primary mb-4">Cookie Policy</h1>
                         <p className="text-sm text-text-muted">
-                            This Cookie Policy explains how Numezis Technologies SA uses cookies and similar technologies
+                            This Cookie Policy explains how Kletron SA uses cookies and similar technologies
                             on our website and VS Code extension.
                         </p>
                     </div>
@@ -57,7 +57,7 @@ export default function CookiePolicyPage() {
                                                 <td className="py-1.5">7 days</td>
                                             </tr>
                                             <tr className="border-b border-border-subtle/30">
-                                                <td className="py-1.5 font-mono text-text-muted">numezis_session</td>
+                                                <td className="py-1.5 font-mono text-text-muted">kletron_session</td>
                                                 <td className="py-1.5">Session management</td>
                                                 <td className="py-1.5">Session</td>
                                             </tr>
@@ -186,7 +186,7 @@ export default function CookiePolicyPage() {
                     <Section title="Contact">
                         <p>
                             For questions about our cookie practices, contact us at{' '}
-                            <a href="mailto:privacy@numezis.com" className="text-status-success-text hover:underline">privacy@numezis.com</a>.
+                            <a href="mailto:privacy@kletron.com" className="text-status-success-text hover:underline">privacy@kletron.com</a>.
                         </p>
                     </Section>
                 </article>

@@ -1,9 +1,9 @@
-import { AgentWorkflowResult, AgentWorkflowUpdate } from "@numezis/shared/types";
-import { resolveLlmSelection } from "@numezis/server/llm";
-import { runWorkflow } from "@numezis/agent-core/workflows";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
-import { runWithWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
+import { AgentWorkflowResult, AgentWorkflowUpdate } from "@kletron/shared/types";
+import { resolveLlmSelection } from "@kletron/server/llm";
+import { runWorkflow } from "@kletron/agent-core/workflows";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
+import { runWithWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 
 const textEncoder = new TextEncoder();
 

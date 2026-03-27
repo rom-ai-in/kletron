@@ -6,7 +6,7 @@ import {
     createEmptyTokenUsageSummary,
     addTokenUsage,
     accumulateUsage,
-} from "@numezis/server/services/tokenUsageTypes";
+} from "@kletron/server/services/tokenUsageTypes";
 
 describe("Token Usage Types", () => {
     describe("createEmptyTokenUsage", () => {
@@ -119,13 +119,13 @@ describe("Token Usage Types", () => {
 
 describe("TokenUsageService", () => {
     // Import the class fresh for each test to reset singleton state
-    let TokenUsageService: typeof import("@numezis/server/services/tokenUsageService").TokenUsageService;
+    let TokenUsageService: typeof import("@kletron/server/services/tokenUsageService").TokenUsageService;
     let tokenUsageService: InstanceType<typeof TokenUsageService>;
 
     beforeEach(async () => {
         // Re-import to get fresh instance
         vi.resetModules();
-        const module = await import("@numezis/server/services/tokenUsageService");
+        const module = await import("@kletron/server/services/tokenUsageService");
         TokenUsageService = module.TokenUsageService;
         tokenUsageService = new TokenUsageService();
     });

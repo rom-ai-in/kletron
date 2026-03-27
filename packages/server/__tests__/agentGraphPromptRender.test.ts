@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { renderUserPrompt } from "@numezis/server/services/agentGraphUtils";
+import { renderUserPrompt } from "@kletron/server/services/agentGraphUtils";
 
 describe("agentGraphUtils.renderUserPrompt", () => {
     it("replaces {{state}} with JSON stringified state", () => {

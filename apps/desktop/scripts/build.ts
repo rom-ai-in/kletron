@@ -16,7 +16,7 @@ await esbuild.build({
   tsconfig: path.resolve(root, "tsconfig.json"),
   external: ["electron", "electron-updater"],
   alias: {
-    "@numezis/bridge": path.resolve(root, "..", "..", "packages", "bridge", "src", "index.ts"),
+    "@kletron/bridge": path.resolve(root, "..", "..", "packages", "bridge", "src", "index.ts"),
   },
   outExtension: { ".js": ".cjs" },
   outdir,

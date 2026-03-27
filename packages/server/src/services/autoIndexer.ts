@@ -11,7 +11,7 @@ type WorkspaceWatcher = {
     root: string;
 };
 
-const watcherKey = Symbol.for("numezis.indexer.watchers");
+const watcherKey = Symbol.for("kletron.indexer.watchers");
 if (!(globalThis as any)[watcherKey]) {
     (globalThis as any)[watcherKey] = new Map<string, WorkspaceWatcher>();
 }

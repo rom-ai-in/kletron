@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { exec } from "child_process";
 import util from "util";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 const execPromise = util.promisify(exec);
 

@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config();
-import { getDb, closeDb } from "@numezis/server/lib/db";
+import { getDb, closeDb } from "@kletron/server/lib/db";
 import { ObjectId } from "mongodb";
 
 async function main() {

@@ -1,8 +1,8 @@
 // app/api/auth/profile/route.ts
 // API route to update user profile in MongoDB
 import { NextResponse } from 'next/server';
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import * as userProfileService from '@numezis/server/services/userProfileService';
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import * as userProfileService from '@kletron/server/services/userProfileService';
 
 export async function PATCH(request: Request) {
     const auth = await requireAppRouteAuth(request);

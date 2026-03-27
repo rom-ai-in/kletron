@@ -1,5 +1,5 @@
 {
-  "name": "@numezis/web",
+  "name": "@kletron/web",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -11,11 +11,11 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@numezis/agent-core": "file:../../packages/agent-core",
-    "@numezis/mcp-client": "file:../../packages/mcp-client",
-    "@numezis/server": "file:../../packages/server",
-    "@numezis/shared": "file:../../packages/shared",
-    "@numezis/ui": "file:../../packages/ui",
+    "@kletron/agent-core": "file:../../packages/agent-core",
+    "@kletron/mcp-client": "file:../../packages/mcp-client",
+    "@kletron/server": "file:../../packages/server",
+    "@kletron/shared": "file:../../packages/shared",
+    "@kletron/ui": "file:../../packages/ui",
     "next": "^14.2.7",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

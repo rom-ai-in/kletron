@@ -15,34 +15,38 @@ import {
   ContextChips,
   createFileChip,
   useToast,
-} from "@numezis/ui/components/design-system";
-import type { ContextChip } from "@numezis/ui/components/design-system";
+} from "@kletron/ui/components/design-system";
+import type { ContextChip } from "@kletron/ui/components/design-system";
 
 // Terminal component
-import { Terminal } from "@numezis/ui/components/Terminal";
+import { Terminal } from "@kletron/ui/components/Terminal";
 
 // Command Center components
-import { TitleBar } from "@numezis/ui/components/CommandCenter/TitleBar";
-import { ProjectSidebar } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
-import type { SidebarProject } from "@numezis/ui/components/CommandCenter/ProjectSidebar";
-import { ConversationCenter } from "@numezis/ui/components/CommandCenter/ConversationCenter";
-import { InputBar } from "@numezis/ui/components/CommandCenter/InputBar";
-import { MessageQueue } from "@numezis/ui/components/CommandCenter/MessageQueue";
-import { ProjectUtilitySidebar } from "@numezis/ui/components/CommandCenter/ProjectUtilitySidebar";
-import type { PendingDiffItem, FileLink, GitSidebarData } from "@numezis/ui/components/CommandCenter/ProjectUtilitySidebar";
-import { UncommittedChangesPanel } from "@numezis/ui/components/CommandCenter/UncommittedChangesPanel";
-import type { FileDiffData } from "@numezis/ui/components/CommandCenter/UncommittedChangesPanel";
-import { InlineDiffReview } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
-import type { InlineDiff } from "@numezis/ui/components/CommandCenter/InlineDiffReview";
-import { SlashCommandMenu } from "@numezis/ui/components/CommandCenter/SlashCommandMenu";
-import type { SlashCommandItem } from "@numezis/ui/components/CommandCenter/SlashCommandMenu";
-import { MultimodalMenu } from "@numezis/ui/components/CommandCenter/MultimodalMenu";
-import { SkillsManager } from "@numezis/ui/components/CommandCenter/SkillsManager";
-import { AutomationsDashboard } from "@numezis/ui/components/CommandCenter/AutomationsDashboard";
-import { AgentGraphSelector } from "@numezis/ui/components/CommandCenter/AgentGraphSelector";
-import type { AgentGraph } from "@numezis/ui/components/CommandCenter/AgentGraphSelector";
-import { ReplayConfirmDialog } from "@numezis/ui/components/CommandCenter/ReplayConfirmDialog";
-import type { ReplayImpact } from "@numezis/ui/components/CommandCenter/ReplayConfirmDialog";
+import { TitleBar } from "@kletron/ui/components/CommandCenter/TitleBar";
+import { ProjectSidebar } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import type { SidebarProject } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import { MessageList } from "@kletron/ui/components/Agent/MessageList";
+import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
+import { useMessageEdit } from "@kletron/ui/hooks/useMessageEdit";
+import { InputBar } from "@kletron/ui/components/CommandCenter/InputBar";
+import { MessageQueue } from "@kletron/ui/components/CommandCenter/MessageQueue";
+import { ProjectUtilitySidebar } from "@kletron/ui/components/CommandCenter/ProjectUtilitySidebar";
+import type { PendingDiffItem, FileLink, GitSidebarData } from "@kletron/ui/components/CommandCenter/ProjectUtilitySidebar";
+import { UncommittedChangesPanel } from "@kletron/ui/components/CommandCenter/UncommittedChangesPanel";
+import type { FileDiffData } from "@kletron/ui/components/CommandCenter/UncommittedChangesPanel";
+import { ResizeHandle } from "@kletron/ui/components/CommandCenter/ResizeHandle";
+import { useResizablePanel } from "@kletron/ui/hooks/useResizablePanel";
+import { InlineDiffReview } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
+import type { InlineDiff } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
+import { SlashCommandMenu } from "@kletron/ui/components/CommandCenter/SlashCommandMenu";
+import type { SlashCommandItem } from "@kletron/ui/components/CommandCenter/SlashCommandMenu";
+import { MultimodalMenu } from "@kletron/ui/components/CommandCenter/MultimodalMenu";
+import { SkillsManager } from "@kletron/ui/components/CommandCenter/SkillsManager";
+import { AutomationsDashboard } from "@kletron/ui/components/CommandCenter/AutomationsDashboard";
+import { AgentGraphSelector } from "@kletron/ui/components/CommandCenter/AgentGraphSelector";
+import type { AgentGraph } from "@kletron/ui/components/CommandCenter/AgentGraphSelector";
+import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
+import type { ReplayImpact } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
 
 // Hooks
 import { useAuth } from "../hooks/useAuth";
@@ -111,6 +115,11 @@ export default function App() {
 
   const skillsHook = useSkills(backendUrlTrimmed, backendReady, auth.getAccessToken);
 
+  // ── Resizable panels ──────────────────────────────────────────────────────
+  const leftPanel = useResizablePanel({ storageKey: 'left-sidebar', defaultWidth: 260, minWidth: 180, maxWidth: 400, direction: 'left' });
+  const rightPanel = useResizablePanel({ storageKey: 'right-sidebar', defaultWidth: 300, minWidth: 220, maxWidth: 500, direction: 'right' });
+  const changesPanel = useResizablePanel({ storageKey: 'changes-panel', defaultWidth: 480, minWidth: 320, maxWidth: 720, direction: 'right' });
+
   // ═══════════════════════════════════════════════════════════════════════════
   // UI STATE
   // ═══════════════════════════════════════════════════════════════════════════
@@ -128,9 +137,12 @@ export default function App() {
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   const [automations, setAutomations] = useState<Automation[]>([]);
-  const [replayImpact, setReplayImpact] = useState<ReplayImpact | null>(null);
-  const [replayDialogOpen, setReplayDialogOpen] = useState(false);
-  const [replayLoading, setReplayLoading] = useState(false);
+  const editControl = useMessageEdit({
+    sessionId: threads.conversationId,
+    events: conversation.conversationEvents,
+    streaming: conversation.streaming,
+    onTruncateAndResend: conversation.truncateAndResend,
+  });
   const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -441,7 +453,7 @@ export default function App() {
 
   async function handleAddProject() {
     try {
-      const result = await (window as any).numezis?.selectWorkspace?.();
+      const result = await (window as any).kletron?.selectWorkspace?.();
       if (!result) return; // user cancelled the dialog
       const folderPath: string = result.path;
       const folderName: string = result.name || folderPath.split("/").pop() || "Project";
@@ -615,64 +627,7 @@ export default function App() {
     conversation.setInput(`${prefix}${comment}`);
   }
 
-  // ── Replay (edit & resend) flow ─────────────────────────────────────────────
-  function handleResendEdit() {
-    if (conversation.editingMessageIndex === null) return;
-    const draft = conversation.editingMessageDraft.trim();
-    if (!draft) return;
 
-    // Find the original content of the message being edited
-    const originalEvent = conversation.conversationEvents.find(
-      (e) => e.messageIndex === conversation.editingMessageIndex
-    );
-    const originalContent = originalEvent?.content ?? "";
-
-    // Compute what will be lost
-    const impact = conversation.computeReplayImpact(
-      conversation.editingMessageIndex,
-      originalContent,
-      draft
-    );
-
-    // If there's nothing after this message (it's the last user message), just replay directly
-    if (impact.messagesRemoved === 0 && impact.toolCallsRemoved === 0 && impact.fileChanges.length === 0) {
-      void executeReplay();
-      return;
-    }
-
-    // Show confirmation dialog
-    setReplayImpact(impact);
-    setReplayDialogOpen(true);
-  }
-
-  async function executeReplay() {
-    if (conversation.editingMessageIndex === null) return;
-    const draft = conversation.editingMessageDraft.trim();
-    if (!draft) return;
-
-    setReplayLoading(true);
-    setReplayDialogOpen(false);
-
-    await conversation.replayFromMessage(
-      conversation.editingMessageIndex,
-      draft,
-      { planMode }
-    );
-
-    setReplayImpact(null);
-    setReplayLoading(false);
-
-    // The replayFromMessage sets input — now trigger send
-    // We need a small delay for state to propagate, then auto-send
-    setTimeout(() => {
-      conversation.sendMessage({ planMode });
-    }, 50);
-  }
-
-  function cancelReplay() {
-    setReplayDialogOpen(false);
-    setReplayImpact(null);
-  }
 
   // Auto-add new conversation to tabs
   useEffect(() => {
@@ -734,8 +689,8 @@ export default function App() {
                     <h2 className="text-sm font-semibold text-text-primary">Backend</h2>
                     <div className="glass-card divide-y divide-border-subtle rounded-md">
                       <div className="flex items-center justify-between gap-4 px-3 py-2">
-                        <div><div className="text-sm font-medium text-text-primary">Backend URL</div><div className="text-xs text-text-muted">Connect to your Numezis backend.</div></div>
-                        <input value={settings.backendUrl} onChange={(e) => settings.setBackendUrl(e.target.value)} className="w-56 rounded-md border border-border-subtle bg-bg-app px-2 py-1 text-xs text-text-primary" placeholder="https://app.numezis.com" />
+                        <div><div className="text-sm font-medium text-text-primary">Backend URL</div><div className="text-xs text-text-muted">Connect to your Kletron backend.</div></div>
+                        <input value={settings.backendUrl} onChange={(e) => settings.setBackendUrl(e.target.value)} className="w-56 rounded-md border border-border-subtle bg-bg-app px-2 py-1 text-xs text-text-primary" placeholder="https://app.kletron.com" />
                       </div>
                       <div className="flex items-center justify-between gap-4 px-3 py-2">
                         <div className="text-sm font-medium text-text-primary">Connection status</div>
@@ -935,7 +890,7 @@ export default function App() {
     <div className="flex h-screen flex-col text-text-primary">
       {/* ── Title Bar ── */}
       <TitleBar
-        workspaceName={workspace.workspace?.name || workspace.workspace?.path?.split("/").pop() || "Numezis Desktop"}
+        workspaceName={workspace.workspace?.name || workspace.workspace?.path?.split("/").pop() || "Kletron Desktop"}
         workspaceSelectorLabel={workspace.workspace?.name || workspace.workspace?.path?.split("/").pop() || "Select workspace"}
         onWorkspaceSelectorClick={() => { void workspace.selectWorkspace(); }}
         workspaceItems={workspace.allWorkspaces}
@@ -944,7 +899,7 @@ export default function App() {
         onAddWorkspace={handleAddProject}
         showTrafficLights={false}
         onOpen={() => {
-          try { (window as any).numezis?.openInVSCode?.(); } catch { /* ignore */ }
+          try { (window as any).kletron?.openInVSCode?.(); } catch { /* ignore */ }
         }}
         onCommit={() => {
           // Focus the right sidebar git section to write commit message
@@ -957,7 +912,7 @@ export default function App() {
           void git.push().then(() =>
             git.createPR(title).then((result) => {
               if (result?.url) {
-                try { (window as any).numezis?.openExternal?.(result.url); } catch { /* ignore */ }
+                try { (window as any).kletron?.openExternal?.(result.url); } catch { /* ignore */ }
               }
             })
           );
@@ -974,16 +929,14 @@ export default function App() {
           });
         }}
         changesVisible={changesVisible}
-        gitDiffStats={git.gitStatus ? {
-          additions: git.gitStatus.created.length + git.gitStatus.modified.length,
-          deletions: git.gitStatus.deleted.length,
-        } : undefined}
+        gitDiffStats={git.diffStats ?? undefined}
       />
 
       {/* ── Three-Pane Body ── */}
       <div className="flex flex-1 min-h-0 relative">
         {/* Left Sidebar: Project Navigation */}
         {sidebarVisible && (
+          <>
           <ProjectSidebar
             projects={sidebarProjects}
             activeThreadId={threads.conversationId}
@@ -1000,44 +953,48 @@ export default function App() {
             }}
             onArchiveThread={(threadId) => void threads.archiveThread(threadId)}
             onDeleteThread={(threadId) => void threads.deleteThread(threadId)}
+            style={{ width: leftPanel.width }}
           />
+          <ResizeHandle
+            onMouseDown={leftPanel.startDrag}
+            onDoubleClick={leftPanel.resetToDefault}
+            active={leftPanel.isDragging}
+          />
+          </>
         )}
 
         {/* Center: Conversation Workspace */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Conversation Messages */}
-          <ConversationCenter
-            renderItems={conversation.renderItems}
-            streaming={conversation.streaming}
-            streamHasEvents={conversation.streamHasEvents}
-            streamingText={conversation.streamingText}
-            sendError={conversation.sendError}
-            conversationLoading={conversation.conversationLoading}
-            conversationId={threads.conversationId}
-            threadTitle={activeThreadTitle}
-            threadUpdatedAt={activeThread?.updatedAt ? formatRelativeTime(activeThread.updatedAt) : undefined}
-            editingMessageIndex={conversation.editingMessageIndex}
-            editingMessageDraft={conversation.editingMessageDraft}
-            editingMessageSaving={conversation.editingMessageSaving}
-            editingMessageError={conversation.editingMessageError}
-            onStartEdit={conversation.startEditMessage}
-            onResendEdit={handleResendEdit}
-            onCancelEdit={conversation.cancelEditMessage}
-            onEditDraftChange={conversation.setEditingMessageDraft}
-            diffReview={
-              inlineDiffs.length > 0 ? (
-                <InlineDiffReview
-                  diffs={inlineDiffs}
-                  onAccept={(editId) => diffs.applyAllDiff(editId)}
-                  onReject={(editId) => diffs.rejectAllDiff(editId)}
-                  onOpenInIDE={(filePath) => {
-                    try { (window as any).numezis?.openInVSCode?.(filePath); } catch { /* ignore */ }
-                  }}
-                  onRequestIteration={handleRequestIteration}
+          <div className="flex-1 overflow-y-auto scrollbar-elegant flex flex-col">
+            <MessageList
+              events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
+              streaming={conversation.streaming}
+              streamingText={conversation.streamingText}
+              messageActions={(event) => (
+                <MessageActions
+                  event={event}
+                  onStartEdit={() => editControl.startEditMessage(event.messageIndex!, event.content ?? "")}
                 />
-              ) : undefined
-            }
-          />
+              )}
+            />
+            {inlineDiffs.length > 0 && (
+              <InlineDiffReview
+                diffs={inlineDiffs}
+                onAccept={(editId) => diffs.applyAllDiff(editId)}
+                onReject={(editId) => diffs.rejectAllDiff(editId)}
+                onOpenInIDE={(filePath) => {
+                  try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
+                }}
+                onRequestIteration={handleRequestIteration}
+              />
+            )}
+            {conversation.sendError && (
+              <div className="mx-4 my-2 rounded border border-status-error-border bg-status-error-bg px-3 py-2 text-[12px] text-status-error-text">
+                {conversation.sendError}
+              </div>
+            )}
+          </div>
 
           {/* Input Bar */}
           <div className="relative">
@@ -1054,7 +1011,7 @@ export default function App() {
               onClose={() => setMultimodalOpen(false)}
               onIncludeFile={async () => {
                 try {
-                  const paths = await (window as any).numezis?.pickFile?.();
+                  const paths = await (window as any).kletron?.pickFile?.();
                   if (Array.isArray(paths)) {
                     for (const p of paths) {
                       const filename = p.split("/").pop() || p;
@@ -1065,7 +1022,7 @@ export default function App() {
               }}
               onTakeScreenshot={async () => {
                 try {
-                  await (window as any).numezis?.captureScreenshot?.();
+                  await (window as any).kletron?.captureScreenshot?.();
                 } catch { /* ignore */ }
               }}
             />
@@ -1161,13 +1118,19 @@ export default function App() {
 
         {/* Middle Panel: Uncommitted Changes Diffs */}
         {changesVisible && (
-          <div className="w-[480px] min-w-[360px] max-w-[640px] flex-shrink-0">
+          <>
+          <ResizeHandle
+            onMouseDown={changesPanel.startDrag}
+            onDoubleClick={changesPanel.resetToDefault}
+            active={changesPanel.isDragging}
+          />
+          <div className="flex-shrink-0" style={{ width: changesPanel.width }}>
             <UncommittedChangesPanel
               fileDiffs={uncommittedFileDiffs}
               loading={git.allDiffsLoading}
               onClose={() => setChangesVisible(false)}
               onOpenInIDE={(p) => {
-                try { (window as any).numezis?.openInVSCode?.(p); } catch { /* ignore */ }
+                try { (window as any).kletron?.openInVSCode?.(p); } catch { /* ignore */ }
               }}
               onStageFile={(p) => { void git.stageFile(p).then(() => git.fetchAllDiffs()); }}
               onRevertFile={(p) => { void git.revertFile(p).then(() => git.fetchAllDiffs()); }}
@@ -1175,10 +1138,17 @@ export default function App() {
               onStageAll={() => { void git.stageAll().then(() => git.fetchAllDiffs()); }}
             />
           </div>
+          </>
         )}
 
         {/* Right Sidebar: Source Control */}
         {rightSidebarVisible && (
+          <>
+          <ResizeHandle
+            onMouseDown={rightPanel.startDrag}
+            onDoubleClick={rightPanel.resetToDefault}
+            active={rightPanel.isDragging}
+          />
           <ProjectUtilitySidebar
             fileLinks={fileLinks}
             pendingDiffs={pendingDiffItems}
@@ -1188,7 +1158,7 @@ export default function App() {
             onAcceptDiff={(editId) => diffs.applyAllDiff(editId)}
             onRejectDiff={(editId) => diffs.rejectAllDiff(editId)}
             onOpenInIDE={(filePath) => {
-              try { (window as any).numezis?.openInVSCode?.(filePath); } catch { /* ignore */ }
+              try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
             }}
             gitData={gitSidebarData}
             onGitCommit={(msg) => git.commit(msg)}
@@ -1208,17 +1178,19 @@ export default function App() {
               void git.fetchAllDiffs();
             }}
             selectedDiffPath={git.selectedDiffPath}
+            style={{ width: rightPanel.width }}
           />
+          </>
         )}
       </div>
 
       {/* Replay Confirmation Dialog */}
       <ReplayConfirmDialog
-        open={replayDialogOpen}
-        impact={replayImpact}
-        onConfirm={executeReplay}
-        onCancel={cancelReplay}
-        loading={replayLoading}
+        open={editControl.replayDialogOpen}
+        impact={editControl.replayImpact}
+        onConfirm={() => void editControl.executeReplay()}
+        onCancel={editControl.cancelReplay}
+        loading={editControl.editingMessageSaving}
       />
     </div>
   );

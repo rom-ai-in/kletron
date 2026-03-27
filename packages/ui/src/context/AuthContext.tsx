@@ -2,9 +2,9 @@
 // src/context/AuthContext.tsx
 // React context provider for authentication state management
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { clearSessionStorage, getSupabaseClient, resetSupabaseClient, setRememberMePreference } from '@numezis/ui/lib/supabase/supabaseClient';
+import { clearSessionStorage, getSupabaseClient, resetSupabaseClient, setRememberMePreference } from '@kletron/ui/lib/supabase/supabaseClient';
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
-import type { UserProfile, UserContext as UserContextType } from '@numezis/shared/supabase/types';
+import type { UserProfile, UserContext as UserContextType } from '@kletron/shared/supabase/types';
 
 // Development auth bypass - set NEXT_PUBLIC_SKIP_AUTH=true in .env to skip authentication
 const SKIP_AUTH = process.env.NEXT_PUBLIC_SKIP_AUTH === 'true';

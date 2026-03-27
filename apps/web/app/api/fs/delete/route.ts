@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 async function handleDelete(request: Request) {
   const auth = await requireAppRouteAuth(request);

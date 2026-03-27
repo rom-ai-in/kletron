@@ -2,9 +2,9 @@ import path from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-import { McpClient } from "@numezis/mcp-client/client";
-import { getConfig } from "@numezis/server/config";
-import { getWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
+import { McpClient } from "@kletron/mcp-client/client";
+import { getConfig } from "@kletron/server/config";
+import { getWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 
 // ── LLM-tolerant Zod helpers ────────────────────────────────────────────────
 // Many LLMs (especially local ones via LM Studio) send "True"/"False" strings
@@ -24,6 +24,14 @@ const laxBool = () =>
     return val; // let Zod reject anything truly invalid
   }, z.boolean());
 
+/** Gracefully coerce objects/arrays into stringified JSON to tolerate LLMs forgetting to quote content strings. */
+const laxString = () =>
+  z.preprocess((val) => {
+    if (typeof val === "string") return val;
+    if (val && typeof val === "object") return JSON.stringify(val, null, 2);
+    return String(val);
+  }, z.string());
+
 
 const formatResult = (raw: unknown) => {
   if (typeof raw === "string") return raw;
@@ -40,12 +48,13 @@ const formatResult = (raw: unknown) => {
 
 async function callMcpTool<TArgs extends Record<string, unknown> | undefined>(
   name: string,
-  args?: TArgs
+  args?: TArgs,
+  config?: any
 ) {
   const client = await McpClient.getInstance();
   const workspaceContext = getWorkspaceContext();
   const rootDir =
-    workspaceContext?.rootPath ?? (await getConfig()).workingFolder;
+    config?.configurable?.workspaceRoot ?? workspaceContext?.rootPath ?? (await getConfig()).workingFolder;
 
   const resolvedArgs = { ...args };
 
@@ -91,7 +100,7 @@ async function callMcpTool<TArgs extends Record<string, unknown> | undefined>(
 
 const createListFilesTool = (defaultMaxDepth?: number) =>
   tool(
-    async (input: { path?: string; maxDepth?: number }) => {
+    async (input: { path?: string; maxDepth?: number }, config: any) => {
       const args: { path?: string; maxDepth?: number } = { ...input };
       if (
         defaultMaxDepth !== undefined &&
@@ -102,7 +111,7 @@ const createListFilesTool = (defaultMaxDepth?: number) =>
       const payload: Record<string, unknown> = {};
       if (args.path) payload.path = args.path;
       if (typeof args.maxDepth === "number") payload.maxDepth = Math.max(0, Math.floor(args.maxDepth));
-      return formatResult(await callMcpTool("list_files", payload));
+      return formatResult(await callMcpTool("list_files", payload, config));
     },
     {
       name: "list_files",
@@ -119,8 +128,8 @@ export const listFilesTool = createListFilesTool();
 export { createListFilesTool };
 
 export const readFileTool = tool(
-  async ({ filePath }: { filePath: string }) => {
-    return formatResult(await callMcpTool("read_file", { filePath }));
+  async ({ filePath }: { filePath: string }, config: any) => {
+    return formatResult(await callMcpTool("read_file", { filePath }, config));
   },
   {
     name: "read_file",
@@ -132,13 +141,13 @@ export const readFileTool = tool(
 );
 
 export const readFileRangeTool = tool(
-  async (input: { filePath: string; startLine: number; endLine: number }) => {
+  async (input: { filePath: string; startLine: number; endLine: number }, config: any) => {
     return formatResult(
       await callMcpTool("read_file_range", {
         filePath: input.filePath,
         startLine: input.startLine,
         endLine: input.endLine,
-      })
+      }, config)
     );
   },
   {
@@ -157,13 +166,13 @@ export const searchCodeTool = tool(
     query: string;
     path?: string;
     maxResults?: number;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("search_code", {
         query: input.query,
         path: input.path,
         maxResults: input.maxResults ?? 50,
-      })
+      }, config)
     );
   },
   {
@@ -178,8 +187,8 @@ export const searchCodeTool = tool(
 );
 
 export const repoMetricsTool = tool(
-  async ({ path }: { path?: string }) => {
-    return formatResult(await callMcpTool("repo_metrics", path ? { path } : {}));
+  async ({ path }: { path?: string }, config: any) => {
+    return formatResult(await callMcpTool("repo_metrics", path ? { path } : {}, config));
   },
   {
     name: "repo_metrics",
@@ -191,9 +200,9 @@ export const repoMetricsTool = tool(
 );
 
 export const describeStructureTool = tool(
-  async ({ path }: { path?: string }) => {
+  async ({ path }: { path?: string }, config: any) => {
     return formatResult(
-      await callMcpTool("describe_structure", path ? { path } : {})
+      await callMcpTool("describe_structure", path ? { path } : {}, config)
     );
   },
   {
@@ -207,14 +216,14 @@ export const describeStructureTool = tool(
 );
 
 export const gitLogTool = tool(
-  async (input: { path?: string; maxCount?: number; filePath?: string; ref?: string }) => {
+  async (input: { path?: string; maxCount?: number; filePath?: string; ref?: string }, config: any) => {
     return formatResult(
       await callMcpTool("git_log", {
         path: input.path,
         maxCount: input.maxCount,
         filePath: input.filePath,
         ref: input.ref,
-      })
+      }, config)
     );
   },
   {
@@ -230,7 +239,7 @@ export const gitLogTool = tool(
 );
 
 export const gitDiffTool = tool(
-  async (input: { path?: string; from?: string; to?: string; staged?: boolean; filePath?: string }) => {
+  async (input: { path?: string; from?: string; to?: string; staged?: boolean; filePath?: string }, config: any) => {
     return formatResult(
       await callMcpTool("git_diff", {
         path: input.path,
@@ -238,7 +247,7 @@ export const gitDiffTool = tool(
         to: input.to,
         staged: input.staged,
         filePath: input.filePath,
-      })
+      }, config)
     );
   },
   {
@@ -255,14 +264,14 @@ export const gitDiffTool = tool(
 );
 
 export const gitBlameTool = tool(
-  async (input: { path?: string; filePath: string; startLine?: number; endLine?: number }) => {
+  async (input: { path?: string; filePath: string; startLine?: number; endLine?: number }, config: any) => {
     return formatResult(
       await callMcpTool("git_blame", {
         path: input.path,
         filePath: input.filePath,
         startLine: input.startLine,
         endLine: input.endLine,
-      })
+      }, config)
     );
   },
   {
@@ -286,7 +295,7 @@ export const gitGrepTool = tool(
     wholeWord?: boolean;
     globs?: string[];
     maxResults?: number;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("git_grep", {
         path: input.path,
@@ -296,7 +305,7 @@ export const gitGrepTool = tool(
         wholeWord: input.wholeWord,
         globs: input.globs,
         maxResults: input.maxResults,
-      })
+      }, config)
     );
   },
   {
@@ -315,12 +324,12 @@ export const gitGrepTool = tool(
 );
 
 export const todoSearchTool = tool(
-  async (input: { path?: string; maxResults?: number }) => {
+  async (input: { path?: string; maxResults?: number }, config: any) => {
     return formatResult(
       await callMcpTool("todo_search", {
         path: input.path,
         maxResults: input.maxResults,
-      })
+      }, config)
     );
   },
   {
@@ -334,8 +343,8 @@ export const todoSearchTool = tool(
 );
 
 export const dependencyInfoTool = tool(
-  async ({ path }: { path?: string }) => {
-    return formatResult(await callMcpTool("dependency_info", path ? { path } : {}));
+  async ({ path }: { path?: string }, config: any) => {
+    return formatResult(await callMcpTool("dependency_info", path ? { path } : {}, config));
   },
   {
     name: "dependency_info",
@@ -355,7 +364,7 @@ export const structuralSearchTool = tool(
     contextLines?: number;
     maxResults?: number;
     timeoutMs?: number;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("structural_search", {
         path: input.path,
@@ -365,7 +374,7 @@ export const structuralSearchTool = tool(
         contextLines: input.contextLines,
         maxResults: input.maxResults,
         timeoutMs: input.timeoutMs,
-      })
+      }, config)
     );
   },
   {
@@ -392,7 +401,7 @@ export const symbolsListTool = tool(
     maxResults?: number;
     maxFiles?: number;
     cacheTtlMs?: number;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("symbols_list", {
         path: input.path,
@@ -402,7 +411,7 @@ export const symbolsListTool = tool(
         maxResults: input.maxResults,
         maxFiles: input.maxFiles,
         cacheTtlMs: input.cacheTtlMs,
-      })
+      }, config)
     );
   },
   {
@@ -427,7 +436,7 @@ export const findSymbolTool = tool(
     exportedOnly?: boolean;
     maxResults?: number;
     globs?: string[];
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("find_symbol", {
         path: input.path,
@@ -435,7 +444,7 @@ export const findSymbolTool = tool(
         exportedOnly: input.exportedOnly,
         maxResults: input.maxResults,
         globs: input.globs,
-      })
+      }, config)
     );
   },
   {
@@ -460,7 +469,7 @@ export const goToDefinitionTool = tool(
     maxResults?: number;
     contextLines?: number;
     cacheTtlMs?: number;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("go_to_definition", {
         path: input.path,
@@ -470,7 +479,7 @@ export const goToDefinitionTool = tool(
         maxResults: input.maxResults,
         contextLines: input.contextLines,
         cacheTtlMs: input.cacheTtlMs,
-      })
+      }, config)
     );
   },
   {
@@ -497,7 +506,7 @@ export const referencesTool = tool(
     maxResults?: number;
     contextLines?: number;
     cacheTtlMs?: number;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("references", {
         path: input.path,
@@ -507,7 +516,7 @@ export const referencesTool = tool(
         maxResults: input.maxResults,
         contextLines: input.contextLines,
         cacheTtlMs: input.cacheTtlMs,
-      })
+      }, config)
     );
   },
   {
@@ -534,7 +543,7 @@ export const findReferencesTool = tool(
     maxResults?: number;
     contextLines?: number;
     cacheTtlMs?: number;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("references", {
         path: input.path,
@@ -544,7 +553,7 @@ export const findReferencesTool = tool(
         maxResults: input.maxResults,
         contextLines: input.contextLines,
         cacheTtlMs: input.cacheTtlMs,
-      })
+      }, config)
     );
   },
   {
@@ -571,7 +580,7 @@ export const webSearchTool = tool(
     includeRawContent?: boolean;
     includeImages?: boolean;
     timeoutMs?: number;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("web_search", {
         query: input.query,
@@ -581,7 +590,7 @@ export const webSearchTool = tool(
         includeRawContent: input.includeRawContent,
         includeImages: input.includeImages,
         timeoutMs: input.timeoutMs,
-      })
+      }, config)
     );
   },
   {
@@ -605,14 +614,14 @@ export const fetchUrlTool = tool(
     timeoutMs?: number;
     maxBytes?: number;
     allowlist?: string[];
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("fetch_url", {
         url: input.url,
         timeoutMs: input.timeoutMs,
         maxBytes: input.maxBytes,
         allowlist: input.allowlist,
-      })
+      }, config)
     );
   },
   {
@@ -637,7 +646,7 @@ export const githubApiTool = tool(
     perPage?: number;
     page?: number;
     timeoutMs?: number;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("github_api", {
         repoUrl: input.repoUrl,
@@ -648,7 +657,7 @@ export const githubApiTool = tool(
         perPage: input.perPage,
         page: input.page,
         timeoutMs: input.timeoutMs,
-      })
+      }, config)
     );
   },
   {
@@ -673,14 +682,14 @@ export const bootstrapContextTool = tool(
     candidates?: string[];
     maxFiles?: number;
     maxBytesPerFile?: number;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("bootstrap_context", {
         path: input.path,
         candidates: input.candidates,
         maxFiles: input.maxFiles,
         maxBytesPerFile: input.maxBytesPerFile,
-      })
+      }, config)
     );
   },
   {
@@ -707,7 +716,7 @@ export const locateUiFeatureTool = tool(
     maxFileSizeBytes?: number;
     contextLines?: number;
     cacheTtlMs?: number;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("locate_ui_feature", {
         path: input.path,
@@ -720,7 +729,7 @@ export const locateUiFeatureTool = tool(
         maxFileSizeBytes: input.maxFileSizeBytes,
         contextLines: input.contextLines,
         cacheTtlMs: input.cacheTtlMs,
-      })
+      }, config)
     );
   },
   {
@@ -748,7 +757,7 @@ export const writeFileTool = tool(
     repoPath?: string;
     createDirs?: boolean;
     overwrite?: boolean;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("write_file", {
         repoPath: input.repoPath,
@@ -756,7 +765,7 @@ export const writeFileTool = tool(
         content: input.content,
         createDirs: input.createDirs ?? true,
         overwrite: input.overwrite ?? true,
-      })
+      }, config)
     );
   },
   {
@@ -765,7 +774,7 @@ export const writeFileTool = tool(
     schema: z.object({
       repoPath: z.string().optional(),
       filePath: z.string(),
-      content: z.string(),
+      content: laxString(),
       createDirs: laxBool().optional(),
       overwrite: laxBool().optional(),
     }),
@@ -775,51 +784,67 @@ export const writeFileTool = tool(
 export const strReplaceEditorTool = tool(
   async (input: {
     repoPath?: string;
+    command?: string;
     path?: string;
     filePath?: string;
-    action?: string;
-    operation?: string;
+    old_str?: string;
+    new_str?: string;
+    file_text?: string;
+    insert_line?: number;
     startLine?: number;
     endLine?: number;
+    view_range?: number[];
     maxBytes?: number;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("str_replace_editor", {
         repoPath: input.repoPath,
+        command: input.command,
         path: input.path,
         filePath: input.filePath,
-        action: input.action,
-        operation: input.operation,
+        old_str: input.old_str,
+        new_str: input.new_str,
+        file_text: input.file_text,
+        insert_line: input.insert_line,
         startLine: input.startLine,
         endLine: input.endLine,
+        view_range: input.view_range,
         maxBytes: input.maxBytes,
-      })
+      }, config)
     );
   },
   {
     name: "str_replace_editor",
-    description: "Read-only compatibility shim for str_replace_editor.",
+    description:
+      "File editor tool. Commands: view (read file), create (new file), str_replace (replace exact unique text), insert (add lines after a line number), undo_edit (revert last edit). Use str_replace for surgical edits with old_str/new_str.",
     schema: z.object({
       repoPath: z.string().optional(),
-      path: z.string().optional(),
-      filePath: z.string().optional(),
-      action: z.string().optional(),
-      operation: z.string().optional(),
-      startLine: z.number().int().positive().optional(),
-      endLine: z.number().int().positive().optional(),
+      command: z.enum(["view", "create", "str_replace", "insert", "undo_edit"]).optional()
+        .describe("Command to execute. Defaults to view."),
+      path: z.string().optional().describe("File path (absolute or relative to repo root)."),
+      filePath: z.string().optional().describe("Alias for path."),
+      old_str: z.string().optional().describe("Exact text to replace (must match once). Required for str_replace."),
+      new_str: z.string().optional().describe("Replacement text. Required for str_replace and insert."),
+      file_text: z.string().optional().describe("Full file content. Required for create."),
+      insert_line: z.number().int().nonnegative().optional()
+        .describe("Line number after which to insert (0 = beginning). Required for insert."),
+      startLine: z.number().int().positive().optional().describe("Start line for view range."),
+      endLine: z.number().int().positive().optional().describe("End line for view range."),
+      view_range: z.array(z.number().int().positive()).optional()
+        .describe("Optional [startLine, endLine] array for view command."),
       maxBytes: z.number().int().positive().optional(),
     }),
   }
 );
 
 export const executeBashTool = tool(
-  async (input: { path?: string; command: string; timeoutMs?: number }) => {
+  async (input: { path?: string; command: string; timeoutMs?: number }, config: any) => {
     return formatResult(
       await callMcpTool("execute_bash", {
         path: input.path,
         command: input.command,
         timeoutMs: input.timeoutMs,
-      })
+      }, config)
     );
   },
   {
@@ -842,7 +867,7 @@ export const outputFormatTool = tool(
     recommendations?: unknown;
     nextActions?: unknown;
     text?: string;
-  }) => {
+  }, config: any) => {
     return formatResult(
       await callMcpTool("output_format", {
         mode: input.mode,
@@ -852,7 +877,7 @@ export const outputFormatTool = tool(
         recommendations: input.recommendations,
         nextActions: input.nextActions,
         text: input.text,
-      })
+      }, config)
     );
   },
   {
@@ -870,7 +895,7 @@ export const outputFormatTool = tool(
   }
 );
 
-import { semanticSearch } from "@numezis/server/services/vectorService";
+import { semanticSearch } from "@kletron/server/services/vectorService";
 
 export const semanticCodeSearchTool = tool(
   async (input: {
@@ -878,7 +903,7 @@ export const semanticCodeSearchTool = tool(
     path?: string;
     language?: string;
     maxResults?: number;
-  }) => {
+  }, config: any) => {
     const workspaceContext = getWorkspaceContext();
     const repoPath = workspaceContext?.rootPath ?? (await getConfig()).workingFolder;
     try {
@@ -894,7 +919,7 @@ export const semanticCodeSearchTool = tool(
         query: input.query,
         path: input.path,
         maxResults: input.maxResults ?? 10,
-      });
+      }, config);
       return `Semantic search unavailable, falling back to keyword search.\n${formatResult(fallback)}`;
     }
   },

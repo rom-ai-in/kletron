@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@numezis/server/lib/db";
+import { getDb } from "@kletron/server/lib/db";
 
 export const dynamic = "force-dynamic";
 
-import { config } from "@numezis/server/config";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { config } from "@kletron/server/config";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 export async function GET(request: Request) {
     const auth = await requireAppRouteAuth(request);

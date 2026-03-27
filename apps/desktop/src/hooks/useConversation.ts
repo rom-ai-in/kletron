@@ -10,7 +10,7 @@ import type {
   StreamingState,
   WorkspaceInfo,
 } from "../types";
-import type { ReplayImpact } from "@numezis/ui";
+import type { ReplayImpact } from "@kletron/ui";
 import { buildHunks, normalizeContent, wait } from "../utils";
 import { computeReplayImpactPure } from "../replayImpact";
 
@@ -37,10 +37,6 @@ export function useConversation(
   const [streamingText, setStreamingText] = useState("");
   const [input, setInput] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
-  const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
-  const [editingMessageDraft, setEditingMessageDraft] = useState<string>("");
-  const [editingMessageSaving, setEditingMessageSaving] = useState(false);
-  const [editingMessageError, setEditingMessageError] = useState<string | null>(null);
   const [tokenUsage, setTokenUsage] = useState<{ input: string; output: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -54,12 +50,7 @@ export function useConversation(
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [conversationEvents, streamingMessage]);
 
-  // Validate editing message
-  useEffect(() => {
-    if (editingMessageIndex === null) return;
-    const editedEvent = conversationEvents.find((e) => e.messageIndex === editingMessageIndex);
-    if (!editedEvent) cancelEditMessage();
-  }, [editingMessageIndex, conversationEvents]);
+
 
   async function fetchPendingEdits(convoId: string, token: string) {
     if (!workspace?.path || !setDiffs) return;
@@ -94,7 +85,7 @@ export function useConversation(
 
         let baseContent = "";
         try {
-          baseContent = await window.numezis.readFile(filePath);
+          baseContent = await window.kletron.readFile(filePath);
         } catch {
           baseContent = "";
         }
@@ -144,9 +135,6 @@ export function useConversation(
     setConversationLoading(true);
     setSendError(null);
     setDiffs?.(() => []);
-    setEditingMessageIndex(null);
-    setEditingMessageDraft("");
-    setEditingMessageError(null);
     handledEditIdsRef.current = new Set();
     try {
       const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
@@ -554,51 +542,43 @@ export function useConversation(
     }
   }
 
-  function startEditMessage(index: number, content: string) {
-    setEditingMessageIndex(index);
-    setEditingMessageDraft(content);
-    setEditingMessageError(null);
+  async function truncateAndResend(messageIndex: number, newContent: string) {
+    if (!conversationId) return;
+    const token = await getAccessToken();
+    if (!token) throw new Error("Authentication expired.");
+
+    // Truncate the conversation on the backend (including the edited message)
+    const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+    if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+
+    const truncateRes = await fetch(`${backendUrlTrimmed}/api/sessions/${conversationId}/truncate`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ afterIndex: messageIndex }),
+    });
+
+    if (!truncateRes.ok) {
+      const text = await truncateRes.text();
+      throw new Error(text || `Failed to truncate conversation (${truncateRes.status})`);
+    }
+
+    // Clear local state after the message index
+    setConversationEvents((prev) =>
+      prev.filter((e) => typeof e.messageIndex === "number" && e.messageIndex < messageIndex)
+    );
+    setDiffs?.(() => []);
+    handledEditIdsRef.current = new Set();
+
+    // Trigger sending the new message content
+    return sendMessage({ text: newContent });
   }
 
-  function cancelEditMessage() {
-    setEditingMessageIndex(null);
-    setEditingMessageDraft("");
-    setEditingMessageError(null);
-  }
-
-  async function saveEditedMessage() {
-    if (editingMessageIndex === null || !conversationId) return;
-    const nextContent = editingMessageDraft.trim();
-    if (!nextContent) {
-      setEditingMessageError("Message content cannot be empty.");
-      return;
-    }
-    setEditingMessageSaving(true);
-    setEditingMessageError(null);
-    try {
-      const token = await getAccessToken();
-      if (!token) throw new Error("Authentication expired.");
-      const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
-      if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
-
-      const res = await fetch(`${backendUrlTrimmed}/api/sessions/${conversationId}/truncate`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ afterIndex: editingMessageIndex }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Failed to update message (${res.status})`);
-      }
-      setConversationEvents((prev) =>
-        prev.map((msg) => (msg.messageIndex === editingMessageIndex ? { ...msg, content: nextContent } : msg))
-      );
-      cancelEditMessage();
-    } catch (error) {
-      setEditingMessageError((error as Error)?.message || "Unable to update message.");
-    } finally {
-      setEditingMessageSaving(false);
-    }
+  function resetConversation() {
+    setConversationEvents([]);
+    setSendError(null);
+    setStreamingState("idle");
+    streamedEventIdsRef.current = new Set();
+    handledEditIdsRef.current = new Set();
   }
 
   const renderItems = useMemo<RenderItem[]>(() => {
@@ -611,12 +591,8 @@ export function useConversation(
       }
     };
 
-    // Detect tool-related events (handles both NEW and LEGACY data).
-    // Legacy data: backend assigned kind="tool" to BOTH AI tool-call and tool-result events.
-    // New data: AI tool-call → kind="assistant" with toolName set.
     const isToolRelated = (e: ChatEvent) =>
-      (e.kind === "assistant" && Boolean(e.toolName)) ||
-      e.kind === "tool";
+      (e.kind === "assistant" && Boolean(e.toolName)) || e.kind === "tool";
 
     for (const event of conversationEvents) {
       if (isToolRelated(event)) {
@@ -629,84 +605,6 @@ export function useConversation(
     flushTools();
     return items;
   }, [conversationEvents]);
-
-  /**
-   * Compute the impact of replaying from a given message index.
-   * Analyses all events after `fromIndex` to find messages, tool calls, and file changes.
-   * Extracts actual code content and builds diff lines where possible.
-   */
-  const computeReplayImpact = useCallback(
-    (fromIndex: number, originalContent: string, newContent: string): ReplayImpact => {
-      return computeReplayImpactPure(conversationEvents, fromIndex, originalContent, newContent);
-    },
-    [conversationEvents]
-  );
-
-  /**
-   * Replay from a given message: update the message, truncate everything after, then resend.
-   */
-  async function replayFromMessage(
-    messageIndex: number,
-    newContent: string,
-    options?: { planMode?: boolean }
-  ) {
-    if (!conversationId) return;
-    const token = await getAccessToken();
-    if (!token) {
-      setSendError("Authentication expired.");
-      return;
-    }
-
-    setEditingMessageSaving(true);
-    setEditingMessageError(null);
-
-    try {
-      // 1. Truncate everything AFTER this message on the server (uses the unified sessions API)
-      const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
-      if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
-
-      const truncateRes = await fetch(`${backendUrlTrimmed}/api/sessions/${conversationId}/truncate`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ afterIndex: messageIndex + 1 }),
-      });
-      if (!truncateRes.ok) {
-        const text = await truncateRes.text();
-        throw new Error(text || `Failed to truncate conversation (${truncateRes.status})`);
-      }
-
-      // 3. Truncate local events: keep only events with messageIndex <= messageIndex
-      setConversationEvents((prev) =>
-        prev.filter((e) => typeof e.messageIndex === "number" && e.messageIndex <= messageIndex)
-          .map((e) =>
-            e.messageIndex === messageIndex ? { ...e, content: newContent.trim() } : e
-          )
-      );
-
-      // 4. Clear editing state
-      cancelEditMessage();
-
-      // 5. Clear diffs (they're from the old branch)
-      setDiffs?.(() => []);
-      handledEditIdsRef.current = new Set();
-
-      // 6. Now re-send the edited message to get a new agent response
-      // We set the input to the edited content and trigger sendMessage
-      setInput(newContent.trim());
-    } catch (error) {
-      setEditingMessageError((error as Error)?.message || "Unable to replay from this message.");
-    } finally {
-      setEditingMessageSaving(false);
-    }
-  }
-
-  function resetConversation() {
-    setConversationEvents([]);
-    setSendError(null);
-    setStreamingState("idle");
-    streamedEventIdsRef.current = new Set();
-    handledEditIdsRef.current = new Set();
-  }
 
   return {
     conversationEvents,
@@ -721,22 +619,13 @@ export function useConversation(
     setInput,
     sendError,
     setSendError,
-    editingMessageIndex,
-    editingMessageDraft,
-    setEditingMessageDraft,
-    editingMessageSaving,
-    editingMessageError,
     messagesEndRef,
     renderItems,
     loadConversation,
     sendMessage,
     stopStreaming,
-    startEditMessage,
-    cancelEditMessage,
-    saveEditedMessage,
-    computeReplayImpact,
-    replayFromMessage,
     resetConversation,
+    truncateAndResend,
     abortRef,
     tokenUsage,
   };

@@ -4,7 +4,7 @@ import { createContext, useContext, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 
-import { Button } from "@numezis/ui/components/design-system";
+import { Button } from "@kletron/ui/components/design-system";
 import type { ComponentDoc } from "../docs";
 
 type InspectorContextValue = {

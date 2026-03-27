@@ -1,15 +1,15 @@
 /**
- * Numezis Design System - Shared Monaco Editor Themes
+ * Kletron Design System - Shared Monaco Editor Themes
  *
  * Canonical Monaco theme definitions sourced from design tokens.
  * Monaco's defineTheme API requires hex values (not CSS variables),
  * so we use the raw token values.
  *
  * @example
- * import { defineNumezisThemes, monacoThemeColors } from '@numezis/ui/styles/monaco-themes';
+ * import { defineKletronThemes, monacoThemeColors } from '@kletron/ui/styles/monaco-themes';
  * // In your Monaco onMount handler:
- * defineNumezisThemes(monaco);
- * monaco.editor.setTheme('numezis-dark');
+ * defineKletronThemes(monaco);
+ * monaco.editor.setTheme('kletron-dark');
  */
 
 import { rawColors } from '../tokens/colors';
@@ -61,18 +61,18 @@ export const monacoTokenRules = {
 } as const;
 
 /**
- * Register Numezis themes in Monaco.
+ * Register Kletron themes in Monaco.
  * Call this in your Monaco `onMount` handler.
  */
-export function defineNumezisThemes(monaco: any) {
-    monaco.editor.defineTheme('numezis-dark', {
+export function defineKletronThemes(monaco: any) {
+    monaco.editor.defineTheme('kletron-dark', {
         base: 'vs-dark',
         inherit: true,
         rules: [...monacoTokenRules.dark],
         colors: { ...monacoThemeColors.dark },
     });
 
-    monaco.editor.defineTheme('numezis-light', {
+    monaco.editor.defineTheme('kletron-light', {
         base: 'vs',
         inherit: true,
         rules: [...monacoTokenRules.light],

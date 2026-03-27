@@ -75,7 +75,7 @@ async function sendWebhook({ url, title, body, timeoutMs = 10_000 }) {
       signal: controller.signal,
       headers: {
         "content-type": "application/json",
-        "user-agent": "numezis-notify/1.0",
+        "user-agent": "kletron-notify/1.0",
       },
       body: JSON.stringify(payload),
     });

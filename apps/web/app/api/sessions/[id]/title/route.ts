@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
-import { getChatModel } from "@numezis/server/llm";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
+import { getChatModel } from "@kletron/server/llm";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { stripSystemPrefix, stripThoughtContent, sanitizeTitle, heuristicTitle } from "@numezis/server/services/titleSanitizer";
+import { stripSystemPrefix, stripThoughtContent, sanitizeTitle, heuristicTitle } from "@kletron/server/services/titleSanitizer";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

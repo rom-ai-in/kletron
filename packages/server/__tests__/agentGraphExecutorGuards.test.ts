@@ -248,11 +248,11 @@ describe("tool call cache (deduplication)", () => {
 });
 
 describe("tool approval policy guard coverage", () => {
-    it("treats str_replace_editor as read-only auto-approve and execute_bash as execution requiring approval for agent", () => {
+    it("treats str_replace_editor as write_repo requiring approval and execute_bash as execution requiring approval for agent", () => {
         const executePolicy = getToolApprovalPolicy({ source: "agent", toolName: "execute_bash" });
         const replacePolicy = getToolApprovalPolicy({ source: "agent", toolName: "str_replace_editor" });
         assert.equal(executePolicy.decision, "requires_approval");
-        assert.equal(replacePolicy.decision, "auto_approve");
+        assert.equal(replacePolicy.decision, "requires_approval");
     });
 
     it("keeps write_file behind manual approval for agent", () => {
@@ -335,7 +335,7 @@ describe("system prompt anti-loop content verification", () => {
         assert.ok(simpleReactSystemPrompt.includes("write_todos **ONCE**"));
         assert.ok(simpleReactSystemPrompt.includes("Never recreate the same queue"));
         assert.ok(simpleReactSystemPrompt.includes("Stop tool usage and produce the final answer"));
-        assert.ok(simpleReactSystemPrompt.includes("Numezis Code"));
+        assert.ok(simpleReactSystemPrompt.includes("Kletron"));
         assert.ok(simpleReactSystemPrompt.includes("Repository First Principle"));
     });
 });

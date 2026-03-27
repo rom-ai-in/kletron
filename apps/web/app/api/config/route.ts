@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { getActiveWorkspace, setActiveWorkspaceFromPath } from "@numezis/server/services/workspaceService";
-import { McpClient } from "@numezis/mcp-client/client";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { getActiveWorkspace, setActiveWorkspaceFromPath } from "@kletron/server/services/workspaceService";
+import { McpClient } from "@kletron/mcp-client/client";
 
 export async function GET(request: Request) {
   const auth = await requireAppRouteAuth(request);

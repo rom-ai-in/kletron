@@ -69,7 +69,7 @@ export interface TitleBarProps {
 }
 
 export function TitleBar({
-  workspaceName = 'Numezis Desktop',
+  workspaceName = 'Kletron Desktop',
   workspaceSelectorLabel,
   onWorkspaceSelectorClick,
   workspaceItems,

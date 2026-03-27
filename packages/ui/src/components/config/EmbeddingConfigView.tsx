@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Database, Save, RotateCcw, Monitor, Cloud, Check, Sparkles, Ship, Gem, Bot } from "lucide-react";
-import { Panel, Button } from "@numezis/ui/components/design-system";
-import type { EmbeddingConfig } from "@numezis/shared/schemas/embeddingConfig.schema";
-import { EMBEDDING_PROVIDERS, EmbeddingProviderType } from "@numezis/shared/schemas/embeddingConfig.schema";
+import { Panel, Button } from "@kletron/ui/components/design-system";
+import type { EmbeddingConfig } from "@kletron/shared/schemas/embeddingConfig.schema";
+import { EMBEDDING_PROVIDERS, EmbeddingProviderType } from "@kletron/shared/schemas/embeddingConfig.schema";
 import {
     AzureEmbeddingConfigForm,
     OpenAIEmbeddingConfigForm,
@@ -12,7 +12,7 @@ import {
     GeminiEmbeddingConfigForm,
     LMStudioEmbeddingConfigForm,
     OllamaEmbeddingConfigForm
-} from "@numezis/ui/components/EmbeddingConfigForms";
+} from "@kletron/ui/components/EmbeddingConfigForms";
 
 const PROVIDERS = [
     { id: "azure" as const, name: "Azure OpenAI", description: "Enterprise-grade embeddings", icon: Cloud, color: "text-status-info-text", bgColor: "bg-status-info-bg" },

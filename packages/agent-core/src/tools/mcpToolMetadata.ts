@@ -185,10 +185,10 @@ export const mcpToolMetadata: McpToolMeta[] = [
   },
   {
     name: "str_replace_editor",
-    label: "Str replace editor",
-    description: "Read-only compatibility shim for str_replace_editor.",
+    label: "File editor",
+    description: "File editor with view, create, str_replace, insert, and undo_edit commands. Use for surgical edits.",
     file: "apps/mcp-server/tools/strReplaceEditor.js",
-    categories: ["compat", "fs"],
+    categories: ["write", "fs"],
   },
   {
     name: "execute_bash",

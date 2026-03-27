@@ -1,9 +1,9 @@
 // app/api/stripe/portal/route.ts
 // Create Stripe Billing Portal Session
 import { NextRequest, NextResponse } from 'next/server';
-import { createBillingPortalSession, getCustomerByEmail } from '@numezis/server/services/stripeService';
-import { createServerSupabaseClient } from '@numezis/server/lib/supabase/supabaseServer';
-import { getSubscriptionByUserId } from '@numezis/server/services/subscriptionService';
+import { createBillingPortalSession, getCustomerByEmail } from '@kletron/server/services/stripeService';
+import { createServerSupabaseClient } from '@kletron/server/lib/supabase/supabaseServer';
+import { getSubscriptionByUserId } from '@kletron/server/services/subscriptionService';
 
 export async function POST(request: NextRequest) {
     try {

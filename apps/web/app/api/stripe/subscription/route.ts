@@ -1,11 +1,11 @@
 // app/api/stripe/subscription/route.ts
 // Get current user's subscription
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@numezis/server/lib/supabase/supabaseServer';
-import { getSubscriptionByUserId, getEffectivePlan } from '@numezis/server/services/subscriptionService';
-import type { SubscriptionResponse } from "@numezis/shared/subscriptionTypes";
-import type { Subscription as ServerSubscription } from "@numezis/server/services/subscriptionService";
-import type { Subscription as SharedSubscription } from "@numezis/shared/subscriptionTypes";
+import { createServerSupabaseClient } from '@kletron/server/lib/supabase/supabaseServer';
+import { getSubscriptionByUserId, getEffectivePlan } from '@kletron/server/services/subscriptionService';
+import type { SubscriptionResponse } from "@kletron/shared/subscriptionTypes";
+import type { Subscription as ServerSubscription } from "@kletron/server/services/subscriptionService";
+import type { Subscription as SharedSubscription } from "@kletron/shared/subscriptionTypes";
 
 export const dynamic = 'force-dynamic';
 

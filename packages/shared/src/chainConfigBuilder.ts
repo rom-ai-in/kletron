@@ -1,5 +1,5 @@
 /**
  * @deprecated This module has been renamed to automationConfigBuilder.
- * Import from "@numezis/shared/automationConfigBuilder" instead.
+ * Import from "@kletron/shared/automationConfigBuilder" instead.
  */
 export * from "./automationConfigBuilder";

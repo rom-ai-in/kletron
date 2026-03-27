@@ -11,8 +11,8 @@ import {
     SearchInput,
     EmptyState,
     ErrorState,
-} from "@numezis/ui/components/design-system";
-import { AgentGraphCard } from "@numezis/ui/components/agentGraphs/AgentGraphCard";
+} from "@kletron/ui/components/design-system";
+import { AgentGraphCard } from "@kletron/ui/components/agentGraphs/AgentGraphCard";
 
 type AgentGraphSummary = {
     _id?: string;

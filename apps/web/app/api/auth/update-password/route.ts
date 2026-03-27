@@ -1,7 +1,7 @@
 // app/api/auth/update-password/route.ts
 // API route for updating password after reset
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@numezis/server/lib/supabase/supabaseServer';
+import { createRouteHandlerClient } from '@kletron/server/lib/supabase/supabaseServer';
 
 export async function POST(request: Request) {
     try {

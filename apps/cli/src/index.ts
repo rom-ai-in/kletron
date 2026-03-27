@@ -1,8 +1,8 @@
 import { createInterface } from "node:readline";
-import { runWorkflow } from "@numezis/agent-core/workflows";
+import { runWorkflow } from "@kletron/agent-core/workflows";
 
 async function main() {
-  console.log("🚀 Numezis Code - Agent Executor");
+  console.log("🚀 Kletron - Agent Executor");
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,

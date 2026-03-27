@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
-import { graphOptions } from "@numezis/shared/graphCatalog";
+import { graphOptions } from "@kletron/shared/graphCatalog";
 import { useLlmHealth } from './useLlmHealth';
-import type { LlmProviderType } from "@numezis/shared/schemas/llmConfig.schema";
+import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -82,7 +82,7 @@ export function useAgentSession(): UseAgentSessionReturn {
                             setLlmProvider(selectedLlmProvider);
                         } else {
                             // Fallback to localStorage then config default
-                            const stored = window.localStorage.getItem("numezis-llm-selection");
+                            const stored = window.localStorage.getItem("kletron-llm-selection");
                             if (stored) {
                                 try {
                                     const parsed = JSON.parse(stored);
@@ -96,7 +96,7 @@ export function useAgentSession(): UseAgentSessionReturn {
                             setSavedGraphId(prefGraphId);
                         } else {
                             // Fallback to localStorage
-                            const storedGraph = window.localStorage.getItem("numezis-graph-selection");
+                            const storedGraph = window.localStorage.getItem("kletron-graph-selection");
                             if (storedGraph) {
                                 setSavedGraphId(storedGraph);
                             }
@@ -106,7 +106,7 @@ export function useAgentSession(): UseAgentSessionReturn {
                 }
 
                 // Fallback to localStorage if API fails or user not authenticated
-                const stored = window.localStorage.getItem("numezis-llm-selection");
+                const stored = window.localStorage.getItem("kletron-llm-selection");
                 if (stored) {
                     try {
                         const parsed = JSON.parse(stored);
@@ -116,7 +116,7 @@ export function useAgentSession(): UseAgentSessionReturn {
                     setLlmProvider(defaultProvider);
                 }
 
-                const storedGraph = window.localStorage.getItem("numezis-graph-selection");
+                const storedGraph = window.localStorage.getItem("kletron-graph-selection");
                 if (storedGraph) {
                     setSavedGraphId(storedGraph);
                 }
@@ -229,7 +229,7 @@ export function useAgentSession(): UseAgentSessionReturn {
         const model = (providerConfig?.model ?? providerConfig?.deployment ?? '') as string;
         // Save to localStorage as fallback
         window.localStorage.setItem(
-            "numezis-llm-selection",
+            "kletron-llm-selection",
             JSON.stringify({ provider, model })
         );
         // Persist to API (fire-and-forget, don't block UI)
@@ -245,7 +245,7 @@ export function useAgentSession(): UseAgentSessionReturn {
         // Keep savedGraphId in sync so the resolve effect doesn't revert
         setSavedGraphId(graphId);
         // Save to localStorage as fallback
-        window.localStorage.setItem("numezis-graph-selection", graphId);
+        window.localStorage.setItem("kletron-graph-selection", graphId);
         // Persist to API (fire-and-forget, don't block UI)
         fetch("/api/user-preferences", {
             method: "PATCH",

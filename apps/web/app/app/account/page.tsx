@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@numezis/ui/context/AuthContext';
-import { Input, PasswordInput, Button, Card, CardHeader, CardContent } from '@numezis/ui/components/design-system';
+import { useAuth } from '@kletron/ui/context/AuthContext';
+import { Input, PasswordInput, Button, Card, CardHeader, CardContent } from '@kletron/ui/components/design-system';
 import { Copy, Key, Shield, User, LogOut, Plus, X } from 'lucide-react';
 interface ApiTokenInfo {
     id: string;
@@ -26,7 +26,7 @@ export default function AccountPage() {
     const [passwordStatus, setPasswordStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
     const [passwordError, setPasswordError] = useState('');
 
-    const [tokenLabel, setTokenLabel] = useState('Numezis Code IDE');
+    const [tokenLabel, setTokenLabel] = useState('Kletron IDE');
     const [tokens, setTokens] = useState<ApiTokenInfo[]>([]);
     const [tokensLoading, setTokensLoading] = useState(false);
     const [tokenError, setTokenError] = useState('');
@@ -175,7 +175,7 @@ export default function AccountPage() {
                     </Button>
                 </div>
                 <p className="mt-2 text-[11px] text-status-success-text/80">
-                    This token will not be shown again. Paste it in the Numezis Code IDE.
+                    This token will not be shown again. Paste it in the Kletron IDE.
                 </p>
             </div>
         );
@@ -186,7 +186,7 @@ export default function AccountPage() {
             <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-8 pb-16">
                 <div>
                     <h1 className="text-2xl font-semibold text-text-primary">My Account</h1>
-                    <p className="text-sm text-text-muted">Manage your Numezis Code account and extension connection.</p>
+                    <p className="text-sm text-text-muted">Manage your Kletron account and extension connection.</p>
                 </div>
 
                 {/* Profile Section */}
@@ -282,16 +282,16 @@ export default function AccountPage() {
                     </form>
                 </section>
 
-                {/* Numezis Code IDE Section */}
+                {/* Kletron IDE Section */}
                 <section className="rounded-lg border border-border-subtle bg-bg-surface p-6">
-                    <h2 className="text-sm font-semibold text-text-primary">Numezis Code IDE</h2>
+                    <h2 className="text-sm font-semibold text-text-primary">Kletron IDE</h2>
                     <p className="mt-1 text-xs text-text-muted">
-                        Generate a token to sync your Numezis Code account with the desktop IDE.
+                        Generate a token to sync your Kletron account with the desktop IDE.
                     </p>
 
                     <div className="mt-4 space-y-3 text-xs text-text-secondary">
                         <p>1. Generate a token below.</p>
-                        <p>2. In Numezis Code, run <code className="rounded bg-bg-elevated px-1.5 py-0.5">numezis.connectBackend</code> and paste the token.</p>
+                        <p>2. In Kletron, run <code className="rounded bg-bg-elevated px-1.5 py-0.5">kletron.connectBackend</code> and paste the token.</p>
                         <p>3. The IDE will use this token to connect to your account.</p>
                     </div>
 

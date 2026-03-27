@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Panel, Button } from "@numezis/ui/components/design-system";
+import { Panel, Button } from "@kletron/ui/components/design-system";
 import {
     History,
     ArrowLeft,
@@ -18,9 +18,9 @@ import {
     Calendar
 } from "lucide-react";
 import Link from "next/link";
-import { type VectorIndexRun } from "@numezis/server/services/vectorHistoryService";
-import { RequireWorkspace } from "@numezis/ui/components/workspace/RequireWorkspace";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+import { type VectorIndexRun } from "@kletron/server/services/vectorHistoryService";
+import { RequireWorkspace } from "@kletron/ui/components/workspace/RequireWorkspace";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 
 export default function VectorHistoryPage() {
     return (

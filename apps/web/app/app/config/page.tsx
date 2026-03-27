@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ListTree, ArrowRight, Wrench, Folder, Brain, Layers, TrendingUp } from "lucide-react";
-import { Panel } from "@numezis/ui/components/design-system";
+import { Panel } from "@kletron/ui/components/design-system";
 
 type LlmConfigSummary = { provider?: string } | null;
 

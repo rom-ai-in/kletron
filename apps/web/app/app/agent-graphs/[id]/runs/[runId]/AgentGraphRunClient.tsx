@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { Button, Panel, Skeleton } from "@numezis/ui/components/design-system";
+import { Button, Panel, Skeleton } from "@kletron/ui/components/design-system";
 
 type AgentGraphDto = {
     _id?: string;

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Wrench, Search, Play, Loader2, AlertCircle } from "lucide-react";
-import { Panel, Button, Skeleton, Modal } from "@numezis/ui/components/design-system";
+import { Panel, Button, Skeleton, Modal } from "@kletron/ui/components/design-system";
 
 type ToolMeta = {
     name: string;

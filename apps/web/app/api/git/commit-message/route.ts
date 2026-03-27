@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { getChatModel } from "@numezis/server/llm";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { getChatModel } from "@kletron/server/llm";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 /**

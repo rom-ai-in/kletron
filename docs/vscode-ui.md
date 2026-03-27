@@ -13,16 +13,16 @@ The extension will expose several UI surfaces:
 - `AgentTreeProvider.ts`
 - Lists active agents, runs, audits.
 - Commands on items: open chat panel, run analysis, apply diff.
-- Each run node shows its current status and exposes `contextValue == agentRun` so the tree menu can trigger `numezis.applyDiff` with the selected `runId`.
+- Each run node shows its current status and exposes `contextValue == agentRun` so the tree menu can trigger `kletron.applyDiff` with the selected `runId`.
 
 ## 3. Status Bar & Commands
 - Status bar item shows connection status.
 - Global commands (in `package.json`):
-  - `numezis.connectBackend`
-  - `numezis.openChat`
-  - `numezis.runDriftAnalysis`
-- `numezis.applyDiff` is also exposed so a tree context item and keyboard shortcut can reapply a diff without reopening the chat.
-- The status bar reflects the stored `numezis.backendUrl` configuration and prompts the user to reconnect when the backend URL is empty.
+  - `kletron.connectBackend`
+  - `kletron.openChat`
+  - `kletron.runDriftAnalysis`
+- `kletron.applyDiff` is also exposed so a tree context item and keyboard shortcut can reapply a diff without reopening the chat.
+- The status bar reflects the stored `kletron.backendUrl` configuration and prompts the user to reconnect when the backend URL is empty.
 
 ## 4. Diff & Edit UI
 - Uses `vscode.workspace.applyEdit` or `vscode.commands.executeCommand('vscode.diff')`.
@@ -31,5 +31,5 @@ The extension will expose several UI surfaces:
 
 ## 5. Settings
 - `backendUrl` (string)
-- API token (required). Copy it from the Numezis Code account page (`/account`).
-- Settings are surfaced under `numezis.backendUrl` and `numezis.apiToken`; changes are persisted globally so the `connectBackend` command can pre-fill the last URL/token pair.
+- API token (required). Copy it from the Kletron account page (`/account`).
+- Settings are surfaced under `kletron.backendUrl` and `kletron.apiToken`; changes are persisted globally so the `connectBackend` command can pre-fill the last URL/token pair.

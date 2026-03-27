@@ -136,7 +136,7 @@ async function main() {
   });
 
   await client.connect();
-  const dbName = process.env.MONGODB_DB || "numezis_coder";
+  const dbName = process.env.MONGODB_DB || "kletron";
   const db = client.db(dbName);
   const collection = db.collection("workspaces");
 

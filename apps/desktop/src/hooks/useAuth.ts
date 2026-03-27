@@ -135,11 +135,11 @@ export function useAuth(backendUrlTrimmed: string, backendUrlValid: boolean) {
 
   // Deep link handler
   useEffect(() => {
-    const unsubscribe = window.numezis.onAuthLink((url) => {
+    const unsubscribe = window.kletron.onAuthLink((url) => {
       try {
         const parsed = new URL(url);
-        if (parsed.protocol !== "numezis-code:") return;
-        if (parsed.hostname !== "numezis.auth") return;
+        if (parsed.protocol !== "kletron:") return;
+        if (parsed.hostname !== "kletron.auth") return;
         const accessToken = parsed.searchParams.get("accessToken");
         const refreshToken = parsed.searchParams.get("refreshToken");
         const expiresAt = Number(parsed.searchParams.get("expiresAt") || 0);
@@ -239,7 +239,7 @@ export function useAuth(backendUrlTrimmed: string, backendUrlValid: boolean) {
       code_challenge: codeChallenge,
     });
     const loginUrl = `${backendUrlTrimmed}/auth/login?${params.toString()}`;
-    const opened = await window.numezis.openExternal(loginUrl);
+    const opened = await window.kletron.openExternal(loginUrl);
     if (!opened) {
       setLoginError("Unable to open browser. Open the portal manually to sign in.");
     }
@@ -277,7 +277,7 @@ export function useAuth(backendUrlTrimmed: string, backendUrlValid: boolean) {
       code_challenge: codeChallenge,
     });
     const registerUrl = `${backendUrlTrimmed}/auth/register?${params.toString()}`;
-    const opened = await window.numezis.openExternal(registerUrl);
+    const opened = await window.kletron.openExternal(registerUrl);
     if (!opened) {
       setLoginError("Unable to open browser. Open the portal manually to register.");
     }

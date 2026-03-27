@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MarketingHeader, MarketingFooter } from '@numezis/ui/components/design-system';
+import { MarketingHeader, MarketingFooter } from '@kletron/ui/components/design-system';
 
 export default function ImprintPage() {
     return (
@@ -23,7 +23,7 @@ export default function ImprintPage() {
                         <div className="flex items-center gap-3 mb-4">
                             <span className="text-3xl">🧠</span>
                             <div>
-                                <h2 className="text-xl font-semibold text-text-primary">Numezis Technologies SA</h2>
+                                <h2 className="text-xl font-semibold text-text-primary">Kletron SA</h2>
                                 <p className="text-xs text-text-muted">Société Anonyme (Swiss Public Limited Company)</p>
                             </div>
                         </div>
@@ -32,7 +32,7 @@ export default function ImprintPage() {
                             <div>
                                 <h3 className="text-xs font-medium text-text-muted mb-2 uppercase tracking-wider">Registered Address</h3>
                                 <p className="text-text-secondary">
-                                    Numezis Technologies SA<br />
+                                    Kletron SA<br />
                                     Rue du Rhône 14<br />
                                     1204 Geneva<br />
                                     Switzerland 🇨🇭
@@ -55,25 +55,25 @@ export default function ImprintPage() {
                             <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
                                 <h3 className="text-xs font-medium text-text-muted mb-2 uppercase tracking-wider">General Inquiries</h3>
                                 <p className="text-sm text-text-secondary">
-                                    <a href="mailto:hello@numezis.com" className="text-status-success-text hover:underline">hello@numezis.com</a>
+                                    <a href="mailto:hello@kletron.com" className="text-status-success-text hover:underline">hello@kletron.com</a>
                                 </p>
                             </div>
                             <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
                                 <h3 className="text-xs font-medium text-text-muted mb-2 uppercase tracking-wider">Support</h3>
                                 <p className="text-sm text-text-secondary">
-                                    <a href="mailto:support@numezis.com" className="text-status-success-text hover:underline">support@numezis.com</a>
+                                    <a href="mailto:support@kletron.com" className="text-status-success-text hover:underline">support@kletron.com</a>
                                 </p>
                             </div>
                             <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
                                 <h3 className="text-xs font-medium text-text-muted mb-2 uppercase tracking-wider">Legal Department</h3>
                                 <p className="text-sm text-text-secondary">
-                                    <a href="mailto:legal@numezis.com" className="text-status-success-text hover:underline">legal@numezis.com</a>
+                                    <a href="mailto:legal@kletron.com" className="text-status-success-text hover:underline">legal@kletron.com</a>
                                 </p>
                             </div>
                             <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface">
                                 <h3 className="text-xs font-medium text-text-muted mb-2 uppercase tracking-wider">Data Protection</h3>
                                 <p className="text-sm text-text-secondary">
-                                    <a href="mailto:dpo@numezis.com" className="text-status-success-text hover:underline">dpo@numezis.com</a>
+                                    <a href="mailto:dpo@kletron.com" className="text-status-success-text hover:underline">dpo@kletron.com</a>
                                 </p>
                             </div>
                         </div>
@@ -119,14 +119,14 @@ export default function ImprintPage() {
                             The operators of linked pages are solely responsible for their content.
                         </p>
                         <p>
-                            All information on this website is provided without warranty. Numezis Technologies SA
+                            All information on this website is provided without warranty. Kletron SA
                             reserves the right to make changes or corrections at any time.
                         </p>
                     </Section>
 
                     <Section title="Copyright">
                         <p>
-                            © 2026 Numezis Technologies SA. All rights reserved.
+                            © 2026 Kletron SA. All rights reserved.
                         </p>
                         <p>
                             The content and works on these pages created by the operators are subject to Swiss copyright law.
@@ -142,11 +142,11 @@ export default function ImprintPage() {
                         </p>
                         <div className="p-4 rounded-lg border border-border-subtle bg-bg-surface mt-3">
                             <p className="text-sm text-text-secondary">
-                                <strong>Numezis EU Representative</strong><br />
+                                <strong>Kletron EU Representative</strong><br />
                                 [To be appointed]<br />
                                 Dublin, Ireland<br />
-                                <a href="mailto:eu-representative@numezis.com" className="text-status-success-text hover:underline">
-                                    eu-representative@numezis.com
+                                <a href="mailto:eu-representative@kletron.com" className="text-status-success-text hover:underline">
+                                    eu-representative@kletron.com
                                 </a>
                             </p>
                         </div>

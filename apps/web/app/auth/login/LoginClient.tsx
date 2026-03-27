@@ -4,9 +4,9 @@
 import React, { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@numezis/ui/context/AuthContext';
-import { getRememberMePreference } from '@numezis/ui/lib/supabase/supabaseClient';
-import { Input, PasswordInput, Button, Checkbox } from '@numezis/ui/components/design-system';
+import { useAuth } from '@kletron/ui/context/AuthContext';
+import { getRememberMePreference } from '@kletron/ui/lib/supabase/supabaseClient';
+import { Input, PasswordInput, Button, Checkbox } from '@kletron/ui/components/design-system';
 
 export default function LoginClient() {
     const [email, setEmail] = useState('');
@@ -99,7 +99,7 @@ export default function LoginClient() {
                     </Link>
                     <h1 className="text-xl font-medium text-text-primary">Welcome back</h1>
                     <p className="text-sm text-text-muted mt-1">
-                        {isIDEFlow ? 'Sign in to connect Numezis Code' : isDeviceFlow ? 'Sign in to confirm your device code' : isExtensionFlow ? 'Sign in to connect VS Code' : 'Sign in to your account'}
+                        {isIDEFlow ? 'Sign in to connect Kletron' : isDeviceFlow ? 'Sign in to confirm your device code' : isExtensionFlow ? 'Sign in to connect VS Code' : 'Sign in to your account'}
                     </p>
                 </div>
 

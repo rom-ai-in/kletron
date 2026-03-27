@@ -1,11 +1,11 @@
 /**
- * Numezis Design System - Motion Tokens
+ * Kletron Design System - Motion Tokens
  * 
  * Animation durations, easing functions, and keyframe definitions.
  * Matches CSS variables in globals.css.
  * 
  * @example
- * import { motion } from '@numezis/ui/tokens';
+ * import { motion } from '@kletron/ui/tokens';
  * <div style={{ transition: `all ${motion.duration.normal} ${motion.easing.default}` }} />
  */
 

@@ -17,6 +17,7 @@ import {
     UserCircle,
     LogOut,
     TrendingUp,
+    Building2,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
@@ -66,6 +67,11 @@ const navItems = [
         label: "Configuration",
         icon: Settings,
         href: "/app/config",
+    },
+    {
+        label: "Organization",
+        icon: Building2,
+        href: "/app/organization",
     }
 ];
 
@@ -118,7 +124,7 @@ export function Sidebar() {
     }, [profile, user]);
 
     const displayEmail = useMemo(() => {
-        return user?.email || 'account@numezis.ch';
+        return user?.email || 'account@kletron.ch';
     }, [user]);
 
     const avatarGradient = useMemo(() => {
@@ -148,7 +154,7 @@ export function Sidebar() {
                 </Link>
                 {!isCollapsed && (
                     <span className="text-sm font-semibold tracking-tight text-text-primary whitespace-nowrap overflow-hidden transition-opacity duration-300">
-                        Numezis Code
+                        Kletron
                     </span>
                 )}
                 <button

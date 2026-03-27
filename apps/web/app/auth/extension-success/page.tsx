@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@numezis/ui/context/AuthContext';
+import { useAuth } from '@kletron/ui/context/AuthContext';
 
 export default function ExtensionSuccessPage() {
     const router = useRouter();

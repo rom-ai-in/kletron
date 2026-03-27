@@ -1,6 +1,6 @@
-import { McpClient } from "@numezis/mcp-client/client";
-import { getConfigSafe } from "@numezis/server/config";
-import { getWorkspaceContext } from "@numezis/server/workspace/workspaceContext";
+import { McpClient } from "@kletron/mcp-client/client";
+import { getConfigSafe } from "@kletron/server/config";
+import { getWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 import path from "node:path";
 import fs from "node:fs";
 import { execFile } from "node:child_process";

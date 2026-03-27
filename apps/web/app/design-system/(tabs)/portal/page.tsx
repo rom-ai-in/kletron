@@ -45,7 +45,7 @@ import {
     type SelectorOption,
     type DiffFile,
     type DiffState,
-} from "@numezis/ui/components/design-system";
+} from "@kletron/ui/components/design-system";
 
 import { DocCard, DocCode, DocRules, DocSection } from "../../components/DocBlocks";
 import { InspectButton } from "../../components/Inspector";
@@ -661,7 +661,7 @@ export default function DesignSystemPortalPage() {
                         <div className="space-y-3">
                             <EventCard
                                 kind="system"
-                                content="Session initialized. Graph: audit, Provider: azure (gpt-4o). Workspace: /Users/dev/numezis-coder-mcp"
+                                content="Session initialized. Graph: audit, Provider: azure (gpt-4o). Workspace: /Users/dev/kletron"
                                 meta="0.0s"
                             />
                             <EventCard
@@ -677,7 +677,7 @@ export default function DesignSystemPortalPage() {
                             <EventCard
                                 kind="tool"
                                 toolName="read_file"
-                                content={`Reading: packages/ui/src/context/AuthContext.tsx\n\n// AuthContext.tsx (245 lines)\nimport { createContext, useContext, useState, useEffect } from 'react';\nimport type { UserProfile } from '@numezis/shared/supabase/types';\n\ninterface AuthState {\n  user: UserProfile | null;\n  token: string | null;\n  refreshToken: string | null;\n  isAuthenticated: boolean;\n  isLoading: boolean;\n}\n\n// ... 230 more lines`}
+                                content={`Reading: packages/ui/src/context/AuthContext.tsx\n\n// AuthContext.tsx (245 lines)\nimport { createContext, useContext, useState, useEffect } from 'react';\nimport type { UserProfile } from '@kletron/shared/supabase/types';\n\ninterface AuthState {\n  user: UserProfile | null;\n  token: string | null;\n  refreshToken: string | null;\n  isAuthenticated: boolean;\n  isLoading: boolean;\n}\n\n// ... 230 more lines`}
                                 meta="120ms"
                                 isExpanded
                             />

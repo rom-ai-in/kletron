@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { nodeOutputSchemaRegistry } from "@numezis/shared/nodeOutputSchemas";
+import { nodeOutputSchemaRegistry } from "@kletron/shared/nodeOutputSchemas";
 
 describe("nodeOutputSchemaRegistry", () => {
     it("contains the required schema IDs", () => {

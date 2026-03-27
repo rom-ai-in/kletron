@@ -33,7 +33,7 @@ The context system is the glue between:
 **Context Graph (Injection Graph)**
 
 - A graph of files (nodes) and relations (edges).
-- Stored server-side at `/.numezis/context_graph.json` in the active workspace.
+- Stored server-side at `/.kletron/context_graph.json` in the active workspace.
 - Used to rank and inject relevant file paths into the LLM system prompt.
 
 **Repository Analysis Graph (Project Soul Graph)**
@@ -113,7 +113,7 @@ source = importing file
 This graph is persisted to:
 
 ```
-<workspaceRoot>/.numezis/context_graph.json
+<workspaceRoot>/.kletron/context_graph.json
 ```
 
 ---
@@ -230,7 +230,7 @@ Soul generation uses LLM and outputs:
 - `techStack`
 - `architectureType`
 
-This result is cached in localStorage as `numezis-repo-graph` and displayed under Project Soul.
+This result is cached in localStorage as `kletron-repo-graph` and displayed under Project Soul.
 
 ---
 

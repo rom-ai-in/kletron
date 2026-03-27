@@ -13,7 +13,7 @@ export interface MarketingNavLink {
 }
 
 export interface MarketingHeaderProps {
-    /** Logo slot — defaults to the Numezis brain+text */
+    /** Logo slot — defaults to the Kletron brain+text */
     logo?: React.ReactNode;
     /** Navigation links */
     navLinks?: MarketingNavLink[];
@@ -60,7 +60,7 @@ export const MarketingHeader: React.FC<MarketingHeaderProps> = ({
                 {logo ?? (
                     <Link href="/" className="flex items-center gap-2.5">
                         <span className="text-xl">🧠</span>
-                        <span className="text-sm font-semibold text-text-primary">Numezis Code</span>
+                        <span className="text-sm font-semibold text-text-primary">Kletron</span>
                     </Link>
                 )}
 
@@ -124,7 +124,7 @@ export const MarketingFooter: React.FC<MarketingFooterProps> = ({
                 <div className="flex flex-col sm:flex-row items-start justify-between gap-8 mb-8">
                     <div className="flex items-center gap-2">
                         <span className="text-base">🧠</span>
-                        <span className="text-sm text-text-primary font-medium">Numezis Code</span>
+                        <span className="text-sm text-text-primary font-medium">Kletron</span>
                     </div>
                     <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-text-muted">
                         {links.map((link) => (
@@ -139,7 +139,7 @@ export const MarketingFooter: React.FC<MarketingFooterProps> = ({
                     </div>
                 </div>
                 <div className="pt-6 border-t border-border-subtle/50 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-text-muted">
-                    <span>&copy; {year} Numezis Technologies SA. All rights reserved.</span>
+                    <span>&copy; {year} Kletron SA. All rights reserved.</span>
                     <span>🇨🇭 Made in Switzerland &bull; 🇪🇺 GDPR Compliant</span>
                 </div>
             </div>

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { getDb } from "@numezis/server/lib/db";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
+import { getDb } from "@kletron/server/lib/db";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 
 export async function POST(req: Request) {
     const auth = await requireAppRouteAuth(req);

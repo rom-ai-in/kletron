@@ -52,7 +52,7 @@ import {
     ContextMenu,
     Breadcrumbs,
     BreadcrumbOverridesProvider,
-} from "@numezis/ui/components/design-system";
+} from "@kletron/ui/components/design-system";
 
 import { DocCard, DocCode, DocRules, DocSection } from "../../components/DocBlocks";
 import { InspectButton } from "../../components/Inspector";

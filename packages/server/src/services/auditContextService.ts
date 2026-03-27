@@ -1,9 +1,9 @@
-import { getDb } from "@numezis/server/lib/db";
+import { getDb } from "@kletron/server/lib/db";
 import {
   formatAuditContextPrompt,
   normalizeAuditContext,
   type AuditContext,
-} from "@numezis/shared/documentContext";
+} from "@kletron/shared/documentContext";
 
 const COLLECTION = "audit_context_config";
 

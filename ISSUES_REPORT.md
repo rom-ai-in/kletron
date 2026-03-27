@@ -1,7 +1,7 @@
 # Repository Issues Analysis Report
 
 ## Summary
-This report documents all issues found in the Numezis Code repository through static analysis.
+This report documents all issues found in the Kletron repository through static analysis.
 
 ## 1. TypeScript Errors (Critical)
 
@@ -38,7 +38,7 @@ Found **910 lines** of linting output with:
 
 Vitest test runner fails to start due to:
 ```
-Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './module-runner' is not defined by "exports" in /home/romain/numezis-coder/node_modules/vite/package.json
+Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './module-runner' is not defined by "exports" in /home/romain/kletron-coder/node_modules/vite/package.json
 ```
 
 This is a known issue with newer versions of Vite/Vitest. The test suite cannot be run until this dependency conflict is resolved.

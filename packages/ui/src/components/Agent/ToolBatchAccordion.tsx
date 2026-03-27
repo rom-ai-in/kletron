@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronDown, ChevronRight, Wrench, Loader2 } from 'lucide-react';
 import { ToolInvocation } from './ToolInvocation';
 import type { ChatEvent } from './MessageList';
 
@@ -16,34 +16,15 @@ export interface ToolBatchAccordionProps {
 }
 
 export const ToolBatchAccordion: React.FC<ToolBatchAccordionProps> = ({ pairs, compact = false }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+
     const hasRunning = pairs.some(p => !p.result);
-    const hasError = pairs.some(p => p.result?.isError === true);
-
-    // Auto collapse logic: expanded by default if running or error, collapsed if all success
-    const [isExpanded, setIsExpanded] = useState(hasRunning || hasError);
-
-    // Effect to auto-collapse when batch finishes successfully
-    useEffect(() => {
-        if (!hasRunning && !hasError) {
-            setIsExpanded(false);
-        } else if (hasRunning || hasError) {
-            setIsExpanded(true);
-        }
-    }, [hasRunning, hasError]);
-
-    const runningCount = pairs.filter(p => !p.result).length;
-    const successCount = pairs.filter(p => p.result && p.result.isError !== true).length;
     const errorCount = pairs.filter(p => p.result?.isError === true).length;
 
-    let summaryText = `Used ${pairs.length} tool${pairs.length === 1 ? '' : 's'}`;
-    let icon = <CheckCircle2 className="w-4 h-4 text-[var(--agent-success)]" />;
-
-    if (hasRunning) {
-        summaryText = `Executing ${runningCount} tool${runningCount === 1 ? '' : 's'}...`;
-        icon = <Loader2 className="w-4 h-4 text-[var(--agent-running)] animate-spin" />;
-    } else if (hasError) {
-        summaryText = `${errorCount} tool${errorCount === 1 ? '' : 's'} failed`;
-        icon = <XCircle className="w-4 h-4 text-[var(--agent-error)]" />;
+    // Unified summary: "X tools" or "X tools (Y failed)"
+    let summaryText = `${pairs.length} tool${pairs.length === 1 ? '' : 's'}`;
+    if (errorCount > 0) {
+        summaryText += ` (${errorCount} failed)`;
     }
 
     return (
@@ -55,18 +36,14 @@ export const ToolBatchAccordion: React.FC<ToolBatchAccordionProps> = ({ pairs, c
                 aria-expanded={isExpanded}
             >
                 <div className="flex items-center gap-2">
-                    {icon}
+                    {hasRunning
+                        ? <Loader2 className="w-4 h-4 text-[var(--agent-running)] animate-spin" />
+                        : <Wrench className="w-4 h-4 text-[var(--agent-tool)]" />
+                    }
                     <span className="text-xs font-medium text-text-secondary">{summaryText}</span>
                 </div>
 
                 <div className="flex items-center gap-1.5 px-2">
-                    {successCount > 0 && hasRunning && (
-                        <span className="text-[10px] text-[var(--agent-success)] font-medium">✓ {successCount}</span>
-                    )}
-                    {errorCount > 0 && hasRunning && (
-                        <span className="text-[10px] text-[var(--agent-error)] font-medium">✗ {errorCount}</span>
-                    )}
-
                     {isExpanded ? (
                         <ChevronDown className="w-4 h-4 text-text-muted" />
                     ) : (

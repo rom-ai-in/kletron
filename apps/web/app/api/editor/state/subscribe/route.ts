@@ -1,5 +1,5 @@
 import { editorStore, subscribers } from "../../store";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 export const runtime = "nodejs";
 

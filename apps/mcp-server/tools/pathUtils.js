@@ -1,10 +1,18 @@
 import path from "path";
 import { config } from "../config.js";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const projectRoot = path.resolve(path.dirname(__filename), "../../..");
 
 export function ensurePathInside(root, target) {
     const allowedRoots = Array.isArray(config.workspaceRoots) && config.workspaceRoots.length > 0
-        ? config.workspaceRoots
+        ? [...config.workspaceRoots]
         : root ? [root] : [];
+
+    if (root && !allowedRoots.includes(root)) {
+        allowedRoots.push(root);
+    }
 
     for (const allowedRoot of allowedRoots) {
         const relative = path.relative(allowedRoot, target);
@@ -26,7 +34,7 @@ export function resolveRepoPath(providedPath) {
         throw new Error("No default directory configured in config.js and no path provided.");
     }
 
-    const baseDir = path.resolve(defaultDir || ".");
+    const baseDir = defaultDir ? path.resolve(defaultDir) : projectRoot;
     const resolved = providedPath
         ? path.isAbsolute(providedPath)
             ? path.resolve(providedPath)

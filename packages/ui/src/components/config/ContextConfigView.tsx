@@ -21,12 +21,12 @@ import {
   FolderOpen,
   X,
 } from "lucide-react";
-import { Panel, Button } from "@numezis/ui/components/design-system";
-import { AuditContextForm } from "@numezis/ui/components/AuditContextForm";
-import { ContextVisualizer } from "@numezis/ui/components/context/ContextVisualizer";
-import { ContextTracePanel } from "@numezis/ui/components/context/ContextTracePanel";
-import type { AuditContext } from "@numezis/shared/documentContext";
-import type { RepoAnalysisResult } from "@numezis/shared/types";
+import { Panel, Button } from "@kletron/ui/components/design-system";
+import { AuditContextForm } from "@kletron/ui/components/AuditContextForm";
+import { ContextVisualizer } from "@kletron/ui/components/context/ContextVisualizer";
+import { ContextTracePanel } from "@kletron/ui/components/context/ContextTracePanel";
+import type { AuditContext } from "@kletron/shared/documentContext";
+import type { RepoAnalysisResult } from "@kletron/shared/types";
 
 // --- Cache Metadata Types ---
 interface CacheMetadata {
@@ -394,8 +394,8 @@ export function ContextConfigView() {
   // Load initial config
   useEffect(() => {
     let hadLocal = false;
-    const stored = window.localStorage.getItem("numezis-audit-context");
-    const storedGraph = window.localStorage.getItem("numezis-repo-graph");
+    const stored = window.localStorage.getItem("kletron-audit-context");
+    const storedGraph = window.localStorage.getItem("kletron-repo-graph");
 
     if (storedGraph) {
       try {
@@ -451,19 +451,19 @@ export function ContextConfigView() {
   useEffect(() => {
     if (!hasLoaded) return;
     const payload = { enabled: auditContextEnabled, context: auditContext };
-    window.localStorage.setItem("numezis-audit-context", JSON.stringify(payload));
+    window.localStorage.setItem("kletron-audit-context", JSON.stringify(payload));
     if (cacheMetadata) {
-      window.localStorage.setItem("numezis-repo-graph", JSON.stringify(cacheMetadata));
+      window.localStorage.setItem("kletron-repo-graph", JSON.stringify(cacheMetadata));
     } else if (repoGraphData) {
       // Legacy fallback
-      window.localStorage.setItem("numezis-repo-graph", JSON.stringify(repoGraphData));
+      window.localStorage.setItem("kletron-repo-graph", JSON.stringify(repoGraphData));
     }
   }, [auditContext, auditContextEnabled, hasLoaded, repoGraphData, cacheMetadata]);
 
   // Clear cache handler
   const handleClearCache = () => {
-    window.localStorage.removeItem("numezis-repo-graph");
-    window.localStorage.removeItem("numezis-audit-context");
+    window.localStorage.removeItem("kletron-repo-graph");
+    window.localStorage.removeItem("kletron-audit-context");
     setCacheMetadata(null);
     setRepoGraphData(null);
     setAuditContext({});

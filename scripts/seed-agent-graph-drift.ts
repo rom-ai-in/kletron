@@ -1,6 +1,6 @@
-import { agentGraphService } from "@numezis/server/services/agentGraphService";
-import { buildDriftAnalysisGraph } from "@numezis/server/services/agentGraphPresets";
-import * as db from "@numezis/server/lib/db";
+import { agentGraphService } from "@kletron/server/services/agentGraphService";
+import { buildDriftAnalysisGraph } from "@kletron/server/services/agentGraphPresets";
+import * as db from "@kletron/server/lib/db";
 
 async function main() {
   const graph = buildDriftAnalysisGraph();

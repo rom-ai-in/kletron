@@ -1,12 +1,12 @@
-import { agentGraphService } from "@numezis/server/services/agentGraphService";
-import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
-import { buildInitialState, getGraphNodeOrder } from "@numezis/server/services/agentGraphRuntime";
-import { listAllWorkspaces } from "@numezis/server/services/workspaceService";
-import { SafeEditGate } from "@numezis/server/services/agent/SafeEditGate";
+import { agentGraphService } from "@kletron/server/services/agentGraphService";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
+import { buildInitialState, getGraphNodeOrder } from "@kletron/server/services/agentGraphRuntime";
+import { listAllWorkspaces } from "@kletron/server/services/workspaceService";
+import { SafeEditGate } from "@kletron/server/services/agent/SafeEditGate";
 import { POST as approvalsPost } from "../apps/web/app/api/agent-graph-runs/[runId]/approvals/route";
 
 async function main() {
-  process.env.NUMEZIS_AUTH_BYPASS = "true";
+  process.env.KLETRON_AUTH_BYPASS = "true";
 
   const graphs = await agentGraphService.listGraphs({ search: "Simple ReAct" });
   const graph = graphs.find((g) => g.name === "Simple ReAct (agent graph)") ?? graphs[0];

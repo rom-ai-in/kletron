@@ -4,11 +4,11 @@ const nextConfig = {
     ignoreBuildErrors: false,
   },
   transpilePackages: [
-    "@numezis/agent-core",
-    "@numezis/mcp-client",
-    "@numezis/server",
-    "@numezis/shared",
-    "@numezis/ui",
+    "@kletron/agent-core",
+    "@kletron/mcp-client",
+    "@kletron/server",
+    "@kletron/shared",
+    "@kletron/ui",
   ],
   // Prevent Next.js from bundling these packages (fixes iconv-lite/encodings issue)
   experimental: {

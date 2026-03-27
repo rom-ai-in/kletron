@@ -11,9 +11,9 @@ import {
     BarChart3,
     Swords,
 } from "lucide-react";
-import { Panel, Button, Badge } from "@numezis/ui/components/design-system";
-import type { MarketAnalysis, CompetitiveMatrixEntry, CompetitiveStatus } from "@numezis/shared/businessAnalystTypes";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
+import { Panel, Button, Badge } from "@kletron/ui/components/design-system";
+import type { MarketAnalysis, CompetitiveMatrixEntry, CompetitiveStatus } from "@kletron/shared/businessAnalystTypes";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 
 // ---------------------------------------------------------------------------
 // API helpers

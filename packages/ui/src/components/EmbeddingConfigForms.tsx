@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
-import { EMBEDDING_MODEL_RECOMMENDATIONS, EmbeddingProviderType } from "@numezis/shared/schemas/embeddingConfig.schema";
+import { EMBEDDING_MODEL_RECOMMENDATIONS, EmbeddingProviderType } from "@kletron/shared/schemas/embeddingConfig.schema";
 
 // ============================================
 // Shared Form Field Styles

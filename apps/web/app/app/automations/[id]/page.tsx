@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import type { AutomationDefinition, AutomationRun, AutomationTriggerType } from "@numezis/shared/automationTypes";
-import type { AgentEvent } from "@numezis/shared/types";
-import { Button, Panel } from "@numezis/ui/components/design-system";
-import { AutomationBuilderModal } from "@numezis/ui/components/AutomationBuilderModal";
-import { describeCron } from "@numezis/shared/cronUtils";
+import type { AutomationDefinition, AutomationRun, AutomationTriggerType } from "@kletron/shared/automationTypes";
+import type { AgentEvent } from "@kletron/shared/types";
+import { Button, Panel } from "@kletron/ui/components/design-system";
+import { AutomationBuilderModal } from "@kletron/ui/components/AutomationBuilderModal";
+import { describeCron } from "@kletron/shared/cronUtils";
 
 /** Display labels for LLM providers */
 const PROVIDER_LABELS: Record<string, string> = {
@@ -48,8 +48,8 @@ import {
     EyeOff,
     Trash2,
 } from "lucide-react";
-import { useWorkspace } from "@numezis/ui/context/WorkspaceContext";
-import { cn } from "@numezis/shared/utils/cn";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
+import { cn } from "@kletron/shared/utils/cn";
 
 interface AutomationDetailPageProps {
     params: { id: string };

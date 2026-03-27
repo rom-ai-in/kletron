@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { Project } from "../types";
 import { normPath } from "../utils";
 
-const PROJECTS_STORAGE_KEY = "numezis.desktop.projects";
+const PROJECTS_STORAGE_KEY = "kletron.desktop.projects";
 
 /** Derive a human-friendly project name from a file path */
 function projectNameFromPath(rootPath: string, fallbackName?: string | null): string {

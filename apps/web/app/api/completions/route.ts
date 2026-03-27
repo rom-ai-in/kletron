@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { getChatModel } from "@numezis/server/llm";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { getChatModel } from "@kletron/server/llm";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 /**
  * POST /api/completions
  * 
- * Provides inline code completions for the Numezis Code IDE.
+ * Provides inline code completions for the Kletron IDE.
  * Takes code context (prefix/suffix) and returns AI-generated completion.
  */
 export async function POST(request: Request) {

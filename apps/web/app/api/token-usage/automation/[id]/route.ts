@@ -1,10 +1,10 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 
-import { tokenUsageService } from "@numezis/server/services/tokenUsageService";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@numezis/server/services/workspaceService";
-import { automationExecutor } from "@numezis/server/services/automationExecutor";
+import { tokenUsageService } from "@kletron/server/services/tokenUsageService";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
+import { automationExecutor } from "@kletron/server/services/automationExecutor";
 
 /**
  * GET /api/token-usage/automation/[id]

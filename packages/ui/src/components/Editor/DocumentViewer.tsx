@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { FileText, FileSpreadsheet, AlertCircle, Download, Loader2 } from 'lucide-react';
-import { isWordDocument, isSpreadsheet } from '@numezis/shared/utils/fileTypes';
+import { isWordDocument, isSpreadsheet } from '@kletron/shared/utils/fileTypes';
 
 interface DocumentViewerProps {
     filePath: string;

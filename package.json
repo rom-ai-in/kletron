@@ -1,9 +1,10 @@
 {
-  "name": "numezis-code",
+  "name": "kletron",
   "version": "1.0.0",
   "type": "module",
   "description": "LangGraph-based TS agentic coder backed by the GitHub MCP server.",
   "scripts": {
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true",
     "start": "tsx scripts/start-all.ts",
     "dev": "tsx scripts/dev-all.ts",
     "dev:web": "npm --workspace apps/web run dev",
@@ -79,16 +80,14 @@
     "@types/react-dom": "^18.2.17",
     "@typescript-eslint/eslint-plugin": "^8.53.1",
     "@typescript-eslint/parser": "^8.53.1",
-    "@vitest/coverage-v8": "^4.0.17",
+    "@vitest/coverage-v8": "^2.1.9",
     "eslint": "^9.3.0",
     "glob": "^13.0.0",
     "tsx": "^4.19.3",
     "typescript": "^5.6.0",
-    "vitest": "^4.0.17"
+    "vitest": "^2.1.9"
   },
-  "overrides": {
-    "vite": "5.4.21"
-  },
+  "overrides": {},
   "private": true,
   "workspaces": [
     "apps/*",

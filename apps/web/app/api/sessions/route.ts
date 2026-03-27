@@ -1,13 +1,13 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
-import { resolveLlmSelection } from "@numezis/server/llm";
-import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@numezis/shared/types";
-import { agentGraphService } from "@numezis/server/services/agentGraphService";
-import { agentGraphRunService } from "@numezis/server/services/agentGraphRunService";
-import { getGraphNodeOrder, buildInitialState } from "@numezis/server/services/agentGraphRuntime";
-import { requireAppRouteAuth } from "@numezis/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@numezis/server/services/workspaceService";
-import { heuristicTitle, sanitizeTitle, stripSystemPrefix, stripThoughtContent } from "@numezis/server/services/titleSanitizer";
+import { resolveLlmSelection } from "@kletron/server/llm";
+import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@kletron/shared/types";
+import { agentGraphService } from "@kletron/server/services/agentGraphService";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
+import { getGraphNodeOrder, buildInitialState } from "@kletron/server/services/agentGraphRuntime";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
+import { heuristicTitle, sanitizeTitle, stripSystemPrefix, stripThoughtContent } from "@kletron/server/services/titleSanitizer";
 
 const textEncoder = new TextEncoder();
 
@@ -147,7 +147,7 @@ export async function POST(request: Request) {
       console.log(`[sessions/create] Stream started for run ${runId}`);
 
       try {
-        const { agentGraphExecutor } = await import("@numezis/server/services/agentGraphExecutor");
+        const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
         console.log(`[sessions/create] Calling executeRunStreaming for ${runId}...`);
         const result = await agentGraphExecutor.executeRunStreaming(runId, {
           onUpdate: async (update) => {
