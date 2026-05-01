@@ -53,8 +53,23 @@ async function callMcpTool<TArgs extends Record<string, unknown> | undefined>(
 ) {
   const client = await McpClient.getInstance();
   const workspaceContext = getWorkspaceContext();
-  const rootDir =
-    config?.configurable?.workspaceRoot ?? workspaceContext?.rootPath ?? (await getConfig()).workingFolder;
+  // Workspace root must be pinned by the caller (run start) or ambient
+  // workspace context. Falling back to the global working folder masks bugs
+  // where the agent ends up reading files from the wrong project.
+  let rootDir: string | undefined =
+    config?.configurable?.workspaceRoot ?? workspaceContext?.rootPath;
+  if (!rootDir) {
+    const fallback = (await getConfig()).workingFolder;
+    if (!fallback) {
+      throw new Error(
+        `Tool '${name}' requires a workspace root. Provide it via config.configurable.workspaceRoot or runWithWorkspaceContext.`
+      );
+    }
+    console.warn(
+      `[mcpTools] Tool '${name}' fell back to global workingFolder. Pin a workspace root in the executor for correctness.`
+    );
+    rootDir = fallback;
+  }
 
   const resolvedArgs = { ...args };
 

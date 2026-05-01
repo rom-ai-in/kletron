@@ -1,11 +1,11 @@
 // app/api/organization/members/route.ts
 // API route to manage organization members (MongoDB version)
 import { NextResponse } from 'next/server';
-import { requireAppRouteAuth } from '@kletron/server/lib/auth/apiAuth';
+import { resolveOrganizationAuth } from '../../../../lib/resolveOrganizationAuth';
 import * as organizationService from '@kletron/server/services/organizationService';
 
 export async function POST(request: Request) {
-    const auth = await requireAppRouteAuth(request);
+    const auth = await resolveOrganizationAuth(request);
     if (!auth) {
         return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-    const auth = await requireAppRouteAuth(request);
+    const auth = await resolveOrganizationAuth(request);
     if (!auth) {
         return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }

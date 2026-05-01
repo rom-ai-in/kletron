@@ -1,11 +1,11 @@
 // app/api/organization/seed/route.ts
 // POST endpoint to ensure a default organization exists for the current user
 import { NextResponse } from 'next/server';
-import { requireAppRouteAuth } from '@kletron/server/lib/auth/apiAuth';
+import { resolveOrganizationAuth } from '../../../../lib/resolveOrganizationAuth';
 import * as organizationService from '@kletron/server/services/organizationService';
 
 export async function POST(request: Request) {
-    const auth = await requireAppRouteAuth(request);
+    const auth = await resolveOrganizationAuth(request);
     if (!auth) {
         return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }

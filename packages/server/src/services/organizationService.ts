@@ -200,11 +200,12 @@ export async function ensureOrganizationForUser(
   });
 }
 
-async function resolveUserEmailAndName(
+/** Profile + users collection; no placeholder email (for display and sync). */
+async function lookupUserContact(
   userId: string
-): Promise<{ email: string; fullName: string | null }> {
+): Promise<{ email: string | null; fullName: string | null }> {
   const profile = await userProfileService.getProfileByUserId(userId);
-  let email = profile?.email?.trim() ?? "";
+  let email = profile?.email?.trim() || null;
   let fullName = profile?.fullName ?? null;
   if (!email) {
     try {
@@ -215,9 +216,16 @@ async function resolveUserEmailAndName(
       if (u?.email) email = u.email.toLowerCase().trim();
       if (u?.name) fullName = u.name;
     } catch {
-      /* invalid ObjectId */
+      /* invalid ObjectId — e.g. dev-user, test-user-1 */
     }
   }
+  return { email, fullName };
+}
+
+async function resolveUserEmailAndName(
+  userId: string
+): Promise<{ email: string; fullName: string | null }> {
+  const { email, fullName } = await lookupUserContact(userId);
   return { email: email || "user@local", fullName };
 }
 
@@ -250,12 +258,33 @@ export async function getOrganizationPayloadForUser(userId: string): Promise<Org
 
   const groupById = new Map(groups.map((g) => [g._id.toString(), g]));
   const gmColl = db.collection<GroupMemberDoc>(GROUP_MEMBERS);
+  const membersColl = db.collection<TenantMemberDoc>(MEMBERS);
   const memberPayload: OrganizationPayload["members"] = [];
 
   for (const m of memberDocs) {
-    const prof = await userProfileService.getProfileByUserId(m.userId);
-    const displayEmail = prof?.email ?? m.email;
-    const displayName = prof?.fullName ?? m.fullName;
+    const contact = await lookupUserContact(m.userId);
+    const displayEmail =
+      contact.email ??
+      (m.email && m.email !== "user@local" ? m.email : null) ??
+      m.email;
+    const displayName = contact.fullName ?? m.fullName;
+
+    if (
+      contact.email &&
+      (contact.email !== m.email ||
+        (contact.fullName ?? null) !== (m.fullName ?? null))
+    ) {
+      await membersColl.updateOne(
+        { userId: m.userId },
+        {
+          $set: {
+            email: contact.email,
+            fullName: contact.fullName ?? m.fullName,
+            updatedAt: new Date(),
+          },
+        }
+      );
+    }
 
     const gms = await gmColl.find({ userId: m.userId }).toArray();
     const groupInfos = gms

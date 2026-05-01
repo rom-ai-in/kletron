@@ -99,7 +99,21 @@ async function runServer() {
     }
   );
 
-  await wireToolHandlers({ server, allTools, workspaceRoot: config.defaultDir });
+  // Allow callers (e.g. the McpClient launching us via stdio) to pin the
+  // workspace root for this MCP process via env so all tool calls operate
+  // against the correct desktop folder.
+  const stdioWorkspaceRoot =
+    (process.env.MCP_WORKSPACE_ROOT && process.env.MCP_WORKSPACE_ROOT.trim()) ||
+    config.defaultDir;
+  const stdioCategoryId =
+    (process.env.MCP_CATEGORY_ID && process.env.MCP_CATEGORY_ID.trim()) || undefined;
+
+  await wireToolHandlers({
+    server,
+    allTools,
+    workspaceRoot: stdioWorkspaceRoot,
+    categoryId: stdioCategoryId,
+  });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

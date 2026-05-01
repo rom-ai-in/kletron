@@ -22,6 +22,8 @@ import { setNestedValue } from "./agentGraphState";
 import { skillRegistry } from "@kletron/agent-core/skills/registry";
 import type { SkillDefinition } from "@kletron/agent-core/skills/types";
 import { loadAllSkillsForRegistry } from "./skillsService";
+import { resolveWorkspaceCapabilities, type WorkspaceCapabilities } from "./workspaceCapabilityResolver";
+import { effectiveToolNames } from "./effectiveToolNames";
 import { tokenUsageService } from "./tokenUsageService";
 import { ObjectId } from "mongodb";
 import { getAuditContextConfig } from "@kletron/server/services/auditContextService";
@@ -727,9 +729,13 @@ function createFormattedReport(result: AgentWorkflowResult): {
     };
 }
 
-function selectToolsByName(toolNames: string[], extraTools: any[] = []) {
+function selectToolsByName(
+    toolNames: string[],
+    extraTools: any[] = [],
+    dynamicTools: any[] = []
+) {
     const allow = new Set(toolNames ?? []);
-    const merged = [...allMcpTools, ...extraTools];
+    const merged = [...allMcpTools, ...extraTools, ...dynamicTools];
     return merged.filter((tool: any) => allow.has(String(tool?.name ?? "")));
 }
 
@@ -1177,6 +1183,19 @@ export class AgentGraphExecutor {
                 workspace._id && ObjectId.isValid(workspace._id.toString()) ? new ObjectId(workspace._id.toString()) : undefined;
             const rootDir = workspace.rootPath;
 
+            // Resolve workspace capabilities once per run. This drives both
+            // (1) which bundled / admin tools the node may use, and
+            // (2) which external MCP servers we attach for namespaced tools.
+            let workspaceCaps: WorkspaceCapabilities | null = null;
+            try {
+                workspaceCaps = await resolveWorkspaceCapabilities(workspace._id!.toString());
+            } catch (capsErr) {
+                console.warn(
+                    "[AgentGraph] Failed to resolve workspace capabilities, falling back to permissive mode:",
+                    (capsErr as Error)?.message ?? capsErr
+                );
+            }
+
             const persistState = async () => {
                 await agentGraphRunService.updateRunState(runId, cloneValue(state));
             };
@@ -1615,9 +1634,42 @@ export class AgentGraphExecutor {
                             console.warn(`[AgentGraph] Failed to load skills ${skillIds.join(", ")}:`, err);
                         }
                     }
-                    // Merge skill tools with node-defined tools
-                    const mergedToolNames = [...new Set([...(node.react.toolNames ?? []), ...skillTools, "write_todos"])];
-                    const selectedTools = selectToolsByName(mergedToolNames, localTools);
+                    // Resolve the effective tool list using the unified policy.
+                    // - Workspace capabilities gate bundled / admin tools.
+                    // - Always-on tools (e.g. `write_todos`) bypass the gate.
+                    // - External MCP tools (`slug__name`) are added wholesale.
+                    const capabilityToolSet = workspaceCaps?.enabledToolSet ?? new Set<string>();
+                    // When capabilities couldn't be resolved, fall back to the
+                    // full bundled + skill + node set (legacy behaviour).
+                    const effectiveCaps = workspaceCaps
+                        ? capabilityToolSet
+                        : new Set<string>([
+                              ...(node.react.toolNames ?? []),
+                              ...skillTools,
+                          ]);
+                    const externalNamespacedTools: string[] = [];
+                    const dynamicExternalTools: any[] = [];
+                    const effective = effectiveToolNames({
+                        nodeToolNames: node.react.toolNames ?? [],
+                        skillToolNames: skillTools,
+                        adminToolNames: [],
+                        capabilityToolSet: effectiveCaps,
+                        externalNamespacedTools,
+                        alwaysOn: ["write_todos"],
+                    });
+                    const mergedToolNames = effective.names;
+                    const selectedTools = selectToolsByName(
+                        mergedToolNames,
+                        localTools,
+                        dynamicExternalTools
+                    );
+
+                    if (effective.dropped.length > 0) {
+                        console.warn(
+                            `[AgentGraph] Node ${node.id} requested ${effective.dropped.length} tool(s) ` +
+                                `outside of workspace capabilities: ${effective.dropped.join(", ")}.`
+                        );
+                    }
                     const toolInvokerMap = new Map<string, (input: Record<string, unknown>) => Promise<string>>();
 
                     // ── Tool call deduplication ──────────────────────────────────
@@ -2207,6 +2259,9 @@ export class AgentGraphExecutor {
                             abortSignal: abortController.signal,
                             getAbortReason: () => abortReason,
                             shouldAbort: checkAbortReason,
+                            // Pin the workspace root so MCP tools always
+                            // operate against the desktop-selected folder.
+                            workspaceRoot: rootDir,
                             // Checkpoint / persistence
                             checkpointer,
                             threadId,

@@ -1,12 +1,12 @@
 // app/api/organization/route.ts
 // API route to get and update the current user's organization info (MongoDB version)
 import { NextResponse } from 'next/server';
-import { requireAppRouteAuth } from '@kletron/server/lib/auth/apiAuth';
+import { resolveOrganizationAuth } from '../../../lib/resolveOrganizationAuth';
 import * as userProfileService from '@kletron/server/services/userProfileService';
 import * as organizationService from '@kletron/server/services/organizationService';
 
 export async function GET(request: Request) {
-    const auth = await requireAppRouteAuth(request);
+    const auth = await resolveOrganizationAuth(request);
     if (!auth) {
         return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-    const auth = await requireAppRouteAuth(request);
+    const auth = await resolveOrganizationAuth(request);
     if (!auth) {
         return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
