@@ -184,7 +184,7 @@ const AgentComposer = memo(function AgentComposer({
         placeholder={sending ? "Add a follow-up (queued until agent finishes)..." : "Ask anything…"}
         containerClassName="max-w-3xl mx-auto"
         footerLeft={
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 w-full items-center gap-2">
             <Selector
               label="GRAPH"
               value={selectedGraphId}
@@ -403,11 +403,21 @@ export default function AgentPage() {
     isStreaming: streamStatus === "streaming",
   });
 
+  /** True while the primary GET /api/sessions/:id (replace load) is in flight — avoids onboarding empty-state flash. */
+  const [sessionDetailLoading, setSessionDetailLoading] = useState(false);
+  const sessionHydrateSeqRef = useRef(0);
+
   // ── Fetch session detail when active session changes ──────────────────
   const loadSessionDetail = useCallback(async (
     sessionId: string,
     options?: { mergeMessages?: boolean; beforeIndex?: number; appendOlder?: boolean },
   ) => {
+    const isReplaceLoad = !options?.mergeMessages && !options?.appendOlder;
+    let seq = 0;
+    if (isReplaceLoad) {
+      seq = ++sessionHydrateSeqRef.current;
+      setSessionDetailLoading(true);
+    }
     try {
       const query = new URLSearchParams();
       query.set("limit", "120");
@@ -502,10 +512,18 @@ export default function AgentPage() {
           } else {
             setMessages(loadedMessages);
           }
+        } else if (isReplaceLoad) {
+          // Server returned no chat events yet (new run, or history not persisted). Clear
+          // stale messages from a previous thread so we don't show wrong content.
+          setMessages([]);
         }
       }
     } catch (e) {
       console.error("Failed to load session detail:", e);
+    } finally {
+      if (isReplaceLoad && seq === sessionHydrateSeqRef.current) {
+        setSessionDetailLoading(false);
+      }
     }
   }, [setMessages]);
 
@@ -606,6 +624,20 @@ export default function AgentPage() {
     }
   }, [activeSessionId, loadSessionDetail]);
 
+  // Server-side runs (e.g. automations) stream only on the server — poll until the run finishes
+  // so the chat fills in without relying on the browser NDJSON stream.
+  useEffect(() => {
+    if (!activeSessionId || !sessionDetail || sessionDetail.id !== activeSessionId) return;
+    if (sending) return;
+    const status = sessionDetail.status;
+    if (status !== "RUNNING" && status !== "PENDING") return;
+
+    const id = window.setInterval(() => {
+      void loadSessionDetail(activeSessionId, { mergeMessages: true });
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [activeSessionId, sessionDetail?.id, sessionDetail?.status, sending, loadSessionDetail]);
+
   useEffect(() => {
     if (!activeSessionId) return;
     const url = new URL(window.location.href);
@@ -655,6 +687,7 @@ export default function AgentPage() {
         setMessages([]);
         setHistoryPage({ total: 0, start: 0, end: 0, hasOlder: false });
         sessionStorage.removeItem(SESSION_STORAGE_KEY);
+        setSessionDetailLoading(false);
       }
       void fetchSessions();
     }
@@ -670,6 +703,7 @@ export default function AgentPage() {
     setMessages([]);
     setHistoryPage({ total: 0, start: 0, end: 0, hasOlder: false });
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    setSessionDetailLoading(false);
   }, [setMessages, handleStop]);
 
   const handleLoadOlderMessages = useCallback(async () => {
@@ -1179,6 +1213,25 @@ export default function AgentPage() {
                   <div className="h-4 w-3/5 rounded bg-bg-elevated" />
                 </div>
               </div>
+            ) : sessionDetailLoading && activeSessionId ? (
+              <div className="max-w-3xl mx-auto px-2 py-8 space-y-6 animate-pulse">
+                <div className="flex justify-end">
+                  <div className="h-10 w-3/5 rounded-xl bg-bg-elevated" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-4 w-4/5 rounded bg-bg-elevated" />
+                  <div className="h-4 w-3/4 rounded bg-bg-elevated" />
+                </div>
+              </div>
+            ) : messages.length === 0 && !sending &&
+              activeSessionId &&
+              (sessionDetail?.status === "RUNNING" || sessionDetail?.status === "PENDING") ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-20 text-text-muted">
+                <Loader2 className="h-8 w-8 animate-spin text-text-muted" />
+                <p className="text-[13px] text-center max-w-md">
+                  This thread is running on the server. Messages will appear here as the agent progresses.
+                </p>
+              </div>
             ) : messages.length === 0 && !sending && (
               <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                 <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>
@@ -1224,11 +1277,28 @@ export default function AgentPage() {
           </div>
         ) : (
           <div className="px-4 py-4 space-y-3">
-            {eventStream.length === 0 && !sending && (
+            {eventStream.length === 0 && !sending && !(sessionDetailLoading && activeSessionId) &&
+              !(activeSessionId && (sessionDetail?.status === "RUNNING" || sessionDetail?.status === "PENDING")) && (
               <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                 <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>
                 <p className="text-[13px] text-center max-w-md">
                   Select a multi-phase graph and send your mission to see the execution timeline.
+                </p>
+              </div>
+            )}
+            {eventStream.length === 0 && !sending && sessionDetailLoading && activeSessionId && (
+              <div className="flex flex-col items-center justify-center gap-3 py-20 text-text-muted">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <p className="text-[13px]">Loading thread…</p>
+              </div>
+            )}
+            {eventStream.length === 0 && !sending && activeSessionId &&
+              (sessionDetail?.status === "RUNNING" || sessionDetail?.status === "PENDING") &&
+              !sessionDetailLoading && (
+              <div className="flex flex-col items-center justify-center gap-3 py-20 text-text-muted">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <p className="text-[13px] text-center max-w-md">
+                  This thread is running on the server. Events will appear as the graph executes.
                 </p>
               </div>
             )}

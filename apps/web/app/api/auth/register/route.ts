@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
 import { getDb } from '@kletron/server/lib/db';
 import { agentGraphService } from '@kletron/server/services/agentGraphService';
+import * as organizationService from '@kletron/server/services/organizationService';
 import * as userProfileService from '@kletron/server/services/userProfileService';
 
 export async function POST(request: Request) {
@@ -60,6 +61,15 @@ export async function POST(request: Request) {
             email.toLowerCase().trim(),
             fullName || null
         );
+
+        try {
+            await organizationService.ensureOrganizationForUser(userId, {
+                email: email.toLowerCase().trim(),
+                fullName: fullName || null,
+            });
+        } catch (orgErr) {
+            console.error('[Register] Failed to ensure organization:', orgErr);
+        }
 
         // Seed default agent graphs for the new user
         try {

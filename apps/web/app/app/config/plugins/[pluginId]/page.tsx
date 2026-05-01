@@ -1,11 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { use } from "react";
-import { buttonVariants } from "@kletron/ui/components/ui/Button";
-import { ExternalLink, Link as LinkIcon } from "lucide-react";
-import { getPlugin } from "@kletron/shared";
+import { use, useCallback, useState } from "react";
+import {
+    buttonVariants,
+    ConfigExplorerModal,
+    ConfigExplorerMonoBlock,
+    ConfigExplorerRow,
+    ConfigExplorerSection,
+    Panel,
+} from "@kletron/ui/components/design-system";
+import { ExternalLink, Link as LinkIcon, ListTree, ScrollText, Wrench } from "lucide-react";
+import { getPlugin, type SkillRecord } from "@kletron/shared";
 import { notFound } from "next/navigation";
+
+type SkillDialogState =
+    | { open: false }
+    | {
+          open: true;
+          slug: string;
+          skill: SkillRecord | null;
+          loading: boolean;
+          error: string | null;
+      };
 
 export default function ConfigPluginDetailPage({
     params,
@@ -15,6 +32,41 @@ export default function ConfigPluginDetailPage({
     const { pluginId } = use(params);
     const plugin = getPlugin(pluginId);
     if (!plugin) notFound();
+
+    const [skillDialog, setSkillDialog] = useState<SkillDialogState>({ open: false });
+
+    const closeSkillDialog = useCallback(() => {
+        setSkillDialog({ open: false });
+    }, []);
+
+    const openSkillDialog = useCallback(async (slug: string) => {
+        setSkillDialog({ open: true, slug, skill: null, loading: true, error: null });
+        try {
+            const res = await fetch(`/api/skills/${encodeURIComponent(slug)}`);
+            if (!res.ok) {
+                const json = await res.json().catch(() => ({}));
+                throw new Error(json.error ?? `Failed to load skill (${res.status})`);
+            }
+            const json = (await res.json()) as { skill: SkillRecord };
+            setSkillDialog({ open: true, slug, skill: json.skill, loading: false, error: null });
+        } catch (err) {
+            setSkillDialog({
+                open: true,
+                slug,
+                skill: null,
+                loading: false,
+                error: (err as Error).message,
+            });
+        }
+    }, []);
+
+    const sd = skillDialog.open ? skillDialog : null;
+    const footerSummary =
+        sd && !sd.loading && sd.skill
+            ? `${sd.skill.source} • v${sd.skill.version}`
+            : sd?.loading
+              ? "Loading…"
+              : "";
 
     return (
         <div className="container mx-auto px-4 py-8">
@@ -74,21 +126,22 @@ export default function ConfigPluginDetailPage({
                     Skills ({plugin.skillSlugs.length})
                 </h2>
                 <p className="mb-3 text-xs text-text-muted">
-                    Authoring in the{" "}
+                    Click a skill to view details. Edit or create skills in the{" "}
                     <Link href="/app/config/skills" className="underline">
                         skills library
                     </Link>
-                    . Enable per workspace after install.
+                    .
                 </p>
                 <div className="flex flex-wrap gap-2">
                     {plugin.skillSlugs.map((slug) => (
-                        <Link
+                        <button
                             key={slug}
-                            href={`/app/config/skills?search=${encodeURIComponent(slug)}`}
-                            className="rounded bg-bg-elevated px-2 py-1 font-mono text-[11px] text-text-muted hover:text-text-primary"
+                            type="button"
+                            onClick={() => void openSkillDialog(slug)}
+                            className="rounded bg-bg-elevated px-2 py-1 font-mono text-[11px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
                         >
                             {slug}
-                        </Link>
+                        </button>
                     ))}
                 </div>
             </section>
@@ -115,6 +168,79 @@ export default function ConfigPluginDetailPage({
                     ))}
                 </div>
             </section>
+
+            <ConfigExplorerModal
+                open={skillDialog.open}
+                onClose={closeSkillDialog}
+                title={sd ? `Skill: ${sd.slug}` : undefined}
+                subtitle={
+                    sd?.loading ? "Loading…" : sd?.skill?.name ?? (sd ? "Skill" : undefined)
+                }
+                footerSummary={footerSummary}
+                footerExtra={
+                    <Link
+                        href="/app/config/skills"
+                        className={buttonVariants({ variant: "secondary", size: "sm" })}
+                    >
+                        Skills library
+                    </Link>
+                }
+            >
+                {sd?.loading && (
+                    <Panel className="p-4">
+                        <p className="text-xs text-text-muted">Loading skill…</p>
+                    </Panel>
+                )}
+                {sd?.error && (
+                    <Panel className="border-status-error-border bg-status-error-bg/30 p-4">
+                        <p className="text-xs text-status-error-text">{sd.error}</p>
+                    </Panel>
+                )}
+                {sd?.skill && (
+                    <>
+                        {sd.skill.description ? (
+                            <Panel className="p-4">
+                                <p className="text-xs text-text-secondary">{sd.skill.description}</p>
+                            </Panel>
+                        ) : null}
+
+                        <ConfigExplorerSection title="Skill" icon={ListTree} variant="divided">
+                            <ConfigExplorerRow
+                                title={sd.skill.name}
+                                subtitle={`tags: ${sd.skill.tags.length ? sd.skill.tags.join(", ") : "none"} • extends: ${sd.skill.extends?.length ? sd.skill.extends.join(", ") : "—"}`}
+                                badge={sd.skill.slug}
+                            />
+                        </ConfigExplorerSection>
+
+                        <ConfigExplorerSection title="Tools" icon={Wrench} variant="divided">
+                            <ConfigExplorerRow
+                                title="Required tools"
+                                subtitle={
+                                    sd.skill.requiredTools.length
+                                        ? sd.skill.requiredTools.join(", ")
+                                        : "—"
+                                }
+                                badge={String(sd.skill.requiredTools.length)}
+                            />
+                            <ConfigExplorerRow
+                                title="Suggested tools"
+                                subtitle={
+                                    sd.skill.suggestedTools.length
+                                        ? sd.skill.suggestedTools.join(", ")
+                                        : "—"
+                                }
+                                badge={String(sd.skill.suggestedTools.length)}
+                            />
+                        </ConfigExplorerSection>
+
+                        <ConfigExplorerSection title="Instructions" icon={ScrollText} variant="stack">
+                            <ConfigExplorerMonoBlock className="max-h-[min(420px,50vh)] overflow-auto whitespace-pre-wrap text-text-primary">
+                                {sd.skill.body}
+                            </ConfigExplorerMonoBlock>
+                        </ConfigExplorerSection>
+                    </>
+                )}
+            </ConfigExplorerModal>
         </div>
     );
 }

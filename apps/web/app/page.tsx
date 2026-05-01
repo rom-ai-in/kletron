@@ -60,10 +60,11 @@ const features = [
   },
   {
     id: 'anti-drift',
-    title: 'Anti-Drift Detection',
-    subtitle: 'Catch divergence before it breaks',
-    description: 'The Code Comparator continuously monitors your codebase evolution. Detect unintended changes, track technical debt, and maintain consistency.',
-    bullets: ['Real-time drift detection', 'Side-by-side comparison', 'Change impact analysis', 'Consistency enforcement'],
+    title: 'Code Comparator',
+    subtitle: 'Agent-driven history and diff analysis',
+    description:
+      'Use the builtin code-comparator skill and Code Comparator agent graph with Git MCP tools. Use /app/changes as your workspace anchor while the agent inspects history and patches.',
+    bullets: ['Git log and diff via MCP', 'Builtin comparator skill', 'Dedicated agent graph preset', 'Workspace-scoped workflows'],
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />

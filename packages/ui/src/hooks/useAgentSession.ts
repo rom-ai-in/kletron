@@ -270,11 +270,16 @@ export function useAgentSession(): UseAgentSessionReturn {
     [enabledProviders, llmConfigData]);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const graphSelectOptions = useMemo(() => (agentGraphs.length > 0 ? agentGraphs : graphOptions).map((g: any) => ({
-        id: String(g._id ?? g.id ?? ""),
-        label: g.name,
-        sub: g.description,
-    })).filter((g) => g.id), [agentGraphs]);
+    const graphSelectOptions = useMemo(
+        () =>
+            (agentGraphs.length > 0 ? agentGraphs : graphOptions)
+                .map((g: any) => ({
+                    id: String(g._id ?? g.id ?? ""),
+                    label: g.name,
+                }))
+                .filter((g) => g.id),
+        [agentGraphs]
+    );
 
     return {
         llmProvider,

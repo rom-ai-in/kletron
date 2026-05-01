@@ -2,7 +2,7 @@
 
 import { ObjectId } from "mongodb";
 import { getDatabase } from "../lib/db";
-import { getPlugin, listPlugins } from "@kletron/shared";
+import { collectSkillSlugsFromPluginIds, getPlugin, listPlugins } from "@kletron/shared";
 import { getSkillBySlug, setWorkspaceSkill } from "./skillsService";
 
 const WORKSPACE_PLUGINS_COLLECTION = "workspace_plugins";
@@ -77,10 +77,23 @@ export async function installPlugin(workspaceId: string, pluginId: string): Prom
 }
 
 /**
- * Removes install record only; does not disable skills.
+ * Deletes the install row and disables this plugin's skill slugs, except slugs still listed by
+ * another installed plugin on the same workspace (overlap-aware).
  */
 export async function removePlugin(workspaceId: string, pluginId: string): Promise<boolean> {
     await ensureIndexes();
+    const installedIds = await listInstalledPluginIds(workspaceId);
+    const otherInstalledIds = installedIds.filter((id) => id !== pluginId);
+    const protectedSlugs = collectSkillSlugsFromPluginIds(otherInstalledIds);
+
+    const plugin = getPlugin(pluginId);
+    if (plugin) {
+        for (const slug of plugin.skillSlugs) {
+            if (protectedSlugs.has(slug)) continue;
+            await setWorkspaceSkill(workspaceId, slug, false);
+        }
+    }
+
     const c = await workspacePluginsCollection();
     const res = await c.deleteOne({ workspaceId, pluginId });
     return (res.deletedCount ?? 0) > 0;

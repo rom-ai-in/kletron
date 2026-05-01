@@ -44,7 +44,7 @@ export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSel
     else if (status === 'loading') statusColor = "bg-status-warning animate-pulse";
 
     return (
-        <div className={`relative ${fullWidth ? 'w-full' : ''}`} ref={containerRef}>
+        <div className={`relative min-w-0 ${fullWidth ? 'w-full' : ''}`} ref={containerRef}>
             {loading ? (
                 <div className={`flex items-center gap-1.5 bg-bg-surface/50 border border-border-subtle rounded ${isSmall ? 'px-2 py-1' : 'px-3 py-1.5'} ${fullWidth ? 'w-full justify-between' : ''}`}>
                     <span className={`font-bold text-text-muted uppercase tracking-wider ${isSmall ? 'text-[9px]' : 'text-[10px]'}`}>{label}</span>

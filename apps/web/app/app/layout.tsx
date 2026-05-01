@@ -56,7 +56,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
                     <BreadcrumbOverridesProvider>
                         <AppHeader />
-                        <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
+                        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-elegant">
+                            {children}
+                        </div>
                     </BreadcrumbOverridesProvider>
                 </main>
             </div>

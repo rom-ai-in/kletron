@@ -126,6 +126,11 @@ const preset: Partial<Config> = {
           paused: 'var(--chain-paused)',
         },
 
+        // Brand / accent (used as bg-accent-cyan, text-accent-cyan across UI)
+        accent: {
+          cyan: 'var(--kletron-accent)',
+        },
+
         // Brand colors
         brand: {
           accent: 'var(--kletron-accent)',

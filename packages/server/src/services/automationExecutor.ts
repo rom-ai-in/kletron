@@ -375,16 +375,17 @@ export class AutomationExecutor {
         const workspaceRootPath = await this.resolveWorkspaceRootPath(resolvedWorkspaceId);
 
         const firstStage = automation.stages[0];
-        const firstGraph = await agentGraphService.getGraph(firstStage.graphId);
-        if (!firstGraph) {
+        const firstGraph = await agentGraphService.resolveGraphForStage(firstStage.graphId);
+        if (!firstGraph?._id) {
             throw new Error(`Graph ${firstStage.graphId} not found for stage 0`);
         }
+        const resolvedGraphId = firstGraph._id.toString();
 
         // ── Create the main thread ──
         const dateStr = new Date().toISOString().slice(0, 16).replace("T", " ");
         const title = `${automation.name} · ${dateStr}`;
         const mainRunId = await agentGraphRunService.createRun(
-            firstStage.graphId,
+            resolvedGraphId,
             resolvedWorkspaceId,
             "automation",
             {
@@ -417,8 +418,8 @@ export class AutomationExecutor {
 
         // Seed the main thread state with the first stage prompt as the mission.
         const firstStage = automation.stages[0];
-        const firstGraph = await agentGraphService.getGraph(firstStage.graphId);
-        if (!firstGraph) {
+        const firstGraph = await agentGraphService.resolveGraphForStage(firstStage.graphId);
+        if (!firstGraph?._id) {
             await agentGraphRunService.updateRunStatus(mainRunId, "FAILED", {
                 endedAt: new Date(),
                 error: `Graph ${firstStage.graphId} not found`,

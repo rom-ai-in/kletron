@@ -7,7 +7,6 @@ import {
     Settings,
     Share2,
     Terminal,
-    History,
     Database,
     Home,
     Layers,
@@ -37,11 +36,6 @@ const navItems = [
         label: "Automations",
         icon: Layers,
         href: "/app/automations",
-    },
-    {
-        label: "Code Comparator",
-        icon: History,
-        href: "/app/changes",
     },
     {
         label: "Agent Graphs",

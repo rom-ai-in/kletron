@@ -130,7 +130,7 @@ export function ProjectSidebar({
       key={id}
       onClick={() => setThreadFilter(id)}
       className={`px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-colors ${threadFilter === id
-        ? 'bg-accent-cyan/15 text-accent-cyan'
+        ? 'bg-state-selected text-text-primary border border-border-subtle'
         : 'text-text-muted hover:text-text-secondary hover:bg-state-hover'
         }`}
     >
@@ -192,7 +192,7 @@ export function ProjectSidebar({
           <button
             type="button"
             onClick={onAddProject}
-            className="flex items-center justify-between mx-2 my-2 px-3 py-2 rounded-lg border border-white/[0.06] bg-white/[0.02] text-[12px] text-text-secondary hover:border-accent-cyan/30 hover:text-text-primary hover:bg-accent-cyan/5 transition-all duration-200"
+            className="flex items-center justify-between mx-2 my-2 px-3 py-2 rounded-lg border border-white/[0.06] bg-white/[0.02] text-[12px] text-text-secondary hover:border-border-strong hover:bg-state-hover hover:text-text-primary transition-all duration-200"
           >
             <div className="flex items-center gap-2">
               <FolderPlus className="h-3.5 w-3.5 text-text-muted" />
@@ -391,7 +391,7 @@ export function ProjectSidebar({
                       <div
                         key={thread.id}
                         className={`group flex items-center gap-2 pl-9 pr-2 py-1.5 cursor-pointer transition-all duration-150 ${isActive
-                          ? 'bg-accent-cyan/8 text-text-primary border-l-2 border-l-accent-cyan pl-[34px]'
+                          ? 'bg-state-selected text-text-primary border-l-2 border-l-border-strong pl-[34px]'
                           : 'text-text-secondary hover:bg-white/[0.03] hover:text-text-primary border-l-2 border-l-transparent'
                           }`}
                         onClick={() => !isEditing && onThreadSelect?.(thread.id)}
@@ -419,7 +419,7 @@ export function ProjectSidebar({
                             {isAutomation && (
                               <span
                                 title="Automation thread"
-                                className="inline-flex h-3.5 w-3.5 items-center justify-center rounded bg-accent-cyan/15 text-accent-cyan flex-shrink-0"
+                                className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-border-subtle bg-bg-elevated text-text-muted flex-shrink-0"
                               >
                                 <Bot className="h-2.5 w-2.5" />
                               </span>

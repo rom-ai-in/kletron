@@ -663,7 +663,6 @@ The web app exposes **128 API routes**. Here are the key categories:
 | **File System** | `/api/fs/` | `read`, `write`, `delete`, `rename`, `mkdir`, `tree`, `search`, `document` |
 | **Editor** | `/api/editor/` | `file/read`, `file/write`, `file/tree`, `state/subscribe` |
 | **Git** | `/api/git/` | `commit-message`, `pr-description` |
-| **Git Diffs** | `/api/git-diffs` | Git diff viewer |
 | **GitHub** | `/api/github/` | `repos`, `clone` |
 | **Tools** | `/api/tools/` | `list`, `[name]`, `execute` |
 | **Runs** | `/api/runs/` | List, `[id]`, `[id]/cancel` |

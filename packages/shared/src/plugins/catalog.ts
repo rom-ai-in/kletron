@@ -239,3 +239,14 @@ export function validatePluginRefs(plugin: PluginDefinition): { ok: true } | { o
     if (missingConnectors.length > 0) return { ok: false, missingConnectors };
     return { ok: true };
 }
+
+/** Union of skill slugs declared by the given installed plugin ids (unknown ids skipped). */
+export function collectSkillSlugsFromPluginIds(pluginIds: string[]): Set<string> {
+    const out = new Set<string>();
+    for (const id of pluginIds) {
+        const p = getPlugin(id);
+        if (!p) continue;
+        for (const slug of p.skillSlugs) out.add(slug);
+    }
+    return out;
+}

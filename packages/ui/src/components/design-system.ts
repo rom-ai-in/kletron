@@ -79,6 +79,21 @@ export { Modal } from './ui/Modal';
 // Panel
 export { Panel } from './ui/Panel';
 
+// Config explorer (Graphs / plugin skill detail — shared modal + sections)
+export { ConfigExplorerModal } from './config/ConfigExplorerModal';
+export type { ConfigExplorerModalProps } from './config/ConfigExplorerModal';
+export {
+    ConfigExplorerSection,
+    ConfigExplorerRow,
+    ConfigExplorerMonoBlock,
+} from './config/ConfigExplorerSection';
+export type {
+    ConfigExplorerSectionProps,
+    ConfigExplorerSectionVariant,
+    ConfigExplorerRowProps,
+    ConfigExplorerMonoBlockProps,
+} from './config/ConfigExplorerSection';
+
 // Skeleton
 export { Skeleton } from './ui/Skeleton';
 

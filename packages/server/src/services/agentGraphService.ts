@@ -4,6 +4,7 @@ import type { AgentGraphDefinition } from "./agentGraphTypes";
 import {
     buildDriftAnalysisGraph,
     buildSimpleReactAgentGraph,
+    buildCodeComparatorGraph,
     buildCoderAgentGraph,
     buildExplorerAgentGraph,
     buildPlannerAgentGraph,
@@ -24,6 +25,20 @@ const HIDDEN_GRAPH_NAMES = new Set<string>([
     "Presentation Generator Pro",
     "Automations (agent graph)",
 ]);
+
+/** 24-char hex ObjectId string — matches automation stages / runWorkflow. */
+const OBJECTID_HEX24_RE = /^[0-9a-fA-F]{24}$/;
+
+function pickSimpleReactGraph(graphs: AgentGraphDefinition[]): AgentGraphDefinition | undefined {
+    const isSingleConversational = (g: AgentGraphDefinition) =>
+        g.nodes?.length === 1 && g.nodes[0]?.output?.schemaId === "conversational";
+
+    return (
+        graphs.find((g) => isSingleConversational(g) && g.name.toLowerCase().includes("simple react")) ??
+        graphs.find((g) => isSingleConversational(g)) ??
+        graphs.find((g) => g.nodes?.length === 1)
+    );
+}
 
 function warnFallback(error: unknown) {
     if (fallbackWarned) return;
@@ -53,6 +68,7 @@ function ensureFallbackGraphs() {
         { id: "000000000000000000000009", graph: buildExplorerAgentGraph() },
         { id: "00000000000000000000000a", graph: buildPlannerAgentGraph() },
         { id: "00000000000000000000000c", graph: buildBusinessAnalystGraph() },
+        { id: "00000000000000000000000d", graph: buildCodeComparatorGraph() },
     ];
 
     for (const entry of entries) {
@@ -101,6 +117,28 @@ export class AgentGraphService {
         }
         const graph = await collection.findOne({ _id: new ObjectId(graphId) });
         return (graph as AgentGraphDefinition) || null;
+    }
+
+    /**
+     * Resolve a stage `graphId`: valid Mongo ObjectId loads that graph; legacy
+     * preset strings (e.g. `simple_react`, `audit`) or missing graphs fall back
+     * to the lightest single-node ReAct graph — same behaviour as `runWorkflow`.
+     */
+    async resolveGraphForStage(graphId?: string): Promise<AgentGraphDefinition | null> {
+        let graph: AgentGraphDefinition | null = null;
+        if (graphId && OBJECTID_HEX24_RE.test(graphId)) {
+            graph = await this.getGraph(graphId);
+        }
+        if (!graph) {
+            const graphs = await this.listGraphs();
+            graph = pickSimpleReactGraph(graphs) ?? graphs[0] ?? null;
+            if (graph && graphId && !OBJECTID_HEX24_RE.test(graphId)) {
+                console.info(
+                    `[AgentGraph] Resolved legacy graphId="${graphId}" → "${graph.name}" (${graph._id})`
+                );
+            }
+        }
+        return graph;
     }
 
     async listGraphs(filter?: AgentGraphFilter): Promise<AgentGraphDefinition[]> {
@@ -177,6 +215,7 @@ export class AgentGraphService {
     async ensureDefaultGraphs(): Promise<void> {
         const defaultPresets = [
             buildSimpleReactAgentGraph,
+            buildCodeComparatorGraph,
         ];
 
         for (const builder of defaultPresets) {

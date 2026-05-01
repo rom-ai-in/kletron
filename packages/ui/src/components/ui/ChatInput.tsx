@@ -3,6 +3,7 @@
 import React, { forwardRef, useEffect, useRef } from 'react';
 import { ArrowUp, Square } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { buttonVariants } from './Button';
 
 export interface ChatInputProps
   extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange' | 'value'> {
@@ -62,10 +63,29 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     const canSend = !!value.trim() && !disabled;
 
+    const sendStopButton =
+      showSendButton && (onSend || onStop) ? (
+        <button
+          type="button"
+          onClick={sending ? onStop : onSend}
+          disabled={!sending && !canSend}
+          className={cn(
+            buttonVariants({
+              variant: sending ? 'danger' : 'primary',
+              size: 'icon',
+            }),
+            'z-20 shrink-0 transition-transform duration-200 active:scale-95'
+          )}
+          aria-label={sending ? 'Stop generation' : 'Send message'}
+        >
+          {sending ? <Square className="h-3.5 w-3.5" /> : <ArrowUp className="h-4 w-4" />}
+        </button>
+      ) : null;
+
     return (
       <div
         className={cn(
-          'rounded-2xl border border-white/[0.08] bg-white/[0.04] p-3.5 shadow-lg transition-all duration-200 focus-within:border-white/[0.14] focus-within:bg-white/[0.05] focus-within:shadow-xl',
+          'relative min-w-0 w-full rounded-2xl border border-white/[0.08] bg-white/[0.04] p-3.5 shadow-lg transition-all duration-200 focus-within:border-white/[0.14] focus-within:bg-white/[0.05] focus-within:shadow-xl',
           containerClassName,
           className
         )}
@@ -87,33 +107,21 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         />
 
         {(footerLeft || footerRight || showSendButton) && (
-          <div className="mt-2.5 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5">
-              {footerLeft}
-            </div>
-            <div className="flex items-center gap-2">
-              {footerRight}
-              {showSendButton && (onSend || onStop) && (
-                <button
-                  type="button"
-                  onClick={sending ? onStop : onSend}
-                  disabled={!sending && !canSend}
-                  className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded-xl transition-all duration-200',
-                    sending
-                      ? 'bg-red-500/15 border border-red-500/25 text-red-400 hover:bg-red-500/20 active:scale-95'
-                      : 'bg-accent-cyan text-bg-app hover:brightness-110 disabled:opacity-20 disabled:cursor-not-allowed active:scale-95'
-                  )}
-                  aria-label={sending ? 'Stop generation' : 'Send message'}
-                >
-                  {sending ? (
-                    <Square className="h-3.5 w-3.5" />
-                  ) : (
-                    <ArrowUp className="h-4 w-4" />
-                  )}
-                </button>
+          <div className="relative mt-2.5 min-h-8 min-w-0">
+            <div
+              className={cn(
+                'flex min-w-0 items-center gap-2',
+                sendStopButton && 'pr-10'
               )}
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">{footerLeft}</div>
+              {footerRight}
             </div>
+            {sendStopButton && (
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex items-center">
+                <div className="pointer-events-auto">{sendStopButton}</div>
+              </div>
+            )}
           </div>
         )}
       </div>

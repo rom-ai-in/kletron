@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { requireAppRouteAuth } from '@kletron/server/lib/auth/apiAuth';
 import * as userProfileService from '@kletron/server/services/userProfileService';
+import * as organizationService from '@kletron/server/services/organizationService';
 
 export async function GET(request: Request) {
     const auth = await requireAppRouteAuth(request);
@@ -11,14 +12,12 @@ export async function GET(request: Request) {
     }
 
     try {
-        // Get user profile from MongoDB
         const profile = await userProfileService.getProfileByUserId(auth.userId);
+        const organization = await organizationService.getOrganizationPayloadForUser(auth.userId);
 
-        // Return simplified organization info (no multi-tenant yet)
         return NextResponse.json({
             success: true,
-            organization: null,
-            message: 'Organization schema not set up yet',
+            organization,
             profile: profile ? {
                 id: profile.id,
                 email: profile.email,
@@ -39,14 +38,25 @@ export async function PATCH(request: Request) {
 
     try {
         const body = await request.json();
-        const { name } = body;
+        const { name, tenantId } = body;
 
         if (typeof name !== 'string' || name.trim().length === 0) {
             return NextResponse.json({ success: false, error: 'A non-empty name is required' }, { status: 400 });
         }
 
-        // Update user profile in MongoDB
-        await userProfileService.updateFullName(auth.userId, name.trim().slice(0, 255));
+        const tid =
+            typeof tenantId === 'string' && tenantId.trim().length > 0
+                ? tenantId.trim()
+                : (await organizationService.getOrganizationPayloadForUser(auth.userId))?.tenant.id;
+
+        if (!tid) {
+            return NextResponse.json({ success: false, error: 'Organization not found' }, { status: 404 });
+        }
+
+        const result = await organizationService.updateTenantName(auth.userId, tid, name);
+        if (!result.ok) {
+            return NextResponse.json({ success: false, error: result.error }, { status: result.error === 'Not allowed' ? 403 : 400 });
+        }
 
         return NextResponse.json({ success: true });
     } catch (err) {

@@ -338,6 +338,62 @@ export function buildSimpleReactAgentGraph(): Omit<AgentGraphDefinition, "_id" |
   };
 }
 
+export const codeComparatorPhaseId = "code_comparator_main";
+
+const codeComparatorToolNames = [
+  "list_files",
+  "read_file",
+  "read_file_range",
+  "describe_structure",
+  "search_code",
+  "semantic_code_search",
+  "git_log",
+  "git_diff",
+  "git_grep",
+  "git_blame",
+  "output_format",
+  "write_todos",
+];
+
+const codeComparatorSystemPrompt = `## Identity
+
+You are **Kletron Code Comparator**, a repository-focused agent for **history and diff analysis**.
+
+The builtin skill **code-comparator** defines your workflow, tools discipline, and the human-facing Changes URL.
+
+## Rules
+
+- Follow the injected skill instructions exactly for workflow and output shape.
+- Use tools for every factual claim about commits, patches, or file contents.
+- Keep answers concise; cite SHAs and paths from tool output.`;
+
+export function buildCodeComparatorGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
+  const nodes: AgentGraphNode[] = [
+    {
+      id: codeComparatorPhaseId,
+      label: "Code Comparator",
+      kind: "react",
+      react: {
+        systemPrompt: codeComparatorSystemPrompt,
+        userPromptTemplate: "{{mission}}",
+        toolNames: codeComparatorToolNames,
+        skillIds: ["code-comparator"],
+        llmSelection: { provider: "azure" },
+      },
+      output: { schemaId: "conversational" },
+    },
+  ];
+
+  return {
+    name: "Code Comparator (agent graph)",
+    description:
+      "Git-centric comparison agent with builtin code-comparator skill; humans anchor at /app/changes.",
+    category: "graph",
+    nodes,
+    edges: [],
+  };
+}
+
 export function buildDriftAnalysisGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
   const nodes: AgentGraphNode[] = [
     {
