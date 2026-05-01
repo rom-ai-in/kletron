@@ -73,7 +73,7 @@ function parseKvText(text: string): Record<string, string> {
 
 function WorkspaceConnectorsPageInner({ workspaceId }: { workspaceId: string }) {
     const searchParams = useSearchParams();
-    const pluginId = searchParams.get("plugin");
+    const pluginId = searchParams?.get("plugin") ?? undefined;
     const plugin = pluginId ? getPlugin(pluginId) : undefined;
 
     const { types } = useConnectorCatalog();
@@ -118,7 +118,7 @@ function WorkspaceConnectorsPageInner({ workspaceId }: { workspaceId: string }) 
         try {
             if (intForm.type.auth === "oauth") {
                 const pluginQs =
-                    pluginId !== null && pluginId !== ""
+                    pluginId !== undefined && pluginId !== ""
                         ? `?plugin=${encodeURIComponent(pluginId)}`
                         : "";
                 window.location.href = `/api/auth/connect/${intForm.type.id}?workspaceId=${workspaceId}&redirect=${encodeURIComponent(`/app/${workspaceId}/connectors${pluginQs}`)}`;

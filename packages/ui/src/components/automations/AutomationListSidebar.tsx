@@ -6,11 +6,8 @@ import {
     Layers,
     Search,
     Plus,
-    Play,
-    CheckCircle2,
-    XCircle,
-    Clock,
     AlertCircle,
+    CheckCircle2,
     Timer,
     Webhook,
     GitBranch,
@@ -22,21 +19,9 @@ import type { AutomationDefinition, AutomationTriggerType } from "@kletron/share
 import { cn } from "@kletron/shared/utils/cn";
 import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 
-// Helper for status icons
-const StatusIcon = ({ status }: { status: string }) => {
-    switch (status) {
-        case "BLOCKED":
-            return <AlertCircle className="h-3.5 w-3.5 text-status-warning-text" />;
-        case "RUNNING":
-            return <Play className="h-3.5 w-3.5 text-status-info-text animate-pulse" />;
-        case "COMPLETED":
-            return <CheckCircle2 className="h-3.5 w-3.5 text-status-success-text" />;
-        case "FAILED":
-            return <XCircle className="h-3.5 w-3.5 text-status-error-text" />;
-        case "PENDING":
-        default:
-            return <Clock className="h-3.5 w-3.5 text-text-muted" />;
-    }
+const StatusIcon = ({ blocked }: { blocked: boolean }) => {
+    if (blocked) return <AlertCircle className="h-3.5 w-3.5 text-status-warning-text" />;
+    return <CheckCircle2 className="h-3.5 w-3.5 text-status-success-text" />;
 };
 
 export function AutomationListSidebar() {
@@ -49,7 +34,7 @@ export function AutomationListSidebar() {
     // State
     const [automations, setAutomations] = useState<AutomationDefinition[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
-    const [filter, setFilter] = useState<"all" | "running" | "completed">("all");
+    const [filter, setFilter] = useState<"all" | "blocked">("all");
     const [triggerFilter, setTriggerFilter] = useState<"all" | AutomationTriggerType>("all");
     const [loading, setLoading] = useState(false);
     const [isBuilderOpen, setIsBuilderOpen] = useState(false);
@@ -91,13 +76,17 @@ export function AutomationListSidebar() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeWorkspaceId]);
 
-    // Filter logic
+    const isAutomationBlocked = (automation: AutomationDefinition) =>
+        !!automation.stages?.some((stage) => !stage.prompt || stage.prompt.trim() === "");
+
+    // Filter logic — status-based filters now operate on the per-config
+    // "blocked" check (any stage missing a prompt) since runtime status
+    // lives on the agent thread, not the automation definition.
     const filteredAutomations = automations.filter(automation => {
         const matchesSearch = automation.name.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesFilter =
             filter === "all" ? true :
-                filter === "running" ? automation.status === "RUNNING" :
-                    filter === "completed" ? (automation.status === "COMPLETED" || automation.status === "FAILED") : true;
+                filter === "blocked" ? isAutomationBlocked(automation) : true;
         const matchesTrigger = triggerFilter === "all" ? true : (automation.triggerType || "manual") === triggerFilter;
         return matchesSearch && matchesFilter && matchesTrigger;
     });
@@ -142,7 +131,7 @@ export function AutomationListSidebar() {
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
-                    {/* Tiny segmented control for status */}
+                    {/* Tiny segmented control for blocked vs all */}
                     <div className="flex border border-border-subtle rounded-md bg-bg-elevated p-0.5">
                         <button
                             onClick={() => setFilter("all")}
@@ -155,24 +144,14 @@ export function AutomationListSidebar() {
                             <Layers className="h-3 w-3 text-text-muted" />
                         </button>
                         <button
-                            onClick={() => setFilter("running")}
+                            onClick={() => setFilter("blocked")}
                             className={cn(
                                 "p-1 rounded-[2px] hover:bg-state-hover transition-colors",
-                                filter === "running" && "bg-state-selected shadow-sm"
+                                filter === "blocked" && "bg-state-selected shadow-sm"
                             )}
-                            title="Running"
+                            title="Needs attention"
                         >
-                            <Play className="h-3 w-3 text-status-info-text" />
-                        </button>
-                        <button
-                            onClick={() => setFilter("completed")}
-                            className={cn(
-                                "p-1 rounded-[2px] hover:bg-state-hover transition-colors",
-                                filter === "completed" && "bg-state-selected shadow-sm"
-                            )}
-                            title="Completed"
-                        >
-                            <CheckCircle2 className="h-3 w-3 text-status-success-text" />
+                            <AlertCircle className="h-3 w-3 text-status-warning-text" />
                         </button>
                     </div>
                 </div>
@@ -220,8 +199,7 @@ export function AutomationListSidebar() {
                             // Ensure ID comparison works (automation._id is ObjectId from standard, activeId is string from URL)
                             const automationIdStr = automation._id?.toString() || "";
                             const isActive = automationIdStr === activeId;
-                            const isBlocked = automation.stages?.some((stage) => !stage.prompt || stage.prompt.trim() === "");
-                            const status = isBlocked ? "BLOCKED" : automation.status;
+                            const blocked = isAutomationBlocked(automation);
 
                             return (
                                 <button
@@ -241,7 +219,7 @@ export function AutomationListSidebar() {
                                         )}>
                                             {automation.name}
                                         </span>
-                                        <StatusIcon status={status} />
+                                        <StatusIcon blocked={blocked} />
                                     </div>
                                     <div className="flex items-center justify-between text-[10px] text-text-muted">
                                         <span className="truncate max-w-[150px]">

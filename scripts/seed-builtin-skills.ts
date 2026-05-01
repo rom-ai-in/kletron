@@ -8,6 +8,7 @@
  *   tsx scripts/seed-builtin-skills.ts --write-plugin-stubs-only
  */
 
+import type { Dirent } from "fs";
 import dotenv from "dotenv";
 import { access, readdir, readFile } from "fs/promises";
 import path from "path";
@@ -79,7 +80,7 @@ async function ensurePluginStubFiles(): Promise<void> {
 
 async function seedAllFromDisk(): Promise<void> {
     const skillsDir = path.join(ROOT, ".agent/skills");
-    let entries: string[];
+    let entries: Dirent[];
     try {
         entries = await readdir(skillsDir, { withFileTypes: true });
     } catch (e) {
