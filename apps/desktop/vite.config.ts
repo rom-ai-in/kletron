@@ -16,6 +16,9 @@ export default defineConfig(async (): Promise<UserConfig> => {
 
   return {
     root: __dirname,
+    // Electron loads `dist/index.html` via `file://`; absolute `/assets/...` URLs resolve to the
+    // filesystem root and the renderer bundle never loads. Relative paths fix blank-window prod runs.
+    base: "./",
     esbuild: {
       jsx: "automatic",
     },

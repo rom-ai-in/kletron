@@ -145,10 +145,9 @@ function createWindow() {
     height: 800,
     minWidth: 960,
     minHeight: 640,
-    transparent: true,
+    // Opaque window: transparent + vibrancy causes broken compositing on some macOS/Electron
+    // builds (blank or clipped UI while CSS backdrops still “work”). Glass look stays in CSS.
     backgroundColor: "#09090b",
-    vibrancy: "sidebar",
-    visualEffectState: "active",
     titleBarStyle: "hiddenInset",
     icon: appIcon,
     webPreferences: {

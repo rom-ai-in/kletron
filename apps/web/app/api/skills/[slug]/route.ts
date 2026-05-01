@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { getSkill as getResolvedSkillFromRegistry } from "@kletron/agent-core/skills/registry";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import {
     deleteSkill,
@@ -15,25 +16,56 @@ import { skillUpdateSchema } from "@kletron/shared/skills/types";
 
 export const dynamic = "force-dynamic";
 
+function skillFromRegistry(slug: string, resolved: Awaited<ReturnType<typeof getResolvedSkillFromRegistry>>) {
+    const now = new Date().toISOString();
+    return {
+        slug: resolved.id,
+        name: resolved.name,
+        version: resolved.version,
+        description: resolved.description,
+        tags: resolved.tags ?? [],
+        requiredTools: resolved.requiredTools ?? [],
+        suggestedTools: resolved.suggestedTools ?? [],
+        extends: resolved.extends ?? [],
+        body: resolved.resolvedSystemPrompt,
+        source: "builtin" as const,
+        author: resolved.author,
+        outputFormat: resolved.outputFormat,
+        maxToolCalls: resolved.maxToolCalls,
+        createdAt: now,
+        updatedAt: now,
+        /** Resolved-only fields (when loaded from filesystem registry, not Mongo). */
+        resolvedTools: resolved.resolvedTools,
+        extendsChain: resolved.extendsChain,
+    };
+}
+
 export async function GET(
     request: Request,
     { params }: { params: Promise<{ slug: string }> }
 ) {
     const auth = await requireAppRouteAuth(request);
     const { slug } = await params;
+
     const skill = await getSkillBySlug(slug);
-    if (!skill) {
+    if (skill) {
+        if (skill.source === "user") {
+            if (!auth) {
+                return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            }
+            if (auth.authType !== "internal" && skill.ownerId !== auth.userId) {
+                return NextResponse.json({ error: "Not found" }, { status: 404 });
+            }
+        }
+        return NextResponse.json({ skill });
+    }
+
+    try {
+        const resolved = await getResolvedSkillFromRegistry(slug);
+        return NextResponse.json({ skill: skillFromRegistry(slug, resolved) });
+    } catch {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    if (skill.source === "user") {
-        if (!auth) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-        if (auth.authType !== "internal" && skill.ownerId !== auth.userId) {
-            return NextResponse.json({ error: "Not found" }, { status: 404 });
-        }
-    }
-    return NextResponse.json({ skill });
 }
 
 export async function PUT(

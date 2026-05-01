@@ -113,13 +113,13 @@ export default function App() {
     backendReady,
     auth.getAccessToken,
     threads.conversationId,
-    setThreadsConversationId,
+    threads.setConversationId,
     workspace.workspace,
     settings.modelConfig,
-    selectedGraph,
-    graphName,
-    loadThreads,
-    setDiffs,
+    models.selectedGraph,
+    models.selectedGraphName ?? undefined,
+    threads.loadThreads,
+    diffs.setDiffs,
     activeWorkspaceId,
     categoriesHook.activeCategory
   );

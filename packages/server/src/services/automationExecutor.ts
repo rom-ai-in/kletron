@@ -65,13 +65,11 @@ const toObjectId = (id?: string): ObjectId | undefined => {
  */
 export class AutomationExecutor {
     /**
-     * Create a new automation
+     * Create a new automation (configuration only; runtime state lives on
+     * the agent threads created per execution).
      */
     async createAutomation(
-        config: Omit<
-            AutomationDefinition,
-            "_id" | "status" | "createdAt" | "currentStageIndex" | "sessionIds" | "aggregatedFindings" | "crossStageInsights"
-        >
+        config: Omit<AutomationDefinition, "_id" | "createdAt">
     ): Promise<string> {
         const db = await getDb();
 
@@ -115,12 +113,7 @@ export class AutomationExecutor {
             ...(webhookConfig ? { webhookConfig } : {}),
             ...(gitEventConfig ? { gitEventConfig } : {}),
             ...(schedule ? { schedule } : {}),
-            status: "PENDING",
             createdAt: new Date(),
-            currentStageIndex: 0,
-            sessionIds: [],
-            aggregatedFindings: [],
-            crossStageInsights: [],
         };
 
         const result = await db.collection(COLLECTION_NAME).insertOne(chain);
@@ -164,7 +157,7 @@ export class AutomationExecutor {
             ];
         }
 
-        if (filter?.status) query.status = filter.status;
+        // filter.status is deprecated; status no longer lives on the config doc.
 
         if (filter?.search) {
             query.$and = [

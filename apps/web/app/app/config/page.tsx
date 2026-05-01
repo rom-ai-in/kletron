@@ -10,6 +10,7 @@ import {
   Brain,
   Layers,
   Link as LinkIcon,
+  Puzzle,
 } from "lucide-react";
 import { Panel } from "@kletron/ui/components/design-system";
 
@@ -178,6 +179,13 @@ export default function ConfigOverviewPage() {
              href="/app/config/connectors"
              meta="Manage connectors"
            />
+          <ConfigCard
+            title="Plugins"
+            description="Cowork-style bundles of skills and connectors."
+            icon={<Puzzle className="h-4 w-4 text-text-muted" />}
+            href="/app/config/plugins"
+            meta="Browse plugins"
+          />
         </div>
 
         <div className="mt-6">

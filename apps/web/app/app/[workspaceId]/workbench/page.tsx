@@ -53,7 +53,7 @@ export default function WorkbenchPage() {
     if (workspaceId) {
       fetch(`/api/workspaces/${workspaceId}`)
         .then(res => res.json())
-        .then(data => setActiveWorkspace(data))
+        .then((data) => setActiveWorkspace(data.workspace ?? data))
         .catch(err => console.error('Error fetching workspace:', err));
     }
   }, [workspaceId]);

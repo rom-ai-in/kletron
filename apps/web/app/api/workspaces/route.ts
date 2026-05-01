@@ -1,23 +1,80 @@
-import { NextResponse } from 'next/server';
+export const dynamic = "force-dynamic";
 
-// Mock data - in production this would connect to the database
-export async function GET() {
-  const workspaces = [
-    { id: "1", name: "My Project", path: "/Users/romainmagnin/Desktop/project" },
-    { id: "2", name: "Work Documents", path: "/Users/romainmagnin/Documents/work" },
-  ];
+import { NextResponse } from "next/server";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import type { Workspace } from "@kletron/server/services/workspaceService";
+import {
+  createWorkspace,
+  getActiveWorkspaceId,
+  listWorkspaces,
+  toWorkspaceSummary,
+  validateWorkspaceRoot,
+} from "@kletron/server/services/workspaceService";
 
-  return NextResponse.json(workspaces);
+function summaryWithHealth(workspace: Workspace) {
+  const base = toWorkspaceSummary(workspace);
+  const h = validateWorkspaceRoot(workspace);
+  return {
+    ...base,
+    health: h.status,
+    healthMessage: h.message ?? null,
+    selectable: h.status === "healthy",
+  };
+}
+
+export async function GET(request: Request) {
+  const auth = await requireAppRouteAuth(request);
+  if (!auth) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  try {
+    const raw = await listWorkspaces(auth.userId);
+    const activeWorkspaceId = await getActiveWorkspaceId(auth.userId);
+    const workspaces = raw.map(summaryWithHealth);
+    return NextResponse.json({ workspaces, activeWorkspaceId });
+  } catch (error) {
+    return NextResponse.json(
+      { error: (error as Error)?.message ?? "Failed to load workspaces" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: Request) {
-  const { name, rootPath } = await request.json();
-  const path = rootPath || name;
+  const auth = await requireAppRouteAuth(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  console.log('Creating workspace:', { name, rootPath: path });
+  try {
+    const body = (await request.json()) as {
+      rootPath?: string;
+      name?: string;
+      repoUrl?: string;
+      provider?: string;
+      defaultBranch?: string;
+    };
+    const rootPath = body.rootPath?.trim();
+    if (!rootPath) {
+      return NextResponse.json({ error: "rootPath is required" }, { status: 400 });
+    }
 
-  return NextResponse.json(
-    { workspace: { id: Date.now().toString(), name: name || path, rootPath: path } },
-    { status: 201 }
-  );
+    const workspace = await createWorkspace({
+      ownerId: auth.userId,
+      rootPath,
+      name: body.name?.trim(),
+      repoUrl: body.repoUrl,
+      provider: body.provider,
+      defaultBranch: body.defaultBranch,
+    });
+
+    return NextResponse.json({ workspace: summaryWithHealth(workspace) }, { status: 201 });
+  } catch (error) {
+    const message = (error as Error)?.message ?? "Failed to create workspace";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
 }
