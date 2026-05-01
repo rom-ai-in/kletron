@@ -4,7 +4,7 @@ import { getDb } from '../lib/db';
 
 export interface UserProfile {
     _id?: string;
-    supabaseId: string;       // Supabase auth user ID
+    userId: string;
     fullName: string | null;
     email: string;
     createdAt: Date;
@@ -13,7 +13,7 @@ export interface UserProfile {
 
 export interface UserProfilePublic {
     id: string;
-    supabaseId: string;
+    userId: string;
     fullName: string | null;
     email: string;
     createdAt: Date;
@@ -43,21 +43,21 @@ async function getCollectionSafe() {
 }
 
 function upsertFallbackProfile(
-    supabaseId: string,
+    userId: string,
     email: string,
     fullName?: string | null
 ): UserProfilePublic {
     const now = new Date();
-    const existing = fallbackProfiles.get(supabaseId);
+    const existing = fallbackProfiles.get(userId);
     const profile: UserProfilePublic = {
-        id: existing?.id ?? `local_${supabaseId}`,
-        supabaseId,
+        id: existing?.id ?? `local_${userId}`,
+        userId,
         fullName: fullName ?? existing?.fullName ?? null,
         email: email || existing?.email || "",
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
     };
-    fallbackProfiles.set(supabaseId, profile);
+    fallbackProfiles.set(userId, profile);
     return profile;
 }
 
@@ -75,7 +75,7 @@ async function getCollection() {
 export async function ensureIndexes() {
     const collection = await getCollectionSafe();
     if (!collection) return;
-    await collection.createIndex({ supabaseId: 1 }, { unique: true });
+    await collection.createIndex({ userId: 1 }, { unique: true });
     await collection.createIndex({ email: 1 });
 }
 
@@ -83,18 +83,18 @@ export async function ensureIndexes() {
  * Create or update a user profile (upsert)
  */
 export async function upsertProfile(
-    supabaseId: string,
+    userId: string,
     email: string,
     fullName?: string | null
 ): Promise<UserProfilePublic> {
     const collection = await getCollectionSafe();
     if (!collection) {
-        return upsertFallbackProfile(supabaseId, email, fullName);
+        return upsertFallbackProfile(userId, email, fullName);
     }
     const now = new Date();
 
     const result = await collection.findOneAndUpdate(
-        { supabaseId },
+        { userId },
         {
             $set: {
                 email,
@@ -102,7 +102,7 @@ export async function upsertProfile(
                 updatedAt: now,
             },
             $setOnInsert: {
-                supabaseId,
+                userId,
                 createdAt: now,
             },
         },
@@ -112,7 +112,7 @@ export async function upsertProfile(
     const profile = result!;
     return {
         id: profile._id!.toString(),
-        supabaseId: profile.supabaseId,
+        userId: profile.userId,
         fullName: profile.fullName,
         email: profile.email,
         createdAt: profile.createdAt,
@@ -121,20 +121,20 @@ export async function upsertProfile(
 }
 
 /**
- * Get a user profile by Supabase ID
+ * Get a user profile by user ID
  */
-export async function getProfileBySupabaseId(supabaseId: string): Promise<UserProfilePublic | null> {
+export async function getProfileByUserId(userId: string): Promise<UserProfilePublic | null> {
     const collection = await getCollectionSafe();
     if (!collection) {
-        return fallbackProfiles.get(supabaseId) ?? null;
+        return fallbackProfiles.get(userId) ?? null;
     }
-    const profile = await collection.findOne({ supabaseId });
+    const profile = await collection.findOne({ userId });
 
     if (!profile) return null;
 
     return {
         id: profile._id!.toString(),
-        supabaseId: profile.supabaseId,
+        userId: profile.userId,
         fullName: profile.fullName,
         email: profile.email,
         createdAt: profile.createdAt,
@@ -145,12 +145,12 @@ export async function getProfileBySupabaseId(supabaseId: string): Promise<UserPr
 /**
  * Update a user's full name
  */
-export async function updateFullName(supabaseId: string, fullName: string): Promise<boolean> {
+export async function updateFullName(userId: string, fullName: string): Promise<boolean> {
     const collection = await getCollectionSafe();
     if (!collection) {
-        const existing = fallbackProfiles.get(supabaseId);
+        const existing = fallbackProfiles.get(userId);
         if (!existing) return false;
-        fallbackProfiles.set(supabaseId, {
+        fallbackProfiles.set(userId, {
             ...existing,
             fullName,
             updatedAt: new Date(),
@@ -159,7 +159,7 @@ export async function updateFullName(supabaseId: string, fullName: string): Prom
     }
 
     const result = await collection.updateOne(
-        { supabaseId },
+        { userId },
         { $set: { fullName, updatedAt: new Date() } }
     );
 
@@ -169,11 +169,11 @@ export async function updateFullName(supabaseId: string, fullName: string): Prom
 /**
  * Delete a user profile
  */
-export async function deleteProfile(supabaseId: string): Promise<boolean> {
+export async function deleteProfile(userId: string): Promise<boolean> {
     const collection = await getCollectionSafe();
     if (!collection) {
-        return fallbackProfiles.delete(supabaseId);
+        return fallbackProfiles.delete(userId);
     }
-    const result = await collection.deleteOne({ supabaseId });
+    const result = await collection.deleteOne({ userId });
     return result.deletedCount > 0;
 }

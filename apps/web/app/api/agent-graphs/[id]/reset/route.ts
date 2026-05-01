@@ -4,21 +4,17 @@ import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import {
     buildSimpleReactAgentGraph,
-    buildDriftAnalysisGraph,
     buildCoderAgentGraph,
     buildExplorerAgentGraph,
     buildPlannerAgentGraph,
-    buildBusinessAnalystGraph,
 } from "@kletron/server/services/agentGraphPresets";
 
 /** Map of graph name → builder for all preset graphs. */
 const PRESET_BUILDERS: Record<string, () => ReturnType<typeof buildSimpleReactAgentGraph>> = {
     "Simple ReAct (agent graph)": buildSimpleReactAgentGraph,
-    "Drift Analysis (agent graph)": buildDriftAnalysisGraph,
     "Coder Agent (agent graph)": buildCoderAgentGraph,
     "Explorer Agent (agent graph)": buildExplorerAgentGraph,
     "Planner Agent (agent graph)": buildPlannerAgentGraph,
-    "Business Analyst": buildBusinessAnalystGraph,
 };
 
 /**

@@ -26,7 +26,8 @@ export function useConversation(
   graphName?: string,
   loadThreads?: (preferredId?: string) => Promise<void>,
   setDiffs?: (fn: (prev: DiffRequest[]) => DiffRequest[]) => void,
-  activeWorkspaceId?: string | null
+  activeWorkspaceId?: string | null,
+  activeCategory?: string
 ) {
   const [conversationEvents, setConversationEvents] = useState<ChatEvent[]>([]);
   const [conversationLoading, setConversationLoading] = useState(false);
@@ -262,10 +263,12 @@ export function useConversation(
           graphId: selectedGraph || undefined,
           message: messageContent,
           ...(modelConfig?.provider ? { provider: modelConfig.provider } : {}),
+          ...(activeCategory ? { category: activeCategory } : {}),
         }
         : {
           message: messageContent,
           ...(modelConfig?.provider ? { provider: modelConfig.provider } : {}),
+          ...(activeCategory ? { category: activeCategory } : {}),
         };
 
       const headers: Record<string, string> = {

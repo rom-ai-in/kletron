@@ -20,7 +20,6 @@ kletron/
 │   ├── shared/         # Shared types, schemas, graph catalog
 │   └── ui/             # React components + hooks (Agent UI, design system)
 ├── scripts/            # Seed scripts for agent graphs
-├── supabase/           # Supabase auth configuration
 └── templates/          # Document templates (Word, PowerPoint)
 ```
 
@@ -102,12 +101,13 @@ sequenceDiagram
 | Graph Presets | `packages/server/src/services/agentGraphPresets.ts` | 2484 |
 | Graph Runtime | `packages/server/src/services/agentGraphRuntime.ts` | 45 |
 | Graph Topo Sort | `packages/server/src/services/agentGraphTopo.ts` | 62 |
-| Graph Conditions | `packages/server/src/services/agentGraphConditions.ts` | — |
-| Graph State | `packages/server/src/services/agentGraphState.ts` | — |
-| Graph Utils | `packages/server/src/services/agentGraphUtils.ts` | — |
+| Graph Conditions | `packages/server/src/services/agentGraphConditions.ts` | 139 |
+| Graph State | `packages/server/src/services/agentGraphState.ts` | 41 |
+| Graph Utils | `packages/server/src/services/agentGraphUtils.ts` | 97 |
+| Graph Run Service | `packages/server/src/services/agentGraphRunService.ts` | 585 |
 | LLM Provider | `packages/server/src/llm.ts` | 372 |
 | MCP Client | `packages/mcp-client/src/client.ts` | 188 |
-| MCP Server | `apps/mcp-server/server.js` | — |
+| MCP Server | `apps/mcp-server/server.js` | 384 |
 | Context Graph Store | `packages/server/src/context/graph/ContextGraphStore.ts` | 156 |
 | Context Ranker | `packages/server/src/context/graph/ContextRanker.ts` | 123 |
 | Context Scanner | `packages/server/src/context/graph/ContextScanner.ts` | 95 |

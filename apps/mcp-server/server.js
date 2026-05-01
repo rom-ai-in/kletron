@@ -38,6 +38,9 @@ import { outputFormat } from "./tools/outputFormat.js";
 import { writeFile } from "./tools/writeFile.js";
 import { loadSkill, listSkills } from "./tools/skillLoader.js";
 import { notify } from "./tools/notify.js";
+
+// Workspace-specific tools
+import { listGlobalSkills, listWorkspaceSkills, enableSkill, disableSkill, listConnectors, addConnector, removeConnector, getWorkspaceConfig } from "./tools/workspaceTools.js";
 import { config } from "./config.js";
 
 const argv = process.argv.slice(2);
@@ -147,10 +150,54 @@ function buildAllTools() {
   return { ...tools, ...advancedTools };
 }
 
-function wireToolHandlers({ server, allTools }) {
+async function buildWorkspaceAwareTools() {
+  const allTools = buildAllTools();
+  
+  // Get the workspace skills manager
+  const { workspaceSkillsManager } = await import("./tools/workspaceSkills.js");
+  
+  // Determine current active workspace from config
+  const activeWorkspace = config.defaultDir;
+  
+  if (activeWorkspace) {
+    try {
+      // Get tools specific to this workspace based on enabled skills and connectors
+      const workspaceTools = await workspaceSkillsManager.getActiveToolsForWorkspace(activeWorkspace);
+      return workspaceTools;
+    } catch (error) {
+      console.warn("[MCP] Failed to get workspace-specific tools, using default:", error.message);
+    }
+  }
+  
+  // Fallback to all tools if workspace not configured or error occurred
+  return allTools;
+}
+
+async function buildAllWorkspaceTools() {
+  const allTools = buildAllTools();
+  
+  // Add workspace management tools
+  const workspaceManagementTools = {
+    list_global_skills: listGlobalSkills,
+    list_workspace_skills: listWorkspaceSkills,
+    enable_skill: enableSkill,
+    disable_skill: disableSkill,
+    list_connectors: listConnectors,
+    add_connector: addConnector,
+    remove_connector: removeConnector,
+    get_workspace_config: getWorkspaceConfig
+  };
+  
+  return { ...allTools, ...workspaceManagementTools };
+}
+
+async function wireToolHandlers({ server, allTools }) {
+  // Use workspace-aware tools if available
+  const tools = await buildWorkspaceAwareTools();
+  
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
-      tools: Object.entries(allTools).map(([name, tool]) => ({
+      tools: Object.entries(tools).map(([name, tool]) => ({
         name,
         description: tool.description,
         inputSchema: tool.inputSchema,
@@ -160,7 +207,53 @@ function wireToolHandlers({ server, allTools }) {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const toolName = request.params.name;
-    const tool = allTools[toolName];
+    const tool = tools[toolName];
+
+    if (!tool) {
+      throw new Error(`Tool not found: ${toolName}`);
+    }
+
+    try {
+      const result = await tool.run(request.params.arguments);
+      return {
+        content: [
+          {
+            type: "text",
+            text: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  });
+}
+
+async function wireAllToolHandlers({ server, allTools }) {
+  // Use all tools including workspace management
+  const tools = await buildAllWorkspaceTools();
+  
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return {
+      tools: Object.entries(tools).map(([name, tool]) => ({
+        name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+      })),
+    };
+  });
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const toolName = request.params.name;
+    const tool = tools[toolName];
 
     if (!tool) {
       throw new Error(`Tool not found: ${toolName}`);
@@ -223,7 +316,8 @@ async function runSseServer({ allTools, port }) {
           { capabilities: { tools: {} } }
         );
 
-        wireToolHandlers({ server: mcpServer, allTools });
+        // Use workspace-aware tool handlers by default
+        await wireToolHandlers({ server: mcpServer, allTools });
 
         const sessionId = transport.sessionId;
         sessions.set(sessionId, transport);

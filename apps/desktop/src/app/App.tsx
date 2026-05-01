@@ -60,6 +60,7 @@ import { useGit } from "../hooks/useGit";
 import { useProjects } from "../hooks/useProjects";
 
 import { useSkills } from "../hooks/useSkills";
+import { useCategories, BUILT_IN_CATEGORIES } from "../hooks/useCategories";
 
 // Utils & types
 import type { MCPServer, EnvVariable, Worktree, ConversationTab, Automation, QueuedMessage } from "../types";
@@ -76,6 +77,9 @@ export default function App() {
 
   const auth = useAuth(backendUrlTrimmed, backendUrlValid);
   const backendReady = backendUrlValid && backendConnected;
+
+  // Work categories system
+  const categoriesHook = useCategories();
 
   // Probe backend connectivity
   const backendProbeRef = useRef<string | null>(null);
@@ -105,11 +109,19 @@ export default function App() {
   const threads = useThreads(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
   const diffs = useDiffs(workspace.workspace);
   const conversation = useConversation(
-    backendUrlTrimmed, backendReady, auth.getAccessToken,
-    threads.conversationId, threads.setConversationId,
-    workspace.workspace, models.modelConfig, models.selectedGraph,
-    models.selectedGraphName, threads.loadThreads, diffs.setDiffs,
-    activeWorkspaceId
+    backendUrlTrimmed,
+    backendReady,
+    auth.getAccessToken,
+    threads.conversationId,
+    setThreadsConversationId,
+    workspace.workspace,
+    settings.modelConfig,
+    selectedGraph,
+    graphName,
+    loadThreads,
+    setDiffs,
+    activeWorkspaceId,
+    categoriesHook.activeCategory
   );
   const git = useGit(workspace.workspace?.path ?? null, backendUrlTrimmed, auth.getAccessToken);
 
@@ -928,8 +940,14 @@ export default function App() {
             return !p;
           });
         }}
-        changesVisible={changesVisible}
+         changesVisible={changesVisible}
         gitDiffStats={git.diffStats ?? undefined}
+        workCategories={BUILT_IN_CATEGORIES.map(c => ({ id: c.id, name: c.name, description: c.description, color: c.color }))}
+        activeWorkCategoryId={categoriesHook.activeCategory}
+        onWorkCategorySelect={(categoryId) => {
+          categoriesHook.setActiveCategory(categoryId);
+          toast.info("Switched category", `Now working in ${categoryId} mode`);
+        }}
       />
 
       {/* ── Three-Pane Body ── */}

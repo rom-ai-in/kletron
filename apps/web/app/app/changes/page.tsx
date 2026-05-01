@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { Button, Panel, Breadcrumbs } from "@kletron/ui/components/design-system";
 import { FolderTreePicker } from "@kletron/ui/components/ui/FolderTreePicker";
-import { DriftAnalysisModal } from "@kletron/ui/components/drift/DriftAnalysisModal";
 import { RequireWorkspace } from "@kletron/ui/components/workspace/RequireWorkspace";
 import { ActiveWorkspaceBanner } from "@kletron/ui/components/workspace/ActiveWorkspaceBanner";
 import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
@@ -58,7 +57,6 @@ function ChangesPageContent() {
     const [diffs, setDiffs] = useState<DiffChunk[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [driftOpen, setDriftOpen] = useState(false);
 
     const fetchDiffs = async (newEnd?: string) => {
         setLoading(true);
@@ -143,14 +141,6 @@ function ChangesPageContent() {
                 </div>
                 <div className="flex items-center gap-3">
                     <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDriftOpen(true)}
-                    >
-                        <ShieldAlert className="mr-2 h-4 w-4" />
-                        Run Drift Analysis
-                    </Button>
-                    <Button
                         variant="secondary"
                         size="sm"
                         onClick={() => {
@@ -163,7 +153,6 @@ function ChangesPageContent() {
                         <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                         Refresh
                     </Button>
-                    <DriftAnalysisModal open={driftOpen} onClose={() => setDriftOpen(false)} />
                 </div>
             </div>
 

@@ -1,0 +1,209 @@
+// packages/agent-core/src/categoryToolSelector.ts
+
+import type { WorkCategoryId } from '@kletron/shared';
+import { DEFAULT_WORK_CATEGORIES, CATEGORY_TOOL_GROUPS } from '@kletron/shared';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export interface CategoryToolConfig {
+  /** Tool name (must match MCP tool name) */
+  name: string;
+  /** Tool description */
+  description: string;
+  /** Tool parameters schema */
+  parameters: Record<string, unknown>;
+  /** Whether the tool can be called automatically (no approval needed) */
+  autoExecute: boolean;
+  /** Category this tool belongs to */
+  category: WorkCategoryId;
+}
+
+// ============================================================================
+// CATEGORY TOOL SELECTOR
+// ============================================================================
+
+export class CategorySpecificToolSelector {
+  private static instance: CategorySpecificToolSelector;
+
+  private constructor() {}
+
+  static getInstance(): CategorySpecificToolSelector {
+    if (!CategorySpecificToolSelector.instance) {
+      CategorySpecificToolSelector.instance = new CategorySpecificToolSelector();
+    }
+    return CategorySpecificToolSelector.instance;
+  }
+
+  /**
+   * Get all tools available for a given category.
+   */
+  getToolsForCategory(categoryId: WorkCategoryId): CategoryToolConfig[] {
+    const categoryConfig = DEFAULT_WORK_CATEGORIES.find((c) => c.id === categoryId);
+    if (!categoryConfig) {
+      return [];
+    }
+
+    // Get base tools for the category
+    const baseTools = this.getBaseTools(categoryId);
+
+    // Get group-specific tools
+    const groupTools = this.getGroupTools(categoryId);
+
+    // Merge and deduplicate
+    const toolMap = new Map<string, CategoryToolConfig>();
+    for (const tool of [...baseTools, ...groupTools]) {
+      toolMap.set(tool.name, tool);
+    }
+
+    return Array.from(toolMap.values());
+  }
+
+  /**
+   * Get tools by group for a category.
+   */
+  getToolsForGroup(categoryId: WorkCategoryId, group: string): CategoryToolConfig[] {
+    const tools = this.getToolsForCategory(categoryId);
+    return tools.filter((t) => t.category === categoryId && this.isToolInGroup(t.name, group, categoryId));
+  }
+
+  /**
+   * Check if a tool is available for a category.
+   */
+  isToolAvailableForCategory(toolName: string, categoryId: WorkCategoryId): boolean {
+    const tools = this.getToolsForCategory(categoryId);
+    return tools.some((t) => t.name === toolName);
+  }
+
+  /**
+   * Get base tools for a category (from DEFAULT_WORK_CATEGORIES.commonTools).
+   */
+  private getBaseTools(categoryId: WorkCategoryId): CategoryToolConfig[] {
+    const categoryConfig = DEFAULT_WORK_CATEGORIES.find((c) => c.id === categoryId);
+    if (!categoryConfig || !categoryConfig.commonTools) {
+      return [];
+    }
+
+    return categoryConfig.commonTools.map((toolName) => ({
+      name: toolName,
+      description: `${toolName} - Available in ${categoryId} mode`,
+      parameters: {},
+      autoExecute: this.isAutoExecute(toolName, categoryId),
+      category: categoryId,
+    }));
+  }
+
+  /**
+   * Get group-specific tools for a category.
+   */
+  private getGroupTools(categoryId: WorkCategoryId): CategoryToolConfig[] {
+    const groups = CATEGORY_TOOL_GROUPS[categoryId as keyof typeof CATEGORY_TOOL_GROUPS];
+    if (!groups) {
+      return [];
+    }
+
+    const allTools = this.getAllMcpTools();
+    return allTools.filter((tool) => groups.includes(tool.group));
+  }
+
+  /**
+   * Check if a tool is in a specific group.
+   */
+  private isToolInGroup(toolName: string, group: string, categoryId: WorkCategoryId): boolean {
+    const groupTools = this.getGroupTools(categoryId);
+    return groupTools.some((t) => t.name === toolName);
+  }
+
+  /**
+   * Check if a tool can be auto-executed (no approval needed).
+   */
+  private isAutoExecute(toolName: string, categoryId: WorkCategoryId): boolean {
+    // Read-only tools are always auto-executable
+    const readOnlyTools = ['list_files', 'read_file', 'read_file_range', 'search_code', 'git_log', 'git_diff', 'git_blame', 'git_grep'];
+    if (readOnlyTools.includes(toolName)) {
+      return true;
+    }
+
+    // Write tools require approval
+    const writeTools = ['write_file', 'str_replace_editor'];
+    if (writeTools.includes(toolName)) {
+      return false;
+    }
+
+    // Execute tools require approval
+    const executeTools = ['execute_bash'];
+    if (executeTools.includes(toolName)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Get all MCP tools with their group information.
+   */
+  private getAllMcpTools(): Array<{ name: string; group: string }> {
+    return [
+      // File system tools
+      { name: 'list_files', group: 'file_system' },
+      { name: 'read_file', group: 'file_system' },
+      { name: 'read_file_range', group: 'file_system' },
+      { name: 'write_file', group: 'file_system' },
+      { name: 'str_replace_editor', group: 'file_system' },
+
+      // Git tools
+      { name: 'git_log', group: 'git' },
+      { name: 'git_diff', group: 'git' },
+      { name: 'git_blame', group: 'git' },
+      { name: 'git_grep', group: 'git' },
+      { name: 'git_commit', group: 'git' },
+      { name: 'git_push', group: 'git' },
+
+      // Code analysis tools
+      { name: 'search_code', group: 'code_analysis' },
+      { name: 'semantic_code_search', group: 'code_analysis' },
+      { name: 'structural_search', group: 'code_analysis' },
+      { name: 'symbols_list', group: 'code_analysis' },
+      { name: 'find_symbol', group: 'code_analysis' },
+      { name: 'go_to_definition', group: 'code_analysis' },
+      { name: 'references', group: 'code_analysis' },
+      { name: 'find_references', group: 'code_analysis' },
+      { name: 'repo_metrics', group: 'code_analysis' },
+      { name: 'describe_structure', group: 'code_analysis' },
+      { name: 'dependency_info', group: 'code_analysis' },
+      { name: 'todo_search', group: 'code_analysis' },
+      { name: 'locate_ui_feature', group: 'code_analysis' },
+
+      // Testing tools
+      { name: 'run_tests', group: 'testing' },
+      { name: 'generate_tests', group: 'testing' },
+
+      // Web tools
+      { name: 'web_search', group: 'web_research' },
+      { name: 'fetch_url', group: 'web_research' },
+
+      // GitHub tools
+      { name: 'github_api', group: 'git' },
+
+      // Execution tools
+      { name: 'execute_bash', group: 'task_execution' },
+
+      // Document tools
+      { name: 'document_create', group: 'document_management' },
+      { name: 'document_edit', group: 'document_management' },
+      { name: 'document_format', group: 'formatting' },
+
+      // Scheduling tools
+      { name: 'schedule_task', group: 'scheduling' },
+      { name: 'calendar_events', group: 'integration' },
+
+      // General tools
+      { name: 'output_format', group: 'general_tools' },
+      { name: 'bootstrap_context', group: 'general_tools' },
+    ];
+  }
+}
+
+// Singleton instance
+export const categoryToolSelector = CategorySpecificToolSelector.getInstance();

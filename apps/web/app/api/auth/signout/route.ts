@@ -1,41 +1,28 @@
 // app/api/auth/signout/route.ts
-// API route for user sign out
+// API route for user sign out using NextAuth server-side
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@kletron/server/lib/supabase/supabaseServer';
-import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { authConfig as authOptions } from '../../../../config/auth';
+import { getServerSession } from 'next-auth';
+import { signOut } from 'next-auth';
 
 export async function POST(request: Request) {
-    const auth = await requireAppRouteAuth(request);
-    if (!auth) {
-        return new Response(JSON.stringify({"error": "Unauthorized"}), {
-            status: 401,
-            headers: { "Content-Type": "application/json" },
-        });
-    }
-
     try {
-        const { client, getResponseCookies } = createRouteHandlerClient(request);
+        const session = await getServerSession(authOptions);
 
-        const { error } = await client.auth.signOut();
-
-        if (error) {
+        if (!session?.user) {
             return NextResponse.json(
-                { success: false, message: error.message },
-                { status: 400 }
+                { success: false, message: 'Unauthorized' },
+                { status: 401 }
             );
         }
 
-        const response = NextResponse.json({
+        // Sign out using NextAuth server-side
+        await signOut({ redirect: false });
+
+        return NextResponse.json({
             success: true,
             message: 'Sign out successful',
         });
-
-        // Clear auth cookies
-        for (const cookie of getResponseCookies()) {
-            response.cookies.set(cookie.name, cookie.value, cookie.options);
-        }
-
-        return response;
     } catch (err) {
         console.error('Sign out error:', err);
         return NextResponse.json(

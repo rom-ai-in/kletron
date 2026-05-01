@@ -5,13 +5,12 @@ import React, { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@kletron/ui/context/AuthContext';
-import { getRememberMePreference } from '@kletron/ui/lib/supabase/supabaseClient';
 import { Input, PasswordInput, Button, Checkbox } from '@kletron/ui/components/design-system';
 
 export default function LoginClient() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [rememberMe, setRememberMe] = useState(() => getRememberMePreference());
+    const [rememberMe, setRememberMe] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [resendLoading, setResendLoading] = useState(false);

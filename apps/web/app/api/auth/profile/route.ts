@@ -21,8 +21,8 @@ export async function PATCH(request: Request) {
             await userProfileService.updateFullName(auth.userId, fullName);
         }
 
-        // Fetch updated profile
-        const profile = await userProfileService.getProfileBySupabaseId(auth.userId);
+        // Fetch updated profile from MongoDB
+        const profile = await userProfileService.getProfileByUserId(auth.userId);
 
         return NextResponse.json({
             success: true,

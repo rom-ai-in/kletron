@@ -147,7 +147,7 @@ export default function CookiePolicyPage() {
                         </p>
                         <ul>
                             <li><strong>Stripe:</strong> Payment processing (required for checkout only)</li>
-                            <li><strong>Supabase:</strong> Authentication (essential)</li>
+                            <li><strong>NextAuth:</strong> Authentication (session cookies)</li>
                         </ul>
                         <p className="mt-3">
                             We do not use advertising cookies or sell data to third parties.

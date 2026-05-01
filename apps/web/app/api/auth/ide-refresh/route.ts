@@ -8,7 +8,7 @@ import { randomBytes } from 'crypto';
 
 // Must match the secret used in ide-auth
 const IDE_JWT_SECRET = new TextEncoder().encode(
-    process.env.IDE_JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'ide-secret-key-change-in-production'
+    process.env.IDE_JWT_SECRET || 'ide-secret-key-change-in-production'
 );
 
 const ACCESS_TOKEN_EXPIRY = '1h';  // 1 hour

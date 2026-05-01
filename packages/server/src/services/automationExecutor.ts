@@ -134,8 +134,33 @@ function parseFindingsFromText(
         });
     }
 
-    console.info(`[parseFindingsFromText] Extracted ${findings.length} findings`);
-    return findings;
+    console.info(`[parseFindingsFromText] Extracted ${findings.length} candidates before noise filter`);
+
+    // Filter out metadata/stats noise that the regex picks up from agent execution summaries.
+    // These include entries like "Total Nodes: 1", "Input Tokens: 414,530", "Success Rate: 100%", etc.
+    const metadataPatterns = [
+        /^Total (?:Nodes|Tokens|Findings|Claims|Verified|Rejected|Duration)\s*:/i,
+        /^(?:Input|Output)\s+Tokens\s*:/i,
+        /^(?:Successful|Failed)\s*:/i,
+        /^Success Rate\s*:/i,
+        /^(?:Total\s+)?(?:Nodes|Stages)\s*:/i,
+        /^\d[\d,.]*\s*$/,                    // Pure numbers like "414,530"
+        /^[\d,.]+%?\s*$/,                     // Percentages like "100%"
+    ];
+
+    const filteredFindings = findings.filter((f) => {
+        const desc = f.description.trim();
+        // Reject very short descriptions (just labels, not real findings)
+        if (desc.length < 20) return false;
+        // Reject metadata-pattern matches
+        if (metadataPatterns.some((p) => p.test(desc))) return false;
+        // Reject if description starts with a common metadata label
+        if (/^(?:Total|Successful|Failed|Success Rate|Input Tokens|Output Tokens|Total Tokens|Total Nodes)\b/i.test(desc)) return false;
+        return true;
+    });
+
+    console.info(`[parseFindingsFromText] After noise filter: ${filteredFindings.length} findings (filtered out ${findings.length - filteredFindings.length} metadata entries)`);
+    return filteredFindings;
 }
 
 function extractRawReportText(rawReport: unknown): string {
@@ -282,8 +307,13 @@ function evaluateZeroFindingEvidenceGate(params: {
     claimsCount: number;
     tasksCount: number;
     workflowResult: AgentWorkflowResult;
+    rawOutput?: string;
 }): string | null {
     if (params.findingsCount > 0) return null;
+
+    // If the stage produced substantial output content, it's not a lazy agent —
+    // it's an analysis/research stage that produces narrative, not structured findings.
+    if (params.rawOutput && params.rawOutput.trim().length > 200) return null;
 
     const evidence = collectAuditEvidence(params.workflowResult);
 
@@ -1183,6 +1213,7 @@ export class AutomationExecutor {
                 claimsCount: claims.length,
                 tasksCount: tasks.length,
                 workflowResult,
+                rawOutput,
             });
             if (evidenceGateError) {
                 return {
@@ -1510,7 +1541,8 @@ export class AutomationExecutor {
     }
 
     /**
-     * Generate aggregated report
+     * Generate aggregated report — compiles each stage's rawOutput into a
+     * rich narrative document instead of just listing stats/findings.
      */
     private generateAggregatedReport(
         chainId: string,
@@ -1518,63 +1550,98 @@ export class AutomationExecutor {
         insights: Insight[]
     ): string {
         const lines: string[] = [];
+        const allSucceeded = results.every((r) => r.success);
+        const totalDurationMs = results.reduce((sum, r) => sum + r.duration, 0);
+        const totalDurationMin = (totalDurationMs / 1000 / 60).toFixed(1);
 
-        lines.push("# Automation Execution Report");
+        // ── Executive Header ──
+        lines.push("# Execution Report");
         lines.push("");
-        lines.push(`**Automation ID**: \`${chainId}\``);
-        lines.push(`**Stages**: ${results.length}`);
         lines.push(
-            `**Status**: ${results.every((r) => r.success) ? "✅ All stages completed" : "❌ Some stages failed"}`
+            `**Completed**: ${new Date().toLocaleDateString()} · **Stages**: ${results.length}/${results.length} · **Duration**: ${totalDurationMin}m · **Status**: ${allSucceeded ? "All stages completed" : "Some stages failed"}`
         );
         lines.push("");
-
-        lines.push("## Stage Summary");
+        lines.push("---");
         lines.push("");
+
+        // ── Stage Outputs (the actual LLM content) ──
         results.forEach((result, i) => {
-            const icon = result.success ? "✅" : "❌";
-            lines.push(
-                `${i + 1}. ${icon} **${result.stageName}** - ${result.findings.length} findings (${(result.duration / 1000 / 60).toFixed(1)}m)`
-            );
-            if (!result.success && result.error) {
-                lines.push(`   - Error: ${result.error}`);
-            }
-        });
-        lines.push("");
+            lines.push(`## ${i + 1}. ${result.stageName}`);
+            lines.push("");
 
+            // Stage metadata line
+            const statusIcon = result.success ? "Completed" : "Failed";
+            lines.push(
+                `> **${statusIcon}** · Duration: ${(result.duration / 1000 / 60).toFixed(1)}m`
+            );
+            lines.push("");
+
+            if (!result.success && result.error) {
+                lines.push(`> **Error**: ${result.error}`);
+                lines.push("");
+            }
+
+            // The actual rich content — this is what the LLM produced
+            if (result.rawOutput && result.rawOutput.trim().length > 0) {
+                // Strip any leading "# Title" that duplicates our section header
+                let content = result.rawOutput.trim();
+                const firstLine = content.split("\n")[0] ?? "";
+                if (firstLine.startsWith("# ")) {
+                    content = content.slice(firstLine.length).trim();
+                }
+                // Bump all headings by 2 levels so they nest under our ## section
+                content = content.replace(/^(#{1,4})\s/gm, (match, hashes: string) => {
+                    const newLevel = Math.min(hashes.length + 2, 6);
+                    return "#".repeat(newLevel) + " ";
+                });
+                lines.push(content);
+            } else {
+                lines.push("*No output captured for this stage.*");
+            }
+
+            lines.push("");
+            lines.push("---");
+            lines.push("");
+        });
+
+        // ── Cross-Stage Insights ──
         if (insights.length > 0) {
             lines.push("## Cross-Stage Insights");
             lines.push("");
             insights.forEach((insight) => {
                 lines.push(`### ${insight.title}`);
-                lines.push(`- **Type**: ${insight.type}`);
-                lines.push(`- **Priority**: ${insight.priority}`);
-                lines.push(`- **Confidence**: ${insight.confidence}%`);
-                lines.push(`- **Description**: ${insight.description}`);
+                lines.push(`- **Type**: ${insight.type} · **Priority**: ${insight.priority} · **Confidence**: ${insight.confidence}%`);
+                lines.push(`- ${insight.description}`);
                 lines.push("");
             });
+            lines.push("---");
+            lines.push("");
         }
 
-        lines.push("## Findings Summary");
-        lines.push("");
+        // ── Findings Appendix (only real findings, skip metadata noise) ──
         const allFindings = results.flatMap((r) => r.findings);
-        const criticalCount = allFindings.filter((f) => f.type === "BLOQUANT").length;
-        const warningCount = allFindings.filter((f) => f.type === "WARNING").length;
-        const infoCount = allFindings.filter((f) => f.type === "INFO").length;
+        const metadataRe = /^(?:Total|Successful|Failed|Success Rate|Input Tokens|Output Tokens|Total Tokens|Total Nodes|Total Findings|Total Claims)\b/i;
+        const realFindings = allFindings.filter((f) => {
+            const desc = f.description?.trim() ?? "";
+            if (desc.length < 20) return false;
+            if (metadataRe.test(desc)) return false;
+            return true;
+        });
 
-        lines.push(`- **Total**: ${allFindings.length}`);
-        lines.push(`- **Critical (BLOQUANT)**: ${criticalCount}`);
-        lines.push(`- **Warnings**: ${warningCount}`);
-        lines.push(`- **Info**: ${infoCount}`);
-        lines.push("");
+        if (realFindings.length > 0) {
+            const criticalCount = realFindings.filter((f) => f.type === "BLOQUANT").length;
+            const warningCount = realFindings.filter((f) => f.type === "WARNING").length;
+            const infoCount = realFindings.filter((f) => f.type === "INFO").length;
 
-        if (allFindings.length > 0) {
-            lines.push("## Detailed Findings");
+            lines.push("## Findings Appendix");
             lines.push("");
-            allFindings.forEach((f, i) => {
+            lines.push(`**${realFindings.length} findings** — ${criticalCount} critical, ${warningCount} warnings, ${infoCount} info`);
+            lines.push("");
+            realFindings.forEach((f, i) => {
                 const loc = f.lineStart
-                    ? `L${f.lineStart}${f.lineEnd ? `-${f.lineEnd}` : ""}`
+                    ? ` L${f.lineStart}${f.lineEnd ? `–${f.lineEnd}` : ""}`
                     : "";
-                lines.push(`${i + 1}. **[${f.type}]** \`${f.file}\`${loc ? ` ${loc}` : ""}`);
+                lines.push(`${i + 1}. **[${f.type}]** \`${f.file}\`${loc}`);
                 lines.push(`   ${f.description.slice(0, 500)}`);
                 lines.push("");
             });

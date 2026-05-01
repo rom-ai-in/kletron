@@ -5,7 +5,7 @@ const ACCESS_TOKEN_EXPIRY = '1h';
 const REFRESH_TOKEN_EXPIRY = '30d';
 
 const IDE_JWT_SECRET = new TextEncoder().encode(
-    process.env.IDE_JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'ide-secret-key-change-in-production'
+    process.env.IDE_JWT_SECRET || 'ide-secret-key-change-in-production'
 );
 
 export interface IdeTokenUser {

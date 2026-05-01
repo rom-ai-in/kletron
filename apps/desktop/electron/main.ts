@@ -146,7 +146,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     transparent: true,
-    backgroundColor: "#00000000",
+    backgroundColor: "#09090b",
     vibrancy: "sidebar",
     visualEffectState: "active",
     titleBarStyle: "hiddenInset",

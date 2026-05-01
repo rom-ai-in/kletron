@@ -155,6 +155,22 @@
   --sidebar-density-font: 12px;
   --sidebar-density-icon: 16px;
 
+  /* ── Glass / frosted surface variables ────────────────────────────── */
+  --glass-bg-sidebar: rgba(24, 24, 27, 0.52);
+  --glass-bg-titlebar: rgba(24, 24, 27, 0.42);
+  --glass-bg-panel: rgba(24, 24, 27, 0.55);
+  --glass-bg-card: rgba(255, 255, 255, 0.04);
+  --glass-bg-card-hover: rgba(255, 255, 255, 0.06);
+  --glass-bg-input: rgba(0, 0, 0, 0.15);
+  --glass-bg-elevated: rgba(24, 24, 27, 0.60);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-border-strong: rgba(255, 255, 255, 0.20);
+  --glass-blur-sm: 8px;
+  --glass-blur-md: 16px;
+  --glass-blur-lg: 24px;
+  --glass-blur-xl: 40px;
+  --glass-noise-opacity: 0.4;
+
   color: var(--text-primary);
   background: var(--bg-app);
 }

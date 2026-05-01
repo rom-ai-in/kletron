@@ -105,8 +105,12 @@ export function extractThoughtsFromContent(content: string): { content: string; 
         cleaned = "";
     }
 
+    // If sanitization removed all visible content but we captured thoughts,
+    // preserve the last thought as visible content so the message isn't hidden.
+    // This commonly happens with thinking models (e.g. Gemma) that wrap their
+    // entire response in <think> tags.
     if (!cleaned.trim() && thoughts.length > 0) {
-        cleaned = "";
+        cleaned = thoughts[thoughts.length - 1];
     }
 
     return { content: cleaned, thoughts };

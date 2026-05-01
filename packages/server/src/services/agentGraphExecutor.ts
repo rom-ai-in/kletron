@@ -2362,6 +2362,20 @@ export class AgentGraphExecutor {
                         timelineEntry.summary = `Failed: ${errorMessage}`;
                         timelineEntry.endedAt = new Date().toISOString();
                     }
+                    // Emit an error event so the UI can display the failure message
+                    const errorEvent: AgentEvent = {
+                        id: nextGlobalEventId(),
+                        phaseId: nodeId,
+                        phaseLabel: node.label ?? nodeId,
+                        kind: "assistant",
+                        role: "assistant",
+                        content: `**Error:** ${errorMessage}`,
+                        timestamp: new Date().toISOString(),
+                        isError: true,
+                    };
+                    eventStream.push(errorEvent);
+                    globalEventStream.push(errorEvent);
+                    state.conversationHistory?.push(errorEvent);
                     await emitUpdate();
 
                     const finalResult: AgentWorkflowResult = {

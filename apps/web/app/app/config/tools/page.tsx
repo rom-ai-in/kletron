@@ -23,7 +23,7 @@ const TOOL_EXAMPLES: Record<string, object> = {
     web_search: { query: "market trends 2024" },
     fetch_url: { url: "https://example.com/api/data" },
     // Semantic search
-    semantic_code_search: { query: "drift analysis worker" },
+    semantic_code_search: { query: "code patterns" },
     output_format: { text: "Sample output" },
 };
 

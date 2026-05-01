@@ -1103,6 +1103,24 @@ export default function AgentPage() {
         </div>
       </div>
 
+      {/* Error snackbar - always visible at top when there's an error */}
+      {errorMessage && !sending && (
+        <div className="flex-none mx-4 mt-2 mb-1 rounded-lg border border-status-error-border bg-status-error-bg px-4 py-3 text-[12px] text-status-error-text shadow-md animate-in slide-in-from-top-2 duration-200">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold">Error</p>
+              <p className="mt-1 text-[11px] opacity-90 break-words">{errorMessage}</p>
+            </div>
+            <button
+              onClick={() => handleSend()}
+              className="flex-shrink-0 px-2 py-1 text-[10px] rounded border border-status-error-border hover:bg-status-error-text hover:text-white transition"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main content area - adaptive */}
       <div
         ref={scrollContainerRef}

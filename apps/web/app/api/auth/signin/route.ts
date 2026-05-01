@@ -1,7 +1,9 @@
 // app/api/auth/signin/route.ts
-// API route for user sign in
+// API route for user sign in using NextAuth server-side
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@kletron/server/lib/supabase/supabaseServer';
+import { authConfig as authOptions } from '../../../../config/auth';
+import { getServerSession } from 'next-auth';
+import { signIn } from 'next-auth';
 
 export async function POST(request: Request) {
     try {
@@ -15,42 +17,48 @@ export async function POST(request: Request) {
             );
         }
 
-        const { client, getResponseCookies } = createRouteHandlerClient(request);
+        // Check if user is already authenticated
+        const existingSession = await getServerSession(authOptions);
+        if (existingSession?.user) {
+            return NextResponse.json(
+                { success: true, message: 'Already signed in', user: existingSession.user },
+                { status: 200 }
+            );
+        }
 
-        const { data, error } = await client.auth.signInWithPassword({
+        // Sign in using NextAuth credentials provider (server-side)
+        const result = await signIn('credentials', {
             email,
             password,
+            redirect: false,
         });
 
-        if (error) {
+        if (result?.error) {
             return NextResponse.json(
-                { success: false, message: error.message },
+                { success: false, message: 'Invalid credentials' },
                 { status: 401 }
             );
         }
 
-        if (!data.user) {
+        // Get the session after successful sign in
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user) {
             return NextResponse.json(
                 { success: false, message: 'Sign in failed' },
                 { status: 401 }
             );
         }
 
-        const response = NextResponse.json({
+        return NextResponse.json({
             success: true,
             message: 'Sign in successful',
             user: {
-                id: data.user.id,
-                email: data.user.email,
+                id: (session.user as any).id,
+                email: session.user.email,
+                name: session.user.name,
             },
         });
-
-        // Set auth cookies
-        for (const cookie of getResponseCookies()) {
-            response.cookies.set(cookie.name, cookie.value, cookie.options);
-        }
-
-        return response;
     } catch (err) {
         console.error('Sign in error:', err);
         return NextResponse.json(

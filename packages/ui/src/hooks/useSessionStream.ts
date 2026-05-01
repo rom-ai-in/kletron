@@ -480,6 +480,10 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const handleSend = useCallback(async (options?: { text?: string }) => {
         const msg = (options?.text ?? input).trim();
         if (!msg || sending) return;
+        if (!sessionId && !selectedGraphId) {
+            setErrorMessage("No agent graph selected. Please select a graph before sending.");
+            return;
+        }
         setInput('');
         setSending(true);
         isStreamingRef.current = true;

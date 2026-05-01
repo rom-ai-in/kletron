@@ -332,16 +332,23 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                             <div className="space-y-3">
                                 {automation.stages.map((stage, index) => {
                                     const currentIndex = Math.min(run.currentStageIndex, Math.max(automation.stages.length - 1, 0));
-                                    const isCompleted = run.status === "COMPLETED" || index < currentIndex;
                                     const isCurrent = index === currentIndex && (run.status === "RUNNING" || run.status === "PAUSED" || run.status === "PENDING");
-                                    const stageStatus: AutomationStatus = isCompleted
-                                        ? "COMPLETED"
-                                        : isCurrent
-                                        ? run.status
-                                        : "PENDING";
+                                    const stageResult = stageResults[index];
+
+                                    // Use persisted stageResult.success when available
+                                    let stageStatus: AutomationStatus;
+                                    if (stageResult) {
+                                        stageStatus = stageResult.success ? "COMPLETED" : "FAILED";
+                                    } else if (run.status === "COMPLETED" || index < currentIndex) {
+                                        stageStatus = "COMPLETED";
+                                    } else if (isCurrent) {
+                                        stageStatus = run.status;
+                                    } else {
+                                        stageStatus = "PENDING";
+                                    }
+                                    const isCompleted = stageStatus === "COMPLETED";
 
                                     const sessionId = run.sessionIds?.[index];
-                                    const stageResult = stageResults[index];
                                     const duration = stageResult?.duration ? `${(stageResult.duration / 1000 / 60).toFixed(1)}m` : "";
                                     const findingsCount = stageResult?.findingsCount ?? 0;
 
@@ -365,7 +372,9 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                                 } ${!sessionId ? "cursor-default opacity-50" : "cursor-pointer"}`}
                                         >
                                             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-elevated text-[10px] font-bold flex-none">
-                                                {isCompleted || (run.status === "COMPLETED") ? (
+                                                {stageStatus === "FAILED" ? (
+                                                    <span className="text-status-error-text">✗</span>
+                                                ) : isCompleted ? (
                                                     <span className="text-status-success-text">✓</span>
                                                 ) : (
                                                     index + 1
@@ -574,8 +583,17 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                             const isExpanded = expandedStages.has(index);
                             const sessionId = run.sessionIds?.[index];
                             const currentIndex = Math.min(run.currentStageIndex, Math.max(automation.stages.length - 1, 0));
-                            const isCompleted = run.status === "COMPLETED" || index < currentIndex;
-                            const stageStatus: AutomationStatus = isCompleted ? "COMPLETED" : "PENDING";
+
+                            // Use persisted stageResult.success when available
+                            let stageStatus: AutomationStatus;
+                            if (stageResult) {
+                                stageStatus = stageResult.success ? "COMPLETED" : "FAILED";
+                            } else if (run.status === "COMPLETED" || index < currentIndex) {
+                                stageStatus = "COMPLETED";
+                            } else {
+                                stageStatus = "PENDING";
+                            }
+                            const isCompleted = stageStatus === "COMPLETED";
                             const hasOutput = stageResult?.rawOutput && stageResult.rawOutput.length > 0;
 
                             return (
@@ -587,7 +605,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                                     >
                                         {isExpanded ? <ChevronDown className="h-4 w-4 text-text-muted flex-none" /> : <ChevronRight className="h-4 w-4 text-text-muted flex-none" />}
                                         <div className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-elevated text-[10px] font-bold flex-none">
-                                            {isCompleted ? <span className="text-status-success-text">✓</span> : index + 1}
+                                            {stageStatus === "FAILED" ? <span className="text-status-error-text">✗</span> : isCompleted ? <span className="text-status-success-text">✓</span> : index + 1}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center justify-between gap-2">

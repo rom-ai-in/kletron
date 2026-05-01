@@ -1,4 +1,5 @@
 import type { AgentWorkflowOptions, AgentWorkflowResult } from "@kletron/shared/types";
+import type { WorkCategoryConfig } from "@kletron/shared/types";
 import type { AgentGraphDefinition } from "@kletron/server/services/agentGraphTypes";
 import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
@@ -24,10 +25,14 @@ function findSimpleReactGraph(graphs: AgentGraphDefinition[]): AgentGraphDefinit
   );
 }
 
+export interface CategoryAwareWorkflowOptions extends AgentWorkflowOptions {
+  category?: WorkCategoryConfig;
+}
+
 export async function runWorkflow(
   message: string,
   graphId?: string,
-  options?: AgentWorkflowOptions
+  options?: CategoryAwareWorkflowOptions
 ): Promise<AgentWorkflowResult> {
   let graphRecord;
 

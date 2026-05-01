@@ -477,7 +477,7 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
                             <div className="rounded-lg border border-border-subtle bg-bg-surface overflow-hidden">
                                 <div className="px-4 py-3 border-b border-border-subtle bg-bg-elevated/20 flex justify-between items-center">
                                     <h3 className="text-sm font-semibold text-text-primary">Review Findings ({automation.aggregatedFindings.length})</h3>
-                                    <Button size="sm" variant="secondary" onClick={() => router.push(`/app/history?type=automation&automationId=${params.id}`)} className="text-[10px] h-6">View All</Button>
+                                    <Button size="sm" variant="secondary" onClick={() => void handleOpenLatestRun()} className="text-[10px] h-6">View All</Button>
                                 </div>
                                 <div className="divide-y divide-border-subtle">
                                     {automation.aggregatedFindings.slice(0, 5).map((finding, i) => (

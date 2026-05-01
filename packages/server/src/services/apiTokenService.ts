@@ -5,7 +5,7 @@ import { ObjectId } from 'mongodb';
 
 export interface ApiToken {
     _id?: ObjectId;
-    userId: string;           // Supabase user ID
+    userId: string;           // Auth user ID
     tokenHash: string;
     label: string;
     createdAt: Date;

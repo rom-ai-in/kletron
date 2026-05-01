@@ -1,19 +1,35 @@
 'use client';
 // src/context/AuthContext.tsx
-// React context provider for authentication state management
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { clearSessionStorage, getSupabaseClient, resetSupabaseClient, setRememberMePreference } from '@kletron/ui/lib/supabase/supabaseClient';
-import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
-import type { UserProfile, UserContext as UserContextType } from '@kletron/shared/supabase/types';
+// React context provider for authentication state management using NextAuth
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from 'next-auth/react';
 
 // Development auth bypass - set NEXT_PUBLIC_SKIP_AUTH=true in .env to skip authentication
 const SKIP_AUTH = process.env.NEXT_PUBLIC_SKIP_AUTH === 'true';
 
+interface UserProfile {
+    id: string;
+    email: string;
+    full_name: string | null;
+    avatar_url: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+interface UserContext {
+    tenant_id: string;
+    company_id: string;
+    group_id: string;
+    group_role: string;
+}
+
+type UserContextType = UserContext;
+
 interface AuthContextValue {
-    user: User | null;
-    session: Session | null;
+    user: any | null;
+    session: any | null;
     profile: UserProfile | null;
-    userContext: UserContextType[] | null;
+    userContext: UserContext[] | null;
     loading: boolean;
     signUp: (email: string, password: string, fullName?: string) => Promise<{ success: boolean; error?: string; requiresConfirmation?: boolean }>;
     signIn: (email: string, password: string, rememberMe?: boolean) => Promise<{ success: boolean; error?: string }>;
@@ -28,88 +44,59 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-    const [user, setUser] = useState<User | null>(null);
-    const [session, setSession] = useState<Session | null>(null);
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [userContext, setUserContext] = useState<UserContextType[] | null>(null);
     const [loading, setLoading] = useState(true);
 
-    const [supabase, setSupabase] = useState(() => getSupabaseClient());
-
-    // Track in-flight and already-fetched user IDs to prevent duplicate calls
-    const fetchingRef = useRef<string | null>(null);
-    const fetchedRef = useRef<string | null>(null);
+    // Use NextAuth session
+    const { data: session, status } = useSession();
 
     // Fetch user profile from MongoDB via API
-    const fetchProfile = useCallback(async (userId: string) => {
-        // Deduplicate: skip if already fetched for this user or a fetch is in-flight
-        if (fetchedRef.current === userId || fetchingRef.current === userId) return;
-        fetchingRef.current = userId;
+    const fetchProfile = useCallback(async () => {
         try {
             const response = await fetch('/api/auth/me');
-            if (!response.ok) {
-                console.error('Failed to fetch profile:', response.statusText);
-                // Mark as fetched even on HTTP error to prevent retry flood
-                fetchedRef.current = userId;
-                return;
-            }
+            if (!response.ok) return;
+
             const data = await response.json();
-            if (data.success && data.profile) {
+            if (data.success && data.user) {
                 setProfile({
-                    id: data.profile.id,
-                    full_name: data.profile.fullName,
-                    email: data.profile.email,
+                    id: data.user.id,
+                    full_name: data.user.name || null,
+                    email: data.user.email,
                     avatar_url: null,
-                    created_at: data.profile.createdAt,
-                    updated_at: data.profile.updatedAt,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
                 });
             }
-            // Always mark as fetched after a successful HTTP response,
-            // even if profile is null — prevents retry loop on auth state changes
-            fetchedRef.current = userId;
         } catch (err) {
             console.error('Error fetching profile:', err);
-            // Only skip marking on network errors to allow genuine retries
-        } finally {
-            fetchingRef.current = null;
         }
     }, []);
 
     // User context is no longer stored (simplified architecture)
-    const fetchUserContext = useCallback(async (_userId: string) => {
-        // Context is not used in the MongoDB-only architecture
+    const fetchUserContext = useCallback(async () => {
         setUserContext([]);
     }, []);
 
     // Refresh profile and context
     const refreshProfile = useCallback(async () => {
-        if (user) {
-            await Promise.all([
-                fetchProfile(user.id),
-                fetchUserContext(user.id),
-            ]);
-        }
-    }, [user, fetchProfile, fetchUserContext]);
+        await Promise.all([
+            fetchProfile(),
+            fetchUserContext(),
+        ]);
+    }, [fetchProfile, fetchUserContext]);
 
     // Initialize auth state
     useEffect(() => {
+        if (SKIP_AUTH) {
+            setLoading(false);
+            return;
+        }
+
         const initAuth = async () => {
-            // Skip auth initialization in dev mode
-            if (SKIP_AUTH) {
-                setLoading(false);
-                return;
-            }
-
             try {
-                const { data: { session: currentSession } } = await supabase.auth.getSession();
-
-                if (currentSession) {
-                    setSession(currentSession);
-                    setUser(currentSession.user);
-                    await Promise.all([
-                        fetchProfile(currentSession.user.id),
-                        fetchUserContext(currentSession.user.id),
-                    ]);
+                if (session?.user) {
+                    await refreshProfile();
                 }
             } catch (err) {
                 console.error('Error initializing auth:', err);
@@ -119,84 +106,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
         initAuth();
+    }, [session, refreshProfile]);
 
-        // Skip auth listener in dev mode
-        if (SKIP_AUTH) {
-            return;
-        }
-
-        // Listen for auth state changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (_event: AuthChangeEvent, newSession: Session | null) => {
-                setSession(newSession);
-                setUser(newSession?.user ?? null);
-
-                if (newSession?.user) {
-                    await Promise.all([
-                        fetchProfile(newSession.user.id),
-                        fetchUserContext(newSession.user.id),
-                    ]);
-                } else {
-                    setProfile(null);
-                    setUserContext(null);
-                }
-
-                setLoading(false);
-            }
-        );
-
-        return () => {
-            subscription.unsubscribe();
-        };
-    }, [supabase, fetchProfile, fetchUserContext]);
-
-    // Sign up
+    // Sign up - calls our custom API route which will handle NextAuth registration
     const signUp = async (email: string, password: string, fullName?: string) => {
         try {
-            const { data, error } = await supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: { full_name: fullName || '' },
-                    emailRedirectTo: `${window.location.origin}/auth/callback`,
-                },
+            const response = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password, fullName })
             });
 
-            if (error) {
-                return { success: false, error: error.message };
+            const result = await response.json();
+
+            if (!response.ok) {
+                return { success: false, error: result.error || 'Registration failed' };
             }
 
-            // Email confirmation is required - no session returned
-            if (data.user && !data.session) {
-                return {
-                    success: true,
-                    requiresConfirmation: true,
-                };
-            }
-
+            // NextAuth doesn't require confirmation for credentials provider
             return { success: true };
         } catch (err) {
             return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
         }
     };
 
-    // Sign in
+    // Sign in - uses NextAuth credentials provider
     const signIn = async (email: string, password: string, rememberMe: boolean = true) => {
         try {
-            // Save the remember me preference before signing in
-            setRememberMePreference(rememberMe);
-            resetSupabaseClient();
-            const client = getSupabaseClient(rememberMe);
-            setSupabase(client);
-
-            const { error } = await client.auth.signInWithPassword({
+            const result = await nextAuthSignIn('credentials', {
                 email,
                 password,
+                redirect: false,
             });
 
-            if (error) {
-                return { success: false, error: error.message };
+            if (result?.error) {
+                return { success: false, error: 'Invalid credentials' };
             }
+
+            // Refresh profile after successful sign in
+            await refreshProfile();
 
             return { success: true };
         } catch (err) {
@@ -204,35 +152,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // Sign out
+    // Sign out - uses NextAuth signOut
     const signOut = async () => {
         try {
-            const { error } = await supabase.auth.signOut();
-
-            if (error) {
-                return { success: false, error: error.message };
-            }
-
-            // Reset dedup refs so re-login triggers a fresh fetch
-            fetchedRef.current = null;
-            fetchingRef.current = null;
-
-            clearSessionStorage();
+            await nextAuthSignOut({ redirect: false });
+            setProfile(null);
             return { success: true };
         } catch (err) {
             return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
         }
     };
 
-    // Reset password
+    // Reset password - calls our custom API route
     const resetPassword = async (email: string) => {
         try {
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${window.location.origin}/auth/update-password`,
+            const response = await fetch('/api/auth/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
             });
 
-            if (error) {
-                return { success: false, error: error.message };
+            if (!response.ok) {
+                const result = await response.json();
+                return { success: false, error: result.error || 'Failed to send reset email' };
             }
 
             return { success: true };
@@ -241,15 +183,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // Update password
+    // Update password - calls our custom API route
     const updatePassword = async (newPassword: string) => {
         try {
-            const { error } = await supabase.auth.updateUser({
-                password: newPassword,
+            const response = await fetch('/api/auth/update-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ newPassword })
             });
 
-            if (error) {
-                return { success: false, error: error.message };
+            if (!response.ok) {
+                const result = await response.json();
+                return { success: false, error: result.error || 'Failed to update password' };
             }
 
             return { success: true };
@@ -259,21 +204,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const updateProfile = async (updates: { fullName?: string }) => {
-        if (!user) {
-            return { success: false, error: 'Not authenticated' };
-        }
-
         try {
             const response = await fetch('/api/auth/profile', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fullName: updates.fullName ?? null }),
+                body: JSON.stringify({ name: updates.fullName ?? null })
             });
 
-            const data = await response.json();
-
-            if (!response.ok || !data.success) {
-                return { success: false, error: data.message || 'Failed to update profile' };
+            if (!response.ok) {
+                const data = await response.json();
+                return { success: false, error: data.error || 'Failed to update profile' };
             }
 
             await refreshProfile();
@@ -284,31 +224,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const resendConfirmation = async (email: string) => {
-        try {
-            const { error } = await supabase.auth.resend({
-                type: 'signup',
-                email,
-                options: {
-                    emailRedirectTo: `${window.location.origin}/auth/callback`,
-                },
-            });
-
-            if (error) {
-                return { success: false, error: error.message };
-            }
-
-            return { success: true };
-        } catch (err) {
-            return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
-        }
+        // NextAuth credentials provider doesn't have email confirmation
+        // In a real implementation with email/password, you might want to add this
+        return { success: true };
     };
 
     const value: AuthContextValue = {
-        user,
-        session,
+        user: session?.user || null,
+        session: session || null,
         profile,
         userContext,
-        loading,
+        loading: status === 'loading' || loading,
         signUp,
         signIn,
         signOut,

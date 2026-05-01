@@ -31,12 +31,24 @@ function SeverityBadge({ type }: { type: Finding["type"] }) {
     );
 }
 
-export function FindingsExplorer({ findings, stages = [], className = "" }: FindingsExplorerProps) {
+export function FindingsExplorer({ findings: rawFindings, stages = [], className = "" }: FindingsExplorerProps) {
     const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("ALL");
     const [stageFilter, setStageFilter] = useState<string>("ALL");
     const [searchQuery, setSearchQuery] = useState("");
     const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
     const [expandedFindings, setExpandedFindings] = useState<Set<number>>(new Set());
+
+    // Client-side metadata noise filter — removes stats like "Total Nodes: 1", "Input Tokens: 414,530" etc.
+    // This cleans up existing run data that was stored before the backend filter was added.
+    const findings = useMemo(() => {
+        const metadataRe = /^(?:Total|Successful|Failed|Success Rate|Input Tokens|Output Tokens|Total Tokens|Total Nodes|Total Findings|Total Claims)\b/i;
+        return rawFindings.filter((f) => {
+            const desc = f.description?.trim() ?? "";
+            if (desc.length < 20) return false;
+            if (metadataRe.test(desc)) return false;
+            return true;
+        });
+    }, [rawFindings]);
 
     // Filter findings
     const filteredFindings = useMemo(() => {

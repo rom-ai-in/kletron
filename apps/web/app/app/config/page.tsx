@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ListTree, ArrowRight, Wrench, Folder, Brain, Layers, TrendingUp } from "lucide-react";
+import { ListTree, ArrowRight, Wrench, Folder, Brain, Layers } from "lucide-react";
 import { Panel } from "@kletron/ui/components/design-system";
 
 type LlmConfigSummary = { provider?: string } | null;
@@ -12,9 +12,6 @@ export default function ConfigOverviewPage() {
   const [toolsCount, setToolsCount] = useState<number>(0);
   const [llmProvider, setLlmProvider] = useState<LlmConfigSummary>(null);
   const [embeddingProvider, setEmbeddingProvider] = useState<string | null>(null);
-  const [baPersonasCount, setBaPersonasCount] = useState<number>(0);
-  const [baCompetitorsCount, setBaCompetitorsCount] = useState<number>(0);
-  const [baHasVision, setBaHasVision] = useState(false);
 
   useEffect(() => {
     // LLM provider (server)
@@ -73,24 +70,7 @@ export default function ConfigOverviewPage() {
     void fetchTools();
   }, []);
 
-  useEffect(() => {
-    const fetchBAContext = async () => {
-      try {
-        const res = await fetch("/api/business-analyst/context");
-        if (!res.ok) return;
-        const data = await res.json();
-        const ctx = data.context;
-        if (ctx) {
-          setBaPersonasCount(Array.isArray(ctx.personas) ? ctx.personas.length : 0);
-          setBaCompetitorsCount(Array.isArray(ctx.competitors) ? ctx.competitors.length : 0);
-          setBaHasVision(!!ctx.productVision);
-        }
-      } catch {
-        // Silently fail — card will show "Not configured"
-      }
-    };
-    void fetchBAContext();
-  }, []);
+
 
   // Format provider names for display
   const formatProvider = (provider: string | null | undefined) => {
@@ -105,15 +85,6 @@ export default function ConfigOverviewPage() {
       voyage: "Voyage",
     };
     return providerNames[provider] || provider;
-  };
-
-  // Build BA meta string
-  const getBaMeta = () => {
-    const parts: string[] = [];
-    if (baHasVision) parts.push("Vision set");
-    if (baPersonasCount > 0) parts.push(`${baPersonasCount} persona${baPersonasCount > 1 ? "s" : ""}`);
-    if (baCompetitorsCount > 0) parts.push(`${baCompetitorsCount} competitor${baCompetitorsCount > 1 ? "s" : ""}`);
-    return parts.length > 0 ? parts.join(" · ") : "Not configured yet";
   };
 
   // Build AI Models meta string
@@ -179,12 +150,26 @@ export default function ConfigOverviewPage() {
             meta={`${toolsCount} tools available`}
           />
           <ConfigCard
-            title="Business Analyst"
-            description="Product vision, user personas & competitors."
-            icon={<TrendingUp className="h-4 w-4 text-text-muted" />}
-            href="/app/business-analyst/config"
-            meta={getBaMeta()}
+            title="Work Categories"
+            description="Configure coding, drafting, automation modes."
+            icon={<Layers className="h-4 w-4 text-text-muted" />}
+            href="/app/config/categories"
+            meta="CoWork categories"
           />
+           <ConfigCard
+             title="Skills"
+             description="AI capabilities as .md files."
+             icon={<Wrench className="h-4 w-4 text-text-muted" />}
+             href="/app/config/skills"
+             meta="Manage skills"
+           />
+           <ConfigCard
+             title="Connectors"
+             description="External service integrations."
+             icon={<LinkIcon className="h-4 w-4 text-text-muted" />}
+             href="/app/config/connectors"
+             meta="Manage connectors"
+           />
         </div>
 
         <div className="mt-6">

@@ -4,7 +4,7 @@ import { getDb } from '../lib/db';
 
 export interface UserPreferences {
     _id?: string;
-    userId: string;           // Supabase auth user ID
+    userId: string;           // Auth user ID
     selectedLlmProvider: string | null;
     selectedGraphId: string | null;
     updatedAt: Date;

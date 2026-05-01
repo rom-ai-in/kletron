@@ -17,6 +17,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { TrafficLights } from '../ui/TrafficLights';
+import { CategorySelector, type WorkCategory } from './CategorySelector';
 
 export interface GitDiffStats {
   additions: number;
@@ -66,6 +67,12 @@ export interface TitleBarProps {
   changesVisible?: boolean;
   onShare?: () => void;
   onRun?: () => void;
+  /** Work categories for dropdown */
+  workCategories?: WorkCategory[];
+  /** Currently active work category ID */
+  activeWorkCategoryId?: string;
+  /** Called when user selects a work category from dropdown */
+  onWorkCategorySelect?: (categoryId: string) => void;
 }
 
 export function TitleBar({
@@ -92,6 +99,9 @@ export function TitleBar({
   changesVisible,
   onShare,
   onRun,
+  workCategories,
+  activeWorkCategoryId,
+  onWorkCategorySelect,
 }: TitleBarProps) {
   const [gitMenuOpen, setGitMenuOpen] = useState(false);
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
@@ -138,6 +148,15 @@ export function TitleBar({
 
       {/* Right: action buttons */}
       <div className="flex items-center gap-1 app-region-no-drag flex-shrink-0">
+        {/* Work category selector */}
+        {workCategories && workCategories.length > 0 && onWorkCategorySelect && (
+          <CategorySelector
+            categories={workCategories}
+            activeCategoryId={activeWorkCategoryId || 'coding'}
+            onCategorySelect={onWorkCategorySelect}
+          />
+        )}
+
         {/* Workspace selector dropdown */}
         {workspaceSelectorLabel && (workspaceItems && workspaceItems.length > 0 ? (
           <div className="relative" ref={wsMenuRef}>
@@ -219,7 +238,7 @@ export function TitleBar({
             <span className="truncate max-w-[140px]">{workspaceSelectorLabel}</span>
             <ChevronDown className="h-2.5 w-2.5" />
           </button>
-        ))}
+          ))}
 
         {/* Run */}
         {onRun && (

@@ -8,7 +8,9 @@
     "prebuild": "tsx ../../scripts/check-context.ts",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "create-test-user": "tsx scripts/create-test-user.ts",
+    "test-auth": "tsx scripts/test-auth.ts"
   },
   "dependencies": {
     "@kletron/agent-core": "file:../../packages/agent-core",
@@ -16,6 +18,7 @@
     "@kletron/server": "file:../../packages/server",
     "@kletron/shared": "file:../../packages/shared",
     "@kletron/ui": "file:../../packages/ui",
+    "bcrypt": "^6.0.0",
     "next": "^14.2.7",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

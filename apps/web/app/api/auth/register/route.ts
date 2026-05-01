@@ -1,8 +1,10 @@
 // app/api/auth/register/route.ts
-// API route for user registration
+// API route for user registration with MongoDB persistence
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@kletron/server/lib/supabase/supabaseServer';
+import bcrypt from 'bcrypt';
+import { getDb } from '@kletron/server/lib/db';
 import { agentGraphService } from '@kletron/server/services/agentGraphService';
+import * as userProfileService from '@kletron/server/services/userProfileService';
 
 export async function POST(request: Request) {
     try {
@@ -23,55 +25,57 @@ export async function POST(request: Request) {
             );
         }
 
-        const { client, getResponseCookies } = createRouteHandlerClient(request);
+        // Check if user already exists
+        const db = await getDb();
+        const usersCollection = db.collection('users');
+        const existingUser = await usersCollection.findOne({ email });
+        if (existingUser) {
+            return NextResponse.json(
+                { success: false, message: 'User already exists' },
+                { status: 409 }
+            );
+        }
 
-        const { data, error } = await client.auth.signUp({
-            email,
-            password,
-            options: {
-                data: {
-                    full_name: fullName || '',
-                },
-            },
+        // Hash password with bcrypt
+        const passwordHash = await bcrypt.hash(password, 12);
+
+        // Insert user into MongoDB and create profile
+        const { ObjectId } = await import('mongodb');
+        const now = new Date();
+
+        const result = await usersCollection.insertOne({
+            _id: new ObjectId(),
+            email: email.toLowerCase().trim(),
+            password: passwordHash,
+            name: fullName || null,
+            createdAt: now,
+            updatedAt: now,
         });
 
-        if (error) {
-            return NextResponse.json(
-                { success: false, message: error.message },
-                { status: 400 }
-            );
-        }
+        const userId = result.insertedId.toString();
 
-        if (!data.user) {
-            return NextResponse.json(
-                { success: false, message: 'Registration failed' },
-                { status: 400 }
-            );
-        }
+        // Create user profile
+        await userProfileService.upsertProfile(
+            userId,
+            email.toLowerCase().trim(),
+            fullName || null
+        );
 
         // Seed default agent graphs for the new user
         try {
             await agentGraphService.ensureDefaultGraphs();
         } catch (seedErr) {
-            // Non-blocking: registration still succeeds even if graph seeding fails
             console.error('[Register] Failed to seed default graphs:', seedErr);
         }
 
-        const response = NextResponse.json({
+        return NextResponse.json({
             success: true,
             message: 'Registration successful',
             user: {
-                id: data.user.id,
-                email: data.user.email,
+                id: userId,
+                email: email.toLowerCase().trim(),
             },
         });
-
-        // Set auth cookies
-        for (const cookie of getResponseCookies()) {
-            response.cookies.set(cookie.name, cookie.value, cookie.options);
-        }
-
-        return response;
     } catch (err) {
         console.error('Registration error:', err);
         return NextResponse.json(
@@ -80,4 +84,3 @@ export async function POST(request: Request) {
         );
     }
 }
-

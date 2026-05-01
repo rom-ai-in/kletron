@@ -62,8 +62,8 @@ Kletron provides multiple interfaces — a Next.js web dashboard, an Electron de
 ├─────────────────────────────────────────────────────────────────┤
 │                    External Services                            │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐   │
-│  │ Supabase │  │  Stripe  │  │ LLM APIs │  │ GitHub API    │   │
-│  │ (DB/Auth)│  │(Billing) │  │(AI/Embed)│  │               │   │
+ │  │ MongoDB  │  │  Stripe  │  │ LLM APIs │  │ GitHub API    │   │
+ │  │(DB/Auth) │  │(Billing) │  │(AI/Embed)│  │               │   │
 │  └──────────┘  └──────────┘  └──────────┘  └───────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -73,7 +73,7 @@ The system follows a layered architecture:
 1. **User Interfaces** — Three ways to interact: web dashboard, desktop app, or CLI.
 2. **Shared Packages** — Common logic for agent execution, backend services, types, and UI components.
 3. **MCP Server** — The single tool provider. All file, git, and code operations go through MCP.
-4. **External Services** — Supabase (database/auth), Stripe (billing), LLM providers, and GitHub.
+4. **External Services** — MongoDB + NextAuth (database/auth), Stripe (billing), LLM providers, and GitHub.
 
 ---
 
@@ -116,7 +116,7 @@ kletron-coder-mcp/
 | Package | Description |
 |---------|-------------|
 | **`packages/agent-core`** | LangGraph ReAct agent runner, deep research workflow, repo scanner agent, MCP tool wrappers, skills system |
-| **`packages/server`** | Backend services: Supabase DB, auth, LLM config, vector/embedding, token usage, Stripe billing |
+| **`packages/server`** | Backend services: MongoDB, NextAuth, LLM config, vector/embedding, token usage, Stripe billing |
 | **`packages/shared`** | Shared TypeScript types, Zod schemas, graph catalog, chain config builders |
 | **`packages/ui`** | 50+ React components: agent panels, graph editor, config views, design system |
 | **`packages/mcp-client`** | MCP client singleton supporting SSE and stdio transports |
@@ -214,7 +214,7 @@ The web app is a **Next.js 14 App Router** application serving as the primary da
 
 #### Authentication
 
-- **Provider**: Supabase Auth (server-side)
+- **Provider**: NextAuth (credentials + JWT, MongoDB for user storage)
 - **Middleware**: Protects `/app/*` routes, redirects unauthenticated users to `/auth/login` with a `redirect` query param
 - **CORS**: Configurable allowlist for `/api/*` routes via `KLETRON_CORS_ALLOWLIST` (defaults to localhost origins in dev)
 - **IDE auth**: Supports device-based auth flow for IDE extensions via `/auth/ide-*` routes
@@ -519,6 +519,73 @@ The MCP server exposes **28 tools** organized by category. All tools are registe
 
 ---
 
+## Category System
+
+Kletron supports multiple work categories that allow users to switch between different types of tasks while maintaining context. Each category has its own set of tools, capabilities, and behavior patterns.
+
+### Available Categories
+
+| Category | Description | Key Features |
+|----------|-------------|--------------|
+| **Coding** | Code assistance and development | File editing, git operations, terminal access, code analysis |
+| **Drafting** | Document creation and editing | Web research, document templates, formatting tools |
+| **Automation** | Workflow automation | Task scheduling, calendar integration, email drafting |
+| **General** | General purpose assistance | Web search, information retrieval, Q&A |
+
+### Category-Specific Tools
+
+Each category has access to different MCP tools:
+
+```typescript
+// Coding category tools
+["list_files", "read_file", "search_code", "edit_file", 
+ "execute_bash", "git_commit", "git_push"]
+
+// Drafting category tools  
+["fetch_url", "web_search", "read_file", "write_file"]
+
+// Automation category tools
+["execute_bash", "git_commit", "schedule_task", "calendar_events"]
+```
+
+### Workspace-Specific Categories
+
+Categories can be customized per workspace:
+
+```typescript
+// Create a custom workspace category
+const customCategory = await categoryService.createWorkspaceCategory(
+  workspaceId,
+  "coding",
+  { 
+    customName: "My Custom Coding",
+    customTools: ["custom_tool", "additional_tool"] 
+  }
+);
+```
+
+### Category Switching
+
+The system automatically detects which category is most appropriate for a given request:
+
+```typescript
+const runner = new CategoryWorkflowRunner();
+const result = await runner.runAutoCategory(
+  "Write documentation",
+  availableCategories,
+  workspaceId
+); // Auto-detects 'drafting' category
+```
+
+### API Endpoints
+
+- `GET /api/work-categories` - List all available categories
+- `POST /api/work-categories/current` - Set current category
+- `GET /api/work-categories/workspace` - Get workspace-specific categories
+- `POST /api/work-categories/workspace` - Create custom workspace category
+
+---
+
 ## Agent Workflows
 
 ### Simple ReAct Agent
@@ -647,13 +714,16 @@ Copy `env.example` to `.env` and fill in your values. See below for all supporte
 | `GOOGLE_API_KEY` | No | Google GenAI API key (for Gemini models) |
 | `OPENAI_API_KEY` | No | OpenAI API key |
 
-### Supabase (Auth & Database)
+### MongoDB & NextAuth
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anonymous/publishable key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key (server-side, keep secret) |
+| `MONGODB_URI` | Yes | MongoDB connection string |
+| `MONGODB_DB` | No | Database name (default: `kletron`) |
+| `MONGODB_USER` | No | MongoDB username |
+| `MONGODB_PASS` | No | MongoDB password |
+| `NEXTAUTH_SECRET` | Yes | NextAuth secret key (use a random string in production) |
+| `IDE_JWT_SECRET` | No | Secret for IDE token signing (defaults to hardcoded value) |
 
 ### MCP & Agent
 
