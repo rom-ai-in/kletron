@@ -27,6 +27,16 @@ function findSimpleReactGraph(graphs: AgentGraphDefinition[]): AgentGraphDefinit
 
 export interface CategoryAwareWorkflowOptions extends AgentWorkflowOptions {
   category?: WorkCategoryConfig;
+  /** Links the run to the automation config that triggered it. */
+  automationId?: string;
+  /** Marks this run as a hidden sub-stage of `parentRunId`. */
+  parentRunId?: string;
+  /** Stage index within the parent automation (0..N-1). */
+  stageIndex?: number;
+  /** Optional initial title for the run (used by automations to label sub-runs). */
+  title?: string;
+  /** Receives the runId immediately after it is created — useful for sub-stage tracking. */
+  onRunCreated?: (runId: string) => void;
 }
 
 export async function runWorkflow(
@@ -60,8 +70,15 @@ export async function runWorkflow(
   const runId = await agentGraphRunService.createRun(
     graphRecord._id!.toString(),
     options?.workspaceId,
-    options?.source
+    options?.source,
+    {
+      automationId: options?.automationId,
+      parentRunId: options?.parentRunId,
+      stageIndex: options?.stageIndex,
+      title: options?.title,
+    }
   );
+  options?.onRunCreated?.(runId);
   const initialNodeStatuses: Record<string, any> = {};
   for (const node of graphRecord.nodes) {
     initialNodeStatuses[node.id] = "PENDING";

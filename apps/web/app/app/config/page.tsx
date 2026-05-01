@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ListTree, ArrowRight, Wrench, Folder, Brain, Layers } from "lucide-react";
+import {
+  ListTree,
+  ArrowRight,
+  Wrench,
+  Folder,
+  Brain,
+  Layers,
+  Link as LinkIcon,
+} from "lucide-react";
 import { Panel } from "@kletron/ui/components/design-system";
 
 type LlmConfigSummary = { provider?: string } | null;

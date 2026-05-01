@@ -36,7 +36,7 @@ import { strReplaceEditor } from "./tools/strReplaceEditor.js";
 import { executeBash } from "./tools/executeBash.js";
 import { outputFormat } from "./tools/outputFormat.js";
 import { writeFile } from "./tools/writeFile.js";
-import { loadSkill, listSkills } from "./tools/skillLoader.js";
+import { list_skills as listSkillsTool, load_skill as loadSkillTool } from "./tools/skillLoader.js";
 import { notify } from "./tools/notify.js";
 
 // Workspace-specific tools
@@ -99,13 +99,13 @@ async function runServer() {
     }
   );
 
-  wireToolHandlers({ server, allTools });
+  await wireToolHandlers({ server, allTools, workspaceRoot: config.defaultDir });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
 
-function buildAllTools() {
+export function buildAllTools() {
   const tools = {
     list_files: listFiles,
     read_file: readFile,
@@ -139,9 +139,9 @@ function buildAllTools() {
     execute_bash: executeBash,
     output_format: outputFormat,
 
-    // Skills system
-    load_skill: loadSkill,
-    list_skills: listSkills,
+    // Skills system (backed by the web API skills service)
+    load_skill: loadSkillTool,
+    list_skills: listSkillsTool,
 
     // Notifications
     notify,
@@ -150,26 +150,32 @@ function buildAllTools() {
   return { ...tools, ...advancedTools };
 }
 
-async function buildWorkspaceAwareTools() {
+async function buildWorkspaceAwareTools(options = {}) {
   const allTools = buildAllTools();
-  
-  // Get the workspace skills manager
+
   const { workspaceSkillsManager } = await import("./tools/workspaceSkills.js");
-  
-  // Determine current active workspace from config
-  const activeWorkspace = config.defaultDir;
-  
+
+  const activeWorkspace = options.workspaceRoot || config.defaultDir;
+  const categoryId = options.categoryId;
+
   if (activeWorkspace) {
     try {
-      // Get tools specific to this workspace based on enabled skills and connectors
-      const workspaceTools = await workspaceSkillsManager.getActiveToolsForWorkspace(activeWorkspace);
-      return workspaceTools;
+      const workspaceTools = await workspaceSkillsManager.getActiveToolsForWorkspace(
+        activeWorkspace,
+        categoryId
+      );
+      // Always keep skill management + capability inspection tools available
+      // so the agent can self-introspect.
+      return {
+        ...workspaceTools,
+        list_skills: allTools.list_skills,
+        load_skill: allTools.load_skill,
+      };
     } catch (error) {
-      console.warn("[MCP] Failed to get workspace-specific tools, using default:", error.message);
+      console.error("[MCP] Failed to get workspace-specific tools, using default:", error.message);
     }
   }
-  
-  // Fallback to all tools if workspace not configured or error occurred
+
   return allTools;
 }
 
@@ -191,10 +197,10 @@ async function buildAllWorkspaceTools() {
   return { ...allTools, ...workspaceManagementTools };
 }
 
-async function wireToolHandlers({ server, allTools }) {
+async function wireToolHandlers({ server, allTools, workspaceRoot, categoryId }) {
   // Use workspace-aware tools if available
-  const tools = await buildWorkspaceAwareTools();
-  
+  const tools = await buildWorkspaceAwareTools({ workspaceRoot, categoryId });
+
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
       tools: Object.entries(tools).map(([name, tool]) => ({
@@ -316,8 +322,10 @@ async function runSseServer({ allTools, port }) {
           { capabilities: { tools: {} } }
         );
 
-        // Use workspace-aware tool handlers by default
-        await wireToolHandlers({ server: mcpServer, allTools });
+        // Per-session workspace + category. Defaults come from config.json.
+        const workspaceRoot = url.searchParams.get("workspaceRoot") || config.defaultDir;
+        const categoryId = url.searchParams.get("category") || undefined;
+        await wireToolHandlers({ server: mcpServer, allTools, workspaceRoot, categoryId });
 
         const sessionId = transport.sessionId;
         sessions.set(sessionId, transport);
@@ -351,7 +359,9 @@ async function runSseServer({ allTools, port }) {
   });
 
   server.listen(port, () => {
-    console.log(`MCP server running on http://localhost:${port}/sse`);
+    // SSE/HTTP transport: stdout is fine, but we still prefer stderr to keep
+    // the convention identical to stdio mode.
+    console.error(`MCP server running on http://localhost:${port}/sse`);
   });
 }
 

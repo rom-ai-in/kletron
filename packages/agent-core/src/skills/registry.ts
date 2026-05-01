@@ -6,6 +6,13 @@ import { loadSkill, loadAllSkills, resolveSkill, listSkillIds } from "./loader";
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Provider that supplies extra skills (typically from a database).
+ * The registry merges these on top of the filesystem catalog so that
+ * user-authored skills become first-class without changing call sites.
+ */
+export type ExternalSkillProvider = () => Promise<SkillDefinition[]>;
+
+/**
  * Singleton registry for managing skills with caching and hot-reload support.
  */
 export class SkillRegistry {
@@ -14,6 +21,7 @@ export class SkillRegistry {
     private cache = new Map<string, SkillDefinition>();
     private resolvedCache = new Map<string, ResolvedSkill>();
     private lastLoadTime: Date | null = null;
+    private externalProviders: ExternalSkillProvider[] = [];
     private readonly options: Required<SkillRegistryOptions>;
 
     private constructor(options: SkillRegistryOptions = {}) {
@@ -100,7 +108,7 @@ export class SkillRegistry {
     }
 
     /**
-     * Force reload all skills from disk.
+     * Force reload all skills from disk + external providers.
      */
     async reload(): Promise<void> {
         this.cache.clear();
@@ -108,6 +116,39 @@ export class SkillRegistry {
         this.lastLoadTime = null;
         await this.ensureLoaded();
         console.log(`[SkillRegistry] Reloaded ${this.cache.size} skills`);
+    }
+
+    /**
+     * Register an additional skill source (e.g. Mongo-backed user skills).
+     * Subsequent reloads will pick up its skills as well.
+     */
+    registerProvider(provider: ExternalSkillProvider): void {
+        if (!this.externalProviders.includes(provider)) {
+            this.externalProviders.push(provider);
+            // Force a refresh so that subsequent calls see the new provider.
+            this.cache.clear();
+            this.resolvedCache.clear();
+            this.lastLoadTime = null;
+        }
+    }
+
+    unregisterProvider(provider: ExternalSkillProvider): void {
+        this.externalProviders = this.externalProviders.filter((p) => p !== provider);
+        this.cache.clear();
+        this.resolvedCache.clear();
+        this.lastLoadTime = null;
+    }
+
+    /** Manually upsert a skill (used by hot-edit flows). */
+    upsertSkill(skill: SkillDefinition): void {
+        this.cache.set(skill.id, skill);
+        this.resolvedCache.delete(skill.id);
+    }
+
+    /** Remove a skill from the in-memory cache. */
+    removeSkill(skillId: string): void {
+        this.cache.delete(skillId);
+        this.resolvedCache.delete(skillId);
     }
 
     /**
@@ -126,13 +167,33 @@ export class SkillRegistry {
             return;
         }
 
-        const skills = await loadAllSkills();
+        // 1. Filesystem builtins (.agent/skills/*).
+        let fsSkills = new Map<string, SkillDefinition>();
+        try {
+            fsSkills = await loadAllSkills();
+        } catch (error) {
+            console.warn("[SkillRegistry] Filesystem skill load failed:", error);
+        }
+
         this.cache.clear();
         this.resolvedCache.clear();
 
-        skills.forEach((skill, id) => {
+        fsSkills.forEach((skill, id) => {
             this.cache.set(id, skill);
         });
+
+        // 2. External providers (Mongo, etc.). Their skills can override
+        //    builtins by id, mirroring how user customizations work.
+        for (const provider of this.externalProviders) {
+            try {
+                const extras = await provider();
+                for (const skill of extras) {
+                    this.cache.set(skill.id, skill);
+                }
+            } catch (error) {
+                console.warn("[SkillRegistry] External provider failed:", error);
+            }
+        }
 
         this.lastLoadTime = new Date();
     }

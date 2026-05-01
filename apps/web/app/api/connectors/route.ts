@@ -1,47 +1,21 @@
-import { NextResponse } from 'next/server';
-import { requireAppRouteAuth } from '@kletron/server/lib/auth/apiAuth';
+// Compatibility shim: the old global mock connectors API is gone. Returns
+// the typed catalog as a flat list so older clients still get something
+// useful while we migrate them to /api/connectors/types and the per-workspace
+// CRUD under /api/workspaces/[workspaceId]/connectors/...
 
-interface Connector {
-  id: string;
-  name: string;
-  type: string;
-  connected: boolean;
-  config?: Record<string, string>;
-}
+import { NextResponse } from "next/server";
+import { listConnectorTypes } from "@kletron/shared";
 
-const CONNECTORS_DB: Connector[] = [
-  { id: "1", name: "GitHub", type: "git", connected: false },
-  { id: "2", name: "Slack", type: "chat", connected: false },
-  { id: "3", name: "Google Drive", type: "storage", connected: false },
-];
+export const dynamic = "force-static";
 
-export async function GET(request: Request) {
-  const auth = await requireAppRouteAuth(request);
-  if (!auth) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Return a copy to avoid mutation
-  return NextResponse.json([...CONNECTORS_DB]);
-}
-
-export async function POST(request: Request) {
-  const auth = await requireAppRouteAuth(request);
-  if (!auth) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const body = await request.json();
-  const { connectorId, connected } = body;
-
-  // Update in database (mock)
-  const index = CONNECTORS_DB.findIndex(c => c.id === connectorId);
-  if (index !== -1) {
-    CONNECTORS_DB[index] = { ...CONNECTORS_DB[index], connected };
-  }
-
-  return NextResponse.json(
-    { success: true, connectorId, connected },
-    { status: 200 }
-  );
+export async function GET() {
+    const types = listConnectorTypes();
+    return NextResponse.json(
+        types.map((t) => ({
+            id: t.id,
+            name: t.name,
+            type: t.category,
+            description: t.description,
+        }))
+    );
 }

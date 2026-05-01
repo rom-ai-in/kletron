@@ -1,73 +1,69 @@
-import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
-import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
-import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
+// Global Skills Library
+//
+// GET  /api/skills            -> list skills (built-in + the caller's user skills)
+// POST /api/skills            -> create a new user skill (SKILL.md)
+//
+// Auth: requireAppRouteAuth. Anonymous + dev-bypass requests get only built-ins.
 
-interface SkillFile {
-  id: string;
-  name: string;
-  description: string;
-  filePath: string;
-  enabled: boolean;
-}
+import { NextResponse } from "next/server";
+import { ZodError } from "zod";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import {
+    createSkill,
+    listSkills,
+} from "@kletron/server/services/skillsService";
+import { skillCreateSchema } from "@kletron/shared/skills/types";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const auth = await requireAppRouteAuth(request);
-  if (!auth) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+    const auth = await requireAppRouteAuth(request);
+    const url = new URL(request.url);
+    try {
+        const viewerUserId =
+            auth?.authType === "internal"
+                ? null
+                : auth?.userId;
 
-  try {
-    const workspace = await resolveWorkspaceFromRequest(request, auth.userId, null);
-    if (!workspace || !workspace._id) {
-      return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
+        const records = await listSkills({
+            tag: url.searchParams.get("tag") ?? undefined,
+            search: url.searchParams.get("search") ?? undefined,
+            source:
+                (url.searchParams.get("source") as "builtin" | "user" | null) ??
+                undefined,
+            viewerUserId,
+            limit: Number(url.searchParams.get("limit") ?? 200),
+        });
+        return NextResponse.json({ skills: records });
+    } catch (error) {
+        console.error("[/api/skills GET]", error);
+        return NextResponse.json(
+            { error: (error as Error).message },
+            { status: 500 }
+        );
     }
-    const repoRoot = workspace.rootPath;
+}
 
-    const skillsDir = path.join(repoRoot, ".claude", "skills");
-
-    if (!fs.existsSync(skillsDir)) {
-      return NextResponse.json([]);
+export async function POST(request: Request) {
+    const auth = await requireAppRouteAuth(request);
+    if (!auth) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const files = fs.readdirSync(skillsDir);
-    const skillFiles: SkillFile[] = [];
-
-    for (const file of files) {
-      if (file.endsWith('.md')) {
-        const fullPath = path.join(skillsDir, file);
-        const stats = fs.statSync(fullPath);
-        
-        if (stats.isFile()) {
-          const name = path.basename(file, '.md');
-          let description = '';
-          
-          // Try to read first line as description
-          try {
-            const content = fs.readFileSync(fullPath, 'utf-8');
-            const lines = content.split('\n');
-            if (lines.length > 0) {
-              description = lines[0].replace(/^#\s*/, '').trim();
-            }
-          } catch (e) {
-            // Ignore read errors
-          }
-
-          skillFiles.push({
-            id: fullPath,
-            name: name,
-            description: description || '',
-            filePath: fullPath,
-            enabled: true
-          });
+    try {
+        const body = await request.json();
+        const validated = skillCreateSchema.parse(body);
+        const skill = await createSkill(validated, auth.userId);
+        return NextResponse.json({ skill }, { status: 201 });
+    } catch (error) {
+        if (error instanceof ZodError) {
+            return NextResponse.json(
+                { error: "Validation failed", issues: error.issues },
+                { status: 400 }
+            );
         }
-      }
+        const message = (error as Error).message;
+        const status = /already exists/i.test(message) ? 409 : 500;
+        console.error("[/api/skills POST]", error);
+        return NextResponse.json({ error: message }, { status });
     }
-
-    return NextResponse.json(skillFiles);
-  } catch (error) {
-    console.error("Error listing skills:", error);
-    return NextResponse.json({ error: "Failed to list skills" }, { status: 500 });
-  }
 }

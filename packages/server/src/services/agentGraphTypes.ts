@@ -212,4 +212,32 @@ export interface AgentGraphRun {
     conversationTurns?: number;
     /** Whether this run has an active LangGraph checkpoint (for resume). */
     hasCheckpoint?: boolean;
+    /** Links this thread back to the automation config that triggered it. */
+    automationId?: ObjectId;
+    /** When set, this run is a hidden sub-stage execution of `parentRunId`. */
+    parentRunId?: ObjectId;
+    /** Stage index for automation runs: 0 for the main thread, i for sub-runs. */
+    stageIndex?: number;
+    /** Per-stage results aggregated on the main automation thread. */
+    automationStageResults?: AutomationStageRunResult[];
 }
+
+/**
+ * Per-stage outcome stored on the main automation thread (`stageIndex === 0`).
+ * Replaces the legacy `audit_runs.stageResults` field.
+ */
+export type AutomationStageRunResult = {
+    stageId: string;
+    stageName: string;
+    stageIndex: number;
+    /** Sub-run ID for stages 1..N (the main thread itself executes stage 0). */
+    subRunId?: string;
+    success: boolean;
+    error?: string;
+    errorKind?: string;
+    findingsCount?: number;
+    claimsCount?: number;
+    tasksCount?: number;
+    rawOutput?: string;
+    duration: number;
+};

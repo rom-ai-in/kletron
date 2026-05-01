@@ -49,6 +49,10 @@ type SessionSummary = {
   conversationTurns: number;
   startedAt: string;
   endedAt: string | null;
+  /** Origin of the run: "agent" (chat) or "automation" (triggered run). */
+  source?: string | null;
+  /** When set, identifies the automation config this thread belongs to. */
+  automationId?: string | null;
 };
 
 type SessionDetail = {
@@ -294,10 +298,12 @@ export default function AgentPage() {
   }, [sessionDetail, isSimpleGraph]);
 
   // ── Fetch sessions (current workspace only) ─────────────────────────
+  // Includes both chat threads (source="agent") and automation threads
+  // (source="automation"). The sidebar visually distinguishes them.
   const fetchSessions = useCallback(async () => {
     try {
       const wsQuery = activeWorkspaceId ? `&workspaceId=${activeWorkspaceId}` : '';
-      const res = await fetch(`/api/sessions?limit=50&excludeSource=automation${wsQuery}`);
+      const res = await fetch(`/api/sessions?limit=50${wsQuery}`);
       if (res.ok) {
         const data = await res.json();
         setSessions(Array.isArray(data) ? data : []);
@@ -541,6 +547,18 @@ export default function AgentPage() {
     beforeIndexAppliedForSessionRef.current = null;
   }, [searchParams]);
 
+  // ── Deep-link via ?sessionId=… ─────────────────────────────────────────
+  // Used by automation Run buttons, history page and notifications to focus
+  // a specific thread inside the agent UI.
+  const sessionIdLinkRef = useRef<string | null>(null);
+  useEffect(() => {
+    const sessionIdParam = searchParams?.get("sessionId");
+    if (!sessionIdParam || sessionIdLinkRef.current === sessionIdParam) return;
+    sessionIdLinkRef.current = sessionIdParam;
+    setActiveSessionId(sessionIdParam);
+    sessionStorage.setItem(SESSION_STORAGE_KEY, sessionIdParam);
+  }, [searchParams]);
+
   const inputLatencySamplesRef = useRef<number[]>([]);
   const handleInputLatencySample = useCallback((ms: number) => {
     const next = [...inputLatencySamplesRef.current, ms].slice(-120);
@@ -757,6 +775,7 @@ export default function AgentPage() {
         title: s.title || "Untitled",
         updatedAt: s.startedAt,
         liveStatus: toThreadLiveStatus(s.status, sending && activeSessionId === s.id),
+        category: s.source === "automation" || s.automationId ? "automation" : "chat",
       }));
     return [
       {
@@ -787,6 +806,7 @@ export default function AgentPage() {
         isError: m.isError,
         thoughts: m.thoughts,
         timestamp: m.timestamp,
+        metadata: (m as any).metadata,
         messageIndex: (m.role === 'user' || m.role === 'assistant') ? i : undefined,
       };
       // Skip consecutive same-kind same-content duplicates

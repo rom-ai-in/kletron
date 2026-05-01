@@ -16,16 +16,26 @@ import {
   MoreHorizontal,
   SquarePen,
   ClipboardCheck,
+  Bot,
 } from 'lucide-react';
 
 export type ThreadLiveStatus = 'running' | 'completed' | 'idle' | 'waiting' | 'error';
+
+export type SidebarThreadCategory = 'chat' | 'automation';
 
 export interface SidebarThread {
   id: string;
   title: string;
   updatedAt?: string;
   liveStatus: ThreadLiveStatus;
+  /**
+   * Origin of the thread — used to badge automation-triggered runs and
+   * power the in-sidebar filter row. Defaults to "chat" when missing.
+   */
+  category?: SidebarThreadCategory;
 }
+
+type SidebarFilter = 'all' | SidebarThreadCategory;
 
 export interface SidebarProject {
   id: string;
@@ -112,6 +122,21 @@ export function ProjectSidebar({
   const [editingTitle, setEditingTitle] = useState('');
   const [contextMenuProjectId, setContextMenuProjectId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [threadFilter, setThreadFilter] = useState<SidebarFilter>('all');
+
+  const filterChip = (id: SidebarFilter, label: string) => (
+    <button
+      type="button"
+      key={id}
+      onClick={() => setThreadFilter(id)}
+      className={`px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-colors ${threadFilter === id
+        ? 'bg-accent-cyan/15 text-accent-cyan'
+        : 'text-text-muted hover:text-text-secondary hover:bg-state-hover'
+        }`}
+    >
+      {label}
+    </button>
+  );
 
   // Close context menu on scroll or outside click
   const closeContextMenu = useCallback(() => {
@@ -215,6 +240,13 @@ export function ProjectSidebar({
             </button>
           )}
         </div>
+      </div>
+
+      {/* ── Category filter chips ── */}
+      <div className="flex items-center gap-1 px-3 pb-2">
+        {filterChip('all', 'All')}
+        {filterChip('chat', 'Chat')}
+        {filterChip('automation', 'Auto')}
       </div>
 
       {/* ── Project & Thread List ── */}
@@ -337,14 +369,23 @@ export function ProjectSidebar({
               {/* Thread List */}
               {!isCollapsed && (
                 <div className="flex flex-col">
-                  {project.threads.length === 0 && (
-                    <div className="pl-9 pr-3 py-1.5 text-[11px] text-text-muted italic">
-                      No threads
-                    </div>
-                  )}
-                  {project.threads.map((thread) => {
+                  {(() => {
+                    const filteredThreads = project.threads.filter((t) => {
+                      if (threadFilter === 'all') return true;
+                      const cat: SidebarThreadCategory = t.category ?? 'chat';
+                      return cat === threadFilter;
+                    });
+                    if (filteredThreads.length === 0) {
+                      return (
+                        <div className="pl-9 pr-3 py-1.5 text-[11px] text-text-muted italic">
+                          No threads
+                        </div>
+                      );
+                    }
+                    return filteredThreads.map((thread) => {
                     const isActive = activeThreadId === thread.id;
                     const isEditing = editingThreadId === thread.id;
+                    const isAutomation = (thread.category ?? 'chat') === 'automation';
 
                     return (
                       <div
@@ -375,6 +416,14 @@ export function ProjectSidebar({
                           </div>
                         ) : (
                           <>
+                            {isAutomation && (
+                              <span
+                                title="Automation thread"
+                                className="inline-flex h-3.5 w-3.5 items-center justify-center rounded bg-accent-cyan/15 text-accent-cyan flex-shrink-0"
+                              >
+                                <Bot className="h-2.5 w-2.5" />
+                              </span>
+                            )}
                             <span className="flex-1 truncate text-[13px] font-medium">{thread.title || 'Untitled'}</span>
                             <span className="text-[11px] text-text-muted flex-shrink-0">{formatRelativeTime(thread.updatedAt)}</span>
                             {/* Hover actions */}
@@ -399,7 +448,8 @@ export function ProjectSidebar({
                         )}
                       </div>
                     );
-                  })}
+                    });
+                  })()}
                 </div>
               )}
             </div>

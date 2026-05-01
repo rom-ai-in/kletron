@@ -51,16 +51,42 @@ async function ensureFallbackRun(runId: string, collection: any) {
     return null;
 }
 
+export type CreateRunOptions = {
+    /** Links this thread to its automation config (set on automation main + sub-runs). */
+    automationId?: string;
+    /** Identifies this run as a hidden sub-stage of a main automation thread. */
+    parentRunId?: string;
+    /** Stage index: 0 for the main automation thread, i for sub-stages. */
+    stageIndex?: number;
+    /** Initial title for the run/session (e.g. automation name + ISO date). */
+    title?: string;
+};
+
 export class AgentGraphRunService {
-    async createRun(graphId: string, workspaceId?: string, source?: string): Promise<string> {
+    async createRun(
+        graphId: string,
+        workspaceId?: string,
+        source?: string,
+        options?: CreateRunOptions,
+    ): Promise<string> {
         if (!ObjectId.isValid(graphId)) {
             throw new Error("Invalid graph ID format");
         }
         const collection = await getCollectionSafe();
+        const automationId = options?.automationId && ObjectId.isValid(options.automationId)
+            ? new ObjectId(options.automationId)
+            : undefined;
+        const parentRunId = options?.parentRunId && ObjectId.isValid(options.parentRunId)
+            ? new ObjectId(options.parentRunId)
+            : undefined;
         const run: AgentGraphRun = {
             graphId: new ObjectId(graphId),
             workspaceId: workspaceId && ObjectId.isValid(workspaceId) ? new ObjectId(workspaceId) : undefined,
             ...(source ? { source } : {}),
+            ...(automationId ? { automationId } : {}),
+            ...(parentRunId ? { parentRunId } : {}),
+            ...(typeof options?.stageIndex === "number" ? { stageIndex: options.stageIndex } : {}),
+            ...(options?.title ? { title: options.title } : {}),
             status: "PENDING",
             startedAt: new Date(),
             nodeOrder: [],
@@ -348,12 +374,17 @@ export class AgentGraphRunService {
                 if (!opts?.includeArchived && run.archived) return false;
                 if (opts?.graphId && ObjectId.isValid(opts.graphId) && run.graphId?.toString() !== opts.graphId) return false;
                 if (opts?.excludeSource && run.source === opts.excludeSource) return false;
+                // Hide automation sub-stage runs from the sidebar listing.
+                if (run.parentRunId) return false;
                 return true;
             });
             runs = runs.sort((a, b) => (b.startedAt?.getTime?.() ?? 0) - (a.startedAt?.getTime?.() ?? 0));
             return runs.slice(0, limit);
         }
-        const filter: Record<string, unknown> = {};
+        const filter: Record<string, unknown> = {
+            // Hide automation sub-stage runs from the sidebar listing.
+            parentRunId: { $exists: false },
+        };
         if (workspaceId && ObjectId.isValid(workspaceId)) {
             filter.workspaceId = new ObjectId(workspaceId);
         }
@@ -399,6 +430,8 @@ export class AgentGraphRunService {
                 if (wsStr && !wsSet.has(wsStr)) return false;
                 if (!opts?.includeArchived && run.archived) return false;
                 if (opts?.graphId && ObjectId.isValid(opts.graphId) && run.graphId?.toString() !== opts.graphId) return false;
+                // Hide automation sub-stage runs from the sidebar listing.
+                if (run.parentRunId) return false;
                 return true;
             });
             runs = runs.sort((a, b) => (b.startedAt?.getTime?.() ?? 0) - (a.startedAt?.getTime?.() ?? 0));
@@ -407,6 +440,8 @@ export class AgentGraphRunService {
 
         // Single DB query: sessions in any of the workspaces OR orphans (no workspaceId)
         const filter: Record<string, unknown> = {
+            // Hide automation sub-stage runs from the sidebar listing.
+            parentRunId: { $exists: false },
             $or: [
                 ...(validWsOids.length > 0 ? [{ workspaceId: { $in: validWsOids } }] : []),
                 { workspaceId: { $exists: false } },
@@ -542,43 +577,23 @@ export class AgentGraphRunService {
         }
     }
     /**
-     * One-time migration: tag existing automation-created runs with source="automation".
-     * Cross-references the audit_runs collection's sessionIds.
+     * List automation sub-runs (hidden child runs) for a given main thread.
+     * Used by the agent UI to expose "Open detailed stage trace" links.
      */
-    async backfillAutomationSource(): Promise<number> {
+    async listSubRuns(parentRunId: string): Promise<AgentGraphRun[]> {
+        if (!ObjectId.isValid(parentRunId)) return [];
         const collection = await getCollectionSafe();
-        if (!collection) return 0;
-
-        try {
-            const db = (await import("../lib/db")).getDb;
-            const database = await db();
-            const auditRuns = database.collection("audit_runs");
-
-            const allAuditRuns = await auditRuns
-                .find({ sessionIds: { $exists: true, $ne: [] } })
-                .project({ sessionIds: 1 })
-                .toArray();
-
-            const automationRunIds: ObjectId[] = [];
-            for (const ar of allAuditRuns) {
-                for (const sid of ar.sessionIds ?? []) {
-                    if (sid && ObjectId.isValid(sid)) {
-                        automationRunIds.push(new ObjectId(sid));
-                    }
-                }
-            }
-
-            if (automationRunIds.length === 0) return 0;
-
-            const result = await collection.updateMany(
-                { _id: { $in: automationRunIds }, source: { $exists: false } },
-                { $set: { source: "automation" } }
-            );
-            return result.modifiedCount;
-        } catch (error) {
-            console.warn("[AgentGraphRun] backfillAutomationSource failed:", (error as Error)?.message);
-            return 0;
+        if (!collection) {
+            const parentObj = new ObjectId(parentRunId);
+            return Array.from(fallbackRuns.values())
+                .filter((run) => run.parentRunId?.toString() === parentObj.toString())
+                .sort((a, b) => (a.stageIndex ?? 0) - (b.stageIndex ?? 0));
         }
+        const runs = await collection
+            .find({ parentRunId: new ObjectId(parentRunId) })
+            .sort({ stageIndex: 1 })
+            .toArray();
+        return runs as AgentGraphRun[];
     }
 }
 

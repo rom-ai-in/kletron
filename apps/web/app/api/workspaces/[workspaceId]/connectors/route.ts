@@ -1,46 +1,38 @@
-// apps/web/app/api/workspaces/[workspaceId]/connectors/route.ts
+// Compatibility wrapper: returns a flat list of integrations + MCP servers
+// for callers that expected the old shape. Prefer:
+//   /api/workspaces/[workspaceId]/connectors/integrations
+//   /api/workspaces/[workspaceId]/connectors/mcp-servers
 
-import { NextRequest, NextResponse } from 'next/server';
-import { workspaceCategoryService } from '@kletron/server/services/workspaceCategoryService';
+import { NextResponse } from "next/server";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import {
+    listIntegrations,
+    listMcpServers,
+} from "@kletron/server/services/connectorsService";
+import {
+    getWorkspaceById,
+    getWorkspaceByIdUnsafe,
+} from "@kletron/server/services/workspaceService";
 
-/**
- * GET /api/workspaces/[workspaceId]/connectors
- * Get all connectors for a workspace
- */
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: { workspaceId: string } },
-) {
-  const { workspaceId } = await params;
-  const connectors = workspaceCategoryService.getConnectors(workspaceId);
+export const dynamic = "force-dynamic";
 
-  return NextResponse.json(connectors);
+async function loadWorkspace(workspaceId: string, auth: { userId: string; authType: string }) {
+    if (auth.authType === "internal") return getWorkspaceByIdUnsafe(workspaceId);
+    return getWorkspaceById(workspaceId, auth.userId);
 }
 
-/**
- * POST /api/workspaces/[workspaceId]/connectors
- * Add a connector to a workspace
- */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { workspaceId: string } },
+export async function GET(
+    request: Request,
+    { params }: { params: Promise<{ workspaceId: string }> }
 ) {
-  const { workspaceId } = await params;
-  const body = await request.json();
-
-  const { connectorId, connected, category, config } = body;
-
-  if (!connectorId) {
-    return NextResponse.json({ error: 'connectorId is required' }, { status: 400 });
-  }
-
-  const connector = await workspaceCategoryService.addConnector(
-    workspaceId,
-    connectorId,
-    connected ?? false,
-    category,
-    config,
-  );
-
-  return NextResponse.json(connector);
+    const auth = await requireAppRouteAuth(request);
+    if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { workspaceId } = await params;
+    const workspace = await loadWorkspace(workspaceId, auth);
+    if (!workspace) return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+    const [integrations, servers] = await Promise.all([
+        listIntegrations(workspaceId),
+        listMcpServers(workspaceId),
+    ]);
+    return NextResponse.json({ integrations, mcpServers: servers });
 }

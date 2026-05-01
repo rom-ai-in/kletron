@@ -20,6 +20,8 @@ import { evaluateCondition } from "./agentGraphConditions";
 import { buildInitialState, getEntryNodeIds, getGraphNodeOrder, resolveExecutionMode } from "./agentGraphRuntime";
 import { setNestedValue } from "./agentGraphState";
 import { skillRegistry } from "@kletron/agent-core/skills/registry";
+import type { SkillDefinition } from "@kletron/agent-core/skills/types";
+import { loadAllSkillsForRegistry } from "./skillsService";
 import { tokenUsageService } from "./tokenUsageService";
 import { ObjectId } from "mongodb";
 import { getAuditContextConfig } from "@kletron/server/services/auditContextService";
@@ -40,6 +42,35 @@ import { ContextScanner } from "@kletron/server/context/graph/ContextScanner";
 import { getWorkspaceByIdUnsafe, listAllWorkspaces } from "./workspaceService";
 import { runWithWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 
+
+let mongoSkillBridgeAttached = false;
+function ensureMongoSkillBridge(): void {
+    if (mongoSkillBridgeAttached) return;
+    mongoSkillBridgeAttached = true;
+    skillRegistry.registerProvider(async (): Promise<SkillDefinition[]> => {
+        try {
+            const rows = await loadAllSkillsForRegistry();
+            return rows.map((r) => ({
+                id: r.slug,
+                name: r.name,
+                version: r.version,
+                description: r.description,
+                systemPromptPrefix: r.body.trim() ? r.body : undefined,
+                requiredTools: r.requiredTools.length ? r.requiredTools : undefined,
+                suggestedTools: r.suggestedTools.length ? r.suggestedTools : undefined,
+                extends: r.extends.length ? r.extends : undefined,
+                tags: r.tags.length ? r.tags : undefined,
+            }));
+        } catch (error) {
+            console.warn(
+                "[agentGraphExecutor] Mongo skill bridge unavailable:",
+                (error as Error).message
+            );
+            return [];
+        }
+    });
+}
+ensureMongoSkillBridge();
 
 const cloneValue = <T>(value: T): T => {
     if (

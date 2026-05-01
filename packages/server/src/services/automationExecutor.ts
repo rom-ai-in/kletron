@@ -3,28 +3,22 @@ import { randomBytes } from "node:crypto";
 import { getDb } from "../lib/db";
 import { runWorkflow } from "@kletron/agent-core/workflows";
 import { AgentWorkflowAbortError } from "@kletron/agent-core/reactAgentRunner";
-import { auditService } from "./auditService";
+import { agentGraphService } from "./agentGraphService";
+import { agentGraphRunService } from "./agentGraphRunService";
+import { agentGraphExecutor } from "./agentGraphExecutor";
+import { getGraphNodeOrder, buildInitialState } from "./agentGraphRuntime";
 import { getWorkspaceByIdUnsafe, listAllWorkspaces } from "./workspaceService";
 import type {
     AutomationDefinition,
-    AutomationStatus,
     AutomationFilter,
-    AutomationResult,
-    AutomationProgress,
-    StageResult,
-    Finding,
-    Insight,
     AutomationStageConfig,
-    AutomationRun,
     AutomationErrorKind,
-    PersistedStageResult,
 } from "@kletron/shared/automationTypes";
-import type { AgentWorkflowAbortReason } from "@kletron/shared/types";
-import type { Claim as WorkflowClaim, Task as WorkflowTask, AgentWorkflowResult, AgentEvent } from "@kletron/shared/types";
+import type { AgentEvent, AgentWorkflowResult, AgentWorkflowAbortReason } from "@kletron/shared/types";
+import type { AgentGraphNodeStatus, AutomationStageRunResult } from "./agentGraphTypes";
 import { computeNextRun } from "@kletron/shared/cronUtils";
 
 const COLLECTION_NAME = "audit_chains"; // Legacy collection name - kept for backward compatibility
-const RUNS_COLLECTION = "audit_runs"; // Legacy collection name - kept for backward compatibility
 
 /** Default per-stage timeout: 10 minutes. Override per-stage via `stage.timeoutMs`. */
 const DEFAULT_STAGE_TIMEOUT_MS = 600_000;
@@ -32,135 +26,12 @@ const DEFAULT_STAGE_TIMEOUT_MS = 600_000;
 /**
  * Classify a stage error into a structured category for diagnostics and UI.
  */
-function classifyStageError(error: unknown, blockerReason?: string | null): AutomationErrorKind {
+function classifyStageError(error: unknown): AutomationErrorKind {
     if (error instanceof AgentWorkflowAbortError && (error as any).reason === "TIMEOUT") return "LLM_TIMEOUT";
     const msg = error instanceof Error ? error.message : String(error ?? "");
     if (/rate.?limit|429|503|502|gateway.?timeout|ECONNRESET|ETIMEDOUT/i.test(msg)) return "LLM_ERROR";
-    if (blockerReason || /tool.*blocked|outside.*configured.*directories|not accessible/i.test(msg)) return "TOOL_BLOCKED";
-    if (/insufficient audit evidence/i.test(msg)) return "EVIDENCE_GATE";
+    if (/tool.*blocked|outside.*configured.*directories|not accessible/i.test(msg)) return "TOOL_BLOCKED";
     return "UNKNOWN";
-}
-
-/**
- * Parse findings from a markdown/text report produced by a conversational agent.
- * Handles multiple LLM output formats:
- *   Format A: "### 1) Title\n**Severity:** BLOQUANT\n**Where:** ..."
- *   Format B: "1) **BLOQUANT — Title**\n- **Files** ..."
- *   Format C: "### Finding 1: Title\n**Severity:** WARNING"
- */
-function parseFindingsFromText(
-    report: string,
-    chainId: string,
-    stageId: string,
-    sessionId: string,
-): Finding[] {
-    if (!report || report.length < 50) return [];
-
-    // Unwrap JSON wrapper: { "simple_react": { "response": "..." } }
-    let text = report;
-    try {
-        const parsed = JSON.parse(report);
-        const inner = parsed?.simple_react?.response ?? parsed?.response;
-        if (typeof inner === "string") text = inner;
-    } catch { /* not JSON, use as-is */ }
-
-    // Split on numbered items: "### 1)", "1)", "### Finding 1:", etc.
-    // Each section runs until the next numbered item or end-of-string.
-    /**
-     * Regex that matches any numbered finding (e.g., "1)", "1.", "Finding 1:")
-     * or bulleted finding (e.g., "- [BLOQUANT]", "* Finding:").
-     */
-    const sectionPattern = /(?:^|\n)(?:#{1,4}\s+)?(?:Finding\s+)?(?:\d+[.):]|[-*]\s+(?:Finding\s+)?|\[[A-Z]+\])[\s\S]*?(?=\n(?:#{1,4}\s+)?(?:Finding\s+)?(?:\d+[.):]|[-*]\s+(?:Finding\s+)?|\[[A-Z]+\])|$)/g;
-    const sections = text.match(sectionPattern);
-    if (!sections || sections.length === 0) {
-        console.info(`[parseFindingsFromText] No numbered sections found in ${text.length}-char report`);
-        return [];
-    }
-
-    console.info(`[parseFindingsFromText] Found ${sections.length} candidate sections in ${text.length}-char report`);
-
-    const findings: Finding[] = [];
-    const severityWords = /\b(BLOQUANT|CRITICAL|WARNING|INFO|HIGH|MEDIUM|LOW)\b/i;
-
-    for (const section of sections) {
-        const firstLine = section.trim().split("\n")[0] ?? "";
-        const titleClean = firstLine
-            .replace(/^#{1,4}\s*/, "")
-            .replace(/^(?:Finding\s+)?\d+[.):\s]+/, "")
-            .replace(/^[-*]\s+(?:Finding\s+)?/, "")
-            .replace(/\*\*/g, "")
-            .trim();
-        if (!titleClean) continue;
-
-        // Severity: "**Severity:** **BLOQUANT**" or inline "**BLOQUANT —"
-        let type: "BLOQUANT" | "WARNING" | "INFO" = "INFO";
-        const sevLabelMatch = section.match(/\*\*Severity:?\*\*[:\s]*\*?\*?(BLOQUANT|CRITICAL|WARNING|INFO|HIGH|MEDIUM|LOW)\*?\*?/i);
-        const sevInlineMatch = firstLine.match(severityWords);
-        const sevRaw = (sevLabelMatch?.[1] ?? sevInlineMatch?.[1] ?? "").toUpperCase();
-        if (sevRaw === "BLOQUANT" || sevRaw === "CRITICAL" || sevRaw === "HIGH") type = "BLOQUANT";
-        else if (sevRaw === "WARNING" || sevRaw === "MEDIUM") type = "WARNING";
-
-        // File paths: backtick-quoted containing / or .
-        const filePaths = section.match(/`([a-zA-Z0-9_.@/-]+\.[a-zA-Z0-9]{1,6})`/g)
-            ?.map(m => m.replace(/`/g, "")) ?? [];
-        const file = filePaths[0] ?? "unknown";
-
-        // Line numbers: "**~357-377**", "~lines 96-105", "line 42", "L206-302"
-        const lineMatch = section.match(/\*?\*?~?\s*(?:lines?\s*)?(\d+)\s*[-–]\s*(\d+)\s*\*?\*?/)
-            ?? section.match(/\*?\*?~?\s*lines?\s+(\d+)\s*\*?\*?/i)
-            ?? section.match(/\bL(\d+)(?:\s*[-–]\s*(\d+))?/);
-        const lineStart = lineMatch ? parseInt(lineMatch[1], 10) : undefined;
-        const lineEnd = lineMatch?.[2] ? parseInt(lineMatch[2], 10) : undefined;
-
-        // Description: prefer "**Description:**" block, then "What's wrong", then title only
-        const descBlock = section.match(/\*\*Description:?\*\*\s*([\s\S]*?)(?=\n-\s*\*\*(?:Concrete|Suggested) fix|$)/i);
-        const whatWrong = section.match(/\*\*What'?s wrong\*\*\s*\n([\s\S]*?)(?=\n\*\*(?:Concrete|Suggested) fix|$)/i);
-        const detail = descBlock?.[1]?.trim() ?? whatWrong?.[1]?.trim() ?? "";
-        const cleanDetail = detail.replace(/\*\*/g, "").replace(/```[\s\S]*?```/g, "[code]").trim();
-        const desc = cleanDetail
-            ? `${titleClean}: ${cleanDetail.slice(0, 300)}`
-            : titleClean;
-
-        findings.push({
-            chainId,
-            stageId,
-            sessionId,
-            type,
-            file,
-            description: desc,
-            lineStart,
-            lineEnd,
-            timestamp: new Date(),
-        });
-    }
-
-    console.info(`[parseFindingsFromText] Extracted ${findings.length} candidates before noise filter`);
-
-    // Filter out metadata/stats noise that the regex picks up from agent execution summaries.
-    // These include entries like "Total Nodes: 1", "Input Tokens: 414,530", "Success Rate: 100%", etc.
-    const metadataPatterns = [
-        /^Total (?:Nodes|Tokens|Findings|Claims|Verified|Rejected|Duration)\s*:/i,
-        /^(?:Input|Output)\s+Tokens\s*:/i,
-        /^(?:Successful|Failed)\s*:/i,
-        /^Success Rate\s*:/i,
-        /^(?:Total\s+)?(?:Nodes|Stages)\s*:/i,
-        /^\d[\d,.]*\s*$/,                    // Pure numbers like "414,530"
-        /^[\d,.]+%?\s*$/,                     // Percentages like "100%"
-    ];
-
-    const filteredFindings = findings.filter((f) => {
-        const desc = f.description.trim();
-        // Reject very short descriptions (just labels, not real findings)
-        if (desc.length < 20) return false;
-        // Reject metadata-pattern matches
-        if (metadataPatterns.some((p) => p.test(desc))) return false;
-        // Reject if description starts with a common metadata label
-        if (/^(?:Total|Successful|Failed|Success Rate|Input Tokens|Output Tokens|Total Tokens|Total Nodes)\b/i.test(desc)) return false;
-        return true;
-    });
-
-    console.info(`[parseFindingsFromText] After noise filter: ${filteredFindings.length} findings (filtered out ${findings.length - filteredFindings.length} metadata entries)`);
-    return filteredFindings;
 }
 
 function extractRawReportText(rawReport: unknown): string {
@@ -176,196 +47,6 @@ function extractRawReportText(rawReport: unknown): string {
     return "";
 }
 
-function detectToolExecutionBlockers(workflowResult: AgentWorkflowResult, reportText: string): string | null {
-    const directBlockers = [
-        /resolved path is outside of the configured repository directories/i,
-        /configured path does not exist or is not a directory/i,
-        /tools are blocked/i,
-        /cannot perform the analysis due to environment restrictions/i,
-    ];
-    if (directBlockers.some((re) => re.test(reportText))) {
-        return "Tool execution is blocked by workspace/path restrictions";
-    }
-
-    const events = Array.isArray((workflowResult as any)?.eventStream)
-        ? ((workflowResult as any).eventStream as Array<Record<string, unknown>>)
-        : [];
-    const toolEvents = events.filter((e) => e?.kind === "tool");
-    if (!toolEvents.length) return null;
-
-    const toolErrors = toolEvents.filter((e) => {
-        const content = typeof e?.content === "string" ? e.content : "";
-        return /^error:/i.test(content.trim()) || /please fix your mistakes/i.test(content);
-    });
-    if (!toolErrors.length) return null;
-
-    const hasPathBlock = toolErrors.some((e) => {
-        const content = typeof e?.content === "string" ? e.content : "";
-        return directBlockers.some((re) => re.test(content));
-    });
-    if (hasPathBlock) {
-        return "Tool execution failed because repository paths are not accessible";
-    }
-
-    // If most tool calls errored, stage output is not reliable.
-    if (toolErrors.length >= 3 && toolErrors.length / toolEvents.length >= 0.7) {
-        return "Most tool calls failed during the audit stage";
-    }
-
-    return null;
-}
-
-function parseJsonObject(raw?: string | Record<string, unknown>): Record<string, unknown> | null {
-    if (!raw) return null;
-    if (typeof raw === "object") return raw as Record<string, unknown>;
-    if (typeof raw !== "string") return null;
-    try {
-        const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
-    } catch {
-        return null;
-    }
-}
-
-function collectAuditEvidence(workflowResult: AgentWorkflowResult) {
-    const events = Array.isArray(workflowResult.eventStream)
-        ? (workflowResult.eventStream as AgentEvent[])
-        : [];
-    const toolEvents = events.filter((e) => e.kind === "tool");
-
-    let fileReadOps = 0;
-    let searchOps = 0;
-    let structureOps = 0;
-    let toolErrors = 0;
-    const toolsUsed = new Set<string>();
-    const filesRead = new Set<string>();
-
-    for (const event of toolEvents) {
-        const toolName = String(event.toolName || event.name || "").trim();
-        if (!toolName) continue;
-        toolsUsed.add(toolName);
-
-        const lower = toolName.toLowerCase();
-        if (/^error:/i.test((event.content || "").trim()) || /please fix your mistakes/i.test(event.content || "")) {
-            toolErrors += 1;
-        }
-
-        if (lower === "read_file" || lower === "read_file_range") {
-            fileReadOps += 1;
-            const args = parseJsonObject(event.toolArgs);
-            if (args) {
-                const filePath = typeof args.filePath === "string"
-                    ? args.filePath
-                    : typeof args.path === "string"
-                        ? args.path
-                        : "";
-                if (filePath && typeof filePath === "string" && filePath.length > 0) {
-                    filesRead.add(filePath);
-                }
-            }
-        }
-
-        if (
-            lower === "search_code" ||
-            lower === "semantic_code_search" ||
-            lower === "git_grep" ||
-            lower === "structural_search" ||
-            lower === "symbols_list" ||
-            lower === "find_symbol" ||
-            lower === "grep_search" ||
-            lower === "find_by_name"
-        ) {
-            searchOps += 1;
-            // Also attempt to track unique files from search results if it's a direct file search
-            const args = parseJsonObject(event.toolArgs);
-            if (args && (typeof args.path === "string" || typeof args.filePath === "string")) {
-                const p = (args.path || args.filePath) as string;
-                if (p && !p.includes("*") && !p.includes("?")) { // skip patterns
-                    filesRead.add(p);
-                }
-            }
-        }
-
-        if (lower === "list_files" || lower === "describe_structure" || lower === "repo_metrics") {
-            structureOps += 1;
-        }
-    }
-
-    return {
-        toolCalls: toolEvents.length,
-        toolErrors,
-        fileReadOps,
-        filesReadUnique: filesRead.size,
-        searchOps,
-        structureOps,
-        toolsUsed: Array.from(toolsUsed),
-    };
-}
-
-function evaluateZeroFindingEvidenceGate(params: {
-    findingsCount: number;
-    claimsCount: number;
-    tasksCount: number;
-    workflowResult: AgentWorkflowResult;
-    rawOutput?: string;
-}): string | null {
-    if (params.findingsCount > 0) return null;
-
-    // If the stage produced substantial output content, it's not a lazy agent —
-    // it's an analysis/research stage that produces narrative, not structured findings.
-    if (params.rawOutput && params.rawOutput.trim().length > 200) return null;
-
-    const evidence = collectAuditEvidence(params.workflowResult);
-
-    // Hardcoded thresholds for "lazy agent" detection
-    const thresholds = {
-        toolCalls: 8,
-        structureOps: 1,
-        searchOps: 2,
-        fileReadOps: 3,
-        filesReadUnique: 3,
-    };
-
-    // If result has claims or tasks, it's generally considered credible even with zero findings
-    if (params.claimsCount >= 3 || params.tasksCount >= 2) return null;
-
-    // Detect "Synthesis" or "Recommendation" stages — they naturally perform fewer tool calls
-    // as they synthesize findings from previous stages.
-    const isSynthesisStage = /synthesis|recommendation|aggregate|summary|report/i.test(params.workflowResult.sessionId || "");
-
-    // If the agent made many tool calls (> 20) but they are mostly not file reads,
-    // it's likely not "lazy" (e.g., doing deep research or complex transformations).
-    if (evidence.toolCalls >= 20 && evidence.toolErrors / evidence.toolCalls < 0.2) return null;
-
-    // Be more lenient on fileReadOps if total tool calls are high or it's a synthesis stage
-    const effectiveFilesReadUnique = (evidence.filesReadUnique === 0 && (evidence.fileReadOps >= 5 || isSynthesisStage))
-        ? 3 // Mock pass
-        : evidence.filesReadUnique;
-
-    const checks = [
-        evidence.toolCalls >= (isSynthesisStage ? 4 : thresholds.toolCalls),
-        evidence.structureOps >= (isSynthesisStage ? 0 : thresholds.structureOps),
-        evidence.searchOps >= (isSynthesisStage ? 1 : thresholds.searchOps),
-        (evidence.fileReadOps >= (isSynthesisStage ? 1 : thresholds.fileReadOps) || effectiveFilesReadUnique >= thresholds.filesReadUnique),
-        evidence.toolErrors <= Math.floor(Math.max(evidence.toolCalls, 1) * 0.4),
-    ];
-
-    const passed = checks.every(Boolean);
-    if (passed) return null;
-
-    return [
-        "Insufficient audit evidence for a zero-findings conclusion.",
-        `toolCalls=${evidence.toolCalls}`,
-        `toolErrors=${evidence.toolErrors}`,
-        `structureOps=${evidence.structureOps}`,
-        `searchOps=${evidence.searchOps}`,
-        `fileReadOps=${evidence.fileReadOps}`,
-        `filesReadUnique=${evidence.filesReadUnique}`,
-        `claims=${params.claimsCount}`,
-        `tasks=${params.tasksCount}`,
-    ].join(" ");
-}
-
 const toObjectId = (id?: string): ObjectId | undefined => {
     if (!id) return undefined;
     if (!ObjectId.isValid(id)) return undefined;
@@ -373,14 +54,14 @@ const toObjectId = (id?: string): ObjectId | undefined => {
 };
 
 /**
- * AutomationExecutor - Orchestrates multi-stage audit workflows
+ * AutomationExecutor — manages automation configurations and runs each
+ * execution as a single agent thread (`agent_graph_runs`). Multi-stage
+ * automations append per-stage prompts and outputs as conversation turns
+ * in the main thread; stages 1..N execute as hidden sub-runs whose
+ * conclusions are folded into the main thread's `state.conversationHistory`.
  *
- * Core responsibilities:
- * - Create and manage automations
- * - Execute stages sequentially
- * - Handle context passing between stages
- * - Aggregate results and detect insights
- * - Persist state to MongoDB
+ * The legacy `audit_runs` and `audit_sessions` collections are no longer
+ * read or written by this service.
  */
 export class AutomationExecutor {
     /**
@@ -401,7 +82,6 @@ export class AutomationExecutor {
 
         const triggerType = config.triggerType || "manual";
 
-        // Auto-generate webhook secret if needed
         let webhookConfig = config.webhookConfig;
         if (triggerType === "webhook" && !webhookConfig?.secret) {
             webhookConfig = {
@@ -410,7 +90,6 @@ export class AutomationExecutor {
             };
         }
 
-        // Auto-generate git event secret if needed
         let gitEventConfig = config.gitEventConfig;
         if (triggerType === "git_event" && gitEventConfig && !gitEventConfig.secret) {
             gitEventConfig = {
@@ -419,7 +98,6 @@ export class AutomationExecutor {
             };
         }
 
-        // Compute next scheduled run if schedule trigger
         let schedule = config.schedule;
         if (triggerType === "schedule" && schedule?.enabled && schedule.cron && schedule.timezone) {
             const nextRun = computeNextRun(schedule.cron, schedule.timezone);
@@ -458,16 +136,12 @@ export class AutomationExecutor {
         if (workspaceId) {
             const workspaceObjectId = toObjectId(workspaceId);
             if (!workspaceObjectId) return null;
-            // Match workspace-scoped OR global automations (no workspaceId)
             query.$or = [
                 { workspaceId: workspaceObjectId },
                 { workspaceId: { $exists: false } },
             ];
         }
-        const chain = await db
-            .collection(COLLECTION_NAME)
-            .findOne(query);
-
+        const chain = await db.collection(COLLECTION_NAME).findOne(query);
         return chain as AutomationDefinition | null;
     }
 
@@ -481,7 +155,6 @@ export class AutomationExecutor {
         if (filter?.workspaceId) {
             const workspaceObjectId = toObjectId(filter.workspaceId);
             if (!workspaceObjectId) return [];
-            // Include workspace-scoped automations AND global ones (no workspaceId)
             query.$and = [
                 ...(query.$and || []),
                 { $or: [
@@ -491,9 +164,7 @@ export class AutomationExecutor {
             ];
         }
 
-        if (filter?.status) {
-            query.status = filter.status;
-        }
+        if (filter?.status) query.status = filter.status;
 
         if (filter?.search) {
             query.$and = [
@@ -505,13 +176,8 @@ export class AutomationExecutor {
             ];
         }
 
-        if (filter?.scheduledOnly) {
-            query["schedule.enabled"] = true;
-        }
-
-        if (filter?.triggerType) {
-            query.triggerType = filter.triggerType;
-        }
+        if (filter?.scheduledOnly) query["schedule.enabled"] = true;
+        if (filter?.triggerType) query.triggerType = filter.triggerType;
 
         const chains = await db
             .collection(COLLECTION_NAME)
@@ -523,33 +189,6 @@ export class AutomationExecutor {
     }
 
     /**
-     * Update automation status
-     */
-    async updateAutomationStatus(
-        chainId: string,
-        status: AutomationStatus,
-        updates?: Partial<AutomationDefinition>,
-        workspaceId?: string
-    ): Promise<void> {
-        const db = await getDb();
-        const query: Record<string, unknown> = { _id: new ObjectId(chainId) };
-        if (workspaceId) {
-            const workspaceObjectId = toObjectId(workspaceId);
-            if (!workspaceObjectId) return;
-            query.workspaceId = workspaceObjectId;
-        }
-        await db.collection(COLLECTION_NAME).updateOne(
-            query,
-            {
-                $set: {
-                    status,
-                    ...updates,
-                },
-            }
-        );
-    }
-
-    /**
      * Update automation configuration
      */
     async updateAutomation(
@@ -558,12 +197,10 @@ export class AutomationExecutor {
         workspaceId?: string
     ): Promise<void> {
         const db = await getDb();
-        // Remove _id from updates if it exists to avoid MongoDB error
         const { _id: _, workspaceId: __, ...updateData } = updates as any;
 
         const triggerType = updateData.triggerType || "manual";
 
-        // Auto-generate webhook secret if switching to webhook and none exists
         if (triggerType === "webhook" && !updateData.webhookConfig?.secret) {
             const existing = await this.getAutomation(chainId, workspaceId);
             if (!existing?.webhookConfig?.secret) {
@@ -574,7 +211,6 @@ export class AutomationExecutor {
             }
         }
 
-        // Auto-generate git event secret if switching to git_event and none exists
         if (triggerType === "git_event" && updateData.gitEventConfig && !updateData.gitEventConfig.secret) {
             const existing = await this.getAutomation(chainId, workspaceId);
             if (!existing?.gitEventConfig?.secret) {
@@ -585,7 +221,6 @@ export class AutomationExecutor {
             }
         }
 
-        // Recompute nextScheduledAt when schedule is present
         if (triggerType === "schedule" && updateData.schedule?.enabled && updateData.schedule.cron && updateData.schedule.timezone) {
             const existing = await this.getAutomation(chainId, workspaceId);
             const nextRun = computeNextRun(updateData.schedule.cron, updateData.schedule.timezone);
@@ -604,1136 +239,7 @@ export class AutomationExecutor {
             query.workspaceId = workspaceObjectId;
         }
 
-        await db.collection(COLLECTION_NAME).updateOne(
-            query,
-            { $set: updateData }
-        );
-    }
-
-    /**
-     * Update run status
-     */
-    async updateRunStatus(
-        runId: string,
-        status: AutomationStatus,
-        updates?: Partial<AutomationRun>,
-        workspaceId?: string
-    ): Promise<void> {
-        const db = await getDb();
-        const query: Record<string, unknown> = { _id: new ObjectId(runId) };
-        if (workspaceId) {
-            const workspaceObjectId = toObjectId(workspaceId);
-            if (!workspaceObjectId) return;
-            query.workspaceId = workspaceObjectId;
-        }
-        await db.collection(RUNS_COLLECTION).updateOne(
-            query,
-            {
-                $set: {
-                    status,
-                    ...updates,
-                },
-            }
-        );
-    }
-
-    /**
-     * Update run progress during execution
-     */
-    async updateRunProgress(
-        runId: string,
-        stageIndex: number,
-        sessionId: string,
-        workspaceId?: string
-    ): Promise<void> {
-        const db = await getDb();
-        const query: Record<string, unknown> = { _id: new ObjectId(runId) };
-        if (workspaceId) {
-            const workspaceObjectId = toObjectId(workspaceId);
-            if (!workspaceObjectId) return;
-            query.workspaceId = workspaceObjectId;
-        }
-        const updateDoc: Record<string, any> = {
-            $set: {
-                currentStageIndex: stageIndex,
-            },
-        };
-        if (sessionId) {
-            updateDoc.$set[`sessionIds.${stageIndex}`] = sessionId;
-        }
-        await db.collection<AutomationRun>(RUNS_COLLECTION).updateOne(query, updateDoc);
-    }
-
-    /**
-     * Update only the current stage index (no session mutation)
-     */
-    async updateRunStageIndex(
-        runId: string,
-        stageIndex: number,
-        workspaceId?: string
-    ): Promise<void> {
-        const db = await getDb();
-        const query: Record<string, unknown> = { _id: new ObjectId(runId) };
-        if (workspaceId) {
-            const workspaceObjectId = toObjectId(workspaceId);
-            if (!workspaceObjectId) return;
-            query.workspaceId = workspaceObjectId;
-        }
-        await db.collection<AutomationRun>(RUNS_COLLECTION).updateOne(
-            query,
-            {
-                $set: {
-                    currentStageIndex: stageIndex,
-                },
-            }
-        );
-    }
-
-    /**
-     * Get run by ID
-     */
-    async getRun(runId: string, workspaceId?: string): Promise<AutomationRun | null> {
-        const db = await getDb();
-        const query: Record<string, unknown> = { _id: new ObjectId(runId) };
-        if (workspaceId) {
-            const workspaceObjectId = toObjectId(workspaceId);
-            if (!workspaceObjectId) return null;
-            query.workspaceId = workspaceObjectId;
-        }
-        const run = await db
-            .collection(RUNS_COLLECTION)
-            .findOne(query);
-
-        return run as AutomationRun | null;
-    }
-
-    /**
-     * Get latest run for an automation
-     */
-    async getLatestRun(chainId: string, workspaceId?: string): Promise<AutomationRun | null> {
-        const db = await getDb();
-        const query: Record<string, unknown> = { chainId: new ObjectId(chainId) };
-        if (workspaceId) {
-            const workspaceObjectId = toObjectId(workspaceId);
-            if (!workspaceObjectId) return null;
-            query.workspaceId = workspaceObjectId;
-        }
-        const runs = await db
-            .collection(RUNS_COLLECTION)
-            .find(query)
-            .sort({ startedAt: -1 })
-            .limit(1)
-            .toArray();
-
-        return (runs[0] as AutomationRun) || null;
-    }
-
-    /**
-     * List runs for an automation
-     */
-    async listRuns(chainId: string, workspaceId?: string): Promise<AutomationRun[]> {
-        const db = await getDb();
-        const query: Record<string, unknown> = { chainId: new ObjectId(chainId) };
-        if (workspaceId) {
-            const workspaceObjectId = toObjectId(workspaceId);
-            if (!workspaceObjectId) return [];
-            query.workspaceId = workspaceObjectId;
-        }
-        const runs = await db
-            .collection(RUNS_COLLECTION)
-            .find(query)
-            .sort({ startedAt: -1 })
-            .toArray();
-
-        return runs as AutomationRun[];
-    }
-
-    /**
-     * Start a new execution run for an automation
-     */
-    async startNewRun(chainId: string, workspaceId?: string): Promise<string> {
-        const db = await getDb();
-        const chain = await this.getAutomation(chainId, workspaceId);
-        if (!chain) throw new Error(`Automation ${chainId} not found`);
-
-        const workspaceObjectId = workspaceId ? toObjectId(workspaceId) : undefined;
-        if (workspaceId && !workspaceObjectId) {
-            throw new Error("Invalid workspace ID");
-        }
-        if (
-            workspaceObjectId &&
-            chain.workspaceId &&
-            chain.workspaceId.toString() !== workspaceObjectId.toString()
-        ) {
-            throw new Error("Workspace mismatch for automation");
-        }
-
-        const run: AutomationRun = {
-            chainId: new ObjectId(chainId),
-            ...(chain.workspaceId
-                ? { workspaceId: chain.workspaceId }
-                : workspaceObjectId
-                    ? { workspaceId: workspaceObjectId }
-                    : {}),
-            status: "PENDING",
-            startedAt: new Date(),
-            currentStageIndex: 0,
-            sessionIds: [],
-            aggregatedFindings: [],
-            crossStageInsights: [],
-        };
-
-        const result = await db.collection(RUNS_COLLECTION).insertOne(run);
-        return result.insertedId.toString();
-    }
-
-    /**
-     * Execute a complete automation by starting a new run
-     */
-    async executeAutomation(
-        chainId: string,
-        onProgress?: (update: AutomationProgress) => void
-    ): Promise<AutomationResult> {
-        const runId = await this.startNewRun(chainId);
-        return this.executeRun(runId, onProgress);
-    }
-
-    /**
-     * Execute a specific run
-     */
-    async executeRun(
-        runId: string,
-        onProgress?: (update: AutomationProgress) => void
-    ): Promise<AutomationResult> {
-        let run = await this.getRun(runId);
-        if (!run) throw new Error(`Run ${runId} not found`);
-
-        const chain = await this.getAutomation(
-            run.chainId.toString(),
-            run.workspaceId?.toString()
-        );
-        if (!chain) throw new Error(`Automation ${run.chainId} not found`);
-
-        // If run was cancelled before we started, don't restart it.
-        if (run.status === "CANCELLED") {
-            console.info(`[AutomationExecutor] Run ${runId} is cancelled. Skipping execution.`);
-            return {
-                chainId: chain._id!.toString(),
-                success: false,
-                stages: [],
-                aggregation: { findings: [], insights: [], report: "", stats: { totalStages: 0, totalFindings: 0, criticalCount: 0, warningCount: 0 } }
-            };
-        }
-
-        await this.updateRunStatus(runId, "RUNNING", undefined, run.workspaceId?.toString());
-        // Also update parent automation status
-        await this.updateAutomationStatus(run.chainId.toString(), "RUNNING", undefined, run.workspaceId?.toString());
-
-        const results: StageResult[] = [];
-        const startTime = Date.now();
-        const runWorkspaceId = run.workspaceId?.toString();
-
-        // Resolve workspace root path for prompt injection
-        let workspaceRootPath: string | undefined;
-        try {
-            const workspace = runWorkspaceId
-                ? await getWorkspaceByIdUnsafe(runWorkspaceId)
-                : (await listAllWorkspaces())[0];
-            workspaceRootPath = workspace?.rootPath;
-        } catch {
-            // Non-fatal: prompts will just lack the workspace path
-        }
-
-        const shouldAbort = (() => {
-            let lastCheck = 0;
-            let cachedReason: AgentWorkflowAbortReason | null = null;
-            const CHECK_INTERVAL_MS = 500;
-            return async () => {
-                if (cachedReason) return cachedReason;
-                const now = Date.now();
-                if (now - lastCheck < CHECK_INTERVAL_MS) return null;
-                lastCheck = now;
-                const current = await this.getRun(runId, runWorkspaceId);
-                if (current?.status === "PAUSED") {
-                    cachedReason = "PAUSED";
-                    return cachedReason;
-                }
-                if (current?.status === "CANCELLED") {
-                    cachedReason = "CANCELLED";
-                    return cachedReason;
-                }
-                return null;
-            };
-        })();
-
-        // Execute each stage sequentially
-        for (let i = run.currentStageIndex; i < chain.stages.length; i++) {
-            // Check if run was paused or cancelled (best-effort: takes effect between stages)
-            const currentRun = await this.getRun(runId, runWorkspaceId);
-            if (currentRun?.status === "PAUSED") {
-                console.info(`[AutomationExecutor] Run ${runId} is paused. Stopping execution loop.`);
-                return {
-                    chainId: chain._id!.toString(),
-                    success: false,
-                    stages: results,
-                    aggregation: { findings: [], insights: [], report: "", stats: { totalStages: 0, totalFindings: 0, criticalCount: 0, warningCount: 0 } }
-                };
-            }
-            if (currentRun?.status === "CANCELLED") {
-                console.info(`[AutomationExecutor] Run ${runId} is cancelled. Stopping execution loop.`);
-                return {
-                    chainId: chain._id!.toString(),
-                    success: false,
-                    stages: results,
-                    aggregation: { findings: [], insights: [], report: "", stats: { totalStages: results.length, totalFindings: results.flatMap((r) => r.findings).length, criticalCount: 0, warningCount: 0 } }
-                };
-            }
-
-            const stage = chain.stages[i];
-
-            // Notify progress
-            onProgress?.({
-                chainId: chain._id!.toString(),
-                stageIndex: i,
-                status: "RUNNING",
-            });
-
-            // Check skip condition
-            if (stage.skipIf && this.evaluateSkipCondition(stage.skipIf, results)) {
-                console.info(`[AutomationExecutor] Skipping stage ${stage.id}: condition met`);
-                onProgress?.({
-                    chainId: chain._id!.toString(),
-                    stageIndex: i,
-                    status: "SKIPPED",
-                });
-                await this.updateRunStageIndex(runId, i + 1, run.workspaceId?.toString());
-                continue;
-            }
-
-            const context = this.buildStageContext(stage, results);
-            const userPrompt = this.buildUserPrompt(stage, context, workspaceRootPath);
-            const auditSessionId = await auditService.createSession(userPrompt);
-            if (auditSessionId) {
-                await this.updateRunProgress(runId, i, auditSessionId, run.workspaceId?.toString());
-            } else {
-                await this.updateRunStageIndex(runId, i, run.workspaceId?.toString());
-            }
-
-            // Execute stage with timeout
-            const stageTimeoutMs = stage.timeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
-            let stageResult: StageResult;
-            try {
-                stageResult = await this.executeStage(chain._id!.toString(), stage, results, {
-                    userPrompt,
-                    auditSessionId,
-                    workspaceId: runWorkspaceId,
-                    shouldAbort,
-                    stageTimeoutMs,
-                });
-            } catch (error) {
-                if (error instanceof AgentWorkflowAbortError || (error as any)?.name === "AgentWorkflowAbortError") {
-                    const reason: AgentWorkflowAbortReason = (error as any).reason ?? "PAUSED";
-                    const status: AutomationStatus = reason === "CANCELLED" ? "CANCELLED" : "PAUSED";
-                    await this.updateRunStatus(
-                        runId,
-                        status,
-                        reason === "CANCELLED" ? { endedAt: new Date() } : undefined,
-                        runWorkspaceId
-                    );
-                    await this.updateAutomationStatus(run.chainId.toString(), status, undefined, runWorkspaceId);
-                    return {
-                        chainId: chain._id!.toString(),
-                        success: false,
-                        stages: results,
-                        aggregation: {
-                            findings: [],
-                            insights: [],
-                            report: "",
-                            stats: {
-                                totalStages: results.length,
-                                totalFindings: results.flatMap((r) => r.findings).length,
-                                criticalCount: 0,
-                                warningCount: 0,
-                            },
-                        },
-                    };
-                }
-                // Convert raw errors to a failed StageResult instead of aborting the pipeline
-                const errorMsg = error instanceof Error ? error.message : String(error);
-                const errorKind = classifyStageError(error);
-                console.error(`[AutomationExecutor] Stage ${stage.id} (${stage.name}) threw an error [${errorKind}]:`, errorMsg);
-                stageResult = {
-                    stageId: stage.id,
-                    stageName: stage.name,
-                    sessionId: "",
-                    success: false,
-                    findings: [],
-                    claims: [],
-                    tasks: [],
-                    duration: Date.now() - startTime,
-                    error: errorMsg,
-                    errorKind,
-                };
-            }
-            results.push(stageResult);
-
-            // Update run progress
-            await this.updateRunStageIndex(runId, i + 1, run.workspaceId?.toString());
-
-            // Notify progress — include error details for failed stages so the UI can display them
-            onProgress?.({
-                chainId: chain._id!.toString(),
-                stageIndex: i,
-                status: stageResult.success ? "COMPLETED" : "FAILED",
-                findings: stageResult.findings,
-                ...(stageResult.success ? {} : {
-                    error: stageResult.error,
-                    errorKind: stageResult.errorKind,
-                    stageName: stage.name,
-                }),
-            });
-
-            // Handle failures — continue to next stage (stages are independent)
-            if (!stageResult.success) {
-                if (
-                    stage.retryOnFailure &&
-                    (stageResult.retries || 0) < (stage.maxRetries || 3)
-                ) {
-                    // Retry same stage
-                    console.info(`[AutomationExecutor] Retrying stage ${stage.id}...`);
-                    i--;
-                    results[results.length - 1].retries = (stageResult.retries || 0) + 1;
-                } else {
-                    // Log failure but CONTINUE to the next stage (don't abort the pipeline)
-                    console.warn(`[AutomationExecutor] Stage ${stage.id} failed: ${stageResult.error}. Continuing to next stage...`);
-                }
-            }
-        }
-
-        // Check for any stage failures
-        const failedStages = results.filter((r) => !r.success);
-        const hasFailures = failedStages.length > 0;
-
-        // Aggregate results
-        const aggregation = await this.aggregateResults(chain._id!.toString(), results);
-
-        const totalDuration = Date.now() - startTime;
-
-        // Determine final status — COMPLETED if all stages passed, FAILED if any failed
-        const finalStatus: AutomationStatus = hasFailures ? "FAILED" : "COMPLETED";
-        const failureInfo = hasFailures
-            ? { failedStages: failedStages.map((r) => ({ stageId: r.stageId, stageName: r.stageName, error: r.error })) }
-            : {};
-
-        // Build persisted stage results for frontend display
-        const persistedStageResults: PersistedStageResult[] = results.map((r) => ({
-            stageId: r.stageId,
-            stageName: r.stageName,
-            sessionId: r.sessionId,
-            success: r.success,
-            error: r.error,
-            errorKind: r.errorKind,
-            findingsCount: r.findings.length,
-            claimsCount: r.claims.length,
-            tasksCount: r.tasks.length,
-            rawOutput: r.rawOutput,
-            duration: r.duration,
-        }));
-
-        // Update final run state — always persist results regardless of failures
-        await this.updateRunStatus(runId, finalStatus, {
-            endedAt: new Date(),
-            aggregatedFindings: aggregation.findings,
-            crossStageInsights: aggregation.insights,
-            finalReport: aggregation.report,
-            stageResults: persistedStageResults,
-            metadata: {
-                totalDuration,
-                totalClaims: results.reduce((sum, r) => sum + r.claims.length, 0),
-                totalVerified: results.reduce(
-                    (sum, r) =>
-                        sum +
-                        r.findings.filter((f) => f.verificationStatus === "VERIFIED").length,
-                    0
-                ),
-                totalRejected: results.reduce(
-                    (sum, r) =>
-                        sum +
-                        r.findings.filter((f) => f.verificationStatus === "REJECTED").length,
-                    0
-                ),
-            },
-        }, run.workspaceId?.toString());
-
-        // Also update parent automation status
-        await this.updateAutomationStatus(chain._id!.toString(), finalStatus, undefined, run.workspaceId?.toString());
-
-        return {
-            chainId: chain._id!.toString(),
-            success: results.every((r) => r.success),
-            stages: results,
-            aggregation,
-        };
-    }
-
-    /**
-     * Execute a single stage
-     */
-    private async executeStage(
-        chainId: string,
-        stage: AutomationStageConfig,
-        previousResults: StageResult[],
-        prepared?: {
-            userPrompt?: string;
-            auditSessionId?: string;
-            workspaceId?: string;
-            shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
-            /** Per-stage timeout in ms. If elapsed, the stage is aborted with reason TIMEOUT. */
-            stageTimeoutMs?: number;
-        }
-    ): Promise<StageResult> {
-        const startTime = Date.now();
-
-        try {
-            // Build user prompt from stage prompt + context
-            const context = prepared?.userPrompt ? null : this.buildStageContext(stage, previousResults);
-            const userPrompt = prepared?.userPrompt ?? this.buildUserPrompt(stage, context);
-            const auditSessionId = prepared?.auditSessionId || "";
-
-            const stageTimeoutMs = prepared?.stageTimeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
-            console.info(`[AutomationExecutor] Executing stage: ${stage.name} (Graph: ${stage.graphId}, timeout: ${stageTimeoutMs}ms)`);
-            console.info(`[AutomationExecutor] Input: ${userPrompt.substring(0, 100)}...`);
-
-            // Build a combined shouldAbort that checks both user-initiated aborts AND stage timeouts
-            const stageDeadline = Date.now() + stageTimeoutMs;
-            const combinedShouldAbort = async (): Promise<AgentWorkflowAbortReason | null> => {
-                // Check user-initiated abort first
-                if (prepared?.shouldAbort) {
-                    const userAbort = await prepared.shouldAbort();
-                    if (userAbort) return userAbort;
-                }
-                // Check stage timeout
-                if (Date.now() >= stageDeadline) {
-                    console.warn(`[AutomationExecutor] Stage ${stage.name} timed out after ${stageTimeoutMs}ms`);
-                    return "TIMEOUT";
-                }
-                return null;
-            };
-
-            // Execute the selected graph workflow
-            const workflowResult = await runWorkflow(userPrompt, stage.graphId, {
-                llmSelection: {
-                    provider: stage.llmProvider,
-                    model: stage.llmModel,
-                },
-                workspaceId: prepared?.workspaceId,
-                source: "automation",
-                shouldAbort: combinedShouldAbort,
-                ...(auditSessionId
-                    ? {
-                        onUpdate: async (update) => {
-                            await auditService.updateSession(auditSessionId, update as Partial<AgentWorkflowResult>);
-                        },
-                    }
-                    : {}),
-            });
-            if (auditSessionId) {
-                await auditService.completeSession(auditSessionId, workflowResult);
-            }
-            const sessionIdForLogs = auditSessionId || workflowResult.sessionId;
-
-            // Extract findings from structured output first, fall back to parsing text
-            let findings: Finding[] = (workflowResult.outputs?.findings || []).map(
-                (f: any) => ({
-                    chainId,
-                    stageId: stage.id,
-                    sessionId: sessionIdForLogs,
-                    type: f.type,
-                    file: f.file,
-                    description: f.description,
-                    lineStart: f.line_start,
-                    lineEnd: f.line_end,
-                    claimId: f.claim_id,
-                    timestamp: new Date(),
-                })
-            );
-
-            // If no structured findings, parse them from the text report
-            if (findings.length === 0) {
-                const rawReport = workflowResult.outputs?.report ?? workflowResult.conclusion ?? "";
-                const reportText = typeof rawReport === "string" ? rawReport : (rawReport.markdown ?? rawReport.summary ?? JSON.stringify(rawReport));
-                console.info(`[AutomationExecutor] No structured findings; parsing from ${reportText.length}-char report text`);
-                findings = parseFindingsFromText(reportText, chainId, stage.id, sessionIdForLogs);
-                console.info(`[AutomationExecutor] Parsed ${findings.length} findings from text`);
-            }
-
-            const rawClaims: WorkflowClaim[] = workflowResult.outputs?.raw_claims ?? [];
-            const claims = rawClaims.map((rawClaim, index) => ({
-                id: `${stage.id}-${index}`,
-                file: rawClaim.source ?? "unknown",
-                description: rawClaim.claim,
-                severity: "INFO" as const,
-                evidence: rawClaim.evidence,
-            }));
-            const rawTasks: WorkflowTask[] = workflowResult.outputs?.tasks ?? [];
-            const tasks = rawTasks.map((task, index) => {
-                let priority: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" = "MEDIUM";
-                if (task.priority === "high") priority = "HIGH";
-                if (task.priority === "low") priority = "LOW";
-                return {
-                    id: `${stage.id}-task-${index}`,
-                    title: task.title,
-                    description: task.description ?? task.title,
-                    priority,
-                    relatedFindingIds: [],
-                };
-            });
-
-            const rawReportOutput = workflowResult.outputs?.report ?? workflowResult.conclusion ?? "";
-            const rawOutput = extractRawReportText(rawReportOutput);
-            const blockerReason = detectToolExecutionBlockers(workflowResult, rawOutput);
-            if (blockerReason) {
-                return {
-                    stageId: stage.id,
-                    stageName: stage.name,
-                    sessionId: sessionIdForLogs,
-                    success: false,
-                    error: blockerReason,
-                    errorKind: classifyStageError(new Error(blockerReason), blockerReason),
-                    findings: [],
-                    claims,
-                    tasks,
-                    rawOutput,
-                    duration: Date.now() - startTime,
-                };
-            }
-
-            const evidenceGateError = evaluateZeroFindingEvidenceGate({
-                findingsCount: findings.length,
-                claimsCount: claims.length,
-                tasksCount: tasks.length,
-                workflowResult,
-                rawOutput,
-            });
-            if (evidenceGateError) {
-                return {
-                    stageId: stage.id,
-                    stageName: stage.name,
-                    sessionId: sessionIdForLogs,
-                    success: false,
-                    error: evidenceGateError,
-                    errorKind: "EVIDENCE_GATE" as AutomationErrorKind,
-                    findings: [],
-                    claims,
-                    tasks,
-                    rawOutput,
-                    duration: Date.now() - startTime,
-                };
-            }
-
-            return {
-                stageId: stage.id,
-                stageName: stage.name,
-                sessionId: sessionIdForLogs,
-                success: true,
-                findings,
-                claims,
-                tasks,
-                rawOutput,
-                duration: Date.now() - startTime,
-            };
-        } catch (error) {
-            if (error instanceof AgentWorkflowAbortError || (error as any)?.name === "AgentWorkflowAbortError") {
-                const reason: AgentWorkflowAbortReason = (error as any).reason ?? "PAUSED";
-                // TIMEOUT aborts are stage-level failures — convert to a failed StageResult
-                // instead of re-throwing (which would pause/cancel the entire run).
-                if (reason === "TIMEOUT") {
-                    const timeoutMs = prepared?.stageTimeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
-                    const errorMsg = `Stage "${stage.name}" timed out after ${Math.round(timeoutMs / 1000)}s — the LLM did not complete in time`;
-                    console.error(`[AutomationExecutor] ${errorMsg}`);
-                    if (prepared?.auditSessionId) {
-                        const fallbackResult: AgentWorkflowResult = {
-                            sessionId: prepared.auditSessionId,
-                            timeline: [],
-                            conclusion: "Stage timed out.",
-                            outputs: {
-                                context: {},
-                                target_files: [],
-                                raw_claims: [],
-                                verified_findings: [],
-                                findings: [],
-                                tasks: [],
-                                report: `TIMEOUT: ${errorMsg}`,
-                            },
-                            eventStream: [],
-                        };
-                        await auditService.completeSession(prepared.auditSessionId, fallbackResult, new Error(errorMsg));
-                    }
-                    return {
-                        stageId: stage.id,
-                        stageName: stage.name,
-                        sessionId: prepared?.auditSessionId ?? "",
-                        success: false,
-                        error: errorMsg,
-                        errorKind: "LLM_TIMEOUT" as AutomationErrorKind,
-                        findings: [],
-                        claims: [],
-                        tasks: [],
-                        duration: Date.now() - startTime,
-                    };
-                }
-                // PAUSED / CANCELLED — re-throw so the pipeline loop handles them
-                throw error;
-            }
-            const errorKind = classifyStageError(error);
-            console.error(`[AutomationExecutor] Stage ${stage.id} failed [${errorKind}]:`, error);
-            if (prepared?.auditSessionId) {
-                const message = error instanceof Error ? error.message : String(error);
-                const fallbackResult: AgentWorkflowResult = {
-                    sessionId: prepared.auditSessionId,
-                    timeline: [],
-                    conclusion: "Stage failed.",
-                    outputs: {
-                        context: {},
-                        target_files: [],
-                        raw_claims: [],
-                        verified_findings: [],
-                        findings: [],
-                        tasks: [],
-                        report: `ERROR: ${message}`,
-                    },
-                    eventStream: [],
-                };
-                await auditService.completeSession(prepared.auditSessionId, fallbackResult, error instanceof Error ? error : new Error(message));
-            }
-            return {
-                stageId: stage.id,
-                stageName: stage.name,
-                sessionId: prepared?.auditSessionId ?? "",
-                success: false,
-                error: error instanceof Error ? error.message : String(error),
-                errorKind,
-                findings: [],
-                claims: [],
-                tasks: [],
-                duration: Date.now() - startTime,
-            };
-        }
-    }
-
-    /**
-     * Build context from previous stages.
-     * When a referenced field (e.g. "findings") is an empty array and the stage
-     * has a rawOutput, inject the rawOutput so the next stage still gets useful context.
-     */
-    private buildStageContext(
-        stage: AutomationStageConfig,
-        previousResults: StageResult[]
-    ): any {
-        if (!stage.contextFromPreviousStages || stage.contextFromPreviousStages.length === 0) {
-            return null;
-        }
-
-        const context: any = {};
-
-        for (const selector of stage.contextFromPreviousStages) {
-            const [stageId, field] = selector.split(".");
-            const prevResult = previousResults.find((r) => r.stageId === stageId);
-
-            if (!prevResult) continue;
-
-            const value = field in prevResult ? (prevResult as any)[field] : undefined;
-            const isEmpty = Array.isArray(value) ? value.length === 0 : !value;
-
-            if (!isEmpty) {
-                context[selector] = value;
-            } else if (prevResult.rawOutput) {
-                context[`${stageId}.output`] = prevResult.rawOutput;
-            }
-        }
-
-        return Object.keys(context).length > 0 ? context : null;
-    }
-
-    /**
-     * Build user prompt with context.
-     * Wraps the stage prompt with instructions that force thorough, iterative analysis.
-     */
-    private buildUserPrompt(stage: AutomationStageConfig, context: any, workspaceRootPath?: string): string {
-        const basePrompt = stage.prompt?.trim();
-        if (!basePrompt) {
-            throw new Error(`Stage ${stage.id} has an empty prompt`);
-        }
-
-        const parts: string[] = [];
-
-        // Inject workspace targeting so the agent knows which project to operate on
-        if (workspaceRootPath) {
-            parts.push("## TARGET WORKSPACE");
-            parts.push(`You are auditing the project located at: ${workspaceRootPath}`);
-            parts.push(`All file paths in this task are relative to this root directory.`);
-            parts.push(`When using tools like list_files, read_file, search_code, execute_bash, etc., always target this directory.`);
-            parts.push(`Do NOT search or modify files outside of: ${workspaceRootPath}`);
-            parts.push("");
-        }
-
-        parts.push("## TASK");
-        parts.push(basePrompt);
-
-        if (context) {
-            parts.push("");
-            parts.push("## CONTEXT FROM PREVIOUS STAGES");
-            parts.push(JSON.stringify(context, null, 2));
-        }
-
-        parts.push("");
-        parts.push("## EXECUTION INSTRUCTIONS");
-        parts.push([
-            "You MUST perform a thorough, multi-step analysis. Do NOT stop after one tool call.",
-            ...(workspaceRootPath ? [`IMPORTANT: All operations MUST target the project at ${workspaceRootPath}. Do NOT explore or reference other directories.`] : []),
-            "1. Start by listing the project structure (describe_structure or list_files).",
-            "2. Identify the files most relevant to this audit stage.",
-            "3. Read at least 5-10 key source files using read_file or read_file_range.",
-            "4. Use search_code to find specific patterns, anti-patterns, or keywords related to the audit.",
-            "5. For each issue found, note the exact file path, line numbers, severity (BLOQUANT/WARNING/INFO), and a concrete fix.",
-            "6. After thorough investigation, produce a detailed report with ALL findings.",
-            "",
-            "Your final output MUST include:",
-            "- A summary of what was analyzed",
-            "- A numbered list of findings with file paths, line numbers, severity, description, and fix",
-            "- If no issues are found after thorough analysis, explain what was checked and why it's clean",
-            "- If findings count is 0, include an explicit 'Audit Evidence' section listing tools used and files inspected",
-            "",
-            "Mandatory scope hygiene:",
-            "- Exclude noise directories: venv, .venv, node_modules, __pycache__, site-packages, build, dist, .git",
-            "- Focus on project source/config/tests first",
-            "",
-            "Do NOT give up after a single tool call. Iterate until you have examined the codebase in depth.",
-        ].join("\n"));
-
-        return parts.join("\n");
-    }
-
-    /**
-     * Evaluate skip condition
-     */
-    private evaluateSkipCondition(
-        condition: string,
-        previousResults: StageResult[]
-    ): boolean {
-        try {
-            // Create a safe evaluation context
-            // Only allow access to previous stage results
-            const evalContext: any = {};
-
-            previousResults.forEach((result) => {
-                evalContext[result.stageId] = {
-                    findings: result.findings,
-                    claims: result.claims,
-                    success: result.success,
-                };
-            });
-
-            // Very simple evaluation (SECURITY: only allow safe property access)
-            // For MVP, we only support simple conditions like "stageId.findings.length === 0"
-            const match = condition.match(/^(\w+)\.findings\.length\s*(===|!==|>|<|>=|<=)\s*(\d+)$/);
-
-            if (match) {
-                const [, stageId, operator, value] = match;
-                const result = evalContext[stageId];
-
-                if (!result) return false;
-
-                const length = result.findings.length;
-                const compareValue = parseInt(value, 10);
-
-                switch (operator) {
-                    case "===":
-                        return length === compareValue;
-                    case "!==":
-                        return length !== compareValue;
-                    case ">":
-                        return length > compareValue;
-                    case "<":
-                        return length < compareValue;
-                    case ">=":
-                        return length >= compareValue;
-                    case "<=":
-                        return length <= compareValue;
-                    default:
-                        return false;
-                }
-            }
-
-            return false;
-        } catch (error) {
-            console.error(`[AutomationExecutor] Error evaluating skip condition:`, error);
-            return false;
-        }
-    }
-
-    /**
-     * Aggregate results across all stages
-     */
-    private async aggregateResults(
-        chainId: string,
-        results: StageResult[]
-    ): Promise<AutomationResult["aggregation"]> {
-        const allFindings = results.flatMap((r) => r.findings);
-
-        // Detect hotspots (files flagged by multiple stages)
-        const insights = this.detectHotspots(results);
-
-        // Generate final report
-        const report = this.generateAggregatedReport(chainId, results, insights);
-
-        return {
-            findings: allFindings,
-            insights,
-            report,
-            stats: {
-                totalStages: results.length,
-                totalFindings: allFindings.length,
-                criticalCount: allFindings.filter((f) => f.type === "BLOQUANT").length,
-                warningCount: allFindings.filter((f) => f.type === "WARNING").length,
-            },
-        };
-    }
-
-    /**
-     * Detect hotspot files (flagged by multiple stages)
-     */
-    private detectHotspots(results: StageResult[]): Insight[] {
-        const insights: Insight[] = [];
-        const fileOccurrences = new Map<string, { count: number; stages: string[] }>();
-
-        // Count file occurrences
-        results.forEach((result) => {
-            result.findings.forEach((finding) => {
-                const existing = fileOccurrences.get(finding.file) || {
-                    count: 0,
-                    stages: [],
-                };
-                existing.count += 1;
-                if (!existing.stages.includes(result.stageId)) {
-                    existing.stages.push(result.stageId);
-                }
-                fileOccurrences.set(finding.file, existing);
-            });
-        });
-
-        // Create hotspot insights for files flagged by 3+ stages
-        fileOccurrences.forEach((data, file) => {
-            if (data.count >= 3) {
-                insights.push({
-                    id: `hotspot-${file.replace(/\//g, "-")}`,
-                    type: "HOTSPOT",
-                    title: `Hotspot Detected: ${file}`,
-                    description: `This file was flagged by ${data.stages.length} different stages (${data.stages.join(", ")})`,
-                    relatedFindings: [],
-                    confidence: Math.min(data.count * 20, 100),
-                    priority: data.count >= 5 ? "CRITICAL" : data.count >= 3 ? "HIGH" : "MEDIUM",
-                });
-            }
-        });
-
-        return insights;
-    }
-
-    /**
-     * Generate aggregated report — compiles each stage's rawOutput into a
-     * rich narrative document instead of just listing stats/findings.
-     */
-    private generateAggregatedReport(
-        chainId: string,
-        results: StageResult[],
-        insights: Insight[]
-    ): string {
-        const lines: string[] = [];
-        const allSucceeded = results.every((r) => r.success);
-        const totalDurationMs = results.reduce((sum, r) => sum + r.duration, 0);
-        const totalDurationMin = (totalDurationMs / 1000 / 60).toFixed(1);
-
-        // ── Executive Header ──
-        lines.push("# Execution Report");
-        lines.push("");
-        lines.push(
-            `**Completed**: ${new Date().toLocaleDateString()} · **Stages**: ${results.length}/${results.length} · **Duration**: ${totalDurationMin}m · **Status**: ${allSucceeded ? "All stages completed" : "Some stages failed"}`
-        );
-        lines.push("");
-        lines.push("---");
-        lines.push("");
-
-        // ── Stage Outputs (the actual LLM content) ──
-        results.forEach((result, i) => {
-            lines.push(`## ${i + 1}. ${result.stageName}`);
-            lines.push("");
-
-            // Stage metadata line
-            const statusIcon = result.success ? "Completed" : "Failed";
-            lines.push(
-                `> **${statusIcon}** · Duration: ${(result.duration / 1000 / 60).toFixed(1)}m`
-            );
-            lines.push("");
-
-            if (!result.success && result.error) {
-                lines.push(`> **Error**: ${result.error}`);
-                lines.push("");
-            }
-
-            // The actual rich content — this is what the LLM produced
-            if (result.rawOutput && result.rawOutput.trim().length > 0) {
-                // Strip any leading "# Title" that duplicates our section header
-                let content = result.rawOutput.trim();
-                const firstLine = content.split("\n")[0] ?? "";
-                if (firstLine.startsWith("# ")) {
-                    content = content.slice(firstLine.length).trim();
-                }
-                // Bump all headings by 2 levels so they nest under our ## section
-                content = content.replace(/^(#{1,4})\s/gm, (match, hashes: string) => {
-                    const newLevel = Math.min(hashes.length + 2, 6);
-                    return "#".repeat(newLevel) + " ";
-                });
-                lines.push(content);
-            } else {
-                lines.push("*No output captured for this stage.*");
-            }
-
-            lines.push("");
-            lines.push("---");
-            lines.push("");
-        });
-
-        // ── Cross-Stage Insights ──
-        if (insights.length > 0) {
-            lines.push("## Cross-Stage Insights");
-            lines.push("");
-            insights.forEach((insight) => {
-                lines.push(`### ${insight.title}`);
-                lines.push(`- **Type**: ${insight.type} · **Priority**: ${insight.priority} · **Confidence**: ${insight.confidence}%`);
-                lines.push(`- ${insight.description}`);
-                lines.push("");
-            });
-            lines.push("---");
-            lines.push("");
-        }
-
-        // ── Findings Appendix (only real findings, skip metadata noise) ──
-        const allFindings = results.flatMap((r) => r.findings);
-        const metadataRe = /^(?:Total|Successful|Failed|Success Rate|Input Tokens|Output Tokens|Total Tokens|Total Nodes|Total Findings|Total Claims)\b/i;
-        const realFindings = allFindings.filter((f) => {
-            const desc = f.description?.trim() ?? "";
-            if (desc.length < 20) return false;
-            if (metadataRe.test(desc)) return false;
-            return true;
-        });
-
-        if (realFindings.length > 0) {
-            const criticalCount = realFindings.filter((f) => f.type === "BLOQUANT").length;
-            const warningCount = realFindings.filter((f) => f.type === "WARNING").length;
-            const infoCount = realFindings.filter((f) => f.type === "INFO").length;
-
-            lines.push("## Findings Appendix");
-            lines.push("");
-            lines.push(`**${realFindings.length} findings** — ${criticalCount} critical, ${warningCount} warnings, ${infoCount} info`);
-            lines.push("");
-            realFindings.forEach((f, i) => {
-                const loc = f.lineStart
-                    ? ` L${f.lineStart}${f.lineEnd ? `–${f.lineEnd}` : ""}`
-                    : "";
-                lines.push(`${i + 1}. **[${f.type}]** \`${f.file}\`${loc}`);
-                lines.push(`   ${f.description.slice(0, 500)}`);
-                lines.push("");
-            });
-        }
-
-        return lines.join("\n");
-    }
-
-    /**
-     * Pause a running automation
-     */
-    async pauseAutomation(chainId: string, workspaceId?: string): Promise<void> {
-        const latestRun = await this.getLatestRun(chainId, workspaceId);
-        if (latestRun && latestRun.status === "RUNNING") {
-            await this.updateRunStatus(latestRun._id!.toString(), "PAUSED", undefined, workspaceId);
-        }
-        await this.updateAutomationStatus(chainId, "PAUSED", undefined, workspaceId);
-    }
-
-    /**
-     * Resume a paused automation
-     */
-    async resumeAutomation(chainId: string, workspaceId?: string): Promise<void> {
-        const chain = await this.getAutomation(chainId, workspaceId);
-        if (!chain) {
-            throw new Error(`Automation ${chainId} not found`);
-        }
-
-        const latestRun = await this.getLatestRun(chainId, workspaceId);
-        if (!latestRun) {
-            throw new Error(`No run found for automation ${chainId} to resume`);
-        }
-
-        await this.updateAutomationStatus(chainId, "RUNNING", undefined, workspaceId);
-
-        // Continue execution of the latest run
-        await this.executeRun(latestRun._id!.toString());
-    }
-
-    /**
-     * Cancel a specific run (best-effort: takes effect between stages)
-     */
-    async cancelRun(runId: string): Promise<void> {
-        const run = await this.getRun(runId);
-        if (!run) throw new Error(`Run ${runId} not found`);
-
-        await this.updateRunStatus(runId, "CANCELLED", {
-            endedAt: new Date(),
-        }, run.workspaceId?.toString());
-
-        // Also update parent automation status (represents latest run status)
-        await this.updateAutomationStatus(run.chainId.toString(), "CANCELLED", undefined, run.workspaceId?.toString());
-    }
-
-    /**
-     * Cancel the latest run of an automation
-     */
-    async cancelAutomation(chainId: string, workspaceId?: string): Promise<{ runId: string }> {
-        const latestRun = await this.getLatestRun(chainId, workspaceId);
-        if (!latestRun) throw new Error(`No run found for automation ${chainId} to cancel`);
-        await this.cancelRun(latestRun._id!.toString());
-        return { runId: latestRun._id!.toString() };
-    }
-
-    /**
-     * Retry a failed run, optionally from a specific stage.
-     * If `fromStageIndex` is not provided, retries from the stage where the run failed.
-     */
-    async retryRun(
-        runId: string,
-        fromStageIndex?: number,
-        onProgress?: (update: AutomationProgress) => void
-    ): Promise<AutomationResult> {
-        const run = await this.getRun(runId);
-        if (!run) throw new Error(`Run ${runId} not found`);
-
-        if (run.status !== "FAILED" && run.status !== "COMPLETED" && run.status !== "CANCELLED") {
-            throw new Error(`Run ${runId} is ${run.status}. Can only retry FAILED, COMPLETED, or CANCELLED runs.`);
-        }
-
-        const resumeIndex = fromStageIndex ?? Math.max(0, run.currentStageIndex - 1);
-        const workspaceId = run.workspaceId?.toString();
-
-        console.info(`[AutomationExecutor] Retrying run ${runId} from stage index ${resumeIndex}`);
-
-        // Reset run status and stage index for re-execution
-        await this.updateRunStatus(runId, "RUNNING", { endedAt: undefined } as any, workspaceId);
-        await this.updateRunStageIndex(runId, resumeIndex, workspaceId);
-        // Also update parent automation
-        await this.updateAutomationStatus(run.chainId.toString(), "RUNNING", undefined, workspaceId);
-
-        return this.executeRun(runId, onProgress);
+        await db.collection(COLLECTION_NAME).updateOne(query, { $set: updateData });
     }
 
     /**
@@ -1748,6 +254,406 @@ export class AutomationExecutor {
             query.workspaceId = workspaceObjectId;
         }
         await db.collection(COLLECTION_NAME).deleteOne(query);
+    }
+
+    /**
+     * Build context from previous stage results for use in subsequent stage prompts.
+     */
+    private buildStageContext(
+        stage: AutomationStageConfig,
+        previousResults: AutomationStageRunResult[]
+    ): Record<string, unknown> | null {
+        if (!stage.contextFromPreviousStages || stage.contextFromPreviousStages.length === 0) {
+            return null;
+        }
+        const context: Record<string, unknown> = {};
+        for (const selector of stage.contextFromPreviousStages) {
+            const [stageId] = selector.split(".");
+            const prev = previousResults.find((r) => r.stageId === stageId);
+            if (!prev) continue;
+            if (prev.rawOutput) {
+                context[`${stageId}.output`] = prev.rawOutput;
+            }
+        }
+        return Object.keys(context).length > 0 ? context : null;
+    }
+
+    /**
+     * Render the user prompt that drives a single stage.
+     */
+    private buildUserPrompt(
+        stage: AutomationStageConfig,
+        context: Record<string, unknown> | null,
+        workspaceRootPath?: string
+    ): string {
+        const basePrompt = stage.prompt?.trim();
+        if (!basePrompt) {
+            throw new Error(`Stage ${stage.id} has an empty prompt`);
+        }
+
+        const parts: string[] = [];
+
+        if (workspaceRootPath) {
+            parts.push("## TARGET WORKSPACE");
+            parts.push(`You are working on the project located at: ${workspaceRootPath}`);
+            parts.push(`All file paths are relative to this root directory.`);
+            parts.push(`Do NOT search or modify files outside of: ${workspaceRootPath}`);
+            parts.push("");
+        }
+
+        parts.push("## TASK");
+        parts.push(basePrompt);
+
+        if (context) {
+            parts.push("");
+            parts.push("## CONTEXT FROM PREVIOUS STAGES");
+            parts.push(JSON.stringify(context, null, 2));
+        }
+
+        return parts.join("\n");
+    }
+
+    /**
+     * Resolve workspace root path so prompts can target the right directory.
+     */
+    private async resolveWorkspaceRootPath(workspaceId?: string): Promise<string | undefined> {
+        try {
+            const workspace = workspaceId
+                ? await getWorkspaceByIdUnsafe(workspaceId)
+                : (await listAllWorkspaces())[0];
+            return workspace?.rootPath;
+        } catch {
+            return undefined;
+        }
+    }
+
+    /**
+     * Append a synthetic event to the main automation thread's
+     * `state.conversationHistory` and persist it.
+     */
+    private async appendMainThreadEvent(mainRunId: string, event: AgentEvent): Promise<void> {
+        const run = await agentGraphRunService.getRun(mainRunId);
+        if (!run) return;
+        const state = run.state ?? { nodes: {} };
+        const history = state.conversationHistory ?? [];
+        history.push(event);
+        await agentGraphRunService.updateRunState(mainRunId, {
+            ...state,
+            conversationHistory: history,
+        });
+    }
+
+    /**
+     * Run an automation as a single agent thread.
+     *
+     * Behaviour:
+     * - One agent_graph_run is created (the "main thread") tied to the
+     *   automation via `automationId` and `stageIndex: 0`. Its initial graph
+     *   is `stages[0].graphId`. The thread is what the user sees in /app/agent.
+     * - Stage 0 executes natively in that thread via
+     *   `agentGraphExecutor.executeRunStreaming` so the conversationHistory
+     *   is populated as in a normal chat.
+     * - Stages 1..N execute as hidden sub-runs (own agent_graph_run docs with
+     *   `parentRunId = mainRunId, stageIndex: i, source: "automation_substage"`)
+     *   and their conclusions are appended to the main thread as a synthetic
+     *   user/assistant turn pair.
+     */
+    async runAutomationAsThread(
+        automationId: string,
+        workspaceId?: string,
+    ): Promise<{ threadId: string }> {
+        const automation = await this.getAutomation(automationId, workspaceId);
+        if (!automation) {
+            throw new Error(`Automation ${automationId} not found`);
+        }
+        if (!automation.stages?.length) {
+            throw new Error(`Automation ${automationId} has no stages`);
+        }
+        const missingPrompts = automation.stages
+            .map((stage, index) => (stage.prompt && stage.prompt.trim().length > 0
+                ? null
+                : { stageId: stage.id, stageName: stage.name, index }))
+            .filter(Boolean);
+        if (missingPrompts.length > 0) {
+            throw new Error(`Automation ${automationId} has stages with missing prompts: ${missingPrompts.map((p) => (p as any).stageName).join(", ")}`);
+        }
+
+        const resolvedWorkspaceId = workspaceId ?? automation.workspaceId?.toString();
+        const workspaceRootPath = await this.resolveWorkspaceRootPath(resolvedWorkspaceId);
+
+        const firstStage = automation.stages[0];
+        const firstGraph = await agentGraphService.getGraph(firstStage.graphId);
+        if (!firstGraph) {
+            throw new Error(`Graph ${firstStage.graphId} not found for stage 0`);
+        }
+
+        // ── Create the main thread ──
+        const dateStr = new Date().toISOString().slice(0, 16).replace("T", " ");
+        const title = `${automation.name} · ${dateStr}`;
+        const mainRunId = await agentGraphRunService.createRun(
+            firstStage.graphId,
+            resolvedWorkspaceId,
+            "automation",
+            {
+                automationId,
+                stageIndex: 0,
+                title,
+            }
+        );
+
+        // Fire-and-forget execution; caller redirects to /app/agent?sessionId=mainRunId
+        void this.executeStagesInThread(mainRunId, automation, workspaceRootPath, resolvedWorkspaceId).catch((error) => {
+            console.error(`[AutomationExecutor] Automation ${automationId} thread ${mainRunId} crashed:`, error);
+        });
+
+        return { threadId: mainRunId };
+    }
+
+    /**
+     * Internal execution loop. Runs all stages and updates the main thread
+     * with results.
+     */
+    private async executeStagesInThread(
+        mainRunId: string,
+        automation: AutomationDefinition,
+        workspaceRootPath: string | undefined,
+        workspaceId: string | undefined,
+    ): Promise<void> {
+        const startTime = Date.now();
+        const stageResults: AutomationStageRunResult[] = [];
+
+        // Seed the main thread state with the first stage prompt as the mission.
+        const firstStage = automation.stages[0];
+        const firstGraph = await agentGraphService.getGraph(firstStage.graphId);
+        if (!firstGraph) {
+            await agentGraphRunService.updateRunStatus(mainRunId, "FAILED", {
+                endedAt: new Date(),
+                error: `Graph ${firstStage.graphId} not found`,
+            } as any);
+            return;
+        }
+
+        const firstContext = this.buildStageContext(firstStage, []);
+        const firstPrompt = this.buildUserPrompt(firstStage, firstContext, workspaceRootPath);
+
+        const initialNodeStatuses: Record<string, AgentGraphNodeStatus> = {};
+        for (const node of firstGraph.nodes) {
+            initialNodeStatuses[node.id] = "PENDING";
+        }
+        const nodeOrder = getGraphNodeOrder(firstGraph);
+        const initialState = buildInitialState(firstGraph, firstPrompt);
+        // Tag the initial state for the UI to recognise stage 0.
+        initialState.conversationHistory = [];
+
+        await agentGraphRunService.updateRunStatus(mainRunId, "RUNNING", {
+            nodeOrder,
+            nodeStatuses: initialNodeStatuses,
+            state: initialState,
+            conversationTurns: 1,
+        } as any);
+
+        // ── Stage 0: run natively in the main thread ──
+        let stage0Result: AutomationStageRunResult;
+        try {
+            const stageStarted = Date.now();
+            const stageTimeoutMs = firstStage.timeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
+            const deadline = stageStarted + stageTimeoutMs;
+            const shouldAbort = async (): Promise<AgentWorkflowAbortReason | null> => {
+                if (Date.now() >= deadline) return "TIMEOUT";
+                const fresh = await agentGraphRunService.getRun(mainRunId);
+                if (fresh?.status === "PAUSED") return "PAUSED";
+                if (fresh?.status === "CANCELLED") return "CANCELLED";
+                return null;
+            };
+            const result = await agentGraphExecutor.executeRunStreaming(mainRunId, {
+                shouldAbort,
+                ...(firstStage.llmProvider
+                    ? {
+                        llmSelectionOverride: {
+                            provider: firstStage.llmProvider,
+                            model: firstStage.llmModel,
+                        },
+                    }
+                    : {}),
+            } as any);
+            stage0Result = this.summariseStageResult({
+                stage: firstStage,
+                stageIndex: 0,
+                result,
+                duration: Date.now() - stageStarted,
+                success: true,
+            });
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            stage0Result = {
+                stageId: firstStage.id,
+                stageName: firstStage.name,
+                stageIndex: 0,
+                success: false,
+                error: errorMsg,
+                errorKind: classifyStageError(error),
+                duration: Date.now() - startTime,
+            };
+        }
+        stageResults.push(stage0Result);
+
+        // ── Stages 1..N: hidden sub-runs whose conclusions are appended ──
+        for (let i = 1; i < automation.stages.length; i++) {
+            const stage = automation.stages[i];
+            const stageStarted = Date.now();
+            const context = this.buildStageContext(stage, stageResults);
+            const userPrompt = this.buildUserPrompt(stage, context, workspaceRootPath);
+            const stageTimeoutMs = stage.timeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
+
+            // Append a synthetic user message describing the upcoming stage.
+            const stageUserId = `automation-stage-${i}-user-${Date.now()}`;
+            const userEvent: AgentEvent = {
+                id: stageUserId,
+                phaseId: `automation_stage_${i}`,
+                phaseLabel: `Stage ${i + 1}: ${stage.name}`,
+                kind: "user",
+                role: "user",
+                content: userPrompt,
+                timestamp: new Date().toISOString(),
+                metadata: {
+                    source: "automation",
+                    stageIndex: i,
+                    stageId: stage.id,
+                    stageName: stage.name,
+                    stageTotal: automation.stages.length,
+                },
+            };
+            await this.appendMainThreadEvent(mainRunId, userEvent);
+
+            // Track sub-run id so the UI can offer "view full stage trace".
+            let subRunId: string | undefined;
+            const deadline = stageStarted + stageTimeoutMs;
+            const shouldAbort = async (): Promise<AgentWorkflowAbortReason | null> => {
+                if (Date.now() >= deadline) return "TIMEOUT";
+                const fresh = await agentGraphRunService.getRun(mainRunId);
+                if (fresh?.status === "PAUSED") return "PAUSED";
+                if (fresh?.status === "CANCELLED") return "CANCELLED";
+                return null;
+            };
+
+            let stageResult: AutomationStageRunResult;
+            try {
+                const result = await runWorkflow(userPrompt, stage.graphId, {
+                    workspaceId,
+                    source: "automation_substage",
+                    automationId: automation._id?.toString(),
+                    parentRunId: mainRunId,
+                    stageIndex: i,
+                    title: `${automation.name} · Stage ${i + 1}: ${stage.name}`,
+                    llmSelection: stage.llmProvider
+                        ? { provider: stage.llmProvider, model: stage.llmModel }
+                        : undefined,
+                    shouldAbort,
+                    onRunCreated: (id) => {
+                        subRunId = id;
+                    },
+                });
+                stageResult = this.summariseStageResult({
+                    stage,
+                    stageIndex: i,
+                    result,
+                    duration: Date.now() - stageStarted,
+                    success: true,
+                    subRunId,
+                });
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                stageResult = {
+                    stageId: stage.id,
+                    stageName: stage.name,
+                    stageIndex: i,
+                    subRunId,
+                    success: false,
+                    error: errorMsg,
+                    errorKind: classifyStageError(error),
+                    duration: Date.now() - stageStarted,
+                };
+            }
+            stageResults.push(stageResult);
+
+            // Append the stage's conclusion as an assistant message.
+            const assistantEvent: AgentEvent = {
+                id: `automation-stage-${i}-assistant-${Date.now()}`,
+                phaseId: `automation_stage_${i}`,
+                phaseLabel: `Stage ${i + 1}: ${stage.name}`,
+                kind: "assistant",
+                role: "assistant",
+                content: stageResult.success
+                    ? (stageResult.rawOutput || "*Stage completed without output.*")
+                    : `**Stage failed:** ${stageResult.error ?? "Unknown error"}`,
+                timestamp: new Date().toISOString(),
+                isError: !stageResult.success,
+                metadata: {
+                    source: "automation",
+                    stageIndex: i,
+                    stageId: stage.id,
+                    stageName: stage.name,
+                    stageTotal: automation.stages.length,
+                    subRunId,
+                    errorKind: stageResult.errorKind,
+                },
+            };
+            await this.appendMainThreadEvent(mainRunId, assistantEvent);
+            await agentGraphRunService.incrementConversationTurns(mainRunId);
+
+            const fresh = await agentGraphRunService.getRun(mainRunId);
+            if (fresh?.status === "CANCELLED" || fresh?.status === "PAUSED") {
+                break;
+            }
+        }
+
+        const totalDuration = Date.now() - startTime;
+        const allSucceeded = stageResults.every((r) => r.success);
+        const finalRun = await agentGraphRunService.getRun(mainRunId);
+        const finalStatus = finalRun?.status === "CANCELLED" || finalRun?.status === "PAUSED"
+            ? finalRun.status
+            : (allSucceeded ? "COMPLETED" : "FAILED");
+
+        await agentGraphRunService.updateRunStatus(mainRunId, finalStatus, {
+            endedAt: new Date(),
+            automationStageResults: stageResults,
+            ...(allSucceeded ? {} : { error: stageResults.find((r) => !r.success)?.error }),
+        } as any);
+
+        console.info(`[AutomationExecutor] Automation ${automation._id} thread ${mainRunId} ${finalStatus} in ${totalDuration}ms`);
+    }
+
+    private summariseStageResult(input: {
+        stage: AutomationStageConfig;
+        stageIndex: number;
+        result: AgentWorkflowResult;
+        duration: number;
+        success: boolean;
+        subRunId?: string;
+    }): AutomationStageRunResult {
+        const rawReportOutput = input.result.outputs?.report ?? input.result.conclusion ?? "";
+        const rawOutput = extractRawReportText(rawReportOutput);
+        const findingsCount = Array.isArray(input.result.outputs?.findings)
+            ? input.result.outputs!.findings.length
+            : 0;
+        const claimsCount = Array.isArray(input.result.outputs?.raw_claims)
+            ? input.result.outputs!.raw_claims.length
+            : 0;
+        const tasksCount = Array.isArray(input.result.outputs?.tasks)
+            ? input.result.outputs!.tasks.length
+            : 0;
+        return {
+            stageId: input.stage.id,
+            stageName: input.stage.name,
+            stageIndex: input.stageIndex,
+            subRunId: input.subRunId,
+            success: input.success,
+            findingsCount,
+            claimsCount,
+            tasksCount,
+            rawOutput,
+            duration: input.duration,
+        };
     }
 
     /**
@@ -1769,7 +675,6 @@ export class AutomationExecutor {
             "schedule.nextScheduledAt": nextRun ?? null,
         };
 
-        // Disable schedule if maxRuns reached
         if (automation.schedule.maxRuns && newCount >= automation.schedule.maxRuns) {
             update["schedule.enabled"] = false;
             update["schedule.nextScheduledAt"] = null;
@@ -1784,8 +689,6 @@ export class AutomationExecutor {
 
     /**
      * List automations that are due for scheduled execution.
-     * Returns automations where triggerType is "schedule", schedule is enabled,
-     * and nextScheduledAt is in the past (or now).
      */
     async listDueScheduledAutomations(): Promise<AutomationDefinition[]> {
         const db = await getDb();
@@ -1819,14 +722,12 @@ export class AutomationExecutor {
             .find(query)
             .toArray() as AutomationDefinition[];
 
-        // Filter by branch if specified
         if (branch) {
             return automations.filter((a) => {
                 const branches = a.gitEventConfig?.branches;
-                if (!branches || branches.length === 0) return true; // no filter = match all
+                if (!branches || branches.length === 0) return true;
                 return branches.some((pattern) => {
                     if (pattern === branch) return true;
-                    // Simple glob: "release/*" matches "release/v1.0"
                     if (pattern.endsWith("/*")) {
                         const prefix = pattern.slice(0, -1);
                         return branch.startsWith(prefix);
@@ -1841,10 +742,6 @@ export class AutomationExecutor {
 
     /**
      * Ensure that default feature audit automations exist in the database.
-     * Seeds one automation per domain from the AUDITABLE_FEATURES list.
-     * Safe to call multiple times — skips if already exists by name.
-     *
-     * @param workspaceId - Optional workspace to scope the seeded automation
      */
     async ensureDefaultAutomations(workspaceId?: string): Promise<{ created: string[]; skipped: string[] }> {
         const { AutomationConfigBuilder } = await import("@kletron/shared/automationConfigBuilder");
@@ -1855,7 +752,6 @@ export class AutomationExecutor {
             return { created: [], skipped: [] };
         }
 
-        // Direct name equality check (avoids regex issues with special chars)
         const query: Record<string, unknown> = { name: config.name };
         if (workspaceId) {
             const wid = toObjectId(workspaceId);
@@ -1882,5 +778,4 @@ export class AutomationExecutor {
     }
 }
 
-// Export singleton instance
 export const automationExecutor = new AutomationExecutor();

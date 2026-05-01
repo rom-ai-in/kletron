@@ -1,16 +1,67 @@
 // src/lib/auth/apiAuth.ts
 // Shared API auth helpers for app and pages routes (MongoDB/NextAuth version)
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getServerSession } from 'next-auth';
 import { API_TOKEN_PREFIX, hashApiToken } from './apiTokens';
 import * as apiTokenService from '@kletron/server/services/apiTokenService';
 import { jwtVerify } from 'jose';
-import { authOptions } from '@kletron/apps/web/config/auth';
+import { timingSafeEqual } from 'node:crypto';
 
 export type AuthResult = {
     userId: string;
-    authType: 'session' | 'api-token' | 'ide-token';
+    authType: 'session' | 'api-token' | 'ide-token' | 'internal';
+    /**
+     * For internal service identities (MCP server -> web), this is the user id
+     * the operation is being performed on behalf of (when supplied via the
+     * `x-on-behalf-of` header).
+     */
+    onBehalfOf?: string;
 };
+
+const INTERNAL_TOKEN_HEADERS = ['x-mcp-internal-token', 'x-internal-token'];
+const ON_BEHALF_HEADERS = ['x-on-behalf-of', 'x-kletron-user'];
+
+function readHeader(headers: Headers, names: string[]): string | null {
+    for (const name of names) {
+        const v = headers.get(name);
+        if (v && v.trim()) return v.trim();
+    }
+    return null;
+}
+
+function readReqHeader(req: NextApiRequest, names: string[]): string | null {
+    for (const name of names) {
+        const value = req.headers[name];
+        if (typeof value === 'string' && value.trim()) return value.trim();
+        if (Array.isArray(value) && value.length > 0 && value[0]?.trim()) {
+            return value[0].trim();
+        }
+    }
+    return null;
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+    const ab = Buffer.from(a);
+    const bb = Buffer.from(b);
+    if (ab.length !== bb.length) return false;
+    try {
+        return timingSafeEqual(ab, bb);
+    } catch {
+        return false;
+    }
+}
+
+function getInternalToken(): string | null {
+    const value = process.env.MCP_INTERNAL_TOKEN || process.env.KLETRON_INTERNAL_TOKEN;
+    return value && value.trim() ? value.trim() : null;
+}
+
+function buildInternalAuth(onBehalfOf: string | null): AuthResult {
+    return {
+        userId: onBehalfOf || process.env.KLETRON_DEV_USER_ID || 'internal',
+        authType: 'internal',
+        onBehalfOf: onBehalfOf || undefined,
+    };
+}
 
 const DEV_AUTH_BYPASS =
     process.env.KLETRON_AUTH_BYPASS === 'true' ||
@@ -87,6 +138,17 @@ async function verifyBearerToken(token: string): Promise<AuthResult | null> {
 }
 
 export async function getAppRouteAuth(request: Request): Promise<AuthResult | null> {
+    // Internal service token (MCP server -> web). Trumps user auth when present
+    // because it represents a trusted infra caller; the actual operation is
+    // scoped to the user provided via x-on-behalf-of header.
+    const internalToken = getInternalToken();
+    if (internalToken) {
+        const presented = readHeader(request.headers, INTERNAL_TOKEN_HEADERS);
+        if (presented && constantTimeEqual(presented, internalToken)) {
+            return buildInternalAuth(readHeader(request.headers, ON_BEHALF_HEADERS));
+        }
+    }
+
     const devBypass = getDevBypassAuth(request);
     if (devBypass && process.env.KLETRON_AUTH_BYPASS === 'true') {
         return devBypass;
@@ -104,6 +166,14 @@ export async function requireAppRouteAuth(request: Request) {
 }
 
 export async function getPagesRouteAuth(req: NextApiRequest): Promise<AuthResult | null> {
+    const internalToken = getInternalToken();
+    if (internalToken) {
+        const presented = readReqHeader(req, INTERNAL_TOKEN_HEADERS);
+        if (presented && constantTimeEqual(presented, internalToken)) {
+            return buildInternalAuth(readReqHeader(req, ON_BEHALF_HEADERS));
+        }
+    }
+
     const devBypass = DEV_AUTH_BYPASS
         ? { userId: process.env.KLETRON_DEV_USER_ID || 'dev-user', authType: 'session' as const }
         : null;

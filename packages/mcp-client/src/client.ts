@@ -9,15 +9,17 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { EventSource } from "eventsource";
 
 import { getConfig } from "@kletron/server/config";
-
-type ToolResultContent = {
-  text?: string;
-  type?: string;
-};
+import {
+    namespacedExternalToolName,
+    parseNamespacedToolName,
+    type ExternalMcpClientConfig,
+} from "./multiClient";
 
 export class McpClient {
   private static instance: McpClient | null = null;
   private readonly client: Client;
+  /** Lazy-initialized multi-server client for external MCP servers. */
+  private external = new Map<string, { client: Client; tools: Array<{ name: string; description?: string; inputSchema?: unknown }>; error?: string }>();
 
   private constructor(client: Client) {
     this.client = client;
@@ -122,9 +124,21 @@ export class McpClient {
       return JSON.stringify(results, null, 2);
     }
 
-    const response = (await this.client.callTool(
+    // External MCP server tools are namespaced as `<slug>__<toolName>`.
+    let targetClient: Client = this.client;
+    const { serverSlug, toolName: parsedTool } = parseNamespacedToolName(name);
+    let actualName = name;
+    if (serverSlug) {
+      const ext = this.external.get(serverSlug);
+      if (ext && !ext.error) {
+        targetClient = ext.client;
+        actualName = parsedTool;
+      }
+    }
+
+    const response = (await targetClient.callTool(
       {
-        name,
+        name: actualName,
         arguments: args,
       },
       CallToolResultSchema
@@ -145,10 +159,100 @@ export class McpClient {
 
   async listTools() {
     const result = await this.client.listTools({});
-    return result.tools;
+    type ListedTool = NonNullable<(typeof result)["tools"]>[number];
+    const merged: ListedTool[] = [...(result.tools ?? [])];
+    for (const [slug, ext] of this.external.entries()) {
+      if (ext.error) continue;
+      for (const tool of ext.tools) {
+        merged.push({
+          ...tool,
+          name: namespacedExternalToolName(slug, tool.name),
+        } as ListedTool);
+      }
+    }
+    return merged;
+  }
+
+  /**
+   * Sync the set of external MCP servers connected to this client. Servers
+   * present in `configs` that aren't connected get connected; servers
+   * connected but missing from `configs` get disconnected.
+   */
+  async syncExternalServers(configs: ExternalMcpClientConfig[]) {
+    const desired = new Map(configs.map((c) => [c.slug, c]));
+    for (const slug of [...this.external.keys()]) {
+      if (!desired.has(slug)) {
+        try {
+          await this.external.get(slug)!.client.close();
+        } catch {
+          // ignore
+        }
+        this.external.delete(slug);
+      }
+    }
+    for (const [slug, config] of desired.entries()) {
+      if (this.external.has(slug)) continue;
+      try {
+        const client = new Client(
+          { name: "kletron-mcp-client", version: "1.0.0" },
+          { capabilities: { tools: {} } }
+        );
+        let transport;
+        if (config.transport === "stdio") {
+          if (!config.command) throw new Error(`stdio MCP '${slug}' missing command`);
+          transport = new StdioClientTransport({
+            command: config.command,
+            args: config.args ?? [],
+            env: { ...process.env, ...(config.env ?? {}) } as Record<string, string>,
+          });
+        } else {
+          if (!config.url) throw new Error(`MCP '${slug}' missing url`);
+          (globalThis as any).EventSource = EventSource as any;
+          transport = new SSEClientTransport(new URL(config.url));
+        }
+        await Promise.race([
+          client.connect(transport),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("connect timeout (10s)")), 10_000)
+          ),
+        ]);
+        const tools = (await client.listTools({})).tools ?? [];
+        this.external.set(slug, { client, tools });
+      } catch (error) {
+        console.error(
+          `[McpClient] Failed to connect external MCP '${slug}':`,
+          (error as Error).message
+        );
+        this.external.set(slug, {
+          client: new Client(
+            { name: "kletron-mcp-client", version: "1.0.0" },
+            { capabilities: { tools: {} } }
+          ),
+          tools: [],
+          error: (error as Error).message,
+        });
+      }
+    }
+  }
+
+  /** Diagnostic summary of all connected servers. */
+  externalStatus() {
+    return Array.from(this.external.entries()).map(([slug, ext]) => ({
+      slug,
+      tools: ext.tools.length,
+      error: ext.error,
+    }));
   }
 
   async close() {
+    for (const ext of this.external.values()) {
+      try {
+        await ext.client.close();
+      } catch {
+        // ignore
+      }
+    }
+    this.external.clear();
     await this.client.close();
     McpClient.instance = null;
   }

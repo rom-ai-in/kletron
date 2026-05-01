@@ -11,6 +11,7 @@
     "dev:desktop": "npm --workspace apps/desktop run dev",
     "worker:i18n-process": "tsx scripts/i18n-process-worker.ts",
     "migrate:workspaces-owner": "tsx scripts/migrate-workspaces-owner.ts",
+    "seed:builtin-skills": "tsx scripts/seed-builtin-skills.ts",
     "check:context": "tsx scripts/check-context.ts",
     "build:ui": "npm --workspace packages/ui run build",
     "build": "npm run build:ui && npm run check:context && npm --workspace apps/web run build",
@@ -21,7 +22,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest",
-    "test": "npm run typecheck && npm run test:unit"
+    "test": "npm run typecheck && npm run test:unit",
+    "seed:skills": "tsx scripts/seed-builtin-skills.ts"
   },
   "dependencies": {
     "@cyntler/react-doc-viewer": "^1.17.1",

@@ -100,12 +100,14 @@ export const config = {
     this.defaultDir = getWorkingFolderFromConfig();
     this.fetchAllowlist = getFetchAllowlist();
     this.workspaceRoots = getWorkspaceRootsFromConfig();
-    console.log(`[MCP Config] Reloaded: defaultDir=${this.defaultDir}`);
+    console.error(`[MCP Config] Reloaded: defaultDir=${this.defaultDir}`);
   }
 };
 
-// Log current config on load
-console.log(`[MCP Config] Loaded from ${configFilePath}`);
-console.log(`[MCP Config] defaultDir: ${config.defaultDir}`);
-console.log(`[MCP Config] fetchAllowlist: ${config.fetchAllowlist.length} domains`);
-console.log(`[MCP Config] workspaceRoots: ${config.workspaceRoots?.length ?? 0}`);
+// Log current config on load. Important: write to STDERR because the MCP
+// server speaks JSON-RPC on STDOUT in stdio transport mode and any non-JSON
+// bytes there will corrupt the protocol stream (per the MCP spec).
+console.error(`[MCP Config] Loaded from ${configFilePath}`);
+console.error(`[MCP Config] defaultDir: ${config.defaultDir}`);
+console.error(`[MCP Config] fetchAllowlist: ${config.fetchAllowlist.length} domains`);
+console.error(`[MCP Config] workspaceRoots: ${config.workspaceRoots?.length ?? 0}`);

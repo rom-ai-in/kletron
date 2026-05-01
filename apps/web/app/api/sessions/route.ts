@@ -11,20 +11,6 @@ import { heuristicTitle, sanitizeTitle, stripSystemPrefix, stripThoughtContent }
 
 const textEncoder = new TextEncoder();
 
-let _backfillDone = false;
-async function backfillAutomationSourceOnce() {
-  if (_backfillDone) return;
-  _backfillDone = true;
-  try {
-    const count = await agentGraphRunService.backfillAutomationSource();
-    if (count > 0) {
-      console.log(`[sessions] Backfilled source="automation" on ${count} existing runs`);
-    }
-  } catch {
-    _backfillDone = false;
-  }
-}
-
 type StreamChunk =
   | { type: "init"; payload: { runId: string; graphId: string } }
   | { type: "update"; payload: AgentWorkflowUpdate }
@@ -213,11 +199,6 @@ export async function GET(request: Request) {
   const graphId = searchParams.get("graphId") ?? undefined;
   const excludeSource = searchParams.get("excludeSource") ?? undefined;
 
-  // One-time migration: tag existing automation runs so excludeSource works on old data
-  if (excludeSource) {
-    await backfillAutomationSourceOnce();
-  }
-
   // If allWorkspaces=true, fetch sessions across all user workspaces
   // Otherwise resolve a single workspace to filter by
   let resolvedWorkspaceId = workspaceId;
@@ -279,6 +260,8 @@ export async function GET(request: Request) {
       startedAt: run.startedAt?.toISOString?.() ?? new Date().toISOString(),
       endedAt: run.endedAt?.toISOString?.() ?? null,
       tokenUsage: run.tokenUsage ?? null,
+      source: run.source ?? null,
+      automationId: run.automationId?.toString() ?? null,
     }));
 
 

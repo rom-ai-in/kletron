@@ -15,6 +15,7 @@ export default defineConfig({
         environment: 'node',
         include: [
             'packages/**/__tests__/**/*.test.ts',
+            'packages/**/tests/**/*.test.ts',
             'apps/**/__tests__/**/*.test.ts',
             'apps/mcp-server/tests/safety.test.js',
         ],

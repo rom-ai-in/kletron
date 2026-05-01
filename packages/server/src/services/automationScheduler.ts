@@ -139,17 +139,23 @@ async function pollScheduledAutomations(): Promise<void> {
                 // Increment schedule count (updates lastScheduledAt, computes nextScheduledAt)
                 await automationExecutor.incrementScheduleCount(automationId);
 
-                // Start a new run in background
                 const workspaceId = fresh.workspaceId?.toString();
-                const runId = await automationExecutor.startNewRun(automationId, workspaceId);
 
-                // Execute run without awaiting (fire-and-forget)
-                automationExecutor.executeRun(runId).catch((error) => {
-                    console.error(
-                        `[AutomationScheduler] Run ${runId} (automation ${automationId}) failed:`,
-                        error
-                    );
-                });
+                // Launch the automation as an agent thread; runAutomationAsThread
+                // is non-blocking (fire-and-forget background execution).
+                automationExecutor
+                    .runAutomationAsThread(automationId, workspaceId)
+                    .then(({ threadId }) => {
+                        console.info(
+                            `[AutomationScheduler] Automation ${automationId} → thread ${threadId}`
+                        );
+                    })
+                    .catch((error) => {
+                        console.error(
+                            `[AutomationScheduler] Automation ${automationId} failed to start:`,
+                            error
+                        );
+                    });
 
                 state.executionsTriggered++;
             } catch (error) {

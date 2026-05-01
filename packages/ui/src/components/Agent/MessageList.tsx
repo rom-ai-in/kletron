@@ -17,6 +17,61 @@ import { groupEvents, pairToolEvents } from '../../lib/toolPairing';
 export type { ChatEvent, RenderItem };
 export { groupEvents };
 
+/**
+ * Render a thin "── Stage X of Y — <name> ──" separator for events that come
+ * from an automation thread. We render it above the synthetic user message
+ * (the stage prompt). Assistant replies in the same stage carry the same
+ * metadata but skip the separator since the user message already labelled it.
+ */
+function renderStageSeparator(event: ChatEvent, isUser: boolean): React.ReactNode {
+    const meta = event.metadata as Record<string, any> | undefined;
+    if (!meta) return null;
+    if (meta.source !== 'automation') return null;
+    const stageIndex = typeof meta.stageIndex === 'number' ? meta.stageIndex : null;
+    const stageTotal = typeof meta.stageTotal === 'number' ? meta.stageTotal : null;
+    if (stageIndex == null) return null;
+    // Only render the banner once per stage — above the user prompt that
+    // introduces the stage. Stage 0 has no banner because it is the very
+    // start of the conversation.
+    if (!isUser || stageIndex === 0) return null;
+    const stageName = typeof meta.stageName === 'string' ? meta.stageName : '';
+    const stageNum = stageIndex + 1;
+    const totalLabel = stageTotal ? ` of ${stageTotal}` : '';
+    return (
+        <div className="my-3 flex items-center gap-2 px-1">
+            <span className="h-px flex-1 bg-border-subtle" />
+            <span className="text-[10px] uppercase tracking-widest text-text-muted font-medium">
+                Stage {stageNum}{totalLabel}
+                {stageName ? ` — ${stageName}` : ''}
+            </span>
+            <span className="h-px flex-1 bg-border-subtle" />
+        </div>
+    );
+}
+
+/**
+ * Render the "View detailed stage trace" link below assistant replies that
+ * came from a hidden sub-stage run.
+ */
+function renderSubRunLink(event: ChatEvent): React.ReactNode {
+    const meta = event.metadata as Record<string, any> | undefined;
+    if (!meta || meta.source !== 'automation') return null;
+    const subRunId = typeof meta.subRunId === 'string' ? meta.subRunId : null;
+    if (!subRunId) return null;
+    return (
+        <div className="mt-1 ml-2">
+            <a
+                href={`/app/agent?sessionId=${subRunId}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-[10px] text-accent-cyan hover:underline"
+            >
+                View detailed stage trace →
+            </a>
+        </div>
+    );
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  * MessageList — scrollable chat container with auto-scroll
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -281,8 +336,14 @@ const MessageListInner: React.FC<MessageListProps> = ({
         const isUser = event.kind === 'user';
         const isEditing = isUser && typeof event.messageIndex === 'number' && event.messageIndex === editingMessageIndex;
 
+        // Automation stage separator — rendered above the synthetic user message
+        // that introduces stage i (and again above the assistant reply, which is
+        // suppressed because the user separator already labels the boundary).
+        const stageSeparator = renderStageSeparator(event, isUser);
+
         return (
             <div key={event.id || `msg-${index}`} className={event.toolName ? 'mb-0' : 'mb-1'}>
+                {stageSeparator}
                 {isAssistant && (
                     <>
                         {event.thoughts && event.thoughts.length > 0 ? (
@@ -349,12 +410,15 @@ const MessageListInner: React.FC<MessageListProps> = ({
                         </div>
                     </div>
                 ) : event.content ? (
-                    <MessageBubble
-                        role={event.kind === 'error' ? 'system' : event.kind}
-                        content={event.content}
-                        timestamp={event.timestamp}
-                        actions={messageActions?.(event)}
-                    />
+                    <>
+                        <MessageBubble
+                            role={event.kind === 'error' ? 'system' : event.kind}
+                            content={event.content}
+                            timestamp={event.timestamp}
+                            actions={messageActions?.(event)}
+                        />
+                        {isAssistant && renderSubRunLink(event)}
+                    </>
                 ) : null}
             </div>
         );
