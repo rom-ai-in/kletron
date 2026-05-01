@@ -10,9 +10,8 @@ interface ContextHUDProps {
 }
 
 // --- Icons Helper ---
-const getNodeIcon = (type: ContextNode['type']) => {
+const getNodeIcon = (type: string) => {
     switch (type) {
-        case 'file': return FileText;
         case 'agent': return Bot;
         case 'diff': return GitCommit;
         case 'conversation': return Globe;
@@ -21,7 +20,7 @@ const getNodeIcon = (type: ContextNode['type']) => {
     }
 };
 
-const getNodeColor = (type: ContextNode['type']) => {
+const getNodeColor = (type: string) => {
     switch (type) {
         case 'file': return "text-status-info-text bg-status-info-bg border-status-info-border";
         case 'agent': return "text-purple-400 bg-purple-400/10 border-purple-500/20";
@@ -43,10 +42,10 @@ export function ContextVisualizer({ className }: ContextHUDProps) {
             const res = await fetch("/api/context/graph");
             const data = await res.json();
             if (data.nodes) {
-                // Sort by recency/activity (mock sorting for now, using ID or stats if available)
+                // Sort by recency/activity (using metadata.viewCount/editCount)
                 const sorted = (data.nodes as ContextNode[]).sort((a, b) => {
-                    const scoreA = (a.stats?.viewCount || 0) + (a.stats?.editCount || 0) * 2;
-                    const scoreB = (b.stats?.viewCount || 0) + (b.stats?.editCount || 0) * 2;
+                    const scoreA = (a.metadata?.viewCount || 0) + (a.metadata?.editCount || 0) * 2;
+                    const scoreB = (b.metadata?.viewCount || 0) + (b.metadata?.editCount || 0) * 2;
                     return scoreB - scoreA;
                 });
                 setNodes(sorted);
@@ -160,11 +159,11 @@ const ContextCard = ({ node }: { node: ContextNode }) => {
             <div className="mt-3 flex items-center gap-3 pt-2 border-t border-border-subtle opacity-60 group-hover:opacity-100 transition-opacity">
                 <div className="flex items-center gap-1 text-[10px] text-text-muted" title="View Count">
                     <Eye size={10} />
-                    <span>{node.stats?.viewCount || 0}</span>
+                    <span>{node.metadata?.viewCount || 0}</span>
                 </div>
                 <div className="flex items-center gap-1 text-[10px] text-text-muted" title="Edit Count">
                     <Edit2 size={10} />
-                    <span>{node.stats?.editCount || 0}</span>
+                    <span>{node.metadata?.editCount || 0}</span>
                 </div>
             </div>
 
