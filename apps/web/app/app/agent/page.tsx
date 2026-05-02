@@ -37,6 +37,13 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
+import type { WorkModeId } from "@kletron/shared/workMode";
+import { WORK_MODES, normalizeToWorkModeId } from "@kletron/shared/workMode";
+import {
+  CategorySelector,
+  type WorkCategory,
+} from "@kletron/ui/components/CommandCenter/CategorySelector";
+import { AgentCodeRepoBar } from "../../../components/agent/AgentCodeRepoBar";
 
 // For simple chat view - reuse existing components (groups tool events, renders collapsible tool cards)
 import { MessageList, type ChatEvent } from "@kletron/ui/components/Agent/MessageList";
@@ -204,8 +211,8 @@ const AgentComposer = memo(function AgentComposer({
         sending={sending}
         placeholder={queuedOrBusy ? "Add a follow-up (queued until agent finishes)..." : "Ask anything…"}
         containerClassName="max-w-3xl mx-auto"
-        footerLeft={
-          <div className="flex min-w-0 w-full flex-wrap items-center gap-2">
+        sessionStrip={
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <Selector
               label="GRAPH"
               value={selectedGraphId}
@@ -412,6 +419,100 @@ export default function AgentPage() {
     })();
   }, [fetchSessions]);
 
+  // ── Code vs Work mode (per workspace, persisted server + local mirror) ──
+  const [workMode, setWorkMode] = useState<WorkModeId>("code");
+  const workModeCategories: WorkCategory[] = useMemo(
+    () =>
+      (["code", "work"] as const).map((id) => ({
+        id,
+        name: WORK_MODES[id].name,
+        description: WORK_MODES[id].description,
+        color: WORK_MODES[id].color,
+      })),
+    [],
+  );
+
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setWorkMode("code");
+      return;
+    }
+    const lsKey = `kletron-work-mode-${activeWorkspaceId}`;
+    const fromLs =
+      typeof window !== "undefined" ? window.localStorage.getItem(lsKey) : null;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/work-categories/current?workspaceId=${encodeURIComponent(activeWorkspaceId)}`,
+        );
+        if (res.ok) {
+          const json = (await res.json()) as { data?: string | null };
+          if (json.data != null && json.data !== "") {
+            const m = normalizeToWorkModeId(String(json.data));
+            if (!cancelled) {
+              setWorkMode(m);
+              try {
+                window.localStorage.setItem(lsKey, m);
+              } catch {
+                /* ignore */
+              }
+            }
+            return;
+          }
+        }
+      } catch {
+        /* fall through */
+      }
+      if (cancelled) return;
+      if (fromLs === "code" || fromLs === "work") {
+        setWorkMode(fromLs);
+      } else {
+        setWorkMode("code");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId]);
+
+  const handleWorkModeSelect = useCallback(
+    async (categoryId: string) => {
+      const next = normalizeToWorkModeId(categoryId) as WorkModeId;
+      const prev = workMode;
+      setWorkMode(next);
+      const lsKey = activeWorkspaceId ? `kletron-work-mode-${activeWorkspaceId}` : null;
+      if (lsKey) {
+        try {
+          window.localStorage.setItem(lsKey, next);
+        } catch {
+          /* ignore */
+        }
+      }
+      try {
+        const res = await fetch("/api/work-categories/current", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workMode: next,
+            workspaceId: activeWorkspaceId ?? undefined,
+          }),
+        });
+        if (!res.ok) throw new Error("persist failed");
+      } catch {
+        setWorkMode(prev);
+        if (lsKey) {
+          try {
+            window.localStorage.setItem(lsKey, prev);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    },
+    [workMode, activeWorkspaceId],
+  );
+
   const {
     messages,
     setMessages,
@@ -437,6 +538,7 @@ export default function AgentPage() {
     threadApprovalMode,
     onSessionCreated: handleSessionCreated,
     onTitleGenerate: handleTitleGenerate,
+    workMode,
   });
 
   const truncateAndResend = useCallback(async (messageIndex: number, newContent: string) => {
@@ -1094,8 +1196,9 @@ export default function AgentPage() {
     }
   }, [sending, messageQueue.length, dequeueAndSend]);
 
-  // ── Pending edits panel (keeps a short confirmation after queue drains so the strip does not “vanish”) ──
-  const showPendingStrip = pendingEdits.length > 0 || flushNotice !== null;
+  // ── Pending edits panel (Code mode only — Work mode hides repo-centric approvals) ──
+  const showPendingStrip =
+    workMode === "code" && (pendingEdits.length > 0 || flushNotice !== null);
   const pendingEditsPanel = showPendingStrip ? (
     <div className="border-t border-white/[0.06] bg-bg-surface p-3">
       {flushNotice && (
@@ -1259,34 +1362,49 @@ export default function AgentPage() {
     handleDeleteSession,
   ]);
 
+  const modeChromeColor = WORK_MODES[workMode].color;
+
   const mainContent = (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Active workspace indicator + Token usage / duration header */}
-      <div className="flex-none flex items-center justify-between gap-3 border-b border-white/[0.06] bg-bg-surface px-4 py-2">
-        {/* Left: workspace indicator */}
-        {activeWorkspace ? (
-          <div className="flex items-center gap-2 min-w-0">
-            <Folder className="h-3.5 w-3.5 text-text-muted flex-shrink-0" />
-            <span className="text-[11px] font-medium text-text-secondary truncate">
-              {activeWorkspace.name}
-            </span>
-            <span className="text-[10px] text-text-muted truncate hidden sm:inline">
-              {activeWorkspace.rootPath}
-            </span>
+      {/* Active workspace + Code|Work + metrics */}
+      <div
+        className="flex-none flex flex-col gap-2 border-b px-4 py-2"
+        style={{
+          backgroundColor: `${modeChromeColor}12`,
+          borderBottomColor: `${modeChromeColor}35`,
+        }}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+            <CategorySelector
+              categories={workModeCategories}
+              activeCategoryId={workMode}
+              onCategorySelect={(id) => void handleWorkModeSelect(id)}
+            />
+            {activeWorkspace ? (
+              <div className="flex items-center gap-2 min-w-0">
+                <Folder className="h-3.5 w-3.5 text-text-muted flex-shrink-0" />
+                <span className="text-[11px] font-medium text-text-secondary truncate">
+                  {activeWorkspace.name}
+                </span>
+                <span className="text-[10px] text-text-muted truncate hidden sm:inline">
+                  {activeWorkspace.rootPath}
+                </span>
+              </div>
+            ) : workspaceError ? (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-status-error-text">Failed to load workspaces</span>
+                <button
+                  onClick={() => void refreshWorkspaces()}
+                  className="text-[10px] text-text-muted underline hover:text-text-primary"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <div className="text-[11px] text-text-muted">No workspace selected</div>
+            )}
           </div>
-        ) : workspaceError ? (
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-status-error-text">Failed to load workspaces</span>
-            <button
-              onClick={() => void refreshWorkspaces()}
-              className="text-[10px] text-text-muted underline hover:text-text-primary"
-            >
-              Retry
-            </button>
-          </div>
-        ) : (
-          <div className="text-[11px] text-text-muted">No workspace selected</div>
-        )}
         {/* Right: metrics + debug */}
         <div className="flex items-center gap-3 flex-shrink-0">
           <Link
@@ -1329,6 +1447,20 @@ export default function AgentPage() {
             {logsCopied ? "Copied!" : "Logs"}
           </button>
         </div>
+        </div>
+
+        {workMode === "code" && activeWorkspaceId ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <AgentCodeRepoBar workspaceId={activeWorkspaceId} />
+            <p className="text-[10px] text-text-muted hidden md:block max-w-xl truncate" title={WORK_MODES.code.description}>
+              Code mode: repo tools, terminal, and Git workflows when connected.
+            </p>
+          </div>
+        ) : workMode === "work" ? (
+          <p className="text-[10px] text-text-muted max-w-2xl" title={WORK_MODES.work.description}>
+            Work mode: research, writing, and planning—fewer automated repo changes.
+          </p>
+        ) : null}
       </div>
 
       {/* Error snackbar - always visible at top when there's an error */}
@@ -1401,7 +1533,10 @@ export default function AgentPage() {
               <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                 <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>
                 <p className="text-[13px] text-center max-w-md">
-                  Start a conversation. Select a graph and LLM provider below, then send your message.
+                  {workMode === "code"
+                    ? "Code mode: pick a graph and model, then ask for repo changes, reviews, or Git help."
+                    : "Work mode: pick a graph and model for research, drafting, and planning—without repo-first defaults."}{" "}
+                  Use the Mode control above to switch.
                 </p>
               </div>
             )}

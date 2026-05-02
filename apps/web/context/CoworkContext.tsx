@@ -4,6 +4,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 import { DEFAULT_WORK_CATEGORIES } from "@kletron/shared";
 import type { WorkCategory } from "@kletron/agent-core";
+import { normalizeToWorkModeId } from "@kletron/shared/workMode";
 
 export interface CoworkState {
     // Current state
@@ -52,7 +53,7 @@ interface CoworkProviderProps {
 }
 
 export function CoworkProvider({ children, workspaceId }: CoworkProviderProps) {
-    const [currentCategory, setCurrentCategoryState] = useState('coding');
+    const [currentCategory, setCurrentCategoryState] = useState('code');
     const [currentWorkspace, setWorkspaceState] = useState<string | null>(workspaceId);
     const [messages, setMessages] = useState<CoworkState['messages']>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -64,8 +65,11 @@ export function CoworkProvider({ children, workspaceId }: CoworkProviderProps) {
     // Load saved state
     useEffect(() => {
         const saved = localStorage.getItem(`kletron-category-${workspaceId}`);
-        if (saved && DEFAULT_WORK_CATEGORIES.some(c => c.id === saved)) {
-            setCurrentCategoryState(saved);
+        if (saved) {
+            const mode = normalizeToWorkModeId(saved);
+            if (DEFAULT_WORK_CATEGORIES.some((c) => c.id === mode)) {
+                setCurrentCategoryState(mode);
+            }
         }
 
         // Check connection status
@@ -89,11 +93,12 @@ export function CoworkProvider({ children, workspaceId }: CoworkProviderProps) {
     }, [currentCategory, workspaceId]);
 
     const setCurrentCategory = useCallback((categoryId: string) => {
-        setCurrentCategoryState(categoryId);
+        setCurrentCategoryState(normalizeToWorkModeId(categoryId));
     }, []);
 
     const switchCategory = useCallback(async (categoryId: string, preserveContext: boolean = true) => {
         const fromCategory = currentCategory;
+        const toCategory = normalizeToWorkModeId(categoryId);
 
         if (preserveContext) {
             try {
@@ -103,7 +108,7 @@ export function CoworkProvider({ children, workspaceId }: CoworkProviderProps) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         fromCategory,
-                        toCategory: categoryId
+                        toCategory
                     })
                 });
 
@@ -117,7 +122,7 @@ export function CoworkProvider({ children, workspaceId }: CoworkProviderProps) {
             }
         }
 
-        setCurrentCategoryState(categoryId);
+        setCurrentCategoryState(toCategory);
         // Clear messages for fresh start in new category
         setMessages([]);
     }, [currentCategory, workspaceId]);
@@ -136,7 +141,8 @@ export function CoworkProvider({ children, workspaceId }: CoworkProviderProps) {
         setIsLoading(true);
 
         try {
-            const response = await fetch(`/api/workspaces/${workspaceId}/categories/${currentCategory}/process`, {
+            const mode = normalizeToWorkModeId(currentCategory);
+            const response = await fetch(`/api/workspaces/${workspaceId}/categories/${mode}/process`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: content })

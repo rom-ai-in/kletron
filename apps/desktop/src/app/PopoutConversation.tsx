@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { MessageList } from "@kletron/ui/components/Agent/MessageList";
 import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
 import { useMessageEdit } from "@kletron/ui/hooks/useMessageEdit";
@@ -7,6 +7,8 @@ import { InputBar } from "@kletron/ui/components/CommandCenter/InputBar";
 import { InlineDiffReview } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
 import type { InlineDiff } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
 import { LLMSelector } from "@kletron/ui/components/design-system";
+import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
+import { useAgentSession } from "@kletron/ui/hooks/useAgentSession";
 
 import { useAuth } from "../hooks/useAuth";
 import { useSettings } from "../hooks/useSettings";
@@ -14,7 +16,7 @@ import { useWorkspace } from "../hooks/useWorkspace";
 import { useConversation } from "../hooks/useConversation";
 import { useDiffs } from "../hooks/useDiffs";
 import { useModels } from "../hooks/useModels";
-
+import type { LlmConfig, LLMProvider } from "../types";
 
 export interface PopoutConversationProps {
   threadId: string;
@@ -28,9 +30,38 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
   const backendReady = backendUrlValid && backendConnected;
 
   const workspace = useWorkspace(backendUrlTrimmed, auth.getAccessToken);
-  const models = useModels(backendUrlTrimmed, backendReady, auth.getAccessToken);
+  const activeWorkspaceId = workspace.workspaceSummary?.id ?? null;
+
+  const getAgentRequestHeaders = useCallback(async () => {
+    const token = await auth.getAccessToken();
+    const h: Record<string, string> = {};
+    if (token) h.Authorization = `Bearer ${token}`;
+    if (activeWorkspaceId) h["x-workspace-id"] = activeWorkspaceId;
+    return h;
+  }, [auth.getAccessToken, activeWorkspaceId]);
+
+  const agentSession = useAgentSession({
+    apiOrigin: backendUrlTrimmed,
+    getRequestHeaders: getAgentRequestHeaders,
+  });
+
+  const models = useModels(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
   const diffs = useDiffs(workspace.workspace);
 
+  const modelConfigForStream = useMemo((): LlmConfig | null => {
+    if (!agentSession.llmConfigData) return null;
+    return {
+      ...agentSession.llmConfigData,
+      provider: agentSession.llmProvider,
+    } as LlmConfig;
+  }, [agentSession.llmConfigData, agentSession.llmProvider]);
+
+  const selectedGraphTitle = useMemo(() => {
+    const id = agentSession.selectedGraphId;
+    const fromApi = agentSession.agentGraphs.find((g) => String(g._id) === id);
+    if (fromApi) return fromApi.name;
+    return agentSession.graphSelectOptions.find((o) => o.id === id)?.label;
+  }, [agentSession.selectedGraphId, agentSession.agentGraphs, agentSession.graphSelectOptions]);
 
   const [conversationId, setConversationId] = useState<string | null>(threadId);
 
@@ -41,11 +72,51 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
     conversationId,
     setConversationId,
     workspace.workspace,
-    models.modelConfig,
-    models.selectedGraph,
-    models.selectedGraphName,
+    modelConfigForStream,
+    agentSession.selectedGraphId || null,
+    selectedGraphTitle,
     undefined,
-    diffs.setDiffs
+    diffs.setDiffs,
+    activeWorkspaceId
+  );
+
+  const agentBarProviders: LLMProvider[] = useMemo(() => {
+    const labels: Record<string, string> = {
+      openai: "OpenAI",
+      claude: "Anthropic",
+      azure: "Azure",
+      gemini: "Google",
+      ollama: "Ollama",
+      lmstudio: "LM Studio",
+      vllm: "vLLM",
+    };
+    return agentSession.enabledProviders.map((pid) => {
+      const cfg = agentSession.llmConfigData?.[pid] as Record<string, unknown> | undefined;
+      const model = (cfg?.model ?? cfg?.deployment ?? "") as string;
+      return {
+        id: pid,
+        label: labels[pid] ?? pid,
+        models: model ? [{ id: model, label: model }] : [],
+        connected: pid === agentSession.llmProvider,
+      };
+    });
+  }, [agentSession.enabledProviders, agentSession.llmConfigData, agentSession.llmProvider]);
+
+  const agentBarSelectedModel = useMemo(() => {
+    const cfg = agentSession.llmConfigData?.[agentSession.llmProvider] as Record<string, unknown> | undefined;
+    const m = (cfg?.model ?? cfg?.deployment ?? "") as string;
+    return m || null;
+  }, [agentSession.llmConfigData, agentSession.llmProvider]);
+
+  const handleAgentBarModelChange = useCallback(
+    (model: string) => {
+      void (async () => {
+        await models.saveModelConfig(agentSession.llmProvider, model);
+        await models.loadModel();
+        agentSession.refreshLlmPreferences();
+      })();
+    },
+    [models, agentSession.llmProvider, agentSession.refreshLlmPreferences]
   );
 
   const editControl = useMessageEdit({
@@ -64,14 +135,19 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
 
   // Probe backend
   useEffect(() => {
-    if (!backendUrlValid) { setBackendConnected(false); return; }
+    if (!backendUrlValid) {
+      setBackendConnected(false);
+      return;
+    }
     (async () => {
       try {
         const res = await fetch(`${backendUrlTrimmed}/api/auth/me`, {
           headers: auth.auth?.accessToken ? { Authorization: `Bearer ${auth.auth.accessToken}` } : undefined,
         });
         setBackendConnected(res.status > 0);
-      } catch { setBackendConnected(false); }
+      } catch {
+        setBackendConnected(false);
+      }
     })();
   }, [backendUrlTrimmed]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -115,8 +191,16 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
         {inlineDiffs.length > 0 && (
           <InlineDiffReview
             diffs={inlineDiffs}
-            onAccept={(editId) => diffs.applyAllDiff(editId)}
-            onReject={(editId) => diffs.rejectAllDiff(editId)}
+            onAccept={(editId) => {
+              void (async () => {
+                await conversation.sessionEdits.approveEdit(editId);
+                await diffs.applyAllDiff(editId);
+              })();
+            }}
+            onReject={(editId) => {
+              void conversation.sessionEdits.rejectEdit(editId);
+              diffs.rejectAllDiff(editId);
+            }}
             onOpenInIDE={(filePath) => {
               try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
             }}
@@ -144,16 +228,23 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
             void conversation.sendMessage();
           }
         }}
-        connected={backendConnected}
-        tokenUsage={conversation.tokenUsage}
+        connected={backendConnected ? (agentSession.llmStatus === "loading" ? "checking" : agentSession.llmStatus === "success") : false}
         modelSelector={
           <LLMSelector
-            providers={models.providers}
-            selectedProvider={models.selectedProvider}
-            selectedModel={models.selectedModel}
-            onProviderChange={models.changeProvider}
-            onModelChange={models.setSelectedModel}
+            providers={agentBarProviders}
+            selectedProvider={agentSession.llmProvider}
+            selectedModel={agentBarSelectedModel}
+            onProviderChange={agentSession.handleLlmChange}
+            onModelChange={handleAgentBarModelChange}
             compact
+          />
+        }
+        approvalSelector={
+          <ThreadApprovalModeSelector
+            value={conversation.threadApprovalMode}
+            onSelect={conversation.onThreadApprovalSelect}
+            disabled={conversation.conversationRunSource === "automation"}
+            disabledReason="Approval mode is fixed for automation threads."
           />
         }
       />

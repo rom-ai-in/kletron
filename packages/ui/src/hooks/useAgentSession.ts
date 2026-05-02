@@ -1,5 +1,6 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { graphOptions } from "@kletron/shared/graphCatalog";
+import { apiFetch, type GetRequestHeaders } from '@kletron/shared';
 import { useLlmHealth } from './useLlmHealth';
 import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 
@@ -21,7 +22,7 @@ type LlmConfigData = {
     provider?: string;
     defaultProvider?: string;
     enabledProviders?: string[];
-    [key: string]: unknown; // each provider key (azure, openai, …) holds its config
+    [key: string]: unknown;
 };
 
 type AgentGraphRecord = {
@@ -30,11 +31,22 @@ type AgentGraphRecord = {
     description?: string;
 };
 
+export interface UseAgentSessionOptions {
+    /** When set (e.g. Electron), prepended to `/api/...` paths. No trailing slash. */
+    apiOrigin?: string;
+    /** Extra headers (Bearer, x-workspace-id, etc.). */
+    getRequestHeaders?: GetRequestHeaders;
+}
+
 export interface UseAgentSessionReturn {
     llmProvider: string;
     enabledProviders: LlmProviderType[];
     selectedGraphId: string;
     agentGraphs: AgentGraphRecord[];
+    /** Re-fetch `/api/agent-graphs` (e.g. after creating a graph in the editor). */
+    refreshGraphs: () => void;
+    /** Re-fetch LLM config + user preferences (e.g. after Settings saved a model). */
+    refreshLlmPreferences: () => void;
     llmConfigData: LlmConfigData | null;
     llmPrefsLoaded: boolean;
     enabledProvidersLoaded: boolean;
@@ -48,7 +60,17 @@ export interface UseAgentSessionReturn {
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
 
-export function useAgentSession(): UseAgentSessionReturn {
+export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessionReturn {
+    const apiOrigin = options?.apiOrigin;
+    const getRequestHeadersRef = useRef(options?.getRequestHeaders);
+    getRequestHeadersRef.current = options?.getRequestHeaders;
+
+    const getHdr = useCallback(async () => {
+        const fn = getRequestHeadersRef.current;
+        if (!fn) return {};
+        return { ...(await fn()) };
+    }, []);
+
     const [llmProvider, setLlmProvider] = useState<string>('azure');
     const [enabledProviders, setEnabledProviders] = useState<LlmProviderType[]>([]);
     const [llmPrefsLoaded, setLlmPrefsLoaded] = useState(false);
@@ -58,22 +80,34 @@ export function useAgentSession(): UseAgentSessionReturn {
     const [graphOptionsLoaded, setGraphOptionsLoaded] = useState(false);
     const [savedGraphId, setSavedGraphId] = useState<string | null>(null);
     const [llmConfigData, setLlmConfigData] = useState<LlmConfigData | null>(null);
+    const [graphsReloadNonce, setGraphsReloadNonce] = useState(0);
+    const refreshGraphs = useCallback(() => setGraphsReloadNonce((n) => n + 1), []);
+    const [llmPrefsReloadNonce, setLlmPrefsReloadNonce] = useState(0);
+    const refreshLlmPreferences = useCallback(() => setLlmPrefsReloadNonce((n) => n + 1), []);
 
-    const { status: llmStatus } = useLlmHealth(llmProvider);
+    const { status: llmStatus } = useLlmHealth(llmProvider, { apiOrigin, getRequestHeaders: getHdr });
 
     // ── Fetch LLM config + user preferences (LLM provider + graph selection)
     useEffect(() => {
         const fetchPreferences = async () => {
             try {
-                // Fetch full LLM config (contains all provider configs + model names)
-                const configRes = await fetch("/api/llm-config");
+                const configRes = await apiFetch({
+                    apiOrigin,
+                    path: "/api/llm-config",
+                    getRequestHeaders: getHdr,
+                    method: "GET",
+                });
                 const configData: LlmConfigData = configRes.ok ? await configRes.json() : {};
                 setLlmConfigData(configData);
 
                 const defaultProvider = (configData.provider ?? configData.defaultProvider ?? 'azure') as string;
 
-                // Try to fetch user preferences from API
-                const prefsRes = await fetch("/api/user-preferences");
+                const prefsRes = await apiFetch({
+                    apiOrigin,
+                    path: "/api/user-preferences",
+                    getRequestHeaders: getHdr,
+                    method: "GET",
+                });
                 if (prefsRes.ok) {
                     const prefsData = await prefsRes.json();
                     if (prefsData.success && prefsData.preferences) {
@@ -81,13 +115,12 @@ export function useAgentSession(): UseAgentSessionReturn {
                         if (selectedLlmProvider) {
                             setLlmProvider(selectedLlmProvider);
                         } else {
-                            // Fallback to localStorage then config default
                             const stored = window.localStorage.getItem("kletron-llm-selection");
                             if (stored) {
                                 try {
                                     const parsed = JSON.parse(stored);
                                     if (parsed.provider) setLlmProvider(parsed.provider);
-                                } catch { }
+                                } catch { /* ignore */ }
                             } else {
                                 setLlmProvider(defaultProvider);
                             }
@@ -95,7 +128,6 @@ export function useAgentSession(): UseAgentSessionReturn {
                         if (prefGraphId) {
                             setSavedGraphId(prefGraphId);
                         } else {
-                            // Fallback to localStorage
                             const storedGraph = window.localStorage.getItem("kletron-graph-selection");
                             if (storedGraph) {
                                 setSavedGraphId(storedGraph);
@@ -105,13 +137,12 @@ export function useAgentSession(): UseAgentSessionReturn {
                     }
                 }
 
-                // Fallback to localStorage if API fails or user not authenticated
                 const stored = window.localStorage.getItem("kletron-llm-selection");
                 if (stored) {
                     try {
                         const parsed = JSON.parse(stored);
                         if (parsed.provider) setLlmProvider(parsed.provider);
-                    } catch { }
+                    } catch { /* ignore */ }
                 } else {
                     setLlmProvider(defaultProvider);
                 }
@@ -126,15 +157,21 @@ export function useAgentSession(): UseAgentSessionReturn {
                 setLlmPrefsLoaded(true);
             }
         };
-        fetchPreferences();
-    }, []);
+        void fetchPreferences();
+    }, [apiOrigin, getHdr, llmPrefsReloadNonce]);
 
     // ── Load agent graphs from API ───────────────────────────────────────
     useEffect(() => {
         let cancelled = false;
         const loadGraphs = async () => {
             try {
-                const res = await fetch("/api/agent-graphs", { cache: "no-store" });
+                const res = await apiFetch({
+                    apiOrigin,
+                    path: "/api/agent-graphs",
+                    getRequestHeaders: getHdr,
+                    method: "GET",
+                    cache: "no-store",
+                });
                 if (!res.ok) throw new Error("Failed to load graphs");
                 const data = await res.json();
                 const list = Array.isArray(data?.graphs) ? (data.graphs as AgentGraphRecord[]) : [];
@@ -153,16 +190,9 @@ export function useAgentSession(): UseAgentSessionReturn {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [apiOrigin, getHdr, graphsReloadNonce]);
 
     // ── Resolve selected graph once graphs AND preferences are loaded ───
-    // IMPORTANT: Do NOT include `selectedGraphId` in the dependency array.
-    // This effect only runs for *initial* resolution (when graphs load or
-    // savedGraphId arrives from the API).  User-initiated changes via
-    // handleGraphChange must not be overridden.
-    // We gate on `llmPrefsLoaded` to avoid a race condition where graphs
-    // load before preferences, causing the default to be picked instead
-    // of the user's saved selection.
     useEffect(() => {
         if (!graphOptionsLoaded || !llmPrefsLoaded) return;
         const hasAgentGraphs = agentGraphs.length > 0;
@@ -186,29 +216,62 @@ export function useAgentSession(): UseAgentSessionReturn {
 
     // ── Fetch enabled LLM providers ──────────────────────────────────────
     useEffect(() => {
-        fetch("/api/llm-config/enable")
-            .then((res) => res.json())
-            .then((data) => {
+        void (async () => {
+            try {
+                const res = await apiFetch({
+                    apiOrigin,
+                    path: "/api/llm-config/enable",
+                    getRequestHeaders: getHdr,
+                    method: "GET",
+                });
+                const data = await res.json();
                 if (Array.isArray(data.enabledProviders)) {
                     setEnabledProviders(data.enabledProviders);
                 } else {
                     setEnabledProviders([]);
                 }
-            })
-            .catch((err) => {
+            } catch (err) {
                 console.error("Failed to fetch enabled providers", err);
                 setEnabledProviders([]);
-            })
-            .finally(() => {
+            } finally {
                 setEnabledProvidersLoaded(true);
-            });
-    }, []);
+            }
+        })();
+    }, [apiOrigin, getHdr]);
+
+    const handleLlmChange = useCallback((provider: string) => {
+        setLlmProvider(provider);
+        const providerConfig = llmConfigData?.[provider] as Record<string, unknown> | undefined;
+        const model = (providerConfig?.model ?? providerConfig?.deployment ?? '') as string;
+        window.localStorage.setItem(
+            "kletron-llm-selection",
+            JSON.stringify({ provider, model })
+        );
+        void apiFetch({
+            apiOrigin,
+            path: "/api/user-preferences",
+            getRequestHeaders: getHdr,
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ selectedLlmProvider: provider }),
+        }).catch(() => { /* Silently fail, localStorage is fallback */ });
+    }, [apiOrigin, getHdr, llmConfigData]);
+
+    const handleGraphChange = useCallback((graphId: string) => {
+        setSelectedGraphId(graphId);
+        setSavedGraphId(graphId);
+        window.localStorage.setItem("kletron-graph-selection", graphId);
+        void apiFetch({
+            apiOrigin,
+            path: "/api/user-preferences",
+            getRequestHeaders: getHdr,
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ selectedGraphId: graphId }),
+        }).catch(() => { /* Silently fail, localStorage is fallback */ });
+    }, [apiOrigin, getHdr]);
 
     // ── Auto-correct provider if current selection is disabled ───────────
-    // We gate on `llmPrefsLoaded` to avoid overwriting the user's saved
-    // preference when enabled providers load before preferences (the initial
-    // 'azure' value might not be in the enabled list, causing a premature
-    // auto-correct that persists over the real saved preference).
     useEffect(() => {
         if (!enabledProvidersLoaded || !llmPrefsLoaded || enabledProviders.length === 0) return;
         if (!enabledProviders.includes(llmProvider as LlmProviderType)) {
@@ -217,46 +280,8 @@ export function useAgentSession(): UseAgentSessionReturn {
                 handleLlmChange(nextProvider);
             }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [enabledProvidersLoaded, llmPrefsLoaded, enabledProviders, llmProvider]);
+    }, [enabledProvidersLoaded, llmPrefsLoaded, enabledProviders, llmProvider, handleLlmChange]);
 
-    // ── Handlers ─────────────────────────────────────────────────────────
-
-    const handleLlmChange = (provider: string) => {
-        setLlmProvider(provider);
-        // Resolve model name from config data
-        const providerConfig = llmConfigData?.[provider] as Record<string, unknown> | undefined;
-        const model = (providerConfig?.model ?? providerConfig?.deployment ?? '') as string;
-        // Save to localStorage as fallback
-        window.localStorage.setItem(
-            "kletron-llm-selection",
-            JSON.stringify({ provider, model })
-        );
-        // Persist to API (fire-and-forget, don't block UI)
-        fetch("/api/user-preferences", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ selectedLlmProvider: provider }),
-        }).catch(() => { /* Silently fail, localStorage is fallback */ });
-    };
-
-    const handleGraphChange = (graphId: string) => {
-        setSelectedGraphId(graphId);
-        // Keep savedGraphId in sync so the resolve effect doesn't revert
-        setSavedGraphId(graphId);
-        // Save to localStorage as fallback
-        window.localStorage.setItem("kletron-graph-selection", graphId);
-        // Persist to API (fire-and-forget, don't block UI)
-        fetch("/api/user-preferences", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ selectedGraphId: graphId }),
-        }).catch(() => { /* Silently fail, localStorage is fallback */ });
-    };
-
-    // ── Derived data ─────────────────────────────────────────────────────
-
-    /** Build LLM options dynamically from enabledProviders + llmConfigData. */
     const llmOptions = useMemo(() =>
         enabledProviders.map((providerId) => {
             const cfg = llmConfigData?.[providerId] as Record<string, unknown> | undefined;
@@ -286,6 +311,8 @@ export function useAgentSession(): UseAgentSessionReturn {
         enabledProviders,
         selectedGraphId,
         agentGraphs,
+        refreshGraphs,
+        refreshLlmPreferences,
         llmConfigData,
         llmPrefsLoaded,
         enabledProvidersLoaded,

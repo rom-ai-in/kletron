@@ -1,5 +1,7 @@
 // packages/agent-core/src/categoryErrorHandler.ts
 
+import { normalizeToWorkModeId } from "@kletron/shared";
+
 export interface ExecutionError {
     message: string;
     code?: string;
@@ -43,17 +45,18 @@ export class CategoryAwareErrorHandler {
         category: string,
         context?: Record<string, unknown>
     ): Promise<ErrorRecoveryResult> {
+        const mode = normalizeToWorkModeId(category);
         // Step 1: Classify the error
-        const classification = this.classifyError(error, category);
+        const classification = this.classifyError(error, mode);
 
         // Step 2: Determine appropriate recovery strategy
-        const strategy = this.selectRecoveryStrategy(classification, category);
+        const strategy = this.selectRecoveryStrategy(classification, mode);
 
         // Step 3: Attempt recovery
         const result = await strategy.recover(error, context);
 
         // Step 4: Log and monitor
-        await this.logErrorWithContext(error, classification, category);
+        await this.logErrorWithContext(error, classification, mode);
         this.monitorRecurringErrors(classification);
 
         return {
@@ -72,22 +75,23 @@ export class CategoryAwareErrorHandler {
         error: ExecutionError,
         category: string
     ): ErrorClassification {
+        const mode = normalizeToWorkModeId(category);
         // Check for category-specific error patterns first
-        const categoryPatterns = this.errorPatterns[category] || {};
+        const categoryPatterns = this.errorPatterns[mode] || {};
         for (const [patternName, pattern] of Object.entries(categoryPatterns)) {
             if (this.matchesPattern(error, pattern)) {
                 return {
                     type: 'category_specific',
-                    category,
+                    category: mode,
                     pattern: patternName,
                     severity: pattern.severity
                 };
             }
         }
 
-        // Check general patterns
-        const generalPatterns = this.errorPatterns.general || {};
-        for (const [patternName, pattern] of Object.entries(generalPatterns)) {
+        // Cross-cutting patterns (any mode)
+        const sharedPatterns = this.errorPatterns.shared || {};
+        for (const [patternName, pattern] of Object.entries(sharedPatterns)) {
             if (this.matchesPattern(error, pattern)) {
                 return {
                     type: 'general',
@@ -133,17 +137,17 @@ export class CategoryAwareErrorHandler {
         classification: ErrorClassification,
         category: string
     ): RecoveryStrategy {
-        const strategyKey = this.buildStrategyKey(classification, category);
+        const mode = normalizeToWorkModeId(category);
+        const strategyKey = this.buildStrategyKey(classification, mode);
 
-        const categoryStrategies = this.recoveryStrategies[category];
+        const categoryStrategies = this.recoveryStrategies[mode];
         if (categoryStrategies && categoryStrategies[strategyKey]) {
             return categoryStrategies[strategyKey];
         }
 
-        // Fall back to general strategies
-        const generalStrategies = this.recoveryStrategies.general;
-        if (generalStrategies && generalStrategies[classification.pattern || 'default']) {
-            return generalStrategies[classification.pattern || 'default'];
+        const sharedStrategies = this.recoveryStrategies.shared;
+        if (sharedStrategies && sharedStrategies[classification.pattern || 'default']) {
+            return sharedStrategies[classification.pattern || 'default'];
         }
 
         // Default strategy
@@ -196,7 +200,7 @@ export class CategoryAwareErrorHandler {
      */
     private loadErrorPatterns(): Record<string, Record<string, ErrorPattern>> {
         return {
-            coding: {
+            code: {
                 file_access_error: {
                     code: 'FILE_ACCESS_ERROR',
                     messageKeywords: ['permission denied', 'file not found', 'path inaccessible'],
@@ -213,7 +217,7 @@ export class CategoryAwareErrorHandler {
                     severity: 'medium'
                 }
             },
-            drafting: {
+            work: {
                 template_error: {
                     code: 'TEMPLATE_ERROR',
                     messageKeywords: ['template', 'format', 'export'],
@@ -223,9 +227,7 @@ export class CategoryAwareErrorHandler {
                     code: 'FILE_SAVE_ERROR',
                     messageKeywords: ['save', 'write', 'export'],
                     severity: 'high'
-                }
-            },
-            automation: {
+                },
                 schedule_error: {
                     code: 'SCHEDULE_ERROR',
                     messageKeywords: ['schedule', 'cron', 'timer', 'trigger'],
@@ -237,7 +239,7 @@ export class CategoryAwareErrorHandler {
                     severity: 'critical'
                 }
             },
-            general: {
+            shared: {
                 llm_error: {
                     code: 'LLM_ERROR',
                     messageRegex: /(?:model|api|rate limit|timeout)/i,
@@ -261,7 +263,7 @@ export class CategoryAwareErrorHandler {
      */
     private loadRecoveryStrategies(): Record<string, Record<string, RecoveryStrategy>> {
         return {
-            coding: {
+            code: {
                 file_access_error: {
                     recover: async (error: ExecutionError) => ({
                         success: true,
@@ -277,16 +279,14 @@ export class CategoryAwareErrorHandler {
                     })
                 }
             },
-            drafting: {
+            work: {
                 template_error: {
                     recover: async (error: ExecutionError) => ({
                         success: true,
                         message: 'Using default template as fallback.',
                         suggestedAction: 'Check template files in workspace'
                     })
-                }
-            },
-            automation: {
+                },
                 schedule_error: {
                     recover: async (error: ExecutionError) => ({
                         success: false,
@@ -302,7 +302,7 @@ export class CategoryAwareErrorHandler {
                     })
                 }
             },
-            general: {
+            shared: {
                 llm_error: {
                     recover: async (error: ExecutionError) => ({
                         success: false,

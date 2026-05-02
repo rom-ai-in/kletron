@@ -15,6 +15,12 @@ export function useThreads(
   const [editingThreadTitle, setEditingThreadTitle] = useState<string>("");
   const [editingThreadSaving, setEditingThreadSaving] = useState(false);
   const [threadActionId, setThreadActionId] = useState<string | null>(null);
+  const [archivedThreads, setArchivedThreads] = useState<ConversationHistoryItem[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+
+  function isThreadArchived(item: ConversationHistoryItem & { archived?: boolean }) {
+    return Boolean(item.archived) || item.status === "archived";
+  }
 
   async function loadThreads(preferredId?: string) {
     const token = await getAccessToken();
@@ -31,8 +37,8 @@ export function useThreads(
         throw new Error(text || `Failed to load threads (${res.status})`);
       }
       const data = await res.json();
-      const list = Array.isArray(data) ? (data as ConversationHistoryItem[]) : [];
-      const active = list.filter((item) => item.status !== "archived");
+      const list = Array.isArray(data) ? (data as (ConversationHistoryItem & { archived?: boolean })[]) : [];
+      const active = list.filter((item) => !isThreadArchived(item));
       setThreads(active);
       if (preferredId && active.some((item) => item.id === preferredId)) {
         setConversationId(preferredId);
@@ -162,9 +168,32 @@ export function useThreads(
     }
   }
 
+  async function loadArchivedThreads() {
+    const token = await getAccessToken();
+    if (!token) return;
+    setArchivedLoading(true);
+    try {
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+      const res = await fetch(
+        `${backendUrlTrimmed}/api/sessions?limit=50&excludeSource=automation&includeArchived=true`,
+        { headers }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const list = Array.isArray(data) ? (data as (ConversationHistoryItem & { archived?: boolean })[]) : [];
+      setArchivedThreads(list.filter((item) => isThreadArchived(item)));
+    } catch {
+      setArchivedThreads([]);
+    } finally {
+      setArchivedLoading(false);
+    }
+  }
+
   function resetThreads() {
     setConversationId(null);
     setThreads([]);
+    setArchivedThreads([]);
   }
 
   // ── Live status polling ─────────────────────────────────────────────────
@@ -181,8 +210,8 @@ export function useThreads(
       const res = await fetch(`${backendUrlTrimmed}/api/sessions?limit=50&excludeSource=automation`, { headers });
       if (!res.ok) return;
       const data = await res.json();
-      const list = Array.isArray(data) ? (data as ConversationHistoryItem[]) : [];
-      const active = list.filter((item) => item.status !== "archived");
+      const list = Array.isArray(data) ? (data as (ConversationHistoryItem & { archived?: boolean })[]) : [];
+      const active = list.filter((item) => !isThreadArchived(item));
       // Only update if there are actual changes
       setThreads((prev) => {
         const changed = active.some((newThread) => {
@@ -242,5 +271,8 @@ export function useThreads(
     deleteThread,
     resetThreads,
     getThreadLiveStatus,
+    archivedThreads,
+    archivedLoading,
+    loadArchivedThreads,
   };
 }

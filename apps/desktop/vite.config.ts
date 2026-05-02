@@ -1,11 +1,12 @@
-import { defineConfig, type UserConfig } from "vite";
+import { defineConfig, loadEnv, type UserConfig } from "vite";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export default defineConfig(async (): Promise<UserConfig> => {
+export default defineConfig(async ({ mode }): Promise<UserConfig> => {
+  const env = loadEnv(mode, __dirname, "VITE_");
   let reactPlugin: any = null;
   try {
     const mod = await import("@vitejs/plugin-react");
@@ -48,6 +49,7 @@ export default defineConfig(async (): Promise<UserConfig> => {
       // Provide `process.env` so Next.js-originated code (e.g. AuthGuard)
       // doesn't throw "process is not defined".
       "process.env": JSON.stringify({}),
+      "import.meta.env.VITE_BACKEND_URL": JSON.stringify(env.VITE_BACKEND_URL ?? ""),
     },
     build: {
       outDir: "dist",

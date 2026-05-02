@@ -1,5 +1,10 @@
 import { KLETRON_ADMIN_TOOL_NAMES } from "@kletron/agent-core/tools/kletronAdminToolNames";
+
+const KLETRON_ADMIN_TOOL_SET_EARLY = new Set(
+    KLETRON_ADMIN_TOOL_NAMES.map((n) => String(n).trim().toLowerCase()),
+);
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
+import { normalizeToWorkModeId, WORK_MODES } from "@kletron/shared/workMode";
 
 export type ToolApprovalConfig = {
     autoApproveReadonlySources: string[];
@@ -58,7 +63,7 @@ function resolveToolApprovalConfig(): ToolApprovalConfig {
     };
 }
 
-export type NormalizedRunSource = "agent" | "automation" | "unknown";
+export type NormalizedRunSource = "agent" | "automation" | "channel" | "unknown";
 
 export type ToolClass = "readonly" | "execution" | "write_repo" | "unknown";
 
@@ -69,6 +74,8 @@ export type ToolApprovalPolicyInput = {
     toolName: string;
     /** For execution tools like execute_bash, the command string for safe-command detection */
     command?: string;
+    /** When `work`, tools not in the Work allowlist are denied. */
+    workMode?: string | null;
 };
 
 export type ToolApprovalPolicyResult = {
@@ -146,6 +153,7 @@ export const normalizeRunSource = (source?: string): NormalizedRunSource => {
     const normalized = String(source ?? "").trim().toLowerCase();
     if (normalized === "agent") return "agent";
     if (normalized === "automation") return "automation";
+    if (normalized.startsWith("channel:")) return "channel";
     return "unknown";
 };
 
@@ -162,6 +170,23 @@ export const getToolApprovalPolicy = (input: ToolApprovalPolicyInput): ToolAppro
     const source = String(input.source ?? "");
     const normalizedSource = normalizeRunSource(source);
     const toolClass = classifyTool(toolName);
+
+    const mode = normalizeToWorkModeId(input.workMode ?? "code");
+    if (mode === "work") {
+        const allowed = new Set(
+            WORK_MODES.work.availableTools.map((t) => t.trim().toLowerCase()),
+        );
+        if (!KLETRON_ADMIN_TOOL_SET_EARLY.has(toolName) && !allowed.has(toolName)) {
+            return {
+                source,
+                normalizedSource,
+                toolName,
+                toolClass,
+                decision: "deny",
+                reason: `Tool "${toolName}" is not available in Work mode.`,
+            };
+        }
+    }
 
     // Read config from persisted config → env vars → defaults
     const cfg: ToolApprovalConfig = resolveToolApprovalConfig();

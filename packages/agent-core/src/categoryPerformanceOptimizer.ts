@@ -1,5 +1,7 @@
 // packages/agent-core/src/categoryPerformanceOptimizer.ts
 
+import { normalizeToWorkModeId } from "@kletron/shared";
+
 export interface CategoryProfile {
     maxTokens: number;
     temperature: number;
@@ -40,8 +42,9 @@ export class CategoryPerformanceOptimizer {
      * Get optimized configuration for a category
      */
     async optimizeForCategory(categoryId: string): Promise<OptimizationConfig> {
-        const profile = this.categoryProfiles[categoryId] || this.getDefaultProfile();
-        const history = this.getHistory(categoryId);
+        const mode = normalizeToWorkModeId(categoryId);
+        const profile = this.categoryProfiles[mode] || this.getDefaultProfile();
+        const history = this.getHistory(mode);
 
         if (history.length < 3) {
             return {
@@ -64,7 +67,8 @@ export class CategoryPerformanceOptimizer {
         success: boolean,
         tokens: number
     ): void {
-        const history = this.performanceHistory.get(categoryId) || [];
+        const mode = normalizeToWorkModeId(categoryId);
+        const history = this.performanceHistory.get(mode) || [];
         history.push({
             timestamp: new Date(),
             latency,
@@ -72,17 +76,15 @@ export class CategoryPerformanceOptimizer {
             tokens
         });
 
-        // Keep only last 100 entries
-        if (history.length > 100) {
-            this.performanceHistory.set(categoryId, history.slice(-100));
-        }
+        this.performanceHistory.set(mode, history.length > 100 ? history.slice(-100) : history);
     }
 
     /**
      * Get performance metrics for a category
      */
     getMetrics(categoryId: string): PerformanceMetrics {
-        const history = this.performanceHistory.get(categoryId) || [];
+        const mode = normalizeToWorkModeId(categoryId);
+        const history = this.performanceHistory.get(mode) || [];
 
         if (history.length === 0) {
             return {
@@ -167,7 +169,7 @@ export class CategoryPerformanceOptimizer {
      */
     private loadCategoryProfiles(): Record<string, CategoryProfile> {
         return {
-            coding: {
+            code: {
                 maxTokens: 4096,
                 temperature: 0.1,
                 topP: 0.9,
@@ -177,33 +179,13 @@ export class CategoryPerformanceOptimizer {
                 toolParallelism: 3,
                 contextWindowSize: 'large'
             },
-            drafting: {
+            work: {
                 maxTokens: 8192,
-                temperature: 0.3,
+                temperature: 0.35,
                 topP: 0.95,
-                frequencyPenalty: -0.2,
-                presencePenalty: 0.3,
-                expectedLatency: 2000,
-                toolParallelism: 2,
-                contextWindowSize: 'medium'
-            },
-            automation: {
-                maxTokens: 4096,
-                temperature: 0.2,
-                topP: 0.85,
-                frequencyPenalty: 0.3,
-                presencePenalty: 0.7,
-                expectedLatency: 1000,
-                toolParallelism: 4,
-                contextWindowSize: 'small'
-            },
-            general: {
-                maxTokens: 4096,
-                temperature: 0.4,
-                topP: 0.9,
                 frequencyPenalty: 0,
-                presencePenalty: 0,
-                expectedLatency: 1500,
+                presencePenalty: 0.2,
+                expectedLatency: 1800,
                 toolParallelism: 2,
                 contextWindowSize: 'medium'
             }
@@ -230,7 +212,7 @@ export class CategoryPerformanceOptimizer {
      * Get performance history for a category
      */
     private getHistory(categoryId: string): Array<{ timestamp: Date; latency: number; success: boolean; tokens: number }> {
-        return this.performanceHistory.get(categoryId) || [];
+        return this.performanceHistory.get(normalizeToWorkModeId(categoryId)) || [];
     }
 }
 

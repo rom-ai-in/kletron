@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ChevronDown } from 'lucide-react';
+import { normalizeToWorkModeId } from '@kletron/shared/workMode';
 
 export interface WorkCategory {
   id: string;
@@ -32,7 +33,8 @@ export function CategorySelector({ categories, activeCategoryId, onCategorySelec
     return () => document.removeEventListener('mousedown', handleClick);
   }, [isOpen]);
 
-  const activeCategory = categories.find(c => c.id === activeCategoryId);
+  const mode = normalizeToWorkModeId(activeCategoryId);
+  const activeCategory = categories.find(c => c.id === mode);
 
   return (
     <div className="relative" ref={ref}>
@@ -44,7 +46,7 @@ export function CategorySelector({ categories, activeCategoryId, onCategorySelec
             ? 'bg-white/[0.08] text-text-primary'
             : 'text-text-muted hover:text-text-primary hover:bg-white/[0.06]'
         }`}
-        title="Select work category"
+        title="Code or Work mode"
       >
         <span className="truncate max-w-[120px]">{activeCategory?.name || 'Category'}</span>
         <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`} />
@@ -53,11 +55,11 @@ export function CategorySelector({ categories, activeCategoryId, onCategorySelec
       {isOpen && (
         <div className="absolute right-0 top-full mt-1.5 z-50 min-w-[240px] max-w-[300px] rounded-lg border border-white/[0.08] py-1" style={{ backgroundColor: '#1c1c20', boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.35)' }}>
           <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-            Work Categories
+            Mode
           </div>
 
           {categories.map((category) => {
-            const isActive = category.id === activeCategoryId;
+            const isActive = category.id === mode;
             return (
               <button
                 key={category.id}

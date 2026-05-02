@@ -1,3 +1,5 @@
+import type { AgentEvent } from "@kletron/shared/types";
+
 /**
  * Resolves a nested property path from an object
  * e.g., getNestedValue(obj, 'nodes.client_research.summary')

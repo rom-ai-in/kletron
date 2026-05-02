@@ -1,11 +1,10 @@
 // packages/shared/src/categoryTypes.ts
 
-export type WorkCategoryId = 
-  | 'coding'
-  | 'drafting'
-  | 'automation'
-  | 'general'
-  | string;
+import type { WorkModeId } from "./workMode";
+import { WORK_MODES } from "./workMode";
+
+/** Persisted and API ids: `code` | `work`. Legacy four-way ids may still appear during migration. */
+export type WorkCategoryId = WorkModeId | "coding" | "drafting" | "automation" | "general" | string;
 
 export interface WorkCategoryConfig {
   id: WorkCategoryId;
@@ -37,70 +36,25 @@ export interface CategoryState {
   lastUsed: Record<WorkCategoryId, Date>;
 }
 
-// Built-in categories
-export const BUILT_IN_CATEGORIES: Record<WorkCategoryId, Omit<WorkCategoryConfig, 'id'>> = {
-  coding: {
-    name: "Code Assistance",
-    description: "AI-powered code analysis, generation, and debugging",
-    icon: "code",
-    color: "#3B82F6",
-    defaultPrompt: "You are a senior software engineer helping with code tasks. Focus on code quality, best practices, and maintainability.",
-    availableTools: ["list_files", "read_file", "search_code", "edit_file", "execute_bash", "git_commit", "git_push"],
-    requiredContextTypes: ["repository", "codebase"],
-    capabilities: {
-      canEditFiles: true,
-      canAccessExternalServices: false,
-      canScheduleTasks: false,
-      canUseTerminal: true
-    },
-    workspaceSpecific: true
-  },
-  drafting: {
-    name: "Document Drafting",
-    description: "Create and edit professional documents",
-    icon: "doc",
-    color: "#10B981",
-    defaultPrompt: "You are a professional technical writer. Create clear, well-structured documentation with proper formatting.",
-    availableTools: ["fetch_url", "web_search", "read_file", "write_file"],
-    requiredContextTypes: ["document_template"],
-    capabilities: {
-      canEditFiles: true,
-      canAccessExternalServices: true,
-      canScheduleTasks: false,
-      canUseTerminal: false
-    },
-    workspaceSpecific: false
-  },
-  automation: {
-    name: "Workflow Automation",
-    description: "Create automated workflows and follow-ups",
-    icon: "zap",
-    color: "#F59E0B",
-    defaultPrompt: "You are a productivity automation specialist. Create efficient, reliable automations for repetitive tasks.",
-    availableTools: ["execute_bash", "git_commit", "schedule_task", "calendar_events"],
-    requiredContextTypes: ["calendar", "email"],
-    capabilities: {
-      canEditFiles: false,
-      canAccessExternalServices: true,
-      canScheduleTasks: true,
-      canUseTerminal: true
-    },
-    workspaceSpecific: false
-  },
-  general: {
-    name: "General Assistance",
-    description: "General purpose AI assistance for any task",
-    icon: "chat",
-    color: "#6B7280",
-    defaultPrompt: "You are a helpful AI assistant. Provide accurate, concise answers to user questions.",
-    availableTools: ["web_search", "fetch_url"],
-    requiredContextTypes: [],
-    capabilities: {
-      canEditFiles: false,
-      canAccessExternalServices: true,
-      canScheduleTasks: false,
-      canUseTerminal: false
-    },
-    workspaceSpecific: false
-  }
+function workModeEntryToBuiltIn(
+  mode: WorkModeId,
+): Omit<WorkCategoryConfig, "id"> {
+  const w = WORK_MODES[mode];
+  return {
+    name: w.name,
+    description: w.description,
+    icon: w.icon,
+    color: w.color,
+    defaultPrompt: w.defaultPrompt,
+    availableTools: w.availableTools,
+    requiredContextTypes: w.requiredContextTypes,
+    capabilities: w.capabilities,
+    workspaceSpecific: w.workspaceSpecific,
+  };
+}
+
+/** Built-in categories (two modes). Prefer importing WORK_MODES for connectors and full metadata. */
+export const BUILT_IN_CATEGORIES: Record<WorkModeId, Omit<WorkCategoryConfig, "id">> = {
+  code: workModeEntryToBuiltIn("code"),
+  work: workModeEntryToBuiltIn("work"),
 };

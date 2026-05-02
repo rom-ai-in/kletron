@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { useAgentSession } from "@kletron/ui/hooks/useAgentSession";
 import {
   ChevronLeft, Settings, Brain, Eye,
   Wrench, GitBranch, Paperclip, ChevronUp, ChevronDown, TerminalSquare,
+  LayoutGrid, Zap, Network,
 } from "lucide-react";
 
 // Design system components
@@ -43,6 +45,7 @@ import type { SlashCommandItem } from "@kletron/ui/components/CommandCenter/Slas
 import { MultimodalMenu } from "@kletron/ui/components/CommandCenter/MultimodalMenu";
 import { SkillsManager } from "@kletron/ui/components/CommandCenter/SkillsManager";
 import { AutomationsDashboard } from "@kletron/ui/components/CommandCenter/AutomationsDashboard";
+import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
 import { AgentGraphSelector } from "@kletron/ui/components/CommandCenter/AgentGraphSelector";
 import type { AgentGraph } from "@kletron/ui/components/CommandCenter/AgentGraphSelector";
 import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
@@ -61,10 +64,28 @@ import { useProjects } from "../hooks/useProjects";
 
 import { useSkills } from "../hooks/useSkills";
 import { useCategories, BUILT_IN_CATEGORIES } from "../hooks/useCategories";
+import { normalizeToWorkModeId } from "@kletron/shared/workMode";
+import { DesktopWorkspaceProvider } from "../providers/DesktopWorkspaceProvider";
 
 // Utils & types
-import type { MCPServer, EnvVariable, Worktree, ConversationTab, Automation, QueuedMessage } from "../types";
+import type {
+  MCPServer,
+  EnvVariable,
+  Worktree,
+  ConversationTab,
+  QueuedMessage,
+  LlmConfig,
+  LLMProvider,
+  AgentGraphSummary,
+} from "../types";
+import { useAutomations } from "../hooks/useAutomations";
+import { useDesktopApiFetch } from "../hooks/useDesktopApiFetch";
+import { AutomationBuilderModal } from "@kletron/ui/components/AutomationBuilderModal";
+import { AgentGraphsPanel } from "./AgentGraphsPanel";
 import { SETTINGS_SECTIONS, formatRelativeTime, pathsEqual } from "../utils";
+import { getComposerConnectionState } from "../composerConnection";
+import { SettingsCard, DeviceOnlyPortalBanner } from "../components/SettingsCard";
+import { usePortalConfigSnapshot } from "../hooks/usePortalConfigSnapshot";
 
 export default function App() {
   // ═══════════════════════════════════════════════════════════════════════════
@@ -78,8 +99,19 @@ export default function App() {
   const auth = useAuth(backendUrlTrimmed, backendUrlValid);
   const backendReady = backendUrlValid && backendConnected;
 
+  const openPortalPath = useCallback((path: string) => {
+    try {
+      const base = backendUrlTrimmed.replace(/\/$/, "");
+      void (window as { kletron?: { openExternal?: (u: string) => Promise<boolean> } }).kletron?.openExternal?.(`${base}${path}`);
+    } catch {
+      // ignore
+    }
+  }, [backendUrlTrimmed]);
+
   // Work categories system
   const categoriesHook = useCategories();
+  const desktopWorkMode = normalizeToWorkModeId(categoriesHook.activeCategory);
+  const isCodeMode = desktopWorkMode === "code";
 
   // Probe backend connectivity
   const backendProbeRef = useRef<string | null>(null);
@@ -95,7 +127,7 @@ export default function App() {
         if (res.status > 0) backendProbeRef.current = backendUrlTrimmed;
       } catch { setBackendConnected(false); backendProbeRef.current = null; }
     })();
-  }, [backendUrlTrimmed]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [backendUrlTrimmed, auth.auth?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const workspace = useWorkspace(backendUrlTrimmed, auth.getAccessToken);
   const projectsHook = useProjects(workspace.workspace?.path, workspace.workspace?.name);
@@ -105,9 +137,69 @@ export default function App() {
   // and sending it as x-workspace-id would break all API scoping.
   const activeWorkspaceId = workspace.workspaceSummary?.id ?? null;
 
-  const models = useModels(backendUrlTrimmed, backendReady, auth.getAccessToken);
+  const getAgentRequestHeaders = useCallback(async () => {
+    const token = await auth.getAccessToken();
+    const h: Record<string, string> = {};
+    if (token) h.Authorization = `Bearer ${token}`;
+    if (activeWorkspaceId) h["x-workspace-id"] = activeWorkspaceId;
+    return h;
+  }, [auth.getAccessToken, activeWorkspaceId]);
+
+  const agentSession = useAgentSession({
+    apiOrigin: backendUrlTrimmed,
+    getRequestHeaders: getAgentRequestHeaders,
+  });
+
+  const composerConnection = useMemo(
+    () =>
+      getComposerConnectionState({
+        backendUrlValid,
+        backendConnected,
+        hasAccessToken: !!auth.auth?.accessToken,
+        activeWorkspaceId,
+        llmStatus: agentSession.llmStatus,
+        llmProviderLabel: agentSession.llmProvider,
+      }),
+    [
+      backendUrlValid,
+      backendConnected,
+      auth.auth?.accessToken,
+      activeWorkspaceId,
+      agentSession.llmStatus,
+      agentSession.llmProvider,
+    ],
+  );
+
+  const models = useModels(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
+  const apiFetch = useDesktopApiFetch(backendUrlTrimmed, auth.getAccessToken, activeWorkspaceId);
+  const automationsHook = useAutomations(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
   const threads = useThreads(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
+  const portalConfigSnapshot = usePortalConfigSnapshot(
+    backendUrlTrimmed,
+    settings.activeView === "settings" &&
+      settings.activeSettingsSection === "configuration" &&
+      backendReady &&
+      !!activeWorkspaceId,
+    auth.getAccessToken,
+    activeWorkspaceId,
+  );
   const diffs = useDiffs(workspace.workspace);
+
+  const modelConfigForStream = useMemo((): LlmConfig | null => {
+    if (!agentSession.llmConfigData) return null;
+    return {
+      ...agentSession.llmConfigData,
+      provider: agentSession.llmProvider,
+    } as LlmConfig;
+  }, [agentSession.llmConfigData, agentSession.llmProvider]);
+
+  const selectedGraphTitle = useMemo(() => {
+    const id = agentSession.selectedGraphId;
+    const fromApi = agentSession.agentGraphs.find((g) => String(g._id) === id);
+    if (fromApi) return fromApi.name;
+    return agentSession.graphSelectOptions.find((o) => o.id === id)?.label;
+  }, [agentSession.selectedGraphId, agentSession.agentGraphs, agentSession.graphSelectOptions]);
+
   const conversation = useConversation(
     backendUrlTrimmed,
     backendReady,
@@ -115,9 +207,9 @@ export default function App() {
     threads.conversationId,
     threads.setConversationId,
     workspace.workspace,
-    settings.modelConfig,
-    models.selectedGraph,
-    models.selectedGraphName ?? undefined,
+    modelConfigForStream,
+    agentSession.selectedGraphId || null,
+    selectedGraphTitle,
     threads.loadThreads,
     diffs.setDiffs,
     activeWorkspaceId,
@@ -148,7 +240,7 @@ export default function App() {
   const [multimodalOpen, setMultimodalOpen] = useState(false);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [planMode, setPlanMode] = useState(false);
-  const [automations, setAutomations] = useState<Automation[]>([]);
+  const [automationBuilderOpen, setAutomationBuilderOpen] = useState(false);
   const editControl = useMessageEdit({
     sessionId: threads.conversationId,
     events: conversation.conversationEvents,
@@ -230,7 +322,6 @@ export default function App() {
     dataLoadedKeyRef.current = key;
     void workspace.loadWorkspaceSummary();
     void threads.loadThreads();
-    void models.loadGraphs();
     void models.loadModel();
     void models.loadTools();
     void skillsHook.loadSkills();
@@ -275,8 +366,64 @@ export default function App() {
   useEffect(() => {
     if (settings.activeView === "settings" && backendReady) {
       void models.loadModel();
+      agentSession.refreshLlmPreferences();
     }
   }, [settings.activeView, backendReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (
+      settings.activeView === "settings" &&
+      settings.activeSettingsSection === "archived" &&
+      backendReady &&
+      activeWorkspaceId
+    ) {
+      void threads.loadArchivedThreads();
+    }
+  }, [settings.activeView, settings.activeSettingsSection, backendReady, activeWorkspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const applyHash = () => {
+      const h = (window.location.hash || "").replace(/^#\/?/, "");
+      if (h === "automations") settings.setActiveView("automations");
+      else if (h === "agent-graphs") settings.setActiveView("agent-graphs");
+      else if (h === "settings") settings.setActiveView("settings");
+    };
+    applyHash();
+    window.addEventListener("hashchange", applyHash);
+    return () => window.removeEventListener("hashchange", applyHash);
+  }, [settings.setActiveView]);
+
+  useEffect(() => {
+    const api = (window as { kletron?: { onNavigate?: (cb: (v: "app" | "automations" | "agent-graphs" | "settings") => void) => () => void } }).kletron;
+    if (!api?.onNavigate) return;
+    return api.onNavigate((view) => {
+      settings.setActiveView(view);
+    });
+  }, [settings.setActiveView]);
+
+  /** Deep link: ?sessionId= opens that thread (hash routes like #/automations are separate). */
+  const sessionIdFromUrlApplied = useRef<string | null>(null);
+  useEffect(() => {
+    if (!backendReady || !auth.auth?.accessToken) return;
+    const params = new URLSearchParams(window.location.search);
+    const sid = params.get("sessionId");
+    if (!sid || sessionIdFromUrlApplied.current === sid) return;
+    sessionIdFromUrlApplied.current = sid;
+    threads.setConversationId(sid);
+    void threads.loadThreads(sid);
+  }, [backendReady, auth.auth?.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const id = threads.conversationId;
+    if (!id) return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("sessionId", id);
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${window.location.hash}`);
+    } catch {
+      // ignore
+    }
+  }, [threads.conversationId]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DERIVED DATA
@@ -398,14 +545,69 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [changesVisible, unstagedPathsKey]);
 
-  // Build agent graph items for selector
   const agentGraphItems: AgentGraph[] = useMemo(() => {
-    return models.graphs.map((g) => ({
-      id: g.id,
-      name: g.name,
-      description: g.description,
-    }));
-  }, [models.graphs]);
+    return agentSession.agentGraphs
+      .map((g) => ({
+        id: String(g._id ?? ""),
+        name: g.name,
+        description: g.description,
+      }))
+      .filter((g) => g.id);
+  }, [agentSession.agentGraphs]);
+
+  const graphsForPanel: AgentGraphSummary[] = useMemo(
+    () =>
+      agentSession.agentGraphs
+        .map((g) => ({
+          id: String(g._id ?? ""),
+          name: g.name,
+          description: g.description,
+          updatedAt: undefined as string | undefined,
+        }))
+        .filter((g) => g.id),
+    [agentSession.agentGraphs]
+  );
+
+  const agentBarProviders: LLMProvider[] = useMemo(() => {
+    const labels: Record<string, string> = {
+      openai: "OpenAI",
+      claude: "Anthropic",
+      azure: "Azure",
+      gemini: "Google",
+      ollama: "Ollama",
+      lmstudio: "LM Studio",
+      vllm: "vLLM",
+    };
+    return agentSession.enabledProviders.map((pid) => {
+      const cfg = agentSession.llmConfigData?.[pid] as Record<string, unknown> | undefined;
+      const model = (cfg?.model ?? cfg?.deployment ?? "") as string;
+      return {
+        id: pid,
+        label: labels[pid] ?? pid,
+        models: model ? [{ id: model, label: model }] : [],
+        connected: pid === agentSession.llmProvider,
+      };
+    });
+  }, [agentSession.enabledProviders, agentSession.llmConfigData, agentSession.llmProvider]);
+
+  const agentBarSelectedModel = useMemo(() => {
+    const cfg = agentSession.llmConfigData?.[agentSession.llmProvider] as Record<string, unknown> | undefined;
+    const m = (cfg?.model ?? cfg?.deployment ?? "") as string;
+    return m || null;
+  }, [agentSession.llmConfigData, agentSession.llmProvider]);
+
+  const handleAgentBarModelChange = useCallback(
+    (model: string) => {
+      void (async () => {
+        await models.saveModelConfig(agentSession.llmProvider, model);
+        await models.loadModel();
+        agentSession.refreshLlmPreferences();
+      })();
+    },
+    [models, agentSession.llmProvider, agentSession.refreshLlmPreferences]
+  );
+
+  const agentGraphsLoading = !agentSession.graphOptionsLoaded || !agentSession.llmPrefsLoaded;
 
   // Slash commands
   const slashCommands: SlashCommandItem[] = useMemo(() => [
@@ -435,7 +637,7 @@ export default function App() {
   }, [workspace.workspace?.path, toast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleNewThreadInProject(projectIdOrPath: string) {
-    conversation.abortRef.current?.abort();
+    conversation.stopStreaming();
     conversation.resetConversation();
     diffs.resetDiffs();
     // Clear the current conversation so the next sendMessage creates a fresh session
@@ -456,7 +658,7 @@ export default function App() {
 
   /** Handle workspace selection from the TitleBar dropdown */
   function handleWorkspaceSelect(workspaceId: string) {
-    conversation.abortRef.current?.abort();
+    conversation.stopStreaming();
     conversation.resetConversation();
     diffs.resetDiffs();
     threads.setConversationId(null);
@@ -508,7 +710,7 @@ export default function App() {
 
   function handleThreadSelect(threadId: string) {
     if (threadId === threads.conversationId) return;
-    conversation.abortRef.current?.abort();
+    conversation.stopStreaming();
     conversation.resetConversation();
     diffs.resetDiffs();
     threads.setConversationId(threadId);
@@ -661,11 +863,118 @@ export default function App() {
   // No project auto-assignment: threads are now scoped purely by workspace.
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // AUTOMATIONS VIEW
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  if (settings.activeView === "automations") {
+    return (
+      <DesktopWorkspaceProvider
+        backendUrlTrimmed={backendUrlTrimmed}
+        getAccessToken={auth.getAccessToken}
+        workspace={workspace}
+      >
+        <div className="flex h-screen flex-col text-text-primary">
+          <header className="flex h-10 items-center justify-between glass-titlebar px-4 pl-[76px] app-region-drag">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => settings.setActiveView("app")}
+                className="text-xs text-text-secondary hover:text-text-primary app-region-no-drag"
+              >
+                <ChevronLeft className="inline h-3.5 w-3.5" /> Back
+              </button>
+              <span className="text-xs font-medium text-text-secondary">Automations</span>
+            </div>
+            <Button
+              size="xs"
+              variant="secondary"
+              className="app-region-no-drag"
+              onClick={() => setAutomationBuilderOpen(true)}
+            >
+              New automation
+            </Button>
+          </header>
+          <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-elegant">
+            {automationsHook.error && (
+              <div className="mb-2 rounded border border-status-error-border bg-status-error-bg px-3 py-2 text-xs text-status-error-text">
+                {automationsHook.error}
+              </div>
+            )}
+            <AutomationsDashboard
+              automations={automationsHook.automations}
+              loading={automationsHook.loading}
+              onRemove={(id) => void automationsHook.remove(id)}
+              onRunNow={(id) => void automationsHook.runNow(id)}
+            />
+          </div>
+          <AutomationBuilderModal
+            open={automationBuilderOpen}
+            onClose={() => setAutomationBuilderOpen(false)}
+            apiFetch={apiFetch}
+            onCreated={() => {
+              setAutomationBuilderOpen(false);
+              void automationsHook.load();
+            }}
+          />
+        </div>
+      </DesktopWorkspaceProvider>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // AGENT GRAPHS VIEW
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  if (settings.activeView === "agent-graphs") {
+    return (
+      <DesktopWorkspaceProvider
+        backendUrlTrimmed={backendUrlTrimmed}
+        getAccessToken={auth.getAccessToken}
+        workspace={workspace}
+      >
+        <div className="flex h-screen flex-col text-text-primary min-h-0">
+          <header className="flex h-10 shrink-0 items-center glass-titlebar px-4 pl-[76px] app-region-drag">
+            <button
+              type="button"
+              onClick={() => settings.setActiveView("app")}
+              className="text-xs text-text-secondary hover:text-text-primary app-region-no-drag"
+            >
+              <ChevronLeft className="inline h-3.5 w-3.5" /> Back
+            </button>
+            <span className="ml-3 text-xs font-medium text-text-secondary">Agent graphs</span>
+          </header>
+          <AgentGraphsPanel
+            backendUrlTrimmed={backendUrlTrimmed}
+            getAccessToken={auth.getAccessToken}
+            activeWorkspaceId={activeWorkspaceId}
+            graphs={graphsForPanel}
+            graphsLoading={agentGraphsLoading}
+            graphRuns={models.graphRuns}
+            graphRunsLoading={models.graphRunsLoading}
+            loadGraphRuns={models.loadGraphRuns}
+            apiFetch={apiFetch}
+            onOpenRunInAgent={(runId) => {
+              settings.setActiveView("app");
+              threads.setConversationId(runId);
+              void threads.loadThreads(runId);
+            }}
+          />
+        </div>
+      </DesktopWorkspaceProvider>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // SETTINGS VIEW
   // ═══════════════════════════════════════════════════════════════════════════
 
   if (settings.activeView === "settings") {
     return (
+      <DesktopWorkspaceProvider
+        backendUrlTrimmed={backendUrlTrimmed}
+        getAccessToken={auth.getAccessToken}
+        workspace={workspace}
+      >
       <div className="flex h-screen flex-col text-text-primary">
         <header className="flex h-10 items-center glass-titlebar px-4 pl-[76px] app-region-drag">
           <span className="text-xs font-medium text-text-secondary">Settings</span>
@@ -694,15 +1003,20 @@ export default function App() {
           </aside>
           <main className="flex-1 overflow-y-auto px-6 py-4 scrollbar-elegant">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-              {/* Configuration */}
-              {(settings.activeSettingsSection === "configuration" || settings.activeSettingsSection === "general") && (
+              {/* Configuration — backend, models, portal-backed intelligence (read-only summaries) */}
+              {settings.activeSettingsSection === "configuration" && (
                 <>
                   <section className="space-y-3">
                     <h2 className="text-sm font-semibold text-text-primary">Backend</h2>
-                    <div className="glass-card divide-y divide-border-subtle rounded-md">
+                    <SettingsCard>
                       <div className="flex items-center justify-between gap-4 px-3 py-2">
                         <div><div className="text-sm font-medium text-text-primary">Backend URL</div><div className="text-xs text-text-muted">Connect to your Kletron backend.</div></div>
-                        <input value={settings.backendUrl} onChange={(e) => settings.setBackendUrl(e.target.value)} className="w-56 rounded-md border border-border-subtle bg-bg-app px-2 py-1 text-xs text-text-primary" placeholder="https://app.kletron.com" />
+                        <input
+                          value={settings.backendUrl}
+                          onChange={(e) => settings.setBackendUrl(e.target.value)}
+                          className="w-56 rounded-md bg-bg-app px-2 py-1 text-xs text-text-primary ring-1 ring-inset ring-border-subtle/90 focus:outline-none focus:ring-border-strong"
+                          placeholder="https://app.kletron.com"
+                        />
                       </div>
                       <div className="flex items-center justify-between gap-4 px-3 py-2">
                         <div className="text-sm font-medium text-text-primary">Connection status</div>
@@ -725,19 +1039,69 @@ export default function App() {
                         </div>
                       </div>
                       {auth.loginError && <div className="px-3 py-2 text-xs text-status-error-text">{auth.loginError}</div>}
-                    </div>
+                      <div className="flex items-center justify-between gap-4 px-3 py-2">
+                        <div>
+                          <div className="text-sm font-medium text-text-primary">Web portal</div>
+                          <div className="text-xs text-text-muted">Organization, billing, and full workspace settings in the browser.</div>
+                        </div>
+                        <Button size="xs" variant="ghost" onClick={() => openPortalPath("/app")}>
+                          Open in browser
+                        </Button>
+                      </div>
+                    </SettingsCard>
                   </section>
                   <section className="space-y-3">
                     <h2 className="text-sm font-semibold text-text-primary">Models</h2>
                     <LLMSelector providers={models.providers} selectedProvider={models.selectedProvider} selectedModel={models.selectedModel} onProviderChange={models.changeProvider} onModelChange={models.changeModel} />
                   </section>
+                  <section className="space-y-3">
+                    <h2 className="text-sm font-semibold text-text-primary">Embeddings &amp; context</h2>
+                    <p className="text-xs text-text-muted">
+                      Read-only snapshot from your workspace. Edit vectors, injection, and related options in the web app.
+                    </p>
+                    {portalConfigSnapshot.error && (
+                      <div className="text-xs text-status-error-text">{portalConfigSnapshot.error}</div>
+                    )}
+                    <SettingsCard>
+                      <div className="flex items-center justify-between gap-4 px-3 py-2">
+                        <div>
+                          <div className="text-sm font-medium text-text-primary">Embeddings</div>
+                          <div className="text-xs text-text-muted">
+                            {portalConfigSnapshot.loading
+                              ? "Loading…"
+                              : !activeWorkspaceId
+                                ? "Select a workspace to view status"
+                                : (portalConfigSnapshot.embeddingLine ?? "—")}
+                          </div>
+                        </div>
+                        <Button size="xs" variant="ghost" onClick={() => openPortalPath("/app/config/embeddings")}>
+                          Edit in portal
+                        </Button>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 px-3 py-2">
+                        <div>
+                          <div className="text-sm font-medium text-text-primary">Context injection</div>
+                          <div className="text-xs text-text-muted">
+                            {portalConfigSnapshot.loading
+                              ? "Loading…"
+                              : !activeWorkspaceId
+                                ? "Select a workspace to view status"
+                                : (portalConfigSnapshot.contextLine ?? "—")}
+                          </div>
+                        </div>
+                        <Button size="xs" variant="ghost" onClick={() => openPortalPath("/app/config/context")}>
+                          Edit in portal
+                        </Button>
+                      </div>
+                    </SettingsCard>
+                  </section>
                 </>
               )}
-              {/* General */}
+              {/* General — local desktop toggles only */}
               {settings.activeSettingsSection === "general" && (
                 <section className="space-y-3">
                   <h2 className="text-sm font-semibold text-text-primary">General</h2>
-                  <div className="glass-card divide-y divide-border-subtle rounded-md">
+                  <SettingsCard>
                     <div className="flex items-center justify-between gap-4 px-3 py-2">
                       <div><div className="text-sm font-medium text-text-primary">Prevent sleep while running</div><div className="text-xs text-text-muted">Keep your computer awake while the agent runs.</div></div>
                       <Toggle size="sm" checked={settings.settingsToggles.preventSleep} onChange={(c) => settings.setSettingsToggles((p) => ({ ...p, preventSleep: c }))} />
@@ -746,31 +1110,37 @@ export default function App() {
                       <div><div className="text-sm font-medium text-text-primary">Require Cmd+Enter to send</div><div className="text-xs text-text-muted">Multiline prompts require Cmd+Enter to send.</div></div>
                       <Toggle size="sm" checked={settings.settingsToggles.requireCmdEnter} onChange={(c) => settings.setSettingsToggles((p) => ({ ...p, requireCmdEnter: c }))} />
                     </div>
-                  </div>
+                  </SettingsCard>
                 </section>
               )}
               {/* Personalization */}
               {settings.activeSettingsSection === "personalization" && (
                 <section className="space-y-3">
                   <h2 className="text-sm font-semibold text-text-primary">Appearance</h2>
-                  <div className="glass-card divide-y divide-border-subtle rounded-md">
+                  <SettingsCard>
                     <div className="flex items-center justify-between gap-4 px-3 py-2">
                       <div><div className="text-sm font-medium text-text-primary">Compact density</div><div className="text-xs text-text-muted">Reduce padding across the interface.</div></div>
                       <Toggle size="sm" checked={settings.settingsToggles.compactDensity} onChange={(c) => settings.setSettingsToggles((p) => ({ ...p, compactDensity: c }))} />
                     </div>
-                  </div>
+                  </SettingsCard>
                 </section>
               )}
               {/* MCP */}
               {settings.activeSettingsSection === "mcp" && (
                 <section className="space-y-3">
                   <h2 className="text-sm font-semibold text-text-primary">MCP Servers</h2>
-                  <MCPServerConfig
-                    servers={mcpServers}
-                    onAdd={(s) => setMcpServers((p) => [...p, { ...s, id: crypto.randomUUID(), enabled: true, status: "disconnected" }])}
-                    onRemove={(id) => setMcpServers((p) => p.filter((s) => s.id !== id))}
-                    onToggle={(id, enabled) => setMcpServers((p) => p.map((s) => (s.id === id ? { ...s, enabled } : s)))}
-                  />
+                  <DeviceOnlyPortalBanner portalPath="/app/config/connectors" onOpenPortal={openPortalPath} />
+                  <SettingsCard>
+                    <div className="p-0">
+                      <MCPServerConfig
+                        embeddedInCard
+                        servers={mcpServers}
+                        onAdd={(s) => setMcpServers((p) => [...p, { ...s, id: crypto.randomUUID(), enabled: true, status: "disconnected" }])}
+                        onRemove={(id) => setMcpServers((p) => p.filter((s) => s.id !== id))}
+                        onToggle={(id, enabled) => setMcpServers((p) => p.map((s) => (s.id === id ? { ...s, enabled } : s)))}
+                      />
+                    </div>
+                  </SettingsCard>
                 </section>
               )}
               {/* Skills */}
@@ -789,11 +1159,20 @@ export default function App() {
               {/* Automations */}
               {settings.activeSettingsSection === "automations" && (
                 <section className="space-y-3">
+                  <p className="text-xs text-text-muted">
+                    Manage automations in the dedicated view for full create/edit, or browse the list below.
+                  </p>
+                  <Button size="sm" variant="secondary" onClick={() => settings.setActiveView("automations")}>
+                    Open automations
+                  </Button>
+                  {automationsHook.error && (
+                    <div className="text-xs text-status-error-text">{automationsHook.error}</div>
+                  )}
                   <AutomationsDashboard
-                    automations={automations}
-                    onAdd={(name, description, schedule) => setAutomations((p) => [...p, { id: crypto.randomUUID(), name, description, schedule, status: "active" }])}
-                    onRemove={(id) => setAutomations((p) => p.filter((a) => a.id !== id))}
-                    onToggle={(id) => setAutomations((p) => p.map((a) => a.id === id ? { ...a, status: a.status === "active" ? "paused" : "active" } : a))}
+                    automations={automationsHook.automations}
+                    loading={automationsHook.loading}
+                    onRemove={(id) => void automationsHook.remove(id)}
+                    onRunNow={(id) => void automationsHook.runNow(id)}
                   />
                 </section>
               )}
@@ -804,37 +1183,32 @@ export default function App() {
                   <p className="text-xs text-text-muted">
                     Agent graphs define different workflows for the AI. Select a graph when starting a conversation to guide the agent's behavior.
                   </p>
-                  {models.graphsLoading && (
+                  {agentGraphsLoading && (
                     <div className="glass-card rounded-md px-3 py-4 text-xs text-text-muted text-center animate-pulse">
                       Loading graphs...
                     </div>
                   )}
-                  {models.graphsError && (
-                    <div className="border border-status-error-bg bg-status-error-bg/10 rounded-md px-3 py-2 text-xs text-status-error-text">
-                      {models.graphsError}
-                    </div>
-                  )}
-                  {!models.graphsLoading && models.graphs.length === 0 && !models.graphsError && (
+                  {!agentGraphsLoading && graphsForPanel.length === 0 && (
                     <div className="glass-card rounded-md px-3 py-4 text-xs text-text-muted text-center">
                       No agent graphs available. Configure them in the web portal.
                     </div>
                   )}
                   <div className="space-y-2">
-                    {models.graphs.map((graph) => (
+                    {graphsForPanel.map((graph) => (
                       <div
                         key={graph.id}
-                        className={`rounded-md px-3 py-2.5 transition-colors cursor-pointer ${models.selectedGraph === graph.id
+                        className={`rounded-md px-3 py-2.5 transition-colors cursor-pointer ${agentSession.selectedGraphId === graph.id
                           ? "glass-selected"
                           : "glass-card"
                           }`}
-                        onClick={() => models.setSelectedGraph(graph.id)}
+                        onClick={() => agentSession.handleGraphChange(graph.id)}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Brain className="h-4 w-4 text-text-muted" />
                             <span className="text-sm font-medium text-text-primary">{graph.name}</span>
                           </div>
-                          {models.selectedGraph === graph.id && (
+                          {agentSession.selectedGraphId === graph.id && (
                             <span className="text-[10px] text-status-success-text font-medium">Active</span>
                           )}
                         </div>
@@ -847,7 +1221,7 @@ export default function App() {
                       </div>
                     ))}
                   </div>
-                  <Button size="sm" variant="secondary" onClick={() => models.loadGraphs()} disabled={models.graphsLoading}>
+                  <Button size="sm" variant="secondary" onClick={() => agentSession.refreshGraphs()} disabled={agentGraphsLoading}>
                     Reload Graphs
                   </Button>
                 </section>
@@ -856,6 +1230,7 @@ export default function App() {
               {settings.activeSettingsSection === "environments" && (
                 <section className="space-y-3">
                   <h2 className="text-sm font-semibold text-text-primary">Environment Variables</h2>
+                  <DeviceOnlyPortalBanner portalPath="/app/config/workspace" onOpenPortal={openPortalPath} />
                   <EnvironmentConfig
                     variables={envVariables}
                     onAdd={(v) => setEnvVariables((p) => [...p, v])}
@@ -868,6 +1243,7 @@ export default function App() {
               {settings.activeSettingsSection === "worktrees" && (
                 <section className="space-y-3">
                   <h2 className="text-sm font-semibold text-text-primary">Worktrees</h2>
+                  <DeviceOnlyPortalBanner portalPath="/app/config/workspace" onOpenPortal={openPortalPath} />
                   <p className="text-xs text-text-muted">Each agent can operate in an isolated worktree to prevent merge conflicts.</p>
                   <WorktreeManager
                     worktrees={worktrees}
@@ -881,9 +1257,43 @@ export default function App() {
               {/* Archived */}
               {settings.activeSettingsSection === "archived" && (
                 <section className="space-y-3">
-                  <h2 className="text-sm font-semibold text-text-primary">Archived Threads</h2>
-                  <div className="glass-card px-3 py-4 text-xs text-text-muted text-center rounded-md">
-                    Archived threads can be viewed and restored from the web portal.
+                  <h2 className="text-sm font-semibold text-text-primary">Archived threads</h2>
+                  <p className="text-xs text-text-muted">
+                    Threads archived from the sidebar. Open one to continue the conversation in the agent view.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void threads.loadArchivedThreads()}
+                    disabled={threads.archivedLoading}
+                  >
+                    {threads.archivedLoading ? "Loading…" : "Refresh list"}
+                  </Button>
+                  <div className="space-y-2">
+                    {threads.archivedThreads.length === 0 && !threads.archivedLoading && (
+                      <div className="glass-card px-3 py-4 text-xs text-text-muted text-center rounded-md">
+                        No archived threads.
+                      </div>
+                    )}
+                    {threads.archivedThreads.map((t) => (
+                      <div
+                        key={t.id}
+                        className="flex items-center justify-between gap-3 glass-card px-3 py-2 rounded-md"
+                      >
+                        <span className="text-sm truncate min-w-0">{t.title || t.id}</span>
+                        <Button
+                          size="xs"
+                          variant="secondary"
+                          onClick={() => {
+                            settings.setActiveView("app");
+                            threads.setConversationId(t.id);
+                            void threads.loadThreads(t.id);
+                          }}
+                        >
+                          Open
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 </section>
               )}
@@ -891,6 +1301,7 @@ export default function App() {
           </main>
         </div>
       </div>
+      </DesktopWorkspaceProvider>
     );
   }
 
@@ -899,6 +1310,11 @@ export default function App() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   return (
+    <DesktopWorkspaceProvider
+      backendUrlTrimmed={backendUrlTrimmed}
+      getAccessToken={auth.getAccessToken}
+      workspace={workspace}
+    >
     <div className="flex h-screen flex-col text-text-primary">
       {/* ── Title Bar ── */}
       <TitleBar
@@ -913,42 +1329,87 @@ export default function App() {
         onOpen={() => {
           try { (window as any).kletron?.openInVSCode?.(); } catch { /* ignore */ }
         }}
-        onCommit={() => {
-          // Focus the right sidebar git section to write commit message
-          setRightSidebarVisible(true);
-        }}
-        onPush={() => void git.push()}
-        onCreatePR={() => {
-          // Push first, then create PR. Use commit message as PR title, or a default.
-          const title = git.commitMessage.trim() || `PR from ${git.gitStatus?.branch ?? 'branch'}`;
-          void git.push().then(() =>
-            git.createPR(title).then((result) => {
-              if (result?.url) {
-                try { (window as any).kletron?.openExternal?.(result.url); } catch { /* ignore */ }
+        onCommit={
+          isCodeMode
+            ? () => {
+                setRightSidebarVisible(true);
               }
-            })
-          );
-        }}
-        committing={git.committing}
-        pushing={git.pushing}
-        creatingPR={git.creatingPR}
+            : undefined
+        }
+        onPush={isCodeMode ? () => void git.push() : undefined}
+        onCreatePR={
+          isCodeMode
+            ? () => {
+                const title = git.commitMessage.trim() || `PR from ${git.gitStatus?.branch ?? "branch"}`;
+                void git.push().then(() =>
+                  git.createPR(title).then((result) => {
+                    if (result?.url) {
+                      try {
+                        (window as { kletron?: { openExternal?: (u: string) => Promise<boolean> } }).kletron?.openExternal?.(
+                          result.url,
+                        );
+                      } catch {
+                        /* ignore */
+                      }
+                    }
+                  }),
+                );
+              }
+            : undefined
+        }
+        committing={isCodeMode ? git.committing : false}
+        pushing={isCodeMode ? git.pushing : false}
+        creatingPR={isCodeMode ? git.creatingPR : false}
         threadTitle={activeThreadTitle}
-        onToggleTerminal={() => setTerminalVisible((p) => !p)}
-        onToggleChanges={() => {
-          setChangesVisible((p) => {
-            if (!p) void git.fetchAllDiffs();
-            return !p;
-          });
-        }}
-         changesVisible={changesVisible}
-        gitDiffStats={git.diffStats ?? undefined}
+        onToggleTerminal={isCodeMode ? () => setTerminalVisible((p) => !p) : undefined}
+        onToggleChanges={
+          isCodeMode
+            ? () => {
+                setChangesVisible((p) => {
+                  if (!p) void git.fetchAllDiffs();
+                  return !p;
+                });
+              }
+            : undefined
+        }
+        changesVisible={isCodeMode ? changesVisible : false}
+        gitDiffStats={isCodeMode ? (git.diffStats ?? undefined) : undefined}
         workCategories={BUILT_IN_CATEGORIES.map(c => ({ id: c.id, name: c.name, description: c.description, color: c.color }))}
         activeWorkCategoryId={categoriesHook.activeCategory}
         onWorkCategorySelect={(categoryId) => {
           categoriesHook.setActiveCategory(categoryId);
-          toast.info("Switched category", `Now working in ${categoryId} mode`);
+          const label =
+            categoriesHook.allCategories.find((c) => c.id === categoryId)?.name ?? categoryId;
+          toast.info("Switched mode", label);
         }}
       />
+
+      <nav className="flex shrink-0 items-center gap-1 border-b border-border-subtle bg-bg-surface/80 px-3 py-1.5">
+        <span className="flex items-center gap-1.5 rounded-md bg-state-selected px-2.5 py-1 text-[11px] font-medium text-text-primary">
+          <LayoutGrid className="h-3.5 w-3.5" /> Agent
+        </span>
+        <button
+          type="button"
+          onClick={() => settings.setActiveView("automations")}
+          className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium text-text-secondary hover:bg-state-hover hover:text-text-primary"
+        >
+          <Zap className="h-3.5 w-3.5" /> Automations
+        </button>
+        <button
+          type="button"
+          onClick={() => settings.setActiveView("agent-graphs")}
+          className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium text-text-secondary hover:bg-state-hover hover:text-text-primary"
+        >
+          <Network className="h-3.5 w-3.5" /> Graphs
+        </button>
+        <button
+          type="button"
+          onClick={() => settings.setActiveView("settings")}
+          className="ml-auto flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium text-text-secondary hover:bg-state-hover hover:text-text-primary"
+        >
+          <Settings className="h-3.5 w-3.5" /> Settings
+        </button>
+      </nav>
 
       {/* ── Three-Pane Body ── */}
       <div className="flex flex-1 min-h-0 relative">
@@ -991,6 +1452,12 @@ export default function App() {
               streamingText={conversation.streamingText}
               streamingReasoning={conversation.streamingReasoning}
               activityEvents={conversation.conversationEvents}
+              hasOlder={conversation.historyPage.hasOlder}
+              loadingOlder={conversation.loadingOlder}
+              onLoadOlder={() => void conversation.onLoadOlderMessages()}
+              virtualized
+              prefetchNearTop
+              onNearTop={() => void conversation.onLoadOlderMessages()}
               messageActions={(event) => (
                 <MessageActions
                   event={event}
@@ -1001,8 +1468,16 @@ export default function App() {
             {inlineDiffs.length > 0 && (
               <InlineDiffReview
                 diffs={inlineDiffs}
-                onAccept={(editId) => diffs.applyAllDiff(editId)}
-                onReject={(editId) => diffs.rejectAllDiff(editId)}
+                onAccept={(editId) => {
+                  void (async () => {
+                    await conversation.sessionEdits.approveEdit(editId);
+                    await diffs.applyAllDiff(editId);
+                  })();
+                }}
+                onReject={(editId) => {
+                  void conversation.sessionEdits.rejectEdit(editId);
+                  diffs.rejectAllDiff(editId);
+                }}
                 onOpenInIDE={(filePath) => {
                   try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
                 }}
@@ -1061,7 +1536,7 @@ export default function App() {
               onSend={handleSendMessage}
               onStop={conversation.stopStreaming}
               sending={conversation.streaming}
-              disabled={!backendReady || !auth.auth?.accessToken}
+              disabled={composerConnection.composerDisabled}
               placeholder={
                 conversation.streaming
                   ? "Add a follow-up (queued until agent finishes)..."
@@ -1074,39 +1549,33 @@ export default function App() {
               onDismissChip={(id) => setContextChips((p) => p.filter((c) => c.id !== id))}
               onPaperclipClick={() => setMultimodalOpen((p) => !p)}
               planMode={planMode}
-              connected={
-                !backendConnected
-                  ? false
-                  : models.llmHealthChecking
-                    ? 'checking'
-                    : models.llmHealthy === true
-              }
-              connectionLabel={
-                !backendConnected
-                  ? 'Backend disconnected'
-                  : models.llmHealthChecking
-                    ? `Testing ${models.selectedProvider ?? 'LLM'}…`
-                    : models.llmHealthy
-                      ? `${models.selectedProvider ?? 'LLM'} connected`
-                      : `${models.selectedProvider ?? 'LLM'} unreachable`
-              }
+              connected={composerConnection.connected}
+              connectionLabel={composerConnection.connectionLabel}
               tokenUsage={conversation.tokenUsage}
               graphSelector={
                 <AgentGraphSelector
                   graphs={agentGraphItems}
-                  selectedGraphId={models.selectedGraph}
-                  onGraphSelect={models.setSelectedGraph}
-                  loading={models.graphsLoading}
+                  selectedGraphId={agentSession.selectedGraphId}
+                  onGraphSelect={agentSession.handleGraphChange}
+                  loading={agentGraphsLoading}
                 />
               }
               modelSelector={
                 <LLMSelector
-                  providers={models.providers}
-                  selectedProvider={models.selectedProvider}
-                  selectedModel={models.selectedModel}
-                  onProviderChange={models.changeProvider}
-                  onModelChange={models.changeModel}
+                  providers={agentBarProviders}
+                  selectedProvider={agentSession.llmProvider}
+                  selectedModel={agentBarSelectedModel}
+                  onProviderChange={agentSession.handleLlmChange}
+                  onModelChange={handleAgentBarModelChange}
                   compact
+                />
+              }
+              approvalSelector={
+                <ThreadApprovalModeSelector
+                  value={conversation.threadApprovalMode}
+                  onSelect={conversation.onThreadApprovalSelect}
+                  disabled={conversation.conversationRunSource === "automation"}
+                  disabledReason="Approval mode is fixed for automation threads."
                 />
               }
             />
@@ -1213,5 +1682,6 @@ export default function App() {
         loading={editControl.editingMessageSaving}
       />
     </div>
+    </DesktopWorkspaceProvider>
   );
 }

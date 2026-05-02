@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { joinApiOrigin } from '@kletron/shared';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -20,11 +21,6 @@ export type SessionEditFlushNotice =
     | { kind: "rejected"; toolName: string }
     | { kind: "approved_all"; count: number }
     | { kind: "rejected_all"; count: number };
-
-function joinApiOrigin(apiOrigin: string | undefined, path: string): string {
-    const base = (apiOrigin ?? "").replace(/\/$/, "");
-    return base ? `${base}${path}` : path;
-}
 
 export interface UseSessionEditsOptions {
     /** The session/run ID to fetch edits for. */

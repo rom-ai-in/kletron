@@ -17,8 +17,9 @@ export async function GET(req: NextRequest) {
 
 /**
  * PUT /api/config/tool-approval — Update tool approval config (partial merge).
- * Body: Partial<ToolApprovalConfig>
- * Example: { "toolOverrides": { "write_file": "always_approve" } }
+ * Body: Partial<ToolApprovalConfig> plus optional `replaceToolOverrides: true` to replace
+ * the entire `toolOverrides` map (needed to remove entries).
+ * Example: { "toolOverrides": { "write_file": "always_approve" }, "replaceToolOverrides": true }
  */
 export async function PUT(req: NextRequest) {
     const auth = await requireAppRouteAuth(req);

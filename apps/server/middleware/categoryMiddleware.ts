@@ -1,7 +1,7 @@
 // apps/server/middleware/categoryMiddleware.ts
 import { MiddlewareHandler } from "hono";
 import { categoryService } from "@kletron/server/services/categoryService";
-import type { WorkCategoryConfig } from "@kletron/shared/types";
+import type { WorkCategoryConfig } from "@kletron/shared/categoryTypes";
 
 export const withCategoryContext: MiddlewareHandler = async (c, next) => {
   try {

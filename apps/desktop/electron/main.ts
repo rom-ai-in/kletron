@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage, Menu } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import { spawn } from "node:child_process";
@@ -137,6 +137,92 @@ function dispatchUpdateStatus(status: UpdateStatus) {
   }
 }
 
+function installAppMenu() {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(process.platform === "darwin"
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: "about" },
+              { type: "separator" },
+              { role: "services" },
+              { type: "separator" },
+              { role: "hide" },
+              { role: "hideOthers" },
+              { role: "unhide" },
+              { type: "separator" },
+              { role: "quit" },
+            ],
+          } as Electron.MenuItemConstructorOptions,
+        ]
+      : [
+          {
+            label: "File",
+            submenu: [{ role: "quit" }],
+          } as Electron.MenuItemConstructorOptions,
+        ]),
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+      ],
+    },
+    {
+      label: "View",
+      submenu: [
+        { role: "reload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { type: "separator" },
+        { role: "togglefullscreen" },
+      ],
+    },
+    {
+      label: "Navigate",
+      submenu: [
+        {
+          label: "Agent",
+          click: () => {
+            mainWindow?.webContents.send("app:navigate", "app");
+          },
+        },
+        {
+          label: "Automations",
+          click: () => {
+            mainWindow?.webContents.send("app:navigate", "automations");
+          },
+        },
+        {
+          label: "Agent Graphs",
+          click: () => {
+            mainWindow?.webContents.send("app:navigate", "agent-graphs");
+          },
+        },
+        {
+          label: "Settings",
+          click: () => {
+            mainWindow?.webContents.send("app:navigate", "settings");
+          },
+        },
+      ],
+    },
+    {
+      label: "Window",
+      submenu: [{ role: "minimize" }, { role: "close" }],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow() {
   const appIcon = loadAppIcon();
 
@@ -272,6 +358,7 @@ app.on("ready", () => {
     }
   }
   createWindow();
+  installAppMenu();
   void setupAutoUpdates();
 });
 

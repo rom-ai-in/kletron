@@ -10,6 +10,8 @@ import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 import { heuristicTitle, sanitizeTitle, stripSystemPrefix, stripThoughtContent } from "@kletron/server/services/titleSanitizer";
+import { normalizeToWorkModeId } from "@kletron/shared/workMode";
+import { categoryService } from "@kletron/server/services/categoryService";
 
 const textEncoder = new TextEncoder();
 
@@ -100,11 +102,37 @@ export async function POST(request: Request) {
       : getToolApprovalConfig().defaultThreadApprovalMode
   );
 
+  let workMode = normalizeToWorkModeId(
+    typeof payload.workMode === "string"
+      ? payload.workMode
+      : typeof payload.category === "string"
+        ? payload.category
+        : null,
+  );
+  if (
+    payload.workMode === undefined &&
+    payload.category === undefined &&
+    auth.userId &&
+    workspace._id
+  ) {
+    const stored = await categoryService.getCurrentCategory(auth.userId, workspace._id.toString());
+    if (stored) workMode = normalizeToWorkModeId(stored);
+  }
+
+  if (
+    auth.userId &&
+    workspace._id &&
+    (typeof payload.workMode === "string" || typeof payload.category === "string")
+  ) {
+    await categoryService.setCurrentCategory(auth.userId, workMode, workspace._id.toString());
+  }
+
   // Create run record
   const nodeOrder = getGraphNodeOrder(graph as any);
   console.log(`[sessions/create] Creating run for graph "${graph.name}" (${graphId}), workspace=${workspace._id}`);
   const runId = await agentGraphRunService.createRun(graphId, workspace._id.toString(), "agent", {
     threadApprovalMode: resolvedThreadMode,
+    workMode,
   });
   console.log(`[sessions/create] ✓ Run created: ${runId}`);
   const initialNodeStatuses: Record<string, any> = {};

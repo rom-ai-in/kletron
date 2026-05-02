@@ -226,6 +226,8 @@ export interface AgentGraphRun {
      * Omitted or `inherit` uses workspace tool approval only.
      */
     threadApprovalMode?: ThreadApprovalMode;
+    /** Code vs Work mode for tool allowlists and prompting (default `code`). */
+    workMode?: "code" | "work";
 }
 
 /**

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Settings,
   CheckCircle2,
@@ -35,6 +36,8 @@ import {
   DEFAULT_WORKSPACE_CONTEXT_INJECTION,
   type WorkspaceContextInjectionSettings,
 } from "@kletron/shared/workspaceContextInjection";
+import { VectorIndexPanel } from "@kletron/ui/components/config/VectorIndexPanel";
+import { VectorHistoryPanel } from "@kletron/ui/components/config/VectorHistoryPanel";
 
 // --- Cache Metadata Types ---
 interface CacheMetadata {
@@ -74,6 +77,12 @@ const TABS: TabConfig[] = [
   { id: "injection", label: "Injection", icon: Sliders, description: "Auto context in agent prompts" },
   { id: "trace", label: "Trace & Debug", icon: Target, description: "Test relevance ranking" },
 ];
+
+const CONTEXT_TAB_IDS = new Set<TabId>(["overview", "structural", "semantic", "injection", "trace"]);
+
+/** Horizontal rhythm aligned with AppHeader / main shell */
+const CX_PAD = "px-6 lg:px-8";
+const CX_SCROLL = `overflow-y-auto scrollbar-elegant ${CX_PAD}`;
 
 // --- Repo Stats Card ---
 interface RepoStatsCardProps {
@@ -383,7 +392,11 @@ function ScanConsole({ logs, isActive }: { logs: string[]; isActive: boolean }) 
 }
 
 // --- Main Component ---
-export function ContextConfigView() {
+function ContextConfigViewInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const isSemanticHistory = searchParams.get("sub") === "history";
+
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [auditContext, setAuditContext] = useState<AuditContext>({});
   const [auditContextEnabled, setAuditContextEnabled] = useState(true);
@@ -404,6 +417,27 @@ export function ContextConfigView() {
   const [cacheMetadata, setCacheMetadata] = useState<CacheMetadata | null>(null);
   const [currentWorkingFolder, setCurrentWorkingFolder] = useState<string | null>(null);
   const [showCacheViewer, setShowCacheViewer] = useState(false);
+
+  // Deep-link: ?tab=…&sub=history
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t && CONTEXT_TAB_IDS.has(t as TabId)) {
+      setActiveTab(t as TabId);
+    }
+  }, [searchParams]);
+
+  const navigateToTab = useCallback(
+    (id: TabId) => {
+      setActiveTab(id);
+      const p = new URLSearchParams(searchParams.toString());
+      p.set("tab", id);
+      if (id !== "semantic") {
+        p.delete("sub");
+      }
+      router.replace(`/app/config/context?${p.toString()}`, { scroll: false });
+    },
+    [router, searchParams]
+  );
 
   // Load initial config
   useEffect(() => {
@@ -619,7 +653,7 @@ export function ContextConfigView() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-bg-app overflow-hidden">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-bg-app overflow-hidden">
       {/* Scan Console Overlay */}
       <ScanConsole logs={scanLogs} isActive={isScanning} />
 
@@ -629,7 +663,9 @@ export function ContextConfigView() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4 shrink-0">
+      <div
+        className={`flex shrink-0 items-center justify-between border-b border-border-subtle bg-bg-surface py-4 ${CX_PAD}`}
+      >
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-main/10 text-primary-main">
             <Settings className="h-5 w-5" />
@@ -679,15 +715,18 @@ export function ContextConfigView() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex items-center gap-1 px-6 py-2 border-b border-border-subtle bg-bg-surface/50">
+      <div
+        className={`flex w-full min-w-0 items-center gap-1 overflow-x-auto border-b border-border-subtle bg-bg-surface/50 py-2 scrollbar-thin ${CX_PAD}`}
+      >
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${isActive
+              type="button"
+              onClick={() => navigateToTab(tab.id)}
+              className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-all ${isActive
                 ? "bg-primary-main/10 text-primary-main ring-1 ring-primary-main/30"
                 : "text-text-muted hover:text-text-primary hover:bg-state-hover"
                 }`}
@@ -701,8 +740,8 @@ export function ContextConfigView() {
 
       {/* Error Banner */}
       {error && (
-        <div className="mx-6 mt-4">
-          <Panel className="p-3 border border-status-error-border bg-status-error-bg text-status-error-text text-sm">
+        <div className={`shrink-0 pt-4 ${CX_PAD}`}>
+          <Panel className="border border-status-error-border bg-status-error-bg p-3 text-sm text-status-error-text">
             <div className="flex items-start gap-2">
               <AlertCircle className="mt-0.5 h-4 w-4 text-status-error-text" />
               <span>{error}</span>
@@ -712,12 +751,12 @@ export function ContextConfigView() {
       )}
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden">
         {/* Tab 1: Overview */}
         {activeTab === "overview" && (
-          <div className="h-full overflow-y-auto p-6 scrollbar-elegant">
-            <div className="max-w-4xl mx-auto space-y-6">
-              <div className="grid gap-4 md:grid-cols-2">
+          <div className={`h-full ${CX_SCROLL} pb-8 pt-6`}>
+            <div className="mx-auto w-full max-w-none space-y-6">
+              <div className="grid w-full gap-4 lg:grid-cols-2">
                 <Panel className="p-4 border border-border-subtle bg-bg-elevated/50">
                   <div className="flex items-center gap-2 mb-2">
                     <Layers size={16} className="text-status-info-text" />
@@ -755,10 +794,10 @@ export function ContextConfigView() {
                     )}
                   </p>
                   <Link
-                    href="/app/vectors"
+                    href="/app/config/context?tab=semantic"
                     className="inline-flex mt-3 text-xs font-medium text-primary-main hover:underline"
                   >
-                    Open vector index →
+                    Open semantic index →
                   </Link>
                 </Panel>
               </div>
@@ -811,40 +850,27 @@ export function ContextConfigView() {
 
         {/* Tab 2: Structural map */}
         {activeTab === "structural" && (
-          <div className="h-full">
+          <div className="h-full min-h-0 w-full min-w-0">
             <ContextVisualizer />
           </div>
         )}
 
-        {/* Tab 3: Semantic index */}
+        {/* Tab 3: Semantic index (full vector UI + history) */}
         {activeTab === "semantic" && (
-          <div className="h-full overflow-y-auto p-6 scrollbar-elegant">
-            <div className="max-w-2xl mx-auto space-y-4">
-              <Panel className="p-6 border border-border-subtle">
-                <h2 className="text-base font-semibold text-text-primary mb-2">Semantic index (vector RAG)</h2>
-                <p className="text-sm text-text-secondary leading-relaxed">
-                  The vector index stores embeddings of code chunks. When enabled under Injection, the agent can receive
-                  semantic matches for your prompt in addition to the structural import graph.
-                </p>
-                <p className="text-sm text-text-secondary mt-3">
-                  Configure embeddings under Configuration → Embeddings, then build the index from the Vector Index page.
-                </p>
-                <Link
-                  href="/app/vectors"
-                  className="mt-4 inline-flex h-9 items-center justify-center rounded-md bg-primary-main px-4 text-sm font-medium text-white hover:opacity-90"
-                >
-                  Go to Vector Index
-                </Link>
-              </Panel>
-            </div>
+          <div className="h-full min-h-0 flex flex-col overflow-hidden bg-bg-app">
+            {isSemanticHistory ? (
+              <VectorHistoryPanel embedded indexHref="/app/config/context?tab=semantic" />
+            ) : (
+              <VectorIndexPanel embedded />
+            )}
           </div>
         )}
 
         {/* Tab 4: Injection settings */}
         {activeTab === "injection" && (
-          <div className="h-full overflow-y-auto p-6 scrollbar-elegant">
-            <div className="max-w-xl mx-auto space-y-4">
-              <Panel className="p-6 border border-border-subtle space-y-4">
+          <div className={`h-full ${CX_SCROLL} pb-8 pt-6`}>
+            <div className="w-full min-w-0 space-y-4">
+              <Panel className="w-full space-y-4 border border-border-subtle p-6 lg:p-8">
                 <h2 className="text-base font-semibold text-text-primary">Auto context injection</h2>
                 <p className="text-xs text-text-secondary">
                   Controls the <code className="text-[11px] bg-bg-app px-1 rounded">ACTIVE CONTEXT</code> block in agent
@@ -944,12 +970,12 @@ export function ContextConfigView() {
           </div>
         )}
 
-        {/* Tab 3: Trace & Debug */}
+        {/* Tab 5: Trace & Debug */}
         {activeTab === "trace" && (
-          <div className="h-full flex">
-            <div className="flex-1 p-6 overflow-y-auto scrollbar-elegant">
-              <div className="max-w-2xl mx-auto">
-                <Panel className="p-6 bg-bg-elevated border border-border-subtle">
+          <div className="flex h-full min-h-0 w-full min-w-0 flex-col lg:flex-row">
+            <div className={`min-h-0 flex-1 ${CX_SCROLL} pb-8 pt-6`}>
+              <div className="mx-auto w-full max-w-5xl">
+                <Panel className="border border-border-subtle bg-bg-elevated p-6 lg:p-8">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="p-2 rounded-lg bg-primary-main/10 text-primary-main">
                       <Target size={18} />
@@ -976,12 +1002,26 @@ export function ContextConfigView() {
                 </Panel>
               </div>
             </div>
-            <div className="w-[400px] border-l border-border-subtle h-full overflow-hidden">
+            <div className="flex min-h-[min(36vh,22rem)] w-full shrink-0 flex-col border-t border-border-subtle bg-bg-surface lg:min-h-0 lg:h-full lg:w-96 lg:shrink-0 lg:border-l lg:border-t-0 xl:w-[26rem]">
               <ContextTracePanel />
             </div>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+export function ContextConfigView() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-full min-h-[240px] flex-1 items-center justify-center bg-bg-app text-sm text-text-muted">
+          Loading context…
+        </div>
+      }
+    >
+      <ContextConfigViewInner />
+    </Suspense>
   );
 }

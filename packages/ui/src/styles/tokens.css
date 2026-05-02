@@ -154,8 +154,6 @@
   --sidebar-density-gap: 4px;
   --sidebar-density-font: 12px;
   --sidebar-density-icon: 16px;
-
-  /* ── Glass / frosted surface variables ────────────────────────────── */
   --glass-bg-sidebar: rgba(24, 24, 27, 0.52);
   --glass-bg-titlebar: rgba(24, 24, 27, 0.42);
   --glass-bg-panel: rgba(24, 24, 27, 0.55);

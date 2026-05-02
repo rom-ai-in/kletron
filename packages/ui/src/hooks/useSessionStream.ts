@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import type { AgentEvent, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent } from '@kletron/shared/types';
 import type { Message, StreamStatus, StreamChunk } from '@kletron/shared/chatTypes';
 import type { ThreadApprovalMode } from '@kletron/shared/threadApprovalTypes';
+import { joinApiOrigin } from '@kletron/shared';
+import { normalizeToWorkModeId } from '@kletron/shared/workMode';
 import { extractThoughtsFromContent, sanitizeVisibleAssistantContent, normalizeMessage } from '@kletron/shared/contentSanitizer';
 
 // Re-export for backward compatibility
@@ -45,8 +47,10 @@ export interface UseSessionStreamOptions {
      * Extra headers for every request (e.g. `Authorization`, `x-workspace-id` from Bearer auth).
      */
     getRequestHeaders?: () => Promise<Record<string, string>>;
-    /** Optional work category in the JSON body (desktop / command-center parity). */
+    /** Optional work category in the JSON body (desktop / command-center parity). Legacy alias for work mode. */
     category?: string | null;
+    /** Code vs Work (`code` | `work`). Takes precedence over `category` when both are set. */
+    workMode?: string | null;
     /** Optional plan mode flag in the JSON body. */
     planMode?: boolean;
     /** Callback when a new session is created (receives runId). */
@@ -89,7 +93,7 @@ export interface UseSessionStreamReturn {
     streamingReasoning: string;
     /** Send a message (creates a new session or continues existing one).
      *  Optionally accepts a `text` override to bypass the input state. */
-    handleSend: (options?: { text?: string }) => Promise<void>;
+    handleSend: (options?: { text?: string; planMode?: boolean }) => Promise<void>;
     /** Stop the current stream. */
     handleStop: () => void;
     /** Keyboard handler (Enter to send). */
@@ -106,11 +110,6 @@ export interface UseSessionStreamReturn {
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
 
-function joinApiOrigin(apiOrigin: string | undefined, path: string): string {
-    const base = (apiOrigin ?? "").replace(/\/$/, "");
-    return base ? `${base}${path}` : path;
-}
-
 export function useSessionStream(options: UseSessionStreamOptions): UseSessionStreamReturn {
     const {
         sessionId,
@@ -122,6 +121,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         apiOrigin,
         getRequestHeaders,
         category,
+        workMode,
         planMode,
         onSessionCreated,
         onTitleGenerate,
@@ -542,13 +542,14 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         }
     }, [onSessionCreated, onTitleGenerate, mergeStreamMessages, clearStreamBuffers, scheduleStreamFlush]);
 
-    const handleSend = useCallback(async (options?: { text?: string }) => {
+    const handleSend = useCallback(async (options?: { text?: string; planMode?: boolean }) => {
         const msg = (options?.text ?? input).trim();
         if (!msg || sending) return;
         if (!sessionId && !selectedGraphId) {
             setErrorMessage("No agent graph selected. Please select a graph before sending.");
             return;
         }
+        const effectivePlanMode = options?.planMode ?? planMode;
         setInput('');
         setSending(true);
         isStreamingRef.current = true;
@@ -567,6 +568,14 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             ? '/api/sessions'
             : `/api/sessions/${sessionId}/chat`;
         const url = joinApiOrigin(apiOrigin, path);
+        const resolvedMode = normalizeToWorkModeId(
+            (workMode ?? category ?? null) as string | null,
+        );
+        const modeBody =
+            workMode != null || category != null
+                ? { workMode: resolvedMode, category: resolvedMode }
+                : {};
+
         const body = isNewSession
             ? {
                 graphId: selectedGraphId,
@@ -575,15 +584,15 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 model: llmModel,
                 ...(workspaceId ? { workspaceId } : {}),
                 ...(threadApprovalMode && threadApprovalMode !== 'inherit' ? { threadApprovalMode } : {}),
-                ...(category ? { category } : {}),
-                ...(planMode ? { planMode: true } : {}),
+                ...modeBody,
+                ...(effectivePlanMode ? { planMode: true } : {}),
             }
             : {
                 message: msg,
                 provider: llmProvider,
                 model: llmModel,
-                ...(category ? { category } : {}),
-                ...(planMode ? { planMode: true } : {}),
+                ...modeBody,
+                ...(effectivePlanMode ? { planMode: true } : {}),
             };
 
         // Optimistic user message (temp ID will be replaced by the real event)
@@ -637,7 +646,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, workspaceId, threadApprovalMode, apiOrigin, category, planMode, processNdjsonStream]);
+    }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, workspaceId, threadApprovalMode, apiOrigin, category, workMode, planMode, processNdjsonStream]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {

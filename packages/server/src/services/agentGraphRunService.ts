@@ -63,6 +63,8 @@ export type CreateRunOptions = {
     title?: string;
     /** Per-thread tool approval mode (interactive agent sessions). */
     threadApprovalMode?: ThreadApprovalMode;
+    /** Code vs Work — scopes tool allowlists for interactive sessions. */
+    workMode?: "code" | "work";
 };
 
 export class AgentGraphRunService {
@@ -93,6 +95,7 @@ export class AgentGraphRunService {
             ...(options?.threadApprovalMode && options.threadApprovalMode !== "inherit"
                 ? { threadApprovalMode: options.threadApprovalMode }
                 : {}),
+            ...(options?.workMode ? { workMode: options.workMode } : {}),
             status: "PENDING",
             startedAt: new Date(),
             nodeOrder: [],
@@ -145,7 +148,27 @@ export class AgentGraphRunService {
         }
     }
 
-    async patchRun(runId: string, partial: Partial<Pick<AgentGraphRun, "threadApprovalMode" | "title">>): Promise<void> {
+    /** Work mode for tool policy (defaults to `code` when unset). */
+    async getRunWorkMode(runId: string): Promise<"code" | "work"> {
+        if (!ObjectId.isValid(runId)) return "code";
+        const collection = await getCollectionSafe();
+        const fromDoc = (r: AgentGraphRun | null | undefined) =>
+            r?.workMode === "work" ? "work" : "code";
+        if (!collection) {
+            return fromDoc(getFallbackRun(runId));
+        }
+        try {
+            const doc = await collection.findOne({ _id: new ObjectId(runId) }, { projection: { workMode: 1 } });
+            return fromDoc(doc as AgentGraphRun | null);
+        } catch {
+            return fromDoc(getFallbackRun(runId));
+        }
+    }
+
+    async patchRun(
+        runId: string,
+        partial: Partial<Pick<AgentGraphRun, "threadApprovalMode" | "title" | "workMode">>,
+    ): Promise<void> {
         if (!ObjectId.isValid(runId)) {
             throw new Error("Invalid run ID format");
         }

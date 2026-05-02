@@ -9,6 +9,7 @@ import { ThreadFeed } from "../chat/ThreadFeed";
 import { Message } from "../chat/Message";
 import { DEFAULT_WORK_CATEGORIES } from "@kletron/shared";
 import type { WorkCategory } from "@kletron/agent-core";
+import { normalizeToWorkModeId } from "@kletron/shared/workMode";
 import { AnimatePresence, motion } from "framer-motion";
 
 interface CoworkWorkbenchProps {
@@ -23,7 +24,7 @@ interface ChatMessage {
     category?: string;
 }
 
-export function CoworkWorkbench({ workspaceId, initialCategory = 'coding' }: CoworkWorkbenchProps) {
+export function CoworkWorkbench({ workspaceId, initialCategory = 'code' }: CoworkWorkbenchProps) {
     const [currentCategory, setCurrentCategory] = useState(initialCategory);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -33,8 +34,11 @@ export function CoworkWorkbench({ workspaceId, initialCategory = 'coding' }: Cow
     // Load saved category from localStorage
     useEffect(() => {
         const saved = localStorage.getItem(`kletron-category-${workspaceId}`);
-        if (saved && DEFAULT_WORK_CATEGORIES.some(c => c.id === saved)) {
-            setCurrentCategory(saved);
+        if (saved) {
+            const mode = normalizeToWorkModeId(saved);
+            if (DEFAULT_WORK_CATEGORIES.some((c) => c.id === mode)) {
+                setCurrentCategory(mode);
+            }
         }
     }, [workspaceId]);
 
@@ -66,7 +70,8 @@ export function CoworkWorkbench({ workspaceId, initialCategory = 'coding' }: Cow
 
         try {
             // Call API to process message
-            const response = await fetch(`/api/workspaces/${workspaceId}/categories/${currentCategory}/process`, {
+            const mode = normalizeToWorkModeId(currentCategory);
+            const response = await fetch(`/api/workspaces/${workspaceId}/categories/${mode}/process`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: content })
@@ -120,12 +125,13 @@ export function CoworkWorkbench({ workspaceId, initialCategory = 'coding' }: Cow
 
     // Handle category switch
     const handleCategorySwitch = useCallback((categoryId: string) => {
-        setCurrentCategory(categoryId);
-        // Clear messages or preserve context based on category compatibility
+        setCurrentCategory(normalizeToWorkModeId(categoryId));
         setMessages([]);
     }, []);
 
-    const currentCategoryConfig = DEFAULT_WORK_CATEGORIES.find(c => c.id === currentCategory);
+    const currentCategoryConfig = DEFAULT_WORK_CATEGORIES.find(
+        (c) => c.id === normalizeToWorkModeId(currentCategory),
+    );
 
     return (
         <div className="flex h-screen bg-background">

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Paperclip, Mic } from 'lucide-react';
 import { ChatInput } from '../ui/ChatInput';
 import { ContextChips } from '../Agent/ContextChips';
@@ -61,12 +61,92 @@ export function InputBar({
   connectionLabel,
   className = '',
 }: InputBarProps) {
+  const leadingFooter = useMemo(() => {
+    if (!onPaperclipClick && !onDictationClick) return null;
+    return (
+      <>
+        {onPaperclipClick && (
+          <button
+            type="button"
+            onClick={onPaperclipClick}
+            className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-state-hover hover:text-text-primary"
+            title="Attach file, screenshot, or photo"
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {onDictationClick && (
+          <button
+            type="button"
+            onClick={onDictationClick}
+            className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-state-hover hover:text-text-primary"
+            title="Dictation (Ctrl+M)"
+          >
+            <Mic className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </>
+    );
+  }, [onPaperclipClick, onDictationClick]);
+
+  const sessionStrip = useMemo(() => {
+    const hasControls = !!(graphSelector || modelSelector || approvalSelector);
+    if (!hasControls) return null;
+
+    return (
+      <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1">
+        {graphSelector}
+        {modelSelector}
+        {approvalSelector}
+        <span
+          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+            connected === 'checking'
+              ? 'animate-pulse bg-yellow-500'
+              : connected
+                ? 'bg-status-success'
+                : 'bg-status-error'
+          }`}
+          title={
+            connectionLabel ||
+            (connected === 'checking' ? 'Checking LLM…' : connected ? 'LLM Connected' : 'LLM Disconnected')
+          }
+        />
+      </div>
+    );
+  }, [graphSelector, modelSelector, approvalSelector, connected, connectionLabel]);
+
+  const stripOrDotOnly = useMemo(() => {
+    if (sessionStrip) return sessionStrip;
+    if (leadingFooter || !graphSelector && !modelSelector && !approvalSelector) {
+      return (
+        <div className="flex w-full min-w-0 justify-end">
+          <span
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+              connected === 'checking'
+                ? 'animate-pulse bg-yellow-500'
+                : connected
+                  ? 'bg-status-success'
+                  : 'bg-status-error'
+            }`}
+            title={
+              connectionLabel ||
+              (connected === 'checking' ? 'Checking LLM…' : connected ? 'LLM Connected' : 'LLM Disconnected')
+            }
+          />
+        </div>
+      );
+    }
+    return null;
+  }, [sessionStrip, leadingFooter, graphSelector, modelSelector, approvalSelector, connected, connectionLabel]);
+
+  const useStrip = stripOrDotOnly != null || leadingFooter != null;
+
   return (
     <div className={`px-4 pb-3 pt-1 ${className}`}>
       {/* Plan mode indicator */}
       {planMode && (
-        <div className="flex items-center gap-2 px-3 py-1 mb-1 rounded-lg bg-blue-500/8 border border-blue-500/15">
-          <span className="text-[11px] font-semibold text-blue-400 uppercase tracking-wider">Plan Mode</span>
+        <div className="mb-1 flex items-center gap-2 rounded-lg border border-blue-500/15 bg-blue-500/8 px-3 py-1">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-blue-400">Plan Mode</span>
           <span className="text-[11px] text-text-muted">Agent will propose a plan without writing code</span>
         </div>
       )}
@@ -89,50 +169,11 @@ export function InputBar({
           disabled={disabled}
           placeholder={placeholder}
           onKeyDown={onKeyDown}
-          footerLeft={
-            <div className="flex items-center gap-1">
-              {onPaperclipClick && (
-                <button
-                  type="button"
-                  onClick={onPaperclipClick}
-                  className="rounded-md p-1.5 text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
-                  title="Attach file, screenshot, or photo"
-                >
-                  <Paperclip className="h-3.5 w-3.5" />
-                </button>
-              )}
-              {onDictationClick && (
-                <button
-                  type="button"
-                  onClick={onDictationClick}
-                  className="rounded-md p-1.5 text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
-                  title="Dictation (Ctrl+M)"
-                >
-                  <Mic className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          }
-          footerRight={
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              {graphSelector}
-              {modelSelector}
-              {approvalSelector}
-              <span
-                className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
-                  connected === 'checking'
-                    ? 'bg-yellow-500 animate-pulse'
-                    : connected
-                      ? 'bg-status-success'
-                      : 'bg-status-error'
-                }`}
-                title={connectionLabel || (connected === 'checking' ? 'Checking LLM…' : connected ? 'LLM Connected' : 'LLM Disconnected')}
-              />
-            </div>
-          }
+          leadingFooter={leadingFooter ?? undefined}
+          sessionStrip={useStrip ? stripOrDotOnly ?? undefined : undefined}
         />
         {tokenUsage && (
-          <div className="mt-1.5 text-[11px] text-text-muted font-mono">
+          <div className="mt-1.5 font-mono text-[11px] text-text-muted">
             Tokens: {tokenUsage.input ?? '—'} in · {tokenUsage.output ?? '—'} out
           </div>
         )}

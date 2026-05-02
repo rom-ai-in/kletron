@@ -52,6 +52,7 @@
     "tsx": "^4.19.3"
   },
   "dependencies": {
+    "@kletron/shared": "*",
     "@monaco-editor/react": "^4.7.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

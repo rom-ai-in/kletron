@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DEFAULT_WORK_CATEGORIES } from '@kletron/shared';
 import { WorkCategory } from '@kletron/agent-core';
+import { normalizeToWorkModeId } from '@kletron/shared/workMode';
 
 interface WorkspaceCategorySelectorProps {
     currentCategory: string;
@@ -17,7 +18,8 @@ export const WorkspaceCategorySelector = ({
     
     // Get available categories (in production, these would come from the API)
     const categories: WorkCategory[] = DEFAULT_WORK_CATEGORIES;
-    
+    const mode = normalizeToWorkModeId(currentCategory);
+
     return (
         <div className="relative">
             <button
@@ -25,10 +27,10 @@ export const WorkspaceCategorySelector = ({
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-subtle"
             >
                 <span className="text-xl">
-                    {categories.find(cat => cat.id === currentCategory)?.icon || '🎯'}
+                    {categories.find(cat => cat.id === mode)?.icon || '🎯'}
                 </span>
                 <span className="font-medium">
-                    {categories.find(cat => cat.id === currentCategory)?.name || 'General'}
+                    {categories.find(cat => cat.id === mode)?.name || 'Mode'}
                 </span>
                 <svg
                     className={`w-4 h-4 transition-transform ${isOpen ? 'transform rotate-180' : ''}`}
@@ -49,7 +51,7 @@ export const WorkspaceCategorySelector = ({
                                 onSelect(category.id);
                                 setIsOpen(false);
                             }}
-                            className={`w-full px-4 py-3 text-left hover:bg-surface flex items-center gap-3 ${currentCategory === category.id ? 'bg-primary/10' : ''}`}
+                            className={`w-full px-4 py-3 text-left hover:bg-surface flex items-center gap-3 ${mode === category.id ? 'bg-primary/10' : ''}`}
                         >
                             <span className="text-xl" style={{ color: category.color }}>
                                 {category.icon}

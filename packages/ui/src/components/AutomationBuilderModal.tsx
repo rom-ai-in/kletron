@@ -75,11 +75,14 @@ interface AutomationBuilderModalProps {
     /** Called when an automation is created or updated; receives the automation ID */
     onCreated: (automationId: string) => void;
     editAutomationId?: string;
+    /** When set (e.g. Electron), used instead of global `fetch` for all API calls. */
+    apiFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 }
 
 type WizardStep = 1 | 2 | 3 | 4;
 
-export function AutomationBuilderModal({ open, onClose, onCreated, editAutomationId }: AutomationBuilderModalProps) {
+export function AutomationBuilderModal({ open, onClose, onCreated, editAutomationId, apiFetch }: AutomationBuilderModalProps) {
+    const request = apiFetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
     const { activeWorkspaceId } = useWorkspace() ?? {};
     const [step, setStep] = useState<WizardStep>(1);
     const [loading, setLoading] = useState(false);
@@ -97,7 +100,7 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
         let cancelled = false;
         const loadGraphs = async () => {
             try {
-                const res = await fetch("/api/agent-graphs", { cache: "no-store" });
+                const res = await request("/api/agent-graphs", { cache: "no-store" });
                 if (!res.ok) return;
                 const data = await res.json();
                 const list = Array.isArray(data?.graphs) ? data.graphs : [];
@@ -117,21 +120,21 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
         const loadProviders = async () => {
             try {
                 // Fetch enabled providers
-                const enableRes = await fetch("/api/llm-config/enable", { cache: "no-store" });
+                const enableRes = await request("/api/llm-config/enable", { cache: "no-store" });
                 const enableData = enableRes.ok ? await enableRes.json() : {};
                 const enabled: LlmProviderType[] = Array.isArray(enableData.enabledProviders)
                     ? enableData.enabledProviders
                     : [];
 
                 // Fetch full config to get model names for each provider
-                const configRes = await fetch("/api/llm-config", { cache: "no-store" });
+                const configRes = await request("/api/llm-config", { cache: "no-store" });
                 const configData = configRes.ok ? await configRes.json() : {};
 
                 // Probe live status for local providers to get exact loaded models
                 let lmStudioLoadedModel: string | undefined = undefined;
                 if (enabled.includes("lmstudio" as LlmProviderType)) {
                     try {
-                        const lmsRes = await fetch("/api/llm-config/lmstudio/models", { cache: "no-store" });
+                        const lmsRes = await request("/api/llm-config/lmstudio/models", { cache: "no-store" });
                         if (lmsRes.ok) {
                             const lmsData = await lmsRes.json();
                             lmStudioLoadedModel = lmsData.loadedModel || undefined;
@@ -144,7 +147,7 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                 let vllmLoadedModel: string | undefined = undefined;
                 if (enabled.includes("vllm" as LlmProviderType)) {
                     try {
-                        const vllmRes = await fetch("/api/llm-config/vllm/models", { cache: "no-store" });
+                        const vllmRes = await request("/api/llm-config/vllm/models", { cache: "no-store" });
                         if (vllmRes.ok) {
                             const vllmData = await vllmRes.json();
                             vllmLoadedModel = vllmData.loadedModel || undefined;
@@ -197,7 +200,7 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
             try {
                 const headers: Record<string, string> = {};
                 if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
-                const res = await fetch(`/api/automations/${editAutomationId}`, { headers });
+                const res = await request(`/api/automations/${editAutomationId}`, { headers });
                 if (res.ok) {
                     const data = await res.json();
                     const chain = data.automation ?? data.chain;
@@ -278,7 +281,7 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
             const headers: Record<string, string> = { "Content-Type": "application/json" };
             if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
 
-            const res = await fetch(url, {
+            const res = await request(url, {
                 method,
                 headers,
                 body: JSON.stringify({ config: automationData }),

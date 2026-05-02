@@ -1,7 +1,7 @@
 // packages/agent-core/src/categoryRouter.ts
 
-import type { WorkCategoryId } from '@kletron/shared';
-import { DEFAULT_WORK_CATEGORIES } from '@kletron/shared';
+import type { WorkCategoryId, WorkModeId } from "@kletron/shared";
+import { DEFAULT_WORK_CATEGORIES, normalizeToWorkModeId, WORK_MODES } from "@kletron/shared";
 
 // ============================================================================
 // TYPES
@@ -24,7 +24,7 @@ export interface ExecutionPlan {
     capabilities: Record<string, boolean>;
   };
   prompt: string;
-  workflow: 'react' | 'deep-research' | 'audit-chain';
+  workflow: "react" | "deep-research" | "audit-chain";
 }
 
 // ============================================================================
@@ -33,8 +33,8 @@ export interface ExecutionPlan {
 
 export class CategoryAwareRouter {
   private static instance: CategoryAwareRouter;
-  private currentCategory: WorkCategoryId = 'coding';
-  private keywordPatterns: Record<WorkCategoryId, string[]>;
+  private currentCategory: WorkModeId = "code";
+  private keywordPatterns: Record<WorkModeId, string[]>;
 
   private constructor() {
     this.keywordPatterns = this.buildKeywordPatterns();
@@ -52,50 +52,48 @@ export class CategoryAwareRouter {
    */
   setContext(workspaceId: string, categoryId?: WorkCategoryId): void {
     if (categoryId) {
-      this.currentCategory = categoryId;
+      this.currentCategory = normalizeToWorkModeId(String(categoryId));
     }
   }
 
   /**
    * Determine the appropriate category for a user input.
-   * Uses keyword-based inference with confidence scoring.
+   * Uses keyword-based inference with confidence scoring (code vs work).
    */
   determineCategory(userInput: string): CategoryInferenceResult {
     const input = userInput.toLowerCase();
 
-    // Check for explicit category mention first
     const explicitMatch = this.findExplicitCategoryMention(input);
     if (explicitMatch) {
       return {
         category: explicitMatch,
         confidence: 0.95,
-        reason: 'explicit_mention',
+        reason: "explicit_mention",
         matchedKeywords: [explicitMatch],
       };
     }
 
-    // Score each category
     const scores = this.scoreCategories(input);
-
-    // Find highest scoring category with confidence threshold
     const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-    const [topCategory, topScore] = sorted[0] || ['general', 0];
+    const [topCategory, topScore] = sorted[0] || ["work", 0];
+    const secondScore = sorted[1]?.[1] ?? 0;
 
-    if (topScore > 0.7) {
-      const matchedKeywords = this.findMatchedKeywords(input, topCategory as WorkCategoryId);
+    // Pick a winner when keyword evidence favors one mode (scores are 0–1 per mode).
+    // Threshold ~0.12 so a single strong keyword in a medium-sized list still registers (e.g. "Write …").
+    if (topScore > secondScore && topScore >= 0.12) {
+      const matchedKeywords = this.findMatchedKeywords(input, topCategory as WorkModeId);
       return {
         category: topCategory as WorkCategoryId,
-        confidence: topScore,
+        confidence: Math.min(0.95, 0.45 + topScore * 0.5),
         reason: `content_analysis(${topScore.toFixed(2)})`,
         matchedKeywords,
       };
     }
 
-    // Fall back to current category
     return {
       category: this.currentCategory,
       confidence: 0.3,
-      reason: 'default_fallback',
+      reason: "default_fallback",
       matchedKeywords: [],
     };
   }
@@ -105,34 +103,32 @@ export class CategoryAwareRouter {
    */
   buildExecutionPlan(userInput: string, context?: { workspacePath?: string; activeFiles?: string[] }): ExecutionPlan {
     const inference = this.determineCategory(userInput);
-    const category = inference.category;
+    const category = normalizeToWorkModeId(String(inference.category));
 
-    // Get category config
     const categoryConfig = DEFAULT_WORK_CATEGORIES.find((c) => c.id === category);
+    const wm = WORK_MODES[category];
     const config = categoryConfig
       ? {
           name: categoryConfig.name,
           description: categoryConfig.description,
           availableTools: categoryConfig.commonTools,
-          requiredContextTypes: [],
+          requiredContextTypes: wm.requiredContextTypes,
           capabilities: {
-            canEditFiles: category === 'coding',
-            canAccessExternalServices: category === 'drafting' || category === 'automation',
-            canScheduleTasks: category === 'automation',
+            canEditFiles: !!wm.capabilities.canEditFiles,
+            canAccessExternalServices: !!wm.capabilities.canAccessExternalServices,
+            canScheduleTasks: !!wm.capabilities.canScheduleTasks,
+            canUseTerminal: !!wm.capabilities.canUseTerminal,
           },
         }
       : {
-          name: 'General',
-          description: 'General purpose assistance',
-          availableTools: ['web_search', 'fetch_url'],
+          name: "Work",
+          description: "General work assistance",
+          availableTools: WORK_MODES.work.availableTools,
           requiredContextTypes: [],
           capabilities: {},
         };
 
-    // Determine workflow type
     const workflow = this.determineWorkflow(userInput, category);
-
-    // Build prompt
     const prompt = this.buildExecutionPrompt(category, userInput, context);
 
     return {
@@ -146,101 +142,76 @@ export class CategoryAwareRouter {
   /**
    * Check for explicit category mentions in the input.
    */
-  private findExplicitCategoryMention(input: string): WorkCategoryId | null {
-    // Check for "in coding mode" or "switch to coding" etc.
-    const categoryKeywords: Record<WorkCategoryId, string[]> = {
-      coding: ['coding', 'code', 'programming', 'developer'],
-      drafting: ['draft', 'document', 'write', 'article'],
-      automation: ['automate', 'workflow', 'schedule', 'automation'],
-      general: ['general', 'help', 'ask', 'question'],
-    };
+  private findExplicitCategoryMention(input: string): WorkModeId | null {
+    const codeHints = ["code mode", "coding mode", "programming mode", "developer mode", "repo mode"];
+    const workHints = ["work mode", "cowork", "writing mode", "research mode"];
 
-    for (const [categoryId, keywords] of Object.entries(categoryKeywords)) {
-      for (const keyword of keywords) {
-        if (input.includes(`in ${keyword}`) || input.includes(`to ${keyword}`) || input.includes(`switch to ${keyword}`)) {
-          return categoryId as WorkCategoryId;
-        }
-      }
+    for (const h of codeHints) {
+      if (input.includes(h)) return "code";
+    }
+    for (const h of workHints) {
+      if (input.includes(h)) return "work";
     }
 
     return null;
   }
 
   /**
-   * Score each category based on keyword matches.
+   * Score code vs work from keyword matches (per-mode density so prose can beat silence).
    */
-  private scoreCategories(input: string): Record<WorkCategoryId, number> {
-    const scores: Record<WorkCategoryId, number> = {
-      coding: 0,
-      drafting: 0,
-      automation: 0,
-      general: 0,
-    };
+  private scoreCategories(input: string): Record<WorkModeId, number> {
+    const scores: Record<WorkModeId, number> = { code: 0, work: 0 };
 
-    for (const [categoryId, patterns] of Object.entries(this.keywordPatterns)) {
+    for (const mode of Object.keys(this.keywordPatterns) as WorkModeId[]) {
+      const patterns = this.keywordPatterns[mode];
+      let hits = 0;
       for (const pattern of patterns) {
         if (input.includes(pattern.toLowerCase())) {
-          scores[categoryId as WorkCategoryId] += 0.15;
+          hits += 1;
         }
       }
-    }
-
-    // Normalize scores to 0-1 range
-    const maxPossible = Object.values(this.keywordPatterns).flat().length * 0.15;
-    for (const category of Object.keys(scores) as WorkCategoryId[]) {
-      scores[category] = Math.min(1, scores[category] / maxPossible);
+      const denom = Math.max(1, patterns.length);
+      scores[mode] = Math.min(1, (hits / denom) * 3);
     }
 
     return scores;
   }
 
-  /**
-   * Find matched keywords for a category.
-   */
-  private findMatchedKeywords(input: string, category: WorkCategoryId): string[] {
+  private findMatchedKeywords(input: string, category: WorkModeId): string[] {
     const patterns = this.keywordPatterns[category] || [];
     return patterns.filter((p) => input.includes(p.toLowerCase()));
   }
 
-  /**
-   * Determine the workflow type based on input and category.
-   */
-  private determineWorkflow(input: string, category: WorkCategoryId): 'react' | 'deep-research' | 'audit-chain' {
+  private determineWorkflow(input: string, category: WorkModeId): "react" | "deep-research" | "audit-chain" {
     const lowerInput = input.toLowerCase();
 
-    // Deep research indicators
     if (
-      lowerInput.includes('research') ||
-      lowerInput.includes('investigate') ||
-      lowerInput.includes('deep dive') ||
-      lowerInput.includes('comprehensive')
+      lowerInput.includes("research") ||
+      lowerInput.includes("investigate") ||
+      lowerInput.includes("deep dive") ||
+      lowerInput.includes("comprehensive")
     ) {
-      return 'deep-research';
+      return "deep-research";
     }
 
-    // Audit indicators
     if (
-      lowerInput.includes('audit') ||
-      lowerInput.includes('review') ||
-      lowerInput.includes('analyze') ||
-      lowerInput.includes('assess')
+      lowerInput.includes("audit") ||
+      lowerInput.includes("review") ||
+      lowerInput.includes("analyze") ||
+      lowerInput.includes("assess")
     ) {
-      return 'audit-chain';
+      return "audit-chain";
     }
 
-    // Default to react for coding, deep-research for drafting/automation
-    if (category === 'coding') {
-      return 'react';
+    if (category === "code") {
+      return "react";
     }
 
-    return 'deep-research';
+    return "deep-research";
   }
 
-  /**
-   * Build an execution prompt for the determined category.
-   */
   private buildExecutionPrompt(
-    category: WorkCategoryId,
+    category: WorkModeId,
     userInput: string,
     context?: { workspacePath?: string; activeFiles?: string[] },
   ): string {
@@ -251,7 +222,7 @@ export class CategoryAwareRouter {
     }
 
     if (context?.activeFiles && context.activeFiles.length > 0) {
-      prompt += `Active files: ${context.activeFiles.join(', ')}\n`;
+      prompt += `Active files: ${context.activeFiles.join(", ")}\n`;
     }
 
     prompt += `\nUser request:\n${userInput}`;
@@ -260,33 +231,70 @@ export class CategoryAwareRouter {
   }
 
   /**
-   * Build keyword patterns for each category.
+   * Code-oriented vs general work-oriented keyword patterns.
    */
-  private buildKeywordPatterns(): Record<WorkCategoryId, string[]> {
+  private buildKeywordPatterns(): Record<WorkModeId, string[]> {
     return {
-      coding: [
-        'code', 'implement', 'fix', 'debug', 'function', 'class', 'git', 'commit', 'test', 'build',
-        'javascript', 'typescript', 'python', 'react', 'node', 'api', 'database', 'algorithm',
-        'component', 'module', 'import', 'export', 'variable', 'constant', 'array', 'object',
-        'error', 'bug', 'issue', 'pr', 'pull request', 'branch', 'merge', 'deploy', 'compile',
+      code: [
+        "code",
+        "implement",
+        "fix",
+        "debug",
+        "function",
+        "class",
+        "git",
+        "commit",
+        "test",
+        "build",
+        "javascript",
+        "typescript",
+        "python",
+        "react",
+        "node",
+        "api",
+        "database",
+        "algorithm",
+        "component",
+        "module",
+        "import",
+        "export",
+        "refactor",
+        "bug",
+        "pr",
+        "pull request",
+        "branch",
+        "merge",
+        "deploy",
+        "compile",
+        "terminal",
+        "bash",
       ],
-      drafting: [
-        'write', 'document', 'report', 'email', 'presentation', 'summary', 'article', 'blog',
-        'markdown', 'draft', 'compose', 'format', 'style', 'template', 'outline', 'content',
-        'documentation', 'manual', 'guide', 'tutorial', 'proposal', 'specification',
-      ],
-      automation: [
-        'automate', 'schedule', 'reminder', 'task', 'cron', 'workflow', 'trigger', 'webhook',
-        'pipeline', 'ci/cd', 'continuous integration', 'deployment', 'monitor', 'alert',
-        'notification', 'sync', 'export', 'import', 'batch', 'process', 'repeat', 'routine',
-      ],
-      general: [
-        'help', 'what', 'how', 'why', 'search', 'find', 'research', 'learn', 'explain',
-        'define', 'describe', 'list', 'compare', 'suggest', 'recommend', 'idea', 'brainstorm',
+      work: [
+        "write",
+        "document",
+        "report",
+        "email",
+        "presentation",
+        "summary",
+        "article",
+        "blog",
+        "draft",
+        "research",
+        "help",
+        "what",
+        "how",
+        "why",
+        "explain",
+        "plan",
+        "meeting",
+        "notes",
+        "automate",
+        "schedule",
+        "workflow",
+        "brainstorm",
       ],
     };
   }
 }
 
-// Singleton instance
 export const categoryRouter = CategoryAwareRouter.getInstance();

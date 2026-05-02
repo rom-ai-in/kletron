@@ -2,7 +2,7 @@
 
 // Test script for category system
 import { CategoryService } from "@kletron/server/services/categoryService";
-import { BUILT_IN_CATEGORIES } from "@kletron/shared/types";
+import { BUILT_IN_CATEGORIES } from "@kletron/shared/categoryTypes";
 
 async function testCategorySystem() {
   console.log("🧪 Testing Category System...\n");
@@ -24,9 +24,9 @@ async function testCategorySystem() {
     
     // Test getting specific category
     console.log("\n✓ Testing category retrieval...");
-    const codingCategory = await service.getCategoryById("coding");
+    const codingCategory = await service.getCategoryById("code");
     if (codingCategory) {
-      console.log(`  Coding category: ${codingCategory.name}`);
+      console.log(`  Code category: ${codingCategory.name}`);
       console.log(`  Description: ${codingCategory.description}`);
       console.log(`  Tools: ${codingCategory.availableTools.join(', ')}`);
     }
@@ -41,7 +41,7 @@ async function testCategorySystem() {
     console.log("\n✓ Creating custom workspace category...");
     const customCategory = await service.createWorkspaceCategory(
       "507f191e810c19729de860ea", // Valid ObjectId format
-      "coding",
+      "code",
       { customName: "My Custom Coding", customTools: ["custom_tool"] }
     );
     console.log(`  Created: ${customCategory.name} (${customCategory.id})`);
@@ -49,13 +49,13 @@ async function testCategorySystem() {
     // Test category state
     console.log("\n✓ Testing category state...");
     const testUserId = "test-user-456";
-    await service.setCurrentCategory(testUserId, "coding");
+    await service.setCurrentCategory(testUserId, "code");
     const currentCategory = await service.getCurrentCategory(testUserId);
     console.log(`  Current category: ${currentCategory}`);
     
     // Test history
-    await service.setCurrentCategory(testUserId, "drafting");
-    await service.setCurrentCategory(testUserId, "automation");
+    await service.setCurrentCategory(testUserId, "work");
+    await service.setCurrentCategory(testUserId, "code");
     const history = await service.getCategoryHistory(testUserId);
     console.log(`  Category history: ${history.join(', ')}`);
     

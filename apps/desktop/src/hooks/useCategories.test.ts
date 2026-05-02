@@ -1,54 +1,54 @@
-// Simple test for useCategories hook
-import { renderHook, act } from '@testing-library/react';
-import { useCategories, BUILT_IN_CATEGORIES } from './useCategories';
+// Simple test for useCategories hook (vitest)
+import { describe, it, expect, beforeEach } from "vitest";
+import { renderHook, act } from "@testing-library/react";
+import { useCategories, BUILT_IN_CATEGORIES } from "./useCategories";
 
-describe('useCategories', () => {
+describe("useCategories", () => {
   beforeEach(() => {
-    // Clear localStorage before each test
     localStorage.clear();
   });
 
-  it('should initialize with coding as default category', () => {
+  it("should initialize with code as default category", () => {
     const { result } = renderHook(() => useCategories());
-    expect(result.current.activeCategory).toBe('coding');
+    expect(result.current.activeCategory).toBe("code");
   });
 
-  it('should return all built-in categories', () => {
+  it("should return all built-in categories", () => {
     const { result } = renderHook(() => useCategories());
-    expect(result.current.categories).toEqual(BUILT_IN_CATEGORIES);
+    expect(result.current.allCategories.slice(0, 2)).toEqual(BUILT_IN_CATEGORIES);
   });
 
-  it('should allow changing active category', () => {
+  it("should allow changing active category to work", () => {
     const { result } = renderHook(() => useCategories());
-    
+
     act(() => {
-      result.current.setActiveCategory('general');
+      result.current.setActiveCategory("work");
     });
-    
-    expect(result.current.activeCategory).toBe('general');
+
+    expect(result.current.activeCategory).toBe("work");
   });
 
-  it('should persist active category in localStorage', () => {
+  it("should persist active category in localStorage", () => {
     const { result } = renderHook(() => useCategories());
-    
+
     act(() => {
-      result.current.setActiveCategory('drafting');
+      result.current.setActiveCategory("work");
     });
-    
-    expect(localStorage.getItem('kletron-active-category')).toBe('drafting');
+
+    expect(localStorage.getItem("kletron-active-category")).toBe("work");
   });
 
-  it('should load saved category from localStorage', () => {
-    localStorage.setItem('kletron-active-category', 'automation');
-    
+  it("should load saved category from localStorage", () => {
+    localStorage.setItem("kletron-active-category", "work");
+
     const { result } = renderHook(() => useCategories());
-    expect(result.current.activeCategory).toBe('automation');
+    expect(result.current.activeCategory).toBe("work");
   });
 
-  it('should fall back to coding if saved category is invalid', () => {
-    localStorage.setItem('kletron-active-category', 'invalid-category');
-    
+  it("should map legacy general id to work", () => {
+    localStorage.setItem("kletron-active-category", "general");
+
     const { result } = renderHook(() => useCategories());
-    expect(result.current.activeCategory).toBe('coding');
+    expect(result.current.activeCategory).toBe("work");
   });
 });

@@ -14,6 +14,13 @@ export interface ChatInputProps
   sending?: boolean;
   footerLeft?: React.ReactNode;
   footerRight?: React.ReactNode;
+  /**
+   * Session controls (graph, model, approvals, etc.) in a condensed row below the card.
+   * When set, footerLeft/footerRight are ignored and only the textarea + send live in the card.
+   */
+  sessionStrip?: React.ReactNode;
+  /** Shown inside the card on the bottom row, left of the send button (e.g. attach / mic). */
+  leadingFooter?: React.ReactNode;
   containerClassName?: string;
   inputClassName?: string;
   maxHeight?: number;
@@ -30,6 +37,8 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       sending = false,
       footerLeft,
       footerRight,
+      sessionStrip,
+      leadingFooter,
       containerClassName,
       inputClassName,
       maxHeight = 160,
@@ -82,14 +91,14 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         </button>
       ) : null;
 
-    return (
-      <div
-        className={cn(
-          'relative min-w-0 w-full rounded-2xl border border-white/[0.08] bg-white/[0.04] p-3.5 shadow-lg transition-all duration-200 focus-within:border-white/[0.14] focus-within:bg-white/[0.05] focus-within:shadow-xl',
-          containerClassName,
-          className
-        )}
-      >
+    const cardShell = cn(
+      'relative min-w-0 w-full rounded-2xl bg-white/[0.04] p-3.5 shadow-lg transition-all duration-200 focus-within:bg-white/[0.05] focus-within:shadow-xl',
+      !sessionStrip && containerClassName,
+      !sessionStrip && className
+    );
+
+    const cardBody = (
+      <>
         <textarea
           ref={setRefs}
           value={value}
@@ -106,27 +115,65 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           {...props}
         />
 
-        {(footerLeft || footerRight || showSendButton) && (
-          <div className="relative mt-2.5 min-h-8 min-w-0">
+        {sessionStrip ? (
+          (sendStopButton || leadingFooter) && (
             <div
               className={cn(
-                'flex min-w-0 items-center gap-2',
-                sendStopButton && 'pr-10'
+                'relative mt-2.5 flex min-h-8 min-w-0 items-center gap-2',
+                leadingFooter ? 'justify-between' : 'justify-end'
               )}
             >
-              {/* Do not use overflow-hidden here: Selector menus are position:absolute and open upward — clipping would hide them. */}
-              <div className="flex min-w-0 flex-1 items-center gap-1.5">{footerLeft}</div>
-              {footerRight}
+              {leadingFooter ? (
+                <div className="flex min-w-0 shrink-0 items-center gap-0.5">{leadingFooter}</div>
+              ) : null}
+              {sendStopButton ? <div className="flex shrink-0">{sendStopButton}</div> : null}
             </div>
-            {sendStopButton && (
-              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex items-center">
-                <div className="pointer-events-auto">{sendStopButton}</div>
+          )
+        ) : (
+          (footerLeft || footerRight || showSendButton) && (
+            <div className="relative mt-2.5 min-h-8 min-w-0">
+              <div
+                className={cn(
+                  'flex min-w-0 items-center gap-2',
+                  sendStopButton && 'pr-10'
+                )}
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-1.5">{footerLeft}</div>
+                {footerRight}
               </div>
-            )}
-          </div>
+              {sendStopButton && (
+                <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex items-center">
+                  <div className="pointer-events-auto">{sendStopButton}</div>
+                </div>
+              )}
+            </div>
+          )
         )}
-      </div>
+      </>
     );
+
+    if (sessionStrip) {
+      return (
+        <div
+          className={cn(
+            'flex w-full min-w-0 flex-col gap-1.5',
+            containerClassName,
+            className
+          )}
+        >
+          <div className={cardShell}>{cardBody}</div>
+          <div
+            role="toolbar"
+            aria-label="Session settings"
+            className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-0.5 py-0.5"
+          >
+            {sessionStrip}
+          </div>
+        </div>
+      );
+    }
+
+    return <div className={cardShell}>{cardBody}</div>;
   }
 );
 

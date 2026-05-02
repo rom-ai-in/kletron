@@ -55,6 +55,12 @@ const ToolApprovalConfigSchema = z.object({
 });
 export type ToolApprovalConfig = z.infer<typeof ToolApprovalConfigSchema>;
 
+/** Optional flags when saving tool approval (not persisted). */
+export type SaveToolApprovalConfigInput = Partial<ToolApprovalConfig> & {
+  /** When true, `toolOverrides` replaces the stored map entirely (allows removals). */
+  replaceToolOverrides?: boolean;
+};
+
 const ConfigSchema = z.object({
   workingFolder: z.string().min(1, "Working folder path cannot be empty"),
   toolApproval: ToolApprovalConfigSchema.optional(),
@@ -155,7 +161,9 @@ export async function loadConfig(): Promise<Config> {
     );
   }
 
-  return { workingFolder: dir };
+  // Preserve optional fields from Mongo (e.g. toolApproval) so getToolApprovalConfig and
+  // setToolApprovalConfigOverride stay aligned after restart.
+  return { ...result.data, workingFolder: dir };
 }
 
 // -------------------------------------------------------------------
@@ -431,12 +439,16 @@ export function getToolApprovalConfig(): ToolApprovalConfig {
 /**
  * Persist updated tool approval config to MongoDB.
  */
-export async function saveToolApprovalConfig(updates: Partial<ToolApprovalConfig>): Promise<ToolApprovalConfig> {
+export async function saveToolApprovalConfig(updates: SaveToolApprovalConfigInput): Promise<ToolApprovalConfig> {
+  const { replaceToolOverrides, ...patch } = updates;
   const current = getToolApprovalConfig();
   const merged: ToolApprovalConfig = {
     ...current,
-    ...updates,
-    toolOverrides: { ...current.toolOverrides, ...(updates.toolOverrides ?? {}) },
+    ...patch,
+    toolOverrides:
+      replaceToolOverrides === true && patch.toolOverrides !== undefined
+        ? patch.toolOverrides
+        : { ...current.toolOverrides, ...(patch.toolOverrides ?? {}) },
   };
 
   const db = await getDatabase();
@@ -453,6 +465,14 @@ export async function saveToolApprovalConfig(updates: Partial<ToolApprovalConfig
   // Refresh cached config
   if (cachedConfig) {
     cachedConfig = { ...cachedConfig, toolApproval: merged };
+  }
+
+  // Keep in-process tool approval policy in sync (executor reads via setToolApprovalConfigOverride).
+  try {
+    const { setToolApprovalConfigOverride } = require("./services/toolApprovalPolicy");
+    setToolApprovalConfigOverride(merged);
+  } catch {
+    // Policy module unavailable in some scripts
   }
 
   console.log(`[Config] Tool approval config saved:`, JSON.stringify(merged));

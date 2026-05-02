@@ -46,9 +46,9 @@ export function ContextTracePanel() {
     };
 
     return (
-        <div className="flex flex-col h-full bg-bg-surface text-text-primary">
+        <div className="flex h-full min-h-0 min-w-0 flex-col bg-bg-surface text-text-primary">
             {/* Header */}
-            <div className="p-4 border-b border-border-subtle bg-bg-elevated/50">
+            <div className="border-b border-border-subtle bg-bg-elevated/50 px-6 py-4 lg:px-8">
                 <div className="flex items-center gap-2 mb-1">
                     <Calculator className="w-4 h-4 text-primary-main" />
                     <h3 className="text-sm font-semibold">Relevance Trace</h3>
@@ -59,7 +59,7 @@ export function ContextTracePanel() {
             </div>
 
             {/* Input */}
-            <div className="p-4 border-b border-border-subtle space-y-3">
+            <div className="space-y-3 border-b border-border-subtle px-6 py-4 lg:px-8">
                 <div className="relative">
                     <Search
                         size={14}
@@ -94,7 +94,7 @@ export function ContextTracePanel() {
             </div>
 
             {/* Results */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-elegant bg-bg-app/50">
+            <div className="flex-1 space-y-2 overflow-y-auto bg-bg-app/50 px-6 py-3 scrollbar-elegant lg:px-8">
                 {/* Message Display */}
                 {message && (
                     <div className="flex items-start gap-2 p-3 rounded-lg bg-status-warning-bg border border-status-warning-border text-status-warning-text text-xs">
@@ -164,7 +164,7 @@ export function ContextTracePanel() {
 
             {/* Footer */}
             {results.length > 0 && (
-                <div className="px-4 py-2 border-t border-border-subtle text-[10px] text-text-muted bg-bg-elevated/30">
+                <div className="border-t border-border-subtle bg-bg-elevated/30 px-6 py-2 text-[10px] text-text-muted lg:px-8">
                     Showing top {results.length} results
                 </div>
             )}

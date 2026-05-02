@@ -12,6 +12,7 @@ import {
   Link as LinkIcon,
   Puzzle,
   Settings,
+  MessagesSquare,
 } from "lucide-react";
 import { Panel } from "@kletron/ui/components/design-system";
 
@@ -144,11 +145,18 @@ export default function ConfigOverviewPage() {
             highlight
           />
           <ConfigCard
-            title="Context"
-            description="Project soul, cache, and graph debugging."
+            title="Context & retrieval"
+            description="Overview, structural map, semantic index, injection, and trace — single home for repo context."
             icon={<Layers className="h-4 w-4 text-text-muted" />}
             href="/app/config/context"
-            meta="Context, structural map & retrieval"
+            meta="Includes vector index & history"
+          />
+          <ConfigCard
+            title="Messenger channels"
+            description="Telegram, Slack, WhatsApp webhooks and identity linking."
+            icon={<MessagesSquare className="h-4 w-4 text-primary-main" />}
+            href="/app/config/channels"
+            meta="Dedicated setup · env vars on server"
           />
           <ConfigCard
             title="Graphs"
@@ -165,11 +173,11 @@ export default function ConfigOverviewPage() {
             meta={`${toolsCount} tools available`}
           />
           <ConfigCard
-            title="Work Categories"
-            description="Configure coding, drafting, automation modes."
+            title="Code vs Work"
+            description="How Code and Work modes differ (tools and behavior)."
             icon={<Layers className="h-4 w-4 text-text-muted" />}
             href="/app/config/categories"
-            meta="CoWork categories"
+            meta="Two modes"
           />
            <ConfigCard
              title="Skills"

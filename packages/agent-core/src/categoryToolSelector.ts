@@ -1,7 +1,7 @@
 // packages/agent-core/src/categoryToolSelector.ts
 
-import type { WorkCategoryId } from '@kletron/shared';
-import { DEFAULT_WORK_CATEGORIES, CATEGORY_TOOL_GROUPS } from '@kletron/shared';
+import type { WorkCategoryId, WorkModeId } from '@kletron/shared';
+import { DEFAULT_WORK_CATEGORIES, CATEGORY_TOOL_GROUPS, normalizeToWorkModeId } from '@kletron/shared';
 
 // ============================================================================
 // TYPES
@@ -40,16 +40,17 @@ export class CategorySpecificToolSelector {
    * Get all tools available for a given category.
    */
   getToolsForCategory(categoryId: WorkCategoryId): CategoryToolConfig[] {
-    const categoryConfig = DEFAULT_WORK_CATEGORIES.find((c) => c.id === categoryId);
+    const mode = normalizeToWorkModeId(String(categoryId));
+    const categoryConfig = DEFAULT_WORK_CATEGORIES.find((c) => c.id === mode);
     if (!categoryConfig) {
       return [];
     }
 
     // Get base tools for the category
-    const baseTools = this.getBaseTools(categoryId);
+    const baseTools = this.getBaseTools(mode);
 
     // Get group-specific tools
-    const groupTools = this.getGroupTools(categoryId);
+    const groupTools = this.getGroupTools(mode);
 
     // Merge and deduplicate
     const toolMap = new Map<string, CategoryToolConfig>();
@@ -64,8 +65,9 @@ export class CategorySpecificToolSelector {
    * Get tools by group for a category.
    */
   getToolsForGroup(categoryId: WorkCategoryId, group: string): CategoryToolConfig[] {
-    const tools = this.getToolsForCategory(categoryId);
-    return tools.filter((t) => t.category === categoryId && this.isToolInGroup(t.name, group, categoryId));
+    const mode = normalizeToWorkModeId(String(categoryId));
+    const tools = this.getToolsForCategory(mode);
+    return tools.filter((t) => t.category === mode && this.isToolInGroup(t.name, group, mode));
   }
 
   /**
@@ -79,26 +81,26 @@ export class CategorySpecificToolSelector {
   /**
    * Get base tools for a category (from DEFAULT_WORK_CATEGORIES.commonTools).
    */
-  private getBaseTools(categoryId: WorkCategoryId): CategoryToolConfig[] {
-    const categoryConfig = DEFAULT_WORK_CATEGORIES.find((c) => c.id === categoryId);
+  private getBaseTools(mode: WorkModeId): CategoryToolConfig[] {
+    const categoryConfig = DEFAULT_WORK_CATEGORIES.find((c) => c.id === mode);
     if (!categoryConfig || !categoryConfig.commonTools) {
       return [];
     }
 
     return categoryConfig.commonTools.map((toolName) => ({
       name: toolName,
-      description: `${toolName} - Available in ${categoryId} mode`,
+      description: `${toolName} - Available in ${mode} mode`,
       parameters: {},
-      autoExecute: this.isAutoExecute(toolName, categoryId),
-      category: categoryId,
+      autoExecute: this.isAutoExecute(toolName, mode),
+      category: mode,
     }));
   }
 
   /**
    * Get group-specific tools for a category.
    */
-  private getGroupTools(categoryId: WorkCategoryId): CategoryToolConfig[] {
-    const groups = CATEGORY_TOOL_GROUPS[categoryId as keyof typeof CATEGORY_TOOL_GROUPS];
+  private getGroupTools(mode: WorkModeId): CategoryToolConfig[] {
+    const groups = CATEGORY_TOOL_GROUPS[mode];
     if (!groups) {
       return [];
     }
@@ -110,15 +112,15 @@ export class CategorySpecificToolSelector {
   /**
    * Check if a tool is in a specific group.
    */
-  private isToolInGroup(toolName: string, group: string, categoryId: WorkCategoryId): boolean {
-    const groupTools = this.getGroupTools(categoryId);
+  private isToolInGroup(toolName: string, group: string, mode: WorkModeId): boolean {
+    const groupTools = this.getGroupTools(mode);
     return groupTools.some((t) => t.name === toolName);
   }
 
   /**
    * Check if a tool can be auto-executed (no approval needed).
    */
-  private isAutoExecute(toolName: string, categoryId: WorkCategoryId): boolean {
+  private isAutoExecute(toolName: string, mode: WorkModeId): boolean {
     // Read-only tools are always auto-executable
     const readOnlyTools = ['list_files', 'read_file', 'read_file_range', 'search_code', 'git_log', 'git_diff', 'git_blame', 'git_grep'];
     if (readOnlyTools.includes(toolName)) {

@@ -61,9 +61,9 @@ const LAUNCHPAD_ITEMS = [
     icon: Clock,
   },
   {
-    title: "Vector Index",
-    description: "Semantic index and search over your repo.",
-    href: "/app/vectors",
+    title: "Semantic index",
+    description: "Vector RAG and indexing under Context & retrieval.",
+    href: "/app/config/context?tab=semantic",
     icon: Database,
   },
   {
@@ -223,7 +223,7 @@ export default function AppDashboardPage() {
         {
           label: "Semantic index",
           done: vectorsReady,
-          href: "/app/vectors",
+          href: "/app/config/context?tab=semantic",
           hint: "Indexed chunks for semantic retrieval — optional; complements the structural map.",
         },
       ],
@@ -693,7 +693,7 @@ export default function AppDashboardPage() {
             </Panel>
 
             <Panel className="p-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Vector Index</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Semantic index</p>
               <div className="mt-3 flex items-center gap-2">
                 <Badge variant={vectorStatusLabel === "Ready" ? "success" : vectorStatusLabel === "Indexing" ? "warning" : "default"}>
                   {vectorStatusLabel}

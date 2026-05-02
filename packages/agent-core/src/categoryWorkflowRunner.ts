@@ -1,7 +1,7 @@
 // packages/agent-core/src/categoryWorkflowRunner.ts
 
 import type { WorkCategoryId } from '@kletron/shared';
-import { DEFAULT_WORK_CATEGORIES, getCategoryById } from '@kletron/shared';
+import { DEFAULT_WORK_CATEGORIES, getCategoryById, normalizeToWorkModeId } from '@kletron/shared';
 import { categoryPromptEngine } from './categoryPromptEngine';
 import { categoryRouter } from './categoryRouter';
 import { categoryToolSelector } from './categoryToolSelector';
@@ -85,8 +85,10 @@ export class CategoryWorkflowRunner {
       onProgress,
     } = options;
 
-    // Determine category
-    const targetCategory = category || this.determineCategory(userInput);
+    // Determine category (always canonical code | work)
+    const targetCategory = normalizeToWorkModeId(
+      String(category ?? this.determineCategory(userInput)),
+    );
     onProgress?.(`Using category: ${targetCategory}`);
 
     // Get category config
@@ -159,7 +161,7 @@ export class CategoryWorkflowRunner {
    */
   determineCategory(input: string, availableCategories?: WorkCategory[]): WorkCategoryId {
     const inference = categoryRouter.determineCategory(input);
-    return inference.category;
+    return normalizeToWorkModeId(String(inference.category));
   }
 
   /**
@@ -210,7 +212,8 @@ export class CategoryWorkflowRunner {
    * Validate that a category is available.
    */
   isCategoryAvailable(category: WorkCategoryId): boolean {
-    return DEFAULT_WORK_CATEGORIES.some(c => c.id === category);
+    const mode = normalizeToWorkModeId(String(category));
+    return DEFAULT_WORK_CATEGORIES.some((c) => c.id === mode);
   }
 
   /**

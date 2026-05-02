@@ -1,7 +1,7 @@
 // packages/agent-core/src/categoryPromptEngine.ts
 
-import type { WorkCategoryId } from '@kletron/shared';
-import { DEFAULT_WORK_CATEGORIES, getCategoryById } from '@kletron/shared';
+import type { WorkCategoryId, WorkModeId } from '@kletron/shared';
+import { DEFAULT_WORK_CATEGORIES, getCategoryById, normalizeToWorkModeId, WORK_MODES } from '@kletron/shared';
 
 // ============================================================================
 // TYPES
@@ -57,18 +57,19 @@ export class CategoryPromptEngine {
    */
   buildPromptForCategory(options: PromptBuildOptions): PromptComponent {
     const { category, userInput, workspacePath, activeFiles, recentEdits, customSystemPrompt, availableTools } = options;
+    const mode = normalizeToWorkModeId(String(category));
 
     // Build system message
-    const systemMessage = this.buildSystemMessage(category, customSystemPrompt, workspacePath, availableTools);
+    const systemMessage = this.buildSystemMessage(mode, customSystemPrompt, workspacePath, availableTools);
 
     // Build user message
     const userMessage = this.buildUserMessage(userInput, activeFiles, recentEdits);
 
     // Get examples
-    const examples = this.getCategoryExamples(category);
+    const examples = this.getCategoryExamples(mode);
 
     // Get constraints
-    const constraints = this.getCategoryConstraints(category);
+    const constraints = this.getCategoryConstraints(mode);
 
     return {
       systemMessage,
@@ -82,13 +83,13 @@ export class CategoryPromptEngine {
    * Build the system message for a category.
    */
   private buildSystemMessage(
-    category: WorkCategoryId,
+    mode: WorkModeId,
     customPrompt?: string,
     workspacePath?: string,
     availableTools?: string[],
   ): string {
-    const baseRole = this.getCategoryRole(category);
-    const capabilities = this.getCategoryCapabilities(category);
+    const baseRole = this.getCategoryRole(mode);
+    const capabilities = this.getCategoryCapabilities(mode);
 
     let message = `You are${baseRole}
 
@@ -124,7 +125,7 @@ export class CategoryPromptEngine {
     }
 
     // Add constraints
-    const constraints = this.getCategoryConstraints(category);
+    const constraints = this.getCategoryConstraints(mode);
     if (constraints.length > 0) {
       message += `**Constraints:**\n${constraints.map((c) => `- ${c}`).join('\n')}\n\n`;
     }
@@ -188,56 +189,36 @@ export class CategoryPromptEngine {
    * Get the role description for a category.
    */
   getCategoryRole(category: WorkCategoryId): string {
-    const roles: Record<WorkCategoryId, string> = {
-      coding: ' a senior software engineer specializing in code analysis and generation.',
-      drafting: ' a professional technical writer with expertise in document creation.',
-      automation: ' a productivity automation specialist focused on workflow optimization.',
-      general: ' a versatile assistant capable of handling diverse tasks.',
+    const mode = normalizeToWorkModeId(String(category));
+    const roles: Record<WorkModeId, string> = {
+      code: ' a senior software engineer specializing in code analysis and generation.',
+      work: ' a versatile assistant for research, writing, planning, and general work—without assuming a coding task unless asked.',
     };
 
-    return roles[category] || ' a helpful AI assistant capable of handling diverse tasks.';
+    return roles[mode] || ' a helpful AI assistant capable of handling diverse tasks.';
   }
 
   /**
    * Get the capabilities for a category.
    */
   getCategoryCapabilities(category: WorkCategoryId): Record<string, boolean> {
-    const capabilities: Record<WorkCategoryId, Record<string, boolean>> = {
-      coding: {
-        canEditFiles: true,
-        canAccessExternalServices: false,
-        canScheduleTasks: false,
-        canUseTerminal: true,
-      },
-      drafting: {
-        canEditFiles: true,
-        canAccessExternalServices: true,
-        canScheduleTasks: false,
-        canUseTerminal: false,
-      },
-      automation: {
-        canEditFiles: false,
-        canAccessExternalServices: true,
-        canScheduleTasks: true,
-        canUseTerminal: true,
-      },
-      general: {
-        canEditFiles: false,
-        canAccessExternalServices: true,
-        canScheduleTasks: false,
-        canUseTerminal: false,
-      },
+    const mode = normalizeToWorkModeId(String(category));
+    const c = WORK_MODES[mode].capabilities;
+    return {
+      canEditFiles: !!c.canEditFiles,
+      canAccessExternalServices: !!c.canAccessExternalServices,
+      canScheduleTasks: !!c.canScheduleTasks,
+      canUseTerminal: !!c.canUseTerminal,
     };
-
-    return capabilities[category] || { canEditFiles: false, canAccessExternalServices: true, canScheduleTasks: false, canUseTerminal: false };
   }
 
   /**
    * Get few-shot examples for a category.
    */
   getCategoryExamples(category: WorkCategoryId): Array<{ input: string; output: string }> {
-    const examples: Record<WorkCategoryId, Array<{ input: string; output: string }>> = {
-      coding: [
+    const mode = normalizeToWorkModeId(String(category));
+    const examples: Record<WorkModeId, Array<{ input: string; output: string }>> = {
+      code: [
         {
           input: 'How do I implement authentication?',
           output: 'Here is a secure implementation using JWT:\n\n```typescript\nimport jwt from \'jsonwebtoken\';\n\nexport function generateToken(user: User): string {\n  return jwt.sign(\n    { userId: user.id, email: user.email },\n    process.env.JWT_SECRET,\n    { expiresIn: \'24h\' }\n  );\n}\n```\n\nThis implementation includes:\n1. Proper error handling\n2. Token expiration\n3. Secure secret management',
@@ -247,23 +228,11 @@ export class CategoryPromptEngine {
           output: 'The issue is in line 42. Here is the corrected version:\n\n```diff\n- const result = data.items.map(item => item.name);\n+ const result = data?.items?.map(item => item.name) || [];\n```\n\nThe fix adds optional chaining to prevent null reference errors.',
         },
       ],
-      drafting: [
+      work: [
         {
-          input: 'Write an API documentation',
-          output: 'Here is a well-structured API documentation:\n\n## API Documentation\n\n### Endpoints\n\n#### GET /api/users\nReturns a list of users.\n\n**Response:**\n```json\n{\n  "users": [...],\n  "total": 42\n}\n```\n\n#### POST /api/users\nCreates a new user.\n\n**Request Body:**\n```json\n{\n  "name": "John Doe",\n  "email": "john@example.com"\n}\n```\n\n**Response:**\n```json\n{\n  "id": 1,\n  "name": "John Doe",\n  "email": "john@example.com"\n}\n```',
+          input: 'Write an executive summary for this quarter',
+          output: '**Executive summary**\n\nRevenue grew 15% QoQ while churn fell to 3.1%. Engagement metrics improved across core flows. Key risks: dependency on a single channel and hiring lag in support.\n\n**Recommendations:** deepen retention programs, expand top-of-funnel tests, and prioritize onboarding fixes.',
         },
-        {
-          input: 'Summarize this report',
-          output: 'Key findings include:\n\n1. **Revenue growth**: 15% increase quarter-over-quarter\n2. **User engagement**: Daily active users up by 22%\n3. **Churn rate**: Decreased from 4.2% to 3.1%\n\n**Recommendations:**\n- Invest more in user retention programs\n- Expand into new markets\n- Improve onboarding flow',
-        },
-      ],
-      automation: [
-        {
-          input: 'Create a daily backup automation',
-          output: 'Here is a daily backup automation:\n\n```yaml\n# backup.yml\nname: Daily Backup\nschedule: "0 2 * * *"\nsteps:\n  - name: Create backup\n    action: execute_bash\n    args:\n      command: "tar -czf /backups/backup-$(date +%Y%m%d).tar.gz /data"\n  - name: Upload to S3\n    action: upload_s3\n    args:\n      bucket: "my-backup-bucket"\n      key: "backup-$(date +%Y%m%d).tar.gz"\n  - name: Cleanup old backups\n    action: execute_bash\n    args:\n      command: "find /backups -mtime +30 -delete"\n```\n\nThis automation runs daily at 2 AM, backs up data to S3, and cleans up backups older than 30 days.',
-        },
-      ],
-      general: [
         {
           input: 'What is TypeScript?',
           output: 'TypeScript is a strongly typed programming language that builds on JavaScript, giving your code better structure, improved tooling, and enhanced maintainability. It compiles to plain JavaScript and is widely used in web development.\n\nKey features:\n- Static type checking\n- Type inference\n- Interfaces and generics\n- Modern JavaScript features\n- Excellent IDE support',
@@ -271,42 +240,31 @@ export class CategoryPromptEngine {
       ],
     };
 
-    return examples[category] || [];
+    return examples[mode] || [];
   }
 
   /**
    * Get constraints for a category.
    */
   getCategoryConstraints(category: WorkCategoryId): string[] {
-    const constraints: Record<WorkCategoryId, string[]> = {
-      coding: [
+    const mode = normalizeToWorkModeId(String(category));
+    const constraints: Record<WorkModeId, string[]> = {
+      code: [
         'Always provide code with proper error handling',
         'Explain complex logic clearly',
         'Suggest appropriate testing strategies',
         'Respect the workspace boundaries',
         'Do not modify files outside the workspace',
       ],
-      drafting: [
-        'Maintain professional tone',
-        'Ensure logical document structure',
-        'Cite sources when making claims',
-        'Follow standard formatting conventions',
-      ],
-      automation: [
-        'Focus on user\'s specific workflow patterns',
-        'Suggest maintainable automation solutions',
-        'Consider error handling and recovery scenarios',
-        'Minimize external dependencies',
-      ],
-      general: [
-        'Provide accurate information',
-        'Cite sources when possible',
-        'Be concise but thorough',
-        'Acknowledge uncertainty when applicable',
+      work: [
+        'Maintain a clear, professional tone',
+        'Provide accurate information and cite sources when possible',
+        'Do not assume a software task unless the user asks',
+        'Prefer concise, well-structured answers',
       ],
     };
 
-    return constraints[category] || [];
+    return constraints[mode] || [];
   }
 
   /**

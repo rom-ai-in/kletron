@@ -48,6 +48,16 @@ const api = {
     ipcRenderer.on("auth:deepLink", listener);
     return () => ipcRenderer.removeListener("auth:deepLink", listener);
   },
+  /** Main-process menu navigates to app / automations / agent-graphs / settings */
+  onNavigate: (handler: (view: "app" | "automations" | "agent-graphs" | "settings") => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, view: string) => {
+      if (view === "app" || view === "automations" || view === "agent-graphs" || view === "settings") {
+        handler(view);
+      }
+    };
+    ipcRenderer.on("app:navigate", listener);
+    return () => ipcRenderer.removeListener("app:navigate", listener);
+  },
   getAppVersion: (): Promise<string> => ipcRenderer.invoke("app:getVersion"),
   getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("app:getUpdateStatus"),
   checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke("app:checkForUpdates"),

@@ -2,17 +2,21 @@
  * Tests for the anti-looping and deduplication guards added to AgentGraphExecutor.
  *
  * Tests verify:
+ * 0. Mission user dedup — findExistingMissionUserEvent (re-entrant executeRunStreaming)
  * 1. write_todos deduplication (hash-based duplicate rejection)
  * 2. Read-only tool call caching (dedup identical calls)
  * 3. Workspace context injection (repo awareness)
  * 4. System prompt anti-loop rules
  *
- * Uses Node.js built-in test runner (node --test) for zero-dependency execution.
+ * Uses Node.js built-in test runner with TS loading, e.g.:
+ *   npx tsx --test packages/server/__tests__/agentGraphExecutorGuards.test.ts
  */
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { getToolApprovalPolicy } from "../src/services/toolApprovalPolicy";
+import { findExistingMissionUserEvent } from "../src/services/agentGraphUtils";
+import { simpleReactSystemPrompt } from "../src/services/agentGraphPresets";
 
 // ─── Helpers (replicated from executor for isolated testing) ────────────────
 
@@ -22,6 +26,60 @@ const stableStringify = (value: unknown): string => {
     const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
     return `{${entries.map(([key, val]) => `${JSON.stringify(key)}:${stableStringify(val)}`).join(",")}}`;
 };
+
+// ─── 0. Mission user dedup (re-entrant executeRunStreaming) ────────────────
+
+describe("findExistingMissionUserEvent", () => {
+    const u = (id: string, content: string) => ({
+        id,
+        kind: "user" as const,
+        role: "user" as const,
+        content,
+        timestamp: new Date().toISOString(),
+    });
+    const a = (id: string, content: string) => ({
+        id,
+        kind: "assistant" as const,
+        role: "assistant" as const,
+        content,
+        timestamp: new Date().toISOString(),
+    });
+
+    it("returns null when mission is empty", () => {
+        assert.equal(findExistingMissionUserEvent([u("1", "hi")], ""), null);
+    });
+
+    it("returns null when history is empty or undefined", () => {
+        assert.equal(findExistingMissionUserEvent(undefined, "m"), null);
+        assert.equal(findExistingMissionUserEvent([], "m"), null);
+    });
+
+    it("finds the user row when it is the last event (legacy case)", () => {
+        const mission = "same text";
+        const row = u("u0", mission);
+        assert.equal(findExistingMissionUserEvent([row], mission), row);
+    });
+
+    it("regression: finds user(mission) when last event is assistant (prefilled history)", () => {
+        const mission = "TARGET WORKSPACE\nDo the audit";
+        const userRow = u("event-0", mission);
+        const history = [userRow, a("a1", "working…")];
+        assert.equal(findExistingMissionUserEvent(history, mission), userRow);
+    });
+
+    it("prefers the most recent matching user when the same content appears twice", () => {
+        const mission = "repeat";
+        const first = u("u1", mission);
+        const second = u("u2", mission);
+        const history = [first, a("a1", "ok"), second];
+        assert.equal(findExistingMissionUserEvent(history, mission), second);
+    });
+
+    it("returns null when no user content matches mission", () => {
+        const history = [u("1", "old mission"), a("2", "reply")];
+        assert.equal(findExistingMissionUserEvent(history, "new mission"), null);
+    });
+});
 
 // ─── 1. stableStringify ─────────────────────────────────────────────────────
 
@@ -329,9 +387,6 @@ describe("system prompt anti-loop content verification", () => {
     });
 
     it("simpleReactSystemPrompt includes anti-loop instructions", () => {
-        // Import the actual prompt to verify it contains key anti-loop phrases
-        const { simpleReactSystemPrompt } = require("../src/services/agentGraphPresets");
-
         assert.ok(simpleReactSystemPrompt.includes("write_todos **ONCE**"));
         assert.ok(simpleReactSystemPrompt.includes("Never recreate the same queue"));
         assert.ok(simpleReactSystemPrompt.includes("Stop tool usage and produce the final answer"));

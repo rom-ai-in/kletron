@@ -133,10 +133,14 @@ function buildEdgesForTarget(targetId: string, upstreamIds: string[], existingEd
 export function AgentGraphEditor({
     graphId,
     initialGraph,
+    apiFetch,
 }: {
     graphId: string;
     initialGraph: AgentGraphDto;
+    /** When set (e.g. Electron), used instead of global `fetch` for save/reset. */
+    apiFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 }) {
+    const request = apiFetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
     const [nodes, setNodes] = useState<AgentGraphDto["nodes"]>(() => initialGraph.nodes ?? []);
     const [edges, setEdges] = useState<AgentGraphDto["edges"]>(() => normalizeEdges(initialGraph.edges ?? []));
     const [execution, setExecution] = useState<AgentGraphDto["execution"]>(() => ({
@@ -277,7 +281,7 @@ export function AgentGraphEditor({
                             stateDefaults: Object.keys(stateDefaults ?? {}).length ? stateDefaults : undefined,
                         },
                     };
-                    const res = await fetch(`/api/agent-graphs/${graphId}`, {
+                    const res = await request(`/api/agent-graphs/${graphId}`, {
                         method: "PUT",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(payload),
@@ -306,7 +310,7 @@ export function AgentGraphEditor({
     const handleResetToDefault = async () => {
         if (!confirm("Reset all nodes to default prompts and tools? This cannot be undone.")) return;
         try {
-            const res = await fetch(`/api/agent-graphs/${graphId}/reset`, { method: "POST" });
+            const res = await request(`/api/agent-graphs/${graphId}/reset`, { method: "POST" });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
                 throw new Error(data.error || "Failed to reset");

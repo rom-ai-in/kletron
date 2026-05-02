@@ -8,7 +8,8 @@
  * that transfers across domains.
  */
 
-import type { WorkCategoryId } from '@kletron/shared';
+import type { WorkCategoryId } from "@kletron/shared";
+import { normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode";
 
 // ============================================================================
 // TYPES
@@ -155,6 +156,9 @@ export class ContextPreserver {
     workspacePath: string,
     currentContext?: CategoryContext,
   ): Promise<ContextTransitionResult> {
+    const from = normalizeToWorkModeId(String(fromCategory)) as WorkModeId;
+    const to = normalizeToWorkModeId(String(toCategory)) as WorkModeId;
+
     const warnings: string[] = [];
     const transferredItems: string[] = [];
     const droppedItems: string[] = [];
@@ -167,26 +171,26 @@ export class ContextPreserver {
     }
 
     // Extract transferable context from source category
-    const sourceCategoryContext = transferable.categoryContext[fromCategory] || this.createDefaultCategoryContext();
+    const sourceCategoryContext = transferable.categoryContext[from] || this.createDefaultCategoryContext();
     
     // Build transferable items
     const transferableItems = this.extractTransferableContext(
       sourceCategoryContext,
-      toCategory,
+      to,
       workspacePath,
     );
 
     // Transform for target category compatibility
-    const transformed = this.transformForCategory(transferableItems, fromCategory, toCategory, droppedItems);
+    const transformed = this.transformForCategory(transferableItems, from, to, droppedItems);
 
     // Get existing target category context
-    const targetCategoryContext = transferable.categoryContext[toCategory] || this.createDefaultCategoryContext();
+    const targetCategoryContext = transferable.categoryContext[to] || this.createDefaultCategoryContext();
 
     // Merge with existing target context
     const merged = this.mergeContexts(targetCategoryContext, transformed, warnings);
 
     // Update transferable context
-    transferable.categoryContext[toCategory] = merged;
+    transferable.categoryContext[to] = merged;
 
     // Also update global context
     transferable.userPreferences = transferableItems.userPreferences || transferable.userPreferences;
@@ -232,37 +236,23 @@ export class ContextPreserver {
     items.recentActivities = sourceContext.recentActivities?.slice(-this.maxRecentActivities);
     items.savedSearches = sourceContext.recentSearches?.map((q) => ({
       query: q,
-      category: sourceContext.workspaceContext ? 'coding' : 'general',
+      category: sourceContext.workspaceContext ? "code" : "work",
       timestamp: Date.now(),
     }));
 
-    // Category-specific transferable items
+    // Category-specific transferable items (Code vs Work)
     if (sourceContext.workspaceContext) {
       items.categoryContext = {
-        coding: {
+        code: {
           activeFiles: sourceContext.activeFiles?.slice(0, 5) || [],
           recentEdits: sourceContext.recentEdits?.slice(-this.maxRecentEdits) || [],
           recentSearches: sourceContext.recentSearches?.slice(-this.maxRecentSearches) || [],
           workspaceContext: sourceContext.workspaceContext,
         },
-        drafting: {
+        work: {
           activeFiles: sourceContext.activeFiles?.filter((f) =>
             f.path.match(/\.(md|txt|docx|rtf|pdf)$/i),
           ) || [],
-          recentEdits: [],
-          recentSearches: sourceContext.recentSearches?.slice(-this.maxRecentSearches) || [],
-          workspaceContext: sourceContext.workspaceContext,
-        },
-        automation: {
-          activeFiles: sourceContext.activeFiles?.filter((f) =>
-            f.path.match(/\.(json|yaml|yml|toml|sh|bash|py|js)$/i),
-          ) || [],
-          recentEdits: [],
-          recentSearches: sourceContext.recentSearches?.slice(-this.maxRecentSearches) || [],
-          workspaceContext: sourceContext.workspaceContext,
-        },
-        general: {
-          activeFiles: [],
           recentEdits: [],
           recentSearches: sourceContext.recentSearches?.slice(-this.maxRecentSearches) || [],
           workspaceContext: sourceContext.workspaceContext,
@@ -288,9 +278,8 @@ export class ContextPreserver {
     // Transfer active files (filter by target category compatibility)
     if (items.categoryContext?.[toCategory]?.activeFiles) {
       const compatibleFiles = items.categoryContext[toCategory].activeFiles.filter((f) => {
-        if (toCategory === 'coding') return true;
-        if (toCategory === 'drafting') return /\.(md|txt|docx|rtf|pdf)$/i.test(f.path);
-        if (toCategory === 'automation') return /\.(json|yaml|yml|toml|sh|bash|py|js)$/i.test(f.path);
+        if (toCategory === "code") return true;
+        if (toCategory === "work") return true;
         return true;
       });
       transformed.activeFiles = compatibleFiles;
@@ -409,10 +398,8 @@ export class ContextPreserver {
       recentActivities: [],
       savedSearches: [],
       categoryContext: {
-        coding: this.createDefaultCategoryContext(),
-        drafting: this.createDefaultCategoryContext(),
-        automation: this.createDefaultCategoryContext(),
-        general: this.createDefaultCategoryContext(),
+        code: this.createDefaultCategoryContext(),
+        work: this.createDefaultCategoryContext(),
       },
     };
   }

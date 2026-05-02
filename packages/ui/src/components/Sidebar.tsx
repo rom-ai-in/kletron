@@ -7,7 +7,6 @@ import {
     Settings,
     Share2,
     Terminal,
-    Database,
     Home,
     Layers,
     Clock,
@@ -27,7 +26,7 @@ const navItems = [
         icon: Home,
         href: "/app",
     },
-{
+    {
         label: "Agent",
         icon: Terminal,
         href: "/app/agent",
@@ -46,11 +45,6 @@ const navItems = [
         label: "History",
         icon: Clock,
         href: "/app/history",
-    },
-    {
-        label: "Vector Index",
-        icon: Database,
-        href: "/app/vectors",
     },
     {
         label: "Configuration",

@@ -911,6 +911,8 @@ export class AgentGraphExecutor {
             onReasoningDelta?: (delta: string) => void;
             llmSelectionOverride?: { provider: LlmProviderType; model?: string };
             shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
+            /** Override audit/tool identity (e.g. channel-linked user). Defaults to workspace.ownerId. */
+            workspaceContextUserId?: string;
         }
     ): Promise<AgentWorkflowResult> {
         console.log(`[AgentGraphExecutor] continueRun: runId=${runId}, message="${message.slice(0, 40)}"`);
@@ -1056,7 +1058,7 @@ export class AgentGraphExecutor {
 
             return this.executeRunStreaming(runId, opts);
             },
-            { userId: workspace.ownerId, runId }
+            { userId: opts?.workspaceContextUserId ?? workspace.ownerId, runId }
         );
     }
 
@@ -1080,6 +1082,8 @@ export class AgentGraphExecutor {
              * Requires enableCheckpoints to also be true.
              */
             resumeFromCheckpoint?: boolean;
+            /** Override audit/tool identity (e.g. channel-linked user). Defaults to workspace.ownerId. */
+            workspaceContextUserId?: string;
         }
     ): Promise<AgentWorkflowResult> {
         console.log(`[AgentGraphExecutor] executeRunStreaming: runId=${runId}`);
@@ -1418,6 +1422,7 @@ export class AgentGraphExecutor {
 
                 return await this.executeRunStreaming(subRunId, {
                     llmSelectionOverride: opts?.llmSelectionOverride,
+                    workspaceContextUserId: opts?.workspaceContextUserId,
                 });
             };
             if (auditContext) {
@@ -1476,20 +1481,10 @@ export class AgentGraphExecutor {
             // Reuse that event for globalEventStream so IDs stay consistent
             // between the stream and the persisted conversation history.
             const missionContent = typeof state.mission === "string" ? state.mission : "";
-            // Reuse the mission user row when it already exists anywhere in history.
-            // Only checking the *last* event was wrong: a second executeRunStreaming
-            // (retry, resume, or overlapping automation) with history like
-            // [user(mission), assistant, …] would append another identical user.
-            let existingUserEvent: AgentEvent | null = null;
-            if (missionContent && state.conversationHistory.length > 0) {
-                for (let i = state.conversationHistory.length - 1; i >= 0; i--) {
-                    const ev = state.conversationHistory[i]!;
-                    if (ev.kind === "user" && ev.content === missionContent) {
-                        existingUserEvent = ev;
-                        break;
-                    }
-                }
-            }
+            const existingUserEvent = findExistingMissionUserEvent(
+                state.conversationHistory,
+                missionContent,
+            );
 
             const initialUserEvent: AgentEvent = existingUserEvent ?? {
                 id: nextGlobalEventId(),
@@ -1856,9 +1851,11 @@ export class AgentGraphExecutor {
 
 
                                 const threadMode = await agentGraphRunService.getRunThreadApprovalMode(runId);
+                                const workMode = await agentGraphRunService.getRunWorkMode(runId);
                                 const basePolicy = getToolApprovalPolicy({
                                     source: runSource,
                                     toolName: name,
+                                    workMode,
                                     ...(name === "execute_bash" && typeof input?.command === "string"
                                         ? { command: input.command as string }
                                         : {}),
@@ -2622,7 +2619,7 @@ export class AgentGraphExecutor {
             cleanupCheckpoints();
             return successResult;
             },
-            { userId: workspace.ownerId, runId }
+            { userId: opts?.workspaceContextUserId ?? workspace.ownerId, runId }
         );
     }
 }

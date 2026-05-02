@@ -3,6 +3,8 @@ import { resolveLlmSelection } from "@kletron/server/llm";
 import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@kletron/shared/types";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { normalizeToWorkModeId } from "@kletron/shared/workMode";
+import { categoryService } from "@kletron/server/services/categoryService";
 
 const textEncoder = new TextEncoder();
 
@@ -96,6 +98,20 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   const graphId = run.graphId?.toString();
+
+  const modePayload =
+    typeof payload.workMode === "string"
+      ? payload.workMode
+      : typeof payload.category === "string"
+        ? payload.category
+        : null;
+  if (modePayload !== null) {
+    const wm = normalizeToWorkModeId(modePayload);
+    await agentGraphRunService.patchRun(params.id, { workMode: wm });
+    if (auth.userId && run.workspaceId) {
+      await categoryService.setCurrentCategory(auth.userId, wm, run.workspaceId.toString());
+    }
+  }
 
   // Track client disconnect via the request abort signal
   let clientDisconnected = false;

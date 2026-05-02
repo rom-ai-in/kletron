@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import { workspaceCategoryService } from '@kletron/server/services/workspaceCategoryService';
 import { categoryWorkflowRunner } from '@kletron/agent-core';
 import { DEFAULT_WORK_CATEGORIES } from '@kletron/shared';
+import { normalizeToWorkModeId } from '@kletron/shared/workMode';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') {
@@ -19,8 +20,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        // Verify category exists
-        const category = DEFAULT_WORK_CATEGORIES.find(c => c.id === categoryId);
+        const mode = normalizeToWorkModeId(categoryId as string);
+        const category = DEFAULT_WORK_CATEGORIES.find((c) => c.id === mode);
         if (!category) {
             return res.status(404).json({ error: 'Category not found' });
         }
@@ -28,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Get workspace and category config
         const workspaceConfig = await workspaceCategoryService.getWorkspaceCategoryConfig(
             workspaceId as string,
-            categoryId as string
+            mode,
         );
 
         // Run workflow with category

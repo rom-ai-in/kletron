@@ -1,8 +1,11 @@
 // packages/server/src/services/categoryService.ts
 import type { WorkCategoryConfig, WorkspaceCategoryConfig } from "@kletron/shared/categoryTypes";
 import { BUILT_IN_CATEGORIES } from "@kletron/shared/categoryTypes";
+import { normalizeToWorkModeId, resolveWorkModeOrNull, type WorkModeId } from "@kletron/shared/workMode";
 import { getDatabase } from "../lib/db";
 import { ObjectId } from "mongodb";
+
+const LEGACY_CATEGORY_IDS = ["coding", "drafting", "automation", "general"] as const;
 
 const CATEGORY_COLLECTION = "work_categories";
 const WORKSPACE_CATEGORY_COLLECTION = "workspace_work_categories";
@@ -50,6 +53,7 @@ interface CategoryStateDoc {
 
 export class CategoryService {
   private static instance: CategoryService | null = null;
+  private static legacyLinksMigrated = false;
 
   private constructor() {}
 
@@ -60,40 +64,107 @@ export class CategoryService {
     return CategoryService.instance;
   }
 
+  /**
+   * Idempotent: remove legacy four-way categories, upsert `code` / `work`, normalize user category_state.
+   */
   async initializeBuiltInCategories(): Promise<void> {
     const db = await getDatabase();
     const collection = db.collection<CategoryDoc>(CATEGORY_COLLECTION);
-    
-    // Check if built-in categories exist
-    const existingCount = await collection.countDocuments({});
-    if (existingCount > 0) return;
-    
-    // Insert built-in categories
-    const categories: CategoryDoc[] = Object.entries(BUILT_IN_CATEGORIES).map(([id, config]) => ({
-      id,
-      name: (config as any).name,
-      description: (config as any).description,
-      icon: (config as any).icon,
-      color: (config as any).color,
-      defaultPrompt: (config as any).defaultPrompt,
-      availableTools: (config as any).availableTools,
-      requiredContextTypes: (config as any).requiredContextTypes,
-      capabilities: (config as any).capabilities,
-      workspaceSpecific: (config as any).workspaceSpecific,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }));
-    
-    await collection.insertMany(categories);
+
+    await collection.deleteMany({
+      id: { $in: [...LEGACY_CATEGORY_IDS] },
+    });
+
+    const now = new Date();
+    for (const id of Object.keys(BUILT_IN_CATEGORIES) as WorkModeId[]) {
+      const config = BUILT_IN_CATEGORIES[id];
+      await collection.updateOne(
+        { id },
+        {
+          $set: {
+            id,
+            name: config.name,
+            description: config.description,
+            icon: config.icon,
+            color: config.color,
+            defaultPrompt: config.defaultPrompt,
+            availableTools: config.availableTools,
+            requiredContextTypes: config.requiredContextTypes,
+            capabilities: config.capabilities,
+            workspaceSpecific: config.workspaceSpecific,
+            updatedAt: now,
+          },
+          $setOnInsert: { createdAt: now },
+        },
+        { upsert: true },
+      );
+    }
+
+    if (!CategoryService.legacyLinksMigrated) {
+      await this.migrateCategoryStateCollection();
+      await this.migrateWorkspaceCategoryLinks();
+      CategoryService.legacyLinksMigrated = true;
+    }
+  }
+
+  private async migrateWorkspaceCategoryLinks(): Promise<void> {
+    const db = await getDatabase();
+    const collection = db.collection<WorkspaceCategoryDoc>(WORKSPACE_CATEGORY_COLLECTION);
+    for (const leg of LEGACY_CATEGORY_IDS) {
+      const next = normalizeToWorkModeId(leg);
+      if (next === leg) continue;
+      await collection.updateMany(
+        { categoryId: leg },
+        { $set: { categoryId: next, updatedAt: new Date() } },
+      );
+    }
+  }
+
+  private async migrateCategoryStateCollection(): Promise<void> {
+    const db = await getDatabase();
+    const collection = db.collection<CategoryStateDoc>("category_state");
+    const docs = await collection.find({}).toArray();
+    for (const doc of docs) {
+      const next = normalizeToWorkModeId(doc.currentCategory);
+      const hist = (doc.categoryHistory || []).map((h) => normalizeToWorkModeId(h));
+      const lastUsed: Record<string, Date> = {};
+      if (doc.lastUsed) {
+        for (const [k, v] of Object.entries(doc.lastUsed)) {
+          lastUsed[normalizeToWorkModeId(k)] = v;
+        }
+      }
+      if (
+        next === doc.currentCategory &&
+        hist.join(",") === (doc.categoryHistory || []).join(",") &&
+        Object.keys(lastUsed).length === Object.keys(doc.lastUsed || {}).length
+      ) {
+        continue;
+      }
+      const filter =
+        doc.workspaceId !== undefined
+          ? { _id: doc._id, workspaceId: doc.workspaceId }
+          : { _id: doc._id };
+      await collection.updateOne(filter, {
+        $set: {
+          currentCategory: next,
+          categoryHistory: hist,
+          lastUsed,
+          updatedAt: new Date(),
+        },
+      });
+    }
   }
 
   async getCategoryById(categoryId: string): Promise<WorkCategoryConfig | null> {
+    await this.initializeBuiltInCategories();
+    const mode = resolveWorkModeOrNull(categoryId);
+    if (mode == null) return null;
     const db = await getDatabase();
     const collection = db.collection<CategoryDoc>(CATEGORY_COLLECTION);
-    
-    const doc = await collection.findOne({ id: categoryId });
+
+    const doc = await collection.findOne({ id: mode });
     if (!doc) return null;
-    
+
     return this.mapToConfig(doc);
   }
 
@@ -116,17 +187,16 @@ export class CategoryService {
     const workspaceDocs = await workspaceCollection.find({ workspaceId }).toArray();
     
     if (workspaceDocs.length === 0) {
-      // Return built-in categories that are workspace-specific
       const builtInWorkspaceCategories = Object.entries(BUILT_IN_CATEGORIES)
-        .filter(([_, config]) => (config as any).workspaceSpecific)
+        .filter(([_, config]) => config.workspaceSpecific)
         .map(([id, config]) => ({
-          ...(config as any),
+          ...config,
           id,
           workspaceId,
           customName: undefined,
-          customTools: undefined
+          customTools: undefined,
         }));
-      
+
       return builtInWorkspaceCategories;
     }
     
@@ -138,10 +208,11 @@ export class CategoryService {
       const baseCategory = baseCategories.find(c => c.id === workspaceDoc.categoryId);
       if (!baseCategory) {
         // Fallback to built-in
-        const builtIn = BUILT_IN_CATEGORIES[workspaceDoc.categoryId];
+        const bid = normalizeToWorkModeId(workspaceDoc.categoryId);
+        const builtIn = BUILT_IN_CATEGORIES[bid];
         return {
-          id: workspaceDoc.categoryId,
-          name: workspaceDoc.customName || builtIn?.name || workspaceDoc.categoryId,
+          id: bid,
+          name: workspaceDoc.customName || builtIn?.name || bid,
           description: builtIn?.description || "",
           icon: builtIn?.icon,
           color: builtIn?.color,
@@ -179,7 +250,9 @@ export class CategoryService {
   ): Promise<WorkspaceCategoryConfig> {
     const db = await getDatabase();
     const collection = db.collection<WorkspaceCategoryDoc>(WORKSPACE_CATEGORY_COLLECTION);
-    
+
+    categoryId = normalizeToWorkModeId(categoryId);
+
     // Check if base category exists
     const baseCategory = await this.getCategoryById(categoryId);
     if (!baseCategory) {
@@ -193,7 +266,9 @@ export class CategoryService {
     });
     
     if (existing) {
-      return this.getWorkspaceCategory(workspaceId, categoryId);
+      const cfg = await this.getWorkspaceCategory(workspaceId, categoryId);
+      if (!cfg) throw new Error(`Workspace category ${categoryId} not found`);
+      return cfg;
     }
     
     const now = new Date();
@@ -208,13 +283,16 @@ export class CategoryService {
     };
     
     await collection.insertOne(doc);
-    return this.getWorkspaceCategory(workspaceId, categoryId);
+    const created = await this.getWorkspaceCategory(workspaceId, categoryId);
+    if (!created) throw new Error(`Failed to read workspace category ${categoryId}`);
+    return created;
   }
 
   async getWorkspaceCategory(
     workspaceId: string,
     categoryId: string
   ): Promise<WorkspaceCategoryConfig | null> {
+    categoryId = normalizeToWorkModeId(categoryId);
     const db = await getDatabase();
     const collection = db.collection<WorkspaceCategoryDoc>(WORKSPACE_CATEGORY_COLLECTION);
     
@@ -250,6 +328,7 @@ export class CategoryService {
     categoryId: string,
     updates: { customName?: string; customTools?: string[] }
   ): Promise<WorkspaceCategoryConfig | null> {
+    categoryId = normalizeToWorkModeId(categoryId);
     const db = await getDatabase();
     const collection = db.collection<WorkspaceCategoryDoc>(WORKSPACE_CATEGORY_COLLECTION);
     
@@ -272,6 +351,7 @@ export class CategoryService {
     workspaceId: string,
     categoryId: string
   ): Promise<boolean> {
+    categoryId = normalizeToWorkModeId(categoryId);
     const db = await getDatabase();
     const collection = db.collection<WorkspaceCategoryDoc>(WORKSPACE_CATEGORY_COLLECTION);
     
@@ -286,25 +366,24 @@ export class CategoryService {
   async getCurrentCategory(userId: string, workspaceId?: string): Promise<string | null> {
     const db = await getDatabase();
     const collection = db.collection<CategoryStateDoc>("category_state");
-    
+
     let doc: CategoryStateDoc | null;
-    
+
     if (workspaceId) {
-      // Try to get workspace-specific state
       doc = await collection.findOne({
         _id: userId,
-        workspaceId: new ObjectId(workspaceId)
+        workspaceId: new ObjectId(workspaceId),
       });
-      
+
       if (!doc) {
-        // Fall back to global state
         doc = await collection.findOne({ _id: userId });
       }
     } else {
       doc = await collection.findOne({ _id: userId });
     }
-    
-    return doc?.currentCategory || null;
+
+    const raw = doc?.currentCategory || null;
+    return raw == null ? null : normalizeToWorkModeId(raw);
   }
 
   async setCurrentCategory(
@@ -312,19 +391,20 @@ export class CategoryService {
     categoryId: string,
     workspaceId?: string
   ): Promise<void> {
+    const categoryIdNorm = normalizeToWorkModeId(categoryId);
     const db = await getDatabase();
     const collection = db.collection<CategoryStateDoc>("category_state");
-    
+
     const now = new Date();
     const updateDoc: Partial<CategoryStateDoc> = {
-      currentCategory: categoryId,
-      updatedAt: now
+      currentCategory: categoryIdNorm,
+      updatedAt: now,
     };
     
     if (workspaceId) {
       updateDoc.workspaceId = new ObjectId(workspaceId);
-      updateDoc.categoryHistory = [categoryId]; // Simple history for now
-      updateDoc.lastUsed = { [categoryId]: now };
+      updateDoc.categoryHistory = [categoryIdNorm];
+      updateDoc.lastUsed = { [categoryIdNorm]: now };
       
       await collection.updateOne(
         { _id: userId, workspaceId: new ObjectId(workspaceId) },
@@ -336,15 +416,24 @@ export class CategoryService {
       const existing = await collection.findOne({ _id: userId });
       
       if (existing && existing.categoryHistory) {
-        updateDoc.categoryHistory = [categoryId, ...existing.categoryHistory.filter(c => c !== categoryId)].slice(0, 10);
+        const normalizedHist = existing.categoryHistory.map((c) => normalizeToWorkModeId(c));
+        updateDoc.categoryHistory = [
+          categoryIdNorm,
+          ...normalizedHist.filter((c) => c !== categoryIdNorm),
+        ].slice(0, 10);
       } else {
-        updateDoc.categoryHistory = [categoryId];
+        updateDoc.categoryHistory = [categoryIdNorm];
       }
-      
+
       if (existing && existing.lastUsed) {
-        updateDoc.lastUsed = { ...existing.lastUsed, [categoryId]: now };
+        const lu: Record<string, Date> = {};
+        for (const [k, v] of Object.entries(existing.lastUsed)) {
+          lu[normalizeToWorkModeId(k)] = v;
+        }
+        lu[categoryIdNorm] = now;
+        updateDoc.lastUsed = lu;
       } else {
-        updateDoc.lastUsed = { [categoryId]: now };
+        updateDoc.lastUsed = { [categoryIdNorm]: now };
       }
       
       await collection.updateOne(
@@ -359,7 +448,7 @@ export class CategoryService {
     const db = await getDatabase();
     const collection = db.collection<CategoryStateDoc>("category_state");
     
-    let doc: CategoryStateDoc | null;
+    let doc: CategoryStateDoc | null = null;
     
     if (workspaceId) {
       doc = await collection.findOne({
@@ -372,7 +461,7 @@ export class CategoryService {
       doc = await collection.findOne({ _id: userId });
     }
     
-    return doc?.categoryHistory || [];
+    return (doc?.categoryHistory || []).map((id) => normalizeToWorkModeId(id));
   }
 
   private mapToConfig(doc: CategoryDoc): WorkCategoryConfig {

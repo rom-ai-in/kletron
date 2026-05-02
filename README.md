@@ -202,7 +202,7 @@ The web app is a **Next.js 14 App Router** application serving as the primary da
 | `/app/history` | Execution history |
 | `/app/runs/[id]` | Run details |
 | `/app/changes` | Code changes view |
-| `/app/vectors` | Vector search interface |
+| `/app/vectors` | Redirects to `/app/config/context?tab=semantic` (semantic index UI) |
 | `/app/automations` | Automation management |
 | `/app/agent-graphs` | Agent graph editor |
 | `/app/config/*` | Configuration (AI, LLM, embeddings, context, tools, graphs, workspace) |

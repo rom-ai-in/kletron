@@ -1,6 +1,6 @@
 // packages/shared/src/customCategories.ts
 
-import type { WorkCategoryId } from './categoryTypes';
+import { WORK_MODES } from "./workMode";
 
 /**
  * Custom work category created by the user.
@@ -42,53 +42,32 @@ export interface CustomWorkCategory {
 /**
  * Built-in category base config (used as template for custom categories)
  */
-export const CATEGORY_TEMPLATES: Record<string, Omit<CustomWorkCategory, 'id' | 'createdAt' | 'updatedAt'>> = {
-  coding: {
-    name: 'Code Assistant',
-    description: 'AI-powered code analysis and generation',
-    icon: '💻',
-    color: '#3B82F6',
-    systemPrompt: 'You are a senior software engineer helping with code tasks. Focus on code quality, best practices, and maintainability.',
-    availableTools: ['list_files', 'read_file', 'search_code', 'edit_file', 'execute_bash', 'git_commit', 'git_push'],
-    requiredContextTypes: ['repository', 'codebase'],
-    capabilities: { canEditFiles: true, canAccessExternalServices: false, canScheduleTasks: false, canUseTerminal: true },
-    defaultSkills: ['code-review', 'implementation', 'testing', 'debugging'],
+export const CATEGORY_TEMPLATES: Record<
+  "code" | "work",
+  Omit<CustomWorkCategory, "id" | "createdAt" | "updatedAt">
+> = {
+  code: {
+    name: WORK_MODES.code.name,
+    description: WORK_MODES.code.description,
+    icon: "💻",
+    color: WORK_MODES.code.color,
+    systemPrompt: WORK_MODES.code.defaultPrompt,
+    availableTools: WORK_MODES.code.availableTools,
+    requiredContextTypes: WORK_MODES.code.requiredContextTypes,
+    capabilities: WORK_MODES.code.capabilities,
+    defaultSkills: ["code-review", "implementation", "testing", "debugging"],
     workspaceSpecific: true,
   },
-  drafting: {
-    name: 'Document Writer',
-    description: 'Create and edit professional documents',
-    icon: '✏️',
-    color: '#10B981',
-    systemPrompt: 'You are a professional technical writer. Create clear, well-structured documentation with proper formatting.',
-    availableTools: ['fetch_url', 'web_search', 'read_file', 'write_file'],
-    requiredContextTypes: ['document_template'],
-    capabilities: { canEditFiles: true, canAccessExternalServices: true, canScheduleTasks: false, canUseTerminal: false },
-    defaultSkills: ['technical-writing', 'documentation', 'summarization'],
-    workspaceSpecific: false,
-  },
-  automation: {
-    name: 'Workflow Automator',
-    description: 'Create automated workflows and follow-ups',
-    icon: '⚡',
-    color: '#F59E0B',
-    systemPrompt: 'You are a productivity automation specialist. Create efficient, reliable automations for repetitive tasks.',
-    availableTools: ['execute_bash', 'git_commit', 'schedule_task', 'calendar_events'],
-    requiredContextTypes: ['calendar', 'email'],
-    capabilities: { canEditFiles: false, canAccessExternalServices: true, canScheduleTasks: true, canUseTerminal: true },
-    defaultSkills: ['workflow-design', 'task-automation', 'scheduling'],
-    workspaceSpecific: false,
-  },
-  general: {
-    name: 'General Assistant',
-    description: 'Open-ended questions and general help',
-    icon: '🎯',
-    color: '#6B7280',
-    systemPrompt: 'You are a helpful AI assistant. Provide accurate, concise answers to user questions.',
-    availableTools: ['web_search', 'fetch_url'],
-    requiredContextTypes: [],
-    capabilities: { canEditFiles: false, canAccessExternalServices: true, canScheduleTasks: false, canUseTerminal: false },
-    defaultSkills: ['research', 'explanation', 'brainstorming'],
+  work: {
+    name: WORK_MODES.work.name,
+    description: WORK_MODES.work.description,
+    icon: "💼",
+    color: WORK_MODES.work.color,
+    systemPrompt: WORK_MODES.work.defaultPrompt,
+    availableTools: WORK_MODES.work.availableTools,
+    requiredContextTypes: WORK_MODES.work.requiredContextTypes,
+    capabilities: WORK_MODES.work.capabilities,
+    defaultSkills: ["research", "explanation", "brainstorming", "technical-writing"],
     workspaceSpecific: false,
   },
 };
@@ -97,7 +76,7 @@ export const CATEGORY_TEMPLATES: Record<string, Omit<CustomWorkCategory, 'id' | 
  * Generate a unique ID for a custom category
  */
 export function generateCustomCategoryId(): string {
-  const prefix = 'custom';
+  const prefix = "custom";
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).substring(2, 8);
   return `${prefix}_${timestamp}_${random}`;
@@ -154,29 +133,32 @@ export function createFullyCustomCategory(
 /**
  * Validate a custom category configuration
  */
-export function validateCustomCategory(category: Partial<CustomWorkCategory>): { valid: boolean; errors: string[] } {
+export function validateCustomCategory(category: Partial<CustomWorkCategory>): {
+  valid: boolean;
+  errors: string[];
+} {
   const errors: string[] = [];
 
   if (!category.name?.trim()) {
-    errors.push('Name is required');
+    errors.push("Name is required");
   }
 
   if (!category.description?.trim()) {
-    errors.push('Description is required');
+    errors.push("Description is required");
   }
 
   if (!category.icon?.trim()) {
-    errors.push('Icon is required');
+    errors.push("Icon is required");
   }
 
   if (!category.color?.trim()) {
-    errors.push('Color is required');
+    errors.push("Color is required");
   } else if (!/^#[0-9a-fA-F]{6}$/.test(category.color)) {
-    errors.push('Color must be a valid hex color (e.g., #3B82F6)');
+    errors.push("Color must be a valid hex color (e.g., #3B82F6)");
   }
 
   if (!category.systemPrompt?.trim()) {
-    errors.push('System prompt is required');
+    errors.push("System prompt is required");
   }
 
   return {

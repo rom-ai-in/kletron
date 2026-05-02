@@ -152,7 +152,7 @@ export function TitleBar({
         {workCategories && workCategories.length > 0 && onWorkCategorySelect && (
           <CategorySelector
             categories={workCategories}
-            activeCategoryId={activeWorkCategoryId || 'coding'}
+            activeCategoryId={activeWorkCategoryId || 'code'}
             onCategorySelect={onWorkCategorySelect}
           />
         )}
