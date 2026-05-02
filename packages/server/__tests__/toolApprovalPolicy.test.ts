@@ -13,7 +13,7 @@ import {
     WRITE_REPO_TOOLS,
     setToolApprovalConfigOverride,
 } from "../src/services/toolApprovalPolicy";
-import type { ToolApprovalPolicyResult } from "../src/services/toolApprovalPolicy";
+import type { ToolApprovalConfig, ToolApprovalPolicyResult } from "../src/services/toolApprovalPolicy";
 
 // Tests rely on env-var fallback path in resolveToolApprovalConfig().
 // When no MongoDB config is injected, env vars drive the behavior.
@@ -322,5 +322,37 @@ describe("applyThreadApprovalOverride", () => {
     it("work mode allows read_file", () => {
         const p = getToolApprovalPolicy({ source: "agent", toolName: "read_file", workMode: "work" });
         expect(p.decision).not.toBe("deny");
+    });
+
+    it("uses injected approvalConfig for never-auto list", () => {
+        const cfg: ToolApprovalConfig = {
+            autoApproveReadonlySources: ["agent", "automation"],
+            neverAutoApproveTools: ["read_file"],
+            autoApproveSafeBash: true,
+            toolOverrides: {},
+        };
+        const p = getToolApprovalPolicy({ source: "agent", toolName: "read_file", approvalConfig: cfg });
+        expect(p.decision).toBe("requires_approval");
+    });
+
+    it("applyThreadApprovalOverride full_auto honors approvalConfig never list", () => {
+        const cfg: ToolApprovalConfig = {
+            autoApproveReadonlySources: ["agent", "automation"],
+            neverAutoApproveTools: ["read_file"],
+            autoApproveSafeBash: true,
+            toolOverrides: {},
+        };
+        const base = getToolApprovalPolicy({
+            source: "channel:x",
+            toolName: "read_file",
+            approvalConfig: cfg,
+        });
+        expect(base.decision).toBe("requires_approval");
+        const out = applyThreadApprovalOverride(base, {
+            mode: "full_auto_thread",
+            toolName: "read_file",
+            approvalConfig: cfg,
+        });
+        expect(out.decision).toBe("requires_approval");
     });
 });

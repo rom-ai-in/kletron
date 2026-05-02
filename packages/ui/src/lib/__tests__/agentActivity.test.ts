@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveActivityState, formatActivityElapsed } from '../agentActivity';
+import { deriveActivityState, formatActivityElapsed, tailEventsSinceLastUser } from '../agentActivity';
 
 describe('deriveActivityState', () => {
     it('returns null when not streaming', () => {
@@ -49,6 +49,34 @@ describe('deriveActivityState', () => {
                 ],
             })?.label,
         ).toBe('Continuing…');
+    });
+
+    it('ignores tools from a prior turn once a newer user message exists (current-turn slice)', () => {
+        expect(
+            deriveActivityState({
+                streaming: true,
+                streamingText: '',
+                events: [
+                    { kind: 'user', content: 'first' },
+                    { kind: 'assistant', toolName: 'grep' },
+                    { kind: 'tool', toolName: 'grep', content: '{}' },
+                    { kind: 'assistant', content: 'Previous reply done.' },
+                    { kind: 'user', content: 'second question' },
+                ],
+            })?.label,
+        ).toBe('Working on it…');
+    });
+});
+
+describe('tailEventsSinceLastUser', () => {
+    it('returns suffix starting at last user', () => {
+        const ev = [
+            { kind: 'user', content: 'a' },
+            { kind: 'assistant', content: 'x' },
+            { kind: 'user', content: 'b' },
+            { kind: 'assistant', toolName: 't' },
+        ];
+        expect(tailEventsSinceLastUser(ev)).toEqual(ev.slice(2));
     });
 });
 

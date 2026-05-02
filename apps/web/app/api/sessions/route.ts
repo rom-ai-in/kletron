@@ -6,7 +6,7 @@ import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { getGraphNodeOrder, buildInitialState } from "@kletron/server/services/agentGraphRuntime";
 import { preflightMissionForNewRun } from "@kletron/server/services/skillSlashPreflight";
-import { getToolApprovalConfig } from "@kletron/server/config";
+import { resolveEffectiveToolApprovalConfigForUser } from "@kletron/server/services/effectiveToolApprovalService";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
@@ -94,10 +94,11 @@ export async function POST(request: Request) {
     });
   }
 
+  const effectiveApproval = await resolveEffectiveToolApprovalConfigForUser(auth.userId);
   const resolvedThreadMode = parseThreadApprovalMode(
     payload.threadApprovalMode !== undefined && payload.threadApprovalMode !== null
       ? payload.threadApprovalMode
-      : getToolApprovalConfig().defaultThreadApprovalMode
+      : effectiveApproval.defaultThreadApprovalMode
   );
 
   let workMode = normalizeToWorkModeId(
@@ -133,6 +134,7 @@ export async function POST(request: Request) {
   const runId = await agentGraphRunService.createRun(resolvedGraphId, workspace._id.toString(), "agent", {
     threadApprovalMode: resolvedThreadMode,
     workMode,
+    createdByUserId: auth.userId,
   });
   console.log(`[sessions/create] ✓ Run created: ${runId}`);
   const initialNodeStatuses: Record<string, any> = {};

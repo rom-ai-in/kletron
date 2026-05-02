@@ -1,18 +1,30 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
-import { getToolApprovalConfig, saveToolApprovalConfig } from "@kletron/server/config";
+import { saveToolApprovalConfig } from "@kletron/server/config";
+import { getEffectiveToolApprovalForUser } from "@kletron/server/services/effectiveToolApprovalService";
+import { getMembershipByUserId } from "@kletron/server/services/organizationService";
+import { saveTenantToolApprovalConfig } from "@kletron/server/services/tenantToolApprovalService";
 
 /**
- * GET /api/config/tool-approval — Return current tool approval config.
+ * GET /api/config/tool-approval — Effective tool approval config for the signed-in user.
+ * Multi-tenant: per-organization doc when present; otherwise inherits deployment defaults.
  */
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
     const auth = await requireAppRouteAuth(req);
     if (!auth) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const config = getToolApprovalConfig();
-    return NextResponse.json(config);
+    try {
+        const { config, policyMeta } = await getEffectiveToolApprovalForUser(auth.userId);
+        return NextResponse.json({ ...config, policyMeta });
+    } catch (err) {
+        console.error("[tool-approval GET]", err);
+        return NextResponse.json(
+            { error: (err as Error)?.message ?? "Failed to load tool approval policy" },
+            { status: 500 }
+        );
+    }
 }
 
 /**
@@ -28,8 +40,25 @@ export async function PUT(req: NextRequest) {
     }
     try {
         const body = await req.json();
+        const membership = await getMembershipByUserId(auth.userId);
+        if (membership?.tenantId) {
+            const updated = await saveTenantToolApprovalConfig(membership.tenantId.toString(), body);
+            return NextResponse.json({
+                ...updated,
+                policyMeta: {
+                    scope: "organization" as const,
+                    hasOrganizationOverride: true,
+                },
+            });
+        }
         const updated = await saveToolApprovalConfig(body);
-        return NextResponse.json(updated);
+        return NextResponse.json({
+            ...updated,
+            policyMeta: {
+                scope: "deployment" as const,
+                hasOrganizationOverride: false,
+            },
+        });
     } catch (err) {
         return NextResponse.json(
             { error: (err as Error)?.message ?? "Failed to save config" },

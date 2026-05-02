@@ -19,6 +19,9 @@ import { groupEvents, pairToolEvents } from '../../lib/toolPairing';
 export type { ChatEvent, RenderItem };
 export { groupEvents };
 
+/** Below this, use absolute positioning + height estimates; short threads render normally (no phantom gap). */
+const VIRTUALIZE_MIN_ITEMS = 16;
+
 /**
  * Render a thin "── Stage X of Y — <name> ──" separator for events that come
  * from an automation thread. We render it above the synthetic user message
@@ -177,6 +180,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
         [visibleEvents, externalRenderItems],
     );
 
+    const useVirtualList = virtualized && items.length >= VIRTUALIZE_MIN_ITEMS;
+
     const handleScroll = useCallback(() => {
         if (!scrollRef.current) return;
         const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
@@ -254,7 +259,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
     }, [offsets.starts]);
 
     const virtualizationWindow = useMemo(() => {
-        if (!virtualized || items.length === 0) {
+        if (!useVirtualList || items.length === 0) {
             return { startIndex: 0, endIndex: items.length - 1 };
         }
         const overscan = 500;
@@ -269,7 +274,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
             startIndex: Math.max(0, startIndex),
             endIndex: Math.min(items.length - 1, Math.max(startIndex, endIndex)),
         };
-    }, [virtualized, items.length, scrollTop, viewportHeight, findStartIndex, offsets.starts, offsets.heights]);
+    }, [useVirtualList, items.length, scrollTop, viewportHeight, findStartIndex, offsets.starts, offsets.heights]);
 
     const observerMapRef = useRef<Map<number, ResizeObserver>>(new Map());
     const nodeMapRef = useRef<Map<number, HTMLDivElement>>(new Map());

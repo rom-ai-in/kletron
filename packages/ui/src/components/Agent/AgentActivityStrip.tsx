@@ -38,7 +38,8 @@ export const AgentActivityStrip: React.FC<AgentActivityStripProps> = ({
     return (
         <p
             className={cn(
-                'ml-auto flex w-fit max-w-full flex-wrap items-baseline justify-end gap-x-1.5 gap-y-1 text-[11px] leading-snug',
+                /* Left column — same side as assistant replies, not under the user bubble */
+                'flex w-fit max-w-full flex-wrap items-baseline justify-start gap-x-1.5 gap-y-1 text-left text-[11px] leading-snug',
                 className,
             )}
             role="status"

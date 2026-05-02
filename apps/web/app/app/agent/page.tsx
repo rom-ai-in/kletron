@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -438,6 +438,8 @@ export default function AgentPage() {
   // ── State ─────────────────────────────────────────────────────────────
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  /** Sidebar thread list fetch (workspace + Code/Work scope) — drives ProjectSidebar skeleton. */
+  const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
   const [threadApprovalMode, setThreadApprovalMode] = useState<ThreadApprovalMode>("inherit");
   const [fullAutoConfirmOpen, setFullAutoConfirmOpen] = useState(false);
@@ -565,6 +567,8 @@ export default function AgentPage() {
    * optimistic user message — avoid until the sidebar list catches up or we confirm the session.
    */
   const pendingSessionListCatchUpRef = useRef<string | null>(null);
+  /** Skip stale-list clear on first paint (same pattern as desktop `useThreads`). */
+  const sessionListScopePrimedRef = useRef(false);
 
   // ── Fetch sessions (current workspace only) ─────────────────────────
   // Includes both chat threads (source="agent") and automation threads
@@ -572,6 +576,7 @@ export default function AgentPage() {
   // Scoped by Code vs Work via `workMode` so the list matches the chrome.
   const fetchSessions = useCallback(async () => {
     sessionsHydratedRef.current = false;
+    setSessionsLoading(true);
     try {
       const wsQuery = activeWorkspaceId ? `&workspaceId=${encodeURIComponent(activeWorkspaceId)}` : "";
       const wmQuery = `&workMode=${encodeURIComponent(workMode)}`;
@@ -584,8 +589,19 @@ export default function AgentPage() {
       }
     } catch (e) {
       console.error("Failed to fetch sessions:", e);
+    } finally {
+      setSessionsLoading(false);
     }
   }, [activeWorkspaceId, workMode]);
+
+  useLayoutEffect(() => {
+    if (!sessionListScopePrimedRef.current) {
+      sessionListScopePrimedRef.current = true;
+      return;
+    }
+    setSessions([]);
+    setSessionsLoading(true);
+  }, [workMode, activeWorkspaceId]);
 
   const handleSessionCreated = useCallback((runId: string, _graphId: string) => {
     pendingSessionListCatchUpRef.current = runId;
@@ -1591,10 +1607,10 @@ export default function AgentPage() {
       projects={sidebarProjects}
       activeThreadId={activeSessionId}
       activeProjectId={activeWorkspaceId}
-      loading={workspaceSwitching}
+      loading={workspaceSwitching || sessionsLoading}
       workMode={workMode}
       onWorkModeChange={(mode) => void handleWorkModeSelect(mode)}
-      workModeSwitcherDisabled={workspaceSwitching}
+      workModeSwitcherDisabled={workspaceSwitching || sessionsLoading}
       onThreadSelect={handleSelectSession}
       onNewThreadInProject={() => { void handleNewSessionInActiveWorkspace(); }}
       onRenameThread={(id, title) => void handleRenameSession(id, title)}
@@ -1610,6 +1626,7 @@ export default function AgentPage() {
     activeSessionId,
     activeWorkspaceId,
     workspaceSwitching,
+    sessionsLoading,
     workMode,
     handleWorkModeSelect,
     handleSelectSession,

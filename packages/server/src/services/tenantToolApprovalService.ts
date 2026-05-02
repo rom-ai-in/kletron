@@ -22,8 +22,13 @@ export async function getTenantToolApprovalConfig(tenantId: string): Promise<Too
         const db = await getDatabase();
         const doc = await db.collection<TenantToolApprovalDoc>(COLLECTION).findOne({ tenantId: new ObjectId(tenantId) });
         if (!doc) return null;
-        const { _id, tenantId: _tid, updatedAt, createdAt, ...cfg } = doc as TenantToolApprovalDoc & Record<string, unknown>;
-        return cfg as ToolApprovalConfig;
+        return {
+            autoApproveReadonlySources: doc.autoApproveReadonlySources ?? ["agent", "automation"],
+            neverAutoApproveTools: doc.neverAutoApproveTools ?? [],
+            autoApproveSafeBash: doc.autoApproveSafeBash !== false,
+            toolOverrides: doc.toolOverrides ?? {},
+            defaultThreadApprovalMode: doc.defaultThreadApprovalMode ?? "inherit",
+        };
     } catch {
         return null;
     }

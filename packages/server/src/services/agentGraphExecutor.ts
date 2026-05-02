@@ -1570,7 +1570,9 @@ export class AgentGraphExecutor {
                     throw new Error("Subgraph cannot reference the current graph");
                 }
                 const nodeOrder = getGraphNodeOrder(subGraph);
-                const subRunId = await agentGraphRunService.createRun(graphId, workspace._id?.toString(), runSource);
+                const subRunId = await agentGraphRunService.createRun(graphId, workspace._id?.toString(), runSource, {
+                    createdByUserId: run.createdByUserId,
+                });
                 const initialNodeStatuses: Record<string, any> = {};
                 for (const node of subGraph.nodes) {
                     initialNodeStatuses[node.id] = "PENDING";

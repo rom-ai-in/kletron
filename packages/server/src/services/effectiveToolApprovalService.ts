@@ -4,24 +4,39 @@ import { agentGraphRunService } from "./agentGraphRunService";
 import { getMembershipByUserId } from "./organizationService";
 import { getTenantToolApprovalConfig } from "./tenantToolApprovalService";
 
+export type ToolApprovalPolicyMeta = {
+    scope: "organization" | "deployment";
+    /** True when this organization has its own Mongo doc (not only inherited deployment defaults). */
+    hasOrganizationOverride: boolean;
+};
+
+export async function getEffectiveToolApprovalForUser(userId: string): Promise<{
+    config: ToolApprovalConfig;
+    policyMeta: ToolApprovalPolicyMeta;
+}> {
+    const membership = await getMembershipByUserId(userId);
+    if (!membership?.tenantId) {
+        return {
+            config: getToolApprovalConfig(),
+            policyMeta: { scope: "deployment", hasOrganizationOverride: false },
+        };
+    }
+    const tenantCfg = await getTenantToolApprovalConfig(membership.tenantId.toString());
+    return {
+        config: tenantCfg ?? getToolApprovalConfig(),
+        policyMeta: {
+            scope: "organization",
+            hasOrganizationOverride: tenantCfg !== null,
+        },
+    };
+}
+
 /**
  * Effective policy for a signed-in user: organization doc if present, else deployment defaults.
  */
 export async function resolveEffectiveToolApprovalConfigForUser(userId: string): Promise<ToolApprovalConfig> {
-    const membership = await getMembershipByUserId(userId);
-    if (!membership?.tenantId) {
-        return getToolApprovalConfig();
-    }
-    const tenantCfg = await getTenantToolApprovalConfig(membership.tenantId.toString());
-    if (tenantCfg) return tenantCfg;
-    return getToolApprovalConfig();
-}
-
-export async function hasTenantToolApprovalDoc(userId: string): Promise<boolean> {
-    const membership = await getMembershipByUserId(userId);
-    if (!membership?.tenantId) return false;
-    const tenantCfg = await getTenantToolApprovalConfig(membership.tenantId.toString());
-    return tenantCfg !== null;
+    const { config } = await getEffectiveToolApprovalForUser(userId);
+    return config;
 }
 
 /**

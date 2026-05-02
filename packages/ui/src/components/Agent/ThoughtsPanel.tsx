@@ -1,7 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { cn } from '../../lib/utils';
-
 interface ThoughtsPanelProps {
     thoughts: string[];
     /** Explicitly mark as long-form reasoning (prose) vs discrete steps */
@@ -54,14 +52,7 @@ export const ThoughtsPanel: React.FC<ThoughtsPanelProps> = ({
                 <div className="flex items-center justify-center shrink-0 text-text-muted/50">
                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </div>
-                <span
-                    className={cn(
-                        'text-[13px] font-medium transition-colors',
-                        isReasoning
-                            ? 'text-text-muted group-hover:text-text-secondary'
-                            : 'text-text-muted group-hover:text-text-secondary',
-                    )}
-                >
+                <span className="text-[13px] font-medium text-text-muted transition-colors group-hover:text-text-secondary">
                     {isProse ? 'Thought' : 'Reasoning'} — {headerSummary}
                 </span>
             </button>

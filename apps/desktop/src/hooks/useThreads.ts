@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import type { WorkModeId } from "@kletron/shared/workMode";
 import type { ConversationHistoryItem, ThreadLiveStatus } from "../types";
 import {
@@ -56,11 +56,12 @@ export function useThreads(
 
   const loadThreads = useCallback(
     async (preferredId?: string, options?: { provisionalTitle?: string }) => {
-      const token = await getAccessToken();
-      if (!token) return;
       setThreadsLoading(true);
       setThreadsError(null);
       try {
+        const token = await getAccessToken();
+        if (!token) return;
+
         const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
         if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
 
@@ -98,12 +99,14 @@ export function useThreads(
     [getAccessToken, activeWorkspaceId, sessionsListUrl, listWorkMode],
   );
 
-  useEffect(() => {
+  /** Before paint: drop stale rows and show list skeleton when Code ↔ Work or workspace scope changes. */
+  useLayoutEffect(() => {
     if (!backendReady) return;
     if (!didInitialThreadsFetchRef.current) {
       didInitialThreadsFetchRef.current = true;
       return;
     }
+    setThreads([]);
     void loadThreads(conversationIdRef.current ?? undefined);
   }, [listWorkMode, activeWorkspaceId, backendReady, loadThreads]);
 
