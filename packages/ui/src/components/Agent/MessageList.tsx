@@ -353,7 +353,10 @@ const MessageListInner: React.FC<MessageListProps> = ({
         const stageSeparator = renderStageSeparator(event, isUser);
 
         return (
-            <div key={event.id || `msg-${index}`} className={event.toolName ? 'mb-0' : 'mb-1'}>
+            <div
+                key={event.id || `msg-${index}`}
+                className={event.toolName ? 'mb-0' : isUser ? 'mb-0.5' : 'mb-1'}
+            >
                 {stageSeparator}
                 {isAssistant && (
                     <>

@@ -148,7 +148,7 @@ export default function ConfigOverviewPage() {
             description="Project soul, cache, and graph debugging."
             icon={<Layers className="h-4 w-4 text-text-muted" />}
             href="/app/config/context"
-            meta="Audit context & knowledge graph"
+            meta="Context, structural map & retrieval"
           />
           <ConfigCard
             title="Graphs"

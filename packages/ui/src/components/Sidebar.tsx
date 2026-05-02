@@ -133,22 +133,30 @@ export function Sidebar() {
 
     return (
         <aside
-            className={`flex h-full flex-col border-r border-border-subtle bg-bg-surface text-text-primary transition-all duration-300 ease-in-out ${isCollapsed ? "w-[72px]" : "w-64"
+            className={`flex h-full flex-col border-r border-white/[0.06] bg-bg-surface text-text-primary transition-all duration-300 ease-in-out ${isCollapsed ? "w-[72px]" : "w-64"
                 }`}
         >
-            {/* Header */}
-            <div className={`flex items-center gap-3 border-b border-border-subtle py-4 transition-all duration-300 ${isCollapsed ? "flex-col justify-center px-2 gap-4" : "px-6"}`}>
-                <Link href="/" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-text-primary text-bg-surface text-lg hover:opacity-80 transition-opacity" title="Go to landing page">
-                    🧠
-                </Link>
+            {/* Header — h-14 matches AppHeader. Collapsed: logo hidden (narrow rail); home stays in nav. */}
+            <div
+                className={`shrink-0 border-b border-white/[0.06] transition-all duration-300 ${isCollapsed
+                    ? "flex h-14 items-center justify-center px-2"
+                    : "flex h-14 items-center gap-3 px-6"
+                    }`}
+            >
                 {!isCollapsed && (
-                    <span className="text-sm font-semibold tracking-tight text-text-primary whitespace-nowrap overflow-hidden transition-opacity duration-300">
-                        Kletron
-                    </span>
+                    <>
+                        <Link href="/" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-text-primary text-bg-surface text-base leading-none hover:opacity-80 transition-opacity" title="Go to landing page">
+                            🧠
+                        </Link>
+                        <span className="text-sm font-semibold tracking-tight text-text-primary whitespace-nowrap overflow-hidden transition-opacity duration-300">
+                            Kletron
+                        </span>
+                    </>
                 )}
                 <button
+                    type="button"
                     onClick={() => setIsCollapsed(!isCollapsed)}
-                    className={`flex items-center justify-center rounded-md p-1 text-text-muted hover:bg-state-hover hover:text-text-primary transition-all ${isCollapsed ? "" : "ml-auto"}`}
+                    className={`flex items-center justify-center rounded-md p-1.5 text-text-muted hover:bg-state-hover hover:text-text-primary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/15 ${isCollapsed ? "" : "ml-auto"}`}
                     title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
                 >
                     {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -192,7 +200,7 @@ export function Sidebar() {
             </nav>
 
             {/* Footer */}
-            <div className={`border-t border-border-subtle p-4 transition-all duration-300 ${isCollapsed ? "px-2" : ""}`}>
+            <div className={`border-t border-white/[0.06] p-4 transition-all duration-300 ${isCollapsed ? "px-2" : ""}`}>
                 {/* Profile Section - Linked to /app/account */}
                 <Link
                     href="/app/account"

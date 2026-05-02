@@ -5,7 +5,9 @@ import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@kletron/shared/t
 import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { getGraphNodeOrder, buildInitialState } from "@kletron/server/services/agentGraphRuntime";
+import { getToolApprovalConfig } from "@kletron/server/config";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 import { heuristicTitle, sanitizeTitle, stripSystemPrefix, stripThoughtContent } from "@kletron/server/services/titleSanitizer";
 
@@ -92,10 +94,18 @@ export async function POST(request: Request) {
     });
   }
 
+  const resolvedThreadMode = parseThreadApprovalMode(
+    payload.threadApprovalMode !== undefined && payload.threadApprovalMode !== null
+      ? payload.threadApprovalMode
+      : getToolApprovalConfig().defaultThreadApprovalMode
+  );
+
   // Create run record
   const nodeOrder = getGraphNodeOrder(graph as any);
   console.log(`[sessions/create] Creating run for graph "${graph.name}" (${graphId}), workspace=${workspace._id}`);
-  const runId = await agentGraphRunService.createRun(graphId, workspace._id.toString(), "agent");
+  const runId = await agentGraphRunService.createRun(graphId, workspace._id.toString(), "agent", {
+    threadApprovalMode: resolvedThreadMode,
+  });
   console.log(`[sessions/create] ✓ Run created: ${runId}`);
   const initialNodeStatuses: Record<string, any> = {};
   for (const node of graph.nodes) {

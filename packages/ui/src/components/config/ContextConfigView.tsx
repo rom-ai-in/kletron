@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
+import Link from "next/link";
 import {
   Settings,
   CheckCircle2,
@@ -20,6 +21,9 @@ import {
   Clock,
   FolderOpen,
   X,
+  LayoutDashboard,
+  Database,
+  Sliders,
 } from "lucide-react";
 import { Panel, Button } from "@kletron/ui/components/design-system";
 import { AuditContextForm } from "@kletron/ui/components/AuditContextForm";
@@ -27,6 +31,10 @@ import { ContextVisualizer } from "@kletron/ui/components/context/ContextVisuali
 import { ContextTracePanel } from "@kletron/ui/components/context/ContextTracePanel";
 import type { AuditContext } from "@kletron/shared/documentContext";
 import type { RepoAnalysisResult } from "@kletron/shared/types";
+import {
+  DEFAULT_WORKSPACE_CONTEXT_INJECTION,
+  type WorkspaceContextInjectionSettings,
+} from "@kletron/shared/workspaceContextInjection";
 
 // --- Cache Metadata Types ---
 interface CacheMetadata {
@@ -50,7 +58,7 @@ function formatTimeAgo(dateString: string): string {
 }
 
 // --- Tab Types ---
-type TabId = "soul" | "context" | "trace";
+type TabId = "overview" | "structural" | "semantic" | "injection" | "trace";
 
 interface TabConfig {
   id: TabId;
@@ -60,8 +68,10 @@ interface TabConfig {
 }
 
 const TABS: TabConfig[] = [
-  { id: "soul", label: "Project Soul", icon: Brain, description: "Mission, phase & constraints" },
-  { id: "context", label: "Active Context", icon: Layers, description: "Knowledge graph nodes" },
+  { id: "overview", label: "Overview", icon: LayoutDashboard, description: "Repo analysis & retrieval status" },
+  { id: "structural", label: "Structural map", icon: Layers, description: "File & import graph" },
+  { id: "semantic", label: "Semantic index", icon: Database, description: "Vector RAG (optional)" },
+  { id: "injection", label: "Injection", icon: Sliders, description: "Auto context in agent prompts" },
   { id: "trace", label: "Trace & Debug", icon: Target, description: "Test relevance ranking" },
 ];
 
@@ -132,7 +142,7 @@ function RepoStatsCard({ data, isScanning, onScan }: RepoStatsCardProps) {
         </div>
       ) : (
         <div className="text-center py-6 text-text-muted text-xs">
-          <p>No analysis data. Run a scan to populate the knowledge graph.</p>
+          <p>No analysis data. Run a scan to analyze the repository structure.</p>
         </div>
       )}
 
@@ -374,12 +384,16 @@ function ScanConsole({ logs, isActive }: { logs: string[]; isActive: boolean }) 
 
 // --- Main Component ---
 export function ContextConfigView() {
-  const [activeTab, setActiveTab] = useState<TabId>("soul");
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [auditContext, setAuditContext] = useState<AuditContext>({});
   const [auditContextEnabled, setAuditContextEnabled] = useState(true);
+  const [injection, setInjection] = useState<WorkspaceContextInjectionSettings>(DEFAULT_WORKSPACE_CONTEXT_INJECTION);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [structuralNodeCount, setStructuralNodeCount] = useState<number | null>(null);
+  type VectorIdx = { indexedFiles?: number; totalChunks?: number; isIndexing?: boolean };
+  const [vectorIndexSummary, setVectorIndexSummary] = useState<VectorIdx | null>(null);
 
   // Scan Logic State
   const [isScanning, setIsScanning] = useState(false);
@@ -442,9 +456,26 @@ export function ContextConfigView() {
           if (typeof data.enabled === "boolean") setAuditContextEnabled(data.enabled);
           if (data.context) setAuditContext(data.context);
         }
+        if (data?.injection && typeof data.injection === "object") {
+          setInjection({ ...DEFAULT_WORKSPACE_CONTEXT_INJECTION, ...data.injection });
+        }
       })
       .catch(() => { })
       .finally(() => setHasLoaded(true));
+
+    fetch("/api/context/graph")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.nodes && Array.isArray(data.nodes)) setStructuralNodeCount(data.nodes.length);
+      })
+      .catch(() => { });
+
+    fetch("/api/vectors")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && typeof data === "object") setVectorIndexSummary(data as VectorIdx);
+      })
+      .catch(() => { });
   }, []);
 
   // Persist State
@@ -469,12 +500,17 @@ export function ContextConfigView() {
     setAuditContext({});
   };
 
-  const persist = async (nextEnabled: boolean, nextContext: AuditContext) => {
+  const persist = async (
+    nextEnabled: boolean,
+    nextContext: AuditContext,
+    nextInjection?: WorkspaceContextInjectionSettings
+  ) => {
     setError(null);
+    const inj = nextInjection ?? injection;
     const res = await fetch("/api/context-config", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled: nextEnabled, context: nextContext }),
+      body: JSON.stringify({ enabled: nextEnabled, context: nextContext, injection: inj }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -492,6 +528,21 @@ export function ContextConfigView() {
       setError((e as Error).message);
     }
   };
+
+  const refreshRetrievalStats = useCallback(() => {
+    void fetch("/api/context/graph")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.nodes && Array.isArray(data.nodes)) setStructuralNodeCount(data.nodes.length);
+      })
+      .catch(() => { });
+    void fetch("/api/vectors")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && typeof data === "object") setVectorIndexSummary(data as VectorIdx);
+      })
+      .catch(() => { });
+  }, []);
 
   const startRepoScan = async () => {
     setIsScanning(true);
@@ -553,6 +604,7 @@ export function ContextConfigView() {
 
                 setScanLogs((prev) => [...prev, "✓ Context Updated."]);
                 setIsScanning(false);
+                refreshRetrievalStats();
               }
             } catch (e) {
               console.error("Parse error", e);
@@ -583,9 +635,9 @@ export function ContextConfigView() {
             <Settings className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-text-primary">Context Configuration</h1>
+            <h1 className="text-lg font-semibold text-text-primary">Context & retrieval</h1>
             <p className="text-sm text-text-muted">
-              Define project soul, manage knowledge graph, and debug context ranking.
+              Repository analysis, structural map, optional vector index, and prompt injection settings.
             </p>
           </div>
         </div>
@@ -661,14 +713,58 @@ export function ContextConfigView() {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-hidden">
-        {/* Tab 1: Project Soul */}
-        {activeTab === "soul" && (
+        {/* Tab 1: Overview */}
+        {activeTab === "overview" && (
           <div className="h-full overflow-y-auto p-6 scrollbar-elegant">
             <div className="max-w-4xl mx-auto space-y-6">
-              {/* Status Card */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <Panel className="p-4 border border-border-subtle bg-bg-elevated/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Layers size={16} className="text-status-info-text" />
+                    <h3 className="text-sm font-semibold text-text-primary">Structural code map</h3>
+                  </div>
+                  <p className="text-xs text-text-secondary mb-3">
+                    Files and import edges used to rank paths for the agent. Built when you run a repo scan.
+                  </p>
+                  <p className="text-2xl font-bold text-text-primary">
+                    {structuralNodeCount === null ? "—" : structuralNodeCount}
+                    <span className="text-xs font-normal text-text-muted ml-2">nodes</span>
+                  </p>
+                  <Button size="sm" variant="secondary" className="mt-3 h-8 text-xs" onClick={refreshRetrievalStats}>
+                    Refresh status
+                  </Button>
+                </Panel>
+                <Panel className="p-4 border border-border-subtle bg-bg-elevated/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Database size={16} className="text-purple-400" />
+                    <h3 className="text-sm font-semibold text-text-primary">Semantic index</h3>
+                  </div>
+                  <p className="text-xs text-text-secondary mb-3">
+                    Optional embeddings over code chunks for meaning-based retrieval (RAG).
+                  </p>
+                  <p className="text-sm text-text-primary">
+                    {vectorIndexSummary?.isIndexing ? (
+                      <span className="text-status-warning-text">Indexing…</span>
+                    ) : (
+                      <>
+                        <span className="font-semibold">{vectorIndexSummary?.indexedFiles ?? 0}</span>
+                        <span className="text-text-muted text-xs ml-1">files · </span>
+                        <span className="font-semibold">{vectorIndexSummary?.totalChunks ?? 0}</span>
+                        <span className="text-text-muted text-xs ml-1">chunks</span>
+                      </>
+                    )}
+                  </p>
+                  <Link
+                    href="/app/vectors"
+                    className="inline-flex mt-3 text-xs font-medium text-primary-main hover:underline"
+                  >
+                    Open vector index →
+                  </Link>
+                </Panel>
+              </div>
+
               <Panel
-                className={`p-4 border-l-4 ${auditContextEnabled ? "border-l-status-success" : "border-l-text-muted"
-                  }`}
+                className={`p-4 border-l-4 ${auditContextEnabled ? "border-l-status-success" : "border-l-text-muted"}`}
               >
                 <div className="flex items-start gap-3">
                   {auditContextEnabled ? (
@@ -678,17 +774,16 @@ export function ContextConfigView() {
                   )}
                   <div>
                     <h3 className="text-sm font-semibold text-text-primary">
-                      {auditContextEnabled ? "Context Injection Enabled" : "Context Injection Paused"}
+                      {auditContextEnabled ? "Document context enabled" : "Document context paused"}
                     </h3>
                     <p className="text-xs text-text-secondary mt-1">
-                      Global grounding is {auditContextEnabled ? "active" : "inactive"}. The agent
-                      will {auditContextEnabled ? "" : "not "}use project context in prompts.
+                      Mission and constraints (Project Soul) are {auditContextEnabled ? "injected" : "not injected"} into
+                      agent prompts alongside structural and semantic context.
                     </p>
                   </div>
                 </div>
               </Panel>
 
-              {/* Cache Status Card */}
               <CacheStatusCard
                 cacheMetadata={cacheMetadata}
                 currentWorkingFolder={currentWorkingFolder}
@@ -698,29 +793,154 @@ export function ContextConfigView() {
                 isScanning={isScanning}
               />
 
-              {/* Repo Stats */}
               <RepoStatsCard data={repoGraphData} isScanning={isScanning} onScan={startRepoScan} />
 
-              {/* Form */}
               <div
-                className={`transition-opacity duration-200 ${auditContextEnabled ? "opacity-100" : "opacity-50 pointer-events-none grayscale"
-                  }`}
+                className={`transition-opacity duration-200 ${auditContextEnabled ? "opacity-100" : "opacity-50 pointer-events-none grayscale"}`}
               >
                 <AuditContextForm
                   key={JSON.stringify(auditContext)}
                   initialContext={auditContext}
                   onSave={handleSave}
-                  onCancel={() => { }}
+                  onCancel={() => {}}
                 />
               </div>
             </div>
           </div>
         )}
 
-        {/* Tab 2: Active Context (Knowledge Graph) */}
-        {activeTab === "context" && (
+        {/* Tab 2: Structural map */}
+        {activeTab === "structural" && (
           <div className="h-full">
             <ContextVisualizer />
+          </div>
+        )}
+
+        {/* Tab 3: Semantic index */}
+        {activeTab === "semantic" && (
+          <div className="h-full overflow-y-auto p-6 scrollbar-elegant">
+            <div className="max-w-2xl mx-auto space-y-4">
+              <Panel className="p-6 border border-border-subtle">
+                <h2 className="text-base font-semibold text-text-primary mb-2">Semantic index (vector RAG)</h2>
+                <p className="text-sm text-text-secondary leading-relaxed">
+                  The vector index stores embeddings of code chunks. When enabled under Injection, the agent can receive
+                  semantic matches for your prompt in addition to the structural import graph.
+                </p>
+                <p className="text-sm text-text-secondary mt-3">
+                  Configure embeddings under Configuration → Embeddings, then build the index from the Vector Index page.
+                </p>
+                <Link
+                  href="/app/vectors"
+                  className="mt-4 inline-flex h-9 items-center justify-center rounded-md bg-primary-main px-4 text-sm font-medium text-white hover:opacity-90"
+                >
+                  Go to Vector Index
+                </Link>
+              </Panel>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: Injection settings */}
+        {activeTab === "injection" && (
+          <div className="h-full overflow-y-auto p-6 scrollbar-elegant">
+            <div className="max-w-xl mx-auto space-y-4">
+              <Panel className="p-6 border border-border-subtle space-y-4">
+                <h2 className="text-base font-semibold text-text-primary">Auto context injection</h2>
+                <p className="text-xs text-text-secondary">
+                  Controls the <code className="text-[11px] bg-bg-app px-1 rounded">ACTIVE CONTEXT</code> block in agent
+                  graph runs.
+                </p>
+                <label className="flex items-center justify-between gap-4 text-sm">
+                  <span>Structural ranking (code map)</span>
+                  <input
+                    type="checkbox"
+                    checked={injection.structuralInjectionEnabled}
+                    onChange={(e) =>
+                      setInjection((prev) => ({ ...prev, structuralInjectionEnabled: e.target.checked }))
+                    }
+                    className="h-4 w-4"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-4 text-sm">
+                  <span>Semantic search (vector index)</span>
+                  <input
+                    type="checkbox"
+                    checked={injection.semanticInjectionEnabled}
+                    onChange={(e) =>
+                      setInjection((prev) => ({ ...prev, semanticInjectionEnabled: e.target.checked }))
+                    }
+                    className="h-4 w-4"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-4 text-sm">
+                  <span>Warn if vector index empty (UI only)</span>
+                  <input
+                    type="checkbox"
+                    checked={injection.requireVectorIndexForAgent}
+                    onChange={(e) =>
+                      setInjection((prev) => ({ ...prev, requireVectorIndexForAgent: e.target.checked }))
+                    }
+                    className="h-4 w-4"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <label className="text-xs text-text-secondary">
+                    Graph top-N
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={injection.graphTopN}
+                      onChange={(e) =>
+                        setInjection((prev) => ({ ...prev, graphTopN: Number(e.target.value) || prev.graphTopN }))
+                      }
+                      className="mt-1 w-full rounded border border-border-subtle bg-bg-app px-2 py-1 text-sm text-text-primary"
+                    />
+                  </label>
+                  <label className="text-xs text-text-secondary">
+                    Vector top-N
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={injection.vectorTopN}
+                      onChange={(e) =>
+                        setInjection((prev) => ({ ...prev, vectorTopN: Number(e.target.value) || prev.vectorTopN }))
+                      }
+                      className="mt-1 w-full rounded border border-border-subtle bg-bg-app px-2 py-1 text-sm text-text-primary"
+                    />
+                  </label>
+                </div>
+                <label className="text-xs text-text-secondary block">
+                  Token budget (ranking prune)
+                  <input
+                    type="number"
+                    min={1000}
+                    step={1000}
+                    value={injection.tokenBudget}
+                    onChange={(e) =>
+                      setInjection((prev) => ({ ...prev, tokenBudget: Number(e.target.value) || prev.tokenBudget }))
+                    }
+                    className="mt-1 w-full rounded border border-border-subtle bg-bg-app px-2 py-1 text-sm text-text-primary"
+                  />
+                </label>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={async () => {
+                    try {
+                      await persist(auditContextEnabled, auditContext, injection);
+                      setIsSaved(true);
+                      setTimeout(() => setIsSaved(false), 1500);
+                    } catch (e) {
+                      setError((e as Error).message);
+                    }
+                  }}
+                >
+                  Save injection settings
+                </Button>
+              </Panel>
+            </div>
           </div>
         )}
 

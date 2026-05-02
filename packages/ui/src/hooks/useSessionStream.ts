@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { AgentEvent, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent } from '@kletron/shared/types';
 import type { Message, StreamStatus, StreamChunk } from '@kletron/shared/chatTypes';
+import type { ThreadApprovalMode } from '@kletron/shared/threadApprovalTypes';
 import { extractThoughtsFromContent, sanitizeVisibleAssistantContent, normalizeMessage } from '@kletron/shared/contentSanitizer';
 
 // Re-export for backward compatibility
@@ -34,6 +35,20 @@ export interface UseSessionStreamOptions {
     llmModel?: string;
     /** Active workspace ID to scope new sessions to. */
     workspaceId?: string | null;
+    /** Per-thread approval mode (sent when creating a new session). */
+    threadApprovalMode?: ThreadApprovalMode;
+    /**
+     * When set (e.g. Electron desktop), prepended to `/api/...` paths. No trailing slash.
+     */
+    apiOrigin?: string;
+    /**
+     * Extra headers for every request (e.g. `Authorization`, `x-workspace-id` from Bearer auth).
+     */
+    getRequestHeaders?: () => Promise<Record<string, string>>;
+    /** Optional work category in the JSON body (desktop / command-center parity). */
+    category?: string | null;
+    /** Optional plan mode flag in the JSON body. */
+    planMode?: boolean;
     /** Callback when a new session is created (receives runId). */
     onSessionCreated?: (runId: string, graphId: string) => void;
     /** Callback when a title should be generated. */
@@ -91,6 +106,11 @@ export interface UseSessionStreamReturn {
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
 
+function joinApiOrigin(apiOrigin: string | undefined, path: string): string {
+    const base = (apiOrigin ?? "").replace(/\/$/, "");
+    return base ? `${base}${path}` : path;
+}
+
 export function useSessionStream(options: UseSessionStreamOptions): UseSessionStreamReturn {
     const {
         sessionId,
@@ -98,9 +118,17 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         llmProvider,
         llmModel,
         workspaceId,
+        threadApprovalMode = 'inherit',
+        apiOrigin,
+        getRequestHeaders,
+        category,
+        planMode,
         onSessionCreated,
         onTitleGenerate,
     } = options;
+
+    const getRequestHeadersRef = useRef(getRequestHeaders);
+    getRequestHeadersRef.current = getRequestHeaders;
 
     const [messages, setMessages] = useState<Message[]>([]);
     const [eventStream, setEventStream] = useState<AgentEvent[]>([]);
@@ -228,12 +256,18 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
             // Fire-and-forget: notify the server so the run status is updated
             if (sessionId) {
-                const headers: Record<string, string> = {};
-                if (workspaceId) headers["x-workspace-id"] = workspaceId;
-                fetch(`/api/sessions/${sessionId}/stop`, { method: "POST", headers }).catch(() => { });
+                void (async () => {
+                    const extra = (await getRequestHeadersRef.current?.()) ?? {};
+                    const headers: Record<string, string> = { ...extra };
+                    if (workspaceId) headers["x-workspace-id"] = workspaceId;
+                    fetch(joinApiOrigin(apiOrigin, `/api/sessions/${sessionId}/stop`), {
+                        method: "POST",
+                        headers,
+                    }).catch(() => { });
+                })();
             }
         }
-    }, [sessionId, workspaceId, clearStreamBuffers]);
+    }, [sessionId, workspaceId, apiOrigin, clearStreamBuffers]);
 
     /**
      * Convert an AgentEvent to a Message for the simple chat view.
@@ -529,12 +563,28 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         abortControllerRef.current = controller;
 
         const isNewSession = !sessionId;
-        const url = isNewSession
+        const path = isNewSession
             ? '/api/sessions'
             : `/api/sessions/${sessionId}/chat`;
+        const url = joinApiOrigin(apiOrigin, path);
         const body = isNewSession
-            ? { graphId: selectedGraphId, message: msg, provider: llmProvider, model: llmModel, ...(workspaceId ? { workspaceId } : {}) }
-            : { message: msg, provider: llmProvider, model: llmModel };
+            ? {
+                graphId: selectedGraphId,
+                message: msg,
+                provider: llmProvider,
+                model: llmModel,
+                ...(workspaceId ? { workspaceId } : {}),
+                ...(threadApprovalMode && threadApprovalMode !== 'inherit' ? { threadApprovalMode } : {}),
+                ...(category ? { category } : {}),
+                ...(planMode ? { planMode: true } : {}),
+            }
+            : {
+                message: msg,
+                provider: llmProvider,
+                model: llmModel,
+                ...(category ? { category } : {}),
+                ...(planMode ? { planMode: true } : {}),
+            };
 
         // Optimistic user message (temp ID will be replaced by the real event)
         const tempId = `temp-${Date.now()}`;
@@ -546,7 +596,11 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         }]);
 
         try {
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            const authExtra = (await getRequestHeadersRef.current?.()) ?? {};
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+                ...authExtra,
+            };
             if (workspaceId) headers['x-workspace-id'] = workspaceId;
 
             const res = await fetch(url, {
@@ -583,7 +637,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, workspaceId, processNdjsonStream]);
+    }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, workspaceId, threadApprovalMode, apiOrigin, category, planMode, processNdjsonStream]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {

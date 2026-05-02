@@ -49,8 +49,8 @@ User clicks: Send
 
 1. **Workspace resolution**: `getWorkspaceByIdUnsafe(workspaceId)`
 2. **Context binding**: `runWithWorkspaceContext(workspace, callback)`
-3. **Context graph**: `ensureContextGraphReady(workspaceId, rootPath)` → loads from `.kletron/context_graph.json` or triggers scan
-4. **Audit context**: `getAuditContextConfig(workspaceId)` → workspace-specific settings
+3. **Context graph**: `ensureContextGraphReady(workspaceId, rootPath)` → per-workspace store; loads `.kletron/context_graph.json` under the repo or triggers `ContextScanner`
+4. **Workspace context**: `getWorkspaceContextConfig(workspaceId)` → document (audit) context plus **injection settings** (structural vs semantic, top-N, token budget)
 5. **Token tracking**: `tokenUsageService.startRunTracking(runId)`
 6. **Timeline setup**: `[{ id: "simple_react", label: "Agent (ReAct)", status: "pending" }]`
 7. **Conversation history**: Initialize with user event:
@@ -70,7 +70,7 @@ For the `simple_react` node:
 
 1. **Tool assembly**: `selectToolsByName(simpleReactToolNames)` → 23 MCP tools + `write_todos`
 2. **System prompt**: `simpleReactSystemPrompt` (285 lines of identity, rules, strategies)
-3. **Context enrichment**: Ranked context items from `ContextRanker` injected
+3. **Context enrichment**: `buildContextBundle()` merges ranked structural paths (`ContextRanker`) with optional vector hits (`semanticSearch`); formatted into `ACTIVE CONTEXT`
 4. **User prompt**: `"Fix the login bug in auth.ts"` (from `{{mission}}` template)
 
 ### Phase 5: ReAct Agent Loop

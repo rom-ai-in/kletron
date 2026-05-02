@@ -377,6 +377,13 @@ export async function semanticSearch(query: string, options: {
     return results;
 }
 
+/**
+ * Chunk count for a repo (semantic index non-empty check).
+ */
+export async function countChunksForRepo(repoPath: string): Promise<number> {
+    const collection = await getCollection();
+    return collection.countDocuments({ repoPath });
+}
 
 /**
  * Clear vectors for a specific repository path

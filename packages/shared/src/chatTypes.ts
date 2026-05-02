@@ -74,6 +74,7 @@ export type ThreadLiveStatus = 'running' | 'completed' | 'idle' | 'waiting' | 'e
  * NDJSON stream chunk types — shared between server routes and client parsers.
  */
 import type { AgentWorkflowResult, AgentWorkflowUpdate } from './types';
+import type { ThreadApprovalMode } from './threadApprovalTypes';
 
 export type StreamChunk =
     | { type: 'init'; payload: { runId: string; graphId: string } }
@@ -97,6 +98,8 @@ export interface ConversationHistoryItem {
 export interface ConversationDetail extends ConversationHistoryItem {
     messages?: Array<ServerAgentEvent & { kind?: string; role?: string; content?: string }>;
     conversationHistory?: Array<ServerAgentEvent & { kind?: string; role?: string; content?: string }>;
+    threadApprovalMode?: ThreadApprovalMode;
+    source?: string | null;
 }
 
 /** Message type for the web-app simple chat view. */

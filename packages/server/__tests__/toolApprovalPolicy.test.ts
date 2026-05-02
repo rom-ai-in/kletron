@@ -2,14 +2,19 @@ import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+    applyThreadApprovalOverride,
     classifyTool,
+    clearToolApprovalConfigOverride,
     getToolApprovalPolicy,
+    isKletronAdminToolName,
     isSafeCommand,
     normalizeRunSource,
     READONLY_TOOLS,
     EXECUTION_TOOLS,
     WRITE_REPO_TOOLS,
+    setToolApprovalConfigOverride,
 } from "../src/services/toolApprovalPolicy";
+import type { ToolApprovalPolicyResult } from "../src/services/toolApprovalPolicy";
 
 // Tests rely on env-var fallback path in resolveToolApprovalConfig().
 // When no MongoDB config is injected, env vars drive the behavior.
@@ -29,7 +34,20 @@ afterEach(() => {
     restoreEnv("AUTO_APPROVE_READONLY_SOURCES", ORIGINAL_AUTO_APPROVE_SOURCES);
     restoreEnv("NEVER_AUTO_APPROVE_TOOLS", ORIGINAL_NEVER_AUTO_APPROVE_TOOLS);
     restoreEnv("AUTO_APPROVE_SAFE_BASH", ORIGINAL_AUTO_APPROVE_SAFE_BASH);
+    clearToolApprovalConfigOverride();
 });
+
+function baseResult(partial: Partial<ToolApprovalPolicyResult>): ToolApprovalPolicyResult {
+    return {
+        source: "agent",
+        normalizedSource: "agent",
+        toolName: "read_file",
+        toolClass: "readonly",
+        decision: "auto_approve",
+        reason: "test",
+        ...partial,
+    };
+}
 
 describe("toolApprovalPolicy source normalization", () => {
     it("normalizes known sources", () => {
@@ -194,5 +212,90 @@ describe("toolApprovalPolicy env overrides (backwards compatibility)", () => {
             command: "ls",
         });
         assert.equal(policy.decision, "requires_approval");
+    });
+});
+
+describe("applyThreadApprovalOverride", () => {
+    it("inherit leaves base unchanged", () => {
+        const b = baseResult({ decision: "auto_approve" });
+        assert.deepEqual(applyThreadApprovalOverride(b, { mode: "inherit", toolName: "read_file" }), b);
+        assert.deepEqual(applyThreadApprovalOverride(b, { mode: undefined, toolName: "read_file" }), b);
+    });
+
+    it("confirm_everything turns auto_approve into requires_approval", () => {
+        const b = baseResult({ decision: "auto_approve", toolName: "read_file" });
+        const out = applyThreadApprovalOverride(b, { mode: "confirm_everything", toolName: "read_file" });
+        assert.equal(out.decision, "requires_approval");
+        assert.match(out.reason, /confirm_everything/);
+    });
+
+    it("full_auto_thread relaxes requires_approval for write_file when not blocked", () => {
+        const b = baseResult({
+            decision: "requires_approval",
+            toolClass: "write_repo",
+            toolName: "write_file",
+            reason: "repo write",
+        });
+        const out = applyThreadApprovalOverride(b, { mode: "full_auto_thread", toolName: "write_file" });
+        assert.equal(out.decision, "auto_approve");
+    });
+
+    it("full_auto_thread does not relax Kletron admin tools", () => {
+        assert.ok(isKletronAdminToolName("kletron_list_graphs"));
+        const b = baseResult({
+            decision: "requires_approval",
+            toolName: "kletron_list_graphs",
+            toolClass: "unknown",
+        });
+        const out = applyThreadApprovalOverride(b, { mode: "full_auto_thread", toolName: "kletron_list_graphs" });
+        assert.equal(out.decision, "requires_approval");
+    });
+
+    it("full_auto_thread does not relax neverAutoApproveTools", () => {
+        setToolApprovalConfigOverride({
+            autoApproveReadonlySources: ["agent", "automation"],
+            neverAutoApproveTools: ["write_file"],
+            autoApproveSafeBash: true,
+            toolOverrides: {},
+        });
+        const b = baseResult({
+            decision: "requires_approval",
+            toolClass: "write_repo",
+            toolName: "write_file",
+        });
+        const out = applyThreadApprovalOverride(b, { mode: "full_auto_thread", toolName: "write_file" });
+        assert.equal(out.decision, "requires_approval");
+    });
+
+    it("full_auto_thread does not relax always_require tool override", () => {
+        setToolApprovalConfigOverride({
+            autoApproveReadonlySources: ["agent", "automation"],
+            neverAutoApproveTools: [],
+            autoApproveSafeBash: true,
+            toolOverrides: { write_file: "always_require" },
+        });
+        const b = baseResult({
+            decision: "requires_approval",
+            toolClass: "write_repo",
+            toolName: "write_file",
+        });
+        const out = applyThreadApprovalOverride(b, { mode: "full_auto_thread", toolName: "write_file" });
+        assert.equal(out.decision, "requires_approval");
+    });
+
+    it("automation source ignores thread modes", () => {
+        const b = baseResult({
+            normalizedSource: "automation",
+            source: "automation",
+            decision: "auto_approve",
+        });
+        const out = applyThreadApprovalOverride(b, { mode: "confirm_everything", toolName: "read_file" });
+        assert.equal(out.decision, "auto_approve");
+    });
+
+    it("deny decision is never changed", () => {
+        const b = baseResult({ decision: "deny", reason: "blocked" });
+        const out = applyThreadApprovalOverride(b, { mode: "full_auto_thread", toolName: "read_file" });
+        assert.equal(out.decision, "deny");
     });
 });

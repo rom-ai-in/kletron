@@ -160,22 +160,27 @@ The ranker filters to scores > 0.1 and returns the top N.
 
 File: `packages/server/src/services/agentGraphExecutor.ts`
 
+Orchestrator: `packages/server/src/context/contextBundleService.ts` (`buildContextBundle`, `formatContextBundleForPrompt`).
+
 Flow per run node:
 
-1. `ensureContextGraphReady()` loads or scans the graph.
-2. `getAuditContextConfig()` loads `enabled` + audit context.
-3. If enabled, `ContextRanker.rank()` is called.
+1. `ensureContextGraphReady(workspaceId, rootPath)` loads from `<rootPath>/.kletron/context_graph.json` or runs `ContextScanner` into the **per-workspace** store (`contextGraphRegistry`).
+2. `getWorkspaceContextConfig(workspaceId)` loads document context (`enabled` + audit fields) and **injection settings** (`structuralInjectionEnabled`, `semanticInjectionEnabled`, limits, token budget).
+3. If structural and/or semantic injection is enabled, `buildContextBundle()` runs `ContextRanker` on the store and optionally `semanticSearch()` (vector index) for the same `rootPath`, then deduplicates file paths.
 4. A **context block** is added to the system prompt.
-5. Audit Context is appended (if enabled).
+5. Audit / Project Soul (`DOCUMENT CONTEXT`) is appended when document context is enabled.
 
-Context block format:
+Context block format (abbreviated):
 
 ```
 ## ACTIVE CONTEXT (Auto-Detected)
 - Current File: <active file, if available>
 
-The following files are likely relevant to your task:
-- <abs path> (Relevance: NN% - Reason, Reason)
+Structural relevance (code map):
+- <abs path> (Relevance: NN% - ...)
+
+Semantic matches (vector index):
+- <abs path> Lx-y (score NN%)
 ```
 
 Final system prompt composition:
@@ -192,7 +197,7 @@ Final system prompt composition:
 Type and normalization:
 
 - `packages/shared/src/documentContext.ts`
-- Stored via `apps/web/app/api/context-config/route.ts`
+- Stored via `apps/web/app/api/context-config/route.ts` (same document may include `injection` for structural/semantic toggles and limits; see `packages/shared/src/workspaceContextInjection.ts`).
 
 The form allows fields like `startupPhase` and `riskTolerance`, but **normalization drops legacy-only fields**. Only fields defined in `DocumentContext` are persisted and injected.
 

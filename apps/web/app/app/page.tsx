@@ -179,6 +179,7 @@ export default function AppDashboardPage() {
   const [repoScanLogs, setRepoScanLogs] = useState<string[]>([]);
   const [repoScanRunning, setRepoScanRunning] = useState(false);
   const [repoScanError, setRepoScanError] = useState<string | null>(null);
+  const [structuralMapNodes, setStructuralMapNodes] = useState(0);
 
   const provider = llmConfig?.provider || llmConfig?.defaultProvider || "";
   const { status: llmStatus, message: llmMessage, recheck: recheckLlm } = useLlmHealth(provider);
@@ -187,6 +188,7 @@ export default function AppDashboardPage() {
   const checklist = useMemo(() => {
     const workspaceLinked = Boolean(workspace?.rootPath);
     const llmReady = Boolean(provider);
+    const structuralReady = structuralMapNodes > 0;
     const embeddingsReady = Boolean(embeddingConfig?.provider);
     const vectorsReady = Boolean((vectorStatus?.indexedFiles ?? 0) > 0);
 
@@ -204,23 +206,29 @@ export default function AppDashboardPage() {
           href: "/app/config/llm",
           hint: "Required for chat, tools, and automations.",
         },
+        {
+          label: "Structural code map",
+          done: structuralReady,
+          href: "/app/config/context",
+          hint: "Run repo scan on Context & retrieval to build file/import graph for agent prompts.",
+        },
       ],
       rag: [
         {
           label: "Embeddings model",
           done: embeddingsReady,
           href: "/app/config/embeddings",
-          hint: "Needed before indexing; skip if you only use tools without RAG.",
+          hint: "Needed before vector indexing; skip if you only use structural context.",
         },
         {
           label: "Semantic index",
           done: vectorsReady,
           href: "/app/vectors",
-          hint: "Indexed files for semantic search — optional for many flows.",
+          hint: "Indexed chunks for semantic retrieval — optional; complements the structural map.",
         },
       ],
     };
-  }, [workspace?.rootPath, provider, embeddingConfig?.provider, vectorStatus?.indexedFiles]);
+  }, [workspace?.rootPath, provider, embeddingConfig?.provider, vectorStatus?.indexedFiles, structuralMapNodes]);
 
   const recentSessions = useMemo(() => sessions.filter((s) => s.status !== "archived").slice(0, 6), [sessions]);
   const recentRuns = useMemo(() => runs.slice(0, 6), [runs]);
@@ -249,12 +257,13 @@ export default function AppDashboardPage() {
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
-      const [sessionsRes, graphsRes, vectorRes, llmRes, embeddingRes] = await Promise.all([
+      const [sessionsRes, graphsRes, vectorRes, llmRes, embeddingRes, graphRes] = await Promise.all([
         fetch("/api/sessions?limit=24&excludeSource=automation"),
         fetch("/api/agent-graphs"),
         fetch("/api/vectors"),
         fetch("/api/llm-config"),
         fetch("/api/embedding-config"),
+        fetch("/api/context/graph"),
       ]);
 
       if (sessionsRes.ok) {
@@ -302,6 +311,13 @@ export default function AppDashboardPage() {
 
       if (embeddingRes.ok) {
         setEmbeddingConfig(await embeddingRes.json());
+      }
+
+      if (graphRes.ok) {
+        const g = (await graphRes.json()) as { nodes?: unknown[] };
+        setStructuralMapNodes(Array.isArray(g.nodes) ? g.nodes.length : 0);
+      } else {
+        setStructuralMapNodes(0);
       }
 
       const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -386,6 +402,15 @@ export default function AppDashboardPage() {
       setRepoScanError(error instanceof Error ? error.message : "Repo scan failed.");
     } finally {
       setRepoScanRunning(false);
+      try {
+        const gr = await fetch("/api/context/graph");
+        if (gr.ok) {
+          const g = (await gr.json()) as { nodes?: unknown[] };
+          setStructuralMapNodes(Array.isArray(g.nodes) ? g.nodes.length : 0);
+        }
+      } catch {
+        /* ignore */
+      }
     }
   }, []);
 
@@ -571,7 +596,8 @@ export default function AppDashboardPage() {
             <div>
               <h2 className="text-sm font-semibold text-text-primary">Setup checklist</h2>
               <p className="text-xs text-text-muted">
-                Code agent and cowork need a workspace and LLM. Semantic search is extra (RAG).
+                Workspace and LLM are required. Run a repo scan for the structural map; embeddings and vector index are
+                optional for semantic RAG.
               </p>
             </div>
           </CardHeader>

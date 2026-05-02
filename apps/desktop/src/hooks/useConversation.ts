@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
+import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import type {
   ChatEvent,
   ConversationDetail,
@@ -40,6 +42,8 @@ export function useConversation(
   const [input, setInput] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
   const [tokenUsage, setTokenUsage] = useState<{ input: string; output: string } | null>(null);
+  const [threadApprovalMode, setThreadApprovalMode] = useState<ThreadApprovalMode>("inherit");
+  const [conversationRunSource, setConversationRunSource] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -176,6 +180,8 @@ export function useConversation(
         throw new Error(text || `Failed to load conversation (${res.status})`);
       }
       const data = (await res.json()) as ConversationDetail;
+      setThreadApprovalMode(parseThreadApprovalMode(data.threadApprovalMode));
+      setConversationRunSource(typeof data.source === "string" ? data.source : null);
       const rawMessages = Array.isArray(data?.conversationHistory) ? data.conversationHistory : (Array.isArray(data?.messages) ? data.messages : []);
       const mapped = rawMessages
         .map((msg, index) => {
@@ -290,6 +296,7 @@ export function useConversation(
           message: messageContent,
           ...(modelConfig?.provider ? { provider: modelConfig.provider } : {}),
           ...(activeCategory ? { category: activeCategory } : {}),
+          ...(threadApprovalMode && threadApprovalMode !== "inherit" ? { threadApprovalMode } : {}),
         }
         : {
           message: messageContent,

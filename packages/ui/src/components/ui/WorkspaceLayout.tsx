@@ -37,27 +37,27 @@ export function WorkspaceLayout({
   return (
     <div className={cn('flex h-full flex-col bg-bg-app text-text-primary', className)}>
       {header && (
-        <div className={cn('flex-none border-b border-border-subtle bg-bg-surface/80', headerClassName)}>
+        <div className={cn('flex-none border-b border-white/[0.06] bg-bg-surface/80', headerClassName)}>
           {header}
         </div>
       )}
-      <div className="flex-1 min-h-0 flex">
+      <div className="flex flex-1 min-h-0">
         {sidebar && (
-          <aside className={cn('min-h-0 border-r border-border-subtle bg-bg-surface', sidebarWidth, sidebarClassName)}>
+          <aside className={cn('flex min-h-0 shrink-0 border-r border-white/[0.06] bg-bg-surface', sidebarWidth, sidebarClassName)}>
             {sidebar}
           </aside>
         )}
-        <main className={cn('flex-1 min-h-0 min-w-0 overflow-hidden', contentClassName)}>
+        <main className={cn('flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden', contentClassName)}>
           {content}
         </main>
         {aside && (
-          <aside className={cn('min-h-0 border-l border-border-subtle bg-bg-surface', asideWidth, asideClassName)}>
+          <aside className={cn('flex min-h-0 shrink-0 border-l border-white/[0.06] bg-bg-surface', asideWidth, asideClassName)}>
             {aside}
           </aside>
         )}
       </div>
       {footer && (
-        <div className={cn('flex-none border-t border-border-subtle bg-bg-surface', footerClassName)}>
+        <div className={cn('flex-none border-t border-white/[0.06] bg-bg-surface', footerClassName)}>
           {footer}
         </div>
       )}

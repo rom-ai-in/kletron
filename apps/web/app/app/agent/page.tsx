@@ -26,6 +26,10 @@ import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
 import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
 
 import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
+import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
+import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
+import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
+import { Modal, Button } from "@kletron/ui/components/design-system";
 import {
   Loader2,
   Folder,
@@ -62,6 +66,8 @@ type SessionDetail = {
   graphId: string;
   title: string;
   status: string;
+  threadApprovalMode?: ThreadApprovalMode;
+  source?: string | null;
   startedAt?: string | null;
   graph: {
     name: string;
@@ -119,6 +125,10 @@ interface AgentComposerProps {
   editControl: ReturnType<typeof useMessageEdit>; // Added for editControl
   /** Server-side run in progress (e.g. automation) — same queued placeholder as streaming */
   runActive?: boolean;
+  threadApprovalMode: ThreadApprovalMode;
+  onThreadApprovalModeChange: (mode: ThreadApprovalMode) => void;
+  threadApprovalLocked?: boolean;
+  threadApprovalLockedReason?: string;
 }
 
 const AgentComposer = memo(function AgentComposer({
@@ -138,6 +148,10 @@ const AgentComposer = memo(function AgentComposer({
   perfDebugEnabled = false,
   onInputLatencySample,
   editControl, // Added for editControl
+  threadApprovalMode,
+  onThreadApprovalModeChange,
+  threadApprovalLocked,
+  threadApprovalLockedReason,
 }: AgentComposerProps) {
   const queuedOrBusy = sending || runActive;
   const [draft, setDraft] = useState("");
@@ -191,7 +205,7 @@ const AgentComposer = memo(function AgentComposer({
         placeholder={queuedOrBusy ? "Add a follow-up (queued until agent finishes)..." : "Ask anything…"}
         containerClassName="max-w-3xl mx-auto"
         footerLeft={
-          <div className="flex min-w-0 w-full items-center gap-2">
+          <div className="flex min-w-0 w-full flex-wrap items-center gap-2">
             <Selector
               label="GRAPH"
               value={selectedGraphId}
@@ -208,6 +222,12 @@ const AgentComposer = memo(function AgentComposer({
               size="sm"
               direction="up"
               status={llmStatus}
+            />
+            <ThreadApprovalModeSelector
+              value={threadApprovalMode}
+              onSelect={onThreadApprovalModeChange}
+              disabled={threadApprovalLocked}
+              disabledReason={threadApprovalLockedReason}
             />
           </div>
         }
@@ -235,6 +255,8 @@ export default function AgentPage() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
+  const [threadApprovalMode, setThreadApprovalMode] = useState<ThreadApprovalMode>("inherit");
+  const [fullAutoConfirmOpen, setFullAutoConfirmOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [messageQueue, setMessageQueue] = useState<QueuedMessageItem[]>([]);
@@ -325,6 +347,43 @@ export default function AgentPage() {
     sessionStorage.setItem(SESSION_STORAGE_KEY, runId);
   }, []);
 
+  const commitThreadApprovalMode = useCallback(
+    async (mode: ThreadApprovalMode) => {
+      setThreadApprovalMode(mode);
+      if (!activeSessionId) return;
+      try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+        const res = await fetch(`/api/sessions/${activeSessionId}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ threadApprovalMode: mode }),
+        });
+        if (!res.ok) {
+          const j = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(j.error || `HTTP ${res.status}`);
+        }
+      } catch (e) {
+        console.error("[threadApprovalMode] PATCH failed:", e);
+      }
+    },
+    [activeSessionId, activeWorkspaceId]
+  );
+
+  const onThreadApprovalSelect = useCallback(
+    (mode: ThreadApprovalMode) => {
+      if (mode === "full_auto_thread") {
+        const key = `kletron-full-auto-thread-ok-${activeWorkspaceId ?? "default"}`;
+        if (typeof sessionStorage !== "undefined" && !sessionStorage.getItem(key)) {
+          setFullAutoConfirmOpen(true);
+          return;
+        }
+      }
+      void commitThreadApprovalMode(mode);
+    },
+    [activeWorkspaceId, commitThreadApprovalMode]
+  );
+
   const handleTitleGenerate = useCallback((runId: string, userMessage: string) => {
     void (async () => {
       const MAX_RETRIES = 2;
@@ -375,6 +434,7 @@ export default function AgentPage() {
     selectedGraphId,
     llmProvider,
     workspaceId: activeWorkspaceId,
+    threadApprovalMode,
     onSessionCreated: handleSessionCreated,
     onTitleGenerate: handleTitleGenerate,
   });
@@ -538,6 +598,11 @@ export default function AgentPage() {
       }
     }
   }, [setMessages]);
+
+  useEffect(() => {
+    if (!sessionDetail?.id) return;
+    setThreadApprovalMode(parseThreadApprovalMode(sessionDetail.threadApprovalMode));
+  }, [sessionDetail?.id, sessionDetail?.threadApprovalMode]);
 
   // ── Pre-fill from BA handoff (URL search params) ──────────────────────
   const handoffAppliedRef = useRef(false);
@@ -1032,7 +1097,7 @@ export default function AgentPage() {
   // ── Pending edits panel (keeps a short confirmation after queue drains so the strip does not “vanish”) ──
   const showPendingStrip = pendingEdits.length > 0 || flushNotice !== null;
   const pendingEditsPanel = showPendingStrip ? (
-    <div className="border-t border-border-subtle bg-bg-surface p-3">
+    <div className="border-t border-white/[0.06] bg-bg-surface p-3">
       {flushNotice && (
         <div
           className={`mb-2 flex items-start gap-2 rounded-lg border px-3 py-2 text-[11px] ${
@@ -1111,7 +1176,7 @@ export default function AgentPage() {
               return (
                 <div
                   key={edit.id}
-                  className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-elevated px-3 py-2 text-[11px]"
+                  className="flex items-center justify-between rounded-lg border border-white/[0.08] bg-bg-elevated px-3 py-2 text-[11px]"
                 >
                   <div className="flex-1 min-w-0 mr-2">
                     <p className="font-mono text-text-primary truncate">{edit.toolName}</p>
@@ -1177,7 +1242,8 @@ export default function AgentPage() {
       onRenameThread={(id, title) => void handleRenameSession(id, title)}
       onArchiveThread={(id) => void handleArchiveSession(id)}
       onDeleteThread={(id) => void handleDeleteSession(id)}
-      className="w-full"
+      surface="solid"
+      className="w-full min-h-0"
     />
   );
 
@@ -1194,9 +1260,9 @@ export default function AgentPage() {
   ]);
 
   const mainContent = (
-    <div className="flex flex-col h-full">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Active workspace indicator + Token usage / duration header */}
-      <div className="flex-none flex items-center justify-between gap-3 px-4 py-2 border-b border-border-subtle bg-bg-surface">
+      <div className="flex-none flex items-center justify-between gap-3 border-b border-white/[0.06] bg-bg-surface px-4 py-2">
         {/* Left: workspace indicator */}
         {activeWorkspace ? (
           <div className="flex items-center gap-2 min-w-0">
@@ -1225,14 +1291,14 @@ export default function AgentPage() {
         <div className="flex items-center gap-3 flex-shrink-0">
           <Link
             href="/app/config/tools"
-            className="rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+            className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
             title="Manage tool catalog and policy"
           >
             Tools
           </Link>
           <Link
             href={selectedGraphId ? `/app/agent-graphs/${selectedGraphId}` : "/app/config/graphs"}
-            className="rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+            className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
             title="Manage graph tool allowlist"
           >
             Graph
@@ -1243,20 +1309,20 @@ export default function AgentPage() {
             onClick={() => setPerfDebugEnabled((v) => !v)}
             className={`rounded border px-2 py-1 text-[10px] transition ${perfDebugEnabled
               ? "border-status-info-border bg-status-info-bg text-status-info-text"
-              : "border-border-subtle bg-bg-elevated text-text-muted hover:bg-state-hover hover:text-text-primary"
+              : "border-white/[0.08] bg-bg-elevated text-text-muted hover:bg-state-hover hover:text-text-primary"
               }`}
             title="Toggle performance debug metrics"
           >
             Perf {perfDebugEnabled ? "ON" : "OFF"}
           </button>
           {perfDebugEnabled && (
-            <div className="rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-muted">
+            <div className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted">
               FPS: {fps ?? "…"} | input p95: {inputLatencyStats.p95.toFixed(1)}ms | avg: {inputLatencyStats.avg.toFixed(1)}ms
             </div>
           )}
           <button
             onClick={handleCopyLogs}
-            className="flex items-center gap-1 rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+            className="flex items-center gap-1 rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
             title="Copy debug logs to clipboard"
           >
             <ClipboardCopy className="h-3 w-3" />
@@ -1429,7 +1495,7 @@ export default function AgentPage() {
       />
 
       {/* Chat input */}
-      <div className="flex-none border-t border-border-subtle bg-bg-surface px-4 py-3">
+      <div className="flex-none border-t border-white/[0.06] bg-bg-surface px-4 py-3">
         <AgentComposer
           sending={sending}
           runActive={isServerSideRunActive}
@@ -1447,6 +1513,10 @@ export default function AgentPage() {
           perfDebugEnabled={perfDebugEnabled}
           onInputLatencySample={handleInputLatencySample}
           editControl={editControl}
+          threadApprovalMode={threadApprovalMode}
+          onThreadApprovalModeChange={onThreadApprovalSelect}
+          threadApprovalLocked={sessionDetail?.source === "automation"}
+          threadApprovalLockedReason="Approval mode is fixed for automation threads."
         />
       </div>
     </div>
@@ -1464,13 +1534,47 @@ export default function AgentPage() {
 
   return (
     <>
+      <Modal
+        open={fullAutoConfirmOpen}
+        onClose={() => setFullAutoConfirmOpen(false)}
+        title="Full auto in this chat"
+        subtitle="Tools will run without asking, including file writes and shell commands. Kletron admin actions and your workspace blocklist still require approval."
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setFullAutoConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                const key = `kletron-full-auto-thread-ok-${activeWorkspaceId ?? "default"}`;
+                sessionStorage.setItem(key, "1");
+                setFullAutoConfirmOpen(false);
+                void commitThreadApprovalMode("full_auto_thread");
+              }}
+            >
+              Enable full auto
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-text-secondary">
+          You can tighten defaults anytime under{" "}
+          <Link href="/app/config/workspace" className="text-accent underline">
+            Configuration → Workspace
+          </Link>
+          .
+        </p>
+      </Modal>
       <WorkspaceLayout
+        className="min-h-0"
         sidebar={memoSidebar}
         content={mainContent}
         aside={timelineSidebar}
         sidebarWidth="w-[260px]"
         asideWidth="w-72"
-        sidebarClassName="border-r-0"
+        sidebarClassName="min-h-0 border-r-0 bg-transparent p-0"
+        contentClassName="min-h-0 bg-bg-app"
       />
     </>
   );

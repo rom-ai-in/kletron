@@ -1,3 +1,15 @@
+import { KLETRON_ADMIN_TOOL_NAMES } from "@kletron/agent-core/tools/kletronAdminToolNames";
+import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
+
+export type ToolApprovalConfig = {
+    autoApproveReadonlySources: string[];
+    neverAutoApproveTools: string[];
+    autoApproveSafeBash: boolean;
+    toolOverrides: Record<string, "always_approve" | "always_require" | "default">;
+    /** Default thread mode for new agent sessions (workspace setting; not used by policy resolution). */
+    defaultThreadApprovalMode?: ThreadApprovalMode;
+};
+
 /* ═══════════════════════════════════════════════════════════════════════════
  * Tool Approval Config resolution
  *
@@ -10,13 +22,6 @@
  * trigger dotenv + MongoDB connections at import time). The server calls
  * setToolApprovalConfigOverride() once after loading persisted config.
  * ═══════════════════════════════════════════════════════════════════════════ */
-
-export type ToolApprovalConfig = {
-    autoApproveReadonlySources: string[];
-    neverAutoApproveTools: string[];
-    autoApproveSafeBash: boolean;
-    toolOverrides: Record<string, "always_approve" | "always_require" | "default">;
-};
 
 let _configOverride: ToolApprovalConfig | null = null;
 
@@ -270,4 +275,56 @@ export const getToolApprovalPolicy = (input: ToolApprovalPolicyInput): ToolAppro
         reason: "Unknown tool class defaults to requiring approval.",
     };
 };
+
+const KLETRON_ADMIN_TOOL_SET = new Set(
+    KLETRON_ADMIN_TOOL_NAMES.map((n) => String(n).trim().toLowerCase())
+);
+
+export function isKletronAdminToolName(toolName: string): boolean {
+    return KLETRON_ADMIN_TOOL_SET.has(String(toolName ?? "").trim().toLowerCase());
+}
+
+/**
+ * Applies per-thread (AgentGraphRun) approval mode on top of workspace policy.
+ * Automation runs ignore thread modes (caller should pass mode only for interactive agent).
+ */
+export function applyThreadApprovalOverride(
+    base: ToolApprovalPolicyResult,
+    input: { mode: ThreadApprovalMode | undefined; toolName: string }
+): ToolApprovalPolicyResult {
+    const mode: ThreadApprovalMode = input.mode ?? "inherit";
+    if (mode === "inherit") return base;
+    if (base.normalizedSource === "automation") return base;
+    if (base.decision === "deny") return base;
+
+    const tool = String(input.toolName ?? "").trim().toLowerCase();
+    const cfg = resolveToolApprovalConfig();
+    const never = new Set(cfg.neverAutoApproveTools.map((t) => t.trim().toLowerCase()).filter(Boolean));
+    const override = cfg.toolOverrides?.[tool];
+
+    if (mode === "confirm_everything") {
+        if (base.decision === "auto_approve") {
+            return {
+                ...base,
+                decision: "requires_approval",
+                reason: `Thread mode confirm_everything: approval required (${base.reason})`,
+            };
+        }
+        return base;
+    }
+
+    if (mode === "full_auto_thread") {
+        if (base.decision !== "requires_approval") return base;
+        if (never.has(tool)) return base;
+        if (override === "always_require") return base;
+        if (isKletronAdminToolName(tool)) return base;
+        return {
+            ...base,
+            decision: "auto_approve",
+            reason: `Thread mode full_auto_thread: auto-approved (${base.reason})`,
+        };
+    }
+
+    return base;
+}
 

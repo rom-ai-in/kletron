@@ -15,7 +15,7 @@ import { agentGraphService } from "./agentGraphService";
 import type { AgentGraphNode } from "./agentGraphTypes";
 import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 import { nodeOutputSchemaRegistry } from "@kletron/shared/nodeOutputSchemas";
-import { parseJsonOutput, renderUserPrompt } from "./agentGraphUtils";
+import { findExistingMissionUserEvent, parseJsonOutput, renderUserPrompt } from "./agentGraphUtils";
 import { evaluateCondition } from "./agentGraphConditions";
 import { buildInitialState, getEntryNodeIds, getGraphNodeOrder, resolveExecutionMode } from "./agentGraphRuntime";
 import { setNestedValue } from "./agentGraphState";
@@ -30,32 +30,26 @@ import { kletronAdminTools } from "@kletron/agent-core/tools/kletronAdminTools";
 import { McpClient } from "@kletron/mcp-client/client";
 import { tokenUsageService } from "./tokenUsageService";
 import { ObjectId } from "mongodb";
-import { getAuditContextConfig } from "@kletron/server/services/auditContextService";
+import { getWorkspaceContextConfig, type WorkspaceContextConfig } from "@kletron/server/services/auditContextService";
 import { formatAuditContextPrompt, type AuditContext } from "@kletron/shared/documentContext";
+import { DEFAULT_WORKSPACE_CONTEXT_INJECTION } from "@kletron/shared/workspaceContextInjection";
 import { agentMemoryService } from "./agentMemoryService";
 import { SafeEditGate } from "./agent/SafeEditGate";
-import { getToolApprovalPolicy } from "./toolApprovalPolicy";
+import { applyThreadApprovalOverride, getToolApprovalPolicy } from "./toolApprovalPolicy";
 import { sanitizeAssistantVisibleContent, stripThoughtTagsForTranscript } from "./titleSanitizer";
 
 // --- Checkpoint Imports ---
 import { getCheckpointSaver, hasCheckpoint, computeGraphHash, ensureCheckpointIndexes, deleteThreadCheckpoints } from "./checkpointService";
 
 // --- Context Management Imports ---
-import { contextGraphStore, type ContextGraphStore } from "@kletron/server/context/graph/ContextGraphStore";
-import { contextScanner, type ContextScanner } from "@kletron/server/context/graph/ContextScanner";
-import { editorStateManager, type EditorStateManager } from "@kletron/server/context/graph/EditorStateManager";
-
-// TODO: Implémenter ContextRanker quand les types seront prêts
-class ContextRankerStub {
-  async rank(_params: { userPrompt: string; editorState: any; limit: number; tokenBudget: number }): Promise<any[]> {
-    return [];
-  }
-}
-const contextRanker = new ContextRankerStub();
-
-// Aliases pour compatibilité avec le code existant
-const getContextGraphStore = () => contextGraphStore;
-const getEditorStateManager = () => editorStateManager;
+import type { ContextGraphStore } from "@kletron/server/context/graph/ContextGraphStore";
+import { contextScanner } from "@kletron/server/context/graph/ContextScanner";
+import { getEditorStateManager } from "@kletron/server/context/graph/EditorStateManager";
+import { getContextGraphStore } from "@kletron/server/context/graph/contextGraphRegistry";
+import {
+  buildContextBundle,
+  formatContextBundleForPrompt,
+} from "@kletron/server/context/contextBundleService";
 import { getWorkspaceByIdUnsafe, listAllWorkspaces } from "./workspaceService";
 import { runWithWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 
@@ -795,8 +789,8 @@ async function maybeExecuteJsonActionTool(opts: {
 }
 
 // Helper to ensure graph is ready
-async function ensureContextGraphReady(_workspaceId: string, rootPath: string) {
-    const store = getContextGraphStore();
+async function ensureContextGraphReady(workspaceId: string, rootPath: string) {
+    const store = getContextGraphStore(workspaceId, rootPath);
     if (store.getAllNodes().length > 0) return store;
 
     console.log("[AgentGraph] Context graph is empty, attempting load...");
@@ -804,9 +798,7 @@ async function ensureContextGraphReady(_workspaceId: string, rootPath: string) {
 
     if (store.getAllNodes().length === 0) {
         console.log("[AgentGraph] Context graph still empty, triggering fresh workspace scan...");
-
-        const scanner = contextScanner;
-        await scanner.scanWorkspace(rootPath);
+        await contextScanner.scanWorkspace(rootPath, store);
         await store.save();
         console.log(`[AgentGraph] Scan complete. Graph now has ${store.getAllNodes().length} nodes.`);
     }
@@ -1108,7 +1100,7 @@ export class AgentGraphExecutor {
             workspace,
             async () => {
             // Ensure context is ready before we start
-            const contextGraphStore = await ensureContextGraphReady(
+            const workspaceGraphStore = await ensureContextGraphReady(
                 workspace._id!.toString(),
                 workspace.rootPath
             );
@@ -1166,14 +1158,17 @@ export class AgentGraphExecutor {
                 }
             };
 
-            let auditContextConfig: { enabled: boolean; context: AuditContext | null } | null = null;
+            let workspaceFullCtx: WorkspaceContextConfig | null = null;
             try {
-                auditContextConfig = await getAuditContextConfig(workspace._id!.toString());
+                workspaceFullCtx = await getWorkspaceContextConfig(workspace._id!.toString());
             } catch (err) {
-                console.warn("[AgentGraph] Failed to load audit context config:", err);
+                console.warn("[AgentGraph] Failed to load workspace context config:", err);
             }
-            const contextInjectionEnabled = auditContextConfig?.enabled !== false;
-            const auditContext = contextInjectionEnabled ? auditContextConfig?.context ?? null : null;
+            const injectionSettings = workspaceFullCtx?.injection ?? DEFAULT_WORKSPACE_CONTEXT_INJECTION;
+            const documentContextEnabled = workspaceFullCtx?.enabled !== false;
+            const auditContext = documentContextEnabled ? workspaceFullCtx?.context ?? null : null;
+            const wantAutoContext =
+                injectionSettings.structuralInjectionEnabled || injectionSettings.semanticInjectionEnabled;
 
             let graph = await agentGraphService.getGraph(run.graphId.toString());
             if (!graph) {
@@ -1481,15 +1476,20 @@ export class AgentGraphExecutor {
             // Reuse that event for globalEventStream so IDs stay consistent
             // between the stream and the persisted conversation history.
             const missionContent = typeof state.mission === "string" ? state.mission : "";
-            const lastHistoryEvent = state.conversationHistory.length > 0
-                ? state.conversationHistory[state.conversationHistory.length - 1]
-                : null;
-            const existingUserEvent =
-                lastHistoryEvent &&
-                    lastHistoryEvent.kind === "user" &&
-                    lastHistoryEvent.content === missionContent
-                    ? lastHistoryEvent
-                    : null;
+            // Reuse the mission user row when it already exists anywhere in history.
+            // Only checking the *last* event was wrong: a second executeRunStreaming
+            // (retry, resume, or overlapping automation) with history like
+            // [user(mission), assistant, …] would append another identical user.
+            let existingUserEvent: AgentEvent | null = null;
+            if (missionContent && state.conversationHistory.length > 0) {
+                for (let i = state.conversationHistory.length - 1; i >= 0; i--) {
+                    const ev = state.conversationHistory[i]!;
+                    if (ev.kind === "user" && ev.content === missionContent) {
+                        existingUserEvent = ev;
+                        break;
+                    }
+                }
+            }
 
             const initialUserEvent: AgentEvent = existingUserEvent ?? {
                 id: nextGlobalEventId(),
@@ -1855,15 +1855,20 @@ export class AgentGraphExecutor {
                                 }
 
 
-                                const policy = getToolApprovalPolicy({
+                                const threadMode = await agentGraphRunService.getRunThreadApprovalMode(runId);
+                                const basePolicy = getToolApprovalPolicy({
                                     source: runSource,
                                     toolName: name,
                                     ...(name === "execute_bash" && typeof input?.command === "string"
                                         ? { command: input.command as string }
                                         : {}),
                                 });
+                                const policy = applyThreadApprovalOverride(basePolicy, {
+                                    mode: threadMode,
+                                    toolName: name,
+                                });
                                 console.info(
-                                    `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} decision=${policy.decision} reason="${policy.reason}"`
+                                    `[ToolApprovalPolicy] runId=${runId} threadMode=${threadMode ?? "inherit"} source=${policy.normalizedSource} tool=${name} decision=${policy.decision} reason="${policy.reason}"`
                                 );
 
                                 if (policy.decision !== "auto_approve") {
@@ -2046,33 +2051,18 @@ export class AgentGraphExecutor {
                     // 3. Smart Context Injection (New Architecture)
                     // ---------------------------------------------------------
                     let contextBlock = "";
-                    if (contextInjectionEnabled) {
-                        // We rank context based on the rendered user prompt + editor state
-                        const editorState = getEditorStateManager().getCurrentState();
-                        const rankedContext = await contextRanker.rank({
-                            userPrompt: userPrompt, // Using existing `userPrompt`
+                    if (wantAutoContext) {
+                        const editorState = getEditorStateManager(workspace._id!.toString()).getCurrentState();
+                        const bundle = await buildContextBundle({
+                            rootPath: rootDir,
+                            userPrompt,
                             editorState,
-                            limit: 15, // Retrieve top 15 most relevant
-                            tokenBudget: 30000 // Reserve budget
+                            store: workspaceGraphStore,
+                            settings: injectionSettings,
                         });
-
-                        // Format the context for the System Prompt
-                        contextBlock = `\n\n## ACTIVE CONTEXT (Auto-Detected)\n`;
-                        if (editorState.activeFile) {
-                            contextBlock += `- Current File: ${editorState.activeFile}\n`;
-                        }
-
-                        if (rankedContext.length > 0) {
-                            contextBlock += `\nThe following files are likely relevant to your task:\n`;
-                            for (const item of rankedContext) {
-                                const rel = (item.score * 100).toFixed(0);
-                                const reasonText = Array.isArray(item.reasons) ? item.reasons.join(", ") : "";
-                                contextBlock += `- ${item.node.id} (Relevance: ${rel}% - ${reasonText})\n`;
-                                // Future: Inject snippets here if budget allows
-                            }
-                        } else {
-                            contextBlock += `No specific relevant files detected in context graph.\n`;
-                        }
+                        contextBlock = formatContextBundleForPrompt(bundle, {
+                            currentFile: editorState.activeFile,
+                        });
                     }
 
                     // Compose final system prompt: skills prefix + base prompt + context

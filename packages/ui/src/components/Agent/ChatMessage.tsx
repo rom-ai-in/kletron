@@ -57,8 +57,8 @@ export interface MessageBubbleProps {
 
 /**
  * Shared message bubble component.
- * - User messages: right-aligned, Cursor-style surface; actions sit in a reserved row below (hover)
- * - Assistant messages: left-aligned, transparent bg, markdown-rendered
+ * - User: compact right bubble (Cursor-like); copy/edit in corner on hover, no extra footer gap
+ * - Assistant: flat markdown, actions under content on hover
  */
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
     role,
@@ -76,28 +76,25 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             <div className={cn('group flex w-full flex-col items-end', className)}>
                 <div
                     className={cn(
-                        'relative w-full max-w-[min(90%,36rem)] rounded-2xl border border-white/[0.09]',
-                        'bg-white/[0.05] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]',
-                        'px-3.5 py-2.5 text-[13px] leading-[1.5] text-text-primary',
-                        'transition-[border-color,box-shadow] duration-200',
-                        'group-hover:border-white/[0.14] group-hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08),0_0_0_1px_rgba(255,255,255,0.04)]',
+                        'relative w-full max-w-[min(85%,28rem)] rounded-xl border border-white/[0.08]',
+                        'bg-white/[0.04] px-3 py-2 text-[13px] leading-snug text-text-primary',
                     )}
                 >
-                    <div className="break-words whitespace-pre-wrap [word-break:break-word]">{content}</div>
+                    <div className="break-words whitespace-pre-wrap [word-break:break-word] pr-1">{content}</div>
+                    {actions ? (
+                        <div
+                            className={cn(
+                                'absolute bottom-1.5 right-1.5 flex items-center gap-px rounded-md',
+                                'bg-bg-root/85 p-0.5 shadow-sm ring-1 ring-white/[0.06] backdrop-blur-sm',
+                                'opacity-0 transition-opacity duration-100',
+                                'pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100',
+                                'focus-within:pointer-events-auto focus-within:opacity-100',
+                            )}
+                        >
+                            {actions}
+                        </div>
+                    ) : null}
                 </div>
-                {/* Reserved height: copy/edit stay below the bubble and clear the next message */}
-                {actions ? (
-                    <div
-                        className={cn(
-                            'mt-1.5 flex min-h-[28px] w-full max-w-[min(90%,36rem)] flex-row items-center justify-end gap-0.5 px-0.5',
-                            'pointer-events-none opacity-0 transition-opacity duration-150',
-                            'group-hover:pointer-events-auto group-hover:opacity-100',
-                            'focus-within:pointer-events-auto focus-within:opacity-100',
-                        )}
-                    >
-                        {actions}
-                    </div>
-                ) : null}
             </div>
         );
     }

@@ -21,11 +21,20 @@ export type SessionEditFlushNotice =
     | { kind: "approved_all"; count: number }
     | { kind: "rejected_all"; count: number };
 
+function joinApiOrigin(apiOrigin: string | undefined, path: string): string {
+    const base = (apiOrigin ?? "").replace(/\/$/, "");
+    return base ? `${base}${path}` : path;
+}
+
 export interface UseSessionEditsOptions {
     /** The session/run ID to fetch edits for. */
     sessionId: string | null;
     /** Whether the session is currently streaming/running. */
     isStreaming: boolean;
+    /** When set (e.g. desktop), prepended to `/api/...` paths. */
+    apiOrigin?: string;
+    /** Extra headers (e.g. Bearer token, x-workspace-id). */
+    getRequestHeaders?: () => Promise<Record<string, string>>;
 }
 
 export interface UseSessionEditsReturn {
@@ -55,7 +64,10 @@ export interface UseSessionEditsReturn {
 const NOTICE_MS = 5000;
 
 export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEditsReturn {
-    const { sessionId, isStreaming } = options;
+    const { sessionId, isStreaming, apiOrigin, getRequestHeaders } = options;
+
+    const getRequestHeadersRef = useRef(getRequestHeaders);
+    getRequestHeadersRef.current = getRequestHeaders;
 
     const [pendingEdits, setPendingEdits] = useState<SessionPendingEdit[]>([]);
     const [processingOp, setProcessingOp] = useState<{
@@ -108,11 +120,16 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
         const controller = new AbortController();
         pollAbortRef.current = controller;
         try {
-            const res = await fetch(`/api/sessions/${sessionId}/edits`, {
-                signal: controller.signal,
-                cache: "no-store",
-                credentials: "include",
-            });
+            const authExtra = (await getRequestHeadersRef.current?.()) ?? {};
+            const res = await fetch(
+                joinApiOrigin(apiOrigin, `/api/sessions/${sessionId}/edits`),
+                {
+                    signal: controller.signal,
+                    cache: "no-store",
+                    credentials: "include",
+                    headers: { ...authExtra },
+                },
+            );
             if (res.ok) {
                 const edits = await res.json();
                 setPendingEdits(Array.isArray(edits) ? edits : []);
@@ -126,7 +143,7 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
                 pollAbortRef.current = null;
             }
         }
-    }, [sessionId]);
+    }, [sessionId, apiOrigin]);
 
     // Poll for edits while streaming
     useEffect(() => {
@@ -162,11 +179,15 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
             const name = toolName?.trim() || "tool";
             setProcessingOp({ editId, op: "approve" });
             try {
-                const res = await fetch(`/api/sessions/${sessionId}/edits/approve`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ editId }),
-                });
+                const authExtra = (await getRequestHeadersRef.current?.()) ?? {};
+                const res = await fetch(
+                    joinApiOrigin(apiOrigin, `/api/sessions/${sessionId}/edits/approve`),
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...authExtra },
+                        body: JSON.stringify({ editId }),
+                    },
+                );
                 if (!res.ok) {
                     const payload = await res.json().catch(() => ({}));
                     throw new Error(
@@ -183,7 +204,7 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
                 setProcessingOp((cur) => (cur?.editId === editId ? null : cur));
             }
         },
-        [sessionId, fetchEdits, scheduleFlushNotice]
+        [sessionId, apiOrigin, fetchEdits, scheduleFlushNotice]
     );
 
     const rejectEdit = useCallback(
@@ -192,9 +213,10 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
             const name = toolName?.trim() || "tool";
             setProcessingOp({ editId, op: "reject" });
             try {
-                await fetch(`/api/sessions/${sessionId}/edits/reject`, {
+                const authExtra = (await getRequestHeadersRef.current?.()) ?? {};
+                await fetch(joinApiOrigin(apiOrigin, `/api/sessions/${sessionId}/edits/reject`), {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json", ...authExtra },
                     body: JSON.stringify({ editId }),
                 });
                 await fetchEdits();
@@ -205,7 +227,7 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
                 setProcessingOp((cur) => (cur?.editId === editId ? null : cur));
             }
         },
-        [sessionId, fetchEdits, scheduleFlushNotice]
+        [sessionId, apiOrigin, fetchEdits, scheduleFlushNotice]
     );
 
     const approveAll = useCallback(async () => {
@@ -213,11 +235,15 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
         const count = pendingEdits.length;
         setApprovingAll(true);
         try {
-            const res = await fetch(`/api/sessions/${sessionId}/edits/approve`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "all" }),
-            });
+            const authExtra = (await getRequestHeadersRef.current?.()) ?? {};
+            const res = await fetch(
+                joinApiOrigin(apiOrigin, `/api/sessions/${sessionId}/edits/approve`),
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", ...authExtra },
+                    body: JSON.stringify({ action: "all" }),
+                },
+            );
             if (!res.ok) {
                 const payload = await res.json().catch(() => ({}));
                 throw new Error(payload?.error || "Bulk approval execution failed");
@@ -231,16 +257,17 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
         } finally {
             setApprovingAll(false);
         }
-    }, [sessionId, fetchEdits, pendingEdits.length, scheduleFlushNotice]);
+    }, [sessionId, apiOrigin, fetchEdits, pendingEdits.length, scheduleFlushNotice]);
 
     const rejectAll = useCallback(async () => {
         if (!sessionId) return;
         const count = pendingEdits.length;
         setRejectingAll(true);
         try {
-            await fetch(`/api/sessions/${sessionId}/edits/reject`, {
+            const authExtra = (await getRequestHeadersRef.current?.()) ?? {};
+            await fetch(joinApiOrigin(apiOrigin, `/api/sessions/${sessionId}/edits/reject`), {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...authExtra },
                 body: JSON.stringify({ action: "all" }),
             });
             await fetchEdits();
@@ -252,7 +279,7 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
         } finally {
             setRejectingAll(false);
         }
-    }, [sessionId, fetchEdits, pendingEdits.length, scheduleFlushNotice]);
+    }, [sessionId, apiOrigin, fetchEdits, pendingEdits.length, scheduleFlushNotice]);
 
     return {
         pendingEdits,

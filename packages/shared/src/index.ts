@@ -1,3 +1,4 @@
+export * from './threadApprovalTypes';
 export * from './categoryTypes';
 export * from './skills/types';
 export * from './connectors/catalog';

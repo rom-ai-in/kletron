@@ -26,6 +26,8 @@ export interface InputBarProps {
   graphSelector?: React.ReactNode;
   /** Model selector rendered in footer */
   modelSelector?: React.ReactNode;
+  /** Thread approval mode (agent sessions) */
+  approvalSelector?: React.ReactNode;
   /** Token usage display */
   tokenUsage?: { input: string; output: string } | null;
   /** Plan mode badge */
@@ -52,6 +54,7 @@ export function InputBar({
   onDictationClick,
   graphSelector,
   modelSelector,
+  approvalSelector,
   tokenUsage,
   planMode = false,
   connected = true,
@@ -111,9 +114,10 @@ export function InputBar({
             </div>
           }
           footerRight={
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               {graphSelector}
               {modelSelector}
+              {approvalSelector}
               <span
                 className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
                   connected === 'checking'

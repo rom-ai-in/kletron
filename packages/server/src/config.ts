@@ -39,6 +39,8 @@ dotenv.config();
 const ToolOverrideSchema = z.enum(["always_approve", "always_require", "default"]).default("default");
 export type ToolOverride = z.infer<typeof ToolOverrideSchema>;
 
+const ThreadApprovalModeSchema = z.enum(["inherit", "confirm_everything", "full_auto_thread"]);
+
 const ToolApprovalConfigSchema = z.object({
   /** Sources for which readonly tools are auto-approved (comma-separated or array) */
   autoApproveReadonlySources: z.array(z.string()).default(["agent", "automation"]),
@@ -48,6 +50,8 @@ const ToolApprovalConfigSchema = z.object({
   autoApproveSafeBash: z.boolean().default(true),
   /** Per-tool overrides: { "execute_bash": "always_approve" | "always_require" | "default" } */
   toolOverrides: z.record(z.string(), ToolOverrideSchema).default({}),
+  /** Default per-thread approval mode for new agent sessions */
+  defaultThreadApprovalMode: ThreadApprovalModeSchema.default("inherit"),
 });
 export type ToolApprovalConfig = z.infer<typeof ToolApprovalConfigSchema>;
 
@@ -389,6 +393,7 @@ const DEFAULT_TOOL_APPROVAL: ToolApprovalConfig = {
   neverAutoApproveTools: [],
   autoApproveSafeBash: true,
   toolOverrides: {},
+  defaultThreadApprovalMode: "inherit",
 };
 
 /**
@@ -419,6 +424,7 @@ export function getToolApprovalConfig(): ToolApprovalConfig {
       ? envSafeBash.trim().toLowerCase() === "true"
       : DEFAULT_TOOL_APPROVAL.autoApproveSafeBash,
     toolOverrides: DEFAULT_TOOL_APPROVAL.toolOverrides,
+    defaultThreadApprovalMode: DEFAULT_TOOL_APPROVAL.defaultThreadApprovalMode,
   };
 }
 

@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { getDb } from "../lib/db";
 import type { AgentGraphNodeStatus, AgentGraphRun, AgentGraphStatus, AgentGraphState } from "./agentGraphTypes";
 import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
@@ -60,6 +61,8 @@ export type CreateRunOptions = {
     stageIndex?: number;
     /** Initial title for the run/session (e.g. automation name + ISO date). */
     title?: string;
+    /** Per-thread tool approval mode (interactive agent sessions). */
+    threadApprovalMode?: ThreadApprovalMode;
 };
 
 export class AgentGraphRunService {
@@ -87,6 +90,9 @@ export class AgentGraphRunService {
             ...(parentRunId ? { parentRunId } : {}),
             ...(typeof options?.stageIndex === "number" ? { stageIndex: options.stageIndex } : {}),
             ...(options?.title ? { title: options.title } : {}),
+            ...(options?.threadApprovalMode && options.threadApprovalMode !== "inherit"
+                ? { threadApprovalMode: options.threadApprovalMode }
+                : {}),
             status: "PENDING",
             startedAt: new Date(),
             nodeOrder: [],
@@ -119,6 +125,51 @@ export class AgentGraphRunService {
         }
         const run = await collection.findOne({ _id: new ObjectId(runId) });
         return (run as AgentGraphRun) || null;
+    }
+
+    /** Lightweight read for hot path (tool approval per call). */
+    async getRunThreadApprovalMode(runId: string): Promise<ThreadApprovalMode | undefined> {
+        if (!ObjectId.isValid(runId)) return undefined;
+        const collection = await getCollectionSafe();
+        if (!collection) {
+            return getFallbackRun(runId)?.threadApprovalMode;
+        }
+        try {
+            const doc = await collection.findOne(
+                { _id: new ObjectId(runId) },
+                { projection: { threadApprovalMode: 1 } }
+            );
+            return doc?.threadApprovalMode as ThreadApprovalMode | undefined;
+        } catch {
+            return getFallbackRun(runId)?.threadApprovalMode;
+        }
+    }
+
+    async patchRun(runId: string, partial: Partial<Pick<AgentGraphRun, "threadApprovalMode" | "title">>): Promise<void> {
+        if (!ObjectId.isValid(runId)) {
+            throw new Error("Invalid run ID format");
+        }
+        const keys = Object.keys(partial).filter((k) => partial[k as keyof typeof partial] !== undefined);
+        if (keys.length === 0) return;
+        const collection = await getCollectionSafe();
+        const $set: Record<string, unknown> = {};
+        for (const k of keys) {
+            $set[k] = partial[k as keyof typeof partial];
+        }
+        if (!collection) {
+            const existing = fallbackRuns.get(runId);
+            if (!existing) return;
+            fallbackRuns.set(runId, { ...existing, ...partial });
+            return;
+        }
+        try {
+            await collection.updateOne({ _id: new ObjectId(runId) }, { $set });
+        } catch (error) {
+            enableFallback(error);
+            const seeded = await ensureFallbackRun(runId, collection);
+            if (!seeded) return;
+            fallbackRuns.set(runId, { ...seeded, ...partial });
+        }
     }
 
     async listRuns(graphId: string, limit = 20, workspaceId?: string): Promise<AgentGraphRun[]> {

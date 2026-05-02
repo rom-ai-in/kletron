@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
+import { cn } from '../../lib/utils';
 import {
   Settings,
   ChevronDown,
@@ -68,6 +69,10 @@ export interface ProjectSidebarProps {
   /** Items awaiting review */
   reviewQueueCount?: number;
   onReviewQueueClick?: () => void;
+  /**
+   * `glass` — frosted panel (e.g. desktop). `solid` — flat surface + hairline edge (web agent).
+   */
+  surface?: 'glass' | 'solid';
   className?: string;
   style?: React.CSSProperties;
 }
@@ -114,6 +119,7 @@ export function ProjectSidebar({
   onRemoveProject,
   reviewQueueCount = 0,
   onReviewQueueClick,
+  surface = 'glass',
   className = '',
   style,
 }: ProjectSidebarProps) {
@@ -129,10 +135,12 @@ export function ProjectSidebar({
       type="button"
       key={id}
       onClick={() => setThreadFilter(id)}
-      className={`px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-colors ${threadFilter === id
-        ? 'bg-state-selected text-text-primary border border-border-subtle'
-        : 'text-text-muted hover:text-text-secondary hover:bg-state-hover'
-        }`}
+      className={cn(
+        'px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-colors',
+        threadFilter === id
+          ? 'bg-state-selected text-text-primary ring-1 ring-inset ring-white/[0.08]'
+          : 'text-text-muted hover:text-text-secondary hover:bg-state-hover',
+      )}
     >
       {label}
     </button>
@@ -174,10 +182,19 @@ export function ProjectSidebar({
   const showTopSection = reviewQueueCount > 0 || Boolean(onAddProject);
 
   return (
-    <div className={`flex flex-col h-full flex-shrink-0 glass-sidebar ${className}`} style={{ width: 260, ...style }}>
+    <div
+      className={cn(
+        'flex h-full flex-shrink-0 flex-col',
+        surface === 'solid'
+          ? 'bg-bg-surface border-r border-white/[0.06]'
+          : 'glass-sidebar',
+        className,
+      )}
+      style={{ width: 260, ...style }}
+    >
       {/* ── Top section: Review queue + Add project (omit wrapper when empty to avoid orphan divider) ── */}
       {showTopSection && (
-        <div className="flex flex-col border-b border-border-subtle">
+        <div className="flex flex-col border-b border-white/[0.06]">
           {reviewQueueCount > 0 && (
             <button
               type="button"
@@ -392,10 +409,12 @@ export function ProjectSidebar({
                     return (
                       <div
                         key={thread.id}
-                        className={`group flex items-center gap-2 pl-9 pr-2 py-1.5 cursor-pointer transition-all duration-150 ${isActive
-                          ? 'bg-state-selected text-text-primary border-l-2 border-l-border-strong pl-[34px]'
-                          : 'text-text-secondary hover:bg-white/[0.03] hover:text-text-primary border-l-2 border-l-transparent'
-                          }`}
+                        className={cn(
+                          'group flex cursor-pointer items-center gap-2 border-l-2 py-1.5 pl-9 pr-2 transition-all duration-150',
+                          isActive
+                            ? 'border-l-white/25 bg-state-selected pl-[34px] text-text-primary'
+                            : 'border-l-transparent text-text-secondary hover:bg-white/[0.03] hover:text-text-primary',
+                        )}
                         onClick={() => !isEditing && onThreadSelect?.(thread.id)}
                       >
                         <StatusDot status={thread.liveStatus} />
@@ -421,7 +440,7 @@ export function ProjectSidebar({
                             {isAutomation && (
                               <span
                                 title="Automation thread"
-                                className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-border-subtle bg-bg-elevated text-text-muted flex-shrink-0"
+                                className="inline-flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded bg-bg-elevated text-text-muted ring-1 ring-inset ring-white/[0.08]"
                               >
                                 <Bot className="h-2.5 w-2.5" />
                               </span>

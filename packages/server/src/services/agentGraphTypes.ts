@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
+import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
 import type { AgentEvent } from "@kletron/shared/types";
 
@@ -220,6 +221,11 @@ export interface AgentGraphRun {
     stageIndex?: number;
     /** Per-stage results aggregated on the main automation thread. */
     automationStageResults?: AutomationStageRunResult[];
+    /**
+     * Per-thread approval policy for interactive agent runs.
+     * Omitted or `inherit` uses workspace tool approval only.
+     */
+    threadApprovalMode?: ThreadApprovalMode;
 }
 
 /**
