@@ -6,7 +6,8 @@ export type SlashSkillRow = { slug: string; description: string; name?: string }
 
 /**
  * Loads the skills library for slash-command autocomplete (GET /api/skills).
- * Pass `workspaceId` when a workspace is active so repo-native `.kletron/skills` entries are merged in.
+ * Pass `workspaceId` when a workspace is active: the palette lists only skills the agent can
+ * actually run for that workspace (same set as slash preflight / load_skill), not the full library.
  * Uses the same origin / auth pattern as useAgentSession / useSessionStream.
  */
 export function useSlashSkills(options: {
@@ -30,7 +31,10 @@ export function useSlashSkills(options: {
       try {
         const headers = await mergeRequestHeaders(getRequestHeadersRef.current);
         const params = new URLSearchParams({ limit: "200" });
-        if (options.workspaceId) params.set("workspaceId", options.workspaceId);
+        if (options.workspaceId) {
+          params.set("workspaceId", options.workspaceId);
+          params.set("executable", "1");
+        }
         const url = joinApiOrigin(options.apiOrigin, `/api/skills?${params.toString()}`);
         const res = await fetch(url, { headers });
         if (!res.ok) throw new Error(String(res.status));

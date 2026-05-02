@@ -655,6 +655,7 @@ export default function AgentPage() {
     streamingText,
     streamingReasoning,
     isStreaming,
+    lastResult,
   } = useSessionStream({
     sessionId: activeSessionId,
     selectedGraphId,
@@ -1235,50 +1236,53 @@ export default function AgentPage() {
     onTruncateAndResend: truncateAndResend,
   });
 
-  // ── Copy debug logs ──────────────────────────────────────────────────
+  // ── Copy full thread JSON (traceability: thoughts, tools, results, raw server history) ──
   const [logsCopied, setLogsCopied] = useState(false);
   const handleCopyLogs = useCallback(() => {
-    const debugState = {
-      timestamp: new Date().toISOString(),
-      activeSessionId,
-      streamStatus,
-      sending,
-      isStreaming,
-      errorMessage,
-      messagesCount: messages.length,
-      messages: messages.map((m) => ({
-        id: m.id,
-        role: m.role,
-        contentLength: m.content?.length ?? 0,
-        contentPreview: (m.content ?? "").slice(0, 120),
-        toolName: m.toolName,
-        timestamp: m.timestamp,
-      })),
-      eventStreamCount: eventStream.length,
-      eventStream: eventStream.slice(0, 30).map((e) => ({
-        id: e.id,
-        kind: e.kind,
-        contentLength: e.content?.length ?? 0,
-        contentPreview: (e.content ?? "").slice(0, 120),
-        name: e.name,
-        timestamp: e.timestamp,
-      })),
-      activeGraphIsSimple,
-      selectedGraphId,
-      llmProvider,
-      sessionDetail: sessionDetail ? {
-        id: sessionDetail.id,
-        graphId: sessionDetail.graphId,
-        status: sessionDetail.status,
-        graph: sessionDetail.graph,
-        conversationHistoryCount: sessionDetail.conversationHistory?.length ?? 0,
-      } : null,
-      tokenUsage,
-      runStartedAt,
-      runEndedAt,
-      timelineCount: timeline.length,
+    const threadExport = {
+      schema: "kletron.agent.thread_export.v1",
+      exportedAt: new Date().toISOString(),
+      context: {
+        activeSessionId,
+        activeWorkspaceId,
+        selectedGraphId,
+        llmProvider,
+        threadApprovalMode,
+        workMode,
+        planMode,
+        activeGraphIsSimple,
+      },
+      /**
+       * Last GET /api/sessions/:id response held in state — includes full `conversationHistory`
+       * as returned by the server (pagination via `conversationPagination` when present).
+       */
+      serverSessionSnapshot: sessionDetail,
+      /**
+       * Hydrated client thread: full message bodies, `thoughts` / `thinking`, tool args/output,
+       * NDJSON-derived `eventStream`, multi-node `timeline`, and final workflow payload when available.
+       */
+      client: {
+        streamStatus,
+        sending,
+        isStreaming,
+        errorMessage,
+        messages,
+        eventStream,
+        timeline,
+        lastResult,
+        /** In-flight token / reasoning buffers (non-empty while a stream is active). */
+        streamingText,
+        streamingReasoning,
+        tokenUsage,
+        runStartedAt,
+        runEndedAt,
+      },
+      messageQueue,
+      historyPagination: historyPage,
+      pendingEdits,
+      flushNotice,
     };
-    const text = JSON.stringify(debugState, null, 2);
+    const text = JSON.stringify(threadExport, null, 2);
     navigator.clipboard?.writeText(text).then(() => {
       setLogsCopied(true);
       setTimeout(() => setLogsCopied(false), 2000);
@@ -1286,9 +1290,32 @@ export default function AgentPage() {
       console.error("Failed to copy logs:", err);
     });
   }, [
-    activeSessionId, streamStatus, sending, isStreaming, errorMessage,
-    messages, eventStream, activeGraphIsSimple, selectedGraphId, llmProvider,
-    sessionDetail, tokenUsage, runStartedAt, runEndedAt, timeline,
+    activeSessionId,
+    activeWorkspaceId,
+    selectedGraphId,
+    llmProvider,
+    threadApprovalMode,
+    workMode,
+    planMode,
+    activeGraphIsSimple,
+    sessionDetail,
+    streamStatus,
+    sending,
+    isStreaming,
+    errorMessage,
+    messages,
+    eventStream,
+    timeline,
+    lastResult,
+    streamingText,
+    streamingReasoning,
+    tokenUsage,
+    runStartedAt,
+    runEndedAt,
+    messageQueue,
+    historyPage,
+    pendingEdits,
+    flushNotice,
   ]);
 
   // Auto-scroll
@@ -1597,10 +1624,10 @@ export default function AgentPage() {
               type="button"
               onClick={handleCopyLogs}
               className="flex items-center gap-1 rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-              title="Copy debug logs to clipboard"
+              title="Copy full thread JSON to clipboard (server history, messages, event stream, timeline, tools, thoughts, results)"
             >
               <ClipboardCopy className="h-3 w-3" />
-              {logsCopied ? "Copied!" : "Logs"}
+              {logsCopied ? "Copied!" : "Copy logs"}
             </button>
           </>
         }

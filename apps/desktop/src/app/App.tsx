@@ -789,8 +789,8 @@ export default function App() {
   const toggleWorkMode = useCallback(() => {
     const cur = normalizeToWorkModeId(categoriesHook.activeCategory);
     const next: WorkModeId = cur === "code" ? "work" : "code";
-    resetComposerForWorkModeChange();
     void categoriesHook.setActiveCategory(next);
+    resetComposerForWorkModeChange();
     toast.info("Switched mode", WORK_MODES[next].name);
   }, [categoriesHook.activeCategory, categoriesHook.setActiveCategory, toast, resetComposerForWorkModeChange]);
 
@@ -1615,8 +1615,8 @@ export default function App() {
         onWorkModeChange={(mode) => {
           const prev = normalizeToWorkModeId(categoriesHook.activeCategory);
           if (mode === prev) return;
-          resetComposerForWorkModeChange();
           void categoriesHook.setActiveCategory(mode);
+          resetComposerForWorkModeChange();
           toast.info("Switched mode", WORK_MODES[mode].name);
         }}
         workspaceName={workspace.workspace?.name ?? workspace.workspace?.path?.split("/").pop() ?? null}

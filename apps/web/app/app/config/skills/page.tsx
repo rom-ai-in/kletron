@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useMemo, useState } from "react";
+import { FolderOpen, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import {
     Button,
     Input,
@@ -91,10 +92,64 @@ function toCreateInput(state: EditorState): SkillCreateInput {
 }
 
 export default function SkillsLibraryPage() {
-    const { activeWorkspaceId } = useWorkspace();
+    const { activeWorkspaceId, activeWorkspace } = useWorkspace();
     const [search, setSearch] = useState("");
-    const { skills, isLoading, error, createSkill, updateSkill, deleteSkill } =
-        useSkillsLibrary({ search, workspaceId: activeWorkspaceId });
+    const {
+        skills,
+        executableSlugsForWorkspace,
+        isLoading,
+        error,
+        refresh,
+        createSkill,
+        updateSkill,
+        deleteSkill,
+    } = useSkillsLibrary({ search, workspaceId: activeWorkspaceId });
+
+    const [workspaceLinkBusy, setWorkspaceLinkBusy] = useState(false);
+    const [workspaceLinkError, setWorkspaceLinkError] = useState<string | null>(null);
+
+    const setSkillEnabledForWorkspace = useCallback(
+        async (slug: string, enabled: boolean) => {
+            if (!activeWorkspaceId) return;
+            setWorkspaceLinkBusy(true);
+            setWorkspaceLinkError(null);
+            try {
+                const res = await fetch(`/api/workspaces/${activeWorkspaceId}/skills`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ skillSlug: slug, enabled }),
+                });
+                if (!res.ok) {
+                    const j = (await res.json().catch(() => ({}))) as { error?: string };
+                    throw new Error(j.error ?? `Request failed (${res.status})`);
+                }
+                await refresh();
+            } catch (err) {
+                setWorkspaceLinkError((err as Error).message);
+            } finally {
+                setWorkspaceLinkBusy(false);
+            }
+        },
+        [activeWorkspaceId, refresh],
+    );
+
+    const execSlugSet = useMemo(
+        () => new Set(executableSlugsForWorkspace),
+        [executableSlugsForWorkspace],
+    );
+
+    const { activeForWorkspace, libraryOnlyForWorkspace } = useMemo(() => {
+        const active: SkillRecord[] = [];
+        const rest: SkillRecord[] = [];
+        for (const s of skills) {
+            if (execSlugSet.has(s.slug)) active.push(s);
+            else rest.push(s);
+        }
+        const byName = (a: SkillRecord, b: SkillRecord) => a.name.localeCompare(b.name);
+        active.sort(byName);
+        rest.sort(byName);
+        return { activeForWorkspace: active, libraryOnlyForWorkspace: rest };
+    }, [skills, execSlugSet]);
     const [editor, setEditor] = useState<EditorState>(blankEditor);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -107,13 +162,18 @@ export default function SkillsLibraryPage() {
 
     const openCreate = () => {
         setSaveError(null);
+        setWorkspaceLinkError(null);
         setEditor({ ...blankEditor, isOpen: true });
     };
     const openEdit = (skill: SkillRecord) => {
         setSaveError(null);
+        setWorkspaceLinkError(null);
         setEditor(fromRecord(skill));
     };
-    const closeEditor = () => setEditor((prev) => ({ ...prev, isOpen: false }));
+    const closeEditor = () => {
+        setWorkspaceLinkError(null);
+        setEditor((prev) => ({ ...prev, isOpen: false }));
+    };
 
     const handleSave = async () => {
         setSaveError(null);
@@ -166,19 +226,9 @@ export default function SkillsLibraryPage() {
                             Skills library
                         </h1>
                         <p className="text-sm text-text-muted">
-                            Reusable agent skills (SKILL.md); enable per workspace from workspace
-                            settings.
-                            {activeWorkspaceId ? (
-                                <>
-                                    {" "}
-                                    With a workspace selected, the repo is the source of truth:
-                                    skills live at{" "}
-                                    <code className="rounded bg-bg-elevated px-1 py-0.5 text-xs">
-                                        {".kletron/skills/<slug>/SKILL.md"}
-                                    </code>{" "}
-                                    and override matching entries in the library.
-                                </>
-                            ) : null}
+                            Author SKILL.md skills. With an active workspace that has a folder path,
+                            new skills are written into that repo and used by the agent for that
+                            workspace.
                         </p>
                     </div>
                 </div>
@@ -188,6 +238,62 @@ export default function SkillsLibraryPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-elegant">
+                {activeWorkspaceId && activeWorkspace?.rootPath ? (
+                    <Panel className="border border-border-subtle bg-bg-elevated/80 p-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="flex gap-3">
+                                <FolderOpen className="mt-0.5 h-5 w-5 shrink-0 text-text-secondary" />
+                                <div className="space-y-1 text-sm">
+                                    <p className="font-medium text-text-primary">
+                                        Saving into workspace{" "}
+                                        <span className="text-text-primary">{activeWorkspace.name}</span>
+                                    </p>
+                                    <p className="text-text-muted">
+                                        &quot;New skill&quot; and edits write{" "}
+                                        <code className="rounded bg-bg-surface px-1 py-0.5 text-xs">
+                                            {".kletron/skills/<slug>/SKILL.md"}
+                                        </code>{" "}
+                                        under{" "}
+                                        <code className="break-all rounded bg-bg-surface px-1 py-0.5 text-xs">
+                                            {activeWorkspace.rootPath}
+                                        </code>
+                                        . Use the agent with this same workspace selected (sidebar) so
+                                        / commands and runs see these skills.
+                                    </p>
+                                </div>
+                            </div>
+                            <Link
+                                href={`/app/${activeWorkspaceId}/skills`}
+                                className="shrink-0 text-sm font-medium text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+                            >
+                                Workspace skill toggles
+                            </Link>
+                        </div>
+                    </Panel>
+                ) : activeWorkspaceId && !activeWorkspace?.rootPath ? (
+                    <Panel className="border border-status-warning-border bg-status-warning-bg/30 p-4">
+                        <p className="text-sm text-text-primary">
+                            The active workspace{" "}
+                            <span className="font-medium">{activeWorkspace?.name ?? "…"}</span> has
+                            no folder path. Map a repository folder in workspace settings, then
+                            return here — otherwise skills cannot be written to disk.
+                        </p>
+                    </Panel>
+                ) : (
+                    <Panel className="border border-status-warning-border bg-status-warning-bg/30 p-4">
+                        <p className="text-sm text-text-primary">
+                            <span className="font-medium">Select a workspace</span> in the app shell
+                            (sidebar / header) before using &quot;New skill&quot; if you want files
+                            under that repo&apos;s{" "}
+                            <code className="rounded bg-bg-surface px-1 py-0.5 text-xs">
+                                .kletron/skills/
+                            </code>
+                            . Without a workspace, saves go to your cloud library only (no files on
+                            disk).
+                        </p>
+                    </Panel>
+                )}
+
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <Input
                         leftIcon={Search}
@@ -230,7 +336,103 @@ export default function SkillsLibraryPage() {
                     </div>
                 )}
 
-                {!isLoading && (
+                {!isLoading && activeWorkspaceId && (
+                    <p className="text-xs text-text-muted">
+                        <span className="font-medium text-text-secondary">In workspace</span> means the
+                        agent can use this skill for the workspace you selected (file under{" "}
+                        <code className="rounded bg-bg-elevated px-1 py-0.5 font-mono text-[10px]">
+                            .kletron/skills/
+                        </code>{" "}
+                        and/or enabled for this workspace).{" "}
+                        <span className="font-medium text-text-secondary">Library only</span> means it
+                        still appears in your library but is not active for this workspace yet.
+                    </p>
+                )}
+
+                {!isLoading && activeWorkspaceId ? (
+                    <>
+                        <section className="space-y-3">
+                            <h2 className="text-sm font-semibold text-text-primary">
+                                Active for this workspace ({activeForWorkspace.length})
+                            </h2>
+                            <p className="text-xs text-text-muted">
+                                Used by the agent and / commands when this workspace is selected.
+                            </p>
+                            {activeForWorkspace.length === 0 ? (
+                                <p className="text-xs text-text-muted">
+                                    None match your search. Create a skill or add{" "}
+                                    <code className="rounded bg-bg-elevated px-1 py-0.5 font-mono text-[10px]">
+                                        {".kletron/skills/<slug>/SKILL.md"}
+                                    </code>{" "}
+                                    in the repo.
+                                </p>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                                    {activeForWorkspace.map((skill) => (
+                                        <SkillPanel
+                                            key={skill.slug}
+                                            skill={skill}
+                                            readOnly={skill.source === "builtin"}
+                                            workspaceRole="active"
+                                            onDisableForWorkspace={() => {
+                                                if (
+                                                    !confirm(
+                                                        `Stop using "${skill.slug}" for this workspace? If the skill still exists as a file under .kletron/skills/, it may remain active until that file is removed.`,
+                                                    )
+                                                ) {
+                                                    return;
+                                                }
+                                                void setSkillEnabledForWorkspace(skill.slug, false);
+                                            }}
+                                            enableForWorkspaceBusy={workspaceLinkBusy}
+                                            onEdit={openEdit}
+                                            onDelete={handleDelete}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </section>
+
+                        <section className="space-y-3">
+                            <h2 className="text-sm font-semibold text-text-primary">
+                                In library only — not active here ({libraryOnlyForWorkspace.length})
+                            </h2>
+                            <p className="text-xs text-text-muted">
+                                Use <span className="font-medium text-text-secondary">Add to workspace</span>{" "}
+                                on a card or in the editor to activate a skill for the agent without
+                                leaving this page. Repo files under{" "}
+                                <code className="rounded bg-bg-elevated px-1 py-0.5 font-mono text-[10px]">
+                                    .kletron/skills/
+                                </code>{" "}
+                                are picked up automatically.
+                            </p>
+                            {libraryOnlyForWorkspace.length === 0 ? (
+                                <p className="text-xs text-text-muted">
+                                    Everything in your search is active for this workspace.
+                                </p>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                                    {libraryOnlyForWorkspace.map((skill) => (
+                                        <SkillPanel
+                                            key={skill.slug}
+                                            skill={skill}
+                                            readOnly={skill.source === "builtin"}
+                                            workspaceRole="inactive"
+                                            onEnableForWorkspace={() =>
+                                                void setSkillEnabledForWorkspace(skill.slug, true)
+                                            }
+                                            enableForWorkspaceBusy={workspaceLinkBusy}
+                                            onEdit={openEdit}
+                                            onDelete={handleDelete}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </section>
+                    </>
+                ) : null}
+
+                {!isLoading && !activeWorkspaceId && (
                     <>
                         <section className="space-y-3">
                             <h2 className="text-sm font-semibold text-text-primary">Built-in</h2>
@@ -282,13 +484,73 @@ export default function SkillsLibraryPage() {
                 title={editorTitle}
                 subtitle={editorSubtitle}
                 footer={
-                    <div className="flex w-full items-center justify-end gap-2">
-                        <Button variant="secondary" onClick={closeEditor} disabled={isSaving}>
-                            Cancel
-                        </Button>
-                        <Button variant="secondary" onClick={handleSave} disabled={isSaving}>
-                            {isSaving ? "Saving…" : "Save"}
-                        </Button>
+                    <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-h-[32px] flex-wrap items-center gap-2">
+                            {activeWorkspaceId && editor.mode === "edit" && editor.slug ? (
+                                <>
+                                    {!execSlugSet.has(editor.slug) ? (
+                                        <Button
+                                            size="sm"
+                                            variant="primary"
+                                            disabled={workspaceLinkBusy || isSaving}
+                                            onClick={() =>
+                                                void setSkillEnabledForWorkspace(editor.slug, true)
+                                            }
+                                        >
+                                            {workspaceLinkBusy ? "Updating…" : "Add to this workspace"}
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            disabled={workspaceLinkBusy || isSaving}
+                                            onClick={() => {
+                                                if (
+                                                    !confirm(
+                                                        `Stop using "${editor.slug}" for this workspace? If this skill still exists under .kletron/skills/ on disk, it can stay active until you remove that file.`,
+                                                    )
+                                                ) {
+                                                    return;
+                                                }
+                                                void setSkillEnabledForWorkspace(editor.slug, false);
+                                            }}
+                                        >
+                                            {workspaceLinkBusy ? "Updating…" : "Remove from workspace"}
+                                        </Button>
+                                    )}
+                                    <span className="max-w-[min(100%,28rem)] text-[11px] text-text-muted">
+                                        Turns the skill on for the workspace you selected in the shell (same
+                                        as the workspace skills page).
+                                    </span>
+                                </>
+                            ) : editor.mode === "create" && activeWorkspaceId && activeWorkspace?.rootPath ? (
+                                <span className="text-[11px] text-text-muted">
+                                    After you save, this skill is written into the repo and becomes active
+                                    here.
+                                </span>
+                            ) : editor.mode === "create" && activeWorkspaceId && !activeWorkspace?.rootPath ? (
+                                <span className="text-[11px] text-status-warning-text">
+                                    Map a folder for this workspace first — otherwise save only updates the
+                                    cloud library.
+                                </span>
+                            ) : editor.mode === "create" && !activeWorkspaceId ? (
+                                <span className="text-[11px] text-text-muted">
+                                    Select a workspace in the shell to save into{" "}
+                                    <code className="rounded bg-bg-elevated px-1 font-mono text-[10px]">
+                                        .kletron/skills/
+                                    </code>
+                                    .
+                                </span>
+                            ) : null}
+                        </div>
+                        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                            <Button variant="secondary" onClick={closeEditor} disabled={isSaving}>
+                                Cancel
+                            </Button>
+                            <Button variant="secondary" onClick={handleSave} disabled={isSaving}>
+                                {isSaving ? "Saving…" : "Save"}
+                            </Button>
+                        </div>
                     </div>
                 }
             >
@@ -296,6 +558,11 @@ export default function SkillsLibraryPage() {
                     {saveError && (
                         <Panel className="border-status-error-border bg-status-error-bg/30 p-3">
                             <p className="text-xs text-status-error-text">{saveError}</p>
+                        </Panel>
+                    )}
+                    {workspaceLinkError && (
+                        <Panel className="border-status-error-border bg-status-error-bg/30 p-3">
+                            <p className="text-xs text-status-error-text">{workspaceLinkError}</p>
                         </Panel>
                     )}
                     {editor.mode === "create" && (
@@ -439,17 +706,26 @@ function SkillPanel({
     onEdit,
     onDelete,
     readOnly,
+    workspaceRole,
+    onEnableForWorkspace,
+    onDisableForWorkspace,
+    enableForWorkspaceBusy,
 }: {
     skill: SkillRecord;
     onEdit: (skill: SkillRecord) => void;
     onDelete: (skill: SkillRecord) => void;
     readOnly?: boolean;
+    /** When set, shows whether this skill is in the executable set for the selected workspace. */
+    workspaceRole?: "active" | "inactive";
+    onEnableForWorkspace?: () => void;
+    onDisableForWorkspace?: () => void;
+    enableForWorkspaceBusy?: boolean;
 }) {
     return (
         <Panel className="p-4">
             <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Sparkles className="h-4 w-4 shrink-0 text-text-muted" />
                         <h3 className="truncate text-sm font-semibold text-text-primary">
                             {skill.name}
@@ -457,6 +733,16 @@ function SkillPanel({
                         <span className="shrink-0 rounded-md border border-border-subtle bg-bg-elevated px-2 py-0.5 font-mono text-[10px] text-text-muted">
                             {skill.slug}
                         </span>
+                        {workspaceRole === "active" ? (
+                            <span className="shrink-0 rounded-md border border-status-success-border bg-status-success-bg px-2 py-0.5 text-[10px] font-medium text-status-success-text">
+                                In workspace
+                            </span>
+                        ) : null}
+                        {workspaceRole === "inactive" ? (
+                            <span className="shrink-0 rounded-md border border-border-subtle bg-bg-app px-2 py-0.5 text-[10px] text-text-muted">
+                                Library only
+                            </span>
+                        ) : null}
                     </div>
                     {skill.description ? (
                         <p className="mt-1 text-xs text-text-secondary">{skill.description}</p>
@@ -481,6 +767,26 @@ function SkillPanel({
                     </div>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-start">
+                    {workspaceRole === "inactive" && onEnableForWorkspace ? (
+                        <Button
+                            size="sm"
+                            variant="primary"
+                            disabled={enableForWorkspaceBusy}
+                            onClick={onEnableForWorkspace}
+                        >
+                            Add to workspace
+                        </Button>
+                    ) : null}
+                    {workspaceRole === "active" && onDisableForWorkspace ? (
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={enableForWorkspaceBusy}
+                            onClick={onDisableForWorkspace}
+                        >
+                            Remove
+                        </Button>
+                    ) : null}
                     <Button size="sm" variant="secondary" onClick={() => onEdit(skill)}>
                         {readOnly ? "View" : "Edit"}
                     </Button>

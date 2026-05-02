@@ -43,7 +43,13 @@ export function useWorkspaceConnectors(workspaceId: string) {
     const [error, setError] = useState<string | null>(null);
 
     const refresh = useCallback(async () => {
-        if (!workspaceId) return;
+        if (!workspaceId) {
+            setIntegrations([]);
+            setMcpServers([]);
+            setError(null);
+            setIsLoading(false);
+            return;
+        }
         setIsLoading(true);
         setError(null);
         try {

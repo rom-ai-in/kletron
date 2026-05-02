@@ -15,7 +15,12 @@ export function useWorkspacePlugins(workspaceId: string) {
     const [error, setError] = useState<string | null>(null);
 
     const refresh = useCallback(async () => {
-        if (!workspaceId) return;
+        if (!workspaceId) {
+            setData(null);
+            setError(null);
+            setIsLoading(false);
+            return;
+        }
         setIsLoading(true);
         setError(null);
         try {

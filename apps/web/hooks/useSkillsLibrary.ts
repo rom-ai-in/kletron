@@ -13,6 +13,11 @@ interface ListResponse {
 
 export interface SkillsLibraryState {
     skills: SkillRecord[];
+    /**
+     * When `workspaceId` was set on fetch: slugs the agent can use for that workspace
+     * (repo files + activations). Same source as GET /api/skills?executable=1.
+     */
+    executableSlugsForWorkspace: string[];
     isLoading: boolean;
     error: string | null;
     refresh: () => Promise<void>;
@@ -30,6 +35,7 @@ export function useSkillsLibrary(options: {
     workspaceId?: string | null;
 } = {}): SkillsLibraryState {
     const [skills, setSkills] = useState<SkillRecord[]>([]);
+    const [executableSlugsForWorkspace, setExecutableSlugsForWorkspace] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -41,10 +47,30 @@ export function useSkillsLibrary(options: {
             if (options.search) params.set("search", options.search);
             if (options.tag) params.set("tag", options.tag);
             if (options.workspaceId) params.set("workspaceId", options.workspaceId);
-            const res = await fetch(`${API_BASE}?${params.toString()}`);
-            if (!res.ok) throw new Error(`Failed to load skills (${res.status})`);
-            const data = (await res.json()) as ListResponse;
+
+            const libReq = fetch(`${API_BASE}?${params.toString()}`);
+            const execReq = options.workspaceId
+                ? fetch(
+                      `${API_BASE}?${new URLSearchParams({
+                          workspaceId: options.workspaceId,
+                          executable: "1",
+                      }).toString()}`
+                  )
+                : Promise.resolve(null as Response | null);
+
+            const [libRes, execRes] = await Promise.all([libReq, execReq]);
+            if (!libRes.ok) throw new Error(`Failed to load skills (${libRes.status})`);
+            const data = (await libRes.json()) as ListResponse;
             setSkills(data.skills ?? []);
+
+            if (execRes && execRes.ok) {
+                const execData = (await execRes.json()) as ListResponse;
+                setExecutableSlugsForWorkspace(
+                    (execData.skills ?? []).map((s) => s.slug).filter(Boolean)
+                );
+            } else {
+                setExecutableSlugsForWorkspace([]);
+            }
         } catch (err) {
             setError((err as Error).message);
         } finally {
@@ -106,5 +132,14 @@ export function useSkillsLibrary(options: {
         await refresh();
     }, [refresh, options.workspaceId]);
 
-    return { skills, isLoading, error, refresh, createSkill, updateSkill, deleteSkill };
+    return {
+        skills,
+        executableSlugsForWorkspace,
+        isLoading,
+        error,
+        refresh,
+        createSkill,
+        updateSkill,
+        deleteSkill,
+    };
 }

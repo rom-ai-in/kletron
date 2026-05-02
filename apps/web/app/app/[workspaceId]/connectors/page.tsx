@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, use, useMemo, useState } from "react";
+import { Suspense, use, useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@kletron/ui/components/ui/Card";
 import { Button } from "@kletron/ui/components/ui/Button";
 import { Input } from "@kletron/ui/components/ui/Input";
@@ -74,6 +74,7 @@ function parseKvText(text: string): Record<string, string> {
 function WorkspaceConnectorsPageInner({ workspaceId }: { workspaceId: string }) {
     const searchParams = useSearchParams();
     const pluginId = searchParams?.get("plugin") ?? undefined;
+    const providerFocus = searchParams?.get("provider")?.trim() || undefined;
     const plugin = pluginId ? getPlugin(pluginId) : undefined;
 
     const { types } = useConnectorCatalog();
@@ -95,6 +96,19 @@ function WorkspaceConnectorsPageInner({ workspaceId }: { workspaceId: string }) 
         deleteMcpServer,
         discoverMcpServer,
     } = useWorkspaceConnectors(workspaceId);
+
+    useEffect(() => {
+        if (!providerFocus || isLoading) return;
+        const id = `connector-card-${providerFocus}`;
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        el.classList.add("ring-2", "ring-focus-ring", "rounded-lg");
+        const timer = window.setTimeout(() => {
+            el.classList.remove("ring-2", "ring-focus-ring", "rounded-lg");
+        }, 2000);
+        return () => clearTimeout(timer);
+    }, [providerFocus, isLoading]);
 
     const [intForm, setIntForm] = useState<IntegrationFormState>(blankIntegrationForm);
     const [mcpForm, setMcpForm] = useState<McpFormState>(blankMcpForm);
@@ -212,7 +226,11 @@ function WorkspaceConnectorsPageInner({ workspaceId }: { workspaceId: string }) 
                         {integrationTypes.map((def) => {
                             const active = integrations.filter((i) => i.providerId === def.id);
                             return (
-                                <Card key={def.id} className="border-border-subtle bg-bg-surface">
+                                <Card
+                                    key={def.id}
+                                    id={`connector-card-${def.id}`}
+                                    className="border-border-subtle bg-bg-surface scroll-mt-4"
+                                >
                                     <CardContent className="p-4">
                                         <div className="flex items-start justify-between gap-2">
                                             <div className="min-w-0">

@@ -32,6 +32,14 @@ export interface PluginCatalogModalProps {
     plugin: PluginDefinition | null;
     open: boolean;
     onClose: () => void;
+    /** Install/remove for the active workspace (same API as workspace plugins page). */
+    workspacePluginActions?: {
+        workspaceId: string;
+        installed: boolean;
+        busy: boolean;
+        onInstall: () => void;
+        onRemove: () => void;
+    } | null;
 }
 
 function PluginConnectorsPanel({ plugin }: { plugin: PluginDefinition }) {
@@ -139,7 +147,12 @@ function PluginConnectorsPanel({ plugin }: { plugin: PluginDefinition }) {
     );
 }
 
-export function PluginCatalogModal({ plugin, open, onClose }: PluginCatalogModalProps) {
+export function PluginCatalogModal({
+    plugin,
+    open,
+    onClose,
+    workspacePluginActions = null,
+}: PluginCatalogModalProps) {
     const [tab, setTab] = useState<Tab>("overview");
     const [skillDialog, setSkillDialog] = useState<SkillDialogState>({ open: false });
 
@@ -205,12 +218,52 @@ export function PluginCatalogModal({ plugin, open, onClose }: PluginCatalogModal
                 subtitle={plugin.name}
                 footerSummary={`${plugin.skillSlugs.length} skills • ${plugin.connectorIds.length} connectors`}
                 footerExtra={
-                    <Link
-                        href="/app/config/skills"
-                        className={buttonVariants({ variant: "secondary", size: "sm" })}
-                    >
-                        Skills library
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {workspacePluginActions ? (
+                            workspacePluginActions.installed ? (
+                                <button
+                                    type="button"
+                                    disabled={workspacePluginActions.busy}
+                                    onClick={() => {
+                                        if (
+                                            !confirm(
+                                                `Remove plugin "${plugin.id}" from this workspace?`,
+                                            )
+                                        ) {
+                                            return;
+                                        }
+                                        workspacePluginActions.onRemove();
+                                    }}
+                                    className={buttonVariants({ variant: "secondary", size: "sm" })}
+                                >
+                                    {workspacePluginActions.busy ? "…" : "Remove from workspace"}
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    disabled={workspacePluginActions.busy}
+                                    onClick={() => workspacePluginActions.onInstall()}
+                                    className={buttonVariants({ variant: "primary", size: "sm" })}
+                                >
+                                    {workspacePluginActions.busy ? "…" : "Install for workspace"}
+                                </button>
+                            )
+                        ) : null}
+                        {workspacePluginActions ? (
+                            <Link
+                                href={`/app/${workspacePluginActions.workspaceId}/plugins`}
+                                className={buttonVariants({ variant: "secondary", size: "sm" })}
+                            >
+                                Workspace plugins
+                            </Link>
+                        ) : null}
+                        <Link
+                            href="/app/config/skills"
+                            className={buttonVariants({ variant: "secondary", size: "sm" })}
+                        >
+                            Skills library
+                        </Link>
+                    </div>
                 }
             >
                 <div className="flex flex-wrap gap-2">

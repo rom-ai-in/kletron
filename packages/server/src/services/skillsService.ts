@@ -520,7 +520,6 @@ export async function resolveWorkspaceSkills(workspaceId: string): Promise<Resol
     const enabled = await ws
         .find({ workspaceId, enabled: true })
         .toArray();
-    if (enabled.length === 0) return [];
 
     const workspace = await getWorkspaceByIdUnsafe(workspaceId);
     const workspaceRootPath = workspace?.rootPath?.trim();
@@ -534,16 +533,48 @@ export async function resolveWorkspaceSkills(workspaceId: string): Promise<Resol
     }
 
     const resolved: ResolvedSkillRecord[] = [];
+    const seenSlugs = new Set<string>();
+
     for (const e of enabled) {
         try {
             const r = resolveOne(e.skillSlug, library, new Set());
-            if (r) resolved.push(r);
+            if (r) {
+                resolved.push(r);
+                seenSlugs.add(e.skillSlug);
+            }
         } catch (error) {
             console.warn(
                 `[skillsService] Could not resolve ${e.skillSlug} for workspace ${workspaceId}: ${(error as Error).message}`
             );
         }
     }
+
+    // Repo-native skills: `.kletron/skills/<slug>/SKILL.md` is treated as enabled for this
+    // workspace when present, even if the user never toggled it in Mongo (disk is primary).
+    if (workspaceRootPath) {
+        try {
+            const diskRecs = await listWorkspaceSkillRecords(workspaceRootPath);
+            for (const dr of diskRecs) {
+                if (seenSlugs.has(dr.slug)) continue;
+                try {
+                    const r = resolveOne(dr.slug, library, new Set());
+                    if (r) {
+                        resolved.push(r);
+                        seenSlugs.add(dr.slug);
+                    }
+                } catch (error) {
+                    console.warn(
+                        `[skillsService] Could not resolve disk skill ${dr.slug} for workspace ${workspaceId}: ${(error as Error).message}`
+                    );
+                }
+            }
+        } catch (error) {
+            console.warn(
+                `[skillsService] Could not scan .kletron/skills for workspace ${workspaceId}: ${(error as Error).message}`
+            );
+        }
+    }
+
     return resolved;
 }
 

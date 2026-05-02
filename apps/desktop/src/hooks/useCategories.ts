@@ -112,14 +112,20 @@ export function useCategories(sync?: UseCategoriesSync) {
   }, [customCategories]);
 
   // Hydrate from server when workspace is known (matches web agent workMode).
+  // Deps omit sync.getAccessToken — unstable identity re-ran this effect and raced user toggles.
   useEffect(() => {
     if (!sync?.backendReady || !sync.activeWorkspaceId) return;
     const wsId = sync.activeWorkspaceId;
     let cancelled = false;
     const lsKey = `kletron-work-mode-${wsId}`;
-    const fromLs = typeof window !== "undefined" ? window.localStorage.getItem(lsKey) : null;
 
     void (async () => {
+      const readWorkspaceModeLs = (): WorkModeId | null => {
+        const raw = typeof window !== "undefined" ? window.localStorage.getItem(lsKey) : null;
+        if (raw === "code" || raw === "work") return normalizeToWorkModeId(raw);
+        return null;
+      };
+
       try {
         const token = await sync.getAccessToken();
         if (!token || cancelled) return;
@@ -132,15 +138,25 @@ export function useCategories(sync?: UseCategoriesSync) {
         if (res.ok) {
           const json = (await res.json()) as { data?: string | null };
           if (json.data != null && json.data !== "") {
-            const m = normalizeToWorkModeId(String(json.data));
+            const serverMode = normalizeToWorkModeId(String(json.data));
+            // Re-read LS after GET: user may have switched while this request was in flight.
+            const liveMode = readWorkspaceModeLs();
+            const chosen =
+              liveMode != null && liveMode !== serverMode ? liveMode : serverMode;
             if (!cancelled) {
-              setActiveCategoryState(m);
+              setActiveCategoryState(chosen);
               try {
-                window.localStorage.setItem(lsKey, m);
+                window.localStorage.setItem(lsKey, chosen);
               } catch {
                 /* ignore */
               }
             }
+            return;
+          }
+          // Server has no row yet — use current workspace LS (always re-read; never a stale snapshot).
+          const onlyLs = readWorkspaceModeLs();
+          if (onlyLs && !cancelled) {
+            setActiveCategoryState(onlyLs);
             return;
           }
         }
@@ -148,15 +164,16 @@ export function useCategories(sync?: UseCategoriesSync) {
         /* fall through */
       }
       if (cancelled) return;
-      if (fromLs === "code" || fromLs === "work") {
-        setActiveCategoryState(fromLs);
+      const fresh = readWorkspaceModeLs();
+      if (fresh) {
+        setActiveCategoryState(fresh);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [sync?.backendReady, sync?.backendUrlTrimmed, sync?.activeWorkspaceId, sync?.getAccessToken]);
+  }, [sync?.backendReady, sync?.backendUrlTrimmed, sync?.activeWorkspaceId]);
 
   const allCategories = [...BUILT_IN_CATEGORIES, ...customCategories] as (WorkCategory | CustomCategory)[];
 
@@ -167,7 +184,6 @@ export function useCategories(sync?: UseCategoriesSync) {
       const mode = normalizeToWorkModeId(categoryId);
       if (!allCategories.some((c) => c.id === mode)) return;
 
-      const prev = activeCategory;
       setCategoryHistory((h) => {
         const newHistory = [mode, ...h.filter((id) => id !== mode)].slice(0, 10);
         return newHistory;
@@ -203,17 +219,12 @@ export function useCategories(sync?: UseCategoriesSync) {
         });
         if (!res.ok) throw new Error("persist failed");
       } catch {
-        setActiveCategoryState(prev);
-        if (lsKey) {
-          try {
-            window.localStorage.setItem(lsKey, prev);
-          } catch {
-            /* ignore */
-          }
-        }
+        // Keep optimistic UI: reverting here made Code/Work feel "stuck" when POST failed or raced.
+        // Workspace LS + in-app state already reflect the user's choice.
+        console.warn("[useCategories] Failed to persist work mode to server; keeping local selection.");
       }
     },
-    [allCategories, activeCategory, sync],
+    [allCategories, sync],
   );
 
   const addCustomCategory = useCallback((category: Omit<CustomCategory, "id" | "createdAt" | "updatedAt">) => {
