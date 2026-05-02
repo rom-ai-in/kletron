@@ -1,37 +1,43 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const mockGetWorkspaceContext = vi.fn();
-const mockAuditLog = vi.fn(async () => undefined);
+const hoisted = vi.hoisted(() => ({
+    mockGetWorkspaceContext: vi.fn(),
+    mockAuditLog: vi.fn(async () => undefined),
+    mockAgentGraphService: {
+        listGraphs: vi.fn(),
+        getGraph: vi.fn(),
+        createGraph: vi.fn(),
+        updateGraph: vi.fn(),
+        deleteGraph: vi.fn(),
+    },
+    mockAutomationExecutor: {
+        listAutomations: vi.fn(),
+        getAutomation: vi.fn(),
+        createAutomation: vi.fn(),
+        updateAutomation: vi.fn(),
+        deleteAutomation: vi.fn(),
+        runAutomationAsThread: vi.fn(),
+    },
+}));
+
+const { mockGetWorkspaceContext, mockAuditLog } = hoisted;
+const mockAgentGraphService = hoisted.mockAgentGraphService;
+const mockAutomationExecutor = hoisted.mockAutomationExecutor;
 
 vi.mock("@kletron/server/workspace/workspaceContext", () => ({
-    getWorkspaceContext: () => mockGetWorkspaceContext(),
+    getWorkspaceContext: () => hoisted.mockGetWorkspaceContext(),
 }));
 
 vi.mock("@kletron/server/services/agentAuditService", () => ({
-    agentAuditService: { log: mockAuditLog },
+    agentAuditService: { log: hoisted.mockAuditLog },
 }));
 
-const mockAgentGraphService = {
-    listGraphs: vi.fn(),
-    getGraph: vi.fn(),
-    createGraph: vi.fn(),
-    updateGraph: vi.fn(),
-    deleteGraph: vi.fn(),
-};
 vi.mock("@kletron/server/services/agentGraphService", () => ({
-    agentGraphService: mockAgentGraphService,
+    agentGraphService: hoisted.mockAgentGraphService,
 }));
 
-const mockAutomationExecutor = {
-    listAutomations: vi.fn(),
-    getAutomation: vi.fn(),
-    createAutomation: vi.fn(),
-    updateAutomation: vi.fn(),
-    deleteAutomation: vi.fn(),
-    runAutomationAsThread: vi.fn(),
-};
 vi.mock("@kletron/server/services/automationExecutor", () => ({
-    automationExecutor: mockAutomationExecutor,
+    automationExecutor: hoisted.mockAutomationExecutor,
 }));
 
 vi.mock("@kletron/server/services/skillsService", () => ({

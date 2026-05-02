@@ -370,6 +370,55 @@ export async function resetEmbeddingToEnvConfig(): Promise<EmbeddingConfig> {
     return getEnvBasedConfig();
 }
 
+/** Same masking as GET /api/embedding-config (no raw API keys). */
+export async function getEmbeddingConfigMaskedForDisplay(): Promise<Record<string, unknown>> {
+    const config = await getEmbeddingConfig();
+    return {
+        ...config,
+        azure: config.azure
+            ? {
+                  ...config.azure,
+                  apiKey: config.azure.apiKey
+                      ? "•".repeat(8) + config.azure.apiKey.slice(-4)
+                      : undefined,
+              }
+            : undefined,
+        openai: config.openai
+            ? {
+                  ...config.openai,
+                  apiKey: config.openai.apiKey
+                      ? "•".repeat(8) + config.openai.apiKey.slice(-4)
+                      : undefined,
+              }
+            : undefined,
+        voyage: config.voyage
+            ? {
+                  ...config.voyage,
+                  apiKey: config.voyage.apiKey
+                      ? "•".repeat(8) + config.voyage.apiKey.slice(-4)
+                      : undefined,
+              }
+            : undefined,
+        gemini: config.gemini
+            ? {
+                  ...config.gemini,
+                  apiKey: config.gemini.apiKey
+                      ? "•".repeat(8) + config.gemini.apiKey.slice(-4)
+                      : undefined,
+              }
+            : undefined,
+        lmstudio: config.lmstudio
+            ? {
+                  ...config.lmstudio,
+                  apiKey: config.lmstudio.apiKey
+                      ? "•".repeat(8) + config.lmstudio.apiKey.slice(-4)
+                      : undefined,
+              }
+            : undefined,
+        ollama: config.ollama,
+    };
+}
+
 // ============================================
 // Helper: Save Config to MongoDB
 // ============================================

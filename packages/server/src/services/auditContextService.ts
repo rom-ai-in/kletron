@@ -56,3 +56,44 @@ export async function buildAuditContextPrompt(workspaceId?: string | null): Prom
   if (!config || !config.enabled || !config.context) return null;
   return formatAuditContextPrompt(config.context);
 }
+
+export type SaveWorkspaceContextConfigInput = {
+  enabled?: boolean;
+  context?: AuditContext | null;
+  injection?: Partial<WorkspaceContextInjectionSettings>;
+};
+
+/**
+ * Upsert workspace audit/context document (same behavior as PUT /api/context-config).
+ */
+export async function saveWorkspaceContextConfig(
+  workspaceId: string,
+  body: SaveWorkspaceContextConfigInput
+): Promise<WorkspaceContextConfig & { updatedAt: Date }> {
+  const enabled = typeof body.enabled === "boolean" ? body.enabled : true;
+  const normalized = normalizeAuditContext(body.context) ?? null;
+  const injection = normalizeWorkspaceContextInjection(body.injection);
+  const now = new Date();
+  const db = await getDb();
+  const col = db.collection(COLLECTION);
+  await col.updateOne(
+    { workspaceId },
+    {
+      $set: {
+        workspaceId,
+        enabled,
+        context: normalized,
+        injection,
+        updatedAt: now,
+      },
+      $setOnInsert: { createdAt: now },
+    } as any,
+    { upsert: true }
+  );
+  return {
+    enabled,
+    context: normalized,
+    injection,
+    updatedAt: now,
+  };
+}

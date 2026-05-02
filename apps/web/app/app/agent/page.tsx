@@ -5,9 +5,12 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ChatInput,
+  ContextChips,
+  createFileChip,
   Selector,
   WorkspaceLayout,
 } from "@kletron/ui/components/design-system";
+import type { ContextChip } from "@kletron/ui/components/design-system";
 import { ProjectSidebar } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
 import type { SidebarProject, SidebarThread, ThreadLiveStatus } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
 import { AddWorkspaceModal } from "@kletron/ui/components/CommandCenter/AddWorkspaceModal";
@@ -36,6 +39,7 @@ import {
   ClipboardCopy,
   CheckCircle2,
   XCircle,
+  Paperclip,
 } from "lucide-react";
 import type { WorkModeId } from "@kletron/shared/workMode";
 import { WORK_MODES, normalizeToWorkModeId } from "@kletron/shared/workMode";
@@ -97,6 +101,14 @@ type SessionDetail = {
 };
 
 const SESSION_STORAGE_KEY = "agent-active-session";
+
+/** Append attachment labels to the outgoing message (API is text-only today). */
+function augmentMessageWithFileChips(text: string, chips: ContextChip[]): string {
+  const files = chips.filter((c) => c.variant === "file");
+  if (files.length === 0) return text;
+  const names = files.map((c) => c.label).join(", ");
+  return `${text}\n\n(Attached for context: ${names})`;
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -162,6 +174,8 @@ const AgentComposer = memo(function AgentComposer({
 }: AgentComposerProps) {
   const queuedOrBusy = sending || runActive;
   const [draft, setDraft] = useState("");
+  const [contextChips, setContextChips] = useState<ContextChip[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setDraft("");
@@ -173,12 +187,27 @@ const AgentComposer = memo(function AgentComposer({
     }
   }, [prefillText]);
 
+  const onAttachFiles = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const list = e.target.files;
+    if (!list?.length) return;
+    setContextChips((prev) => {
+      const add: ContextChip[] = [];
+      for (let i = 0; i < list.length; i++) {
+        const f = list[i];
+        add.push(createFileChip(f.name, `${f.name}-${f.size}-${Date.now()}-${i}`));
+      }
+      return [...prev, ...add];
+    });
+    e.target.value = "";
+  }, []);
+
   const handleSend = useCallback(() => {
     const text = draft.trim();
     if (!text) return;
-    onSendText(text);
+    onSendText(augmentMessageWithFileChips(text, contextChips));
     setDraft("");
-  }, [draft, onSendText]);
+    setContextChips([]);
+  }, [draft, contextChips, onSendText]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (perfDebugEnabled) {
@@ -202,6 +231,15 @@ const AgentComposer = memo(function AgentComposer({
 
   return (
     <>
+      {contextChips.length > 0 && (
+        <div className="mx-auto mb-1.5 w-full max-w-3xl">
+          <ContextChips
+            chips={contextChips}
+            onDismiss={(id) => setContextChips((p) => p.filter((c) => c.id !== id))}
+            size="sm"
+          />
+        </div>
+      )}
       <ChatInput
         value={draft}
         onChange={setDraft}
@@ -211,6 +249,28 @@ const AgentComposer = memo(function AgentComposer({
         sending={sending}
         placeholder={queuedOrBusy ? "Add a follow-up (queued until agent finishes)..." : "Ask anything…"}
         containerClassName="max-w-3xl mx-auto"
+        leadingFooter={
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={onAttachFiles}
+              aria-hidden
+              tabIndex={-1}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-state-hover hover:text-text-primary"
+              title="Attach files"
+              aria-label="Attach files"
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+            </button>
+          </>
+        }
         sessionStrip={
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <Selector

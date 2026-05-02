@@ -6,7 +6,7 @@ import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/Replay
 import { InputBar } from "@kletron/ui/components/CommandCenter/InputBar";
 import { InlineDiffReview } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
 import type { InlineDiff } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
-import { LLMSelector } from "@kletron/ui/components/design-system";
+import { Selector } from "@kletron/ui/components/design-system";
 import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
 import { useAgentSession } from "@kletron/ui/hooks/useAgentSession";
 
@@ -15,8 +15,7 @@ import { useSettings } from "../hooks/useSettings";
 import { useWorkspace } from "../hooks/useWorkspace";
 import { useConversation } from "../hooks/useConversation";
 import { useDiffs } from "../hooks/useDiffs";
-import { useModels } from "../hooks/useModels";
-import type { LlmConfig, LLMProvider } from "../types";
+import type { LlmConfig } from "../types";
 
 export interface PopoutConversationProps {
   threadId: string;
@@ -45,7 +44,6 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
     getRequestHeaders: getAgentRequestHeaders,
   });
 
-  const models = useModels(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
   const diffs = useDiffs(workspace.workspace);
 
   const modelConfigForStream = useMemo((): LlmConfig | null => {
@@ -78,45 +76,6 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
     undefined,
     diffs.setDiffs,
     activeWorkspaceId
-  );
-
-  const agentBarProviders: LLMProvider[] = useMemo(() => {
-    const labels: Record<string, string> = {
-      openai: "OpenAI",
-      claude: "Anthropic",
-      azure: "Azure",
-      gemini: "Google",
-      ollama: "Ollama",
-      lmstudio: "LM Studio",
-      vllm: "vLLM",
-    };
-    return agentSession.enabledProviders.map((pid) => {
-      const cfg = agentSession.llmConfigData?.[pid] as Record<string, unknown> | undefined;
-      const model = (cfg?.model ?? cfg?.deployment ?? "") as string;
-      return {
-        id: pid,
-        label: labels[pid] ?? pid,
-        models: model ? [{ id: model, label: model }] : [],
-        connected: pid === agentSession.llmProvider,
-      };
-    });
-  }, [agentSession.enabledProviders, agentSession.llmConfigData, agentSession.llmProvider]);
-
-  const agentBarSelectedModel = useMemo(() => {
-    const cfg = agentSession.llmConfigData?.[agentSession.llmProvider] as Record<string, unknown> | undefined;
-    const m = (cfg?.model ?? cfg?.deployment ?? "") as string;
-    return m || null;
-  }, [agentSession.llmConfigData, agentSession.llmProvider]);
-
-  const handleAgentBarModelChange = useCallback(
-    (model: string) => {
-      void (async () => {
-        await models.saveModelConfig(agentSession.llmProvider, model);
-        await models.loadModel();
-        agentSession.refreshLlmPreferences();
-      })();
-    },
-    [models, agentSession.llmProvider, agentSession.refreshLlmPreferences]
   );
 
   const editControl = useMessageEdit({
@@ -230,13 +189,14 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
         }}
         connected={backendConnected ? (agentSession.llmStatus === "loading" ? "checking" : agentSession.llmStatus === "success") : false}
         modelSelector={
-          <LLMSelector
-            providers={agentBarProviders}
-            selectedProvider={agentSession.llmProvider}
-            selectedModel={agentBarSelectedModel}
-            onProviderChange={agentSession.handleLlmChange}
-            onModelChange={handleAgentBarModelChange}
-            compact
+          <Selector
+            label="LLM"
+            value={agentSession.llmProvider}
+            options={agentSession.llmOptions}
+            onSelect={agentSession.handleLlmChange}
+            size="sm"
+            direction="up"
+            status={agentSession.llmStatus}
           />
         }
         approvalSelector={

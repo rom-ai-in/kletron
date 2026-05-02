@@ -130,7 +130,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             </div>
           )
         ) : (
-          (footerLeft || footerRight || showSendButton) && (
+          (footerLeft || footerRight || showSendButton || leadingFooter) && (
             <div className="relative mt-2.5 min-h-8 min-w-0">
               <div
                 className={cn(
@@ -138,7 +138,10 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   sendStopButton && 'pr-10'
                 )}
               >
-                <div className="flex min-w-0 flex-1 items-center gap-1.5">{footerLeft}</div>
+                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                  {leadingFooter}
+                  {footerLeft}
+                </div>
                 {footerRight}
               </div>
               {sendStopButton && (

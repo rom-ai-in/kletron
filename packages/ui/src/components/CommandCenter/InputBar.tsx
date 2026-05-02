@@ -90,9 +90,7 @@ export function InputBar({
   }, [onPaperclipClick, onDictationClick]);
 
   const sessionStrip = useMemo(() => {
-    const hasControls = !!(graphSelector || modelSelector || approvalSelector);
-    if (!hasControls) return null;
-
+    if (!graphSelector && !modelSelector && !approvalSelector) return null;
     return (
       <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1">
         {graphSelector}
@@ -115,35 +113,8 @@ export function InputBar({
     );
   }, [graphSelector, modelSelector, approvalSelector, connected, connectionLabel]);
 
-  const stripOrDotOnly = useMemo(() => {
-    if (sessionStrip) return sessionStrip;
-    if (leadingFooter || !graphSelector && !modelSelector && !approvalSelector) {
-      return (
-        <div className="flex w-full min-w-0 justify-end">
-          <span
-            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-              connected === 'checking'
-                ? 'animate-pulse bg-yellow-500'
-                : connected
-                  ? 'bg-status-success'
-                  : 'bg-status-error'
-            }`}
-            title={
-              connectionLabel ||
-              (connected === 'checking' ? 'Checking LLM…' : connected ? 'LLM Connected' : 'LLM Disconnected')
-            }
-          />
-        </div>
-      );
-    }
-    return null;
-  }, [sessionStrip, leadingFooter, graphSelector, modelSelector, approvalSelector, connected, connectionLabel]);
-
-  const useStrip = stripOrDotOnly != null || leadingFooter != null;
-
   return (
     <div className={`px-4 pb-3 pt-1 ${className}`}>
-      {/* Plan mode indicator */}
       {planMode && (
         <div className="mb-1 flex items-center gap-2 rounded-lg border border-blue-500/15 bg-blue-500/8 px-3 py-1">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-blue-400">Plan Mode</span>
@@ -151,14 +122,12 @@ export function InputBar({
         </div>
       )}
 
-      {/* Context Chips */}
       {contextChips && contextChips.length > 0 && (
         <div className="pb-1.5">
           <ContextChips chips={contextChips} onDismiss={onDismissChip} size="sm" />
         </div>
       )}
 
-      {/* Input Area */}
       <div>
         <ChatInput
           value={value}
@@ -170,7 +139,7 @@ export function InputBar({
           placeholder={placeholder}
           onKeyDown={onKeyDown}
           leadingFooter={leadingFooter ?? undefined}
-          sessionStrip={useStrip ? stripOrDotOnly ?? undefined : undefined}
+          sessionStrip={sessionStrip ?? undefined}
         />
         {tokenUsage && (
           <div className="mt-1.5 font-mono text-[11px] text-text-muted">

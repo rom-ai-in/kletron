@@ -15,8 +15,8 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-import { getWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
-import { agentAuditService } from "@kletron/server/services/agentAuditService";
+import { asJson, requireRunIdentity, withAudit } from "./kletronAdminHelpers";
+import { kletronExtendedAdminTools } from "./kletronExtendedAdminTools";
 import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { automationExecutor } from "@kletron/server/services/automationExecutor";
 import {
@@ -45,83 +45,11 @@ import {
 } from "@kletron/server/services/pluginsService";
 import { SLUG_REGEX } from "@kletron/shared";
 
-interface RunIdentity {
-    userId: string;
-    workspaceId: string;
-    runId?: string;
-}
-
-function requireRunIdentity(): RunIdentity {
-    const ctx = getWorkspaceContext();
-    if (!ctx) {
-        throw new Error(
-            "Kletron admin tools require an active workspace context. Are you running outside an agent run?"
-        );
-    }
-    if (!ctx.workspaceId) {
-        throw new Error("Workspace id missing from run context.");
-    }
-    if (!ctx.userId) {
-        throw new Error(
-            "User identity missing from run context. Refusing to perform admin action without an attributable user."
-        );
-    }
-    return {
-        userId: ctx.userId,
-        workspaceId: ctx.workspaceId,
-        runId: ctx.runId,
-    };
-}
-
 // Hard cap on payload sizes so the LLM cannot stash megabytes of body text
 // in a single create/update call.
 const MAX_BODY_CHARS = 50_000;
 const MAX_DESC_CHARS = 5_000;
 const MAX_NAME_CHARS = 200;
-
-async function withAudit<T>(
-    tool: string,
-    args: unknown,
-    fn: () => Promise<T>
-): Promise<T> {
-    const identity = requireRunIdentity();
-    try {
-        const result = await fn();
-        agentAuditService
-            .log({
-                tool,
-                args,
-                result,
-                outcome: "success",
-                userId: identity.userId,
-                workspaceId: identity.workspaceId,
-                runId: identity.runId,
-            })
-            .catch(() => undefined);
-        return result;
-    } catch (error) {
-        agentAuditService
-            .log({
-                tool,
-                args,
-                error: (error as Error)?.message ?? String(error),
-                outcome: "error",
-                userId: identity.userId,
-                workspaceId: identity.workspaceId,
-                runId: identity.runId,
-            })
-            .catch(() => undefined);
-        throw error;
-    }
-}
-
-function asJson(value: unknown): string {
-    try {
-        return JSON.stringify(value);
-    } catch {
-        return JSON.stringify(String(value));
-    }
-}
 
 // ─── Graph schemas (kept loose; the service layer enforces the full shape) ──
 
@@ -949,6 +877,7 @@ export const kletronAdminTools = [
     kletronListPlugins,
     kletronInstallPlugin,
     kletronUninstallPlugin,
+    ...kletronExtendedAdminTools,
 ];
 
 // Re-export from a tiny module so `workspaceCapabilityResolver` can import

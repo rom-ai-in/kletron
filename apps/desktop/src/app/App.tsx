@@ -11,6 +11,7 @@ import {
   Button,
   Toggle,
   LLMSelector,
+  Selector,
   MCPServerConfig,
   EnvironmentConfig,
   WorktreeManager,
@@ -46,8 +47,6 @@ import { MultimodalMenu } from "@kletron/ui/components/CommandCenter/MultimodalM
 import { SkillsManager } from "@kletron/ui/components/CommandCenter/SkillsManager";
 import { AutomationsDashboard } from "@kletron/ui/components/CommandCenter/AutomationsDashboard";
 import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
-import { AgentGraphSelector } from "@kletron/ui/components/CommandCenter/AgentGraphSelector";
-import type { AgentGraph } from "@kletron/ui/components/CommandCenter/AgentGraphSelector";
 import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
 import type { ReplayImpact } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
 
@@ -75,7 +74,6 @@ import type {
   ConversationTab,
   QueuedMessage,
   LlmConfig,
-  LLMProvider,
   AgentGraphSummary,
 } from "../types";
 import { useAutomations } from "../hooks/useAutomations";
@@ -545,16 +543,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [changesVisible, unstagedPathsKey]);
 
-  const agentGraphItems: AgentGraph[] = useMemo(() => {
-    return agentSession.agentGraphs
-      .map((g) => ({
-        id: String(g._id ?? ""),
-        name: g.name,
-        description: g.description,
-      }))
-      .filter((g) => g.id);
-  }, [agentSession.agentGraphs]);
-
   const graphsForPanel: AgentGraphSummary[] = useMemo(
     () =>
       agentSession.agentGraphs
@@ -566,45 +554,6 @@ export default function App() {
         }))
         .filter((g) => g.id),
     [agentSession.agentGraphs]
-  );
-
-  const agentBarProviders: LLMProvider[] = useMemo(() => {
-    const labels: Record<string, string> = {
-      openai: "OpenAI",
-      claude: "Anthropic",
-      azure: "Azure",
-      gemini: "Google",
-      ollama: "Ollama",
-      lmstudio: "LM Studio",
-      vllm: "vLLM",
-    };
-    return agentSession.enabledProviders.map((pid) => {
-      const cfg = agentSession.llmConfigData?.[pid] as Record<string, unknown> | undefined;
-      const model = (cfg?.model ?? cfg?.deployment ?? "") as string;
-      return {
-        id: pid,
-        label: labels[pid] ?? pid,
-        models: model ? [{ id: model, label: model }] : [],
-        connected: pid === agentSession.llmProvider,
-      };
-    });
-  }, [agentSession.enabledProviders, agentSession.llmConfigData, agentSession.llmProvider]);
-
-  const agentBarSelectedModel = useMemo(() => {
-    const cfg = agentSession.llmConfigData?.[agentSession.llmProvider] as Record<string, unknown> | undefined;
-    const m = (cfg?.model ?? cfg?.deployment ?? "") as string;
-    return m || null;
-  }, [agentSession.llmConfigData, agentSession.llmProvider]);
-
-  const handleAgentBarModelChange = useCallback(
-    (model: string) => {
-      void (async () => {
-        await models.saveModelConfig(agentSession.llmProvider, model);
-        await models.loadModel();
-        agentSession.refreshLlmPreferences();
-      })();
-    },
-    [models, agentSession.llmProvider, agentSession.refreshLlmPreferences]
   );
 
   const agentGraphsLoading = !agentSession.graphOptionsLoaded || !agentSession.llmPrefsLoaded;
@@ -1542,7 +1491,7 @@ export default function App() {
                   ? "Add a follow-up (queued until agent finishes)..."
                   : planMode
                     ? "Describe what you want to plan..."
-                    : "Describe what you want to build..."
+                    : "Ask anything…"
               }
               onKeyDown={handleInputKeyDown}
               contextChips={contextChips}
@@ -1553,21 +1502,25 @@ export default function App() {
               connectionLabel={composerConnection.connectionLabel}
               tokenUsage={conversation.tokenUsage}
               graphSelector={
-                <AgentGraphSelector
-                  graphs={agentGraphItems}
-                  selectedGraphId={agentSession.selectedGraphId}
-                  onGraphSelect={agentSession.handleGraphChange}
+                <Selector
+                  label="GRAPH"
+                  value={agentSession.selectedGraphId}
+                  options={agentSession.graphSelectOptions}
+                  onSelect={agentSession.handleGraphChange}
+                  size="sm"
+                  direction="up"
                   loading={agentGraphsLoading}
                 />
               }
               modelSelector={
-                <LLMSelector
-                  providers={agentBarProviders}
-                  selectedProvider={agentSession.llmProvider}
-                  selectedModel={agentBarSelectedModel}
-                  onProviderChange={agentSession.handleLlmChange}
-                  onModelChange={handleAgentBarModelChange}
-                  compact
+                <Selector
+                  label="LLM"
+                  value={agentSession.llmProvider}
+                  options={agentSession.llmOptions}
+                  onSelect={agentSession.handleLlmChange}
+                  size="sm"
+                  direction="up"
+                  status={agentSession.llmStatus}
                 />
               }
               approvalSelector={

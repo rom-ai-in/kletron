@@ -402,3 +402,48 @@ export async function setProviderEnabled(
     writeConfigFile(updatedConfig);
     return updatedConfig;
 }
+
+/** Same masking as GET /api/llm-config (no raw API keys). */
+export async function getLlmConfigMaskedForDisplay(): Promise<Record<string, unknown>> {
+    const config = await getLlmConfig();
+    return {
+        ...config,
+        azure: config.azure
+            ? {
+                  ...config.azure,
+                  apiKey: config.azure.apiKey ? "••••••••" : "",
+              }
+            : undefined,
+        openai: config.openai
+            ? {
+                  ...config.openai,
+                  apiKey: config.openai.apiKey ? "••••••••" : "",
+              }
+            : undefined,
+        claude: config.claude
+            ? {
+                  ...config.claude,
+                  apiKey: config.claude.apiKey ? "••••••••" : "",
+              }
+            : undefined,
+        gemini: config.gemini
+            ? {
+                  ...config.gemini,
+                  apiKey: config.gemini.apiKey ? "••••••••" : "",
+              }
+            : undefined,
+        lmstudio: config.lmstudio
+            ? {
+                  ...config.lmstudio,
+                  apiKey: config.lmstudio.apiKey ? "••••••••" : "",
+              }
+            : undefined,
+        ollama: config.ollama ?? undefined,
+        vllm: config.vllm
+            ? {
+                  ...config.vllm,
+                  apiKey: config.vllm.apiKey ? "••••••••" : "",
+              }
+            : undefined,
+    };
+}
