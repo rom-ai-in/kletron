@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { CornerDownLeft, Zap, GitBranch, Wrench, Eye } from 'lucide-react';
 import {
   filterSlashCommandItems,
@@ -54,6 +55,8 @@ export function SlashCommandMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const flatRef = useRef<SlashCommandItem[]>([]);
   const selectedRef = useRef(0);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   const filtered = useMemo(() => filterSlashCommandItems(commands, filter), [commands, filter]);
 
@@ -107,6 +110,18 @@ export function SlashCommandMenu({
     return { sections: sectionsOut, flatItems: flat };
   }, [filtered, expandedSections, initialPerSection]);
 
+  const flatIndexByKey = useMemo(() => {
+    const m = new Map<string, number>();
+    let i = 0;
+    for (const sec of sections) {
+      for (const cmd of sec.visible) {
+        m.set(`${sec.sectionId}::${cmd.id}`, i);
+        i += 1;
+      }
+    }
+    return m;
+  }, [sections]);
+
   useLayoutEffect(() => {
     flatRef.current = flatItems;
   }, [flatItems]);
@@ -139,15 +154,15 @@ export function SlashCommandMenu({
     if (!open) return;
 
     function handleKeyDown(e: KeyboardEvent) {
-      const flat = flatRef.current;
-      if (flat.length === 0) return;
-
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
         onClose();
         return;
       }
+
+      const flat = flatRef.current;
+      if (flat.length === 0) return;
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         e.stopPropagation();
@@ -166,7 +181,9 @@ export function SlashCommandMenu({
         const idx = selectedRef.current;
         const cmd = flat[idx];
         if (cmd) {
-          cmd.action();
+          flushSync(() => {
+            cmd.action();
+          });
           onClose();
         }
       }
@@ -176,6 +193,14 @@ export function SlashCommandMenu({
     return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [open, onClose]);
 
+  // When commands are loaded but the filter matches nothing, clear `open` so the shell does not
+  // keep blocking Enter. Skip while `commands` is still empty (async load) to avoid closing `/` prematurely.
+  useEffect(() => {
+    if (open && commands.length > 0 && flatItems.length === 0) {
+      onCloseRef.current();
+    }
+  }, [open, commands.length, flatItems.length]);
+
   if (!open || flatItems.length === 0) return null;
 
   return (
@@ -183,7 +208,7 @@ export function SlashCommandMenu({
       ref={menuRef}
       role="listbox"
       aria-label="Slash commands"
-      className={`absolute bottom-full left-0 z-50 mb-1 max-h-[min(24rem,50vh)] min-w-[22rem] max-w-lg overflow-hidden rounded-lg glass-elevated ${className}`}
+      className={`absolute bottom-full left-0 z-[100] mb-1 max-h-[min(24rem,50vh)] min-w-[22rem] max-w-lg overflow-hidden rounded-lg glass-elevated ${className}`}
     >
       <div className="max-h-[inherit] overflow-y-auto scrollbar-elegant py-1">
         {sections.map((sec) => (
@@ -194,7 +219,7 @@ export function SlashCommandMenu({
               </span>
             </div>
             {sec.visible.map((cmd) => {
-              const index = flatItems.indexOf(cmd);
+              const index = flatIndexByKey.get(`${sec.sectionId}::${cmd.id}`) ?? 0;
               const isSelected = index === selectedIndex;
               return (
                 <button
@@ -202,8 +227,17 @@ export function SlashCommandMenu({
                   type="button"
                   role="option"
                   aria-selected={isSelected}
-                  onClick={() => {
-                    cmd.action();
+                  onMouseDown={(e) => {
+                    // Keep focus in the composer; without this, textarea blur can swallow the click
+                    // and controlled input updates from the action may not apply reliably.
+                    e.preventDefault();
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    flushSync(() => {
+                      cmd.action();
+                    });
                     onClose();
                   }}
                   onMouseEnter={() => setSelectedIndex(index)}
@@ -234,6 +268,7 @@ export function SlashCommandMenu({
               <button
                 type="button"
                 className="w-full px-3 py-1.5 text-left text-[11px] text-text-muted transition-colors hover:bg-state-hover hover:text-text-secondary"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() =>
                   setExpandedSections((prev) => ({ ...prev, [sec.sectionId]: true }))
                 }

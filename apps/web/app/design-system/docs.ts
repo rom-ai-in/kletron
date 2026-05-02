@@ -370,7 +370,7 @@ export const componentDocs: Record<string, ComponentDoc> = {
         name: "Selector",
         summary: "Compact dropdown for selecting from short lists.",
         usage: `<Selector label="Model" value={value} options={options} onSelect={setValue} />`,
-        props: ["label?: string", "value: string", "options: SelectorOption[]", "onSelect: (id) => void"],
+        props: ["label?: string", "value: string", "options: SelectorOption[]", "onSelect: (id) => void", "menuAlign?: 'start' | 'end' (use end when the control sits on the right edge)"],
         tokens: ["colors.states", "componentRadius.button"],
         states: ["closed", "open", "disabled"],
     },

@@ -18,7 +18,9 @@ export type AutomationErrorKind = "LLM_TIMEOUT" | "LLM_ERROR" | "TOOL_BLOCKED" |
 
 /**
  * Graph ID — references an AgentGraphDefinition stored in MongoDB.
- * This is a string (typically a MongoDB ObjectId or a legacy preset key).
+ * Runtime resolution: MongoDB ObjectId for DB-backed graphs, or legacy preset keys
+ * (`audit`, `simple_react`, …) resolved server-side via `resolveGraphForStage`.
+ * UI clients should persist only real graph document ids from `/api/agent-graphs`.
  */
 export type GraphId = string;
 

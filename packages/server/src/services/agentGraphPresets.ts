@@ -216,6 +216,16 @@ When investigating history, use git_log, git_diff, git_blame to determine:
 
 ---
 
+## Workspace skills (progressive disclosure)
+
+This workspace may have skills enabled (specialized instructions). They are not all injected into this prompt at once.
+
+- Call list_available_skills to see slug, name, and short description for skills enabled for this workspace.
+- To follow a specialization, call load_skill with the target skill slug before relying on its rules. The tool returns the full resolved instructions (and metadata); treat that output as authoritative for the current task.
+- Graph authors may also pin skills on this node (always-on); pinned skill instructions are merged into the system prompt ahead of runtime-loaded skills.
+
+---
+
 ## Web Research
 
 Use web_search and fetch_url only when:
@@ -310,7 +320,9 @@ export const simpleReactToolNames = [
   "write_file",
   "web_search",
   "fetch_url",
-  "write_todos"
+  "write_todos",
+  "list_available_skills",
+  "load_skill",
 ];
 
 

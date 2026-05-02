@@ -5,6 +5,7 @@ import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@kletron/shared/t
 import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { getGraphNodeOrder, buildInitialState } from "@kletron/server/services/agentGraphRuntime";
+import { preflightMissionForNewRun } from "@kletron/server/services/skillSlashPreflight";
 import { getToolApprovalConfig } from "@kletron/server/config";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
@@ -63,18 +64,15 @@ export async function POST(request: Request) {
     });
   }
 
-  let graph = await agentGraphService.getGraph(graphId);
-  if (!graph) {
-    // Requested graph was deleted — fall back to first available graph
-    const allGraphs = await agentGraphService.listGraphs();
-    graph = allGraphs[0] ?? null;
-    if (!graph) {
-      return new Response(JSON.stringify({ error: "No agent graphs available. Please seed graphs first." }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+  // Resolve Mongo graph document (client may send legacy slugs: universal-v1, audit, simple_react, …)
+  const graph = await agentGraphService.resolveGraphForStage(graphId);
+  if (!graph?._id) {
+    return new Response(JSON.stringify({ error: "No agent graphs available. Please seed graphs first." }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
   }
+  const resolvedGraphId = String(graph._id);
 
   let workspace;
   try {
@@ -127,10 +125,12 @@ export async function POST(request: Request) {
     await categoryService.setCurrentCategory(auth.userId, workMode, workspace._id.toString());
   }
 
-  // Create run record
+  // Create run record (always persist Mongo graph id — client may send legacy slug, not ObjectId)
   const nodeOrder = getGraphNodeOrder(graph as any);
-  console.log(`[sessions/create] Creating run for graph "${graph.name}" (${graphId}), workspace=${workspace._id}`);
-  const runId = await agentGraphRunService.createRun(graphId, workspace._id.toString(), "agent", {
+  console.log(
+    `[sessions/create] Creating run for graph "${graph.name}" (requested=${graphId}, resolved=${resolvedGraphId}), workspace=${workspace._id}`,
+  );
+  const runId = await agentGraphRunService.createRun(resolvedGraphId, workspace._id.toString(), "agent", {
     threadApprovalMode: resolvedThreadMode,
     workMode,
   });
@@ -139,14 +139,23 @@ export async function POST(request: Request) {
   for (const node of graph.nodes) {
     initialNodeStatuses[node.id] = "PENDING";
   }
+  const pre = await preflightMissionForNewRun(message, workspace._id.toString());
+  const initialState = {
+    ...buildInitialState(graph as any, pre.mission),
+    mission: pre.mission,
+    userInput: pre.mission,
+    loadedSkillIds: pre.loadedSkillIds.length ? pre.loadedSkillIds : undefined,
+    skillLoads: pre.skillLoads.length ? pre.skillLoads : undefined,
+  };
+  const titleSource =
+    pre.mission.startsWith("[System:") && pre.mission.indexOf("]\n\n") !== -1
+      ? pre.mission.slice(pre.mission.indexOf("]\n\n") + 3)
+      : pre.mission;
   await agentGraphRunService.updateRunStatus(runId, "RUNNING", {
     nodeOrder,
     nodeStatuses: initialNodeStatuses,
-    state: buildInitialState(graph as any, message),
-    title: (message.startsWith("[System:") && message.indexOf("]\n\n") !== -1
-      ? message.slice(message.indexOf("]\n\n") + 3)
-      : message
-    ).trim().slice(0, 80),
+    state: initialState,
+    title: titleSource.trim().slice(0, 80),
     conversationTurns: 1,
   } as any);
   console.log(`[sessions/create] ✓ Run status set to RUNNING`);
@@ -168,7 +177,7 @@ export async function POST(request: Request) {
           clientDisconnected = true;
         }
       };
-      sendChunk({ type: "init", payload: { runId, graphId } });
+      sendChunk({ type: "init", payload: { runId, graphId: resolvedGraphId } });
       console.log(`[sessions/create] Stream started for run ${runId}`);
 
       try {

@@ -23,7 +23,12 @@ export interface SkillsLibraryState {
 
 const API_BASE = "/api/skills";
 
-export function useSkillsLibrary(options: { search?: string; tag?: string } = {}): SkillsLibraryState {
+export function useSkillsLibrary(options: {
+    search?: string;
+    tag?: string;
+    /** When set, lists/reads/writes repo-native skills under `.kletron/skills` for this workspace. */
+    workspaceId?: string | null;
+} = {}): SkillsLibraryState {
     const [skills, setSkills] = useState<SkillRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -35,6 +40,7 @@ export function useSkillsLibrary(options: { search?: string; tag?: string } = {}
             const params = new URLSearchParams();
             if (options.search) params.set("search", options.search);
             if (options.tag) params.set("tag", options.tag);
+            if (options.workspaceId) params.set("workspaceId", options.workspaceId);
             const res = await fetch(`${API_BASE}?${params.toString()}`);
             if (!res.ok) throw new Error(`Failed to load skills (${res.status})`);
             const data = (await res.json()) as ListResponse;
@@ -44,7 +50,7 @@ export function useSkillsLibrary(options: { search?: string; tag?: string } = {}
         } finally {
             setIsLoading(false);
         }
-    }, [options.search, options.tag]);
+    }, [options.search, options.tag, options.workspaceId]);
 
     useEffect(() => {
         void refresh();
@@ -54,7 +60,10 @@ export function useSkillsLibrary(options: { search?: string; tag?: string } = {}
         const res = await fetch(API_BASE, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(input),
+            body: JSON.stringify({
+                ...input,
+                ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}),
+            }),
         });
         if (!res.ok) {
             const json = await res.json().catch(() => ({}));
@@ -63,10 +72,13 @@ export function useSkillsLibrary(options: { search?: string; tag?: string } = {}
         const json = await res.json();
         await refresh();
         return json.skill as SkillRecord;
-    }, [refresh]);
+    }, [refresh, options.workspaceId]);
 
     const updateSkill = useCallback(async (slug: string, input: SkillUpdateInput) => {
-        const res = await fetch(`${API_BASE}/${encodeURIComponent(slug)}`, {
+        const q = options.workspaceId
+            ? `?workspaceId=${encodeURIComponent(options.workspaceId)}`
+            : "";
+        const res = await fetch(`${API_BASE}/${encodeURIComponent(slug)}${q}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(input),
@@ -78,10 +90,13 @@ export function useSkillsLibrary(options: { search?: string; tag?: string } = {}
         const json = await res.json();
         await refresh();
         return json.skill as SkillRecord;
-    }, [refresh]);
+    }, [refresh, options.workspaceId]);
 
     const deleteSkill = useCallback(async (slug: string) => {
-        const res = await fetch(`${API_BASE}/${encodeURIComponent(slug)}`, {
+        const q = options.workspaceId
+            ? `?workspaceId=${encodeURIComponent(options.workspaceId)}`
+            : "";
+        const res = await fetch(`${API_BASE}/${encodeURIComponent(slug)}${q}`, {
             method: "DELETE",
         });
         if (!res.ok) {
@@ -89,7 +104,7 @@ export function useSkillsLibrary(options: { search?: string; tag?: string } = {}
             throw new Error(json.error ?? `Failed to delete skill (${res.status})`);
         }
         await refresh();
-    }, [refresh]);
+    }, [refresh, options.workspaceId]);
 
     return { skills, isLoading, error, refresh, createSkill, updateSkill, deleteSkill };
 }

@@ -38,7 +38,6 @@ import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadA
 import { Modal, Button } from "@kletron/ui/components/design-system";
 import {
   Loader2,
-  Folder,
   ClipboardCopy,
   CheckCircle2,
   XCircle,
@@ -49,10 +48,7 @@ import {
 } from "lucide-react";
 import type { WorkModeId } from "@kletron/shared/workMode";
 import { WORK_MODES, normalizeToWorkModeId } from "@kletron/shared/workMode";
-import {
-  CategorySelector,
-  type WorkCategory,
-} from "@kletron/ui/components/CommandCenter/CategorySelector";
+import { AgentSessionChrome } from "@kletron/ui/components/CommandCenter/AgentSessionChrome";
 import { AgentCodeRepoBar } from "../../../components/agent/AgentCodeRepoBar";
 
 // For simple chat view - reuse existing components (groups tool events, renders collapsible tool cards)
@@ -143,6 +139,7 @@ interface AgentComposerProps {
   llmOptions: any[];
   onLlmChange: (value: string) => void;
   llmStatus?: "none" | "loading" | "success" | "error";
+  llmStatusDetail?: string | null;
   prefillText?: string | null;
   resetKey: string;
   perfDebugEnabled?: boolean;
@@ -171,6 +168,7 @@ const AgentComposer = memo(function AgentComposer({
   llmOptions,
   onLlmChange,
   llmStatus,
+  llmStatusDetail,
   prefillText,
   resetKey,
   perfDebugEnabled = false,
@@ -201,6 +199,7 @@ const AgentComposer = memo(function AgentComposer({
     apiOrigin: undefined,
     getRequestHeaders: getSlashRequestHeaders,
     enabled: true,
+    workspaceId: activeWorkspaceId,
   });
 
   const slashCommands = useMemo((): SlashCommandItem[] => {
@@ -218,7 +217,10 @@ const AgentComposer = memo(function AgentComposer({
         label: "plan",
         description: "Toggle Plan Mode (read-only proposals)",
         icon: <Eye className="h-3.5 w-3.5" />,
-        action: onPlanModeToggle,
+        action: () => {
+          setDraft("/plan ");
+          onPlanModeToggle();
+        },
       },
       {
         id: "skills",
@@ -227,7 +229,10 @@ const AgentComposer = memo(function AgentComposer({
         description: "Open Skills library & settings",
         icon: <Wrench className="h-3.5 w-3.5" />,
         action: () => {
-          router.push("/app/config/skills");
+          setDraft("/skills ");
+          queueMicrotask(() => {
+            router.push("/app/config/skills");
+          });
         },
       },
       {
@@ -237,7 +242,10 @@ const AgentComposer = memo(function AgentComposer({
         description: "Workspace & repository settings",
         icon: <GitBranch className="h-3.5 w-3.5" />,
         action: () => {
-          router.push("/app/config/workspace");
+          setDraft("/worktree ");
+          queueMicrotask(() => {
+            router.push("/app/config/workspace");
+          });
         },
       },
     ];
@@ -389,6 +397,8 @@ const AgentComposer = memo(function AgentComposer({
               size="sm"
               direction="up"
               status={llmStatus}
+              menuAlign="end"
+              statusTooltip={llmStatusDetail}
             />
             <ThreadApprovalModeSelector
               value={threadApprovalMode}
@@ -467,6 +477,7 @@ export default function AgentPage() {
     handleLlmChange,
     handleGraphChange,
     llmStatus,
+    llmStatusDetail,
     graphOptionsLoaded,
     agentGraphs,
   } = useAgentSession();
@@ -583,17 +594,6 @@ export default function AgentPage() {
 
   // ── Code vs Work mode (per workspace, persisted server + local mirror) ──
   const [workMode, setWorkMode] = useState<WorkModeId>("code");
-  const workModeCategories: WorkCategory[] = useMemo(
-    () =>
-      (["code", "work"] as const).map((id) => ({
-        id,
-        name: WORK_MODES[id].name,
-        description: WORK_MODES[id].description,
-        color: WORK_MODES[id].color,
-      })),
-    [],
-  );
-
   useEffect(() => {
     if (!activeWorkspaceId) {
       setWorkMode("code");
@@ -637,43 +637,6 @@ export default function AgentPage() {
       cancelled = true;
     };
   }, [activeWorkspaceId]);
-
-  const handleWorkModeSelect = useCallback(
-    async (categoryId: string) => {
-      const next = normalizeToWorkModeId(categoryId) as WorkModeId;
-      const prev = workMode;
-      setWorkMode(next);
-      const lsKey = activeWorkspaceId ? `kletron-work-mode-${activeWorkspaceId}` : null;
-      if (lsKey) {
-        try {
-          window.localStorage.setItem(lsKey, next);
-        } catch {
-          /* ignore */
-        }
-      }
-      try {
-        const res = await fetch("/api/work-categories/current", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            workMode: next,
-            workspaceId: activeWorkspaceId ?? undefined,
-          }),
-        });
-        if (!res.ok) throw new Error("persist failed");
-      } catch {
-        setWorkMode(prev);
-        if (lsKey) {
-          try {
-            window.localStorage.setItem(lsKey, prev);
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-    },
-    [workMode, activeWorkspaceId],
-  );
 
   const {
     messages,
@@ -1047,6 +1010,48 @@ export default function AgentPage() {
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
     setSessionDetailLoading(false);
   }, [setMessages, handleStop]);
+
+  /** Switching Code ↔ Work starts a fresh thread so messages stay scoped to the mode. */
+  const handleWorkModeSelect = useCallback(
+    async (categoryId: string) => {
+      const next = normalizeToWorkModeId(categoryId) as WorkModeId;
+      const prev = workMode;
+      if (next === prev) return;
+
+      handleNewSession();
+
+      setWorkMode(next);
+      const lsKey = activeWorkspaceId ? `kletron-work-mode-${activeWorkspaceId}` : null;
+      if (lsKey) {
+        try {
+          window.localStorage.setItem(lsKey, next);
+        } catch {
+          /* ignore */
+        }
+      }
+      try {
+        const res = await fetch("/api/work-categories/current", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workMode: next,
+            workspaceId: activeWorkspaceId ?? undefined,
+          }),
+        });
+        if (!res.ok) throw new Error("persist failed");
+      } catch {
+        setWorkMode(prev);
+        if (lsKey) {
+          try {
+            window.localStorage.setItem(lsKey, prev);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    },
+    [workMode, activeWorkspaceId, handleNewSession],
+  );
 
   const handleLoadOlderMessages = useCallback(async () => {
     if (!activeSessionId || loadingOlder || !historyPage.hasOlder) return;
@@ -1530,106 +1535,76 @@ export default function AgentPage() {
     handleDeleteSession,
   ]);
 
-  const modeChromeColor = WORK_MODES[workMode].color;
-
   const mainContent = (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Active workspace + Code|Work + metrics */}
-      <div
-        className="flex-none flex flex-col gap-2 border-b px-4 py-2"
-        style={{
-          backgroundColor: `${modeChromeColor}12`,
-          borderBottomColor: `${modeChromeColor}35`,
-        }}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-            <CategorySelector
-              categories={workModeCategories}
-              activeCategoryId={workMode}
-              onCategorySelect={(id) => void handleWorkModeSelect(id)}
-            />
-            {activeWorkspace ? (
-              <div className="flex items-center gap-2 min-w-0">
-                <Folder className="h-3.5 w-3.5 text-text-muted flex-shrink-0" />
-                <span className="text-[11px] font-medium text-text-secondary truncate">
-                  {activeWorkspace.name}
-                </span>
-                <span className="text-[10px] text-text-muted truncate hidden sm:inline">
-                  {activeWorkspace.rootPath}
-                </span>
-              </div>
-            ) : workspaceError ? (
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-status-error-text">Failed to load workspaces</span>
-                <button
-                  onClick={() => void refreshWorkspaces()}
-                  className="text-[10px] text-text-muted underline hover:text-text-primary"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : (
-              <div className="text-[11px] text-text-muted">No workspace selected</div>
-            )}
-          </div>
-        {/* Right: metrics + debug */}
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <Link
-            href="/app/config/tools"
-            className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-            title="Manage tool catalog and policy"
-          >
-            Tools
-          </Link>
-          <Link
-            href={selectedGraphId ? `/app/agent-graphs/${selectedGraphId}` : "/app/config/graphs"}
-            className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-            title="Manage graph tool allowlist"
-          >
-            Graph
-          </Link>
-          {runStartedAt && tokenUsage && <TokenUsageDisplay tokenUsage={tokenUsage} />}
-          {runStartedAt && <DurationDisplay startedAt={runStartedAt} endedAt={runEndedAt ?? undefined} />}
-          <button
-            onClick={() => setPerfDebugEnabled((v) => !v)}
-            className={`rounded border px-2 py-1 text-[10px] transition ${perfDebugEnabled
-              ? "border-status-info-border bg-status-info-bg text-status-info-text"
-              : "border-white/[0.08] bg-bg-elevated text-text-muted hover:bg-state-hover hover:text-text-primary"
-              }`}
-            title="Toggle performance debug metrics"
-          >
-            Perf {perfDebugEnabled ? "ON" : "OFF"}
-          </button>
-          {perfDebugEnabled && (
-            <div className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted">
-              FPS: {fps ?? "…"} | input p95: {inputLatencyStats.p95.toFixed(1)}ms | avg: {inputLatencyStats.avg.toFixed(1)}ms
+      <AgentSessionChrome
+        workMode={workMode}
+        onWorkModeChange={(mode) => void handleWorkModeSelect(mode)}
+        workspaceName={activeWorkspace?.name ?? null}
+        workspaceRootPath={activeWorkspace?.rootPath ?? null}
+        workspaceErrorSlot={
+          workspaceError ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-status-error-text">Failed to load workspaces</span>
+              <button
+                type="button"
+                onClick={() => void refreshWorkspaces()}
+                className="text-[10px] text-text-muted underline hover:text-text-primary"
+              >
+                Retry
+              </button>
             </div>
-          )}
-          <button
-            onClick={handleCopyLogs}
-            className="flex items-center gap-1 rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-            title="Copy debug logs to clipboard"
-          >
-            <ClipboardCopy className="h-3 w-3" />
-            {logsCopied ? "Copied!" : "Logs"}
-          </button>
-        </div>
-        </div>
-
-        {workMode === "code" && activeWorkspaceId ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <AgentCodeRepoBar workspaceId={activeWorkspaceId} />
-            <p className="text-[10px] text-text-muted hidden md:block max-w-xl truncate" title={WORK_MODES.code.description}>
-              Code mode: repo tools, terminal, and Git workflows when connected.
-            </p>
-          </div>
-        ) : workMode === "work" ? (
-          <p className="text-[10px] text-text-muted max-w-2xl" title={WORK_MODES.work.description}>
-            Work mode: research, writing, and planning—fewer automated repo changes.
-          </p>
-        ) : null}
-      </div>
+          ) : undefined
+        }
+        trailing={
+          <>
+            {workMode === "code" && activeWorkspaceId ? (
+              <AgentCodeRepoBar workspaceId={activeWorkspaceId} />
+            ) : null}
+            <Link
+              href="/app/config/tools"
+              className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+              title="Manage tool catalog and policy"
+            >
+              Tools
+            </Link>
+            <Link
+              href={selectedGraphId ? `/app/agent-graphs/${selectedGraphId}` : "/app/agent-graphs"}
+              className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+              title="Manage graph tool allowlist"
+            >
+              Graph
+            </Link>
+            {runStartedAt && tokenUsage && <TokenUsageDisplay tokenUsage={tokenUsage} />}
+            {runStartedAt && <DurationDisplay startedAt={runStartedAt} endedAt={runEndedAt ?? undefined} />}
+            <button
+              type="button"
+              onClick={() => setPerfDebugEnabled((v) => !v)}
+              className={`rounded border px-2 py-1 text-[10px] transition ${perfDebugEnabled
+                ? "border-status-info-border bg-status-info-bg text-status-info-text"
+                : "border-white/[0.08] bg-bg-elevated text-text-muted hover:bg-state-hover hover:text-text-primary"
+                }`}
+              title="Toggle performance debug metrics"
+            >
+              Perf {perfDebugEnabled ? "ON" : "OFF"}
+            </button>
+            {perfDebugEnabled && (
+              <div className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted">
+                FPS: {fps ?? "…"} | input p95: {inputLatencyStats.p95.toFixed(1)}ms | avg: {inputLatencyStats.avg.toFixed(1)}ms
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleCopyLogs}
+              className="flex items-center gap-1 rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+              title="Copy debug logs to clipboard"
+            >
+              <ClipboardCopy className="h-3 w-3" />
+              {logsCopied ? "Copied!" : "Logs"}
+            </button>
+          </>
+        }
+      />
 
       {/* Error snackbar - always visible at top when there's an error */}
       {errorMessage && !sending && (
@@ -1812,6 +1787,7 @@ export default function AgentPage() {
           llmOptions={llmOptions}
           onLlmChange={handleLlmChange}
           llmStatus={llmStatus}
+          llmStatusDetail={llmStatusDetail}
           prefillText={composerPrefill}
           resetKey={activeSessionId ?? "new-session"}
           perfDebugEnabled={perfDebugEnabled}

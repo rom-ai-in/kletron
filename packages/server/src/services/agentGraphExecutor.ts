@@ -20,10 +20,15 @@ import { evaluateCondition } from "./agentGraphConditions";
 import { buildInitialState, getEntryNodeIds, getGraphNodeOrder, resolveExecutionMode } from "./agentGraphRuntime";
 import { setNestedValue } from "./agentGraphState";
 import { skillRegistry } from "@kletron/agent-core/skills/registry";
-import type { SkillDefinition } from "@kletron/agent-core/skills/types";
+import type { ResolvedSkill, SkillDefinition } from "@kletron/agent-core/skills/types";
 import { loadAllSkillsForRegistry } from "./skillsService";
 import { resolveWorkspaceCapabilities, type WorkspaceCapabilities } from "./workspaceCapabilityResolver";
 import { effectiveToolNames } from "./effectiveToolNames";
+import { applySkillSlashPreflight, mergeLoadedSkillIds } from "./skillSlashPreflight";
+import {
+    listWorkspaceSkillRecords,
+    skillRecordToSkillDefinition,
+} from "./workspaceSkillFiles";
 import { buildDynamicExternalTools } from "@kletron/agent-core/tools/dynamicExternalTools";
 import { KLETRON_ADMIN_TOOL_NAMES } from "@kletron/agent-core/tools/kletronAdminToolNames";
 import { kletronAdminTools } from "@kletron/agent-core/tools/kletronAdminTools";
@@ -1021,6 +1026,22 @@ export class AgentGraphExecutor {
 
             // ── Standard multi-turn continuation ─────────────────────────────
 
+            const { mission: preflightMission, loadedSkillIdsToAppend } = await applySkillSlashPreflight(
+                message,
+                workspace._id!.toString()
+            );
+            const mergedLoaded = mergeLoadedSkillIds(run.state.loadedSkillIds, loadedSkillIdsToAppend);
+            const prevLoaded = new Set(run.state.loadedSkillIds ?? []);
+            const newSlashSlugs = loadedSkillIdsToAppend.filter((id) => !prevLoaded.has(id));
+            const slashSkillLoads =
+                newSlashSlugs.length > 0
+                    ? newSlashSlugs.map((slug) => ({
+                          slug,
+                          at: new Date().toISOString(),
+                          reason: "slash_preflight" as const,
+                      }))
+                    : [];
+
             // Append user message to conversation history
             const history = run.state.conversationHistory ?? [];
             history.push({
@@ -1036,9 +1057,11 @@ export class AgentGraphExecutor {
             // Update state with new mission and conversation history
             const updatedState = {
                 ...run.state,
-                mission: message,
-                userInput: message,
+                mission: preflightMission,
+                userInput: preflightMission,
                 conversationHistory: history,
+                loadedSkillIds: mergedLoaded,
+                skillLoads: [...(run.state.skillLoads ?? []), ...slashSkillLoads],
             };
 
             // Reset node statuses for re-execution
@@ -1103,6 +1126,8 @@ export class AgentGraphExecutor {
         return await runWithWorkspaceContext(
             workspace,
             async () => {
+            let diskSkillRegistryOverlay = false;
+            try {
             // Ensure context is ready before we start
             const workspaceGraphStore = await ensureContextGraphReady(
                 workspace._id!.toString(),
@@ -1254,6 +1279,21 @@ export class AgentGraphExecutor {
                 await agentGraphRunService.updateRunState(runId, cloneValue(state));
             };
 
+            if (rootDir) {
+                try {
+                    const diskRecs = await listWorkspaceSkillRecords(rootDir);
+                    for (const r of diskRecs) {
+                        skillRegistry.upsertSkill(skillRecordToSkillDefinition(r));
+                    }
+                    diskSkillRegistryOverlay = diskRecs.length > 0;
+                } catch (diskErr) {
+                    console.warn(
+                        "[AgentGraph] Failed to load .kletron/skills overlay:",
+                        (diskErr as Error)?.message ?? diskErr
+                    );
+                }
+            }
+
             const normalizeTaskStatus = (value: string) => {
                 if (value === "todo" || value === "done" || value === "in_progress") return value;
                 return "todo";
@@ -1334,6 +1374,12 @@ export class AgentGraphExecutor {
                 return output;
             };
 
+            /** Max runtime-loaded skills per session (load_skill + slash preflight). */
+            const RUNTIME_MAX_LOADED_SKILLS = 20;
+            const enabledWorkspaceSkillSlugs = new Set(
+                (workspaceCaps?.enabledSkills ?? []).map((s) => s.slug)
+            );
+
             // ── write_todos deduplication & loop guard ────────────────────────
             let lastTodosHash: string | null = null;
             let consecutiveTodosDuplicates = 0;
@@ -1394,11 +1440,114 @@ export class AgentGraphExecutor {
                 }
             );
 
+            const listAvailableSkillsTool = createTool(
+                async () => {
+                    const skills = workspaceCaps?.enabledSkills ?? [];
+                    return JSON.stringify(
+                        skills.map((s) => ({
+                            slug: s.slug,
+                            name: s.name,
+                            description: s.description,
+                        })),
+                        null,
+                        2
+                    );
+                },
+                {
+                    name: "list_available_skills",
+                    description:
+                        "List skills enabled for this workspace (slug, name, short description). Call before load_skill to pick a specialization.",
+                    schema: z.object({}),
+                }
+            );
+
+            const loadSkillTool = createTool(
+                async (input: { skill_id: string; reason?: string }) => {
+                    const skillId = input.skill_id?.trim() ?? "";
+                    if (!skillId) {
+                        return JSON.stringify({ ok: false, error: "skill_id is required" }, null, 2);
+                    }
+                    if (!enabledWorkspaceSkillSlugs.has(skillId)) {
+                        return JSON.stringify(
+                            {
+                                ok: false,
+                                error: `Skill "${skillId}" is not enabled for this workspace. Use list_available_skills for eligible slugs.`,
+                            },
+                            null,
+                            2
+                        );
+                    }
+                    const currentLoaded = ((state as any).loadedSkillIds as string[] | undefined) ?? [];
+                    const already = currentLoaded.includes(skillId);
+                    if (!already && currentLoaded.length >= RUNTIME_MAX_LOADED_SKILLS) {
+                        return JSON.stringify(
+                            {
+                                ok: false,
+                                error: `At most ${RUNTIME_MAX_LOADED_SKILLS} skills can be loaded in one session.`,
+                            },
+                            null,
+                            2
+                        );
+                    }
+                    try {
+                        const resolved = await skillRegistry.getSkill(skillId);
+                        if (!already) {
+                            (state as any).loadedSkillIds = [...currentLoaded, skillId];
+                            const loads = [...(((state as any).skillLoads as Array<{ slug: string; at: string; reason?: string }>) ?? [])];
+                            loads.push({
+                                slug: skillId,
+                                at: new Date().toISOString(),
+                                reason:
+                                    input.reason && input.reason.trim()
+                                        ? input.reason.trim()
+                                        : "load_skill",
+                            });
+                            (state as any).skillLoads = loads;
+                            await persistState();
+                        }
+                        return JSON.stringify(
+                            {
+                                ok: true,
+                                skill_id: skillId,
+                                already_loaded: already,
+                                name: resolved.name,
+                                description: resolved.description,
+                                extendsChain: resolved.extendsChain,
+                                requiredTools: resolved.requiredTools ?? [],
+                                suggestedTools: resolved.suggestedTools ?? [],
+                                resolvedTools: resolved.resolvedTools,
+                                resolvedSystemPrompt: resolved.resolvedSystemPrompt,
+                            },
+                            null,
+                            2
+                        );
+                    } catch (err) {
+                        return JSON.stringify(
+                            {
+                                ok: false,
+                                error: (err as Error)?.message ?? String(err),
+                            },
+                            null,
+                            2
+                        );
+                    }
+                },
+                {
+                    name: "load_skill",
+                    description:
+                        "Load a workspace-enabled skill by slug. Returns full resolved instructions; session remembers loaded skills for later turns.",
+                    schema: z.object({
+                        skill_id: z.string().describe("Skill slug from list_available_skills"),
+                        reason: z.string().optional(),
+                    }),
+                }
+            );
+
             // Always-on Kletron admin tools (graphs/automations/skills/...).
             // Each tool reads identity from `runWithWorkspaceContext` and logs
             // every call to the agent_audit collection. They are gated by zod
             // schemas + safe-edit confirmation, not by skill activation.
-            const localTools = [writeTodosTool, ...kletronAdminTools];
+            const localTools = [writeTodosTool, listAvailableSkillsTool, loadSkillTool, ...kletronAdminTools];
 
             const runSubGraph = async (message: string, graphId: string) => {
                 const subGraph = await agentGraphService.getGraph(graphId);
@@ -1671,23 +1820,48 @@ export class AgentGraphExecutor {
                     const nodeKind = node.kind ?? "react";
 
                     // ---------------------------------------------------------
-                    // 2.5. Skills Injection (NEW)
+                    // 2.5. Skills Injection (pinned graph skillIds + runtime loadedSkillIds)
                     // ---------------------------------------------------------
-                    const skillIds = node.react.skillIds ?? [];
+                    const pinnedSkillIds = node.react.skillIds ?? [];
+                    const loadedSkillIds = (state as any).loadedSkillIds as string[] | undefined;
                     let skillPromptPrefix = "";
                     let skillTools: string[] = [];
-                    if (skillIds.length > 0) {
+                    const pinnedResolved: ResolvedSkill[] = [];
+                    const loadedResolved: ResolvedSkill[] = [];
+                    if (pinnedSkillIds.length > 0) {
                         try {
-                            const resolvedSkills = await skillRegistry.getSkills(skillIds);
-                            skillPromptPrefix = resolvedSkills
-                                .map((s) => s.resolvedSystemPrompt)
-                                .filter(Boolean)
-                                .join("\n\n---\n\n");
-                            skillTools = [...new Set(resolvedSkills.flatMap((s) => s.resolvedTools))];
+                            const rs = await skillRegistry.getSkills(pinnedSkillIds);
+                            pinnedResolved.push(...rs);
                         } catch (err) {
-                            console.warn(`[AgentGraph] Failed to load skills ${skillIds.join(", ")}:`, err);
+                            console.warn(`[AgentGraph] Failed to load pinned skills ${pinnedSkillIds.join(", ")}:`, err);
                         }
                     }
+                    if (loadedSkillIds?.length) {
+                        try {
+                            const rs = await skillRegistry.getSkills(loadedSkillIds);
+                            loadedResolved.push(...rs);
+                        } catch (err) {
+                            console.warn(`[AgentGraph] Failed to load runtime skills ${loadedSkillIds.join(", ")}:`, err);
+                        }
+                    }
+                    const promptChunks = [...pinnedResolved, ...loadedResolved]
+                        .map((s) => s.resolvedSystemPrompt)
+                        .filter(Boolean);
+                    if (promptChunks.length > 0) {
+                        skillPromptPrefix = promptChunks.join("\n\n---\n\n");
+                    }
+                    skillTools = [
+                        ...new Set([
+                            ...pinnedResolved.flatMap((s) => s.resolvedTools),
+                            ...loadedResolved.flatMap((s) => s.resolvedTools),
+                        ]),
+                    ];
+                    const workspaceSkillToolNames = [
+                        ...new Set((workspaceCaps?.enabledSkills ?? []).flatMap((s) => s.resolvedTools)),
+                    ];
+                    const skillToolNamesForEffective = [
+                        ...new Set([...skillTools, ...workspaceSkillToolNames]),
+                    ];
                     // Resolve the effective tool list using the unified policy.
                     // - Workspace capabilities gate bundled / admin tools.
                     // - Always-on tools (e.g. `write_todos`) bypass the gate.
@@ -1699,12 +1873,12 @@ export class AgentGraphExecutor {
                         ? capabilityToolSet
                         : new Set<string>([
                               ...(node.react.toolNames ?? []),
-                              ...skillTools,
+                              ...skillToolNamesForEffective,
                           ]);
                     const effective = effectiveToolNames({
                         nodeToolNames: node.react.toolNames ?? [],
-                        skillToolNames: skillTools,
-                        adminToolNames: KLETRON_ADMIN_TOOL_NAMES,
+                        skillToolNames: skillToolNamesForEffective,
+                        adminToolNames: [...KLETRON_ADMIN_TOOL_NAMES],
                         capabilityToolSet: effectiveCaps,
                         externalNamespacedTools: externalNamespacedToolNames,
                         alwaysOn: ["write_todos", ...KLETRON_ADMIN_TOOL_NAMES],
@@ -2618,6 +2792,16 @@ export class AgentGraphExecutor {
             await emitUpdate();
             cleanupCheckpoints();
             return successResult;
+            } finally {
+                if (diskSkillRegistryOverlay) {
+                    await skillRegistry.reload().catch((err) =>
+                        console.warn(
+                            "[AgentGraph] skillRegistry.reload after .kletron/skills:",
+                            (err as Error)?.message ?? err
+                        )
+                    );
+                }
+            }
             },
             { userId: opts?.workspaceContextUserId ?? workspace.ownerId, runId }
         );

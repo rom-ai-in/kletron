@@ -95,7 +95,6 @@ const segmentLabels: Record<string, string> = {
   "/app/config": "Configuration",
   "/app/config/context": "Context & retrieval",
   "/app/config/llm": "LLM",
-  "/app/config/graphs": "Graphs",
   "/app/account": "Account",
   "/app/organization": "Organization",
   "/app/organization/members": "Members",

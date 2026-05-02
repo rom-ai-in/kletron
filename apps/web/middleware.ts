@@ -1,5 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+/**
+ * Dev defaults for `/api/*` CORS. Browsers send `Origin: null` for some `file://` and packaged
+ * Electron loads — include the literal string `null` (not the same as missing Origin).
+ *
+ * Production: set `KLETRON_CORS_ALLOWLIST` to a comma-separated list of allowed origins, e.g.
+ * `https://app.example.com,null` so the desktop app can call the API from `file://` or custom
+ * protocols. Use `*` to allow any origin (no credentials on wildcard per browser rules).
+ */
 const DEFAULT_DEV_CORS_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -8,6 +16,7 @@ const DEFAULT_DEV_CORS_ORIGINS = [
     "http://localhost:8080",
     "http://127.0.0.1:8080",
     "file://",
+    "null",
     "kletron://"
 ];
 

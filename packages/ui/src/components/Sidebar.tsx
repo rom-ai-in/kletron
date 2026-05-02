@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
     Settings,
-    Share2,
     Terminal,
     Home,
     Layers,
@@ -15,7 +14,6 @@ import {
     UserCircle,
     LogOut,
     Building2,
-    Sparkles,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
@@ -35,11 +33,6 @@ const navItems = [
         label: "Automations",
         icon: Layers,
         href: "/app/automations",
-    },
-    {
-        label: "Agent Graphs",
-        icon: Share2,
-        href: "/app/agent-graphs",
     },
     {
         label: "History",

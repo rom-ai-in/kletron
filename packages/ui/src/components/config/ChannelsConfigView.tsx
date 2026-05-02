@@ -93,18 +93,22 @@ export function ChannelsConfigView() {
   const [saveAppMsg, setSaveAppMsg] = useState<string | null>(null);
 
   const loadAppCreds = useCallback(async () => {
-    const res = await fetch("/api/channels/app-credentials");
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data?.telegram) {
-      setAppStatus({
-        encryptionConfigured: Boolean(data.encryptionConfigured),
-        telegram: data.telegram,
-      });
+    try {
+      const res = await fetch("/api/channels/app-credentials");
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.telegram) {
+        setAppStatus({
+          encryptionConfigured: Boolean(data.encryptionConfigured),
+          telegram: data.telegram,
+        });
+      }
+    } catch {
+      /* offline, wrong origin, or server down — avoid unhandled rejection in effects */
     }
   }, []);
 
   useEffect(() => {
-    void loadAppCreds();
+    void loadAppCreds().catch(() => undefined);
   }, [loadAppCreds]);
 
   const saveAppCreds = async () => {
@@ -137,27 +141,35 @@ export function ChannelsConfigView() {
   const [wsSaveMsg, setWsSaveMsg] = useState<string | null>(null);
 
   const loadGraphs = useCallback(async () => {
-    const res = await fetch("/api/agent-graphs");
-    const data = await res.json().catch(() => ({}));
-    setGraphs(Array.isArray(data?.graphs) ? data.graphs : []);
-  }, []);
-
-  useEffect(() => {
-    void loadGraphs();
-  }, [loadGraphs]);
-
-  const loadWsSettings = useCallback(async (wsId: string) => {
-    if (!wsId) return;
-    const res = await fetch(`/api/workspaces/${encodeURIComponent(wsId)}/channel-settings?channel=telegram`);
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
-      setWsEnabled(data.enabled !== false);
-      setDefaultGraphId(typeof data.defaultGraphId === "string" ? data.defaultGraphId : "");
+    try {
+      const res = await fetch("/api/agent-graphs");
+      const data = await res.json().catch(() => ({}));
+      setGraphs(Array.isArray(data?.graphs) ? data.graphs : []);
+    } catch {
+      setGraphs([]);
     }
   }, []);
 
   useEffect(() => {
-    if (selectedWsId) void loadWsSettings(selectedWsId);
+    void loadGraphs().catch(() => undefined);
+  }, [loadGraphs]);
+
+  const loadWsSettings = useCallback(async (wsId: string) => {
+    if (!wsId) return;
+    try {
+      const res = await fetch(`/api/workspaces/${encodeURIComponent(wsId)}/channel-settings?channel=telegram`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setWsEnabled(data.enabled !== false);
+        setDefaultGraphId(typeof data.defaultGraphId === "string" ? data.defaultGraphId : "");
+      }
+    } catch {
+      /* network error — keep previous workspace form state */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedWsId) void loadWsSettings(selectedWsId).catch(() => undefined);
   }, [selectedWsId, loadWsSettings]);
 
   const saveWsSettings = async () => {
@@ -239,7 +251,7 @@ export function ChannelsConfigView() {
   const openModal = (id: ChannelKey) => {
     setActiveModal(id);
     if (id === "telegram") {
-      void loadAppCreds();
+      void loadAppCreds().catch(() => undefined);
     }
   };
 

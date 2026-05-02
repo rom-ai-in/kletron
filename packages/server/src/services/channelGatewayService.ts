@@ -6,6 +6,7 @@ import { agentGraphExecutor } from "./agentGraphExecutor";
 import { agentGraphRunService } from "./agentGraphRunService";
 import { agentGraphService } from "./agentGraphService";
 import { buildInitialState, getGraphNodeOrder } from "./agentGraphRuntime";
+import { preflightMissionForNewRun } from "./skillSlashPreflight";
 import { channelChatContextService } from "./channelChatContextService";
 import { resolveChannelRouting } from "./channelResolverService";
 import { buildChannelSessionKey, channelStoreService } from "./channelStoreService";
@@ -144,11 +145,19 @@ export async function runChannelAgentTurn(event: NormalizedInboundEvent): Promis
             for (const node of graph.nodes) {
                 initialNodeStatuses[node.id] = "PENDING";
             }
-            const title = event.text.trim().slice(0, 80);
+            const pre = await preflightMissionForNewRun(event.text, workspaceId);
+            const title = pre.mission.trim().slice(0, 80);
+            const initialState = {
+                ...buildInitialState(graph as any, pre.mission),
+                mission: pre.mission,
+                userInput: pre.mission,
+                loadedSkillIds: pre.loadedSkillIds.length ? pre.loadedSkillIds : undefined,
+                skillLoads: pre.skillLoads.length ? pre.skillLoads : undefined,
+            };
             await agentGraphRunService.updateRunStatus(runId, "RUNNING", {
                 nodeOrder,
                 nodeStatuses: initialNodeStatuses,
-                state: buildInitialState(graph as any, event.text),
+                state: initialState,
                 title,
                 conversationTurns: 1,
             } as any);

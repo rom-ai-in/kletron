@@ -156,10 +156,44 @@ function installAppMenu() {
             ],
           } as Electron.MenuItemConstructorOptions,
         ]
+      : []),
+    ...(process.platform === "darwin"
+      ? [
+          {
+            label: "File",
+            submenu: [
+              {
+                label: "Add workspace…",
+                accelerator: "CommandOrControl+O",
+                click: () => mainWindow?.webContents.send("app:addWorkspace"),
+              },
+              {
+                label: "Settings…",
+                accelerator: "CommandOrControl+,",
+                click: () => mainWindow?.webContents.send("app:openSettings"),
+              },
+              { type: "separator" },
+              { role: "close" },
+            ],
+          } as Electron.MenuItemConstructorOptions,
+        ]
       : [
           {
             label: "File",
-            submenu: [{ role: "quit" }],
+            submenu: [
+              {
+                label: "Add workspace…",
+                accelerator: "CommandOrControl+O",
+                click: () => mainWindow?.webContents.send("app:addWorkspace"),
+              },
+              {
+                label: "Settings…",
+                accelerator: "CommandOrControl+,",
+                click: () => mainWindow?.webContents.send("app:openSettings"),
+              },
+              { type: "separator" },
+              { role: "quit" },
+            ],
           } as Electron.MenuItemConstructorOptions,
         ]),
     {
@@ -176,6 +210,12 @@ function installAppMenu() {
     {
       label: "View",
       submenu: [
+        {
+          label: "Toggle Code / Work mode",
+          accelerator: "CommandOrControl+Shift+M",
+          click: () => mainWindow?.webContents.send("app:toggleWorkMode"),
+        },
+        { type: "separator" },
         { role: "reload" },
         { role: "toggleDevTools" },
         { type: "separator" },
@@ -351,7 +391,25 @@ async function setupAutoUpdates() {
   });
 }
 
+function findKletronProtocolUrl(argv: string[]): string | undefined {
+  return argv.find((arg) => typeof arg === "string" && arg.startsWith("kletron://"));
+}
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  process.exit(0);
+}
+
+app.on("second-instance", (_event, commandLine) => {
+  const url = findKletronProtocolUrl(commandLine);
+  if (url) dispatchAuthUrl(url);
+});
+
 app.on("ready", () => {
+  const coldStartAuthUrl = findKletronProtocolUrl(process.argv);
+  if (coldStartAuthUrl) {
+    pendingAuthUrl = coldStartAuthUrl;
+  }
   if (process.defaultApp && process.argv.length >= 2) {
     app.setAsDefaultProtocolClient("kletron", process.execPath, [path.resolve(process.argv[1])]);
   } else {
@@ -464,6 +522,15 @@ ipcMain.handle("app:openInVSCode", async (_event, targetPath?: string) => {
     child.on("error", () => resolve(false));
     child.on("exit", (code) => resolve(code === 0));
   });
+});
+
+/** Open a folder in the OS file manager (Finder / Explorer / …). */
+ipcMain.handle("app:openWorkspaceInSystemFileManager", async (_event, targetPath?: string) => {
+  const resolved = targetPath || currentWorkspacePath;
+  if (!resolved) return false;
+  const normalized = path.normalize(resolved);
+  const err = await shell.openPath(normalized);
+  return err === "";
 });
 
 ipcMain.handle("fs:listFiles", async (_event, relativePath?: string, depth?: number) => {

@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { graphOptions } from "@kletron/shared/graphCatalog";
 import { apiFetch, type GetRequestHeaders } from '@kletron/shared';
 import { useLlmHealth } from './useLlmHealth';
 import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
@@ -31,6 +30,20 @@ type AgentGraphRecord = {
     description?: string;
 };
 
+/** Persisted `agent_graphs._id` only (24 hex). Legacy catalog slugs are rejected. */
+const MONGO_GRAPH_ID_HEX24 = /^[0-9a-fA-F]{24}$/;
+
+function takeValidStoredGraphSelection(): string | null {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem("kletron-graph-selection");
+    if (!raw) return null;
+    if (!MONGO_GRAPH_ID_HEX24.test(raw)) {
+        window.localStorage.removeItem("kletron-graph-selection");
+        return null;
+    }
+    return raw;
+}
+
 export interface UseAgentSessionOptions {
     /** When set (e.g. Electron), prepended to `/api/...` paths. No trailing slash. */
     apiOrigin?: string;
@@ -56,6 +69,8 @@ export interface UseAgentSessionReturn {
     handleLlmChange: (provider: string) => void;
     handleGraphChange: (graphId: string) => void;
     llmStatus: 'success' | 'error' | 'loading' | 'none';
+    /** Human-readable reason for llmStatus (e.g. from health check). Hover LLM selector to see. */
+    llmStatusDetail: string | null;
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
@@ -85,7 +100,10 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
     const [llmPrefsReloadNonce, setLlmPrefsReloadNonce] = useState(0);
     const refreshLlmPreferences = useCallback(() => setLlmPrefsReloadNonce((n) => n + 1), []);
 
-    const { status: llmStatus } = useLlmHealth(llmProvider, { apiOrigin, getRequestHeaders: getHdr });
+    const { status: llmStatus, message: llmStatusDetail } = useLlmHealth(llmProvider, {
+        apiOrigin,
+        getRequestHeaders: getHdr,
+    });
 
     // ── Fetch LLM config + user preferences (LLM provider + graph selection)
     useEffect(() => {
@@ -125,13 +143,11 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
                                 setLlmProvider(defaultProvider);
                             }
                         }
-                        if (prefGraphId) {
+                        if (prefGraphId && MONGO_GRAPH_ID_HEX24.test(prefGraphId)) {
                             setSavedGraphId(prefGraphId);
                         } else {
-                            const storedGraph = window.localStorage.getItem("kletron-graph-selection");
-                            if (storedGraph) {
-                                setSavedGraphId(storedGraph);
-                            }
+                            const cleaned = takeValidStoredGraphSelection();
+                            if (cleaned) setSavedGraphId(cleaned);
                         }
                         return;
                     }
@@ -147,10 +163,8 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
                     setLlmProvider(defaultProvider);
                 }
 
-                const storedGraph = window.localStorage.getItem("kletron-graph-selection");
-                if (storedGraph) {
-                    setSavedGraphId(storedGraph);
-                }
+                const cleanedGraph = takeValidStoredGraphSelection();
+                if (cleanedGraph) setSavedGraphId(cleanedGraph);
             } catch (e) {
                 console.error("Failed to fetch preferences", e);
             } finally {
@@ -193,6 +207,7 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
     }, [apiOrigin, getHdr, graphsReloadNonce]);
 
     // ── Resolve selected graph once graphs AND preferences are loaded ───
+    // Only real `agent_graphs` Mongo ids are valid — never catalog slugs (e.g. universal-v1).
     useEffect(() => {
         if (!graphOptionsLoaded || !llmPrefsLoaded) return;
         const hasAgentGraphs = agentGraphs.length > 0;
@@ -202,12 +217,13 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
                   agentGraphs[0]?._id ??
                   ""
               )
-            : (graphOptions[0]?.id || "universal-v1");
-        const savedIsValid = savedGraphId
-            ? hasAgentGraphs
-                ? agentGraphs.some((g) => String(g._id) === savedGraphId)
-                : graphOptions.some((g) => g.id === savedGraphId)
-            : false;
+            : "";
+        const savedIsValid = Boolean(
+            savedGraphId &&
+                MONGO_GRAPH_ID_HEX24.test(savedGraphId) &&
+                hasAgentGraphs &&
+                agentGraphs.some((g) => String(g._id) === savedGraphId),
+        );
         const nextGraphId = savedIsValid ? savedGraphId! : defaultGraphId;
         if (nextGraphId) {
             setSelectedGraphId((prev) => (prev && prev !== "" ? prev : nextGraphId));
@@ -282,28 +298,33 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
         }
     }, [enabledProvidersLoaded, llmPrefsLoaded, enabledProviders, llmProvider, handleLlmChange]);
 
-    const llmOptions = useMemo(() =>
-        enabledProviders.map((providerId) => {
+    const llmOptions = useMemo(() => {
+        const ids: string[] =
+            enabledProviders.length > 0
+                ? [...enabledProviders]
+                : llmProvider
+                  ? [llmProvider]
+                  : [];
+        return ids.map((providerId) => {
             const cfg = llmConfigData?.[providerId] as Record<string, unknown> | undefined;
-            const model = (cfg?.model ?? cfg?.deployment ?? '') as string;
+            const model = (cfg?.model ?? cfg?.deployment ?? "") as string;
             return {
                 id: providerId,
                 label: PROVIDER_LABELS[providerId] ?? providerId,
-                sub: model || 'Not configured',
+                sub: model || "Not configured",
             };
-        }),
-    [enabledProviders, llmConfigData]);
+        });
+    }, [enabledProviders, llmConfigData, llmProvider]);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const graphSelectOptions = useMemo(
         () =>
-            (agentGraphs.length > 0 ? agentGraphs : graphOptions)
-                .map((g: any) => ({
-                    id: String(g._id ?? g.id ?? ""),
+            agentGraphs
+                .map((g) => ({
+                    id: String(g._id ?? ""),
                     label: g.name,
                 }))
                 .filter((g) => g.id),
-        [agentGraphs]
+        [agentGraphs],
     );
 
     return {
@@ -322,5 +343,6 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
         handleLlmChange,
         handleGraphChange,
         llmStatus,
+        llmStatusDetail,
     };
 }

@@ -151,7 +151,7 @@ export default function ToolsConfigPage() {
                         </div>
                         <div className="flex gap-2">
                             <Link
-                                href="/app/config/graphs"
+                                href="/app/agent-graphs"
                                 className="rounded-md border border-border-subtle bg-bg-elevated px-2.5 py-1.5 text-xs text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
                             >
                                 Configure per-graph tools

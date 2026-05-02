@@ -2,9 +2,12 @@
 // Manages a global skill library (source: builtin | user) and per-workspace
 // activation records.
 //
-// Built-in skills live on disk under `.agent/skills/<slug>/SKILL.md` and are
-// imported into the `skills` collection by the seed script. User-authored
-// skills are written directly to Mongo from the web UI.
+// Built-in skills live on disk under `.agent/skills/<slug>/SKILL.md` in the
+// Kletron repo and are imported into the `skills` collection by the seed script.
+//
+// User-authored skills: when a workspace root is provided, the **primary**
+// source of truth is `<workspaceRoot>/.kletron/skills/<slug>/SKILL.md`. Mongo
+// holds a mirror for listing and environments without direct FS access.
 
 import { ObjectId } from "mongodb";
 import matter from "gray-matter";
@@ -22,6 +25,14 @@ import {
     type WorkspaceSkillRecord,
     type ResolvedSkillRecord,
 } from "@kletron/shared/skills/types";
+import {
+    deleteWorkspaceSkillDir,
+    listWorkspaceSkillRecords,
+    readWorkspaceSkillRecord,
+    writeWorkspaceSkillFromCreate,
+    writeWorkspaceSkillFromUpdate,
+} from "./workspaceSkillFiles";
+import { getWorkspaceByIdUnsafe } from "./workspaceService";
 
 const SKILLS_COLLECTION = "skills";
 const WORKSPACE_SKILLS_COLLECTION = "workspace_skills";
@@ -132,9 +143,14 @@ export interface ListSkillsOptions {
      */
     viewerUserId?: string | null;
     limit?: number;
+    /**
+     * When set, skills under `.kletron/skills/` are loaded and **override** Mongo
+     * user skills with the same slug (repo-native primary source of truth).
+     */
+    workspaceRootPath?: string;
 }
 
-export async function listSkills(options: ListSkillsOptions = {}): Promise<SkillRecord[]> {
+async function listSkillsFromDatabase(options: ListSkillsOptions = {}): Promise<SkillRecord[]> {
     await ensureIndexes();
     const collection = await skillsCollection();
     const clauses: Record<string, unknown>[] = [];
@@ -164,7 +180,57 @@ export async function listSkills(options: ListSkillsOptions = {}): Promise<Skill
     return docs.map(toRecord);
 }
 
-export async function getSkillBySlug(slug: string): Promise<SkillRecord | null> {
+export async function listSkills(options: ListSkillsOptions = {}): Promise<SkillRecord[]> {
+    const fromDb = await listSkillsFromDatabase(options);
+    const root = options.workspaceRootPath?.trim();
+    if (!root) {
+        return fromDb;
+    }
+
+    let disk: SkillRecord[] = [];
+    try {
+        disk = await listWorkspaceSkillRecords(root);
+    } catch (error) {
+        console.warn("[skillsService] listWorkspaceSkillRecords failed:", (error as Error).message);
+    }
+
+    const bySlug = new Map<string, SkillRecord>();
+    for (const r of fromDb) {
+        bySlug.set(r.slug, r);
+    }
+    for (const d of disk) {
+        if (d.source !== "user") continue;
+        const existing = bySlug.get(d.slug);
+        if (existing?.source === "builtin") continue;
+        bySlug.set(d.slug, { ...d, source: "user" });
+    }
+    return Array.from(bySlug.values()).sort((a, b) => {
+        if (a.source !== b.source) return a.source === "builtin" ? -1 : 1;
+        return a.name.localeCompare(b.name);
+    });
+}
+
+export async function getSkillBySlug(
+    slug: string,
+    options: { workspaceRootPath?: string } = {}
+): Promise<SkillRecord | null> {
+    const root = options.workspaceRootPath?.trim();
+    if (root) {
+        try {
+            const disk = await readWorkspaceSkillRecord(root, slug);
+            if (disk) {
+                const mongo = await getSkillBySlugMongo(slug);
+                if (mongo?.source === "builtin") return mongo;
+                return disk;
+            }
+        } catch (error) {
+            console.warn("[skillsService] readWorkspaceSkillRecord failed:", (error as Error).message);
+        }
+    }
+    return getSkillBySlugMongo(slug);
+}
+
+async function getSkillBySlugMongo(slug: string): Promise<SkillRecord | null> {
     await ensureIndexes();
     const collection = await skillsCollection();
     const doc = await collection.findOne({ slug });
@@ -174,10 +240,14 @@ export async function getSkillBySlug(slug: string): Promise<SkillRecord | null> 
 export async function createSkill(
     input: SkillCreateInput,
     ownerId: string,
-    options: { source?: SkillSource } = {}
+    options: { source?: SkillSource; workspaceRootPath?: string } = {}
 ): Promise<SkillRecord> {
     await ensureIndexes();
     const validated = skillCreateSchema.parse(input);
+    const root = options.workspaceRootPath?.trim();
+    if (root) {
+        await writeWorkspaceSkillFromCreate(root, validated, ownerId);
+    }
     const collection = await skillsCollection();
     const now = new Date();
     const doc: SkillDoc = {
@@ -202,6 +272,9 @@ export async function createSkill(
         const result = await collection.insertOne(doc);
         doc._id = result.insertedId;
     } catch (error) {
+        if (root) {
+            await deleteWorkspaceSkillDir(root, validated.slug).catch(() => undefined);
+        }
         if ((error as { code?: number }).code === 11000) {
             throw new Error(`Skill slug already exists: ${validated.slug}`);
         }
@@ -214,19 +287,25 @@ export async function updateSkill(
     slug: string,
     updates: SkillUpdateInput,
     ownerId: string,
-    options: { allowBuiltin?: boolean } = {}
+    options: { allowBuiltin?: boolean; workspaceRootPath?: string } = {}
 ): Promise<SkillRecord | null> {
     await ensureIndexes();
     const validated = skillUpdateSchema.parse(updates);
     const collection = await skillsCollection();
-    const existing = await collection.findOne({ slug });
-    if (!existing) return null;
-    if (existing.source === "builtin" && !options.allowBuiltin) {
+    const root = options.workspaceRootPath?.trim();
+
+    const existingDoc = await collection.findOne({ slug });
+    if (!existingDoc) return null;
+    if (existingDoc.source === "builtin" && !options.allowBuiltin) {
         throw new Error("Built-in skills cannot be modified");
     }
-    if (existing.source === "user" && existing.ownerId !== ownerId) {
+    if (existingDoc.source === "user" && existingDoc.ownerId !== ownerId) {
         throw new Error("You do not have permission to edit this skill");
     }
+
+    const diskRec = root ? await readWorkspaceSkillRecord(root, slug) : null;
+    const baseForDisk: SkillRecord =
+        diskRec && existingDoc.source !== "builtin" ? diskRec : toRecord(existingDoc);
 
     const now = new Date();
     const fm = validated.frontmatter ?? {};
@@ -245,12 +324,20 @@ export async function updateSkill(
     if (fm.maxToolCalls !== undefined) next.maxToolCalls = fm.maxToolCalls;
     if (validated.body !== undefined) next.body = validated.body;
 
+    if (root && existingDoc.source === "user") {
+        await writeWorkspaceSkillFromUpdate(root, slug, baseForDisk, validated);
+    }
+
     await collection.updateOne({ slug }, { $set: next });
     const updated = await collection.findOne({ slug });
     return updated ? toRecord(updated) : null;
 }
 
-export async function deleteSkill(slug: string, ownerId: string): Promise<boolean> {
+export async function deleteSkill(
+    slug: string,
+    ownerId: string,
+    options: { workspaceRootPath?: string } = {}
+): Promise<boolean> {
     await ensureIndexes();
     const collection = await skillsCollection();
     const existing = await collection.findOne({ slug });
@@ -260,6 +347,10 @@ export async function deleteSkill(slug: string, ownerId: string): Promise<boolea
     }
     if (existing.ownerId !== ownerId) {
         throw new Error("You do not have permission to delete this skill");
+    }
+    const root = options.workspaceRootPath?.trim();
+    if (root) {
+        await deleteWorkspaceSkillDir(root, slug);
     }
     await collection.deleteOne({ slug });
     // Also drop activations.
@@ -431,8 +522,14 @@ export async function resolveWorkspaceSkills(workspaceId: string): Promise<Resol
         .toArray();
     if (enabled.length === 0) return [];
 
+    const workspace = await getWorkspaceByIdUnsafe(workspaceId);
+    const workspaceRootPath = workspace?.rootPath?.trim();
+
     const library = new Map<string, SkillRecord>();
-    for (const record of await listSkills({ viewerUserId: null })) {
+    for (const record of await listSkills({
+        viewerUserId: null,
+        ...(workspaceRootPath ? { workspaceRootPath } : {}),
+    })) {
         library.set(record.slug, record);
     }
 

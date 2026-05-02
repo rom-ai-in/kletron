@@ -62,8 +62,8 @@ import { useGit } from "../hooks/useGit";
 import { useProjects } from "../hooks/useProjects";
 
 import { useSkills } from "../hooks/useSkills";
-import { useCategories, BUILT_IN_CATEGORIES } from "../hooks/useCategories";
-import { normalizeToWorkModeId } from "@kletron/shared/workMode";
+import { useCategories } from "../hooks/useCategories";
+import { WORK_MODES, normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode";
 import { DesktopWorkspaceProvider } from "../providers/DesktopWorkspaceProvider";
 
 // Utils & types
@@ -83,6 +83,7 @@ import { AgentGraphsPanel } from "./AgentGraphsPanel";
 import { DesktopPrimaryNav } from "./DesktopPrimaryNav";
 import { HistoryPanel } from "./HistoryPanel";
 import { CodeRepoConnectorStrip } from "@kletron/ui/components/CommandCenter/CodeRepoConnectorStrip";
+import { AgentSessionChrome } from "@kletron/ui/components/CommandCenter/AgentSessionChrome";
 import { PORTAL_LINK_GROUPS } from "../portalLinks";
 import { SETTINGS_SECTIONS, formatRelativeTime, pathsEqual } from "../utils";
 import { getComposerConnectionState } from "../composerConnection";
@@ -129,10 +130,15 @@ export default function App() {
   const workspace = useWorkspace(backendUrlTrimmed, auth.getAccessToken);
   const projectsHook = useProjects(workspace.workspace?.path, workspace.workspace?.name);
 
-  // activeWorkspaceId MUST be a backend-issued workspace ID (from workspaceSummary).
-  // Never fall back to projectsHook.activeProjectId — that's a local-only concept
-  // and sending it as x-workspace-id would break all API scoping.
-  const activeWorkspaceId = workspace.workspaceSummary?.id ?? null;
+  /** Backend workspace id for API headers. Prefer summary; fall back to matching `allWorkspaces` by root path so automations/threads load before summary catches up (never use projectsHook ids — local-only). */
+  const activeWorkspaceId = useMemo(() => {
+    const fromSummary = workspace.workspaceSummary?.id?.trim();
+    if (fromSummary) return fromSummary;
+    const rootPath = workspace.workspace?.path;
+    if (!rootPath || workspace.allWorkspaces.length === 0) return null;
+    const hit = workspace.allWorkspaces.find((w) => pathsEqual(w.rootPath, rootPath));
+    return hit?.id ?? null;
+  }, [workspace.workspaceSummary?.id, workspace.workspace?.path, workspace.allWorkspaces]);
 
   // Work categories system (server + localStorage, same as web agent work mode)
   const categoriesHook = useCategories({
@@ -161,6 +167,7 @@ export default function App() {
     apiOrigin: backendUrlTrimmed,
     getRequestHeaders: getAgentRequestHeaders,
     enabled: backendReady,
+    workspaceId: activeWorkspaceId,
   });
 
   const composerConnection = useMemo(
@@ -245,6 +252,30 @@ export default function App() {
   const [rightSidebarVisible, setRightSidebarVisible] = useState(true);
   const [changesVisible, setChangesVisible] = useState(false);
   const [terminalVisible, setTerminalVisible] = useState(false);
+
+  /** Restore Git sidebars when returning from Work → Code */
+  const gitPanelsBeforeWorkRef = useRef({ rightOpen: true, changesOpen: false });
+  const prevDesktopWorkModeRef = useRef(desktopWorkMode);
+
+  useEffect(() => {
+    const prev = prevDesktopWorkModeRef.current;
+    const next = desktopWorkMode;
+    if (prev === next) return;
+    prevDesktopWorkModeRef.current = next;
+
+    if (prev === "code" && next === "work") {
+      gitPanelsBeforeWorkRef.current = {
+        rightOpen: rightSidebarVisible,
+        changesOpen: changesVisible,
+      };
+      setRightSidebarVisible(false);
+      setChangesVisible(false);
+    } else if (prev === "work" && next === "code") {
+      const s = gitPanelsBeforeWorkRef.current;
+      setRightSidebarVisible(s.rightOpen);
+      setChangesVisible(s.changesOpen);
+    }
+  }, [desktopWorkMode, rightSidebarVisible, changesVisible]);
   const [openTabs, setOpenTabs] = useState<ConversationTab[]>([]);
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
   const [envVariables, setEnvVariables] = useState<EnvVariable[]>([]);
@@ -278,10 +309,12 @@ export default function App() {
       }
       if (e.key === "b" && e.shiftKey) {
         e.preventDefault();
+        if (!isCodeMode) return;
         setRightSidebarVisible((p) => !p);
       }
       if (e.key === "g" && e.shiftKey) {
         e.preventDefault();
+        if (!isCodeMode) return;
         setChangesVisible((p) => {
           if (!p) void git.fetchAllDiffs();
           return !p;
@@ -300,11 +333,7 @@ export default function App() {
           handleTabClose(threads.conversationId);
         }
       }
-      // Add new project: Cmd+O
-      if (e.key === "o" && !e.shiftKey) {
-        e.preventDefault();
-        handleAddProject();
-      }
+      // Add workspace: File → Add workspace… (Cmd+O) is handled via main-process IPC → onAddWorkspaceRequest
       // Toggle terminal: Cmd+J
       if (e.key === "j" && !e.shiftKey) {
         e.preventDefault();
@@ -322,7 +351,7 @@ export default function App() {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [threads.conversationId, openTabs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [threads.conversationId, openTabs, isCodeMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DATA LOADING
@@ -622,7 +651,10 @@ export default function App() {
         label: "plan",
         description: "Toggle Plan Mode (read-only proposals)",
         icon: <Eye className="h-3.5 w-3.5" />,
-        action: () => setPlanMode((p) => !p),
+        action: () => {
+          conversation.setInput("/plan ");
+          setPlanMode((p) => !p);
+        },
       },
       {
         id: "skills",
@@ -631,6 +663,7 @@ export default function App() {
         description: "Open Skills settings",
         icon: <Wrench className="h-3.5 w-3.5" />,
         action: () => {
+          conversation.setInput("/skills ");
           settings.setActiveView("settings");
           settings.setActiveSettingsSection("skills");
         },
@@ -642,6 +675,7 @@ export default function App() {
         description: "Manage Git worktrees",
         icon: <GitBranch className="h-3.5 w-3.5" />,
         action: () => {
+          conversation.setInput("/worktree ");
           settings.setActiveView("settings");
           settings.setActiveSettingsSection("worktrees");
         },
@@ -741,6 +775,44 @@ export default function App() {
       toast.error("Failed to add workspace", (err as Error)?.message ?? "Unknown error");
     }
   }
+
+  /** New thread + empty composer when switching Code ↔ Work so runs stay scoped to the mode. */
+  const resetComposerForWorkModeChange = useCallback(() => {
+    conversation.stopStreaming();
+    conversation.resetConversation();
+    diffs.resetDiffs();
+    threads.setConversationId(null);
+    setMessageQueue([]);
+    setOpenTabs([]);
+  }, [conversation, diffs, threads]);
+
+  const toggleWorkMode = useCallback(() => {
+    const cur = normalizeToWorkModeId(categoriesHook.activeCategory);
+    const next: WorkModeId = cur === "code" ? "work" : "code";
+    resetComposerForWorkModeChange();
+    void categoriesHook.setActiveCategory(next);
+    toast.info("Switched mode", WORK_MODES[next].name);
+  }, [categoriesHook.activeCategory, categoriesHook.setActiveCategory, toast, resetComposerForWorkModeChange]);
+
+  const handleAddProjectRef = useRef(handleAddProject);
+  handleAddProjectRef.current = handleAddProject;
+  const toggleWorkModeRef = useRef(toggleWorkMode);
+  toggleWorkModeRef.current = toggleWorkMode;
+  const setActiveViewRef = useRef(settings.setActiveView);
+  setActiveViewRef.current = settings.setActiveView;
+
+  useEffect(() => {
+    const k = window.kletron;
+    if (!k?.onAddWorkspaceRequest) return;
+    const u1 = k.onAddWorkspaceRequest(() => void handleAddProjectRef.current());
+    const u2 = k.onOpenSettingsRequest?.(() => setActiveViewRef.current("settings"));
+    const u3 = k.onToggleWorkModeRequest?.(() => toggleWorkModeRef.current());
+    return () => {
+      u1();
+      u2?.();
+      u3?.();
+    };
+  }, []);
 
   function handleThreadSelect(threadId: string) {
     if (threadId === threads.conversationId) return;
@@ -1108,10 +1180,14 @@ export default function App() {
                         />
                       </div>
                       <div className="flex items-center justify-between gap-4 px-3 py-2">
-                        <div className="text-sm font-medium text-text-primary">Connection status</div>
-                        <span className={`flex items-center gap-1.5 text-xs ${backendReady ? "text-status-success-text" : "text-status-error-text"}`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${backendReady ? "bg-status-success" : "bg-status-error"}`} />
-                          {backendReady ? "Connected" : "Disconnected"}
+                        <div className="text-sm font-medium text-text-primary">Backend reachability</div>
+                        <span className={`flex items-center gap-1.5 text-xs ${backendConnected ? "text-status-success-text" : "text-status-error-text"}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${backendConnected ? "bg-status-success" : "bg-status-error"}`} />
+                          {!backendUrlValid
+                            ? "Invalid URL"
+                            : backendConnected
+                              ? "Reachable"
+                              : "Unreachable"}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-4 px-3 py-2">
@@ -1459,8 +1535,29 @@ export default function App() {
         onWorkspaceSelect={handleWorkspaceSelect}
         onAddWorkspace={handleAddProject}
         showTrafficLights={false}
+        openEditorLabel={isCodeMode ? "VS Code" : "Folder"}
+        openEditorTitle={
+          isCodeMode
+            ? "Open workspace in Visual Studio Code"
+            : "Open workspace folder in Finder / File Explorer"
+        }
+        openActionVariant={isCodeMode ? "vscode" : "native-folder"}
         onOpen={() => {
-          try { (window as any).kletron?.openInVSCode?.(); } catch { /* ignore */ }
+          try {
+            const k = (
+              window as {
+                kletron?: {
+                  openInVSCode?: (p?: string) => Promise<boolean>;
+                  openWorkspaceInSystemFileManager?: (p?: string) => Promise<boolean>;
+                };
+              }
+            ).kletron;
+            const p = workspace.workspace?.path;
+            if (isCodeMode) void k?.openInVSCode?.(p);
+            else void k?.openWorkspaceInSystemFileManager?.(p);
+          } catch {
+            /* ignore */
+          }
         }}
         onCommit={
           isCodeMode
@@ -1506,34 +1603,42 @@ export default function App() {
             : undefined
         }
         changesVisible={isCodeMode ? changesVisible : false}
+        onToggleSourceControl={
+          isCodeMode ? () => setRightSidebarVisible((p) => !p) : undefined
+        }
+        sourceControlVisible={isCodeMode ? rightSidebarVisible : false}
         gitDiffStats={isCodeMode ? (git.diffStats ?? undefined) : undefined}
-        workCategories={BUILT_IN_CATEGORIES.map(c => ({ id: c.id, name: c.name, description: c.description, color: c.color }))}
-        activeWorkCategoryId={categoriesHook.activeCategory}
-        onWorkCategorySelect={(categoryId) => {
-          void categoriesHook.setActiveCategory(categoryId);
-          const label =
-            categoriesHook.allCategories.find((c) => c.id === categoryId)?.name ?? categoryId;
-          toast.info("Switched mode", label);
-        }}
       />
 
-      {isCodeMode && activeWorkspaceId && (
-        <div className="flex shrink-0 items-center border-b border-border-subtle/60 bg-bg-surface/60 px-3 py-1.5">
-          <CodeRepoConnectorStrip
-            apiOrigin={backendUrlTrimmed}
-            workspaceId={activeWorkspaceId}
-            getRequestHeaders={getAgentRequestHeaders}
-            onOpenConnectorsPortal={() =>
-              openPortalPath(`/app/app/${encodeURIComponent(activeWorkspaceId)}/connectors`)
-            }
-          />
-        </div>
-      )}
+      <AgentSessionChrome
+        workMode={desktopWorkMode}
+        onWorkModeChange={(mode) => {
+          const prev = normalizeToWorkModeId(categoriesHook.activeCategory);
+          if (mode === prev) return;
+          resetComposerForWorkModeChange();
+          void categoriesHook.setActiveCategory(mode);
+          toast.info("Switched mode", WORK_MODES[mode].name);
+        }}
+        workspaceName={workspace.workspace?.name ?? workspace.workspace?.path?.split("/").pop() ?? null}
+        workspaceRootPath={workspace.workspace?.path ?? null}
+        codeModeSecondRow={
+          isCodeMode && activeWorkspaceId ? (
+            <CodeRepoConnectorStrip
+              apiOrigin={backendUrlTrimmed}
+              workspaceId={activeWorkspaceId}
+              getRequestHeaders={getAgentRequestHeaders}
+              onOpenConnectorsPortal={() =>
+                openPortalPath(`/app/app/${encodeURIComponent(activeWorkspaceId)}/connectors`)
+              }
+            />
+          ) : undefined
+        }
+      />
 
       <DesktopPrimaryNav activeView={settings.activeView} onSelect={(v) => settings.setActiveView(v)} />
 
       {/* ── Three-Pane Body ── */}
-      <div className="flex flex-1 min-h-0 relative">
+      <div className="app-region-no-drag flex flex-1 min-h-0 relative">
         {/* Left Sidebar: Project Navigation */}
         {sidebarVisible && (
           <>
@@ -1545,6 +1650,7 @@ export default function App() {
             onThreadSelect={handleThreadSelect}
             onNewThreadInProject={handleNewThreadInProject}
             onAddProject={handleAddProject}
+            showAddProjectButton={false}
             onSettings={() => settings.setActiveView("settings")}
             onRenameThread={(threadId, newTitle) => {
               threads.startEditThread({ id: threadId, title: newTitle });
@@ -1564,9 +1670,9 @@ export default function App() {
         )}
 
         {/* Center: Conversation Workspace */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Conversation Messages */}
-          <div className="flex-1 overflow-y-auto scrollbar-elegant flex flex-col">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-elegant">
             <MessageList
               events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
               streaming={conversation.streaming}
@@ -1613,7 +1719,7 @@ export default function App() {
           </div>
 
           {/* Input Bar */}
-          <div className="relative">
+          <div className="relative z-10 shrink-0 app-region-no-drag">
             {/* Slash command menu */}
             <SlashCommandMenu
               open={slashMenuOpen}
@@ -1682,6 +1788,7 @@ export default function App() {
                   size="sm"
                   direction="up"
                   loading={agentGraphsLoading}
+                  menuAlign="end"
                 />
               }
               modelSelector={
@@ -1693,6 +1800,8 @@ export default function App() {
                   size="sm"
                   direction="up"
                   status={agentSession.llmStatus}
+                  menuAlign="end"
+                  statusTooltip={agentSession.llmStatusDetail}
                 />
               }
               approvalSelector={
@@ -1730,8 +1839,8 @@ export default function App() {
           )}
         </div>
 
-        {/* Middle Panel: Uncommitted Changes Diffs */}
-        {changesVisible && (
+        {/* Middle Panel: Uncommitted Changes Diffs (Code mode only) */}
+        {isCodeMode && changesVisible && (
           <>
           <ResizeHandle
             onMouseDown={changesPanel.startDrag}
@@ -1755,8 +1864,8 @@ export default function App() {
           </>
         )}
 
-        {/* Right Sidebar: Source Control */}
-        {rightSidebarVisible && (
+        {/* Right Sidebar: Source Control (Code mode only — Work mode hides Git UI) */}
+        {isCodeMode && rightSidebarVisible && (
           <>
           <ResizeHandle
             onMouseDown={rightPanel.startDrag}

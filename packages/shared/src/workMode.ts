@@ -90,7 +90,18 @@ export const WORK_MODES: Record<WorkModeId, WorkModeDefinition> = {
     color: "#6366F1",
     defaultPrompt:
       "You are a thoughtful assistant for general work: clear writing, research, and planning. Do not assume a software engineering task unless the user asks. Prefer concise, well-structured answers.",
-    availableTools: ["web_search", "fetch_url", "read_file", "write_file", "calculate"],
+    /** Read-only repo discovery is allowed so users can ask “what’s in this workspace?” without switching to Code mode; terminal/git/bash remain Code-only. */
+    availableTools: [
+      "web_search",
+      "fetch_url",
+      "read_file",
+      "write_file",
+      "calculate",
+      "list_files",
+      "search_code",
+      "describe_structure",
+      "repo_metrics",
+    ],
     requiredContextTypes: [],
     capabilities: {
       canEditFiles: true,

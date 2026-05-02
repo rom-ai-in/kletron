@@ -12,6 +12,7 @@ import {
     getSkillBySlug,
     updateSkill,
 } from "@kletron/server/services/skillsService";
+import { getWorkspaceById } from "@kletron/server/services/workspaceService";
 import { skillUpdateSchema } from "@kletron/shared/skills/types";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +48,17 @@ export async function GET(
     const auth = await requireAppRouteAuth(request);
     const { slug } = await params;
 
-    const skill = await getSkillBySlug(slug);
+    const url = new URL(request.url);
+    const workspaceId = url.searchParams.get("workspaceId")?.trim();
+    let workspaceRootPath: string | undefined;
+    if (workspaceId && auth?.userId) {
+        const ws = await getWorkspaceById(workspaceId, auth.userId);
+        workspaceRootPath = ws?.rootPath?.trim();
+    }
+
+    const skill = await getSkillBySlug(slug, {
+        ...(workspaceRootPath ? { workspaceRootPath } : {}),
+    });
     if (skill) {
         if (skill.source === "user") {
             if (!auth) {
@@ -78,9 +89,18 @@ export async function PUT(
     }
     try {
         const { slug } = await params;
+        const url = new URL(request.url);
+        const workspaceId = url.searchParams.get("workspaceId")?.trim();
+        let workspaceRootPath: string | undefined;
+        if (workspaceId) {
+            const ws = await getWorkspaceById(workspaceId, auth.userId);
+            workspaceRootPath = ws?.rootPath?.trim();
+        }
         const body = await request.json();
         const validated = skillUpdateSchema.parse(body);
-        const updated = await updateSkill(slug, validated, auth.userId);
+        const updated = await updateSkill(slug, validated, auth.userId, {
+            ...(workspaceRootPath ? { workspaceRootPath } : {}),
+        });
         if (!updated) {
             return NextResponse.json({ error: "Not found" }, { status: 404 });
         }
@@ -109,7 +129,16 @@ export async function DELETE(
     }
     try {
         const { slug } = await params;
-        const ok = await deleteSkill(slug, auth.userId);
+        const url = new URL(request.url);
+        const workspaceId = url.searchParams.get("workspaceId")?.trim();
+        let workspaceRootPath: string | undefined;
+        if (workspaceId) {
+            const ws = await getWorkspaceById(workspaceId, auth.userId);
+            workspaceRootPath = ws?.rootPath?.trim();
+        }
+        const ok = await deleteSkill(slug, auth.userId, {
+            ...(workspaceRootPath ? { workspaceRootPath } : {}),
+        });
         if (!ok) {
             return NextResponse.json({ error: "Not found" }, { status: 404 });
         }

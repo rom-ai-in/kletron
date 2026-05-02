@@ -160,9 +160,9 @@ export default function ConfigOverviewPage() {
           />
           <ConfigCard
             title="Graphs"
-            description="DB-backed agent graphs (nodes + edges)."
+            description="Edit DAGs, inspect structure, run live executions."
             icon={<ListTree className="h-4 w-4 text-text-muted" />}
-            href="/app/config/graphs"
+            href="/app/agent-graphs"
             meta={`${graphsCount} graphs`}
           />
           <ConfigCard
@@ -205,7 +205,7 @@ export default function ConfigOverviewPage() {
         <div className="mt-6">
           <Panel className="p-4">
             <p className="text-xs text-text-secondary">
-              Tip: each section is deep-linkable. You can share links like <span className="font-mono">/config/graphs</span>{" "}
+              Tip: each section is deep-linkable. You can share links like <span className="font-mono">/app/agent-graphs</span>{" "}
               with your team.
             </p>
           </Panel>

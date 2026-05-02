@@ -163,6 +163,14 @@ export type AgentGraphState = {
     /** Accumulated conversation history for multi-turn sessions. */
     conversationHistory?: AgentEvent[];
     /**
+     * Runtime-loaded skill slugs for this session (progressive disclosure via `load_skill` or slash preflight).
+     * Order is significant: later entries override earlier ones when instructions conflict.
+     * Merged into the system prompt **after** pinned graph `react.skillIds` (pinned first, then loaded).
+     */
+    loadedSkillIds?: string[];
+    /** Optional audit trail for UI/debug when skills are loaded at runtime. */
+    skillLoads?: Array<{ slug: string; at: string; reason?: string }>;
+    /**
      * LangGraph checkpoint metadata — present when a run was interrupted
      * and is awaiting human approval to resume.
      */

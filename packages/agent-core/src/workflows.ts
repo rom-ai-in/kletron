@@ -5,6 +5,7 @@ import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { getGraphNodeOrder, buildInitialState } from "@kletron/server/services/agentGraphRuntime";
 import { agentGraphExecutor } from "@kletron/server/services/agentGraphExecutor";
+import { preflightMissionForNewRun } from "@kletron/server/services/skillSlashPreflight";
 
 const OBJECTID_RE = /^[0-9a-fA-F]{24}$/;
 
@@ -83,10 +84,23 @@ export async function runWorkflow(
   for (const node of graphRecord.nodes) {
     initialNodeStatuses[node.id] = "PENDING";
   }
+  const pre = options?.workspaceId
+    ? await preflightMissionForNewRun(message, options.workspaceId)
+    : null;
+  const initialState = pre
+    ? {
+        ...buildInitialState(graphRecord, pre.mission),
+        mission: pre.mission,
+        userInput: pre.mission,
+        loadedSkillIds: pre.loadedSkillIds.length ? pre.loadedSkillIds : undefined,
+        skillLoads: pre.skillLoads.length ? pre.skillLoads : undefined,
+      }
+    : buildInitialState(graphRecord, message);
+
   await agentGraphRunService.updateRunStatus(runId, "RUNNING", {
     nodeOrder,
     nodeStatuses: initialNodeStatuses,
-    state: buildInitialState(graphRecord, message),
+    state: initialState,
   } as any);
 
   return agentGraphExecutor.executeRunStreaming(runId, {

@@ -14,10 +14,16 @@ type AgentGraphSummary = {
 export function AgentGraphCard({
     graph,
     onView,
+    onInspect,
+    onQuickRun,
     onDelete,
 }: {
     graph: AgentGraphSummary;
     onView?: () => void;
+    /** Read-only nodes/edges overview (e.g. config explorer modal). */
+    onInspect?: () => void;
+    /** Start a real graph run and go to the run page. */
+    onQuickRun?: () => void;
     onDelete?: () => void;
 }) {
     return (
@@ -40,7 +46,17 @@ export function AgentGraphCard({
                         )}
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                    {onInspect && (
+                        <Button size="sm" variant="ghost" onClick={onInspect}>
+                            Inspect
+                        </Button>
+                    )}
+                    {onQuickRun && (
+                        <Button size="sm" variant="secondary" onClick={onQuickRun}>
+                            Run
+                        </Button>
+                    )}
                     <Button size="sm" variant="secondary" onClick={onView}>
                         Open
                     </Button>

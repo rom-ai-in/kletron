@@ -464,7 +464,8 @@ export const kletronGetSkill = tool(
     },
     {
         name: "kletron_get_skill",
-        description: "Fetch one skill by slug, including the full body.",
+        description:
+            "Fetch one skill by slug from the library (admin/catalog), including the full body. For agent runtime loading gated by workspace enablement, use load_skill instead.",
         schema: z.object({
             slug: z.string().regex(SLUG_REGEX, "invalid slug"),
         }),

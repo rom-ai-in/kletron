@@ -60,7 +60,11 @@ export interface ProjectSidebarProps {
   onNewThreadInProject?: (projectId: string) => void;
   /** Add a new project via folder picker */
   onAddProject?: () => void;
+  /** When false, hide the top "Add new project" button (desktop: use TitleBar workspace menu + shortcuts). Default true. */
+  showAddProjectButton?: boolean;
   onSettings?: () => void;
+  /** When false, hide the settings control at the bottom of the sidebar. Default true. */
+  showThreadsSettingsButton?: boolean;
   onRenameThread?: (threadId: string, newTitle: string) => void;
   onArchiveThread?: (threadId: string) => void;
   onDeleteThread?: (threadId: string) => void;
@@ -112,7 +116,9 @@ export function ProjectSidebar({
   onThreadSelect,
   onNewThreadInProject,
   onAddProject,
+  showAddProjectButton = true,
   onSettings,
+  showThreadsSettingsButton = true,
   onRenameThread,
   onArchiveThread,
   onDeleteThread,
@@ -179,7 +185,7 @@ export function ProjectSidebar({
     setEditingTitle('');
   }
 
-  const showTopSection = reviewQueueCount > 0 || Boolean(onAddProject);
+  const showTopSection = reviewQueueCount > 0 || Boolean(onAddProject && showAddProjectButton);
 
   return (
     <div
@@ -206,7 +212,7 @@ export function ProjectSidebar({
             </button>
           )}
 
-          {onAddProject && (
+          {onAddProject && showAddProjectButton && (
             <button
               type="button"
               onClick={onAddProject}
@@ -246,16 +252,6 @@ export function ProjectSidebar({
               title="New thread"
             >
               New
-            </button>
-          )}
-          {onSettings && (
-            <button
-              type="button"
-              onClick={onSettings}
-              className="rounded-md p-1 text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
-              title="Settings"
-            >
-              <Settings className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -487,6 +483,21 @@ export function ProjectSidebar({
           </>
         )}
       </div>
+
+      {/* ── Bottom: settings (aligned with thread column width) ── */}
+      {onSettings && showThreadsSettingsButton && (
+        <div className="flex-none border-t border-white/[0.06] px-2 py-2">
+          <button
+            type="button"
+            onClick={onSettings}
+            className="flex w-full items-center justify-center gap-2 rounded-lg px-2 py-2 text-[11px] font-medium text-text-muted transition-colors hover:bg-state-hover hover:text-text-primary"
+            title="Settings"
+          >
+            <Settings className="h-3.5 w-3.5 shrink-0" />
+            <span>Settings</span>
+          </button>
+        </div>
+      )}
 
     </div>
   );

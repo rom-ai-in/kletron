@@ -1,3 +1,8 @@
+/**
+ * Static catalog for docs / design-system demos only.
+ * Do **not** use `GraphOption.id` as `graphId` in API calls — persisted graphs live in
+ * `agent_graphs` and are identified by a 24-hex Mongo ObjectId from GET `/api/agent-graphs`.
+ */
 export type PhaseDefinition = {
   id: string;
   label: string;

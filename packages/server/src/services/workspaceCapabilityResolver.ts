@@ -10,7 +10,7 @@
 // Used by:
 //   - The bundled MCP server, to filter its tool list per workspace.
 //   - The MCP client, to know which external servers to connect to.
-//   - The agent graph executor, to resolve skill prompts at run time.
+//   - The agent graph executor, for the enabled-tool set and enabled skill list (skill **prompt** text is merged in the executor from graph `skillIds` + run `loadedSkillIds`, not here).
 
 import { resolveWorkspaceSkills } from "./skillsService";
 import {

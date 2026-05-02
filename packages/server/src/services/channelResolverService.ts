@@ -97,21 +97,15 @@ export async function resolveChannelRouting(params: {
         graphId = ctx.graphOverrideId.trim();
     }
 
-    let graph = graphId ? await agentGraphService.getGraph(graphId) : null;
-    if (!graph) {
-        const all = await agentGraphService.listGraphs();
-        graph = all[0] ?? null;
-        if (!graph) {
-            return {
-                ok: false,
-                reason: "no_graph",
-                message: "No agent graph is available. Seed or create a graph in Kletron first.",
-            };
-        }
-        graphId = graph._id!.toString();
-    } else {
-        graphId = graph._id!.toString();
+    const graph = await agentGraphService.resolveGraphForStage(graphId || undefined);
+    if (!graph?._id) {
+        return {
+            ok: false,
+            reason: "no_graph",
+            message: "No agent graph is available. Seed or create a graph in Kletron first.",
+        };
     }
+    graphId = graph._id.toString();
 
     return {
         ok: true,

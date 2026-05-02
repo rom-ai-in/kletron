@@ -17,6 +17,7 @@ import {
     type SkillCreateInput,
     type SkillRecord,
 } from "@kletron/shared";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 import { useSkillsLibrary } from "../../../../hooks/useSkillsLibrary";
 
 const EMPTY_BODY = `## When to use this skill
@@ -90,9 +91,10 @@ function toCreateInput(state: EditorState): SkillCreateInput {
 }
 
 export default function SkillsLibraryPage() {
+    const { activeWorkspaceId } = useWorkspace();
     const [search, setSearch] = useState("");
     const { skills, isLoading, error, createSkill, updateSkill, deleteSkill } =
-        useSkillsLibrary({ search });
+        useSkillsLibrary({ search, workspaceId: activeWorkspaceId });
     const [editor, setEditor] = useState<EditorState>(blankEditor);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -165,7 +167,18 @@ export default function SkillsLibraryPage() {
                         </h1>
                         <p className="text-sm text-text-muted">
                             Reusable agent skills (SKILL.md); enable per workspace from workspace
-                            settings
+                            settings.
+                            {activeWorkspaceId ? (
+                                <>
+                                    {" "}
+                                    With a workspace selected, the repo is the source of truth:
+                                    skills live at{" "}
+                                    <code className="rounded bg-bg-elevated px-1 py-0.5 text-xs">
+                                        {".kletron/skills/<slug>/SKILL.md"}
+                                    </code>{" "}
+                                    and override matching entries in the library.
+                                </>
+                            ) : null}
                         </p>
                     </div>
                 </div>

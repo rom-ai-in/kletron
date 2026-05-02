@@ -5,7 +5,8 @@ import { joinApiOrigin, mergeRequestHeaders, type GetRequestHeaders } from "@kle
 export type SlashSkillRow = { slug: string; description: string; name?: string };
 
 /**
- * Loads the global skills library for slash-command autocomplete.
+ * Loads the skills library for slash-command autocomplete (GET /api/skills).
+ * Pass `workspaceId` when a workspace is active so repo-native `.kletron/skills` entries are merged in.
  * Uses the same origin / auth pattern as useAgentSession / useSessionStream.
  */
 export function useSlashSkills(options: {
@@ -13,6 +14,8 @@ export function useSlashSkills(options: {
   getRequestHeaders?: GetRequestHeaders;
   /** When false, skips fetch (default true). */
   enabled?: boolean;
+  /** When set, includes merged skills from this workspace’s `.kletron/skills` on disk. */
+  workspaceId?: string | null;
 }): { skills: SlashSkillRow[] } {
   const getRequestHeadersRef = useRef(options.getRequestHeaders);
   getRequestHeadersRef.current = options.getRequestHeaders;
@@ -26,7 +29,9 @@ export function useSlashSkills(options: {
     void (async () => {
       try {
         const headers = await mergeRequestHeaders(getRequestHeadersRef.current);
-        const url = joinApiOrigin(options.apiOrigin, "/api/skills?limit=200");
+        const params = new URLSearchParams({ limit: "200" });
+        if (options.workspaceId) params.set("workspaceId", options.workspaceId);
+        const url = joinApiOrigin(options.apiOrigin, `/api/skills?${params.toString()}`);
         const res = await fetch(url, { headers });
         if (!res.ok) throw new Error(String(res.status));
         const data = (await res.json()) as { skills?: SlashSkillRow[] };
@@ -38,7 +43,7 @@ export function useSlashSkills(options: {
     return () => {
       cancelled = true;
     };
-  }, [options.apiOrigin, enabled]);
+  }, [options.apiOrigin, options.workspaceId, enabled]);
 
   return { skills };
 }

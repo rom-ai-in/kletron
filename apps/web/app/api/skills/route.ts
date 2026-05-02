@@ -12,6 +12,7 @@ import {
     createSkill,
     listSkills,
 } from "@kletron/server/services/skillsService";
+import { getWorkspaceById } from "@kletron/server/services/workspaceService";
 import { skillCreateSchema } from "@kletron/shared/skills/types";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,13 @@ export async function GET(request: Request) {
                 ? null
                 : auth?.userId;
 
+        let workspaceRootPath: string | undefined;
+        const workspaceId = url.searchParams.get("workspaceId")?.trim();
+        if (workspaceId && auth?.userId) {
+            const ws = await getWorkspaceById(workspaceId, auth.userId);
+            workspaceRootPath = ws?.rootPath?.trim();
+        }
+
         const records = await listSkills({
             tag: url.searchParams.get("tag") ?? undefined,
             search: url.searchParams.get("search") ?? undefined,
@@ -33,6 +41,7 @@ export async function GET(request: Request) {
                 undefined,
             viewerUserId,
             limit: Number(url.searchParams.get("limit") ?? 200),
+            ...(workspaceRootPath ? { workspaceRootPath } : {}),
         });
         return NextResponse.json({ skills: records });
     } catch (error) {
@@ -50,9 +59,24 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     try {
-        const body = await request.json();
-        const validated = skillCreateSchema.parse(body);
-        const skill = await createSkill(validated, auth.userId);
+        const body = (await request.json()) as Record<string, unknown>;
+        const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
+        const { workspaceId: _w, ...skillBody } = body;
+        const validated = skillCreateSchema.parse(skillBody);
+        let workspaceRootPath: string | undefined;
+        if (workspaceId && auth.userId) {
+            const ws = await getWorkspaceById(workspaceId, auth.userId);
+            workspaceRootPath = ws?.rootPath?.trim();
+            if (!workspaceRootPath) {
+                return NextResponse.json(
+                    { error: "Workspace not found or has no root path." },
+                    { status: 400 }
+                );
+            }
+        }
+        const skill = await createSkill(validated, auth.userId, {
+            ...(workspaceRootPath ? { workspaceRootPath } : {}),
+        });
         return NextResponse.json({ skill }, { status: 201 });
     } catch (error) {
         if (error instanceof ZodError) {

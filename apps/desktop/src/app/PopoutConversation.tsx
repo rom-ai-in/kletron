@@ -197,6 +197,8 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
             size="sm"
             direction="up"
             status={agentSession.llmStatus}
+            menuAlign="end"
+            statusTooltip={agentSession.llmStatusDetail}
           />
         }
         approvalSelector={

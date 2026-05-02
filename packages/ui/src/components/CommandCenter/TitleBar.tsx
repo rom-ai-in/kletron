@@ -4,11 +4,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Play,
   FolderOpen,
+  Code2,
   GitCommitHorizontal,
   TerminalSquare,
   Share2,
   ChevronDown,
   GitCompareArrows,
+  PanelRight,
   Upload,
   GitPullRequest,
   Loader2,
@@ -17,7 +19,6 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { TrafficLights } from '../ui/TrafficLights';
-import { CategorySelector, type WorkCategory } from './CategorySelector';
 
 export interface GitDiffStats {
   additions: number;
@@ -53,8 +54,14 @@ export interface TitleBarProps {
   gitDiffStats?: GitDiffStats | null;
   /** Show custom traffic light dots (set false in Electron where native ones exist) */
   showTrafficLights?: boolean;
-  /** Callbacks for top-bar actions */
+  /** Callbacks for top-bar actions — opens workspace in external editor (e.g. VS Code) */
   onOpen?: () => void;
+  /** Label for the editor button (default: "Editor") */
+  openEditorLabel?: string;
+  /** Tooltip for the editor button */
+  openEditorTitle?: string;
+  /** Desktop: Code mode shows VS Code icon; Work mode shows folder icon for native reveal */
+  openActionVariant?: 'vscode' | 'native-folder';
   onCommit?: () => void;
   onPush?: () => void;
   onCreatePR?: () => void;
@@ -65,14 +72,11 @@ export interface TitleBarProps {
   onToggleTerminal?: () => void;
   onToggleChanges?: () => void;
   changesVisible?: boolean;
+  /** Right source-control sidebar (e.g. Unstaged / Staged file list) */
+  onToggleSourceControl?: () => void;
+  sourceControlVisible?: boolean;
   onShare?: () => void;
   onRun?: () => void;
-  /** Work categories for dropdown */
-  workCategories?: WorkCategory[];
-  /** Currently active work category ID */
-  activeWorkCategoryId?: string;
-  /** Called when user selects a work category from dropdown */
-  onWorkCategorySelect?: (categoryId: string) => void;
 }
 
 export function TitleBar({
@@ -97,11 +101,13 @@ export function TitleBar({
   onToggleTerminal,
   onToggleChanges,
   changesVisible,
+  onToggleSourceControl,
+  sourceControlVisible,
   onShare,
   onRun,
-  workCategories,
-  activeWorkCategoryId,
-  onWorkCategorySelect,
+  openEditorLabel = 'Folder',
+  openEditorTitle = 'Open workspace folder in external editor',
+  openActionVariant,
 }: TitleBarProps) {
   const [gitMenuOpen, setGitMenuOpen] = useState(false);
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
@@ -128,15 +134,15 @@ export function TitleBar({
   return (
     <header className={`relative z-50 flex h-9 items-center justify-between glass-titlebar px-4 app-region-drag ${!showTrafficLights ? 'pl-[76px]' : ''}`}>
       {/* Left: traffic lights + workspace name */}
-      <div className="flex items-center gap-3 min-w-0 flex-shrink-0">
+      <div className="flex min-w-0 flex-shrink-0 items-center gap-3 app-region-no-drag">
         {showTrafficLights && <TrafficLights className="app-region-no-drag" />}
         <div className="text-[11px] font-medium text-text-muted truncate max-w-[120px]">
           {workspaceName}
         </div>
       </div>
 
-      {/* Center: thread title (replaces tab bar) */}
-      <div className="flex-1 flex items-center justify-center min-w-0 px-4">
+      {/* Center: thread title (replaces tab bar) — must not inherit titlebar drag */}
+      <div className="flex-1 flex items-center justify-center min-w-0 px-4 app-region-no-drag">
         {center ?? (
           threadTitle && (
             <span className="text-[13px] font-medium text-text-primary truncate max-w-[400px]">
@@ -148,15 +154,6 @@ export function TitleBar({
 
       {/* Right: action buttons */}
       <div className="flex items-center gap-1 app-region-no-drag flex-shrink-0">
-        {/* Work category selector */}
-        {workCategories && workCategories.length > 0 && onWorkCategorySelect && (
-          <CategorySelector
-            categories={workCategories}
-            activeCategoryId={activeWorkCategoryId || 'code'}
-            onCategorySelect={onWorkCategorySelect}
-          />
-        )}
-
         {/* Workspace selector dropdown */}
         {workspaceSelectorLabel && (workspaceItems && workspaceItems.length > 0 ? (
           <div className="relative" ref={wsMenuRef}>
@@ -252,16 +249,20 @@ export function TitleBar({
           </button>
         )}
 
-        {/* Open button */}
+        {/* Open workspace in external IDE */}
         {onOpen && (
           <button
             type="button"
             onClick={onOpen}
             className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150"
-            title="Open in editor"
+            title={openEditorTitle}
           >
-            <FolderOpen className="h-3 w-3" />
-            Open
+            {openActionVariant === 'vscode' ? (
+              <Code2 className="h-3 w-3" />
+            ) : (
+              <FolderOpen className="h-3 w-3" />
+            )}
+            {openEditorLabel}
           </button>
         )}
 
@@ -334,7 +335,7 @@ export function TitleBar({
         )}
 
         {/* Separator */}
-        {(onOpen || hasGitActions) && (onToggleTerminal || onToggleChanges || onShare || gitDiffStats) && (
+        {(onOpen || hasGitActions) && (onToggleTerminal || onToggleChanges || onToggleSourceControl || onShare || gitDiffStats) && (
           <div className="w-px h-3.5 bg-white/[0.08] mx-1" />
         )}
 
@@ -347,6 +348,18 @@ export function TitleBar({
             title="Toggle uncommitted changes (⌘⇧G)"
           >
             <GitCompareArrows className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+        {/* Source control sidebar (Unstaged / Staged) */}
+        {onToggleSourceControl && (
+          <button
+            type="button"
+            onClick={onToggleSourceControl}
+            className={`rounded-md p-1.5 transition-all duration-150 ${sourceControlVisible ? 'text-accent-cyan bg-accent-cyan/10' : 'text-text-muted hover:text-text-primary hover:bg-white/[0.06]'}`}
+            title="Toggle source control sidebar (⌘⇧B)"
+          >
+            <PanelRight className="h-3.5 w-3.5" />
           </button>
         )}
 

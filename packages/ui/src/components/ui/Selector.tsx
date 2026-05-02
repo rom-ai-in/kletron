@@ -18,9 +18,16 @@ export type SelectorProps = {
     status?: 'success' | 'error' | 'loading' | 'none';
     loading?: boolean;
     fullWidth?: boolean;
+    /**
+     * Horizontal alignment of the dropdown to the trigger.
+     * Use `end` when the selector sits on the right edge of the window so the menu opens inward and is not clipped.
+     */
+    menuAlign?: 'start' | 'end';
+    /** Shown as native tooltip on the trigger (e.g. LLM health error reason). */
+    statusTooltip?: string | null;
 };
 
-export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSelect, direction = 'up', size = 'md', status = 'none', loading = false, fullWidth = false }) => {
+export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSelect, direction = 'up', size = 'md', status = 'none', loading = false, fullWidth = false, menuAlign = 'start', statusTooltip }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -60,6 +67,7 @@ export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSel
                     aria-expanded={isOpen}
                     aria-haspopup="listbox"
                     aria-label={`${label}: ${selectedOption?.label || value}`}
+                    title={statusTooltip ?? undefined}
                 >
                     <div className="flex items-center gap-1.5 min-w-0">
                         <span className={`font-bold text-text-muted uppercase tracking-wider shrink-0 ${isSmall ? 'text-[9px]' : 'text-[10px]'}`}>{label}</span>
@@ -79,8 +87,8 @@ export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSel
                 <div
                     role="listbox"
                     aria-label={label}
-                    className={`absolute left-0 mb-1 bg-bg-surface border border-border-subtle rounded-lg shadow-xl overflow-y-auto max-h-60 z-[100] flex flex-col p-1 ${direction === 'up' ? 'bottom-full origin-bottom' : 'top-full mt-1 origin-top'
-                        } ${fullWidth ? 'w-full' : 'min-w-[180px]'}`}
+                    className={`absolute mb-1 bg-bg-surface border border-border-subtle rounded-lg shadow-xl overflow-y-auto max-h-60 z-[100] flex flex-col p-1 ${menuAlign === 'end' ? 'right-0 left-auto' : 'left-0'} ${direction === 'up' ? 'bottom-full origin-bottom' : 'top-full mt-1 origin-top'
+                        } ${fullWidth ? 'w-full' : 'min-w-[220px] max-w-[min(100vw-1.5rem,22rem)]'}`}
                 >
                     {options.map((option) => (
                         <button
@@ -96,8 +104,8 @@ export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSel
                                 }`}
                             type="button"
                         >
-                            <div className="flex flex-col gap-0.5">
-                                <div className="text-[11px] font-medium leading-tight flex items-center gap-1.5">
+                            <div className="min-w-0 flex flex-col gap-0.5">
+                                <div className="text-[11px] font-medium leading-tight flex items-center gap-1.5 break-words">
                                     {option.label}
                                     {option.hasWarning && (
                                         <span className="rounded-[4px] border border-status-warning-border bg-status-warning-bg px-1.5 py-0.5 text-[8.5px] font-bold text-status-warning-text whitespace-nowrap">
@@ -105,7 +113,7 @@ export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSel
                                         </span>
                                     )}
                                 </div>
-                                {option.sub && <div className="text-[9px] text-text-muted leading-tight">{option.sub}</div>}
+                                {option.sub && <div className="text-[9px] text-text-muted leading-snug break-words">{option.sub}</div>}
                             </div>
                             {option.id === value && <Check className="w-3 h-3 text-status-success-text" aria-hidden="true" />}
                         </button>
