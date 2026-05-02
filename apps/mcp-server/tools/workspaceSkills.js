@@ -152,6 +152,11 @@ class WorkspaceSkillsManager {
     }
 
     fallbackBaseline(allTools, categoryId) {
+        // NOTE: Kletron admin tools (kletron_create_graph etc.) are NOT in
+        // this list because they are LangChain tools registered in-process
+        // by the agent executor, not bundled MCP tools. The executor merges
+        // them into every run via `KLETRON_ADMIN_TOOL_NAMES` even when
+        // capability resolution falls through to permissive mode.
         const baseTools = [
             "list_files",
             "read_file",

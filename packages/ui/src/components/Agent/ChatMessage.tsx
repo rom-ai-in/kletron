@@ -57,7 +57,7 @@ export interface MessageBubbleProps {
 
 /**
  * Shared message bubble component.
- * - User messages: right-aligned, bordered, plain text
+ * - User messages: right-aligned, Cursor-style surface; actions sit in a reserved row below (hover)
  * - Assistant messages: left-aligned, transparent bg, markdown-rendered
  */
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
@@ -71,28 +71,53 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 }) => {
     const isUser = role === 'user';
 
+    if (isUser) {
+        return (
+            <div className={cn('group flex w-full flex-col items-end', className)}>
+                <div
+                    className={cn(
+                        'relative w-full max-w-[min(90%,36rem)] rounded-2xl border border-white/[0.09]',
+                        'bg-white/[0.05] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]',
+                        'px-3.5 py-2.5 text-[13px] leading-[1.5] text-text-primary',
+                        'transition-[border-color,box-shadow] duration-200',
+                        'group-hover:border-white/[0.14] group-hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08),0_0_0_1px_rgba(255,255,255,0.04)]',
+                    )}
+                >
+                    <div className="break-words whitespace-pre-wrap [word-break:break-word]">{content}</div>
+                </div>
+                {/* Reserved height: copy/edit stay below the bubble and clear the next message */}
+                {actions ? (
+                    <div
+                        className={cn(
+                            'mt-1.5 flex min-h-[28px] w-full max-w-[min(90%,36rem)] flex-row items-center justify-end gap-0.5 px-0.5',
+                            'pointer-events-none opacity-0 transition-opacity duration-150',
+                            'group-hover:pointer-events-auto group-hover:opacity-100',
+                            'focus-within:pointer-events-auto focus-within:opacity-100',
+                        )}
+                    >
+                        {actions}
+                    </div>
+                ) : null}
+            </div>
+        );
+    }
+
     return (
-        <div className={cn(`group flex flex-col ${isUser ? 'items-end' : 'items-start'}`, className)}>
-            <div
-                className={cn(
-                    'relative rounded-lg px-3 py-2 text-[12px]',
-                    isUser
-                        ? 'border border-border-strong bg-bg-elevated text-text-primary max-w-[90%] shadow-sm'
-                        : 'bg-transparent text-text-secondary w-full',
-                )}
-            >
-                {/* Content */}
-                <div className={cn('break-words', isUser ? 'text-text-primary' : 'text-text-secondary')}>
-                    {isUser ? content : <MarkdownRenderer content={content} />}
+        <div className={cn('group flex flex-col items-start', className)}>
+            <div className="relative w-full bg-transparent text-[12px] text-text-secondary">
+                <div className="break-words text-text-secondary">
+                    <MarkdownRenderer content={content} variant="chat" />
                 </div>
 
-                {/* Actions slot */}
-                {actions}
+                {actions ? (
+                    <div className="mt-0.5 flex justify-start opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                        {actions}
+                    </div>
+                ) : null}
 
-                {/* Timestamp (hover reveal, assistant only by default) */}
-                {!isUser && showTimestamp !== false && timestamp && (
-                    <div className="mt-0.5 flex items-center opacity-0 group-hover:opacity-100 transition-opacity justify-start">
-                        <span className="text-[9px] text-text-muted font-mono">{timestamp}</span>
+                {showTimestamp !== false && timestamp && (
+                    <div className="mt-0.5 flex items-center justify-start opacity-0 transition-opacity group-hover:opacity-100">
+                        <span className="font-mono text-[9px] text-text-muted">{timestamp}</span>
                     </div>
                 )}
             </div>

@@ -47,7 +47,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
     return (
         <div
             className={cn(
-                'flex items-center gap-0.5 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity',
+                'flex items-center gap-0.5',
                 isUser ? 'justify-end' : 'justify-start',
                 className,
             )}
@@ -57,7 +57,11 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
                 <button
                     type="button"
                     onClick={handleCopy}
-                    className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
+                    className={cn(
+                        'rounded-md p-1.5 text-text-muted transition-colors',
+                        'hover:bg-white/[0.07] hover:text-text-primary',
+                        'active:scale-[0.98]',
+                    )}
                     title={copied ? 'Copied!' : 'Copy message'}
                 >
                     {copied ? (
@@ -73,7 +77,11 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
                 <button
                     type="button"
                     onClick={() => onStartEdit(event.messageIndex!, event.content || '')}
-                    className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
+                    className={cn(
+                        'rounded-md p-1.5 text-text-muted transition-colors',
+                        'hover:bg-white/[0.07] hover:text-text-primary',
+                        'active:scale-[0.98]',
+                    )}
                     title="Edit and resend"
                 >
                     <Pencil className="w-3 h-3" />

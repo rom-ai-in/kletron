@@ -219,7 +219,12 @@ export type { UseAgentSessionReturn } from '../hooks/useAgentSession';
 export { useSessionStream, normalizeMessage } from '../hooks/useSessionStream';
 export type { Message, StreamStatus, TokenUsageForDisplay, UseSessionStreamOptions, UseSessionStreamReturn } from '../hooks/useSessionStream';
 export { useSessionEdits } from '../hooks/useSessionEdits';
-export type { SessionPendingEdit, UseSessionEditsOptions, UseSessionEditsReturn } from '../hooks/useSessionEdits';
+export type {
+    SessionPendingEdit,
+    SessionEditFlushNotice,
+    UseSessionEditsOptions,
+    UseSessionEditsReturn,
+} from '../hooks/useSessionEdits';
 
 // =============================================================================
 // EDITOR COMPONENTS (Monaco-based)

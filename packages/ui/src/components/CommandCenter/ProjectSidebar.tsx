@@ -171,39 +171,41 @@ export function ProjectSidebar({
     setEditingTitle('');
   }
 
+  const showTopSection = reviewQueueCount > 0 || Boolean(onAddProject);
+
   return (
     <div className={`flex flex-col h-full flex-shrink-0 glass-sidebar ${className}`} style={{ width: 260, ...style }}>
-      {/* ── Top section: Review queue + Add project ── */}
-      <div className="flex flex-col border-b border-border-subtle">
-        {/* Review Queue */}
-        {reviewQueueCount > 0 && (
-          <button
-            type="button"
-            onClick={onReviewQueueClick}
-            className="flex items-center gap-2 mx-2 mt-2 px-2 py-1.5 rounded-md border border-status-warning-border bg-status-warning-bg text-xs text-status-warning-text hover:brightness-110 transition-all"
-          >
-            <ClipboardCheck className="h-3.5 w-3.5" />
-            <span className="font-medium">{reviewQueueCount} awaiting review</span>
-          </button>
-        )}
+      {/* ── Top section: Review queue + Add project (omit wrapper when empty to avoid orphan divider) ── */}
+      {showTopSection && (
+        <div className="flex flex-col border-b border-border-subtle">
+          {reviewQueueCount > 0 && (
+            <button
+              type="button"
+              onClick={onReviewQueueClick}
+              className="flex items-center gap-2 mx-2 mt-2 px-2 py-1.5 rounded-md border border-status-warning-border bg-status-warning-bg text-xs text-status-warning-text hover:brightness-110 transition-all"
+            >
+              <ClipboardCheck className="h-3.5 w-3.5" />
+              <span className="font-medium">{reviewQueueCount} awaiting review</span>
+            </button>
+          )}
 
-        {/* Add new project button — Codex style */}
-        {onAddProject && (
-          <button
-            type="button"
-            onClick={onAddProject}
-            className="flex items-center justify-between mx-2 my-2 px-3 py-2 rounded-lg border border-white/[0.06] bg-white/[0.02] text-[12px] text-text-secondary hover:border-border-strong hover:bg-state-hover hover:text-text-primary transition-all duration-200"
-          >
-            <div className="flex items-center gap-2">
-              <FolderPlus className="h-3.5 w-3.5 text-text-muted" />
-              <span className="font-medium">Add new project</span>
-            </div>
-            <kbd className="flex items-center gap-0.5 rounded bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-mono text-text-muted">
-              <span>&#8984;</span><span>O</span>
-            </kbd>
-          </button>
-        )}
-      </div>
+          {onAddProject && (
+            <button
+              type="button"
+              onClick={onAddProject}
+              className="flex items-center justify-between mx-2 my-2 px-3 py-2 rounded-lg border border-white/[0.06] bg-white/[0.02] text-[12px] text-text-secondary hover:border-border-strong hover:bg-state-hover hover:text-text-primary transition-all duration-200"
+            >
+              <div className="flex items-center gap-2">
+                <FolderPlus className="h-3.5 w-3.5 text-text-muted" />
+                <span className="font-medium">Add new project</span>
+              </div>
+              <kbd className="flex items-center gap-0.5 rounded bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-mono text-text-muted">
+                <span>&#8984;</span><span>O</span>
+              </kbd>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Threads section header ── */}
       <div className="flex items-center justify-between px-3 py-2.5 mt-1 gap-2">

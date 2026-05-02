@@ -15,6 +15,7 @@ type StreamChunk =
   | { type: "init"; payload: { runId: string; graphId: string } }
   | { type: "update"; payload: AgentWorkflowUpdate }
   | { type: "text_delta"; payload: { content: string } }
+  | { type: "reasoning_delta"; payload: { content: string } }
   | { type: "final"; payload: AgentWorkflowResult }
   | { type: "error"; payload: { message: string } };
 
@@ -141,6 +142,9 @@ export async function POST(request: Request) {
           },
           onTextDelta: (content) => {
             sendChunk({ type: "text_delta", payload: { content } });
+          },
+          onReasoningDelta: (content) => {
+            sendChunk({ type: "reasoning_delta", payload: { content } });
           },
           ...(llmSelection ? { llmSelectionOverride: llmSelection } : {}),
         });

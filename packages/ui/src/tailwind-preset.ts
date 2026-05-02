@@ -242,6 +242,11 @@ const preset: Partial<Config> = {
           from: { transform: 'translateX(-100%)' },
           to: { transform: 'translateX(0)' },
         },
+        /** Gradient drift for inline “working” tool summaries (bg-clip-text + gradient) */
+        'text-shimmer': {
+          '0%': { backgroundPosition: '200% center' },
+          '100%': { backgroundPosition: '-200% center' },
+        },
       },
 
       // ── Animation (from motion tokens) ───────────────────────────────────
@@ -252,6 +257,7 @@ const preset: Partial<Config> = {
         'scale-in': 'scale-in 300ms cubic-bezier(0.4, 0, 0.2, 1)',
         'slide-in-right': 'slide-in-right 300ms cubic-bezier(0, 0, 0.2, 1)',
         'slide-in-left': 'slide-in-left 300ms cubic-bezier(0, 0, 0.2, 1)',
+        'text-shimmer': 'text-shimmer 2.8s ease-in-out infinite',
       },
     },
   },

@@ -10,6 +10,8 @@ import { ToolInvocation } from './ToolInvocation';
 import { ToolBatchAccordion } from './ToolBatchAccordion';
 import type { ToolPair } from './ToolBatchAccordion';
 import { ThoughtsPanel } from './ThoughtsPanel';
+import { AgentActivityStrip } from './AgentActivityStrip';
+import type { ActivitySourceEvent } from '../../lib/agentActivity';
 import type { ChatEvent, RenderItem } from '@kletron/shared/chatTypes';
 import { groupEvents, pairToolEvents } from '../../lib/toolPairing';
 
@@ -87,6 +89,12 @@ export interface MessageListProps {
     streaming?: boolean;
     /** Progressive streaming text (token-by-token accumulation). */
     streamingText?: string;
+    /** Live reasoning stream (`reasoning_delta` chunks). */
+    streamingReasoning?: string;
+    /** Recent raw events for the activity strip (e.g. full `eventStream` while streaming). */
+    activityEvents?: ActivitySourceEvent[];
+    /** ISO time when the current run started (elapsed label on activity strip). */
+    runStartedAt?: string | null;
     /** Show tool calls in compact (single-line) mode */
     compactTools?: boolean;
     /** Additional className for the scroll container */
@@ -120,6 +128,9 @@ const MessageListInner: React.FC<MessageListProps> = ({
     messageActions,
     streaming,
     streamingText,
+    streamingReasoning,
+    activityEvents,
+    runStartedAt,
     compactTools = false,
     className,
     footer,
@@ -314,7 +325,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
         if (isAtBottomRef.current) {
             bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [items, streaming]);
+    }, [items, streaming, streamingText, streamingReasoning]);
 
     const renderMessageItem = useCallback((item: RenderItem, index: number) => {
         if (item.type === 'tools') {
@@ -413,7 +424,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
                     <>
                         <MessageBubble
                             role={event.kind === 'error' ? 'system' : event.kind}
-                            content={event.content}
+                            content={event.content ?? ''}
                             timestamp={event.timestamp}
                             actions={messageActions?.(event)}
                         />
@@ -474,20 +485,27 @@ const MessageListInner: React.FC<MessageListProps> = ({
             </div>
 
             {streaming && (
-                <div className="flex justify-start mt-1">
+                <div className="mt-1 w-full max-w-[95%] space-y-1.5">
+                    <AgentActivityStrip
+                        streaming={streaming}
+                        streamingText={streamingText ?? ''}
+                        streamingReasoning={streamingReasoning}
+                        events={activityEvents ?? []}
+                        runStartedAt={runStartedAt}
+                    />
+                    {streamingReasoning?.trim() ? (
+                        <ThoughtsPanel
+                            thoughts={[streamingReasoning]}
+                            isReasoning
+                            defaultExpanded
+                        />
+                    ) : null}
                     {streamingText ? (
-                        /* Progressive text — show accumulated tokens with a blinking cursor */
-                        <div className="w-full rounded-lg px-3 py-2 text-[12px] bg-transparent text-text-secondary">
-                            <MarkdownRenderer content={streamingText} />
-                            <span className="inline-block w-[2px] h-[14px] bg-text-muted align-text-bottom ml-0.5 animate-pulse" />
+                        <div className="w-full text-[12px] text-text-secondary pl-0.5">
+                            <MarkdownRenderer content={streamingText} variant="chat" />
+                            <span className="inline-block w-[2px] h-[14px] bg-text-muted/80 align-text-bottom ml-0.5 animate-pulse" />
                         </div>
-                    ) : (
-                        /* No text yet — show minimal "thinking" indicator */
-                        <div className="max-w-[90%] rounded-lg px-3 py-2 text-[12px] bg-transparent text-text-muted flex items-center gap-2">
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-text-muted animate-pulse" />
-                            Working on it...
-                        </div>
-                    )}
+                    ) : null}
                 </div>
             )}
 
@@ -505,6 +523,9 @@ export const MessageList = React.memo(
         prev.renderItems === next.renderItems &&
         prev.streaming === next.streaming &&
         prev.streamingText === next.streamingText &&
+        prev.streamingReasoning === next.streamingReasoning &&
+        prev.activityEvents === next.activityEvents &&
+        prev.runStartedAt === next.runStartedAt &&
         prev.compactTools === next.compactTools &&
         prev.className === next.className &&
         prev.footer === next.footer &&
@@ -515,5 +536,12 @@ export const MessageList = React.memo(
         prev.onLoadOlder === next.onLoadOlder &&
         prev.virtualized === next.virtualized &&
         prev.prefetchNearTop === next.prefetchNearTop &&
-        prev.onNearTop === next.onNearTop,
+        prev.onNearTop === next.onNearTop &&
+        prev.editingMessageIndex === next.editingMessageIndex &&
+        prev.editingMessageDraft === next.editingMessageDraft &&
+        prev.editingMessageSaving === next.editingMessageSaving &&
+        prev.editingMessageError === next.editingMessageError &&
+        prev.onEditDraftChange === next.onEditDraftChange &&
+        prev.onCancelEdit === next.onCancelEdit &&
+        prev.onResendEdit === next.onResendEdit,
 );

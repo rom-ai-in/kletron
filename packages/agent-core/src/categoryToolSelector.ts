@@ -142,6 +142,12 @@ export class CategorySpecificToolSelector {
 
   /**
    * Get all MCP tools with their group information.
+   *
+   * IMPORTANT: This list MUST stay in sync with the names exported by
+   * `allMcpTools` (in `tools/mcpTools.ts`) plus the always-on Kletron admin
+   * pack (`KLETRON_ADMIN_TOOL_NAMES`). Names that don't exist in either set
+   * are dead references and should not be added here. The vitest guard
+   * `categoryToolSelector.test.ts` enforces this invariant.
    */
   private getAllMcpTools(): Array<{ name: string; group: string }> {
     return [
@@ -157,8 +163,6 @@ export class CategorySpecificToolSelector {
       { name: 'git_diff', group: 'git' },
       { name: 'git_blame', group: 'git' },
       { name: 'git_grep', group: 'git' },
-      { name: 'git_commit', group: 'git' },
-      { name: 'git_push', group: 'git' },
 
       // Code analysis tools
       { name: 'search_code', group: 'code_analysis' },
@@ -175,10 +179,6 @@ export class CategorySpecificToolSelector {
       { name: 'todo_search', group: 'code_analysis' },
       { name: 'locate_ui_feature', group: 'code_analysis' },
 
-      // Testing tools
-      { name: 'run_tests', group: 'testing' },
-      { name: 'generate_tests', group: 'testing' },
-
       // Web tools
       { name: 'web_search', group: 'web_research' },
       { name: 'fetch_url', group: 'web_research' },
@@ -188,15 +188,6 @@ export class CategorySpecificToolSelector {
 
       // Execution tools
       { name: 'execute_bash', group: 'task_execution' },
-
-      // Document tools
-      { name: 'document_create', group: 'document_management' },
-      { name: 'document_edit', group: 'document_management' },
-      { name: 'document_format', group: 'formatting' },
-
-      // Scheduling tools
-      { name: 'schedule_task', group: 'scheduling' },
-      { name: 'calendar_events', group: 'integration' },
 
       // General tools
       { name: 'output_format', group: 'general_tools' },

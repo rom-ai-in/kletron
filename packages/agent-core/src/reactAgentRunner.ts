@@ -20,6 +20,8 @@ export type StreamReactAgentOptions = {
   onTokenUsage?: (usage: TokenUsage, model: string) => Promise<void> | void;
   /** Callback for progressive text streaming (token-by-token) */
   onTextDelta?: (delta: string) => void;
+  /** Callback for reasoning / extended-thinking deltas when the provider exposes them on chunks */
+  onReasoningDelta?: (delta: string) => void;
   /** Abort signal to stop streaming mid-run */
   abortSignal?: AbortSignal;
   /** Optional abort reason getter (used when abortSignal triggers) */
@@ -70,6 +72,36 @@ export class AgentWorkflowAbortError extends Error {
  * Extract token usage from a LangChain message's usage_metadata.
  * LangChain messages from most providers include this metadata.
  */
+/** Best-effort extraction of streamed reasoning text from an AIMessageChunk (provider-dependent). */
+function extractReasoningDeltaFromChunk(chunk: any): string {
+  if (!chunk || typeof chunk !== "object") return "";
+  const ak = chunk.additional_kwargs ?? {};
+  const direct =
+    chunk.reasoning_content ??
+    ak.reasoning_content ??
+    ak.reasoning ??
+    chunk.reasoning;
+  if (typeof direct === "string" && direct.trim()) return direct;
+
+  const content = chunk.content;
+  if (!Array.isArray(content)) return "";
+  let out = "";
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const t = (block as any).type;
+    if (t === "reasoning" || t === "thinking" || t === "redacted_thinking") {
+      const text =
+        typeof (block as any).text === "string"
+          ? (block as any).text
+          : typeof (block as any).reasoning === "string"
+            ? (block as any).reasoning
+            : "";
+      if (text) out += text;
+    }
+  }
+  return out;
+}
+
 function extractTokenUsage(message: BaseMessage): TokenUsage | null {
   const usageMetadata = (message as any).usage_metadata;
   if (!usageMetadata) return null;
@@ -114,11 +146,11 @@ export async function streamReactAgentMessages(
     ? null
     : { messages: [...(opts.extraMessages ?? []), { role: "user", content: opts.userPrompt }] };
 
-  // Use multi-mode streaming when onTextDelta is provided to get token-by-token output.
+  // Use multi-mode streaming when token-level callbacks are provided.
   // With ["values", "messages"], the stream yields [mode, data] tuples:
   //   ["values", { messages: BaseMessage[] }]   — complete state snapshots
   //   ["messages", [AIMessageChunk, metadata]]  — token-level LLM chunks
-  const useMultiMode = !!opts.onTextDelta;
+  const useMultiMode = !!(opts.onTextDelta || opts.onReasoningDelta);
   const streamMode = useMultiMode ? (["values", "messages"] as any) : "values";
 
   // ── Build stream config ────────────────────────────────────────────
@@ -287,9 +319,18 @@ export async function streamReactAgentMessages(
           // Token-level chunk: data is [AIMessageChunk, metadata]
           const chunk = Array.isArray(data) ? data[0] : data;
           const content = typeof chunk?.content === "string" ? chunk.content : "";
+          const reasoning = extractReasoningDeltaFromChunk(chunk);
+          if (reasoning && opts.onReasoningDelta) {
+            opts.onReasoningDelta(reasoning);
+          }
           // Only emit text deltas for non-tool-call assistant chunks
-          if (content && !chunk?.tool_calls?.length && !chunk?.tool_call_chunks?.length) {
-            opts.onTextDelta!(content);
+          if (
+            content &&
+            opts.onTextDelta &&
+            !chunk?.tool_calls?.length &&
+            !chunk?.tool_call_chunks?.length
+          ) {
+            opts.onTextDelta(content);
           }
         } else if (mode === "values") {
           await processValuesState(data as { messages?: BaseMessage[] });

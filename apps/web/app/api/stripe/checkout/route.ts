@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
         // Build success/cancel URLs
         const origin = request.headers.get('origin') || 'http://localhost:3000';
-        const successUrl = `${origin}/app/account/billing?success=true&session_id={CHECKOUT_SESSION_ID}`;
+        const successUrl = `${origin}/app/organization/billing?success=true&session_id={CHECKOUT_SESSION_ID}`;
         const cancelUrl = `${origin}/pricing?canceled=true`;
 
         // Create checkout session

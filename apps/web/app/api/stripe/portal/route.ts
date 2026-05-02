@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
         // Build return URL
         const origin = request.headers.get('origin') || 'http://localhost:3000';
-        const returnUrl = `${origin}/app/account/billing`;
+        const returnUrl = `${origin}/app/organization/billing`;
 
         // Create billing portal session
         const session = await createBillingPortalSession(customerId, returnUrl);

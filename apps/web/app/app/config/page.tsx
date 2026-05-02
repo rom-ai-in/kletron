@@ -11,6 +11,7 @@ import {
   Layers,
   Link as LinkIcon,
   Puzzle,
+  Settings,
 } from "lucide-react";
 import { Panel } from "@kletron/ui/components/design-system";
 
@@ -114,9 +115,14 @@ export default function ConfigOverviewPage() {
   return (
     <div className="flex h-full flex-col bg-bg-app overflow-hidden">
       <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
-        <div>
-          <h1 className="text-lg font-semibold text-text-primary">Configuration</h1>
-          <p className="text-sm text-text-muted">One place to manage AI providers and Graph flows.</p>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-text-secondary/10 text-text-secondary">
+            <Settings className="h-5 w-5" aria-hidden />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold text-text-primary">Configuration</h1>
+            <p className="text-sm text-text-muted">One place to manage AI providers and Graph flows.</p>
+          </div>
         </div>
       </div>
 

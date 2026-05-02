@@ -20,6 +20,7 @@ import {
 } from "./connectorsService";
 import { toolsUnlockedByConnectors } from "@kletron/shared";
 import type { ResolvedSkillRecord } from "@kletron/shared/skills/types";
+import { KLETRON_ADMIN_TOOL_NAMES } from "@kletron/agent-core/tools/kletronAdminToolNames";
 
 export interface WorkspaceCapabilities {
     workspaceId: string;
@@ -36,6 +37,12 @@ export interface WorkspaceCapabilities {
 /**
  * Always-on baseline tools (read-only repo browsing). Without these, even an
  * "empty" workspace wouldn't be useful for the agent.
+ *
+ * The Kletron admin tools are also included here so an agent can always
+ * manage graphs/automations/skills/connectors/plugins, regardless of which
+ * skills are enabled. These tools are gated at the tool boundary by
+ * per-call user identity + audit log + safe-edit confirmation, not by
+ * capability resolution.
  */
 const BASELINE_TOOLS = [
     "list_files",
@@ -49,6 +56,7 @@ const BASELINE_TOOLS = [
     "references",
     "todo_search",
     "repo_metrics",
+    ...KLETRON_ADMIN_TOOL_NAMES,
 ];
 
 /**

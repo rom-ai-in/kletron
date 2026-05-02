@@ -244,6 +244,37 @@ export class McpClient {
     }));
   }
 
+  /**
+   * Snapshot of every tool exposed by currently-connected external servers.
+   * Names are returned namespaced as `slug__toolName` so callers can hand
+   * them straight to the agent runtime and route via `callTool`.
+   */
+  listExternalTools(): Array<{
+    serverSlug: string;
+    name: string;
+    description?: string;
+    inputSchema?: unknown;
+  }> {
+    const out: Array<{
+      serverSlug: string;
+      name: string;
+      description?: string;
+      inputSchema?: unknown;
+    }> = [];
+    for (const [slug, ext] of this.external.entries()) {
+      if (ext.error) continue;
+      for (const tool of ext.tools) {
+        out.push({
+          serverSlug: slug,
+          name: namespacedExternalToolName(slug, tool.name),
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+        });
+      }
+    }
+    return out;
+  }
+
   async close() {
     for (const ext of this.external.values()) {
       try {

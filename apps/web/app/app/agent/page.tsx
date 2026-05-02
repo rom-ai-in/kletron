@@ -30,6 +30,8 @@ import {
   Loader2,
   Folder,
   ClipboardCopy,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 // For simple chat view - reuse existing components (groups tool events, renders collapsible tool cards)
@@ -60,6 +62,7 @@ type SessionDetail = {
   graphId: string;
   title: string;
   status: string;
+  startedAt?: string | null;
   graph: {
     name: string;
     nodeCount: number;
@@ -114,10 +117,13 @@ interface AgentComposerProps {
   perfDebugEnabled?: boolean;
   onInputLatencySample?: (ms: number) => void;
   editControl: ReturnType<typeof useMessageEdit>; // Added for editControl
+  /** Server-side run in progress (e.g. automation) — same queued placeholder as streaming */
+  runActive?: boolean;
 }
 
 const AgentComposer = memo(function AgentComposer({
   sending,
+  runActive = false,
   onStop,
   onSendText,
   selectedGraphId,
@@ -133,6 +139,7 @@ const AgentComposer = memo(function AgentComposer({
   onInputLatencySample,
   editControl, // Added for editControl
 }: AgentComposerProps) {
+  const queuedOrBusy = sending || runActive;
   const [draft, setDraft] = useState("");
 
   useEffect(() => {
@@ -181,7 +188,7 @@ const AgentComposer = memo(function AgentComposer({
         onStop={sending ? onStop : undefined}
         onKeyDown={handleKeyDown}
         sending={sending}
-        placeholder={sending ? "Add a follow-up (queued until agent finishes)..." : "Ask anything…"}
+        placeholder={queuedOrBusy ? "Add a follow-up (queued until agent finishes)..." : "Ask anything…"}
         containerClassName="max-w-3xl mx-auto"
         footerLeft={
           <div className="flex min-w-0 w-full items-center gap-2">
@@ -361,6 +368,7 @@ export default function AgentPage() {
     handleStop,
     isAtBottomRef,
     streamingText,
+    streamingReasoning,
     isStreaming,
   } = useSessionStream({
     sessionId: activeSessionId,
@@ -392,6 +400,9 @@ export default function AgentPage() {
 
   const {
     pendingEdits,
+    processingOp,
+    flushNotice,
+    dismissFlushNotice,
     approveEdit,
     rejectEdit,
     approveAll,
@@ -464,6 +475,7 @@ export default function AgentPage() {
               toolCallId: e.toolCallId,
               isError: e.isError,
               thoughts: e.thoughts,
+              thinking: e.thinking,
             }));
 
           // Dedup pass:
@@ -799,30 +811,6 @@ export default function AgentPage() {
     handleNewSession();
   }, [handleNewSession]);
 
-  // ── Build sidebar project from active workspace + its sessions ───────
-  const sidebarProjects: SidebarProject[] = useMemo(() => {
-    if (!activeWorkspace) return [];
-    const threadsForWorkspace = sessions
-      .filter((s) => s.workspaceId === activeWorkspace.id)
-      .map((s): SidebarThread => ({
-        id: s.id,
-        title: s.title || "Untitled",
-        updatedAt: s.startedAt,
-        liveStatus: toThreadLiveStatus(s.status, sending && activeSessionId === s.id),
-        category: s.source === "automation" || s.automationId ? "automation" : "chat",
-      }));
-    return [
-      {
-        id: activeWorkspace.id,
-        name: activeWorkspace.name,
-        health: activeWorkspace.health,
-        healthMessage: activeWorkspace.healthMessage,
-        selectable: activeWorkspace.selectable,
-        threads: threadsForWorkspace,
-      },
-    ];
-  }, [activeWorkspace, sessions, sending, activeSessionId]);
-
   // Convert Message[] from useSessionStream to ChatEvent[] for MessageList
   // Includes a final consecutive-duplicate guard to catch any remaining dupes
   const chatEventsForView = useMemo<ChatEvent[]>(() => {
@@ -839,6 +827,7 @@ export default function AgentPage() {
         toolCallId: m.toolCallId,
         isError: m.isError,
         thoughts: m.thoughts,
+        thinking: m.thinking,
         timestamp: m.timestamp,
         metadata: (m as any).metadata,
         messageIndex: (m.role === 'user' || m.role === 'assistant') ? i : undefined,
@@ -860,10 +849,54 @@ export default function AgentPage() {
   }, [messages]);
   const deferredChatEvents = useDeferredValue(chatEventsForView);
 
+  /** Automations and other server-only runs never open a browser NDJSON stream (`sending` stays false). */
+  const isServerSideRunActive = useMemo(() => {
+    if (!activeSessionId || !sessionDetail || sessionDetail.id !== activeSessionId) return false;
+    const st = sessionDetail.status;
+    return st === "RUNNING" || st === "PENDING";
+  }, [activeSessionId, sessionDetail]);
+
+  const agentBusy = sending || isServerSideRunActive;
+
+  /** Live stream events; for server runs fall back to persisted chat so the activity line can show tool names. */
+  const activityEventsForStrip = useMemo(
+    () => (eventStream.length > 0 ? eventStream : deferredChatEvents),
+    [eventStream, deferredChatEvents],
+  );
+
+  const runStartedAtForUi = runStartedAt ?? sessionDetail?.startedAt ?? null;
+
+  // ── Build sidebar project from active workspace + its sessions ───────
+  const sidebarProjects: SidebarProject[] = useMemo(() => {
+    if (!activeWorkspace) return [];
+    const threadsForWorkspace = sessions
+      .filter((s) => s.workspaceId === activeWorkspace.id)
+      .map((s): SidebarThread => ({
+        id: s.id,
+        title: s.title || "Untitled",
+        updatedAt: s.startedAt,
+        liveStatus: toThreadLiveStatus(
+          s.status,
+          activeSessionId === s.id && (sending || isServerSideRunActive),
+        ),
+        category: s.source === "automation" || s.automationId ? "automation" : "chat",
+      }));
+    return [
+      {
+        id: activeWorkspace.id,
+        name: activeWorkspace.name,
+        health: activeWorkspace.health,
+        healthMessage: activeWorkspace.healthMessage,
+        selectable: activeWorkspace.selectable,
+        threads: threadsForWorkspace,
+      },
+    ];
+  }, [activeWorkspace, sessions, sending, activeSessionId, isServerSideRunActive]);
+
   const editControl = useMessageEdit({
     sessionId: activeSessionId,
     events: chatEventsForView,
-    streaming: sending,
+    streaming: agentBusy,
     onTruncateAndResend: truncateAndResend,
   });
 
@@ -996,64 +1029,139 @@ export default function AgentPage() {
     }
   }, [sending, messageQueue.length, dequeueAndSend]);
 
-  // ── Pending edits panel ───────────────────────────────────────────────
-  const pendingEditsPanel = pendingEdits.length > 0 ? (
+  // ── Pending edits panel (keeps a short confirmation after queue drains so the strip does not “vanish”) ──
+  const showPendingStrip = pendingEdits.length > 0 || flushNotice !== null;
+  const pendingEditsPanel = showPendingStrip ? (
     <div className="border-t border-border-subtle bg-bg-surface p-3">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
-          Pending Edits ({pendingEdits.length})
-        </h3>
-        <div className="flex gap-1.5">
+      {flushNotice && (
+        <div
+          className={`mb-2 flex items-start gap-2 rounded-lg border px-3 py-2 text-[11px] ${
+            flushNotice.kind === "rejected" || flushNotice.kind === "rejected_all"
+              ? "border-status-error-border bg-status-error-bg/30 text-status-error-text"
+              : "border-status-success-border bg-status-success-bg/30 text-status-success-text"
+          }`}
+        >
+          {flushNotice.kind === "rejected" || flushNotice.kind === "rejected_all" ? (
+            <XCircle className="w-4 h-4 shrink-0 mt-0.5 opacity-90" aria-hidden />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 opacity-90" aria-hidden />
+          )}
+          <p className="flex-1 min-w-0 leading-snug">
+            {flushNotice.kind === "approved" && (
+              <>
+                Approved <span className="font-mono">{flushNotice.toolName}</span>. The run continues in the thread above.
+              </>
+            )}
+            {flushNotice.kind === "rejected" && (
+              <>
+                Rejected <span className="font-mono">{flushNotice.toolName}</span>.
+              </>
+            )}
+            {flushNotice.kind === "approved_all" && (
+              <>
+                Approved {flushNotice.count} pending action{flushNotice.count === 1 ? "" : "s"}. The run continues in the thread above.
+              </>
+            )}
+            {flushNotice.kind === "rejected_all" && (
+              <>
+                Rejected {flushNotice.count} pending action{flushNotice.count === 1 ? "" : "s"}.
+              </>
+            )}
+          </p>
           <button
-            onClick={() => void approveAll()}
-            disabled={approvingAll}
-            className="px-2 py-1 text-[10px] rounded border border-status-success-border bg-status-success-bg text-status-success-text hover:opacity-80 disabled:opacity-50"
+            type="button"
+            onClick={() => dismissFlushNotice()}
+            className="shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide opacity-70 hover:opacity-100"
           >
-            {approvingAll ? "Approving..." : "Approve All"}
-          </button>
-          <button
-            onClick={() => void rejectAll()}
-            disabled={rejectingAll}
-            className="px-2 py-1 text-[10px] rounded border border-status-error-border bg-status-error-bg text-status-error-text hover:opacity-80 disabled:opacity-50"
-          >
-            {rejectingAll ? "Rejecting..." : "Reject All"}
+            Dismiss
           </button>
         </div>
-      </div>
-      <div className="space-y-1.5 max-h-48 overflow-y-auto">
-        {pendingEdits.map((edit) => (
-          <div
-            key={edit.id}
-            className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-elevated px-3 py-2 text-[11px]"
-          >
-            <div className="flex-1 min-w-0 mr-2">
-              <p className="font-mono text-text-primary truncate">{edit.toolName}</p>
-              {edit.description && (
-                <p className="text-text-muted truncate">{edit.description}</p>
-              )}
-              {edit.lastError && (
-                <p className="text-status-error-text truncate">
-                  Last error: {edit.lastError}
-                </p>
-              )}
-            </div>
-            <div className="flex gap-1">
+      )}
+
+      {pendingEdits.length > 0 ? (
+        <>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+              Pending actions ({pendingEdits.length})
+            </h3>
+            <div className="flex gap-1.5">
               <button
-                onClick={() => void approveEdit(edit.id)}
-                className="px-1.5 py-0.5 rounded text-[10px] border border-status-success-border bg-status-success-bg text-status-success-text hover:opacity-80"
+                type="button"
+                onClick={() => void approveAll()}
+                disabled={approvingAll || rejectingAll}
+                className="px-2 py-1 text-[10px] rounded border border-status-success-border bg-status-success-bg text-status-success-text hover:opacity-80 disabled:opacity-50"
               >
-                Approve
+                {approvingAll ? "Approving..." : "Approve All"}
               </button>
               <button
-                onClick={() => void rejectEdit(edit.id)}
-                className="px-1.5 py-0.5 rounded text-[10px] border border-status-error-border bg-status-error-bg text-status-error-text hover:opacity-80"
+                type="button"
+                onClick={() => void rejectAll()}
+                disabled={approvingAll || rejectingAll}
+                className="px-2 py-1 text-[10px] rounded border border-status-error-border bg-status-error-bg text-status-error-text hover:opacity-80 disabled:opacity-50"
               >
-                Reject
+                {rejectingAll ? "Rejecting..." : "Reject All"}
               </button>
             </div>
           </div>
-        ))}
-      </div>
+          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            {pendingEdits.map((edit) => {
+              const busy = processingOp?.editId === edit.id;
+              const approvingThis = busy && processingOp?.op === "approve";
+              const rejectingThis = busy && processingOp?.op === "reject";
+              return (
+                <div
+                  key={edit.id}
+                  className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-elevated px-3 py-2 text-[11px]"
+                >
+                  <div className="flex-1 min-w-0 mr-2">
+                    <p className="font-mono text-text-primary truncate">{edit.toolName}</p>
+                    {edit.description && (
+                      <p className="text-text-muted truncate">{edit.description}</p>
+                    )}
+                    {edit.lastError && (
+                      <p className="text-status-error-text truncate">
+                        Last error: {edit.lastError}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => void approveEdit(edit.id, edit.toolName)}
+                      disabled={busy || approvingAll || rejectingAll}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border border-status-success-border bg-status-success-bg text-status-success-text hover:opacity-80 disabled:opacity-50"
+                    >
+                      {approvingThis ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" aria-hidden />
+                          <span>Approving…</span>
+                        </>
+                      ) : (
+                        "Approve"
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void rejectEdit(edit.id, edit.toolName)}
+                      disabled={busy || approvingAll || rejectingAll}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border border-status-error-border bg-status-error-bg text-status-error-text hover:opacity-80 disabled:opacity-50"
+                    >
+                      {rejectingThis ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" aria-hidden />
+                          <span>Rejecting…</span>
+                        </>
+                      ) : (
+                        "Reject"
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
     </div>
   ) : null;
 
@@ -1223,16 +1331,7 @@ export default function AgentPage() {
                   <div className="h-4 w-3/4 rounded bg-bg-elevated" />
                 </div>
               </div>
-            ) : messages.length === 0 && !sending &&
-              activeSessionId &&
-              (sessionDetail?.status === "RUNNING" || sessionDetail?.status === "PENDING") ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-20 text-text-muted">
-                <Loader2 className="h-8 w-8 animate-spin text-text-muted" />
-                <p className="text-[13px] text-center max-w-md">
-                  This thread is running on the server. Messages will appear here as the agent progresses.
-                </p>
-              </div>
-            ) : messages.length === 0 && !sending && (
+            ) : messages.length === 0 && !sending && !isServerSideRunActive && (
               <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                 <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>
                 <p className="text-[13px] text-center max-w-md">
@@ -1240,11 +1339,14 @@ export default function AgentPage() {
                 </p>
               </div>
             )}
-            {(messages.length > 0 || sending) && (
+            {(messages.length > 0 || agentBusy) && (
               <MessageList
                 events={deferredChatEvents}
-                streaming={sending}
+                streaming={agentBusy}
                 streamingText={streamingText}
+                streamingReasoning={streamingReasoning}
+                activityEvents={activityEventsForStrip}
+                runStartedAt={runStartedAtForUi}
                 maxVisibleEvents={320}
                 hasOlder={historyPage.hasOlder}
                 loadingOlder={loadingOlder}
@@ -1277,8 +1379,7 @@ export default function AgentPage() {
           </div>
         ) : (
           <div className="px-4 py-4 space-y-3">
-            {eventStream.length === 0 && !sending && !(sessionDetailLoading && activeSessionId) &&
-              !(activeSessionId && (sessionDetail?.status === "RUNNING" || sessionDetail?.status === "PENDING")) && (
+            {eventStream.length === 0 && !sending && !isServerSideRunActive && !(sessionDetailLoading && activeSessionId) && (
               <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                 <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>
                 <p className="text-[13px] text-center max-w-md">
@@ -1292,25 +1393,15 @@ export default function AgentPage() {
                 <p className="text-[13px]">Loading thread…</p>
               </div>
             )}
-            {eventStream.length === 0 && !sending && activeSessionId &&
-              (sessionDetail?.status === "RUNNING" || sessionDetail?.status === "PENDING") &&
-              !sessionDetailLoading && (
-              <div className="flex flex-col items-center justify-center gap-3 py-20 text-text-muted">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <p className="text-[13px] text-center max-w-md">
-                  This thread is running on the server. Events will appear as the graph executes.
-                </p>
-              </div>
-            )}
             {eventStream
               .filter((e) => e.kind !== "system")
               .map((event) => (
                 <EventCard key={event.id} event={event} />
               ))}
-            {sending && eventStream.length > 0 && (
-              <div className="flex items-center gap-2 px-4 py-3 text-text-muted">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-[12px]">Executing...</span>
+            {(sending || isServerSideRunActive) && (
+              <div className="flex items-center gap-2 px-1 py-2 text-text-muted">
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                <span className="text-[12px]">{sending ? "Executing…" : "Run in progress…"}</span>
               </div>
             )}
             {errorMessage && !sending && (
@@ -1334,13 +1425,14 @@ export default function AgentPage() {
         onMoveUp={handleQueueMoveUp}
         onDelete={handleQueueDelete}
         onForceSend={handleQueueForceSend}
-        streaming={sending}
+        streaming={agentBusy}
       />
 
       {/* Chat input */}
       <div className="flex-none border-t border-border-subtle bg-bg-surface px-4 py-3">
         <AgentComposer
           sending={sending}
+          runActive={isServerSideRunActive}
           onStop={handleStop}
           onSendText={handleSendOrQueueText}
           selectedGraphId={selectedGraphId}
@@ -1378,6 +1470,7 @@ export default function AgentPage() {
         aside={timelineSidebar}
         sidebarWidth="w-[260px]"
         asideWidth="w-72"
+        sidebarClassName="border-r-0"
       />
     </>
   );

@@ -122,6 +122,26 @@ export const CONNECTOR_CATALOG: ConnectorTypeDefinition[] = [
         docsUrl: "https://www.notion.so/help/create-integrations-with-the-notion-api",
     },
     {
+        id: "guru",
+        name: "Guru",
+        description:
+            "Search company cards, collections, and verified answers. Use alongside Notion and Confluence for unified enterprise knowledge discovery.",
+        category: "knowledge",
+        icon: "book-open",
+        auth: "api_key",
+        credentialFields: [
+            {
+                key: "apiKey",
+                label: "API token",
+                help: "User or collection token from Guru developer settings.",
+                secret: true,
+                required: true,
+            },
+        ],
+        unlocksTools: ["fetch_url", "web_search"],
+        docsUrl: "https://developer.getguru.com/",
+    },
+    {
         id: "linear",
         name: "Linear",
         description: "Manage issues and projects via Linear.",

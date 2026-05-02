@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { KLETRON_ADMIN_TOOL_NAMES } from "@kletron/agent-core/tools/kletronAdminToolNames";
 
 vi.mock("../src/services/skillsService", () => ({
     resolveWorkspaceSkills: vi.fn(async () => [
@@ -52,6 +53,9 @@ describe("workspaceCapabilityResolver", () => {
         expect(caps.enabledTools).toContain("github_api");
         expect(caps.externalMcpServers).toHaveLength(1);
         expect(caps.externalMcpServers[0]?.slug).toBe("demo");
+        for (const name of KLETRON_ADMIN_TOOL_NAMES) {
+            expect(caps.enabledTools).toContain(name);
+        }
     });
 
     it("does not expose github_api without a github integration", async () => {

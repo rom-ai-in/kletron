@@ -204,3 +204,55 @@ function resolvePath(inputPath) {
   // 4. Throw if path escapes workspace scope
 }
 ```
+
+## Effective tool policy (single source of truth)
+
+At every node execution the executor computes an **effective tool list** via
+[`effectiveToolNames(...)`](../../packages/server/src/services/effectiveToolNames.ts):
+
+```
+effective = ((node.toolNames ∪ skill.tools ∪ admin.alwaysOn) ∩ caps.enabledToolSet)
+            ∪ caps.externalNamespacedTools
+```
+
+- `node.toolNames` — declared on the graph node.
+- `skill.tools` — `requiredTools + suggestedTools` of every enabled skill.
+- `admin.alwaysOn` — names from `KLETRON_ADMIN_TOOL_NAMES` (see admin tools doc).
+- `caps.enabledToolSet` — produced by `resolveWorkspaceCapabilities` (baseline + skill + integration tools + admin pack).
+- `caps.externalNamespacedTools` — `slug__toolName` entries from connected external MCP servers.
+
+The executor logs a warning whenever a node references a tool that is not in
+the effective set, so misconfiguration becomes visible in the run timeline.
+
+## External MCP servers (per-workspace)
+
+Workspace-scoped external servers (registered via the connectors page) are
+attached at run start through `McpClient.syncExternalServers(...)` and their
+tools are wrapped as LangChain tools by
+[`buildDynamicExternalTools()`](../../packages/agent-core/src/tools/dynamicExternalTools.ts).
+The wrappers route invocations back through `client.callTool("slug__name", args)`.
+
+Schema strategy: when the server's JSON Schema is convertible we build a
+typed `z.object(...)`; otherwise we fall back to `z.record(z.any())` and let
+the server do final validation.
+
+## Workspace-root pinning
+
+Every MCP tool call requires a workspace root. The executor pins the
+desktop-selected folder via `config.configurable.workspaceRoot`, which
+`callMcpTool` reads first (then falls back to `runWithWorkspaceContext`,
+finally throwing if neither is set). Stdio MCP processes also receive
+`MCP_WORKSPACE_ROOT` so default-folder lookups stay correct.
+
+## Run-level tool telemetry
+
+Every node now records a `toolCallsSummary` on its timeline entry:
+
+```ts
+[
+  { name: "read_file", count: 12, errors: 0, meanMs: 38 },
+  { name: "search_code", count: 4, errors: 1, meanMs: 220 },
+]
+```
+
+Use it to spot expensive tools, retries, and external MCP latency end-to-end.

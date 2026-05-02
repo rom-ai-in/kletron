@@ -156,7 +156,7 @@ export default function PricingPage() {
 
         // Already on this plan
         if (currentPlanId === tierId) {
-            window.location.href = '/app/account/billing';
+            window.location.href = '/app/organization/billing';
             return;
         }
 

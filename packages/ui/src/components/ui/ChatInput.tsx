@@ -114,7 +114,8 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                 sendStopButton && 'pr-10'
               )}
             >
-              <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">{footerLeft}</div>
+              {/* Do not use overflow-hidden here: Selector menus are position:absolute and open upward — clipping would hide them. */}
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">{footerLeft}</div>
               {footerRight}
             </div>
             {sendStopButton && (

@@ -9,6 +9,7 @@ import {
   sanitizeTitle,
   stripSystemPrefix,
   stripThoughtContent,
+  stripThoughtTagsForTranscript,
 } from "@kletron/server/services/titleSanitizer";
 import { containsMetaLeakage } from "@kletron/shared/contentSanitizer";
 
@@ -46,7 +47,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const sanitizedConversationHistory = rawHistory
       .map((event) => {
         const original = typeof event?.content === "string" ? event.content : "";
-        const cleaned = sanitizeAssistantVisibleContent(stripThoughtContent(original)).trim();
+        const cleaned = sanitizeAssistantVisibleContent(stripThoughtTagsForTranscript(original)).trim();
         // Use shared containsMetaLeakage from contentSanitizer instead of inline regex
         if (
           !cleaned ||

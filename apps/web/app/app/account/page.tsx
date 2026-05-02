@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@kletron/ui/context/AuthContext';
-import { Input, PasswordInput, Button, Card, CardHeader, CardContent } from '@kletron/ui/components/design-system';
+import { Input, PasswordInput, Button, Panel } from '@kletron/ui/components/design-system';
 import { Copy, Key, Shield, User, LogOut, Plus, X } from 'lucide-react';
 interface ApiTokenInfo {
     id: string;
@@ -182,15 +182,8 @@ export default function AccountPage() {
     }, [newToken, copied]);
 
     return (
-        <div className="h-full overflow-y-auto bg-bg-app">
-            <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-8 pb-16">
-                <div>
-                    <h1 className="text-2xl font-semibold text-text-primary">My Account</h1>
-                    <p className="text-sm text-text-muted">Manage your Kletron account and extension connection.</p>
-                </div>
-
-                {/* Profile Section */}
-                <section className="rounded-lg border border-border-subtle bg-bg-surface p-6">
+        <div className="flex w-full flex-col gap-6">
+                <Panel className="p-6">
                     <h2 className="text-sm font-semibold text-text-primary">Profile</h2>
                     <p className="mt-1 text-xs text-text-muted">Update your main information.</p>
                     <form onSubmit={handleProfileSubmit} className="mt-4 space-y-4">
@@ -231,10 +224,9 @@ export default function AccountPage() {
                             {profileStatus === 'saving' ? 'Saving…' : 'Save'}
                         </Button>
                     </form>
-                </section>
+                </Panel>
 
-                {/* Security Section */}
-                <section className="rounded-lg border border-border-subtle bg-bg-surface p-6">
+                <Panel className="p-6">
                     <h2 className="text-sm font-semibold text-text-primary">Security</h2>
                     <p className="mt-1 text-xs text-text-muted">Change your password.</p>
                     <form onSubmit={handlePasswordSubmit} className="mt-4 space-y-4">
@@ -280,10 +272,9 @@ export default function AccountPage() {
                             {passwordStatus === 'saving' ? 'Updating…' : 'Update Password'}
                         </Button>
                     </form>
-                </section>
+                </Panel>
 
-                {/* Kletron IDE Section */}
-                <section className="rounded-lg border border-border-subtle bg-bg-surface p-6">
+                <Panel className="p-6">
                     <h2 className="text-sm font-semibold text-text-primary">Kletron IDE</h2>
                     <p className="mt-1 text-xs text-text-muted">
                         Generate a token to sync your Kletron account with the desktop IDE.
@@ -355,10 +346,9 @@ export default function AccountPage() {
                             )}
                         </div>
                     </div>
-                </section>
+                </Panel>
 
-                {/* Sign Out Section */}
-                <section className="rounded-lg border border-border-subtle bg-bg-surface p-6">
+                <Panel className="p-6">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                             <h2 className="text-sm font-semibold text-text-primary">Sign Out</h2>
@@ -373,8 +363,7 @@ export default function AccountPage() {
                             Sign Out
                         </Button>
                     </div>
-                </section>
-            </div>
+                </Panel>
         </div>
     );
 }

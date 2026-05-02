@@ -9,6 +9,10 @@ import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceS
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { SafeEditGate } from "@kletron/server/services/agent/SafeEditGate";
 import { McpClient } from "@kletron/mcp-client/client";
+import {
+    invokeKletronAdminToolForApproval,
+    isKletronAdminToolName,
+} from "@kletron/server/services/kletronAdminToolApprovalRunner";
 
 const safeEditGate = SafeEditGate.getInstance();
 
@@ -120,6 +124,17 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   const executeEdit = async (edit: any) => {
     const toolName = String(edit.toolName ?? "");
+    if (isKletronAdminToolName(toolName)) {
+      const raw = await invokeKletronAdminToolForApproval({
+        toolName,
+        args: (edit.args ?? {}) as Record<string, unknown>,
+        workspace,
+        userId: auth.userId,
+        runId: params.id,
+      });
+      const evicted = await maybeEvictResult(workspace.rootPath, params.id, toolName, raw);
+      return { executed: true, result: evicted.content, evictedPath: evicted.evictedPath ?? undefined };
+    }
     if (!["write_file", "execute_bash", "str_replace_editor"].includes(toolName)) {
       return { executed: false, message: "Unsupported tool" };
     }

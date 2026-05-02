@@ -40,7 +40,9 @@ import { list_skills as listSkillsTool, load_skill as loadSkillTool } from "./to
 import { notify } from "./tools/notify.js";
 
 // Workspace-specific tools
-import { listGlobalSkills, listWorkspaceSkills, enableSkill, disableSkill, listConnectors, addConnector, removeConnector, getWorkspaceConfig } from "./tools/workspaceTools.js";
+// Workspace management tools (skills/connectors CRUD) are not exposed by
+// the bundled MCP server. Agents manage these via the in-process Kletron
+// admin tool pack (`KLETRON_ADMIN_TOOL_NAMES`) registered by the executor.
 import { config } from "./config.js";
 
 const argv = process.argv.slice(2);
@@ -193,74 +195,10 @@ async function buildWorkspaceAwareTools(options = {}) {
   return allTools;
 }
 
-async function buildAllWorkspaceTools() {
-  const allTools = buildAllTools();
-  
-  // Add workspace management tools
-  const workspaceManagementTools = {
-    list_global_skills: listGlobalSkills,
-    list_workspace_skills: listWorkspaceSkills,
-    enable_skill: enableSkill,
-    disable_skill: disableSkill,
-    list_connectors: listConnectors,
-    add_connector: addConnector,
-    remove_connector: removeConnector,
-    get_workspace_config: getWorkspaceConfig
-  };
-  
-  return { ...allTools, ...workspaceManagementTools };
-}
-
 async function wireToolHandlers({ server, allTools, workspaceRoot, categoryId }) {
   // Use workspace-aware tools if available
   const tools = await buildWorkspaceAwareTools({ workspaceRoot, categoryId });
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-      tools: Object.entries(tools).map(([name, tool]) => ({
-        name,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-      })),
-    };
-  });
-
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const toolName = request.params.name;
-    const tool = tools[toolName];
-
-    if (!tool) {
-      throw new Error(`Tool not found: ${toolName}`);
-    }
-
-    try {
-      const result = await tool.run(request.params.arguments);
-      return {
-        content: [
-          {
-            type: "text",
-            text: typeof result === "string" ? result : JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error.message}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  });
-}
-
-async function wireAllToolHandlers({ server, allTools }) {
-  // Use all tools including workspace management
-  const tools = await buildAllWorkspaceTools();
-  
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
       tools: Object.entries(tools).map(([name, tool]) => ({

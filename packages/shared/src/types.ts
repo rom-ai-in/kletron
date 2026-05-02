@@ -73,6 +73,8 @@ export type AgentEvent = {
     toolOutput?: string; // Result of the tool execution
     isError?: boolean; // Whether this tool result is an error
     thoughts?: string[]; // Array of internal reasoning steps
+    /** Optional long-form reasoning block when distinct from `thoughts[]`. */
+    thinking?: string;
     metadata?: Record<string, any>; // Generic metadata for future extensibility (e.g. valid actions)
     timestamp: string;
 };

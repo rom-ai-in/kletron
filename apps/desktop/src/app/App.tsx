@@ -989,6 +989,8 @@ export default function App() {
               events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
               streaming={conversation.streaming}
               streamingText={conversation.streamingText}
+              streamingReasoning={conversation.streamingReasoning}
+              activityEvents={conversation.conversationEvents}
               messageActions={(event) => (
                 <MessageActions
                   event={event}

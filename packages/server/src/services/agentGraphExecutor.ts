@@ -24,6 +24,10 @@ import type { SkillDefinition } from "@kletron/agent-core/skills/types";
 import { loadAllSkillsForRegistry } from "./skillsService";
 import { resolveWorkspaceCapabilities, type WorkspaceCapabilities } from "./workspaceCapabilityResolver";
 import { effectiveToolNames } from "./effectiveToolNames";
+import { buildDynamicExternalTools } from "@kletron/agent-core/tools/dynamicExternalTools";
+import { KLETRON_ADMIN_TOOL_NAMES } from "@kletron/agent-core/tools/kletronAdminToolNames";
+import { kletronAdminTools } from "@kletron/agent-core/tools/kletronAdminTools";
+import { McpClient } from "@kletron/mcp-client/client";
 import { tokenUsageService } from "./tokenUsageService";
 import { ObjectId } from "mongodb";
 import { getAuditContextConfig } from "@kletron/server/services/auditContextService";
@@ -31,7 +35,7 @@ import { formatAuditContextPrompt, type AuditContext } from "@kletron/shared/doc
 import { agentMemoryService } from "./agentMemoryService";
 import { SafeEditGate } from "./agent/SafeEditGate";
 import { getToolApprovalPolicy } from "./toolApprovalPolicy";
-import { sanitizeAssistantVisibleContent, stripThoughtContent } from "./titleSanitizer";
+import { sanitizeAssistantVisibleContent, stripThoughtTagsForTranscript } from "./titleSanitizer";
 
 // --- Checkpoint Imports ---
 import { getCheckpointSaver, hasCheckpoint, computeGraphHash, ensureCheckpointIndexes, deleteThreadCheckpoints } from "./checkpointService";
@@ -832,7 +836,7 @@ function isAiToolCallEvent(event: AgentEvent): boolean {
 function convertConversationHistoryToMessages(events: AgentEvent[]): BaseMessage[] {
     const messages: BaseMessage[] = [];
     const sanitizeEventContent = (value?: string) => {
-        const cleaned = sanitizeAssistantVisibleContent(stripThoughtContent(value ?? "")).trim();
+        const cleaned = sanitizeAssistantVisibleContent(stripThoughtTagsForTranscript(value ?? "")).trim();
         if (!cleaned) return "";
         // Prevent old policy/prompt leakage from re-entering model context
         if (
@@ -912,6 +916,7 @@ export class AgentGraphExecutor {
         opts?: {
             onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
             onTextDelta?: (delta: string) => void;
+            onReasoningDelta?: (delta: string) => void;
             llmSelectionOverride?: { provider: LlmProviderType; model?: string };
             shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
         }
@@ -935,7 +940,9 @@ export class AgentGraphExecutor {
             throw new Error("Workspace not found for run continuation.");
         }
 
-        return await runWithWorkspaceContext(workspace, async () => {
+        return await runWithWorkspaceContext(
+            workspace,
+            async () => {
 
             // ── Check for checkpoint-based resume ────────────────────────────
             // If the run was interrupted (PAUSED with checkpoint metadata),
@@ -1056,7 +1063,9 @@ export class AgentGraphExecutor {
             await agentGraphRunService.incrementConversationTurns(runId);
 
             return this.executeRunStreaming(runId, opts);
-        });
+            },
+            { userId: workspace.ownerId, runId }
+        );
     }
 
     async executeRunStreaming(
@@ -1065,6 +1074,8 @@ export class AgentGraphExecutor {
             onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
             /** Progressive text streaming callback — emits token-by-token text deltas */
             onTextDelta?: (delta: string) => void;
+            /** Reasoning / thinking deltas (e.g. Claude extended thinking blocks) */
+            onReasoningDelta?: (delta: string) => void;
             llmSelectionOverride?: { provider: LlmProviderType; model?: string };
             shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
             /**
@@ -1093,7 +1104,9 @@ export class AgentGraphExecutor {
             throw new Error("Workspace not found for run execution.");
         }
 
-        return await runWithWorkspaceContext(workspace, async () => {
+        return await runWithWorkspaceContext(
+            workspace,
+            async () => {
             // Ensure context is ready before we start
             const contextGraphStore = await ensureContextGraphReady(
                 workspace._id!.toString(),
@@ -1194,6 +1207,48 @@ export class AgentGraphExecutor {
                     "[AgentGraph] Failed to resolve workspace capabilities, falling back to permissive mode:",
                     (capsErr as Error)?.message ?? capsErr
                 );
+            }
+
+            // Sync external MCP servers for this workspace. Disabled servers
+            // get disconnected, new ones get connected. After this call,
+            // namespaced `slug__name` tools are available via McpClient.
+            let dynamicExternalTools: any[] = [];
+            let externalNamespacedToolNames: string[] = [];
+            if (workspaceCaps?.externalMcpServers?.length) {
+                try {
+                    const client = await McpClient.getInstance();
+                    await client.syncExternalServers(
+                        workspaceCaps.externalMcpServers.map((s) => ({
+                            id: s.id,
+                            slug: s.slug,
+                            name: s.name,
+                            transport: s.transport,
+                            command: s.command,
+                            args: s.args,
+                            env: s.env,
+                            url: s.url,
+                            headers: s.headers,
+                        }))
+                    );
+                    dynamicExternalTools = await buildDynamicExternalTools();
+                    externalNamespacedToolNames = dynamicExternalTools.map(
+                        (t: any) => String(t?.name ?? "")
+                    );
+                } catch (extErr) {
+                    console.warn(
+                        "[AgentGraph] External MCP sync failed:",
+                        (extErr as Error)?.message ?? extErr
+                    );
+                }
+            } else if (workspaceCaps) {
+                // No external servers configured: still ensure any previously
+                // connected servers from a prior run are disconnected.
+                try {
+                    const client = await McpClient.getInstance();
+                    await client.syncExternalServers([]);
+                } catch {
+                    // ignore
+                }
             }
 
             const persistState = async () => {
@@ -1340,7 +1395,11 @@ export class AgentGraphExecutor {
                 }
             );
 
-            const localTools = [writeTodosTool];
+            // Always-on Kletron admin tools (graphs/automations/skills/...).
+            // Each tool reads identity from `runWithWorkspaceContext` and logs
+            // every call to the agent_audit collection. They are gated by zod
+            // schemas + safe-edit confirmation, not by skill activation.
+            const localTools = [writeTodosTool, ...kletronAdminTools];
 
             const runSubGraph = async (message: string, graphId: string) => {
                 const subGraph = await agentGraphService.getGraph(graphId);
@@ -1647,15 +1706,13 @@ export class AgentGraphExecutor {
                               ...(node.react.toolNames ?? []),
                               ...skillTools,
                           ]);
-                    const externalNamespacedTools: string[] = [];
-                    const dynamicExternalTools: any[] = [];
                     const effective = effectiveToolNames({
                         nodeToolNames: node.react.toolNames ?? [],
                         skillToolNames: skillTools,
-                        adminToolNames: [],
+                        adminToolNames: KLETRON_ADMIN_TOOL_NAMES,
                         capabilityToolSet: effectiveCaps,
-                        externalNamespacedTools,
-                        alwaysOn: ["write_todos"],
+                        externalNamespacedTools: externalNamespacedToolNames,
+                        alwaysOn: ["write_todos", ...KLETRON_ADMIN_TOOL_NAMES],
                     });
                     const mergedToolNames = effective.names;
                     const selectedTools = selectToolsByName(
@@ -1688,6 +1745,27 @@ export class AgentGraphExecutor {
                     ]);
                     const toolCallCache = new Map<string, string>();
                     let toolCallCount = 0;
+                    // Per-tool telemetry for the run timeline.
+                    const toolCallSummary = new Map<
+                        string,
+                        { count: number; errors: number; totalMs: number }
+                    >();
+                    const recordToolCall = (
+                        name: string,
+                        startedAt: number,
+                        ok: boolean
+                    ) => {
+                        const elapsed = Math.max(0, Date.now() - startedAt);
+                        const entry = toolCallSummary.get(name) ?? {
+                            count: 0,
+                            errors: 0,
+                            totalMs: 0,
+                        };
+                        entry.count += 1;
+                        entry.totalMs += elapsed;
+                        if (!ok) entry.errors += 1;
+                        toolCallSummary.set(name, entry);
+                    };
 
                     const invokeBaseTool = async (baseTool: any, input: unknown) => {
                         if (typeof baseTool?.invoke === "function") {
@@ -1855,7 +1933,17 @@ export class AgentGraphExecutor {
                                     `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} action=auto_approved_execute`
                                 );
 
-                                const result = await invokeBaseTool(baseTool, input);
+                                const startedAt = Date.now();
+                                let toolOk = true;
+                                let result: unknown;
+                                try {
+                                    result = await invokeBaseTool(baseTool, input);
+                                } catch (err) {
+                                    toolOk = false;
+                                    recordToolCall(name, startedAt, false);
+                                    throw err;
+                                }
+                                recordToolCall(name, startedAt, toolOk);
                                 const finalResult = await maybeEvictToolResult({
                                     rootDir,
                                     runId,
@@ -2079,6 +2167,7 @@ export class AgentGraphExecutor {
                                 abortSignal: abortController.signal,
                                 getAbortReason: () => abortReason,
                                 shouldAbort: checkAbortReason,
+                                workspaceRoot: rootDir,
                                 onTokenUsage: async (usage, model) => {
                                     await tokenUsageService.logUsage({
                                         timestamp: new Date(),
@@ -2134,6 +2223,7 @@ export class AgentGraphExecutor {
                                 abortSignal: abortController.signal,
                                 getAbortReason: () => abortReason,
                                 shouldAbort: checkAbortReason,
+                                workspaceRoot: rootDir,
                                 onTokenUsage: async (usage, model) => {
                                     await tokenUsageService.logUsage({
                                         timestamp: new Date(),
@@ -2256,6 +2346,7 @@ export class AgentGraphExecutor {
                             onMessage: handleStreamingMessage,
                             // Forward text deltas for progressive streaming
                             onTextDelta: opts?.onTextDelta,
+                            onReasoningDelta: opts?.onReasoningDelta,
                             abortSignal: abortController.signal,
                             getAbortReason: () => abortReason,
                             shouldAbort: checkAbortReason,
@@ -2396,6 +2487,21 @@ export class AgentGraphExecutor {
                             outputTokens: nodeTokenUsage.outputTokens,
                             totalTokens: nodeTokenUsage.totalTokens,
                         } : undefined;
+                        // Per-tool telemetry: count, mean ms, errors.
+                        if (toolCallSummary.size > 0) {
+                            (timelineEntry as any).toolCallsSummary = Array.from(
+                                toolCallSummary.entries()
+                            )
+                                .map(([toolName, stats]) => ({
+                                    name: toolName,
+                                    count: stats.count,
+                                    errors: stats.errors,
+                                    meanMs: Math.round(
+                                        stats.totalMs / Math.max(1, stats.count)
+                                    ),
+                                }))
+                                .sort((a, b) => b.count - a.count);
+                        }
                     }
                     await emitUpdate();
 
@@ -2525,7 +2631,9 @@ export class AgentGraphExecutor {
             await emitUpdate();
             cleanupCheckpoints();
             return successResult;
-        });
+            },
+            { userId: workspace.ownerId, runId }
+        );
     }
 }
 

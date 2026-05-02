@@ -49,7 +49,7 @@ export const PLUGIN_CATALOG: PluginDefinition[] = [
         name: "Productivity",
         publisher: "Anthropic",
         description:
-            "Manage tasks, plan your day, and build up memory of important context about your work. Syncs with your calendar, email, and chat to keep everything organized and on track.",
+            "Tasks in TASKS.md, two-tier memory (CLAUDE.md hot cache plus memory/ glossary and profiles), and sync/update flows. Use connectors for calendar, email, chat, and trackers when available.",
         externalUrl: "https://claude.ai",
         samplePrompts: [
             "Set up my task and memory system",
@@ -67,6 +67,37 @@ export const PLUGIN_CATALOG: PluginDefinition[] = [
             "ms365",
             "monday",
             "clickup",
+            "google-calendar",
+            "gmail",
+        ],
+    },
+    {
+        id: "enterprise-search",
+        name: "Enterprise search",
+        publisher: "Anthropic",
+        description:
+            "Search across email, chat, documents, and wikis from one place. Find anything across connected tools without switching apps when integrations are active.",
+        externalUrl: "https://claude.com",
+        samplePrompts: [
+            "Search across all my company tools at once",
+            "Generate a daily activity digest",
+            "Find everything related to a specific project",
+            "Catch up on what I missed this week",
+        ],
+        skillSlugs: [
+            "digest",
+            "knowledge-synthesis",
+            "search-strategy",
+            "search",
+            "source-management",
+        ],
+        connectorIds: [
+            "slack",
+            "notion",
+            "guru",
+            "atlassian",
+            "asana",
+            "ms365",
             "google-calendar",
             "gmail",
         ],

@@ -36,6 +36,7 @@ export function useConversation(
   const [streamingMessage, setStreamingMessage] = useState<string | null>(null);
   const [streamHasEvents, setStreamHasEvents] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [streamingReasoning, setStreamingReasoning] = useState("");
   const [input, setInput] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
   const [tokenUsage, setTokenUsage] = useState<{ input: string; output: string } | null>(null);
@@ -45,6 +46,32 @@ export function useConversation(
   const streamedEventIdsRef = useRef<Set<string>>(new Set());
   const handledEditIdsRef = useRef<Set<string>>(new Set());
   const streamingTextRef = useRef("");
+  const streamingReasoningRef = useRef("");
+  const streamFlushRafRef = useRef<number | null>(null);
+
+  function cancelStreamFlush() {
+    if (streamFlushRafRef.current != null) {
+      cancelAnimationFrame(streamFlushRafRef.current);
+      streamFlushRafRef.current = null;
+    }
+  }
+
+  function clearStreamBuffers() {
+    cancelStreamFlush();
+    streamingTextRef.current = "";
+    streamingReasoningRef.current = "";
+    setStreamingText("");
+    setStreamingReasoning("");
+  }
+
+  function scheduleStreamFlush() {
+    if (streamFlushRafRef.current != null) return;
+    streamFlushRafRef.current = requestAnimationFrame(() => {
+      streamFlushRafRef.current = null;
+      setStreamingText(streamingTextRef.current);
+      setStreamingReasoning(streamingReasoningRef.current);
+    });
+  }
 
   // Scroll to bottom on new events
   useEffect(() => {
@@ -217,8 +244,7 @@ export function useConversation(
     setStreamingState("streaming");
     setStreamingMessage(null);
     setStreamHasEvents(false);
-    setStreamingText("");
-    streamingTextRef.current = "";
+    clearStreamBuffers();
     setTokenUsage(null);
     setConversationEvents((prev) => [
       ...prev,
@@ -340,15 +366,13 @@ export function useConversation(
                   await loadThreads?.(convoId);
                 }
               } else if (chunk.type === "text_delta") {
-                // Progressive text streaming
                 streamingTextRef.current += chunk.payload.content;
-                setStreamingText(streamingTextRef.current);
+                scheduleStreamFlush();
+              } else if (chunk.type === "reasoning_delta") {
+                streamingReasoningRef.current += chunk.payload.content;
+                scheduleStreamFlush();
               } else if (chunk.type === "update") {
-                // Full update: clear progressive text (real message is in eventStream)
-                if (streamingTextRef.current) {
-                  streamingTextRef.current = "";
-                  setStreamingText("");
-                }
+                clearStreamBuffers();
                 const update = chunk.payload;
                 if (update.eventStream?.length) {
                   // Map events to ChatEvents
@@ -402,9 +426,7 @@ export function useConversation(
                   });
                 }
               } else if (chunk.type === "final") {
-                // Clear any residual streaming text
-                streamingTextRef.current = "";
-                setStreamingText("");
+                clearStreamBuffers();
                 // Session completed
                 convoId = chunk.payload.sessionId ?? convoId;
 
@@ -486,6 +508,7 @@ export function useConversation(
                 }
               } else if (chunk.type === "error") {
                 didError = true;
+                clearStreamBuffers();
                 setSendError(chunk.payload.message);
               }
             } catch {
@@ -518,6 +541,7 @@ export function useConversation(
       else setStreamingState("idle");
       setStreaming(false);
       setStreamingMessage(null);
+      clearStreamBuffers();
       abortRef.current = null;
       if (convoId) await fetchPendingEdits(convoId, token!);
       await loadThreads?.(convoId ?? undefined);
@@ -526,6 +550,7 @@ export function useConversation(
 
   function stopStreaming() {
     abortRef.current?.abort();
+    clearStreamBuffers();
     setStreaming(false);
     setStreamingMessage(null);
     setStreamingState("stopped");
@@ -618,6 +643,7 @@ export function useConversation(
     streamingMessage,
     streamHasEvents,
     streamingText,
+    streamingReasoning,
     input,
     setInput,
     sendError,
