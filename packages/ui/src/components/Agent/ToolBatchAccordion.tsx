@@ -78,9 +78,9 @@ export const ToolBatchAccordion: React.FC<ToolBatchAccordionProps> = ({ pairs, c
                 <span className="min-w-0 flex-1 text-[11px] leading-snug sm:text-xs">
                     <span
                         className={cn(
-                            hasRunning &&
-                                'bg-gradient-to-r from-text-muted from-25% via-text-primary via-50% to-text-muted to-75% bg-[length:200%_100%] bg-clip-text font-medium text-transparent animate-text-shimmer',
-                            !hasRunning && 'font-medium text-text-secondary',
+                            'font-medium',
+                            hasRunning && 'text-text-secondary animate-pulse',
+                            !hasRunning && 'text-text-secondary',
                         )}
                     >
                         {summaryCore}

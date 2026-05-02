@@ -10,6 +10,23 @@ export type ActivitySourceEvent = {
     content?: string;
 };
 
+/**
+ * Only events at or after the latest user message represent the current turn.
+ * Without this, a stale `eventStream` from the previous assistant/tool phase
+ * drives “Using tools…” / “Continuing…” while waiting on a new user send.
+ */
+export function tailEventsSinceLastUser(events: ActivitySourceEvent[]): ActivitySourceEvent[] {
+    let lastUserIndex = -1;
+    for (let i = events.length - 1; i >= 0; i--) {
+        if (events[i].kind === 'user') {
+            lastUserIndex = i;
+            break;
+        }
+    }
+    if (lastUserIndex < 0) return events;
+    return events.slice(lastUserIndex);
+}
+
 export function deriveActivityState(input: {
     streaming: boolean;
     streamingText: string;
@@ -25,7 +42,7 @@ export function deriveActivityState(input: {
     if (input.streamingReasoning?.trim()) {
         return { label: 'Thinking…' };
     }
-    const ev = input.events;
+    const ev = tailEventsSinceLastUser(input.events);
     if (ev.length === 0) {
         return { label: 'Working on it…' };
     }

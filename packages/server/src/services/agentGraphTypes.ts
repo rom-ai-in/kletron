@@ -201,6 +201,8 @@ export interface AgentGraphRun {
     workspaceId?: ObjectId;
     /** Origin of this run: "agent" (UI), "automation", "api", "cli", etc. */
     source?: string;
+    /** Authenticated user who started this run (used for per-tenant tool approval). */
+    createdByUserId?: string;
     status: AgentGraphStatus;
     startedAt: Date;
     endedAt?: Date;

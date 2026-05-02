@@ -75,6 +75,7 @@ export type ThreadLiveStatus = 'running' | 'completed' | 'idle' | 'waiting' | 'e
  */
 import type { AgentWorkflowResult, AgentWorkflowUpdate } from './types';
 import type { ThreadApprovalMode } from './threadApprovalTypes';
+import type { WorkModeId } from './workMode';
 
 export type StreamChunk =
     | { type: 'init'; payload: { runId: string; graphId: string } }
@@ -92,6 +93,8 @@ export interface ConversationHistoryItem {
     updatedAt?: string;
     status?: 'active' | 'archived';
     lastRole?: 'user' | 'assistant' | 'system' | 'tool';
+    /** Run creation mode; omitted on older clients until API returns it. */
+    workMode?: WorkModeId;
 }
 
 /** Conversation detail (thread detail with history). */

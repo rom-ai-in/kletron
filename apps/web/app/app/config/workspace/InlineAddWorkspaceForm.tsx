@@ -173,18 +173,18 @@ export function InlineAddWorkspaceForm({ onCreated }: InlineAddWorkspaceFormProp
     }, [rootPath, name, validation.valid, saving, onCreated]);
 
     return (
-        <Panel className="p-0 overflow-hidden border border-border-default shadow-sm mb-6">
-            <div className="border-b border-border-subtle bg-bg-elevated/50 px-5 py-4 flex items-center gap-3">
-                <div className="h-8 w-8 rounded-full bg-state-hover flex items-center justify-center border border-border-subtle">
-                    <Plus className="h-4 w-4 text-text-primary" />
+        <Panel className="overflow-hidden p-0">
+            <div className="flex items-center gap-3 border-b border-border-subtle bg-bg-surface px-5 py-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bg-elevated text-text-secondary">
+                    <Plus className="h-4 w-4" aria-hidden />
                 </div>
-                <div>
-                    <h2 className="text-sm font-semibold text-text-primary">Add New Workspace</h2>
-                    <p className="text-xs text-text-muted mt-0.5">Connect a local folder to track an agentic workspace</p>
+                <div className="min-w-0">
+                    <h2 className="text-sm font-semibold text-text-primary">Add workspace</h2>
+                    <p className="text-xs text-text-muted">Map a local folder to this Kletron instance</p>
                 </div>
             </div>
 
-            <div className="p-5 space-y-5 bg-bg-surface">
+            <div className="space-y-5 bg-bg-app p-5">
                 {error && (
                     <div className="rounded-md border border-status-error-border bg-status-error-bg px-4 py-3 text-[13px] text-status-error-text flex items-center gap-2">
                         <AlertCircle className="h-4 w-4" />
@@ -317,7 +317,7 @@ export function InlineAddWorkspaceForm({ onCreated }: InlineAddWorkspaceFormProp
                 </div>
             </div>
 
-            <div className="bg-bg-elevated/30 border-t border-border-subtle px-5 py-3 flex justify-end">
+            <div className="flex justify-end border-t border-border-subtle bg-bg-surface px-5 py-3">
                 <Button
                     onClick={() => void handleCreate()}
                     disabled={!validation.valid || saving}

@@ -53,8 +53,8 @@ export interface UseSessionStreamOptions {
     workMode?: string | null;
     /** Optional plan mode flag in the JSON body. */
     planMode?: boolean;
-    /** Callback when a new session is created (receives runId). */
-    onSessionCreated?: (runId: string, graphId: string) => void;
+    /** Callback when a new session is created (receives runId, graphId, first user message body). */
+    onSessionCreated?: (runId: string, graphId: string, firstUserMessage?: string) => void;
     /** Callback when a title should be generated. */
     onTitleGenerate?: (runId: string, userMessage: string) => void;
 }
@@ -461,7 +461,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
                     if (chunk.type === "init") {
                         if (isNewSession && onSessionCreated) {
-                            onSessionCreated(chunk.payload.runId, chunk.payload.graphId);
+                            onSessionCreated(chunk.payload.runId, chunk.payload.graphId, userMessage);
                         }
                     } else if (chunk.type === "text_delta") {
                         streamingTextRef.current += chunk.payload.content;
@@ -571,8 +571,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         const resolvedMode = normalizeToWorkModeId(
             (workMode ?? category ?? null) as string | null,
         );
-        const modeBody =
-            workMode != null || category != null
+        /** Only attach work mode on session creation; continuations keep the run's stored workMode (see /api/sessions/[id]/chat). */
+        const modeBodyForCreate =
+            isNewSession && (workMode != null || category != null)
                 ? { workMode: resolvedMode, category: resolvedMode }
                 : {};
 
@@ -584,14 +585,13 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 model: llmModel,
                 ...(workspaceId ? { workspaceId } : {}),
                 ...(threadApprovalMode && threadApprovalMode !== 'inherit' ? { threadApprovalMode } : {}),
-                ...modeBody,
+                ...modeBodyForCreate,
                 ...(effectivePlanMode ? { planMode: true } : {}),
             }
             : {
                 message: msg,
                 provider: llmProvider,
                 model: llmModel,
-                ...modeBody,
                 ...(effectivePlanMode ? { planMode: true } : {}),
             };
 

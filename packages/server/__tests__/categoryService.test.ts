@@ -191,6 +191,16 @@ describe("CategoryService", () => {
       expect(result).toBe("work");
     });
 
+    it("should not E11000 when a legacy global category_state row exists and workspace is set", async (ctx) => {
+      if (!mongoReady) ctx.skip();
+      const uid = "test-user-dupkey-regression";
+      const ws = testWorkspaceId;
+      await service.setCurrentCategory(uid, "code");
+      await expect(service.setCurrentCategory(uid, "work", ws)).resolves.not.toThrow();
+      expect(await service.getCurrentCategory(uid, ws)).toBe("work");
+      expect(await service.getCurrentCategory(uid)).toBe("code");
+    });
+
     it("should track category history", async (ctx) => {
       if (!mongoReady) ctx.skip();
       await service.setCurrentCategory(testUserId, "code");

@@ -99,13 +99,19 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   const graphId = run.graphId?.toString();
 
+  /**
+   * Do not retag an existing run's work mode from every chat continuation — that blurred Code vs Work.
+   * Only patch run + workspace current category when the client explicitly opts in (`alignWorkMode: true`).
+   * New sessions set workMode via POST /api/sessions.
+   */
+  const alignWorkMode = payload.alignWorkMode === true;
   const modePayload =
     typeof payload.workMode === "string"
       ? payload.workMode
       : typeof payload.category === "string"
         ? payload.category
         : null;
-  if (modePayload !== null) {
+  if (alignWorkMode && modePayload !== null) {
     const wm = normalizeToWorkModeId(modePayload);
     await agentGraphRunService.patchRun(params.id, { workMode: wm });
     if (auth.userId && run.workspaceId) {

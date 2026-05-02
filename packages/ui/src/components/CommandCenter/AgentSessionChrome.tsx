@@ -8,6 +8,11 @@ import { WorkModeSegmented } from "./WorkModeSegmented";
 export type AgentSessionChromeProps = {
   workMode: WorkModeId;
   onWorkModeChange: (mode: WorkModeId) => void;
+  /**
+   * When false, the Code/Work control is not shown here (e.g. it lives in the thread sidebar).
+   * Keep passing workMode for tinting and code-only rows.
+   */
+  showWorkModeSwitcher?: boolean;
   /** Main workspace line: name + path, or error, or empty state — or pass simple strings below */
   workspaceSlot?: React.ReactNode;
   /** When `workspaceSlot` is omitted, show name + path */
@@ -28,6 +33,7 @@ export type AgentSessionChromeProps = {
 export function AgentSessionChrome({
   workMode,
   onWorkModeChange,
+  showWorkModeSwitcher = true,
   workspaceSlot,
   workspaceName,
   workspaceRootPath,
@@ -58,7 +64,12 @@ export function AgentSessionChrome({
 
   return (
     <section
-      aria-label="Agent session"
+      aria-label={
+        showWorkModeSwitcher
+          ? "Agent session"
+          : `Agent session, ${WORK_MODES[workMode].name} mode. Change mode in the thread sidebar.`
+      }
+      aria-details={showWorkModeSwitcher ? undefined : "sidebar-work-mode-desc"}
       className={`flex-none flex flex-col gap-1 border-b px-4 py-1.5 app-region-no-drag ${className}`}
       style={{
         backgroundColor: `${modeChromeColor}12`,
@@ -67,7 +78,9 @@ export function AgentSessionChrome({
     >
       <div className="flex min-h-0 flex-nowrap items-center gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-          <WorkModeSegmented value={workMode} onChange={onWorkModeChange} />
+          {showWorkModeSwitcher ? (
+            <WorkModeSegmented value={workMode} onChange={onWorkModeChange} />
+          ) : null}
           <div className="min-w-0 flex-1">{workspaceMain}</div>
         </div>
         {trailing ? (

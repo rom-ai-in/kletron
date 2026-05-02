@@ -1,5 +1,7 @@
-import { PluginsCatalogClient } from "../../../../components/config/PluginsCatalogClient";
+"use client";
 
-export default function ConfigPluginsPage() {
-    return <PluginsCatalogClient />;
+import { RedirectToWorkspaceSubpage } from "../../../../components/workspace/RedirectToWorkspaceSubpage";
+
+export default function ConfigPluginsRedirectPage() {
+    return <RedirectToWorkspaceSubpage segment="plugins" />;
 }

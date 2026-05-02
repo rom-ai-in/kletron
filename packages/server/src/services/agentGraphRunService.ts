@@ -65,6 +65,8 @@ export type CreateRunOptions = {
     threadApprovalMode?: ThreadApprovalMode;
     /** Code vs Work — scopes tool allowlists for interactive sessions. */
     workMode?: "code" | "work";
+    /** User id for per-tenant approval policy (interactive sessions). */
+    createdByUserId?: string;
 };
 
 export class AgentGraphRunService {
@@ -96,6 +98,7 @@ export class AgentGraphRunService {
                 ? { threadApprovalMode: options.threadApprovalMode }
                 : {}),
             ...(options?.workMode ? { workMode: options.workMode } : {}),
+            ...(options?.createdByUserId ? { createdByUserId: options.createdByUserId } : {}),
             status: "PENDING",
             startedAt: new Date(),
             nodeOrder: [],
@@ -437,7 +440,14 @@ export class AgentGraphRunService {
      */
     async listSessions(
         workspaceId?: string,
-        opts?: { includeArchived?: boolean; limit?: number; graphId?: string; excludeSource?: string }
+        opts?: {
+            includeArchived?: boolean;
+            limit?: number;
+            graphId?: string;
+            excludeSource?: string;
+            /** When set, only runs whose stored mode matches (legacy runs without field count as `code`). */
+            workMode?: "code" | "work";
+        }
     ): Promise<AgentGraphRun[]> {
         const limit = opts?.limit ?? 50;
         const collection = await getCollectionSafe();
@@ -448,6 +458,8 @@ export class AgentGraphRunService {
                 if (!opts?.includeArchived && run.archived) return false;
                 if (opts?.graphId && ObjectId.isValid(opts.graphId) && run.graphId?.toString() !== opts.graphId) return false;
                 if (opts?.excludeSource && run.source === opts.excludeSource) return false;
+                if (opts?.workMode === "work" && run.workMode !== "work") return false;
+                if (opts?.workMode === "code" && run.workMode === "work") return false;
                 // Hide automation sub-stage runs from the sidebar listing.
                 if (run.parentRunId) return false;
                 return true;
@@ -470,6 +482,15 @@ export class AgentGraphRunService {
         }
         if (opts?.excludeSource) {
             filter.source = { $ne: opts.excludeSource };
+        }
+        if (opts?.workMode === "work") {
+            filter.workMode = "work";
+        } else if (opts?.workMode === "code") {
+            filter.$or = [
+                { workMode: "code" },
+                { workMode: { $exists: false } },
+                { workMode: null },
+            ];
         }
         const runs = await collection
             .find(filter)

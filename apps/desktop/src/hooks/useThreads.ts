@@ -1,11 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import type { WorkModeId } from "@kletron/shared/workMode";
 import type { ConversationHistoryItem, ThreadLiveStatus } from "../types";
+import {
+  mergePreferredIntoSessionList,
+  pickConversationIdAfterLoad,
+} from "../utils/threadListMerge";
 
 export function useThreads(
   backendUrlTrimmed: string,
   backendReady: boolean,
   getAccessToken: () => Promise<string | null>,
-  activeWorkspaceId: string | null
+  activeWorkspaceId: string | null,
+  listWorkMode: WorkModeId,
 ) {
   const [threads, setThreads] = useState<ConversationHistoryItem[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(false);
@@ -18,48 +24,88 @@ export function useThreads(
   const [archivedThreads, setArchivedThreads] = useState<ConversationHistoryItem[]>([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
 
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
+
+  const skipAutoSelectAfterModeChangeRef = useRef(false);
+  const prevListWorkModeRef = useRef(listWorkMode);
+  useEffect(() => {
+    if (prevListWorkModeRef.current !== listWorkMode) {
+      prevListWorkModeRef.current = listWorkMode;
+      skipAutoSelectAfterModeChangeRef.current = true;
+    }
+  }, [listWorkMode]);
+
+  const didInitialThreadsFetchRef = useRef(false);
+
   function isThreadArchived(item: ConversationHistoryItem & { archived?: boolean }) {
     return Boolean(item.archived) || item.status === "archived";
   }
 
-  /** Same query shape as web `fetchSessions` (apps/web/app/app/agent/page.tsx). */
-  function sessionsListUrl(includeArchived: boolean) {
-    const q = new URLSearchParams();
-    q.set("limit", "50");
-    if (activeWorkspaceId) q.set("workspaceId", activeWorkspaceId);
-    if (includeArchived) q.set("includeArchived", "true");
-    return `${backendUrlTrimmed}/api/sessions?${q.toString()}`;
-  }
+  const sessionsListUrl = useCallback(
+    (includeArchived: boolean) => {
+      const q = new URLSearchParams();
+      q.set("limit", "50");
+      q.set("workMode", listWorkMode);
+      if (activeWorkspaceId) q.set("workspaceId", activeWorkspaceId);
+      if (includeArchived) q.set("includeArchived", "true");
+      return `${backendUrlTrimmed}/api/sessions?${q.toString()}`;
+    },
+    [backendUrlTrimmed, activeWorkspaceId, listWorkMode],
+  );
 
-  async function loadThreads(preferredId?: string) {
-    const token = await getAccessToken();
-    if (!token) return;
-    setThreadsLoading(true);
-    setThreadsError(null);
-    try {
-      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-      if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+  const loadThreads = useCallback(
+    async (preferredId?: string, options?: { provisionalTitle?: string }) => {
+      const token = await getAccessToken();
+      if (!token) return;
+      setThreadsLoading(true);
+      setThreadsError(null);
+      try {
+        const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+        if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
 
-      const res = await fetch(sessionsListUrl(false), { headers });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Failed to load threads (${res.status})`);
+        const res = await fetch(sessionsListUrl(false), { headers });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || `Failed to load threads (${res.status})`);
+        }
+        const data = await res.json();
+        const list = Array.isArray(data) ? (data as (ConversationHistoryItem & { archived?: boolean })[]) : [];
+        const active = list.filter((item) => !isThreadArchived(item));
+
+        const skipAuto = skipAutoSelectAfterModeChangeRef.current;
+        skipAutoSelectAfterModeChangeRef.current = false;
+
+        let merged: ConversationHistoryItem[] = [];
+        setThreads((prev) => {
+          merged = mergePreferredIntoSessionList(active, preferredId, {
+            provisionalTitle: options?.provisionalTitle,
+            provisionalWorkMode: listWorkMode,
+            prevThreads: prev,
+          });
+          return merged;
+        });
+        const selectionHint = preferredId ?? conversationIdRef.current ?? undefined;
+        setConversationId((curr) =>
+          pickConversationIdAfterLoad(merged, selectionHint, curr, { skipAutoSelectFirst: skipAuto }),
+        );
+      } catch (error) {
+        setThreadsError((error as Error)?.message || "Unable to load threads.");
+      } finally {
+        setThreadsLoading(false);
       }
-      const data = await res.json();
-      const list = Array.isArray(data) ? (data as (ConversationHistoryItem & { archived?: boolean })[]) : [];
-      const active = list.filter((item) => !isThreadArchived(item));
-      setThreads(active);
-      if (preferredId && active.some((item) => item.id === preferredId)) {
-        setConversationId(preferredId);
-      } else if (!conversationId || !active.some((item) => item.id === conversationId)) {
-        setConversationId(active[0]?.id ?? null);
-      }
-    } catch (error) {
-      setThreadsError((error as Error)?.message || "Unable to load threads.");
-    } finally {
-      setThreadsLoading(false);
+    },
+    [getAccessToken, activeWorkspaceId, sessionsListUrl, listWorkMode],
+  );
+
+  useEffect(() => {
+    if (!backendReady) return;
+    if (!didInitialThreadsFetchRef.current) {
+      didInitialThreadsFetchRef.current = true;
+      return;
     }
-  }
+    void loadThreads(conversationIdRef.current ?? undefined);
+  }, [listWorkMode, activeWorkspaceId, backendReady, loadThreads]);
 
   /**
    * In the unified session system, sessions are created on first message send
@@ -103,12 +149,12 @@ export function useThreads(
       }
       setThreads((prev) =>
         prev.map((thread) =>
-          thread.id === editingThreadId ? { ...thread, title: nextTitle } : thread
-        )
+          thread.id === editingThreadId ? { ...thread, title: nextTitle } : thread,
+        ),
       );
       cancelEditThread();
     } catch (err) {
-      console.warn('[useThreads] Failed to save thread title', err);
+      console.warn("[useThreads] Failed to save thread title", err);
     } finally {
       setEditingThreadSaving(false);
     }
@@ -138,7 +184,7 @@ export function useThreads(
         setConversationId(null);
       }
     } catch (err) {
-      console.warn('[useThreads] Failed to archive thread', err);
+      console.warn("[useThreads] Failed to archive thread", err);
     } finally {
       setThreadActionId(null);
     }
@@ -160,7 +206,7 @@ export function useThreads(
             Authorization: `Bearer ${token}`,
             ...(activeWorkspaceId ? { "x-workspace-id": activeWorkspaceId } : {}),
           },
-        }
+        },
       );
       if (!res.ok) {
         const text = await res.text();
@@ -171,7 +217,7 @@ export function useThreads(
         setConversationId(null);
       }
     } catch (err) {
-      console.warn('[useThreads] Failed to delete thread', err);
+      console.warn("[useThreads] Failed to delete thread", err);
     } finally {
       setThreadActionId(null);
     }
@@ -218,18 +264,37 @@ export function useThreads(
       const data = await res.json();
       const list = Array.isArray(data) ? (data as (ConversationHistoryItem & { archived?: boolean })[]) : [];
       const active = list.filter((item) => !isThreadArchived(item));
-      // Only update if there are actual changes
+      const preferredId = conversationIdRef.current ?? undefined;
       setThreads((prev) => {
-        const changed = active.some((newThread) => {
-          const old = prev.find((t) => t.id === newThread.id);
-          return !old || old.lastRole !== newThread.lastRole || old.status !== newThread.status || old.title !== newThread.title;
+        const merged = mergePreferredIntoSessionList(active, preferredId, {
+          prevThreads: prev,
+          provisionalWorkMode: listWorkMode,
         });
-        return changed ? active : prev;
+        const same =
+          merged.length === prev.length &&
+          merged.every((t) => {
+            const o = prev.find((p) => p.id === t.id);
+            return (
+              o &&
+              o.title === t.title &&
+              o.lastRole === t.lastRole &&
+              (o.status ?? "") === (t.status ?? "")
+            );
+          });
+        return same ? prev : merged;
       });
     } catch (err) {
-      console.warn('[useThreads] Thread status poll failed', err);
+      console.warn("[useThreads] Thread status poll failed", err);
     }
-  }, [backendUrlTrimmed, backendReady, getAccessToken, threads.length]);
+  }, [
+    backendUrlTrimmed,
+    backendReady,
+    getAccessToken,
+    threads.length,
+    sessionsListUrl,
+    activeWorkspaceId,
+    listWorkMode,
+  ]);
 
   useEffect(() => {
     // Poll every 5 seconds when we have active threads

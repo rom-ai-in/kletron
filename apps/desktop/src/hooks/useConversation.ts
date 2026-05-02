@@ -14,6 +14,7 @@ import type {
   WorkspaceInfo,
 } from "../types";
 import { buildHunks, normalizeContent } from "../utils";
+import { provisionalTitleFromUserMessage } from "../utils/threadListMerge";
 
 function messageToChatEvent(m: Message, messageIndex: number): ChatEvent {
   const role = m.role;
@@ -54,7 +55,7 @@ export function useConversation(
   modelConfig: LlmConfig | null,
   selectedGraph: string | null,
   _graphName?: string,
-  loadThreads?: (preferredId?: string) => Promise<void>,
+  loadThreads?: (preferredId?: string, options?: { provisionalTitle?: string }) => Promise<void>,
   setDiffs?: (fn: (prev: DiffRequest[]) => DiffRequest[]) => void,
   activeWorkspaceId?: string | null,
   activeCategory?: string
@@ -123,9 +124,11 @@ export function useConversation(
     category: activeCategory ?? null,
     workMode: normalizeToWorkModeId(activeCategory ?? "code"),
     threadApprovalMode,
-    onSessionCreated: (runId) => {
+    onSessionCreated: (runId, _graphId, firstUserMessage) => {
       setConversationId(runId);
-      void loadThreads?.(runId);
+      void loadThreads?.(runId, {
+        provisionalTitle: provisionalTitleFromUserMessage(firstUserMessage),
+      });
     },
     onTitleGenerate,
   });
@@ -152,12 +155,22 @@ export function useConversation(
     setHistoryPage,
   } = agentThread;
 
+  // Keep run source + approval mode aligned with the *current* session only.
+  // Previously, leaving an automation thread (or opening New chat) left `conversationRunSource`
+  // stuck on "automation", which greyed out ThreadApprovalModeSelector forever.
   useEffect(() => {
+    if (!conversationId) {
+      setConversationRunSource(null);
+      return;
+    }
     const d = agentThread.sessionDetail;
-    if (!d?.id) return;
+    if (!d?.id || d.id !== conversationId) {
+      setConversationRunSource(null);
+      return;
+    }
     setThreadApprovalMode(parseThreadApprovalMode(d.threadApprovalMode));
     setConversationRunSource(typeof d.source === "string" ? d.source : null);
-  }, [agentThread.sessionDetail]);
+  }, [conversationId, agentThread.sessionDetail]);
 
   const prevStreamStatusRef = useRef(stream.streamStatus);
   useEffect(() => {
@@ -165,7 +178,7 @@ export function useConversation(
     prevStreamStatusRef.current = stream.streamStatus;
     if (stream.streamStatus !== "streaming" && conversationId && wasStreaming) {
       void loadSessionDetail(conversationId, { mergeMessages: true });
-      void loadThreads?.(undefined);
+      void loadThreads?.(conversationId);
     }
   }, [stream.streamStatus, conversationId, loadSessionDetail, loadThreads]);
 
@@ -190,10 +203,10 @@ export function useConversation(
   useEffect(() => {
     const was = prevSendingRef.current;
     prevSendingRef.current = stream.sending;
-    if (was && !stream.sending) {
-      void loadThreads?.(undefined);
+    if (was && !stream.sending && conversationId) {
+      void loadThreads?.(conversationId);
     }
-  }, [stream.sending, loadThreads]);
+  }, [stream.sending, loadThreads, conversationId]);
 
   useEffect(() => {
     if (!workspace?.path || !setDiffs || !conversationId) return;

@@ -455,7 +455,10 @@ ipcMain.handle("app:selectWorkspace", async () => {
 });
 
 ipcMain.handle("app:setWorkspace", async (_event, workspacePath: string) => {
-  if (!workspacePath) return null;
+  if (!workspacePath?.trim()) {
+    currentWorkspacePath = null;
+    return null;
+  }
   currentWorkspacePath = workspacePath;
   return getWorkspaceInfo(currentWorkspacePath);
 });

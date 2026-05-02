@@ -9,10 +9,15 @@ import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 import { useWorkspacePlugins } from "../../hooks/useWorkspacePlugins";
 import { PluginCatalogModal } from "./PluginCatalogModal";
 
-export function PluginsCatalogClient() {
+export function PluginsCatalogClient(props: { workspaceId?: string } = {}) {
+    const { workspaceId: routeWorkspaceId } = props;
     const plugins = listPlugins();
-    const { activeWorkspaceId, activeWorkspace } = useWorkspace();
-    const { installed, isLoading: wsLoading, setInstalled } = useWorkspacePlugins(activeWorkspaceId ?? "");
+    const { activeWorkspaceId, activeWorkspace, workspaces } = useWorkspace();
+    const targetWorkspaceId = routeWorkspaceId ?? activeWorkspaceId ?? "";
+    const pageWorkspace = routeWorkspaceId
+        ? (workspaces.find((w) => w.id === routeWorkspaceId) ?? null)
+        : activeWorkspace;
+    const { installed, isLoading: wsLoading, setInstalled } = useWorkspacePlugins(targetWorkspaceId);
 
     const [openId, setOpenId] = useState<string | null>(null);
     const [query, setQuery] = useState("");
@@ -56,7 +61,7 @@ export function PluginsCatalogClient() {
         }
     };
 
-    const workspaceReady = !activeWorkspaceId || !wsLoading;
+    const workspaceReady = !targetWorkspaceId || !wsLoading;
 
     return (
         <div className="flex h-full flex-col overflow-hidden bg-bg-app">
@@ -68,50 +73,55 @@ export function PluginsCatalogClient() {
                     <div className="min-w-0">
                         <h1 className="text-lg font-semibold text-text-primary">Plugins</h1>
                         <p className="text-sm text-text-muted">
-                            Bundles of skills and connectors. Install applies to the workspace you select in
-                            the shell.
+                            Bundles of skills and connectors. Install and remove apply to this workspace.
                         </p>
                     </div>
                 </div>
-                <div className="shrink-0 text-xs text-text-muted">
-                    {plugins.length} {plugins.length === 1 ? "bundle" : "bundles"}
+                <div className="flex shrink-0 flex-col items-end gap-1 text-xs text-text-muted">
+                    {targetWorkspaceId ? (
+                        <>
+                            <Link
+                                href={`/app/${targetWorkspaceId}/skills`}
+                                className="text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+                            >
+                                Skills
+                            </Link>
+                            <Link
+                                href={`/app/${targetWorkspaceId}/connectors`}
+                                className="text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+                            >
+                                Connectors
+                            </Link>
+                        </>
+                    ) : null}
+                    <span>
+                        {plugins.length} {plugins.length === 1 ? "bundle" : "bundles"}
+                    </span>
                 </div>
             </div>
 
             <div className="flex-1 space-y-6 overflow-y-auto p-6 scrollbar-elegant">
-                {activeWorkspaceId && activeWorkspace ? (
+                {targetWorkspaceId && pageWorkspace ? (
                     <Panel className="border border-border-subtle bg-bg-elevated/80 p-4">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="flex gap-3">
-                                <FolderOpen className="mt-0.5 h-5 w-5 shrink-0 text-text-secondary" />
-                                <div className="text-sm">
-                                    <p className="font-medium text-text-primary">
-                                        Install target:{" "}
-                                        <span className="text-text-primary">{activeWorkspace.name}</span>
-                                    </p>
-                                    <p className="mt-1 text-xs text-text-muted">
-                                        Use Install / Remove below or manage everything on the workspace
-                                        page.
-                                    </p>
-                                </div>
+                        <div className="flex gap-3">
+                            <FolderOpen className="mt-0.5 h-5 w-5 shrink-0 text-text-secondary" />
+                            <div className="text-sm">
+                                <p className="font-medium text-text-primary">
+                                    Workspace:{" "}
+                                    <span className="text-text-primary">{pageWorkspace.name}</span>
+                                </p>
+                                <p className="mt-1 text-xs text-text-muted">
+                                    Install bundles here, then wire connectors from this workspace&apos;s
+                                    Connectors page.
+                                </p>
                             </div>
-                            <Link
-                                href={`/app/${activeWorkspaceId}/plugins`}
-                                className={buttonVariants({
-                                    variant: "secondary",
-                                    size: "sm",
-                                    className: "shrink-0",
-                                })}
-                            >
-                                Workspace plugins
-                            </Link>
                         </div>
                     </Panel>
                 ) : (
                     <Panel className="border border-status-warning-border bg-status-warning-bg/30 p-4">
                         <p className="text-sm text-text-primary">
-                            <span className="font-medium">Select a workspace</span> in the shell to install or
-                            remove plugins from this catalog.
+                            <span className="font-medium">Workspace unavailable.</span> Open this page from a
+                            workspace route or select a workspace in the shell.
                         </p>
                     </Panel>
                 )}
@@ -128,7 +138,7 @@ export function PluginsCatalogClient() {
                     />
                 </div>
 
-                {activeWorkspaceId ? (
+                {targetWorkspaceId ? (
                     <div className="space-y-8">
                         <section className="space-y-3">
                             <h2 className="text-sm font-semibold text-text-primary">
@@ -147,7 +157,7 @@ export function PluginsCatalogClient() {
                                             key={p.id}
                                             plugin={p}
                                             workspaceReady={workspaceReady}
-                                            activeWorkspaceId={activeWorkspaceId}
+                                            activeWorkspaceId={targetWorkspaceId}
                                             installed
                                             busy={busyId === p.id}
                                             onOpen={() => setOpenId(p.id)}
@@ -176,7 +186,7 @@ export function PluginsCatalogClient() {
                                             key={p.id}
                                             plugin={p}
                                             workspaceReady={workspaceReady}
-                                            activeWorkspaceId={activeWorkspaceId}
+                                            activeWorkspaceId={targetWorkspaceId}
                                             installed={false}
                                             busy={busyId === p.id}
                                             onOpen={() => setOpenId(p.id)}
@@ -206,7 +216,7 @@ export function PluginsCatalogClient() {
                     </div>
                 )}
 
-                {filtered.length === 0 && !activeWorkspaceId && (
+                {filtered.length === 0 && !targetWorkspaceId && (
                     <Panel className="p-6 text-center">
                         <p className="text-sm text-text-secondary">No plugins match your search.</p>
                     </Panel>
@@ -218,9 +228,9 @@ export function PluginsCatalogClient() {
                 open={Boolean(openId && openPlugin)}
                 onClose={() => setOpenId(null)}
                 workspacePluginActions={
-                    activeWorkspaceId && openPlugin
+                    targetWorkspaceId && openPlugin
                         ? {
-                              workspaceId: activeWorkspaceId,
+                              workspaceId: targetWorkspaceId,
                               installed: !!installed[openPlugin.id],
                               busy: busyId === openPlugin.id,
                               onInstall: () => void runInstall(openPlugin.id, "install"),

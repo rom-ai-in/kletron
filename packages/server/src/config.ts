@@ -436,13 +436,13 @@ export function getToolApprovalConfig(): ToolApprovalConfig {
   };
 }
 
-/**
- * Persist updated tool approval config to MongoDB.
- */
-export async function saveToolApprovalConfig(updates: SaveToolApprovalConfigInput): Promise<ToolApprovalConfig> {
+/** Merge partial tool-approval updates into a full config (shared by global + tenant persistence). */
+export function mergeToolApprovalConfigUpdates(
+  current: ToolApprovalConfig,
+  updates: SaveToolApprovalConfigInput
+): ToolApprovalConfig {
   const { replaceToolOverrides, ...patch } = updates;
-  const current = getToolApprovalConfig();
-  const merged: ToolApprovalConfig = {
+  return {
     ...current,
     ...patch,
     toolOverrides:
@@ -450,6 +450,14 @@ export async function saveToolApprovalConfig(updates: SaveToolApprovalConfigInpu
         ? patch.toolOverrides
         : { ...current.toolOverrides, ...(patch.toolOverrides ?? {}) },
   };
+}
+
+/**
+ * Persist updated tool approval config to MongoDB.
+ */
+export async function saveToolApprovalConfig(updates: SaveToolApprovalConfigInput): Promise<ToolApprovalConfig> {
+  const current = getToolApprovalConfig();
+  const merged = mergeToolApprovalConfigUpdates(current, updates);
 
   const db = await getDatabase();
   const collection = db.collection<WorkspaceConfigDoc>(COLLECTION_NAME);

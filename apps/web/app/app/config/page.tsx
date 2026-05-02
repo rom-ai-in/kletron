@@ -15,10 +15,21 @@ import {
   MessagesSquare,
 } from "lucide-react";
 import { Panel } from "@kletron/ui/components/design-system";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 
 type LlmConfigSummary = { provider?: string } | null;
 
 export default function ConfigOverviewPage() {
+  const { activeWorkspaceId } = useWorkspace();
+  const skillsHref = activeWorkspaceId
+    ? `/app/${activeWorkspaceId}/skills`
+    : "/app/config/skills";
+  const connectorsHref = activeWorkspaceId
+    ? `/app/${activeWorkspaceId}/connectors`
+    : "/app/config/connectors";
+  const pluginsHref = activeWorkspaceId
+    ? `/app/${activeWorkspaceId}/plugins`
+    : "/app/config/plugins";
   const [graphsCount, setGraphsCount] = useState<number>(0);
   const [toolsCount, setToolsCount] = useState<number>(0);
   const [llmProvider, setLlmProvider] = useState<LlmConfigSummary>(null);
@@ -183,22 +194,22 @@ export default function ConfigOverviewPage() {
              title="Skills"
              description="AI capabilities as .md files."
              icon={<Wrench className="h-4 w-4 text-text-muted" />}
-             href="/app/config/skills"
-             meta="Manage skills"
+             href={skillsHref}
+             meta={activeWorkspaceId ? "This workspace" : "Pick a workspace"}
            />
            <ConfigCard
              title="Connectors"
              description="External service integrations."
              icon={<LinkIcon className="h-4 w-4 text-text-muted" />}
-             href="/app/config/connectors"
-             meta="Manage connectors"
+             href={connectorsHref}
+             meta={activeWorkspaceId ? "OAuth & MCP" : "Pick a workspace"}
            />
           <ConfigCard
             title="Plugins"
             description="Cowork-style bundles of skills and connectors."
             icon={<Puzzle className="h-4 w-4 text-text-muted" />}
-            href="/app/config/plugins"
-            meta="Browse plugins"
+            href={pluginsHref}
+            meta={activeWorkspaceId ? "This workspace" : "Pick a workspace"}
           />
         </div>
 

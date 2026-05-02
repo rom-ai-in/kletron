@@ -234,7 +234,7 @@ export async function POST(request: Request) {
 
 /**
  * GET /api/sessions - List sessions (runs with title, status, timestamps).
- * Query params: ?workspaceId=, ?includeArchived=true, ?limit=50, ?graphId=
+ * Query params: ?workspaceId=, ?includeArchived=true, ?limit=50, ?graphId=, ?workMode=code|work
  */
 export async function GET(request: Request) {
   const auth = await requireAppRouteAuth(request);
@@ -249,6 +249,11 @@ export async function GET(request: Request) {
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "50", 10) || 50, 200);
   const graphId = searchParams.get("graphId") ?? undefined;
   const excludeSource = searchParams.get("excludeSource") ?? undefined;
+  const workModeRaw = searchParams.get("workMode");
+  const listWorkModeFilter =
+    workModeRaw != null && workModeRaw !== ""
+      ? normalizeToWorkModeId(workModeRaw)
+      : undefined;
 
   // If allWorkspaces=true, fetch sessions across all user workspaces
   // Otherwise resolve a single workspace to filter by
@@ -268,20 +273,17 @@ export async function GET(request: Request) {
 
   try {
     let runs;
+    const listOpts = {
+      includeArchived,
+      limit,
+      graphId,
+      excludeSource,
+      ...(listWorkModeFilter ? { workMode: listWorkModeFilter } : {}),
+    };
     if (allWorkspaces) {
-      runs = await agentGraphRunService.listSessions(undefined, {
-        includeArchived,
-        limit,
-        graphId,
-        excludeSource,
-      });
+      runs = await agentGraphRunService.listSessions(undefined, listOpts);
     } else {
-      runs = await agentGraphRunService.listSessions(resolvedWorkspaceId, {
-        includeArchived,
-        limit,
-        graphId,
-        excludeSource,
-      });
+      runs = await agentGraphRunService.listSessions(resolvedWorkspaceId, listOpts);
     }
 
     // Helper: strip injected [System: ...] personality prefix from titles
@@ -313,6 +315,7 @@ export async function GET(request: Request) {
       tokenUsage: run.tokenUsage ?? null,
       source: run.source ?? null,
       automationId: run.automationId?.toString() ?? null,
+      workMode: normalizeToWorkModeId(run.workMode as string | undefined),
     }));
 
 

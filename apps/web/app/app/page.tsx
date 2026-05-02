@@ -34,8 +34,9 @@ import {
   Terminal,
 } from "lucide-react";
 
-/** Mirrors the main sidebar — keep labels in sync when nav changes. */
-const LAUNCHPAD_ITEMS = [
+/** Build launchpad items; Skills URL follows the active workspace when set. */
+function buildLaunchpadItems(skillsHref: string) {
+  return [
   {
     title: "Agent",
     description: "Chat, tools, and sessions for the active workspace.",
@@ -75,7 +76,7 @@ const LAUNCHPAD_ITEMS = [
   {
     title: "Skills",
     description: "Prompt skills, presets, and reusable instructions.",
-    href: "/app/config/skills",
+    href: skillsHref,
     icon: BookOpen,
   },
   {
@@ -91,6 +92,7 @@ const LAUNCHPAD_ITEMS = [
     icon: Building2,
   },
 ] as const;
+}
 
 type ConversationHistoryItem = {
   id: string;
@@ -165,7 +167,14 @@ function statusBadge(status: string | undefined) {
 
 export default function AppDashboardPage() {
   const router = useRouter();
-  const { activeWorkspace: workspace } = useWorkspace();
+  const { activeWorkspace: workspace, activeWorkspaceId } = useWorkspace();
+  const launchpadItems = useMemo(
+    () =>
+      buildLaunchpadItems(
+        activeWorkspaceId ? `/app/${activeWorkspaceId}/skills` : "/app/config/skills",
+      ),
+    [activeWorkspaceId],
+  );
   const [sessions, setSessions] = useState<ConversationHistoryItem[]>([]);
   const [runs, setRuns] = useState<AgentGraphRunSummary[]>([]);
   const [graphs, setGraphs] = useState<AgentGraphSummary[]>([]);
@@ -463,7 +472,7 @@ export default function AppDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {LAUNCHPAD_ITEMS.map((item) => {
+              {launchpadItems.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Link

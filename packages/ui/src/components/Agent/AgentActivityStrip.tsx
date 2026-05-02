@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { deriveActivityState, type ActivitySourceEvent } from '../../lib/agentActivity';
+import { cn } from '../../lib/utils';
 
 export interface AgentActivityStripProps {
     streaming: boolean;
@@ -15,8 +16,8 @@ export interface AgentActivityStripProps {
 }
 
 /**
- * Single line of muted status text while the agent runs. No borders, chips, or timers.
- * Hidden while answer text is streaming (the markdown stream is the status).
+ * Single-line status while the agent runs (solid text — reliable across browsers).
+ * Hidden while answer tokens stream to avoid duplicating the markdown preview.
  */
 export const AgentActivityStrip: React.FC<AgentActivityStripProps> = ({
     streaming,
@@ -34,15 +35,29 @@ export const AgentActivityStrip: React.FC<AgentActivityStripProps> = ({
     /** Don’t duplicate the live answer stream with an “Answering…” line */
     if (streamingText.trim().length > 0) return null;
 
-    const text = state.detail ? `${state.label} · ${state.detail}` : state.label;
-
     return (
         <p
-            className={`text-[11px] text-text-muted/90 ${className}`.trim()}
+            className={cn(
+                'ml-auto flex w-fit max-w-full flex-wrap items-baseline justify-end gap-x-1.5 gap-y-1 text-[11px] leading-snug',
+                className,
+            )}
             role="status"
             aria-live="polite"
         >
-            {text}
+            <span className="font-medium text-text-muted">{state.label}</span>
+            {state.detail ? (
+                <>
+                    <span className="select-none text-text-muted/45" aria-hidden>
+                        ·
+                    </span>
+                    <span
+                        className="max-w-[min(100%,14rem)] truncate rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10.5px] font-medium text-text-muted/90"
+                        title={state.detail}
+                    >
+                        {state.detail}
+                    </span>
+                </>
+            ) : null}
         </p>
     );
 };

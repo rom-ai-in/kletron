@@ -76,6 +76,8 @@ export type ToolApprovalPolicyInput = {
     command?: string;
     /** When `work`, tools not in the Work allowlist are denied. */
     workMode?: string | null;
+    /** When set, uses this snapshot instead of the process singleton / env defaults (per-tenant runs). */
+    approvalConfig?: ToolApprovalConfig;
 };
 
 export type ToolApprovalPolicyResult = {
@@ -188,8 +190,7 @@ export const getToolApprovalPolicy = (input: ToolApprovalPolicyInput): ToolAppro
         }
     }
 
-    // Read config from persisted config → env vars → defaults
-    const cfg: ToolApprovalConfig = resolveToolApprovalConfig();
+    const cfg: ToolApprovalConfig = input.approvalConfig ?? resolveToolApprovalConfig();
 
     const autoApproveReadonlySources = new Set(cfg.autoApproveReadonlySources);
     const neverAutoApproveTools = new Set(cfg.neverAutoApproveTools);
@@ -315,7 +316,7 @@ export function isKletronAdminToolName(toolName: string): boolean {
  */
 export function applyThreadApprovalOverride(
     base: ToolApprovalPolicyResult,
-    input: { mode: ThreadApprovalMode | undefined; toolName: string }
+    input: { mode: ThreadApprovalMode | undefined; toolName: string; approvalConfig?: ToolApprovalConfig }
 ): ToolApprovalPolicyResult {
     const mode: ThreadApprovalMode = input.mode ?? "inherit";
     if (mode === "inherit") return base;
@@ -323,7 +324,7 @@ export function applyThreadApprovalOverride(
     if (base.decision === "deny") return base;
 
     const tool = String(input.toolName ?? "").trim().toLowerCase();
-    const cfg = resolveToolApprovalConfig();
+    const cfg = input.approvalConfig ?? resolveToolApprovalConfig();
     const never = new Set(cfg.neverAutoApproveTools.map((t) => t.trim().toLowerCase()).filter(Boolean));
     const override = cfg.toolOverrides?.[tool];
 

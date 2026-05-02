@@ -43,12 +43,24 @@ interface WorkspaceCategoryDoc {
 }
 
 interface CategoryStateDoc {
-  _id: string; // userId
+  /**
+   * Legacy global row: `userId`.
+   * Per-workspace row: `${userId}::${workspaceIdHex}` — required because MongoDB `_id`
+   * is unique; `{ _id: userId, workspaceId: X }` upserts collide with an existing `{ _id: userId }` doc.
+   */
+  _id: string;
   currentCategory: string;
   categoryHistory: string[];
   lastUsed: Record<string, Date>;
   workspaceId?: string | ObjectId;
   updatedAt: Date;
+}
+
+function categoryStateDocId(userId: string, workspaceId?: string): string {
+  const uid = userId.trim();
+  const ws = workspaceId?.trim();
+  if (!ws) return uid;
+  return `${uid}::${ws}`;
 }
 
 export class CategoryService {
@@ -370,11 +382,14 @@ export class CategoryService {
     let doc: CategoryStateDoc | null;
 
     if (workspaceId) {
-      doc = await collection.findOne({
-        _id: userId,
-        workspaceId: new ObjectId(workspaceId),
-      });
-
+      const scopedId = categoryStateDocId(userId, workspaceId);
+      doc = await collection.findOne({ _id: scopedId });
+      if (!doc) {
+        doc = await collection.findOne({
+          _id: userId,
+          workspaceId: new ObjectId(workspaceId),
+        });
+      }
       if (!doc) {
         doc = await collection.findOne({ _id: userId });
       }
@@ -405,11 +420,12 @@ export class CategoryService {
       updateDoc.workspaceId = new ObjectId(workspaceId);
       updateDoc.categoryHistory = [categoryIdNorm];
       updateDoc.lastUsed = { [categoryIdNorm]: now };
-      
+
+      const docId = categoryStateDocId(userId, workspaceId);
       await collection.updateOne(
-        { _id: userId, workspaceId: new ObjectId(workspaceId) },
+        { _id: docId },
         { $set: updateDoc },
-        { upsert: true }
+        { upsert: true },
       );
     } else {
       // Global state
@@ -451,12 +467,16 @@ export class CategoryService {
     let doc: CategoryStateDoc | null = null;
     
     if (workspaceId) {
-      doc = await collection.findOne({
-        _id: userId,
-        workspaceId: new ObjectId(workspaceId)
-      });
+      const scopedId = categoryStateDocId(userId, workspaceId);
+      doc = await collection.findOne({ _id: scopedId });
+      if (!doc) {
+        doc = await collection.findOne({
+          _id: userId,
+          workspaceId: new ObjectId(workspaceId),
+        });
+      }
     }
-    
+
     if (!doc) {
       doc = await collection.findOne({ _id: userId });
     }

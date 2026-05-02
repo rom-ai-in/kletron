@@ -193,7 +193,13 @@ export default function App() {
   const models = useModels(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
   const apiFetch = useDesktopApiFetch(backendUrlTrimmed, auth.getAccessToken, activeWorkspaceId);
   const automationsHook = useAutomations(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
-  const threads = useThreads(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
+  const threads = useThreads(
+    backendUrlTrimmed,
+    backendReady,
+    auth.getAccessToken,
+    activeWorkspaceId,
+    desktopWorkMode,
+  );
   const portalConfigSnapshot = usePortalConfigSnapshot(
     backendUrlTrimmed,
     settings.activeView === "settings" &&
@@ -785,6 +791,17 @@ export default function App() {
     setMessageQueue([]);
     setOpenTabs([]);
   }, [conversation, diffs, threads]);
+
+  const handleWorkModeSelect = useCallback(
+    (mode: WorkModeId) => {
+      const prev = normalizeToWorkModeId(categoriesHook.activeCategory);
+      if (mode === prev) return;
+      void categoriesHook.setActiveCategory(mode);
+      resetComposerForWorkModeChange();
+      toast.info("Switched mode", WORK_MODES[mode].name);
+    },
+    [categoriesHook.activeCategory, categoriesHook.setActiveCategory, resetComposerForWorkModeChange, toast],
+  );
 
   const toggleWorkMode = useCallback(() => {
     const cur = normalizeToWorkModeId(categoriesHook.activeCategory);
@@ -1612,13 +1629,8 @@ export default function App() {
 
       <AgentSessionChrome
         workMode={desktopWorkMode}
-        onWorkModeChange={(mode) => {
-          const prev = normalizeToWorkModeId(categoriesHook.activeCategory);
-          if (mode === prev) return;
-          void categoriesHook.setActiveCategory(mode);
-          resetComposerForWorkModeChange();
-          toast.info("Switched mode", WORK_MODES[mode].name);
-        }}
+        onWorkModeChange={handleWorkModeSelect}
+        showWorkModeSwitcher={false}
         workspaceName={workspace.workspace?.name ?? workspace.workspace?.path?.split("/").pop() ?? null}
         workspaceRootPath={workspace.workspace?.path ?? null}
         codeModeSecondRow={
@@ -1647,6 +1659,9 @@ export default function App() {
             activeThreadId={threads.conversationId}
             activeProjectId={workspace.workspace?.path ?? null}
             loading={workspace.switching || threads.threadsLoading}
+            workMode={desktopWorkMode}
+            onWorkModeChange={handleWorkModeSelect}
+            workModeSwitcherDisabled={workspace.switching || threads.threadsLoading}
             onThreadSelect={handleThreadSelect}
             onNewThreadInProject={handleNewThreadInProject}
             onAddProject={handleAddProject}
@@ -1659,6 +1674,27 @@ export default function App() {
             }}
             onArchiveThread={(threadId) => void threads.archiveThread(threadId)}
             onDeleteThread={(threadId) => void threads.deleteThread(threadId)}
+            onRemoveProject={(projectId) => {
+              const path = workspace.workspace?.path;
+              if (!path || !pathsEqual(projectId, path)) return;
+              const ok = window.confirm(
+                "Remove this workspace from Kletron? Your threads remain on the server. You can add this folder again anytime.",
+              );
+              if (!ok) return;
+              conversation.stopStreaming();
+              conversation.resetConversation();
+              threads.resetThreads();
+              diffs.resetDiffs();
+              workspace.clearWorkspace();
+              try {
+                const url = new URL(window.location.href);
+                url.searchParams.delete("sessionId");
+                window.history.replaceState({}, "", `${url.pathname}${url.search}${window.location.hash}`);
+              } catch {
+                /* ignore */
+              }
+              toast.info("Workspace removed", "Choose a folder or add a project when you're ready.");
+            }}
             style={{ width: leftPanel.width }}
           />
           <ResizeHandle

@@ -76,7 +76,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             <div className={cn('group flex w-full flex-col items-end', className)}>
                 <div
                     className={cn(
-                        'relative w-full max-w-[min(85%,28rem)] rounded-xl border border-white/[0.08]',
+                        'relative inline-block w-max max-w-[min(85%,28rem)] rounded-xl border border-white/[0.08]',
                         'bg-white/[0.04] px-3 py-2 text-[13px] leading-snug text-text-primary',
                     )}
                 >

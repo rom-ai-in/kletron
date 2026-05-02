@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { unwrapRouteParams } from "../../../../lib/unwrapRouteParams";
 import { Card, CardContent } from "@kletron/ui/components/ui/Card";
 import { ArrowRight, Cog, Wrench, Link as LinkIcon } from "lucide-react";
 
@@ -14,9 +15,9 @@ interface WorkspaceSummary {
 export default function WorkspaceSettingsPage({
     params,
 }: {
-    params: Promise<{ workspaceId: string }>;
+    params: Promise<{ workspaceId: string }> | { workspaceId: string };
 }) {
-    const { workspaceId } = use(params);
+    const { workspaceId } = unwrapRouteParams(params);
     const [workspace, setWorkspace] = useState<WorkspaceSummary | null>(null);
     const [error, setError] = useState<string | null>(null);
 

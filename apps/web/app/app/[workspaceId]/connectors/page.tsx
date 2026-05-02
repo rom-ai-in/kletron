@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, use, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { unwrapRouteParams } from "../../../../lib/unwrapRouteParams";
 import { Card, CardContent } from "@kletron/ui/components/ui/Card";
 import { Button } from "@kletron/ui/components/ui/Button";
 import { Input } from "@kletron/ui/components/ui/Input";
@@ -618,9 +619,9 @@ function WorkspaceConnectorsPageInner({ workspaceId }: { workspaceId: string }) 
 export default function WorkspaceConnectorsPage({
     params,
 }: {
-    params: Promise<{ workspaceId: string }>;
+    params: Promise<{ workspaceId: string }> | { workspaceId: string };
 }) {
-    const { workspaceId } = use(params);
+    const { workspaceId } = unwrapRouteParams(params);
     return (
         <Suspense
             fallback={

@@ -42,6 +42,10 @@ export interface PluginCatalogModalProps {
     } | null;
 }
 
+function skillsLibraryHref(workspaceId: string | undefined) {
+    return workspaceId ? `/app/${workspaceId}/skills` : "/app/config/skills";
+}
+
 function PluginConnectorsPanel({ plugin }: { plugin: PluginDefinition }) {
     const [search, setSearch] = useState("");
     const { types, isLoading, error } = useConnectorCatalog();
@@ -155,6 +159,7 @@ export function PluginCatalogModal({
 }: PluginCatalogModalProps) {
     const [tab, setTab] = useState<Tab>("overview");
     const [skillDialog, setSkillDialog] = useState<SkillDialogState>({ open: false });
+    const skillsHref = skillsLibraryHref(workspacePluginActions?.workspaceId);
 
     useEffect(() => {
         setTab("overview");
@@ -249,19 +254,19 @@ export function PluginCatalogModal({
                                 </button>
                             )
                         ) : null}
-                        {workspacePluginActions ? (
+                        {workspacePluginActions && plugin ? (
                             <Link
-                                href={`/app/${workspacePluginActions.workspaceId}/plugins`}
+                                href={`/app/${workspacePluginActions.workspaceId}/connectors?plugin=${encodeURIComponent(plugin.id)}`}
                                 className={buttonVariants({ variant: "secondary", size: "sm" })}
                             >
-                                Workspace plugins
+                                Connectors
                             </Link>
                         ) : null}
                         <Link
-                            href="/app/config/skills"
+                            href={skillsHref}
                             className={buttonVariants({ variant: "secondary", size: "sm" })}
                         >
-                            Skills library
+                            Skills
                         </Link>
                     </div>
                 }
@@ -311,11 +316,24 @@ export function PluginCatalogModal({
                                 Skills ({plugin.skillSlugs.length})
                             </h2>
                             <p className="mb-3 text-xs text-text-muted">
-                                Click a skill to view details. Edit or create skills in the{" "}
-                                <Link href="/app/config/skills" className="underline">
-                                    skills library
-                                </Link>
-                                .
+                                Click a skill to view details.{" "}
+                                {workspacePluginActions ? (
+                                    <>
+                                        Edit or create skills on the{" "}
+                                        <Link href={skillsHref} className="underline">
+                                            Skills
+                                        </Link>{" "}
+                                        page for this workspace.
+                                    </>
+                                ) : (
+                                    <>
+                                        Edit or create skills in the{" "}
+                                        <Link href={skillsHref} className="underline">
+                                            Skills
+                                        </Link>{" "}
+                                        area (select a workspace first).
+                                    </>
+                                )}
                             </p>
                             <div className="flex flex-wrap gap-2">
                                 {plugin.skillSlugs.map((slug) => (
@@ -372,10 +390,10 @@ export function PluginCatalogModal({
                 footerSummary={skillFooterSummary}
                 footerExtra={
                     <Link
-                        href="/app/config/skills"
+                        href={skillsHref}
                         className={buttonVariants({ variant: "secondary", size: "sm" })}
                     >
-                        Skills library
+                        Skills
                     </Link>
                 }
             >

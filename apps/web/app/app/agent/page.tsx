@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -72,6 +72,8 @@ type SessionSummary = {
   source?: string | null;
   /** When set, identifies the automation config this thread belongs to. */
   automationId?: string | null;
+  /** Stored Code vs Work mode for this run (defaults to `code` when unset server-side). */
+  workMode?: WorkModeId;
 };
 
 type SessionDetail = {
@@ -231,7 +233,11 @@ const AgentComposer = memo(function AgentComposer({
         action: () => {
           setDraft("/skills ");
           queueMicrotask(() => {
-            router.push("/app/config/skills");
+            router.push(
+              activeWorkspaceId
+                ? `/app/${activeWorkspaceId}/skills`
+                : "/app/config/skills",
+            );
           });
         },
       },
@@ -250,7 +256,7 @@ const AgentComposer = memo(function AgentComposer({
       },
     ];
     return [...fromLibrary, ...builtin];
-  }, [slashSkillRows, onPlanModeToggle, router]);
+  }, [slashSkillRows, onPlanModeToggle, router, activeWorkspaceId]);
 
   useEffect(() => {
     setDraft("");
@@ -468,6 +474,52 @@ export default function AgentPage() {
     deleteWorkspace: deleteWorkspaceCtx,
   } = useWorkspace();
 
+  // ── Code vs Work mode (per workspace, persisted server + local mirror) ──
+  const [workMode, setWorkMode] = useState<WorkModeId>("code");
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setWorkMode("code");
+      return;
+    }
+    const lsKey = `kletron-work-mode-${activeWorkspaceId}`;
+    const fromLs =
+      typeof window !== "undefined" ? window.localStorage.getItem(lsKey) : null;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/work-categories/current?workspaceId=${encodeURIComponent(activeWorkspaceId)}`,
+        );
+        if (res.ok) {
+          const json = (await res.json()) as { data?: string | null };
+          if (json.data != null && json.data !== "") {
+            const m = normalizeToWorkModeId(String(json.data));
+            if (!cancelled) {
+              setWorkMode(m);
+              try {
+                window.localStorage.setItem(lsKey, m);
+              } catch {
+                /* ignore */
+              }
+            }
+            return;
+          }
+        }
+      } catch {
+        /* fall through */
+      }
+      if (cancelled) return;
+      if (fromLs === "code" || fromLs === "work") {
+        setWorkMode(fromLs);
+      } else {
+        setWorkMode("code");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId]);
+
   // ── Hooks ─────────────────────────────────────────────────────────────
   const {
     llmProvider,
@@ -506,23 +558,37 @@ export default function AgentPage() {
     return isSimpleGraph;
   }, [sessionDetail, isSimpleGraph]);
 
+  const sessionsHydratedRef = useRef(false);
+  /**
+   * After POST /api/sessions, `activeSessionId` is set from the stream before GET /api/sessions
+   * returns an updated list. Pruning "unknown" ids would call handleNewSession() and wipe the
+   * optimistic user message — avoid until the sidebar list catches up or we confirm the session.
+   */
+  const pendingSessionListCatchUpRef = useRef<string | null>(null);
+
   // ── Fetch sessions (current workspace only) ─────────────────────────
   // Includes both chat threads (source="agent") and automation threads
   // (source="automation"). The sidebar visually distinguishes them.
+  // Scoped by Code vs Work via `workMode` so the list matches the chrome.
   const fetchSessions = useCallback(async () => {
+    sessionsHydratedRef.current = false;
     try {
-      const wsQuery = activeWorkspaceId ? `&workspaceId=${activeWorkspaceId}` : '';
-      const res = await fetch(`/api/sessions?limit=50${wsQuery}`);
+      const wsQuery = activeWorkspaceId ? `&workspaceId=${encodeURIComponent(activeWorkspaceId)}` : "";
+      const wmQuery = `&workMode=${encodeURIComponent(workMode)}`;
+      const res = await fetch(`/api/sessions?limit=50${wsQuery}${wmQuery}`);
       if (res.ok) {
         const data = await res.json();
-        setSessions(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? (data as SessionSummary[]) : [];
+        setSessions(list);
+        sessionsHydratedRef.current = true;
       }
     } catch (e) {
       console.error("Failed to fetch sessions:", e);
     }
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, workMode]);
 
   const handleSessionCreated = useCallback((runId: string, _graphId: string) => {
+    pendingSessionListCatchUpRef.current = runId;
     setActiveSessionId(runId);
     sessionStorage.setItem(SESSION_STORAGE_KEY, runId);
   }, []);
@@ -591,52 +657,6 @@ export default function AgentPage() {
       console.error("[title-gen] All retries exhausted for session", runId);
     })();
   }, [fetchSessions]);
-
-  // ── Code vs Work mode (per workspace, persisted server + local mirror) ──
-  const [workMode, setWorkMode] = useState<WorkModeId>("code");
-  useEffect(() => {
-    if (!activeWorkspaceId) {
-      setWorkMode("code");
-      return;
-    }
-    const lsKey = `kletron-work-mode-${activeWorkspaceId}`;
-    const fromLs =
-      typeof window !== "undefined" ? window.localStorage.getItem(lsKey) : null;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch(
-          `/api/work-categories/current?workspaceId=${encodeURIComponent(activeWorkspaceId)}`,
-        );
-        if (res.ok) {
-          const json = (await res.json()) as { data?: string | null };
-          if (json.data != null && json.data !== "") {
-            const m = normalizeToWorkModeId(String(json.data));
-            if (!cancelled) {
-              setWorkMode(m);
-              try {
-                window.localStorage.setItem(lsKey, m);
-              } catch {
-                /* ignore */
-              }
-            }
-            return;
-          }
-        }
-      } catch {
-        /* fall through */
-      }
-      if (cancelled) return;
-      if (fromLs === "code" || fromLs === "work") {
-        setWorkMode(fromLs);
-      } else {
-        setWorkMode("code");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeWorkspaceId]);
 
   const {
     messages,
@@ -1004,6 +1024,7 @@ export default function AgentPage() {
     // Stop any active stream before clearing state — this also releases
     // the streaming guard so setMessages will work.
     handleStop();
+    pendingSessionListCatchUpRef.current = null;
     setActiveSessionId(null);
     setSessionDetail(null);
     setMessages([]);
@@ -1011,6 +1032,29 @@ export default function AgentPage() {
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
     setSessionDetailLoading(false);
   }, [setMessages, handleStop]);
+
+  useEffect(() => {
+    if (!activeSessionId || !sessionsHydratedRef.current) return;
+    if (sessions.some((s) => s.id === activeSessionId)) {
+      if (pendingSessionListCatchUpRef.current === activeSessionId) {
+        pendingSessionListCatchUpRef.current = null;
+      }
+      return;
+    }
+    // Brand-new thread: sidebar list is stale until fetchSessions completes.
+    if (pendingSessionListCatchUpRef.current === activeSessionId) return;
+    if (sending || streamStatus === "streaming") return;
+    // Session exists server-side but list filtered / delayed — keep UI.
+    if (sessionDetail?.id === activeSessionId) return;
+    handleNewSession();
+  }, [
+    sessions,
+    activeSessionId,
+    handleNewSession,
+    sending,
+    streamStatus,
+    sessionDetail?.id,
+  ]);
 
   /** Switching Code ↔ Work starts a fresh thread so messages stay scoped to the mode. */
   const handleWorkModeSelect = useCallback(
@@ -1183,8 +1227,6 @@ export default function AgentPage() {
     }
     return events;
   }, [messages]);
-  const deferredChatEvents = useDeferredValue(chatEventsForView);
-
   /** Automations and other server-only runs never open a browser NDJSON stream (`sending` stays false). */
   const isServerSideRunActive = useMemo(() => {
     if (!activeSessionId || !sessionDetail || sessionDetail.id !== activeSessionId) return false;
@@ -1194,10 +1236,20 @@ export default function AgentPage() {
 
   const agentBusy = sending || isServerSideRunActive;
 
-  /** Live stream events; for server runs fall back to persisted chat so the activity line can show tool names. */
+  /**
+   * Activity strip must follow the same timeline as the visible thread (`messages`).
+   * Raw `eventStream` can still contain the *previous* turn until the first `update`
+   * chunk — using it caused wrong “Continuing…” / old tool names right after send.
+   */
   const activityEventsForStrip = useMemo(
-    () => (eventStream.length > 0 ? eventStream : deferredChatEvents),
-    [eventStream, deferredChatEvents],
+    () =>
+      chatEventsForView.map((e) => ({
+        kind: e.kind,
+        toolName: e.toolName,
+        name: e.toolName,
+        content: e.content,
+      })),
+    [chatEventsForView],
   );
 
   const runStartedAtForUi = runStartedAt ?? sessionDetail?.startedAt ?? null;
@@ -1540,6 +1592,9 @@ export default function AgentPage() {
       activeThreadId={activeSessionId}
       activeProjectId={activeWorkspaceId}
       loading={workspaceSwitching}
+      workMode={workMode}
+      onWorkModeChange={(mode) => void handleWorkModeSelect(mode)}
+      workModeSwitcherDisabled={workspaceSwitching}
       onThreadSelect={handleSelectSession}
       onNewThreadInProject={() => { void handleNewSessionInActiveWorkspace(); }}
       onRenameThread={(id, title) => void handleRenameSession(id, title)}
@@ -1555,6 +1610,8 @@ export default function AgentPage() {
     activeSessionId,
     activeWorkspaceId,
     workspaceSwitching,
+    workMode,
+    handleWorkModeSelect,
     handleSelectSession,
     handleNewSessionInActiveWorkspace,
     handleRenameSession,
@@ -1567,6 +1624,7 @@ export default function AgentPage() {
       <AgentSessionChrome
         workMode={workMode}
         onWorkModeChange={(mode) => void handleWorkModeSelect(mode)}
+        showWorkModeSwitcher={false}
         workspaceName={activeWorkspace?.name ?? null}
         workspaceRootPath={activeWorkspace?.rootPath ?? null}
         workspaceErrorSlot={
@@ -1712,7 +1770,7 @@ export default function AgentPage() {
             )}
             {(messages.length > 0 || agentBusy) && (
               <MessageList
-                events={deferredChatEvents}
+                events={chatEventsForView}
                 streaming={agentBusy}
                 streamingText={streamingText}
                 streamingReasoning={streamingReasoning}

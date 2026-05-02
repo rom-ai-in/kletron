@@ -19,6 +19,8 @@ import {
   ClipboardCheck,
   Bot,
 } from 'lucide-react';
+import { WORK_MODES, type WorkModeId } from '@kletron/shared/workMode';
+import { WorkModeSegmented } from './WorkModeSegmented';
 
 export type ThreadLiveStatus = 'running' | 'completed' | 'idle' | 'waiting' | 'error';
 
@@ -79,6 +81,13 @@ export interface ProjectSidebarProps {
   surface?: 'glass' | 'solid';
   className?: string;
   style?: React.CSSProperties;
+  /**
+   * Code vs Work — drives which threads are listed. Pass with `onWorkModeChange` to show the switcher above the list.
+   */
+  workMode?: WorkModeId;
+  onWorkModeChange?: (mode: WorkModeId) => void;
+  /** Disable mode control (e.g. while workspace or threads are loading). */
+  workModeSwitcherDisabled?: boolean;
 }
 
 function StatusDot({ status }: { status: ThreadLiveStatus }) {
@@ -128,6 +137,9 @@ export function ProjectSidebar({
   surface = 'glass',
   className = '',
   style,
+  workMode,
+  onWorkModeChange,
+  workModeSwitcherDisabled = false,
 }: ProjectSidebarProps) {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
@@ -230,34 +242,55 @@ export function ProjectSidebar({
         </div>
       )}
 
-      {/* ── Threads section header ── */}
-      <div className="flex items-center justify-between px-3 py-2.5 mt-1 gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-widest text-text-muted">
-          Threads
-        </span>
-        <div className="flex items-center gap-1">
-          {onNewThreadInProject && projects.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                const targetId =
-                  activeProjectId && projects.some((p) => p.id === activeProjectId)
-                    ? activeProjectId
-                    : projects[0]?.id;
-                if (targetId) {
-                  onNewThreadInProject(targetId);
-                }
-              }}
-              className="rounded-md px-2 py-1 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
-              title="New thread"
-            >
-              New
-            </button>
-          )}
+      {/* ── Mode first (scopes list), then Threads header — icons stay muted, no accent stripe ── */}
+      <div className="mt-1 flex flex-col gap-2 px-3 py-2.5">
+        {workMode != null && onWorkModeChange ? (
+          <div className="flex flex-col gap-1" role="region" aria-label="Code or work thread list">
+            <WorkModeSegmented
+              value={workMode}
+              onChange={onWorkModeChange}
+              disabled={workModeSwitcherDisabled}
+              fullWidth
+              showIcons
+            />
+            <p id="sidebar-work-mode-desc" className="text-[10px] leading-snug text-text-muted">
+              <span className="font-medium text-text-secondary">{WORK_MODES[workMode].name}</span>{' '}
+              threads — switch mode for a fresh composer.
+            </p>
+          </div>
+        ) : null}
+
+        <div className="flex items-center justify-between gap-2">
+          <span
+            id="project-sidebar-threads-heading"
+            className="text-[11px] font-bold uppercase tracking-widest text-text-muted"
+          >
+            Threads
+          </span>
+          <div className="flex items-center gap-1">
+            {onNewThreadInProject && projects.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const targetId =
+                    activeProjectId && projects.some((p) => p.id === activeProjectId)
+                      ? activeProjectId
+                      : projects[0]?.id;
+                  if (targetId) {
+                    onNewThreadInProject(targetId);
+                  }
+                }}
+                className="rounded-md px-2 py-1 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
+                title="New thread"
+              >
+                New
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* ── Category filter chips ── */}
+      {/* ── Category filter chips (chat vs automation within this mode) ── */}
       <div className="flex items-center gap-1 px-3 pb-2">
         {filterChip('all', 'All')}
         {filterChip('chat', 'Chat')}
@@ -315,27 +348,28 @@ export function ProjectSidebar({
                   <span className="truncate">{project.name}</span>
                 </button>
 
-                {/* Hover action icons — ... menu + new thread (hidden for readonly projects) */}
+                {/* Hover action icons — … menu (only if handlers exist) + new thread */}
                 {!project.readonly && (
                   <div className="flex items-center gap-0.5 opacity-0 group-hover/project:opacity-100 transition-all flex-shrink-0">
-                    {/* Context menu (remove) */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (showContextMenu) {
-                          closeContextMenu();
-                        } else {
-                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                          setMenuPosition({ top: rect.bottom + 4, left: rect.left });
-                          setContextMenuProjectId(project.id);
-                        }
-                      }}
-                      className="p-0.5 rounded text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
-                      title="More actions"
-                    >
-                      <MoreHorizontal className="h-3.5 w-3.5" />
-                    </button>
+                    {onRemoveProject && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (showContextMenu) {
+                            closeContextMenu();
+                          } else {
+                            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                            setMenuPosition({ top: rect.bottom + 4, left: rect.left });
+                            setContextMenuProjectId(project.id);
+                          }
+                        }}
+                        className="p-0.5 rounded text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
+                        title="More actions"
+                      >
+                        <MoreHorizontal className="h-3.5 w-3.5" />
+                      </button>
+                    )}
 
                     {/* New thread in this project */}
                     {onNewThreadInProject && isHealthy && (

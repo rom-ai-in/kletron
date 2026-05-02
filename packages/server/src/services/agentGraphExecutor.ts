@@ -40,7 +40,19 @@ import { formatAuditContextPrompt, type AuditContext } from "@kletron/shared/doc
 import { DEFAULT_WORKSPACE_CONTEXT_INJECTION } from "@kletron/shared/workspaceContextInjection";
 import { agentMemoryService } from "./agentMemoryService";
 import { SafeEditGate } from "./agent/SafeEditGate";
+import type { ToolApprovalConfig } from "./toolApprovalPolicy";
 import { applyThreadApprovalOverride, getToolApprovalPolicy } from "./toolApprovalPolicy";
+import { resolveEffectiveToolApprovalConfigForRun } from "./effectiveToolApprovalService";
+
+const runApprovalConfigCache = new Map<string, ToolApprovalConfig>();
+
+async function getCachedRunApprovalConfig(runId: string): Promise<ToolApprovalConfig> {
+    const hit = runApprovalConfigCache.get(runId);
+    if (hit) return hit;
+    const cfg = await resolveEffectiveToolApprovalConfigForRun(runId);
+    runApprovalConfigCache.set(runId, cfg);
+    return cfg;
+}
 import { sanitizeAssistantVisibleContent, stripThoughtTagsForTranscript } from "./titleSanitizer";
 
 // --- Checkpoint Imports ---
@@ -2026,10 +2038,12 @@ export class AgentGraphExecutor {
 
                                 const threadMode = await agentGraphRunService.getRunThreadApprovalMode(runId);
                                 const workMode = await agentGraphRunService.getRunWorkMode(runId);
+                                const approvalCfg = await getCachedRunApprovalConfig(runId);
                                 const basePolicy = getToolApprovalPolicy({
                                     source: runSource,
                                     toolName: name,
                                     workMode,
+                                    approvalConfig: approvalCfg,
                                     ...(name === "execute_bash" && typeof input?.command === "string"
                                         ? { command: input.command as string }
                                         : {}),
@@ -2037,6 +2051,7 @@ export class AgentGraphExecutor {
                                 const policy = applyThreadApprovalOverride(basePolicy, {
                                     mode: threadMode,
                                     toolName: name,
+                                    approvalConfig: approvalCfg,
                                 });
                                 console.info(
                                     `[ToolApprovalPolicy] runId=${runId} threadMode=${threadMode ?? "inherit"} source=${policy.normalizedSource} tool=${name} decision=${policy.decision} reason="${policy.reason}"`
