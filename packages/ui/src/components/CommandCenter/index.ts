@@ -33,7 +33,14 @@ export { UncommittedChangesPanel } from './UncommittedChangesPanel';
 export type { UncommittedChangesPanelProps, FileDiffData } from './UncommittedChangesPanel';
 
 export { SlashCommandMenu } from './SlashCommandMenu';
-export type { SlashCommandMenuProps, SlashCommandItem } from './SlashCommandMenu';
+export type { SlashCommandMenuProps, SlashCommandItem, SlashCommandSectionId } from './SlashCommandMenu';
+export {
+  filterSlashCommandItems,
+  normalizeSlashQuery,
+  slashItemMatchesQuery,
+  SLASH_SECTION_LABEL,
+  SLASH_SECTION_ORDER,
+} from './slashCommandMenuUtils';
 
 export { MultimodalMenu } from './MultimodalMenu';
 export type { MultimodalMenuProps } from './MultimodalMenu';

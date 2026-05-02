@@ -3,6 +3,7 @@
  * Agent composer graph + provider selection lives in `useAgentSession` (shared UI hook).
  */
 import { useEffect, useState } from "react";
+import { defaultAgentGraphPayload } from "@kletron/shared";
 import type { AgentGraphRunSummary, LlmConfig, LLMProvider, ToolMetadata } from "../types";
 
 export function useModels(
@@ -91,6 +92,28 @@ export function useModels(
       setGraphRuns([]);
     } finally {
       setGraphRunsLoading(false);
+    }
+  }
+
+  async function createAgentGraph(): Promise<string | null> {
+    const token = await getAccessToken();
+    if (!token) return null;
+    try {
+      const h: Record<string, string> = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      };
+      if (activeWorkspaceId) h["x-workspace-id"] = activeWorkspaceId;
+      const res = await fetch(`${backendUrlTrimmed}/api/agent-graphs`, {
+        method: "POST",
+        headers: h,
+        body: JSON.stringify(defaultAgentGraphPayload()),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { graphId?: string };
+      return typeof data.graphId === "string" ? data.graphId : null;
+    } catch {
+      return null;
     }
   }
 
@@ -255,6 +278,7 @@ export function useModels(
     loadModel,
     loadGraphRuns,
     startGraphRun,
+    createAgentGraph,
     loadTools,
   };
 }

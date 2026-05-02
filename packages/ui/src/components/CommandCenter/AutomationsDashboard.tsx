@@ -8,7 +8,7 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  AlertCircle,
+  ExternalLink,
   Trash2,
   Calendar,
   RefreshCw,
@@ -25,6 +25,7 @@ export interface Automation {
   status: AutomationStatus;
   lastRunAt?: string;
   nextRunAt?: string;
+  lastSessionId?: string;
 }
 
 export interface AutomationsDashboardProps {
@@ -32,8 +33,12 @@ export interface AutomationsDashboardProps {
   onAdd?: (name: string, description: string, schedule: string) => void;
   onRemove?: (id: string) => void;
   onToggle?: (id: string) => void;
-  onRunNow?: (id: string) => void;
+  onRunNow?: (id: string) => void | Promise<void>;
   onViewResults?: (id: string) => void;
+  /** Open automation detail in the web app (same origin as API). */
+  onOpenInBrowser?: (id: string) => void;
+  /** Jump to agent view with this session/thread id. */
+  onOpenThread?: (sessionId: string) => void;
   loading?: boolean;
   className?: string;
 }
@@ -82,6 +87,8 @@ export function AutomationsDashboard({
   onToggle,
   onRunNow,
   onViewResults,
+  onOpenInBrowser,
+  onOpenThread,
   loading = false,
   className = '',
 }: AutomationsDashboardProps) {
@@ -132,10 +139,30 @@ export function AutomationsDashboard({
               </div>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+              {onOpenInBrowser && (
+                <button
+                  type="button"
+                  onClick={() => onOpenInBrowser(automation.id)}
+                  className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
+                  title="Open in browser"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+                </button>
+              )}
+              {onOpenThread && automation.lastSessionId && (
+                <button
+                  type="button"
+                  onClick={() => onOpenThread(automation.lastSessionId!)}
+                  className="rounded px-1.5 py-0.5 text-[10px] text-accent hover:underline"
+                  title="Open thread in app"
+                >
+                  Thread
+                </button>
+              )}
               {onRunNow && (
                 <button
                   type="button"
-                  onClick={() => onRunNow(automation.id)}
+                  onClick={() => void onRunNow(automation.id)}
                   className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
                   title="Run now"
                 >

@@ -196,6 +196,12 @@ function installAppMenu() {
           },
         },
         {
+          label: "History",
+          click: () => {
+            mainWindow?.webContents.send("app:navigate", "history");
+          },
+        },
+        {
           label: "Automations",
           click: () => {
             mainWindow?.webContents.send("app:navigate", "automations");

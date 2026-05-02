@@ -1,9 +1,10 @@
 // Shared types for the Kletron Desktop application
 
-export type ActiveView = "app" | "settings" | "automations" | "agent-graphs";
+export type ActiveView = "app" | "history" | "settings" | "automations" | "agent-graphs";
 export type SettingsSectionId =
   | "general"
   | "configuration"
+  | "portal"
   | "personalization"
   | "mcp"
   | "skills"

@@ -1,22 +1,22 @@
 // apps/web/app/api/work-categories/current/route.ts
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { categoryService } from "@kletron/server/services/categoryService";
 import { isValidWorkModeId, normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 /**
  * GET /api/work-categories/current?workspaceId=optional
  * Returns current Code vs Work mode for the user (optionally scoped to a workspace).
+ * Auth: NextAuth session (browser) or Bearer / IDE token (desktop).
  */
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession();
-
-    if (!session?.user || !(session.user as { id?: string }).id) {
+    const auth = await requireAppRouteAuth(request);
+    if (!auth) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as { id: string }).id;
+    const userId = auth.userId;
     const { searchParams } = new URL(request.url);
     const workspaceId = searchParams.get("workspaceId")?.trim() || undefined;
 
@@ -48,13 +48,12 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession();
-
-    if (!session?.user || !(session.user as { id?: string }).id) {
+    const auth = await requireAppRouteAuth(request);
+    if (!auth) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as { id: string }).id;
+    const userId = auth.userId;
     const body = await request.json().catch(() => ({} as Record<string, unknown>));
     const raw =
       typeof body.workMode === "string"

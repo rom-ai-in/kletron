@@ -128,7 +128,7 @@ export type {
     InputBarProps,
     ProjectUtilitySidebarProps, PendingDiffItem, FileLink, GitSidebarData,
     InlineDiffReviewProps, InlineDiff,
-    SlashCommandMenuProps, SlashCommandItem,
+    SlashCommandMenuProps, SlashCommandItem, SlashCommandSectionId,
     MultimodalMenuProps,
     ReviewQueueProps, ReviewQueueItem,
     SkillsManagerProps, SkillItem,

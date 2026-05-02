@@ -48,10 +48,16 @@ const api = {
     ipcRenderer.on("auth:deepLink", listener);
     return () => ipcRenderer.removeListener("auth:deepLink", listener);
   },
-  /** Main-process menu navigates to app / automations / agent-graphs / settings */
-  onNavigate: (handler: (view: "app" | "automations" | "agent-graphs" | "settings") => void): (() => void) => {
+  /** Main-process menu navigates to primary views */
+  onNavigate: (handler: (view: "app" | "history" | "automations" | "agent-graphs" | "settings") => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, view: string) => {
-      if (view === "app" || view === "automations" || view === "agent-graphs" || view === "settings") {
+      if (
+        view === "app" ||
+        view === "history" ||
+        view === "automations" ||
+        view === "agent-graphs" ||
+        view === "settings"
+      ) {
         handler(view);
       }
     };

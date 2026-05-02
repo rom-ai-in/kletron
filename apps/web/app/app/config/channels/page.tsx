@@ -32,8 +32,8 @@ export default function ChannelsConfigPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 scrollbar-elegant">
-        <div className="mx-auto max-w-3xl">
+      <div className="flex-1 overflow-y-auto scrollbar-elegant">
+        <div className="w-full px-6 py-6 lg:px-8">
           <ChannelsConfigView />
         </div>
       </div>

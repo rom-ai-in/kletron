@@ -39,6 +39,14 @@ export type CustomCategory = {
   updatedAt: Date;
 };
 
+/** When set, GET/POST `/api/work-categories/current` (same contract as web agent). */
+export type UseCategoriesSync = {
+  backendUrlTrimmed: string;
+  backendReady: boolean;
+  getAccessToken: () => Promise<string | null>;
+  activeWorkspaceId: string | null;
+};
+
 // ============================================================================
 // BUILT-IN CATEGORIES (Code vs Work)
 // ============================================================================
@@ -66,8 +74,8 @@ export const BUILT_IN_CATEGORIES: WorkCategory[] = (["code", "work"] as WorkMode
 // HOOK
 // ============================================================================
 
-export function useCategories() {
-  const [activeCategory, setActiveCategory] = useState<WorkModeId>("code");
+export function useCategories(sync?: UseCategoriesSync) {
+  const [activeCategory, setActiveCategoryState] = useState<WorkModeId>("code");
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
   const [categoryHistory, setCategoryHistory] = useState<WorkModeId[]>(["code"]);
 
@@ -75,7 +83,7 @@ export function useCategories() {
     const savedCategory = localStorage.getItem("kletron-active-category");
     if (savedCategory) {
       const mode = normalizeToWorkModeId(savedCategory);
-      setActiveCategory(mode);
+      setActiveCategoryState(mode);
     }
 
     const savedCustom = localStorage.getItem("kletron-custom-categories");
@@ -83,10 +91,10 @@ export function useCategories() {
       try {
         const parsed = JSON.parse(savedCustom);
         setCustomCategories(
-          parsed.map((c: any) => ({
+          parsed.map((c: Record<string, unknown>) => ({
             ...c,
-            createdAt: new Date(c.createdAt),
-            updatedAt: new Date(c.updatedAt),
+            createdAt: new Date(c.createdAt as string),
+            updatedAt: new Date(c.updatedAt as string),
           })),
         );
       } catch {
@@ -103,22 +111,109 @@ export function useCategories() {
     localStorage.setItem("kletron-custom-categories", JSON.stringify(customCategories));
   }, [customCategories]);
 
+  // Hydrate from server when workspace is known (matches web agent workMode).
+  useEffect(() => {
+    if (!sync?.backendReady || !sync.activeWorkspaceId) return;
+    const wsId = sync.activeWorkspaceId;
+    let cancelled = false;
+    const lsKey = `kletron-work-mode-${wsId}`;
+    const fromLs = typeof window !== "undefined" ? window.localStorage.getItem(lsKey) : null;
+
+    void (async () => {
+      try {
+        const token = await sync.getAccessToken();
+        if (!token || cancelled) return;
+        const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+        headers["x-workspace-id"] = wsId;
+        const res = await fetch(
+          `${sync.backendUrlTrimmed}/api/work-categories/current?workspaceId=${encodeURIComponent(wsId)}`,
+          { headers },
+        );
+        if (res.ok) {
+          const json = (await res.json()) as { data?: string | null };
+          if (json.data != null && json.data !== "") {
+            const m = normalizeToWorkModeId(String(json.data));
+            if (!cancelled) {
+              setActiveCategoryState(m);
+              try {
+                window.localStorage.setItem(lsKey, m);
+              } catch {
+                /* ignore */
+              }
+            }
+            return;
+          }
+        }
+      } catch {
+        /* fall through */
+      }
+      if (cancelled) return;
+      if (fromLs === "code" || fromLs === "work") {
+        setActiveCategoryState(fromLs);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sync?.backendReady, sync?.backendUrlTrimmed, sync?.activeWorkspaceId, sync?.getAccessToken]);
+
   const allCategories = [...BUILT_IN_CATEGORIES, ...customCategories] as (WorkCategory | CustomCategory)[];
 
   const activeCategoryConfig = allCategories.find((c) => c.id === activeCategory);
 
   const setActiveCategoryAndSave = useCallback(
-    (categoryId: string) => {
+    async (categoryId: string) => {
       const mode = normalizeToWorkModeId(categoryId);
-      if (allCategories.some((c) => c.id === mode)) {
-        setCategoryHistory((prev) => {
-          const newHistory = [mode, ...prev.filter((id) => id !== mode)].slice(0, 10);
-          return newHistory;
+      if (!allCategories.some((c) => c.id === mode)) return;
+
+      const prev = activeCategory;
+      setCategoryHistory((h) => {
+        const newHistory = [mode, ...h.filter((id) => id !== mode)].slice(0, 10);
+        return newHistory;
+      });
+      setActiveCategoryState(mode);
+
+      const lsKey = sync?.activeWorkspaceId ? `kletron-work-mode-${sync.activeWorkspaceId}` : null;
+      if (lsKey) {
+        try {
+          window.localStorage.setItem(lsKey, mode);
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (!sync?.backendReady || !sync.getAccessToken) return;
+
+      try {
+        const token = await sync.getAccessToken();
+        if (!token) return;
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        };
+        if (sync.activeWorkspaceId) headers["x-workspace-id"] = sync.activeWorkspaceId;
+        const res = await fetch(`${sync.backendUrlTrimmed}/api/work-categories/current`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            workMode: mode,
+            workspaceId: sync.activeWorkspaceId ?? undefined,
+          }),
         });
-        setActiveCategory(mode);
+        if (!res.ok) throw new Error("persist failed");
+      } catch {
+        setActiveCategoryState(prev);
+        if (lsKey) {
+          try {
+            window.localStorage.setItem(lsKey, prev);
+          } catch {
+            /* ignore */
+          }
+        }
       }
     },
-    [allCategories],
+    [allCategories, activeCategory, sync],
   );
 
   const addCustomCategory = useCallback((category: Omit<CustomCategory, "id" | "createdAt" | "updatedAt">) => {

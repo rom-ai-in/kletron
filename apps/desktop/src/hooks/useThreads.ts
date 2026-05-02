@@ -22,6 +22,15 @@ export function useThreads(
     return Boolean(item.archived) || item.status === "archived";
   }
 
+  /** Same query shape as web `fetchSessions` (apps/web/app/app/agent/page.tsx). */
+  function sessionsListUrl(includeArchived: boolean) {
+    const q = new URLSearchParams();
+    q.set("limit", "50");
+    if (activeWorkspaceId) q.set("workspaceId", activeWorkspaceId);
+    if (includeArchived) q.set("includeArchived", "true");
+    return `${backendUrlTrimmed}/api/sessions?${q.toString()}`;
+  }
+
   async function loadThreads(preferredId?: string) {
     const token = await getAccessToken();
     if (!token) return;
@@ -31,7 +40,7 @@ export function useThreads(
       const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
       if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
 
-      const res = await fetch(`${backendUrlTrimmed}/api/sessions?limit=50&excludeSource=automation`, { headers });
+      const res = await fetch(sessionsListUrl(false), { headers });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || `Failed to load threads (${res.status})`);
@@ -175,10 +184,7 @@ export function useThreads(
     try {
       const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
       if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
-      const res = await fetch(
-        `${backendUrlTrimmed}/api/sessions?limit=50&excludeSource=automation&includeArchived=true`,
-        { headers }
-      );
+      const res = await fetch(sessionsListUrl(true), { headers });
       if (!res.ok) return;
       const data = await res.json();
       const list = Array.isArray(data) ? (data as (ConversationHistoryItem & { archived?: boolean })[]) : [];
@@ -207,7 +213,7 @@ export function useThreads(
       const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
       if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
 
-      const res = await fetch(`${backendUrlTrimmed}/api/sessions?limit=50&excludeSource=automation`, { headers });
+      const res = await fetch(sessionsListUrl(false), { headers });
       if (!res.ok) return;
       const data = await res.json();
       const list = Array.isArray(data) ? (data as (ConversationHistoryItem & { archived?: boolean })[]) : [];

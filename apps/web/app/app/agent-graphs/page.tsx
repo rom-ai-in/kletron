@@ -13,6 +13,7 @@ import {
     ErrorState,
 } from "@kletron/ui/components/design-system";
 import { AgentGraphCard } from "@kletron/ui/components/agentGraphs/AgentGraphCard";
+import { defaultAgentGraphPayload } from "@kletron/shared";
 
 type AgentGraphSummary = {
     _id?: string;
@@ -21,29 +22,6 @@ type AgentGraphSummary = {
     updatedAt?: string;
     nodes?: any[];
 };
-
-function defaultGraphPayload() {
-    return {
-        graph: {
-            name: "New Agent Graph",
-            description: "All nodes are ReAct agents. Outputs must be strict JSON.",
-            nodes: [
-                {
-                    id: "node-1",
-                    label: "Node 1",
-                    react: {
-                        systemPrompt: "You are a helpful ReAct agent. Use tools as needed. Output strict JSON only.",
-                        userPromptTemplate: "Analyze this state and produce the next output.\n\n{{state}}",
-                        toolNames: ["list_files", "read_file", "search_code"],
-                        llmSelection: { provider: "azure" },
-                    },
-                    output: { schemaId: "generic_json" },
-                },
-            ],
-            edges: [],
-        },
-    };
-}
 
 export default function AgentGraphsPage() {
     const router = useRouter();
@@ -85,7 +63,7 @@ export default function AgentGraphsPage() {
             const res = await fetch("/api/agent-graphs", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(defaultGraphPayload()),
+                body: JSON.stringify(defaultAgentGraphPayload()),
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));

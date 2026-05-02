@@ -62,6 +62,12 @@ export function useAutomations({
         status: mapStatus(typeof a.status === "string" ? a.status : undefined),
         lastRunAt: typeof (a as any).lastRunAt === "string" ? (a as any).lastRunAt : undefined,
         nextRunAt: typeof (a as any).nextRunAt === "string" ? (a as any).nextRunAt : undefined,
+        lastSessionId:
+          typeof (a as any).lastSessionId === "string"
+            ? (a as any).lastSessionId
+            : typeof (a as any).lastRunSessionId === "string"
+              ? (a as any).lastRunSessionId
+              : undefined,
       }));
       setAutomations(list.filter((x) => x.id));
     } catch (e) {
@@ -93,20 +99,30 @@ export function useAutomations({
   );
 
   const runNow = useCallback(
-    async (id: string) => {
-      if (!workspaceId) return;
-      await apiFetch({
+    async (id: string): Promise<string | undefined> => {
+      if (!workspaceId) return undefined;
+      const res = await apiFetch({
         apiOrigin,
         path: `/api/automations/${encodeURIComponent(id)}/execute`,
         getRequestHeaders,
-        method: "POST",
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
           "x-workspace-id": workspaceId,
         },
         body: JSON.stringify({}),
       });
+      let threadId: string | undefined;
+      if (res.ok) {
+        try {
+          const j = (await res.json()) as { threadId?: string };
+          if (typeof j.threadId === "string") threadId = j.threadId;
+        } catch {
+          /* ignore */
+        }
+      }
       await load();
+      return threadId;
     },
     [apiOrigin, getRequestHeaders, workspaceId, load]
   );

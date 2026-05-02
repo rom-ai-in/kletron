@@ -841,11 +841,19 @@ export const componentDocs: Record<string, ComponentDoc> = {
     slashCommandMenu: {
         id: "slashCommandMenu",
         name: "SlashCommandMenu",
-        summary: "Floating command menu triggered by / in the input bar, with keyboard navigation.",
-        usage: `<SlashCommandMenu open={open} onClose={close} commands={commands} filter={input} />`,
-        props: ["open: boolean", "onClose: () => void", "commands: SlashCommandItem[]", "filter?: string"],
+        summary:
+            "Floating slash palette with Skills and Commands sections, per-section “Show more”, and document-capture keyboard handling.",
+        usage: `<SlashCommandMenu open={open} onClose={close} commands={commands} filter={input} initialPerSection={5} />`,
+        props: [
+            "open: boolean",
+            "onClose: () => void",
+            "commands: SlashCommandItem[] (sectionId: skills | commands)",
+            "filter?: string",
+            "initialPerSection?: number",
+            "className?: string",
+        ],
         tokens: ["colors.bg.elevated", "shadows.lg", "zIndex.popover"],
-        states: ["open", "closed", "filtering"],
+        states: ["open", "closed", "filtering", "expanded section"],
     },
     multimodalMenu: {
         id: "multimodalMenu",

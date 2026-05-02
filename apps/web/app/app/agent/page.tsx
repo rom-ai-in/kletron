@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ChatInput,
@@ -27,6 +27,9 @@ import { useSessionEdits } from "@kletron/ui/hooks/useSessionEdits";
 import { useMessageEdit } from "@kletron/ui/hooks/useMessageEdit";
 import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
 import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
+import { SlashCommandMenu } from "@kletron/ui/components/CommandCenter/SlashCommandMenu";
+import type { SlashCommandItem } from "@kletron/ui/components/CommandCenter/SlashCommandMenu";
+import { useSlashSkills } from "@kletron/ui/hooks/useSlashSkills";
 
 import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
@@ -40,6 +43,9 @@ import {
   CheckCircle2,
   XCircle,
   Paperclip,
+  Eye,
+  Wrench,
+  GitBranch,
 } from "lucide-react";
 import type { WorkModeId } from "@kletron/shared/workMode";
 import { WORK_MODES, normalizeToWorkModeId } from "@kletron/shared/workMode";
@@ -148,6 +154,9 @@ interface AgentComposerProps {
   onThreadApprovalModeChange: (mode: ThreadApprovalMode) => void;
   threadApprovalLocked?: boolean;
   threadApprovalLockedReason?: string;
+  activeWorkspaceId: string | null;
+  planMode: boolean;
+  onPlanModeToggle: () => void;
 }
 
 const AgentComposer = memo(function AgentComposer({
@@ -171,11 +180,69 @@ const AgentComposer = memo(function AgentComposer({
   onThreadApprovalModeChange,
   threadApprovalLocked,
   threadApprovalLockedReason,
+  activeWorkspaceId,
+  planMode,
+  onPlanModeToggle,
 }: AgentComposerProps) {
+  const router = useRouter();
   const queuedOrBusy = sending || runActive;
   const [draft, setDraft] = useState("");
   const [contextChips, setContextChips] = useState<ContextChip[]>([]);
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const getSlashRequestHeaders = useCallback(async () => {
+    const h: Record<string, string> = {};
+    if (activeWorkspaceId) h["x-workspace-id"] = activeWorkspaceId;
+    return h;
+  }, [activeWorkspaceId]);
+
+  const { skills: slashSkillRows } = useSlashSkills({
+    apiOrigin: undefined,
+    getRequestHeaders: getSlashRequestHeaders,
+    enabled: true,
+  });
+
+  const slashCommands = useMemo((): SlashCommandItem[] => {
+    const fromLibrary: SlashCommandItem[] = slashSkillRows.map((s) => ({
+      id: `skill-${s.slug}`,
+      sectionId: "skills",
+      label: s.slug,
+      description: s.description || undefined,
+      action: () => setDraft(`/${s.slug} `),
+    }));
+    const builtin: SlashCommandItem[] = [
+      {
+        id: "plan",
+        sectionId: "commands",
+        label: "plan",
+        description: "Toggle Plan Mode (read-only proposals)",
+        icon: <Eye className="h-3.5 w-3.5" />,
+        action: onPlanModeToggle,
+      },
+      {
+        id: "skills",
+        sectionId: "commands",
+        label: "skills",
+        description: "Open Skills library & settings",
+        icon: <Wrench className="h-3.5 w-3.5" />,
+        action: () => {
+          router.push("/app/config/skills");
+        },
+      },
+      {
+        id: "worktree",
+        sectionId: "commands",
+        label: "worktree",
+        description: "Workspace & repository settings",
+        icon: <GitBranch className="h-3.5 w-3.5" />,
+        action: () => {
+          router.push("/app/config/workspace");
+        },
+      },
+    ];
+    return [...fromLibrary, ...builtin];
+  }, [slashSkillRows, onPlanModeToggle, router]);
 
   useEffect(() => {
     setDraft("");
@@ -186,6 +253,12 @@ const AgentComposer = memo(function AgentComposer({
       setDraft(prefillText);
     }
   }, [prefillText]);
+
+  useEffect(() => {
+    if (!draft.startsWith("/")) {
+      setSlashMenuOpen(false);
+    }
+  }, [draft]);
 
   const onAttachFiles = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const list = e.target.files;
@@ -209,25 +282,39 @@ const AgentComposer = memo(function AgentComposer({
     setContextChips([]);
   }, [draft, contextChips, onSendText]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (perfDebugEnabled) {
-      const isEditingKey =
-        e.key.length === 1 ||
-        e.key === "Backspace" ||
-        e.key === "Delete" ||
-        e.key === "Enter";
-      if (isEditingKey && onInputLatencySample) {
-        const t0 = performance.now();
-        requestAnimationFrame(() => {
-          onInputLatencySample(performance.now() - t0);
-        });
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (perfDebugEnabled) {
+        const isEditingKey =
+          e.key.length === 1 ||
+          e.key === "Backspace" ||
+          e.key === "Delete" ||
+          e.key === "Enter";
+        if (isEditingKey && onInputLatencySample) {
+          const t0 = performance.now();
+          requestAnimationFrame(() => {
+            onInputLatencySample(performance.now() - t0);
+          });
+        }
       }
-    }
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }, [handleSend, onInputLatencySample, perfDebugEnabled]);
+      if (draft === "" && e.key === "/") {
+        setSlashMenuOpen(true);
+        return;
+      }
+      if (
+        slashMenuOpen &&
+        (e.key === "Enter" || (e.key === "Tab" && !e.shiftKey))
+      ) {
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
+    },
+    [draft, handleSend, onInputLatencySample, perfDebugEnabled, slashMenuOpen]
+  );
 
   return (
     <>
@@ -240,15 +327,28 @@ const AgentComposer = memo(function AgentComposer({
           />
         </div>
       )}
-      <ChatInput
+      <div className="relative mx-auto max-w-3xl">
+        <SlashCommandMenu
+          open={slashMenuOpen}
+          onClose={() => setSlashMenuOpen(false)}
+          commands={slashCommands}
+          filter={draft}
+        />
+        <ChatInput
         value={draft}
         onChange={setDraft}
         onSend={handleSend}
         onStop={sending ? onStop : undefined}
         onKeyDown={handleKeyDown}
         sending={sending}
-        placeholder={queuedOrBusy ? "Add a follow-up (queued until agent finishes)..." : "Ask anything…"}
-        containerClassName="max-w-3xl mx-auto"
+        placeholder={
+          planMode
+            ? "Describe what you want to plan…"
+            : queuedOrBusy
+              ? "Add a follow-up (queued until agent finishes)..."
+              : "Ask anything…"
+        }
+        containerClassName="w-full"
         leadingFooter={
           <>
             <input
@@ -299,6 +399,7 @@ const AgentComposer = memo(function AgentComposer({
           </div>
         }
       />
+      </div>
 
       {/* Replay Confirmation Dialog */}
       <ReplayConfirmDialog
@@ -337,6 +438,7 @@ export default function AgentPage() {
   });
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [perfDebugEnabled, setPerfDebugEnabled] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
   const [fps, setFps] = useState<number | null>(null);
   const [inputLatencyStats, setInputLatencyStats] = useState<{ avg: number; p95: number; count: number }>({
     avg: 0,
@@ -599,6 +701,7 @@ export default function AgentPage() {
     onSessionCreated: handleSessionCreated,
     onTitleGenerate: handleTitleGenerate,
     workMode,
+    planMode,
   });
 
   const truncateAndResend = useCallback(async (messageIndex: number, newContent: string) => {
@@ -1256,11 +1359,12 @@ export default function AgentPage() {
     }
   }, [sending, messageQueue.length, dequeueAndSend]);
 
-  // ── Pending edits panel (Code mode only — Work mode hides repo-centric approvals) ──
+  // ── Pending edits panel — same horizontal measure as MessageList / ChatInput (max-w-3xl) ──
   const showPendingStrip =
-    workMode === "code" && (pendingEdits.length > 0 || flushNotice !== null);
+    pendingEdits.length > 0 || flushNotice !== null;
   const pendingEditsPanel = showPendingStrip ? (
-    <div className="border-t border-white/[0.06] bg-bg-surface p-3">
+    <div className="flex-none border-t border-white/[0.06] bg-transparent">
+      <div className="mx-auto w-full max-w-3xl px-2 py-3">
       {flushNotice && (
         <div
           className={`mb-2 flex items-start gap-2 rounded-lg border px-3 py-2 text-[11px] ${
@@ -1308,11 +1412,11 @@ export default function AgentPage() {
 
       {pendingEdits.length > 0 ? (
         <>
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5 min-w-0">
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-muted min-w-0">
               Pending actions ({pendingEdits.length})
             </h3>
-            <div className="flex gap-1.5">
+            <div className="flex flex-shrink-0 gap-1.5">
               <button
                 type="button"
                 onClick={() => void approveAll()}
@@ -1331,33 +1435,36 @@ export default function AgentPage() {
               </button>
             </div>
           </div>
-          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+          <div className="space-y-1 max-h-[min(50vh,22rem)] overflow-y-auto overscroll-contain">
             {pendingEdits.map((edit) => {
               const busy = processingOp?.editId === edit.id;
               const approvingThis = busy && processingOp?.op === "approve";
               const rejectingThis = busy && processingOp?.op === "reject";
+              const desc = edit.description?.trim();
+              const title = [edit.toolName, desc, edit.lastError].filter(Boolean).join(" · ");
               return (
                 <div
                   key={edit.id}
-                  className="flex items-center justify-between rounded-lg border border-white/[0.08] bg-bg-elevated px-3 py-2 text-[11px]"
+                  className="flex items-center justify-between gap-2 rounded-md border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] leading-none"
                 >
-                  <div className="flex-1 min-w-0 mr-2">
-                    <p className="font-mono text-text-primary truncate">{edit.toolName}</p>
-                    {edit.description && (
-                      <p className="text-text-muted truncate">{edit.description}</p>
-                    )}
-                    {edit.lastError && (
-                      <p className="text-status-error-text truncate">
-                        Last error: {edit.lastError}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-1 shrink-0">
+                  <p
+                    className="min-w-0 flex-1 truncate text-text-primary"
+                    title={title}
+                  >
+                    <span className="font-mono text-text-primary">{edit.toolName}</span>
+                    {desc ? (
+                      <span className="text-text-muted"> · {desc}</span>
+                    ) : null}
+                    {edit.lastError ? (
+                      <span className="text-status-error-text"> · {edit.lastError}</span>
+                    ) : null}
+                  </p>
+                  <div className="flex shrink-0 items-center gap-0.5">
                     <button
                       type="button"
                       onClick={() => void approveEdit(edit.id, edit.toolName)}
                       disabled={busy || approvingAll || rejectingAll}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border border-status-success-border bg-status-success-bg text-status-success-text hover:opacity-80 disabled:opacity-50"
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] border border-status-success-border bg-status-success-bg text-status-success-text hover:opacity-80 disabled:opacity-50"
                     >
                       {approvingThis ? (
                         <>
@@ -1372,7 +1479,7 @@ export default function AgentPage() {
                       type="button"
                       onClick={() => void rejectEdit(edit.id, edit.toolName)}
                       disabled={busy || approvingAll || rejectingAll}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border border-status-error-border bg-status-error-bg text-status-error-text hover:opacity-80 disabled:opacity-50"
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] border border-status-error-border bg-status-error-bg text-status-error-text hover:opacity-80 disabled:opacity-50"
                     >
                       {rejectingThis ? (
                         <>
@@ -1390,6 +1497,7 @@ export default function AgentPage() {
           </div>
         </>
       ) : null}
+      </div>
     </div>
   ) : null;
 
@@ -1679,7 +1787,7 @@ export default function AgentPage() {
       {/* Pending edits panel */}
       {pendingEditsPanel}
 
-      {/* Queued messages (visible when agent is busy) */}
+      {/* Queued messages — align width with thread + composer */}
       <MessageQueue
         messages={messageQueue}
         onEdit={handleQueueEdit}
@@ -1687,10 +1795,11 @@ export default function AgentPage() {
         onDelete={handleQueueDelete}
         onForceSend={handleQueueForceSend}
         streaming={agentBusy}
+        className="mx-auto w-full max-w-3xl"
       />
 
       {/* Chat input */}
-      <div className="flex-none border-t border-white/[0.06] bg-bg-surface px-4 py-3">
+      <div className="flex-none px-4 pb-3 pt-1">
         <AgentComposer
           sending={sending}
           runActive={isServerSideRunActive}
@@ -1712,6 +1821,9 @@ export default function AgentPage() {
           onThreadApprovalModeChange={onThreadApprovalSelect}
           threadApprovalLocked={sessionDetail?.source === "automation"}
           threadApprovalLockedReason="Approval mode is fixed for automation threads."
+          activeWorkspaceId={activeWorkspaceId}
+          planMode={planMode}
+          onPlanModeToggle={() => setPlanMode((p) => !p)}
         />
       </div>
     </div>

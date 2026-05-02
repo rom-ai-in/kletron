@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
+import { ExternalLink } from "lucide-react";
 import { AgentGraphCard } from "@kletron/ui/components/agentGraphs/AgentGraphCard";
 import { AgentGraphEditor } from "@kletron/ui/components/agentGraphs/AgentGraphEditor";
 import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
+import { Button } from "@kletron/ui/components/design-system";
 import type { AgentGraphSummary, AgentGraphRunSummary } from "../types";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 
@@ -16,6 +18,10 @@ export function AgentGraphsPanel({
   loadGraphRuns,
   apiFetch,
   onOpenRunInAgent,
+  onOpenGraphInBrowser,
+  onOpenRunInBrowser,
+  onCreateGraph,
+  createGraphBusy,
 }: {
   backendUrlTrimmed: string;
   getAccessToken: () => Promise<string | null>;
@@ -27,6 +33,10 @@ export function AgentGraphsPanel({
   loadGraphRuns: (graphId: string) => Promise<void>;
   apiFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   onOpenRunInAgent: (runId: string) => void;
+  onOpenGraphInBrowser: (graphId: string) => void;
+  onOpenRunInBrowser: (graphId: string, runId: string) => void;
+  onCreateGraph?: () => void | Promise<void>;
+  createGraphBusy?: boolean;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorGraph, setEditorGraph] = useState<Record<string, unknown> | null>(null);
@@ -135,8 +145,17 @@ export function AgentGraphsPanel({
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto px-6 py-4 scrollbar-elegant">
-      <h1 className="text-lg font-semibold text-text-primary mb-1">Agent graphs</h1>
-      <p className="text-xs text-text-muted mb-4">Edit workflows used by the agent. Changes save automatically.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-lg font-semibold text-text-primary mb-1">Agent graphs</h1>
+          <p className="text-xs text-text-muted">Edit workflows used by the agent. Changes save automatically.</p>
+        </div>
+        {onCreateGraph && (
+          <Button size="xs" variant="secondary" disabled={createGraphBusy} onClick={() => void onCreateGraph()}>
+            {createGraphBusy ? "Creating…" : "New graph"}
+          </Button>
+        )}
+      </div>
       {graphsLoading && <div className="text-xs text-text-muted animate-pulse">Loading graphs…</div>}
       {!graphsLoading && graphs.length === 0 && (
         <div className="text-sm text-text-muted rounded-md border border-border-subtle px-4 py-6 text-center">
@@ -145,19 +164,28 @@ export function AgentGraphsPanel({
       )}
       <div className="grid gap-3 max-w-3xl">
         {graphs.map((g) => (
-          <AgentGraphCard
-            key={g.id}
-            graph={{
-              _id: g.id,
-              name: g.name,
-              description: g.description,
-              updatedAt: g.updatedAt,
-            }}
-            onView={() => {
-              setSelectedGraphId(g.id);
-              setEditingId(g.id);
-            }}
-          />
+          <div key={g.id} className="relative">
+            <AgentGraphCard
+              graph={{
+                _id: g.id,
+                name: g.name,
+                description: g.description,
+                updatedAt: g.updatedAt,
+              }}
+              onView={() => {
+                setSelectedGraphId(g.id);
+                setEditingId(g.id);
+              }}
+            />
+            <button
+              type="button"
+              title="Open in browser"
+              onClick={() => onOpenGraphInBrowser(g.id)}
+              className="absolute right-3 top-3 rounded p-1 text-text-muted hover:text-text-primary hover:bg-state-hover"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </button>
+          </div>
         ))}
       </div>
 
@@ -183,6 +211,17 @@ export function AgentGraphsPanel({
                 >
                   Open in agent
                 </button>
+                {selectedGraphId && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-0.5 text-text-muted hover:text-text-primary"
+                    title="Open run in browser"
+                    onClick={() => onOpenRunInBrowser(selectedGraphId, r.id)}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Browser
+                  </button>
+                )}
                 <button
                   type="button"
                   className="text-text-muted hover:text-text-primary"

@@ -139,7 +139,7 @@ export function Sidebar() {
             >
                 {!isCollapsed && (
                     <>
-                        <Link href="/" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-text-primary text-bg-surface text-base leading-none hover:opacity-80 transition-opacity" title="Go to landing page">
+                        <Link href="/" className="flex shrink-0 items-center text-2xl leading-none hover:opacity-80 transition-opacity" title="Go to landing page">
                             🧠
                         </Link>
                         <span className="text-sm font-semibold tracking-tight text-text-primary whitespace-nowrap overflow-hidden transition-opacity duration-300">

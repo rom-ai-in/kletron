@@ -1,49 +1,73 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowRight, Folder, Link2, MessageSquare, Phone, Send, Terminal } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { ArrowRight, Folder, Link2, MessageSquare, Phone, Send, Settings2, Terminal } from "lucide-react";
 import {
   Button,
-  Card,
+  Checkbox,
   ConfigExplorerMonoBlock,
   ConfigExplorerSection,
   Input,
   Modal,
   Panel,
+  PasswordInput,
 } from "@kletron/ui/components/design-system";
+import { cn } from "../../lib/utils";
 import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 
 type ChannelKey = "telegram" | "slack" | "whatsapp";
+
+const selectControlClass = cn(
+  "w-full rounded-md border border-border-subtle bg-bg-surface text-sm text-text-primary",
+  "h-10 px-3 shadow-sm transition-colors",
+  "hover:border-border-strong",
+  "focus:outline-none focus:ring-2 focus:ring-focus-ring/50 focus:border-border-strong",
+  "disabled:cursor-not-allowed disabled:opacity-50"
+);
+
+const fieldLabelClass = "block text-[11px] font-medium uppercase tracking-wide text-text-muted";
+const helpTextClass = "text-xs text-text-secondary leading-relaxed";
 
 const CHANNELS: Array<{
   id: ChannelKey;
   name: string;
   blurb: string;
-  meta: string;
   icon: typeof Send;
 }> = [
   {
     id: "telegram",
     name: "Telegram",
-    blurb: "Bot token, webhook, default graph per workspace.",
-    meta: "Configure below + link your user id",
+    blurb: "Shared bot token, per-workspace graph, /switch in chat.",
     icon: Send,
   },
   {
     id: "slack",
     name: "Slack",
-    blurb: "Events API URL verification is live; routing uses the same workspace rules as Telegram.",
-    meta: "See modal for URL",
+    blurb: "Events API and workspace routing (same rules as Telegram).",
     icon: MessageSquare,
   },
   {
     id: "whatsapp",
     name: "WhatsApp",
-    blurb: "Meta webhook verification; full routing aligns with Telegram when enabled.",
-    meta: "See modal for URL",
+    blurb: "Meta Cloud API webhooks and verification.",
     icon: Phone,
   },
 ];
+
+function StatusPill({ ok, children }: { ok: boolean; children: ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-medium",
+        ok
+          ? "border-status-success-border bg-status-success-bg text-status-success-text"
+          : "border-border-subtle bg-bg-app text-text-muted"
+      )}
+    >
+      {children}
+    </span>
+  );
+}
 
 export function ChannelsConfigView() {
   const { workspaces, activeWorkspaceId, loading: wsLoading } = useWorkspace();
@@ -60,7 +84,6 @@ export function ChannelsConfigView() {
     []
   );
 
-  // App-wide Telegram credentials
   const [appStatus, setAppStatus] = useState<{
     encryptionConfigured: boolean;
     telegram: { telegramBotConfigured: boolean; telegramWebhookSecretConfigured: boolean };
@@ -108,7 +131,6 @@ export function ChannelsConfigView() {
     }
   };
 
-  // Per-workspace Telegram settings
   const [wsEnabled, setWsEnabled] = useState(true);
   const [defaultGraphId, setDefaultGraphId] = useState("");
   const [graphs, setGraphs] = useState<Array<{ _id?: string; id?: string; name?: string }>>([]);
@@ -194,179 +216,116 @@ export function ChannelsConfigView() {
 
   const activeMeta = CHANNELS.find((c) => c.id === activeModal);
 
+  const workspaceOptions = useMemo(
+    () =>
+      workspaces.map((w) => ({
+        id: w.id,
+        label: w.name || w.id,
+      })),
+    [workspaces]
+  );
+
+  const graphOptions = useMemo(
+    () =>
+      graphs.map((g) => {
+        const id = String(g._id ?? g.id ?? "");
+        return { id, label: g.name || id };
+      }),
+    [graphs]
+  );
+
+  const selectedWorkspaceLabel = workspaceOptions.find((w) => w.id === selectedWsId)?.label ?? "—";
+
+  const openModal = (id: ChannelKey) => {
+    setActiveModal(id);
+    if (id === "telegram") {
+      void loadAppCreds();
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      <Panel className="p-4">
-        <p className="text-xs text-text-secondary leading-relaxed">
-          Set the shared Telegram bot token here (stored encrypted when <code className="font-mono text-[11px]">KLETRON_CHANNEL_SECRETS_KEY</code> is set). Then, for each workspace, choose the default agent graph and whether Telegram is enabled. In Telegram, use{" "}
-          <code className="font-mono text-[11px]">/switch</code> to change the active workspace for that chat.
+    <div className="w-full min-w-0 space-y-6">
+      <Panel className="border border-border-subtle bg-bg-elevated/50 p-5">
+        <p className={helpTextClass}>
+          Choose a workspace below for status and for settings that depend on the workspace. Open a channel card to configure webhooks, tokens, and linking. Tokens stay on the server; use{" "}
+          <code className="rounded border border-border-subtle bg-bg-app px-1 font-mono text-[11px]">/switch</code> in Telegram to change the active workspace per chat.
         </p>
-        <p className="text-xs text-text-muted mt-2">
-          Groups: workspace context is per chat — whoever runs <code className="font-mono text-[11px]">/switch</code> sets the bot&apos;s workspace for that group until someone changes it.
+        <p className={cn(helpTextClass, "mt-2 text-text-muted")}>
+          Groups: context is per chat — whoever runs <code className="font-mono text-[11px]">/switch</code> sets the workspace for that group until someone changes it.
         </p>
       </Panel>
 
-      <ConfigExplorerSection title="App-wide Telegram bot" icon={Terminal} iconClassName="text-status-info-text">
-        <p className="text-xs">
-          Webhook URL (set in BotFather / Telegram API):{" "}
-          <ConfigExplorerMonoBlock className="mt-1 break-all text-text-primary">
-            {webhookBase || "…"}/telegram
-          </ConfigExplorerMonoBlock>
-        </p>
-        <p className="text-xs text-text-muted mt-2">
-          Encryption:{" "}
-          {appStatus?.encryptionConfigured ? (
-            <span className="text-status-success-text">KLETRON_CHANNEL_SECRETS_KEY is set</span>
-          ) : (
-            <span className="text-status-warning-text">Set KLETRON_CHANNEL_SECRETS_KEY on the server to encrypt tokens.</span>
-          )}
-          {" · "}
-          Bot configured: {appStatus?.telegram.telegramBotConfigured ? "yes" : "no"} · Webhook secret:{" "}
-          {appStatus?.telegram.telegramWebhookSecretConfigured ? "yes" : "no"}
-        </p>
-        <div className="mt-3 space-y-2 max-w-md">
-          <label className="text-[11px] text-text-muted">Bot token (leave blank to keep current)</label>
-          <Input
-            size="sm"
-            fullWidth
-            type="password"
-            autoComplete="off"
-            value={botToken}
-            onChange={(e) => setBotToken(e.target.value)}
-            placeholder="••••••••"
-          />
-          <label className="text-[11px] text-text-muted">Webhook secret (optional)</label>
-          <Input
-            size="sm"
-            fullWidth
-            type="password"
-            autoComplete="off"
-            value={webhookSecret}
-            onChange={(e) => setWebhookSecret(e.target.value)}
-            placeholder="Matches X-Telegram-Bot-Api-Secret-Token"
-          />
-          <Button size="sm" variant="secondary" onClick={() => void saveAppCreds()}>
-            Save app credentials
-          </Button>
-          {saveAppMsg && (
-            <p className={`text-xs ${saveAppMsg === "Saved." ? "text-status-success-text" : "text-status-error-text"}`}>
-              {saveAppMsg}
-            </p>
-          )}
-        </div>
-      </ConfigExplorerSection>
-
-      <ConfigExplorerSection title="Workspace defaults" icon={Folder} iconClassName="text-status-success-text">
-        <div className="space-y-3">
-          <div>
-            <label className="text-[11px] text-text-muted block mb-1">Workspace</label>
-            <select
-              className="w-full max-w-md rounded-md border border-border-subtle bg-bg-base px-2 py-2 text-sm text-text-primary"
-              value={selectedWsId ?? ""}
-              onChange={(e) => setSelectedWsId(e.target.value || null)}
-              disabled={wsLoading}
-            >
-              {workspaces.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name || w.id}
-                </option>
-              ))}
-            </select>
-          </div>
-          <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer">
-            <input
-              type="checkbox"
-              checked={wsEnabled}
-              onChange={(e) => setWsEnabled(e.target.checked)}
-              className="rounded border-border-subtle"
-            />
-            Enable Telegram for this workspace
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="w-full min-w-0 space-y-2 sm:max-w-md">
+          <label htmlFor="ch-page-workspace" className={fieldLabelClass}>
+            Workspace (for status & workspace-scoped settings)
           </label>
-          <div>
-            <label className="text-[11px] text-text-muted block mb-1">Default agent graph</label>
-            <select
-              className="w-full max-w-md rounded-md border border-border-subtle bg-bg-base px-2 py-2 text-sm text-text-primary"
-              value={defaultGraphId}
-              onChange={(e) => setDefaultGraphId(e.target.value)}
-            >
-              <option value="">(first available graph)</option>
-              {graphs.map((g) => {
-                const id = String(g._id ?? g.id ?? "");
-                return (
-                  <option key={id} value={id}>
-                    {g.name || id}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-          <Button size="sm" variant="secondary" onClick={() => void saveWsSettings()} disabled={!selectedWsId}>
-            Save workspace channel settings
-          </Button>
-          {wsSaveMsg && (
-            <p className={`text-xs ${wsSaveMsg.includes("saved") ? "text-status-success-text" : "text-status-error-text"}`}>
-              {wsSaveMsg}
-            </p>
-          )}
-        </div>
-      </ConfigExplorerSection>
-
-      <ConfigExplorerSection title="Link your Telegram account" icon={Link2} iconClassName="text-primary-main">
-        <p className="text-xs text-text-secondary mb-2">
-          Uses the selected workspace above for the link record. Get your numeric id from @userinfobot.
-        </p>
-        <div className="flex flex-wrap items-end gap-2 max-w-md">
-          <div className="flex-1 min-w-[140px]">
-            <label className="text-[11px] text-text-muted block mb-1">Telegram user id</label>
-            <Input
-              size="sm"
-              fullWidth
-              value={externalUserId}
-              onChange={(e) => setExternalUserId(e.target.value)}
-              placeholder="123456789"
-              inputMode="numeric"
-              disabled={linkStatus === "saving"}
-            />
-          </div>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={linkStatus === "saving" || !selectedWsId}
-            onClick={() => void linkTelegram()}
+          <select
+            id="ch-page-workspace"
+            className={selectControlClass}
+            value={selectedWsId ?? ""}
+            onChange={(e) => setSelectedWsId(e.target.value || null)}
+            disabled={wsLoading || workspaceOptions.length === 0}
           >
-            {linkStatus === "saving" ? "Saving…" : "Link"}
-          </Button>
+            {workspaceOptions.length === 0 ? (
+              <option value="">No workspaces</option>
+            ) : (
+              workspaceOptions.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.label}
+                </option>
+              ))
+            )}
+          </select>
         </div>
-        {linkMsg && (
-          <p
-            className={`text-xs mt-2 ${linkStatus === "ok" ? "text-status-success-text" : "text-status-error-text"}`}
-          >
-            {linkMsg}
-          </p>
-        )}
-      </ConfigExplorerSection>
+      </div>
 
-      <div>
-        <h2 className="text-sm font-semibold text-text-primary mb-3">Channel reference</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="w-full min-w-0" aria-labelledby="ch-channels-heading">
+        <div className="mb-4 flex items-center gap-2">
+          <Settings2 className="h-4 w-4 text-text-muted" aria-hidden />
+          <h2 id="ch-channels-heading" className="text-sm font-semibold text-text-primary">
+            Channels
+          </h2>
+        </div>
+        <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {CHANNELS.map((ch) => {
             const Icon = ch.icon;
             return (
               <button
                 key={ch.id}
                 type="button"
-                onClick={() => setActiveModal(ch.id)}
-                className="group text-left rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-app"
+                onClick={() => openModal(ch.id)}
+                className="group w-full min-w-0 text-left rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-app"
               >
-                <Panel className="h-full p-4 transition-colors group-hover:border-border-strong">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
+                <Panel className="h-full border border-border-subtle p-5 transition-colors group-hover:border-border-strong group-hover:bg-bg-elevated/30">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4 shrink-0 text-primary-main" aria-hidden />
                         <h3 className="text-sm font-semibold text-text-primary">{ch.name}</h3>
                       </div>
-                      <p className="mt-1 text-xs text-text-secondary">{ch.blurb}</p>
-                      <p className="mt-3 text-[11px] text-text-muted">{ch.meta}</p>
+                      <p className="mt-2 text-xs leading-relaxed text-text-secondary">{ch.blurb}</p>
+
+                      {ch.id === "telegram" && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          <StatusPill ok={Boolean(appStatus?.telegram.telegramBotConfigured)}>
+                            App bot {appStatus?.telegram.telegramBotConfigured ? "set" : "missing"}
+                          </StatusPill>
+                          <StatusPill ok={Boolean(appStatus?.encryptionConfigured)}>
+                            {appStatus?.encryptionConfigured ? "Secrets encrypted" : "No encrypt key"}
+                          </StatusPill>
+                          <StatusPill ok={wsEnabled}>{selectedWorkspaceLabel}: {wsEnabled ? "on" : "off"}</StatusPill>
+                        </div>
+                      )}
+
+                      {ch.id === "slack" && (
+                        <p className="mt-3 text-[11px] text-text-muted">Webhook path: /slack · configure in dialog</p>
+                      )}
+                      {ch.id === "whatsapp" && (
+                        <p className="mt-3 text-[11px] text-text-muted">Callback: /whatsapp · Meta verify token (env)</p>
+                      )}
+
+                      <p className="mt-4 text-[11px] font-medium text-primary-main">Open settings →</p>
                     </div>
                     <div className="mt-0.5 shrink-0 text-text-muted transition-colors group-hover:text-text-primary">
                       <ArrowRight className="h-4 w-4" aria-hidden />
@@ -377,35 +336,236 @@ export function ChannelsConfigView() {
             );
           })}
         </div>
-      </div>
+      </section>
 
       <Modal
         open={activeModal !== null}
         onClose={() => setActiveModal(null)}
-        title="Messenger channel"
-        subtitle={activeMeta?.name ?? "Details"}
+        title="Channel settings"
+        subtitle={activeMeta?.name ?? ""}
       >
         {activeModal === "telegram" && (
-          <div className="space-y-4 text-sm text-text-secondary">
-            <p>
-              Configuration is done in the sections above (app bot token, per-workspace graph, link). Webhook:{" "}
-              <code className="break-all rounded bg-bg-muted px-1 font-mono text-[11px] text-text-primary">
-                {webhookBase}/telegram
-              </code>
+          <div className="w-full min-w-0 space-y-4">
+            <p className={cn(helpTextClass, "px-0")}>
+              Workspace <span className="font-medium text-text-primary">{selectedWorkspaceLabel}</span> is used for defaults and identity link below. Change it from the main page selector.
             </p>
+
+            <ConfigExplorerSection title="App-wide Telegram bot" icon={Terminal} iconClassName="text-status-info-text">
+              <div className="w-full min-w-0 space-y-4">
+                <div className="space-y-2">
+                  <span className={fieldLabelClass}>Webhook URL</span>
+                  <p className="text-xs text-text-secondary">Set in BotFather / Telegram API.</p>
+                  <ConfigExplorerMonoBlock className="w-full break-all text-text-primary">
+                    {webhookBase || "…"}/telegram
+                  </ConfigExplorerMonoBlock>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+                  <span>
+                    Encryption:{" "}
+                    {appStatus?.encryptionConfigured ? (
+                      <span className="text-status-success-text">key configured</span>
+                    ) : (
+                      <span className="text-status-warning-text">set KLETRON_CHANNEL_SECRETS_KEY on the server</span>
+                    )}
+                  </span>
+                  <span className="hidden sm:inline text-border-subtle">·</span>
+                  <span>Bot: {appStatus?.telegram.telegramBotConfigured ? "configured" : "not set"}</span>
+                  <span className="hidden sm:inline text-border-subtle">·</span>
+                  <span>Webhook secret: {appStatus?.telegram.telegramWebhookSecretConfigured ? "set" : "none"}</span>
+                </div>
+
+                <div className="w-full space-y-4 border-t border-border-subtle pt-4">
+                  <div className="space-y-2">
+                    <label htmlFor="dlg-ch-bot-token" className={fieldLabelClass}>
+                      Bot token
+                    </label>
+                    <p className="text-[11px] text-text-muted">Leave blank to keep the current token.</p>
+                    <PasswordInput
+                      id="dlg-ch-bot-token"
+                      size="md"
+                      fullWidth
+                      autoComplete="off"
+                      value={botToken}
+                      onChange={(e) => setBotToken(e.target.value)}
+                      placeholder="Enter new token or leave unchanged"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="dlg-ch-webhook-secret" className={fieldLabelClass}>
+                      Webhook secret (optional)
+                    </label>
+                    <p className="text-[11px] text-text-muted">Must match X-Telegram-Bot-Api-Secret-Token.</p>
+                    <PasswordInput
+                      id="dlg-ch-webhook-secret"
+                      size="md"
+                      fullWidth
+                      autoComplete="off"
+                      value={webhookSecret}
+                      onChange={(e) => setWebhookSecret(e.target.value)}
+                      placeholder="Optional verification token"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                    <Button size="md" variant="primary" type="button" onClick={() => void saveAppCreds()} className="w-full sm:w-auto">
+                      Save app credentials
+                    </Button>
+                  </div>
+                  {saveAppMsg && (
+                    <p
+                      className={cn(
+                        "text-sm",
+                        saveAppMsg === "Saved." ? "text-status-success-text" : "text-status-error-text"
+                      )}
+                      role="status"
+                    >
+                      {saveAppMsg}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </ConfigExplorerSection>
+
+            <ConfigExplorerSection title="Workspace defaults (Telegram)" icon={Folder} iconClassName="text-status-success-text">
+              <div className="w-full min-w-0 space-y-4">
+                <p className="text-xs text-text-muted">
+                  Applies to <span className="font-medium text-text-secondary">{selectedWorkspaceLabel}</span>. Switch workspace on the main page if needed.
+                </p>
+                <div className="border-t border-border-subtle pt-2">
+                  <Checkbox
+                    size="sm"
+                    checked={wsEnabled}
+                    onChange={setWsEnabled}
+                    label="Enable Telegram for this workspace"
+                    description="When off, this workspace ignores Telegram routing."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="dlg-ch-graph" className={fieldLabelClass}>
+                    Default agent graph
+                  </label>
+                  <select
+                    id="dlg-ch-graph"
+                    className={selectControlClass}
+                    value={defaultGraphId}
+                    onChange={(e) => setDefaultGraphId(e.target.value)}
+                    disabled={!selectedWsId}
+                  >
+                    <option value="">(first available graph)</option>
+                    {graphOptions.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                  <Button
+                    size="md"
+                    variant="primary"
+                    type="button"
+                    onClick={() => void saveWsSettings()}
+                    disabled={!selectedWsId}
+                    className="w-full sm:w-auto"
+                  >
+                    Save workspace channel settings
+                  </Button>
+                </div>
+                {wsSaveMsg && (
+                  <p
+                    className={cn(
+                      "text-sm",
+                      wsSaveMsg.includes("saved") ? "text-status-success-text" : "text-status-error-text"
+                    )}
+                    role="status"
+                  >
+                    {wsSaveMsg}
+                  </p>
+                )}
+              </div>
+            </ConfigExplorerSection>
+
+            <ConfigExplorerSection title="Link your Telegram account" icon={Link2} iconClassName="text-primary-main">
+              <div className="w-full min-w-0 space-y-4">
+                <p className={helpTextClass}>
+                  Links your Kletron user to a Telegram id for workspace <span className="font-medium text-text-primary">{selectedWorkspaceLabel}</span>. Get your numeric id from @userinfobot.
+                </p>
+                <div className="space-y-2">
+                  <label htmlFor="dlg-ch-tg-id" className={fieldLabelClass}>
+                    Telegram user id
+                  </label>
+                  <Input
+                    id="dlg-ch-tg-id"
+                    size="md"
+                    fullWidth
+                    value={externalUserId}
+                    onChange={(e) => setExternalUserId(e.target.value)}
+                    placeholder="123456789"
+                    inputMode="numeric"
+                    disabled={linkStatus === "saving"}
+                  />
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                  <Button
+                    size="md"
+                    variant="secondary"
+                    type="button"
+                    disabled={linkStatus === "saving" || !selectedWsId}
+                    onClick={() => void linkTelegram()}
+                    className="w-full sm:w-auto"
+                  >
+                    {linkStatus === "saving" ? "Saving…" : "Link account"}
+                  </Button>
+                </div>
+                {linkMsg && (
+                  <p
+                    className={cn(
+                      "text-sm",
+                      linkStatus === "ok" ? "text-status-success-text" : "text-status-error-text"
+                    )}
+                    role="status"
+                  >
+                    {linkMsg}
+                  </p>
+                )}
+              </div>
+            </ConfigExplorerSection>
           </div>
         )}
+
         {activeModal === "slack" && (
-          <div className="space-y-4 text-sm text-text-secondary">
-            <p>Events API URL:</p>
-            <ConfigExplorerMonoBlock className="break-all text-text-primary">{webhookBase}/slack</ConfigExplorerMonoBlock>
-            <p className="text-xs text-text-muted">Slack signing secret can be stored in workspace channel settings when that UI is extended.</p>
+          <div className="w-full min-w-0 space-y-6 text-sm text-text-secondary">
+            <p className={helpTextClass}>
+              Point Slack&apos;s Events API request URL to the path below. Signing secrets and per-workspace toggles will follow the same pattern as Telegram when extended in the API.
+            </p>
+            <div className="space-y-2">
+              <span className={fieldLabelClass}>Events / interactivity URL</span>
+              <ConfigExplorerMonoBlock className="w-full break-all text-text-primary">{webhookBase}/slack</ConfigExplorerMonoBlock>
+            </div>
+            <Panel className="border border-border-subtle bg-bg-elevated/40 p-4">
+              <p className="text-xs text-text-muted">
+                Routing in the app uses the same workspace resolution as Telegram once your Slack app is verified. Configure OAuth and signing in your Slack app settings; store secrets via server env or future
+                workspace channel settings.
+              </p>
+            </Panel>
           </div>
         )}
+
         {activeModal === "whatsapp" && (
-          <div className="space-y-4 text-sm text-text-secondary">
-            <p>Set CHANNEL_WHATSAPP_VERIFY_TOKEN for Meta verification. Callback:</p>
-            <ConfigExplorerMonoBlock className="break-all text-text-primary">{webhookBase}/whatsapp</ConfigExplorerMonoBlock>
+          <div className="w-full min-w-0 space-y-6 text-sm text-text-secondary">
+            <p className={helpTextClass}>
+              Meta sends verification and messages to the callback URL. Set the verify token in the environment (<code className="rounded bg-bg-muted px-1 font-mono text-[11px]">CHANNEL_WHATSAPP_VERIFY_TOKEN</code>
+              ) to match your Meta app configuration.
+            </p>
+            <div className="space-y-2">
+              <span className={fieldLabelClass}>Callback URL</span>
+              <ConfigExplorerMonoBlock className="w-full break-all text-text-primary">{webhookBase}/whatsapp</ConfigExplorerMonoBlock>
+            </div>
+            <Panel className="border border-border-subtle bg-bg-elevated/40 p-4">
+              <p className="text-xs text-text-muted">
+                Full WhatsApp routing will align with Telegram once the webhook handler stores workspace context the same way. Until then, use this URL for Meta dashboard setup and token verification.
+              </p>
+            </Panel>
           </div>
         )}
       </Modal>

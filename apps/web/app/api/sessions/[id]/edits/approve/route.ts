@@ -135,9 +135,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       const evicted = await maybeEvictResult(workspace.rootPath, params.id, toolName, raw);
       return { executed: true, result: evicted.content, evictedPath: evicted.evictedPath ?? undefined };
     }
-    if (!["write_file", "execute_bash", "str_replace_editor"].includes(toolName)) {
-      return { executed: false, message: "Unsupported tool" };
-    }
+    // All other tools (read-only MCP, edits, bash, etc.) replay through the same MCP client as the agent.
     const client = await McpClient.getInstance();
     const resolvedArgs = resolveArgs(toolName, edit.args ?? {}, workspace.rootPath);
     const raw = await client.callTool(toolName, resolvedArgs as any);

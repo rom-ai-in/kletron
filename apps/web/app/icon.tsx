@@ -8,7 +8,8 @@ export default function Icon() {
     (
       <div
         style={{
-          fontSize: 22,
+          fontSize: 20,
+          lineHeight: 1,
           background: "#09090b",
           width: "100%",
           height: "100%",
@@ -16,12 +17,9 @@ export default function Icon() {
           alignItems: "center",
           justifyContent: "center",
           borderRadius: 6,
-          color: "#a1a1aa",
-          fontWeight: 700,
-          fontFamily: "sans-serif",
         }}
       >
-        N
+        🧠
       </div>
     ),
     { ...size }
