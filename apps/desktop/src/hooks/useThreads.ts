@@ -186,6 +186,7 @@ export function useThreads(
       if (conversationId === threadId) {
         setConversationId(null);
       }
+      void loadArchivedThreads();
     } catch (err) {
       console.warn("[useThreads] Failed to archive thread", err);
     } finally {
@@ -216,6 +217,7 @@ export function useThreads(
         throw new Error(text || `Failed to delete thread (${res.status})`);
       }
       setThreads((prev) => prev.filter((thread) => thread.id !== threadId));
+      setArchivedThreads((prev) => prev.filter((thread) => thread.id !== threadId));
       if (conversationId === threadId) {
         setConversationId(null);
       }
@@ -226,7 +228,7 @@ export function useThreads(
     }
   }
 
-  async function loadArchivedThreads() {
+  const loadArchivedThreads = useCallback(async () => {
     const token = await getAccessToken();
     if (!token) return;
     setArchivedLoading(true);
@@ -243,7 +245,7 @@ export function useThreads(
     } finally {
       setArchivedLoading(false);
     }
-  }
+  }, [getAccessToken, activeWorkspaceId, sessionsListUrl]);
 
   function resetThreads() {
     setConversationId(null);

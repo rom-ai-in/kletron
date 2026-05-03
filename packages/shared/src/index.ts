@@ -3,6 +3,7 @@ export * from './sessionThreadTypes';
 export * from './channelTypes';
 export * from './threadApprovalTypes';
 export * from './workMode';
+export * from './threadRecency';
 export * from './categoryTypes';
 export * from './workspaceCategories';
 export * from './skills/types';

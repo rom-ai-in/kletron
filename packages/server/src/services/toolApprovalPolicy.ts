@@ -167,6 +167,16 @@ export const classifyTool = (toolName: string): ToolClass => {
     return "unknown";
 };
 
+/**
+ * External MCP tools exposed as `serverSlug__toolName` (double underscore).
+ * Work mode uses a small fixed allowlist; namespaced MCP tools must still pass
+ * so connectors (e.g. Hunter) work in Work threads.
+ */
+export function isNamespacedExternalMcpToolName(toolName: string): boolean {
+    const t = String(toolName ?? "").trim().toLowerCase();
+    return /^[a-z0-9][a-z0-9_-]{0,63}__[a-z0-9][a-z0-9_-]{0,127}$/.test(t);
+}
+
 export const getToolApprovalPolicy = (input: ToolApprovalPolicyInput): ToolApprovalPolicyResult => {
     const toolName = String(input.toolName ?? "").trim().toLowerCase();
     const source = String(input.source ?? "");
@@ -178,7 +188,11 @@ export const getToolApprovalPolicy = (input: ToolApprovalPolicyInput): ToolAppro
         const allowed = new Set(
             WORK_MODES.work.availableTools.map((t) => t.trim().toLowerCase()),
         );
-        if (!KLETRON_ADMIN_TOOL_SET_EARLY.has(toolName) && !allowed.has(toolName)) {
+        if (
+            !KLETRON_ADMIN_TOOL_SET_EARLY.has(toolName) &&
+            !allowed.has(toolName) &&
+            !isNamespacedExternalMcpToolName(toolName)
+        ) {
             return {
                 source,
                 normalizedSource,

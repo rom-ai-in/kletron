@@ -35,9 +35,9 @@ import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
+import { AgentStatusShimmerLabel } from "@kletron/ui/components/Agent/AgentStatusShimmerLabel";
 import { Modal, Button } from "@kletron/ui/components/design-system";
 import {
-  Loader2,
   ClipboardCopy,
   CheckCircle2,
   XCircle,
@@ -580,13 +580,29 @@ export default function AgentPage() {
     try {
       const wsQuery = activeWorkspaceId ? `&workspaceId=${encodeURIComponent(activeWorkspaceId)}` : "";
       const wmQuery = `&workMode=${encodeURIComponent(workMode)}`;
-      const res = await fetch(`/api/sessions?limit=50${wsQuery}${wmQuery}`);
-      if (res.ok) {
-        const data = await res.json();
-        const list = Array.isArray(data) ? (data as SessionSummary[]) : [];
-        setSessions(list);
-        sessionsHydratedRef.current = true;
+      const base = `/api/sessions?limit=50${wsQuery}${wmQuery}`;
+      const [activeRes, allRes] = await Promise.all([
+        fetch(base),
+        fetch(`${base}&includeArchived=true`),
+      ]);
+      let merged: SessionSummary[] = [];
+      if (activeRes.ok) {
+        const data = await activeRes.json();
+        merged = Array.isArray(data) ? (data as SessionSummary[]) : [];
       }
+      if (allRes.ok) {
+        const data = await allRes.json();
+        const full = Array.isArray(data) ? (data as SessionSummary[]) : [];
+        const seen = new Set(merged.map((s) => s.id));
+        for (const s of full) {
+          if (s.archived && !seen.has(s.id)) {
+            seen.add(s.id);
+            merged.push(s);
+          }
+        }
+      }
+      setSessions(merged);
+      sessionsHydratedRef.current = true;
     } catch (e) {
       console.error("Failed to fetch sessions:", e);
     } finally {
@@ -1278,12 +1294,13 @@ export default function AgentPage() {
       .map((s): SidebarThread => ({
         id: s.id,
         title: s.title || "Untitled",
-        updatedAt: s.startedAt,
+        updatedAt: s.endedAt ?? s.startedAt,
         liveStatus: toThreadLiveStatus(
           s.status,
           activeSessionId === s.id && (sending || isServerSideRunActive),
         ),
         category: s.source === "automation" || s.automationId ? "automation" : "chat",
+        archived: s.archived,
       }));
     return [
       {
@@ -1513,25 +1530,48 @@ export default function AgentPage() {
       {pendingEdits.length > 0 ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5 min-w-0">
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-muted min-w-0">
-              Pending actions ({pendingEdits.length})
+            <h3 className="min-w-0 text-[11px] font-bold uppercase tracking-wider">
+              <AgentStatusShimmerLabel
+                className="uppercase tracking-wider"
+                textClassName="text-text-muted font-bold"
+              >
+                Pending actions ({pendingEdits.length})
+              </AgentStatusShimmerLabel>
             </h3>
             <div className="flex flex-shrink-0 gap-1.5">
               <button
                 type="button"
                 onClick={() => void approveAll()}
                 disabled={approvingAll || rejectingAll}
-                className="px-2 py-1 text-[10px] rounded border border-status-success-border bg-status-success-bg text-status-success-text hover:opacity-80 disabled:opacity-50"
+                className="rounded border border-status-success-border bg-status-success-bg px-2 py-1 text-[10px] hover:opacity-80 disabled:opacity-50"
               >
-                {approvingAll ? "Approving..." : "Approve All"}
+                {approvingAll ? (
+                  <AgentStatusShimmerLabel
+                    className="text-[10px]"
+                    textClassName="text-status-success-text font-semibold"
+                  >
+                    Approving…
+                  </AgentStatusShimmerLabel>
+                ) : (
+                  <span className="text-status-success-text">Approve All</span>
+                )}
               </button>
               <button
                 type="button"
                 onClick={() => void rejectAll()}
                 disabled={approvingAll || rejectingAll}
-                className="px-2 py-1 text-[10px] rounded border border-status-error-border bg-status-error-bg text-status-error-text hover:opacity-80 disabled:opacity-50"
+                className="rounded border border-status-error-border bg-status-error-bg px-2 py-1 text-[10px] hover:opacity-80 disabled:opacity-50"
               >
-                {rejectingAll ? "Rejecting..." : "Reject All"}
+                {rejectingAll ? (
+                  <AgentStatusShimmerLabel
+                    className="text-[10px]"
+                    textClassName="text-status-error-text font-semibold"
+                  >
+                    Rejecting…
+                  </AgentStatusShimmerLabel>
+                ) : (
+                  <span className="text-status-error-text">Reject All</span>
+                )}
               </button>
             </div>
           </div>
@@ -1567,10 +1607,12 @@ export default function AgentPage() {
                       className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] border border-status-success-border bg-status-success-bg text-status-success-text hover:opacity-80 disabled:opacity-50"
                     >
                       {approvingThis ? (
-                        <>
-                          <Loader2 className="w-3 h-3 animate-spin" aria-hidden />
-                          <span>Approving…</span>
-                        </>
+                        <AgentStatusShimmerLabel
+                          className="text-[9px]"
+                          textClassName="text-status-success-text font-semibold"
+                        >
+                          Approving…
+                        </AgentStatusShimmerLabel>
                       ) : (
                         "Approve"
                       )}
@@ -1582,10 +1624,12 @@ export default function AgentPage() {
                       className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] border border-status-error-border bg-status-error-bg text-status-error-text hover:opacity-80 disabled:opacity-50"
                     >
                       {rejectingThis ? (
-                        <>
-                          <Loader2 className="w-3 h-3 animate-spin" aria-hidden />
-                          <span>Rejecting…</span>
-                        </>
+                        <AgentStatusShimmerLabel
+                          className="text-[9px]"
+                          textClassName="text-status-error-text font-semibold"
+                        >
+                          Rejecting…
+                        </AgentStatusShimmerLabel>
                       ) : (
                         "Reject"
                       )}
@@ -1834,9 +1878,10 @@ export default function AgentPage() {
               </div>
             )}
             {eventStream.length === 0 && !sending && sessionDetailLoading && activeSessionId && (
-              <div className="flex flex-col items-center justify-center gap-3 py-20 text-text-muted">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <p className="text-[13px]">Loading thread…</p>
+              <div className="flex flex-col items-center justify-center py-20 text-text-muted">
+                <AgentStatusShimmerLabel className="text-[13px]" textClassName="text-text-secondary font-medium">
+                  Loading thread…
+                </AgentStatusShimmerLabel>
               </div>
             )}
             {eventStream
@@ -1845,9 +1890,10 @@ export default function AgentPage() {
                 <EventCard key={event.id} event={event} />
               ))}
             {(sending || isServerSideRunActive) && (
-              <div className="flex items-center gap-2 px-1 py-2 text-text-muted">
-                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                <span className="text-[12px]">{sending ? "Executing…" : "Run in progress…"}</span>
+              <div className="px-1 py-2 text-text-muted">
+                <AgentStatusShimmerLabel className="text-[12px]" textClassName="text-text-secondary font-medium">
+                  {sending ? "Executing…" : "Run in progress…"}
+                </AgentStatusShimmerLabel>
               </div>
             )}
             {errorMessage && !sending && (

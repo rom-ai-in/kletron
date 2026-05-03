@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { cn } from '../../lib/utils';
 import {
@@ -20,6 +20,13 @@ import {
   Bot,
 } from 'lucide-react';
 import { WORK_MODES, type WorkModeId } from '@kletron/shared/workMode';
+import {
+  type ThreadRecencyBucket,
+  THREAD_RECENCY_LABELS,
+  THREAD_RECENCY_SECTION_ORDER,
+  parseThreadRecencyMs,
+  threadRecencyBucket,
+} from '@kletron/shared/threadRecency';
 import { WorkModeSegmented } from './WorkModeSegmented';
 
 export type ThreadLiveStatus = 'running' | 'completed' | 'idle' | 'waiting' | 'error';
@@ -36,6 +43,8 @@ export interface SidebarThread {
    * power the in-sidebar filter row. Defaults to "chat" when missing.
    */
   category?: SidebarThreadCategory;
+  /** When true, listed under the collapsible Archived section (still respects chat/auto filter). */
+  archived?: boolean;
 }
 
 type SidebarFilter = 'all' | SidebarThreadCategory;
@@ -147,6 +156,10 @@ export function ProjectSidebar({
   const [contextMenuProjectId, setContextMenuProjectId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [threadFilter, setThreadFilter] = useState<SidebarFilter>('all');
+  /** Per-project expanded state for the Archived block (default collapsed). */
+  const [archivedExpandedProjects, setArchivedExpandedProjects] = useState<Set<string>>(() => new Set());
+
+  const recencyNow = useMemo(() => new Date(), [projects, loading, threadFilter]);
 
   const filterChip = (id: SidebarFilter, label: string) => (
     <button
@@ -415,7 +428,7 @@ export function ProjectSidebar({
                 document.body,
               )}
 
-              {/* Thread List */}
+              {/* Thread List — grouped by recency; archived collapsed by default */}
               {!isCollapsed && (
                 <div className="flex flex-col">
                   {(() => {
@@ -431,75 +444,143 @@ export function ProjectSidebar({
                         </div>
                       );
                     }
-                    return filteredThreads.map((thread) => {
-                    const isActive = activeThreadId === thread.id;
-                    const isEditing = editingThreadId === thread.id;
-                    const isAutomation = (thread.category ?? 'chat') === 'automation';
+
+                    const activeThreads = filteredThreads.filter((t) => !t.archived);
+                    const archivedThreads = filteredThreads.filter((t) => t.archived);
+
+                    const buckets = new Map<ThreadRecencyBucket, SidebarThread[]>();
+                    for (const b of THREAD_RECENCY_SECTION_ORDER) {
+                      buckets.set(b, []);
+                    }
+                    for (const t of activeThreads) {
+                      const b = threadRecencyBucket(t.updatedAt, recencyNow);
+                      buckets.get(b)!.push(t);
+                    }
+                    for (const b of THREAD_RECENCY_SECTION_ORDER) {
+                      buckets.get(b)!.sort((a, c) => {
+                        const ma = parseThreadRecencyMs(a.updatedAt);
+                        const mc = parseThreadRecencyMs(c.updatedAt);
+                        if (ma == null && mc == null) return 0;
+                        if (ma == null) return 1;
+                        if (mc == null) return -1;
+                        return mc - ma;
+                      });
+                    }
+
+                    const archivedOpen = archivedExpandedProjects.has(project.id);
+
+                    function renderThreadRow(thread: SidebarThread) {
+                      const isActive = activeThreadId === thread.id;
+                      const isEditing = editingThreadId === thread.id;
+                      const isAutomation = (thread.category ?? 'chat') === 'automation';
+
+                      return (
+                        <div
+                          key={thread.id}
+                          className={cn(
+                            'group flex cursor-pointer items-center gap-2 border-l-2 py-1.5 pl-9 pr-2 transition-all duration-150',
+                            isActive
+                              ? 'border-l-white/25 bg-state-selected pl-[34px] text-text-primary'
+                              : 'border-l-transparent text-text-secondary hover:bg-white/[0.03] hover:text-text-primary',
+                          )}
+                          onClick={() => !isEditing && onThreadSelect?.(thread.id)}
+                        >
+                          <StatusDot status={thread.liveStatus} />
+
+                          {isEditing ? (
+                            <div className="flex items-center gap-1 flex-1 min-w-0">
+                              <input
+                                value={editingTitle}
+                                onChange={(e) => setEditingTitle(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveEdit();
+                                  if (e.key === 'Escape') cancelEdit();
+                                }}
+                                className="flex-1 min-w-0 rounded-md border border-border-subtle bg-bg-app px-1.5 py-0.5 text-xs text-text-primary"
+                                autoFocus
+                              />
+                              <button type="button" onClick={(e) => { e.stopPropagation(); saveEdit(); }} className="p-0.5 text-status-success-text"><Check className="h-3 w-3" /></button>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); cancelEdit(); }} className="p-0.5 text-text-muted"><X className="h-3 w-3" /></button>
+                            </div>
+                          ) : (
+                            <>
+                              {isAutomation && (
+                                <span
+                                  title="Automation thread"
+                                  className="inline-flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded bg-bg-elevated text-text-muted ring-1 ring-inset ring-white/[0.08]"
+                                >
+                                  <Bot className="h-2.5 w-2.5" />
+                                </span>
+                              )}
+                              <span className="flex-1 truncate text-[13px] font-medium">{thread.title || 'Untitled'}</span>
+                              <span className="text-[11px] text-text-muted flex-shrink-0">{formatRelativeTime(thread.updatedAt)}</span>
+                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
+                                {onRenameThread && (
+                                  <button type="button" onClick={(e) => { e.stopPropagation(); startEdit(thread); }} className="p-0.5 text-text-muted hover:text-text-primary" title="Rename">
+                                    <Pencil className="h-2.5 w-2.5" />
+                                  </button>
+                                )}
+                                {onArchiveThread && !thread.archived && (
+                                  <button type="button" onClick={(e) => { e.stopPropagation(); onArchiveThread(thread.id); }} className="p-0.5 text-text-muted hover:text-text-primary" title="Archive">
+                                    <Archive className="h-2.5 w-2.5" />
+                                  </button>
+                                )}
+                                {onDeleteThread && (
+                                  <button type="button" onClick={(e) => { e.stopPropagation(); onDeleteThread(thread.id); }} className="p-0.5 text-text-muted hover:text-status-error-text" title="Delete">
+                                    <Trash2 className="h-2.5 w-2.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    }
 
                     return (
-                      <div
-                        key={thread.id}
-                        className={cn(
-                          'group flex cursor-pointer items-center gap-2 border-l-2 py-1.5 pl-9 pr-2 transition-all duration-150',
-                          isActive
-                            ? 'border-l-white/25 bg-state-selected pl-[34px] text-text-primary'
-                            : 'border-l-transparent text-text-secondary hover:bg-white/[0.03] hover:text-text-primary',
-                        )}
-                        onClick={() => !isEditing && onThreadSelect?.(thread.id)}
-                      >
-                        <StatusDot status={thread.liveStatus} />
-
-                        {isEditing ? (
-                          <div className="flex items-center gap-1 flex-1 min-w-0">
-                            <input
-                              value={editingTitle}
-                              onChange={(e) => setEditingTitle(e.target.value)}
-                              onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') saveEdit();
-                                if (e.key === 'Escape') cancelEdit();
-                              }}
-                              className="flex-1 min-w-0 rounded-md border border-border-subtle bg-bg-app px-1.5 py-0.5 text-xs text-text-primary"
-                              autoFocus
-                            />
-                            <button type="button" onClick={(e) => { e.stopPropagation(); saveEdit(); }} className="p-0.5 text-status-success-text"><Check className="h-3 w-3" /></button>
-                            <button type="button" onClick={(e) => { e.stopPropagation(); cancelEdit(); }} className="p-0.5 text-text-muted"><X className="h-3 w-3" /></button>
-                          </div>
-                        ) : (
-                          <>
-                            {isAutomation && (
-                              <span
-                                title="Automation thread"
-                                className="inline-flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded bg-bg-elevated text-text-muted ring-1 ring-inset ring-white/[0.08]"
-                              >
-                                <Bot className="h-2.5 w-2.5" />
-                              </span>
-                            )}
-                            <span className="flex-1 truncate text-[13px] font-medium">{thread.title || 'Untitled'}</span>
-                            <span className="text-[11px] text-text-muted flex-shrink-0">{formatRelativeTime(thread.updatedAt)}</span>
-                            {/* Hover actions */}
-                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
-                              {onRenameThread && (
-                                <button type="button" onClick={(e) => { e.stopPropagation(); startEdit(thread); }} className="p-0.5 text-text-muted hover:text-text-primary" title="Rename">
-                                  <Pencil className="h-2.5 w-2.5" />
-                                </button>
-                              )}
-                              {onArchiveThread && (
-                                <button type="button" onClick={(e) => { e.stopPropagation(); onArchiveThread(thread.id); }} className="p-0.5 text-text-muted hover:text-text-primary" title="Archive">
-                                  <Archive className="h-2.5 w-2.5" />
-                                </button>
-                              )}
-                              {onDeleteThread && (
-                                <button type="button" onClick={(e) => { e.stopPropagation(); onDeleteThread(thread.id); }} className="p-0.5 text-text-muted hover:text-status-error-text" title="Delete">
-                                  <Trash2 className="h-2.5 w-2.5" />
-                                </button>
-                              )}
+                      <>
+                        {THREAD_RECENCY_SECTION_ORDER.map((bucketId) => {
+                          const list = buckets.get(bucketId)!;
+                          if (list.length === 0) return null;
+                          return (
+                            <div key={bucketId} className="flex flex-col">
+                              <div className="pl-9 pr-3 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                                {THREAD_RECENCY_LABELS[bucketId]}
+                              </div>
+                              {list.map((thread) => renderThreadRow(thread))}
                             </div>
-                          </>
-                        )}
-                      </div>
+                          );
+                        })}
+                        {archivedThreads.length > 0 ? (
+                          <div className="flex flex-col border-t border-white/[0.06] mt-1 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setArchivedExpandedProjects((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(project.id)) next.delete(project.id);
+                                  else next.add(project.id);
+                                  return next;
+                                });
+                              }}
+                              className="flex w-full items-center gap-1.5 pl-9 pr-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary hover:bg-white/[0.03] transition-colors"
+                            >
+                              {archivedOpen ? (
+                                <ChevronDown className="h-3 w-3 flex-shrink-0" />
+                              ) : (
+                                <ChevronRight className="h-3 w-3 flex-shrink-0" />
+                              )}
+                              <Archive className="h-3 w-3 flex-shrink-0" />
+                              <span>
+                                Archived ({archivedThreads.length})
+                              </span>
+                            </button>
+                            {archivedOpen ? archivedThreads.map((thread) => renderThreadRow(thread)) : null}
+                          </div>
+                        ) : null}
+                      </>
                     );
-                    });
                   })()}
                 </div>
               )}

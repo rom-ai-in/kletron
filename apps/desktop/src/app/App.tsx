@@ -430,6 +430,12 @@ export default function App() {
     }
   }, [settings.activeView, settings.activeSettingsSection, backendReady, activeWorkspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Sidebar Archived section — prefetch without opening Settings. */
+  useEffect(() => {
+    if (!backendReady || !activeWorkspaceId) return;
+    void threads.loadArchivedThreads();
+  }, [backendReady, activeWorkspaceId, threads.loadArchivedThreads]);
+
   useEffect(() => {
     const applyHash = () => {
       const h = (window.location.hash || "").replace(/^#\/?/, "");
@@ -519,24 +525,40 @@ export default function App() {
       workspace.workspace?.name ||
       workspace.workspace?.path?.split("/").pop() ||
       "Workspace";
+    const activeRows = threads.threads.map((t) => ({
+      id: t.id,
+      title: t.title || "Untitled",
+      updatedAt: t.updatedAt,
+      archived: false as const,
+      liveStatus:
+        t.status === "archived"
+          ? ("idle" as const)
+          : threads.conversationId === t.id && conversation.streaming
+            ? ("running" as const)
+            : ("idle" as const),
+    }));
+    const archivedRows = threads.archivedThreads.map((t) => ({
+      id: t.id,
+      title: t.title || "Untitled",
+      updatedAt: t.updatedAt,
+      archived: true as const,
+      liveStatus: "idle" as const,
+    }));
     return [
       {
         id: workspace.workspace?.path ?? "default",
         name,
-        threads: threads.threads.map((t) => ({
-          id: t.id,
-          title: t.title || "Untitled",
-          updatedAt: t.updatedAt,
-          liveStatus:
-            t.status === "archived"
-              ? ("idle" as const)
-              : threads.conversationId === t.id && conversation.streaming
-                ? ("running" as const)
-                : ("idle" as const),
-        })),
+        threads: [...activeRows, ...archivedRows],
       },
     ];
-  }, [threads.threads, threads.conversationId, conversation.streaming, workspace.workspace?.path, workspace.workspace?.name]);
+  }, [
+    threads.threads,
+    threads.archivedThreads,
+    threads.conversationId,
+    conversation.streaming,
+    workspace.workspace?.path,
+    workspace.workspace?.name,
+  ]);
 
   // Build pending diffs for right sidebar
   const pendingDiffItems: PendingDiffItem[] = useMemo(() => {

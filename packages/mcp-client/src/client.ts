@@ -191,7 +191,18 @@ export class McpClient {
       }
     }
     for (const [slug, config] of desired.entries()) {
-      if (this.external.has(slug)) continue;
+      const existing = this.external.get(slug);
+      // Healthy connection: keep it (tools already listed).
+      if (existing && !existing.error) continue;
+      // Failed prior attempt leaves a poisoned entry — remove so we retry each sync.
+      if (existing?.error) {
+        try {
+          await existing.client.close();
+        } catch {
+          // ignore
+        }
+        this.external.delete(slug);
+      }
       try {
         const client = new Client(
           { name: "kletron-mcp-client", version: "1.0.0" },

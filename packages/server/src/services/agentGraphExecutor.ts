@@ -754,36 +754,6 @@ function selectToolsByName(
     return merged.filter((tool: any) => allow.has(String(tool?.name ?? "")));
 }
 
-/** Ensures JSON Schema includes `properties: {}` for strict OpenAI / LM Studio validators. */
-const LM_STUDIO_LOOSE_OBJECT_SCHEMA = z.object({}).catchall(z.any());
-
-function ensureLmStudioToolParametersSchema(schema: unknown): z.ZodTypeAny {
-    if (!schema || typeof schema !== "object") return LM_STUDIO_LOOSE_OBJECT_SCHEMA;
-    if (!(schema instanceof z.ZodType)) return LM_STUDIO_LOOSE_OBJECT_SCHEMA;
-
-    const typeName = (schema as z.ZodTypeAny)._def?.typeName;
-    if (typeName === "ZodAny" || typeName === "ZodUnknown") {
-        return LM_STUDIO_LOOSE_OBJECT_SCHEMA;
-    }
-
-    if (typeName === "ZodObject") {
-        const zo = schema as z.ZodObject<Record<string, z.ZodTypeAny>>;
-        const keys = Object.keys(zo.shape);
-        const catchall = (zo as { _def?: { catchall?: z.ZodTypeAny } })._def?.catchall;
-        const catchallName = catchall?._def?.typeName;
-        const hasUsefulCatchall =
-            catchall &&
-            catchallName !== undefined &&
-            catchallName !== "ZodNever" &&
-            catchallName !== "ZodVoid";
-        if (keys.length === 0 && !hasUsefulCatchall) {
-            return LM_STUDIO_LOOSE_OBJECT_SCHEMA;
-        }
-    }
-
-    return schema as z.ZodTypeAny;
-}
-
 async function maybeExecuteJsonActionTool(opts: {
     schemaId: string;
     parsed: unknown;
@@ -2030,7 +2000,8 @@ export class AgentGraphExecutor {
                     const wrapTool = (baseTool: any) => {
                         const name = String(baseTool?.name ?? "unknown");
                         const description = baseTool?.description ?? "";
-                        const schema = ensureLmStudioToolParametersSchema(baseTool?.schema);
+                        // Avoid z.any() — strict OpenAI/LM Studio validators require parameters.properties
+                        const schema = baseTool?.schema ?? z.object({}).catchall(z.any());
                         const returnDirect = (baseTool as any)?.returnDirect;
                         const wrapped = createTool(
                             async (input: Record<string, unknown>) => {

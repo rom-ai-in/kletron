@@ -152,7 +152,9 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
         };
 
         tick();
-        const interval = setInterval(tick, isStreaming ? 3000 : 10000);
+        /** Fast poll while streaming or when approvals are queued (stream may appear idle during human-in-the-loop). */
+        const intervalMs = isStreaming || pendingEdits.length > 0 ? 3000 : 10000;
+        const interval = setInterval(tick, intervalMs);
         const onVisibility = () => {
             if (document.visibilityState === "visible") tick();
         };
@@ -167,7 +169,7 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
                 pollAbortRef.current = null;
             }
         };
-    }, [sessionId, isStreaming, fetchEdits]);
+    }, [sessionId, isStreaming, pendingEdits.length, fetchEdits]);
 
     const approveEdit = useCallback(
         async (editId: string, toolName?: string) => {

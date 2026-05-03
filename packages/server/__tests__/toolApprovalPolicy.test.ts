@@ -6,6 +6,7 @@ import {
     clearToolApprovalConfigOverride,
     getToolApprovalPolicy,
     isKletronAdminToolName,
+    isNamespacedExternalMcpToolName,
     isSafeCommand,
     normalizeRunSource,
     READONLY_TOOLS,
@@ -322,6 +323,22 @@ describe("applyThreadApprovalOverride", () => {
     it("work mode allows read_file", () => {
         const p = getToolApprovalPolicy({ source: "agent", toolName: "read_file", workMode: "work" });
         expect(p.decision).not.toBe("deny");
+    });
+
+    it("work mode allows namespaced external MCP tools (slug__tool)", () => {
+        expect(isNamespacedExternalMcpToolName("hunter__domain-search")).toBe(true);
+        const p = getToolApprovalPolicy({
+            source: "agent",
+            toolName: "hunter__domain-search",
+            workMode: "work",
+        });
+        expect(p.decision).not.toBe("deny");
+        expect(p.decision).toBe("requires_approval");
+        const auto = applyThreadApprovalOverride(p, {
+            mode: "full_auto_thread",
+            toolName: "hunter__domain-search",
+        });
+        expect(auto.decision).toBe("auto_approve");
     });
 
     it("uses injected approvalConfig for never-auto list", () => {
