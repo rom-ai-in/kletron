@@ -247,6 +247,11 @@ const preset: Partial<Config> = {
           '0%': { backgroundPosition: '200% center' },
           '100%': { backgroundPosition: '-200% center' },
         },
+        /** Highlight sweep across solid status text (AgentStatusShimmerLabel) */
+        'activity-sheen': {
+          '0%': { transform: 'translateX(-140%)' },
+          '100%': { transform: 'translateX(340%)' },
+        },
       },
 
       // ── Animation (from motion tokens) ───────────────────────────────────
@@ -258,6 +263,7 @@ const preset: Partial<Config> = {
         'slide-in-right': 'slide-in-right 300ms cubic-bezier(0, 0, 0.2, 1)',
         'slide-in-left': 'slide-in-left 300ms cubic-bezier(0, 0, 0.2, 1)',
         'text-shimmer': 'text-shimmer 2.8s ease-in-out infinite',
+        'activity-sheen': 'activity-sheen 3.1s ease-in-out infinite',
       },
     },
   },

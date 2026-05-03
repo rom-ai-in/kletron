@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     sanitizeVisibleAssistantContent,
+    sanitizeAssistantStreamPreview,
     extractThoughtsFromContent,
     normalizeMessage,
     containsMetaLeakage,
@@ -21,6 +22,24 @@ import { normalizeMarkdown } from '../src/normalizeMarkdown';
 // ═══════════════════════════════════════════════════════════════════════════════
 // sanitizeVisibleAssistantContent
 // ═══════════════════════════════════════════════════════════════════════════════
+
+describe('sanitizeAssistantStreamPreview', () => {
+    it('hides incomplete thinking block tail while streaming', () => {
+        const partial = '<think>secret reasoning so far';
+        expect(sanitizeAssistantStreamPreview(partial)).toBe('');
+    });
+
+    it('shows only content after closed thinking block', () => {
+        const s = '<think>done</think>\n\nHello user';
+        expect(sanitizeAssistantStreamPreview(s)).toContain('Hello user');
+        expect(sanitizeAssistantStreamPreview(s)).not.toContain('done');
+    });
+
+    it('filters meta paragraphs like sanitizeVisibleAssistantContent', () => {
+        const s = 'we must obey policy.\n\nActual reply.';
+        expect(sanitizeAssistantStreamPreview(s)).toBe('Actual reply.');
+    });
+});
 
 describe('sanitizeVisibleAssistantContent', () => {
     it('returns empty string for empty input', () => {

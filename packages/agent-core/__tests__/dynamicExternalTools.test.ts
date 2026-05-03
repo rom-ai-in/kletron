@@ -63,7 +63,7 @@ describe("buildDynamicExternalTools", () => {
         });
         const tools = await buildDynamicExternalTools();
         expect(tools).toHaveLength(1);
-        // Schema is z.record(z.any()) so `parse({})` should succeed.
+        // Fallback schema accepts arbitrary keys but serializes with properties: {} for LM Studio.
         const schema: any = (tools[0] as any).schema;
         expect(() => schema.parse({})).not.toThrow();
         expect(() => schema.parse({ anything: "goes" })).not.toThrow();

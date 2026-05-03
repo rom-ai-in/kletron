@@ -475,7 +475,11 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                     } else if (chunk.type === "activity") {
                         // Reserved for server-driven activity line
                     } else if (chunk.type === "update") {
-                        clearStreamBuffers();
+                        // Commit any token/reasoning deltas still in refs (flush RAF may not have run yet)
+                        cancelStreamFlush();
+                        streamFlushRafRef.current = null;
+                        setStreamingText(streamingTextRef.current);
+                        setStreamingReasoning(streamingReasoningRef.current);
                         const update = chunk.payload;
 
                         // Update timeline (full replacement — these are always complete)
@@ -498,10 +502,14 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                                 setTokenUsage(usage);
                             }
                         }
+                        clearStreamBuffers();
                     } else if (chunk.type === "final") {
                         // Final chunk logging (replaces debug-fetch instrumentation)
                         console.debug('[useSessionStream] Final chunk received', { eventStreamCount: chunk.payload.eventStream?.length ?? 0 });
-                        clearStreamBuffers();
+                        cancelStreamFlush();
+                        streamFlushRafRef.current = null;
+                        setStreamingText(streamingTextRef.current);
+                        setStreamingReasoning(streamingReasoningRef.current);
                         setLastResult(chunk.payload);
                         setRunEndedAt(new Date().toISOString());
 
@@ -529,6 +537,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                             onTitleGenerate(runId, userMessage);
                             isFirstMessageRef.current = false;
                         }
+                        clearStreamBuffers();
                     } else if (chunk.type === "error") {
                         console.error("[useSessionStream] Stream error:", chunk.payload.message);
                         clearStreamBuffers();
@@ -540,7 +549,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 }
             }
         }
-    }, [onSessionCreated, onTitleGenerate, mergeStreamMessages, clearStreamBuffers, scheduleStreamFlush]);
+    }, [onSessionCreated, onTitleGenerate, mergeStreamMessages, clearStreamBuffers, cancelStreamFlush, scheduleStreamFlush]);
 
     const handleSend = useCallback(async (options?: { text?: string; planMode?: boolean }) => {
         const msg = (options?.text ?? input).trim();

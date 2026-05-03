@@ -24,7 +24,12 @@ interface ExternalToolDescriptor {
     inputSchema?: unknown;
 }
 
-const looseObjectSchema = (): ZodTypeAny => z.record(z.any());
+/**
+ * LM Studio / strict OpenAI-compatible stacks reject tools whose JSON Schema has
+ * `type: "object"` but omits `properties`. `z.record(z.any())` does that — use an
+ * empty object plus catchall instead so `properties: {}` is always emitted.
+ */
+const looseObjectSchema = (): ZodTypeAny => z.object({}).catchall(z.any());
 
 function jsonSchemaToZod(schema: unknown): ZodTypeAny {
     if (!schema || typeof schema !== "object") return looseObjectSchema();

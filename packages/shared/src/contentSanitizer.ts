@@ -120,6 +120,36 @@ export function extractThoughtsFromContent(content: string): { content: string; 
 // Visible content sanitization — strips meta-reasoning paragraphs.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Progressive assistant stream (token deltas): strip thinking tags and meta text
+ * before rendering markdown, so users don't see chain-of-thought or echoed context.
+ */
+export function sanitizeAssistantStreamPreview(raw: string): string {
+    if (!raw?.trim()) return "";
+    let t = raw.replace(/\r\n/g, "\n");
+    // Completed blocks — keep pairing aligned with {@link extractThoughtsFromContent} / titleSanitizer
+    t = t.replace(/<think>([\s\S]*?)<\/think>/gi, " ");
+    t = truncateAtUnclosedRedactedThinking(t);
+    // Stray half-tags common while streaming (`<think>` shorthand from some providers)
+    t = t.replace(/<\/?think>/gi, " ");
+    return sanitizeVisibleAssistantContent(t.trim());
+}
+
+/** Streaming partial: hide everything from an unclosed `<think>` opener onward. */
+function truncateAtUnclosedRedactedThinking(text: string): string {
+    const open = "<think>";
+    const close = "</think>";
+    let from = 0;
+    while (true) {
+        const i = text.indexOf(open, from);
+        if (i === -1) return text;
+        const afterOpen = text.slice(i + open.length);
+        const j = afterOpen.indexOf(close);
+        if (j === -1) return text.slice(0, i).trim();
+        from = i + open.length + j + close.length;
+    }
+}
+
 export function sanitizeVisibleAssistantContent(content: string): string {
     if (!content) return "";
     const paragraphs = content
@@ -166,7 +196,9 @@ export function normalizeMessage(msg: Message): Message {
     }
     if (msg.thoughts && msg.thoughts.length > 0) return msg;
     const extracted = extractThoughtsFromContent(visibleContent);
-    if (extracted.thoughts.length === 0) return msg;
+    if (extracted.thoughts.length === 0) {
+        return { ...msg, content: visibleContent };
+    }
     return {
         ...msg,
         content: extracted.content,

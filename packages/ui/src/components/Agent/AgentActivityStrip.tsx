@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { deriveActivityState, type ActivitySourceEvent } from '../../lib/agentActivity';
 import { cn } from '../../lib/utils';
+import { AgentStatusShimmerLabel } from './AgentStatusShimmerLabel';
 
 export interface AgentActivityStripProps {
     streaming: boolean;
@@ -16,7 +17,7 @@ export interface AgentActivityStripProps {
 }
 
 /**
- * Single-line status while the agent runs (solid text — reliable across browsers).
+ * Single-line status while the agent runs (shimmer sweep over readable label).
  * Hidden while answer tokens stream to avoid duplicating the markdown preview.
  */
 export const AgentActivityStrip: React.FC<AgentActivityStripProps> = ({
@@ -45,7 +46,7 @@ export const AgentActivityStrip: React.FC<AgentActivityStripProps> = ({
             role="status"
             aria-live="polite"
         >
-            <span className="font-medium text-text-muted">{state.label}</span>
+            <AgentStatusShimmerLabel>{state.label}</AgentStatusShimmerLabel>
             {state.detail ? (
                 <>
                     <span className="select-none text-text-muted/45" aria-hidden>

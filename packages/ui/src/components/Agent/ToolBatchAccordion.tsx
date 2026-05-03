@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Wrench, Loader2 } from 'lucide-react';
 import { ToolInvocation } from './ToolInvocation';
 import type { ChatEvent } from './MessageList';
 import { cn } from '../../lib/utils';
+import { AgentStatusShimmerLabel } from './AgentStatusShimmerLabel';
 import {
     CATEGORY_ORDER,
     categoryLabel,
@@ -76,15 +77,7 @@ export const ToolBatchAccordion: React.FC<ToolBatchAccordionProps> = ({ pairs, c
                 </span>
 
                 <span className="min-w-0 flex-1 text-[11px] leading-snug sm:text-xs">
-                    <span
-                        className={cn(
-                            'font-medium',
-                            hasRunning && 'text-text-secondary animate-pulse',
-                            !hasRunning && 'text-text-secondary',
-                        )}
-                    >
-                        {summaryCore}
-                    </span>
+                    <AgentStatusShimmerLabel active={hasRunning}>{summaryCore}</AgentStatusShimmerLabel>
                     {failureSuffix ? (
                         <span className="font-medium tabular-nums text-status-error-text/90">{failureSuffix}</span>
                     ) : null}

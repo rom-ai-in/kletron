@@ -13,6 +13,7 @@ import { ThoughtsPanel } from './ThoughtsPanel';
 import { AgentActivityStrip } from './AgentActivityStrip';
 import type { ActivitySourceEvent } from '../../lib/agentActivity';
 import type { ChatEvent, RenderItem } from '@kletron/shared/chatTypes';
+import { sanitizeAssistantStreamPreview } from '@kletron/shared/contentSanitizer';
 import { groupEvents, pairToolEvents } from '../../lib/toolPairing';
 
 // Re-export for backward compatibility
@@ -181,6 +182,11 @@ const MessageListInner: React.FC<MessageListProps> = ({
     );
 
     const useVirtualList = virtualized && items.length >= VIRTUALIZE_MIN_ITEMS;
+
+    const streamingMarkdownSafe = useMemo(
+        () => sanitizeAssistantStreamPreview(streamingText ?? ''),
+        [streamingText],
+    );
 
     const handleScroll = useCallback(() => {
         if (!scrollRef.current) return;
@@ -476,7 +482,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
                         {hiddenCount} older messages hidden for performance
                     </div>
                 )}
-                {virtualized && items.length > 0 ? (
+                {useVirtualList && items.length > 0 ? (
                     <div style={{ position: 'relative', height: offsets.totalHeight }}>
                         {items.slice(virtualizationWindow.startIndex, virtualizationWindow.endIndex + 1).map((item, localIndex) => {
                             const index = virtualizationWindow.startIndex + localIndex;
@@ -502,7 +508,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
             </div>
 
             {streaming && (
-                <div className="mt-1 w-full max-w-[95%] space-y-1.5">
+                <div className="mt-1.5 w-full max-w-[95%] flex flex-col items-start gap-1.5">
                     <AgentActivityStrip
                         streaming={streaming}
                         streamingText={streamingText ?? ''}
@@ -511,15 +517,15 @@ const MessageListInner: React.FC<MessageListProps> = ({
                         runStartedAt={runStartedAt}
                     />
                     {streamingReasoning?.trim() ? (
-                        <ThoughtsPanel
-                            thoughts={[streamingReasoning]}
-                            isReasoning
-                            defaultExpanded
-                        />
+                        <ThoughtsPanel thoughts={[streamingReasoning]} isReasoning defaultExpanded={false} />
                     ) : null}
-                    {streamingText ? (
+                    {(streamingText ?? '').trim() ? (
                         <div className="w-full text-[12px] text-text-secondary pl-0.5">
-                            <MarkdownRenderer content={streamingText} variant="chat" />
+                            {streamingMarkdownSafe ? (
+                                <MarkdownRenderer content={streamingMarkdownSafe} variant="chat" />
+                            ) : (
+                                <span className="text-text-muted/70 text-[11px]"> … </span>
+                            )}
                             <span className="inline-block w-[2px] h-[14px] bg-text-muted/80 align-text-bottom ml-0.5 animate-pulse" />
                         </div>
                     ) : null}
