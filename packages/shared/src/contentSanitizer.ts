@@ -67,13 +67,19 @@ export function extractThoughtsFromContent(content: string): { content: string; 
         }
     };
 
-    // Extract explicit <think> blocks
-    const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
-    let match: RegExpExecArray | null;
-    while ((match = thinkRegex.exec(cleaned)) !== null) {
-        addThoughts(match[1]);
+    // Extract explicit thinking blocks: long `redacted_thinking` XML first, then short `think` tags.
+    const longThink = /<redacted_thinking>([\s\S]*?)<\/redacted_thinking>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = longThink.exec(cleaned)) !== null) {
+        addThoughts(m[1]);
     }
-    cleaned = cleaned.replace(thinkRegex, "").trim();
+    cleaned = cleaned.replace(longThink, "").trim();
+
+    const shortThink = /<think>([\s\S]*?)<\/think>/gi;
+    while ((m = shortThink.exec(cleaned)) !== null) {
+        addThoughts(m[1]);
+    }
+    cleaned = cleaned.replace(shortThink, "").trim();
 
     // Split on explicit Final/Answer markers
     const finalRegex = /(?:^|\n)\s*(final|answer)\s*:\s*/i;
@@ -87,10 +93,12 @@ export function extractThoughtsFromContent(content: string): { content: string; 
         }
     }
 
-    // Heuristic: if first paragraph looks like reasoning, split it out
+    // Heuristic: if an *early* paragraph looks like planning, split it into thoughts.
+    // Require 3+ paragraphs so two-paragraph answers (common from small models) are not
+    // reclassified when the final message is normalized (avoids visible "jump" vs stream).
     const cueRegex = /\b(we need to|we should|we have|the user|user wants|goal|plan|approach|next step|tool|call|let's|i will)\b/i;
     const paragraphs = cleaned.split(/\n\s*\n/);
-    if (paragraphs.length >= 2) {
+    if (paragraphs.length >= 3) {
         const first = paragraphs[0].trim();
         const rest = paragraphs.slice(1).join("\n\n").trim();
         if (rest && cueRegex.test(first)) {
@@ -108,7 +116,7 @@ export function extractThoughtsFromContent(content: string): { content: string; 
     // If sanitization removed all visible content but we captured thoughts,
     // preserve the last thought as visible content so the message isn't hidden.
     // This commonly happens with thinking models (e.g. Gemma) that wrap their
-    // entire response in <think> tags.
+    // entire response in `think` or `redacted_thinking` XML tags.
     if (!cleaned.trim() && thoughts.length > 0) {
         cleaned = thoughts[thoughts.length - 1];
     }
@@ -120,40 +128,35 @@ export function extractThoughtsFromContent(content: string): { content: string; 
 // Visible content sanitization — strips meta-reasoning paragraphs.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/** Strip closed `redacted_thinking` and `think` XML blocks (matching open/close tag names). */
+function stripCompletedThinkingTagBlocks(text: string): string {
+    return text
+        .replace(/<redacted_thinking>[\s\S]*?<\/redacted_thinking>/gi, " ")
+        .replace(/<think>[\s\S]*?<\/think>/gi, " ");
+}
+
 /**
  * Progressive assistant stream (token deltas): strip thinking tags and meta text
  * before rendering markdown, so users don't see chain-of-thought or echoed context.
+ *
+ * We intentionally do **not** truncate on an unclosed thinking opener: models often
+ * stream the opening tag before the body and close tag, which would blank the whole
+ * answer until the close arrives (severe flicker). A brief partial tag may show until
+ * the block completes; closed blocks are stripped immediately.
  */
 export function sanitizeAssistantStreamPreview(raw: string): string {
     if (!raw?.trim()) return "";
     let t = raw.replace(/\r\n/g, "\n");
-    // Completed blocks — keep pairing aligned with {@link extractThoughtsFromContent} / titleSanitizer
-    t = t.replace(/<think>([\s\S]*?)<\/think>/gi, " ");
-    t = truncateAtUnclosedRedactedThinking(t);
-    // Stray half-tags common while streaming (`<think>` shorthand from some providers)
+    t = stripCompletedThinkingTagBlocks(t);
+    // Stray half-tags common while streaming
+    t = t.replace(/<\/?redacted_thinking>/gi, " ");
     t = t.replace(/<\/?think>/gi, " ");
     return sanitizeVisibleAssistantContent(t.trim());
 }
 
-/** Streaming partial: hide everything from an unclosed `<think>` opener onward. */
-function truncateAtUnclosedRedactedThinking(text: string): string {
-    const open = "<think>";
-    const close = "</think>";
-    let from = 0;
-    while (true) {
-        const i = text.indexOf(open, from);
-        if (i === -1) return text;
-        const afterOpen = text.slice(i + open.length);
-        const j = afterOpen.indexOf(close);
-        if (j === -1) return text.slice(0, i).trim();
-        from = i + open.length + j + close.length;
-    }
-}
-
 export function sanitizeVisibleAssistantContent(content: string): string {
     if (!content) return "";
-    const paragraphs = content
-        .replace(/<think>[\s\S]*?<\/think>/gi, " ")
+    const paragraphs = stripCompletedThinkingTagBlocks(content)
         .split(/\n{2,}/)
         .map((part) => part.trim())
         .filter(Boolean);

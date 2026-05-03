@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
+import type { ResearchDepthId } from "@kletron/shared/researchDepth";
 import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
 import type { AgentEvent } from "@kletron/shared/types";
 
@@ -20,6 +21,8 @@ export type AgentGraphNodeReactConfig = {
     skillIds?: string[];
     /** Future: enforce hard cap on tool calls. */
     maxToolCalls?: number;
+    /** Optional LangGraph recursion limit for this node (overrides graph.execution.maxReactSteps). */
+    recursionLimit?: number;
     /**
      * If true, the agent will interrupt before executing tools so that a
      * human can review and approve the pending tool calls (human-in-the-loop).
@@ -83,10 +86,15 @@ export type AgentGraphExecutionConfig = {
     mode?: AgentGraphExecutionMode;
     /** Optional entry node for state machine mode. */
     entryNodeId?: string;
-    /** Max total node executions in a run (loop guard). */
+    /**
+     * Max total **graph node** executions (DAG / state-machine loop guard).
+     * This is **not** the LangGraph ReAct recursion limit; see `maxReactSteps` and `GRAPH_RECURSION_LIMIT`.
+     */
     maxIterations?: number;
     /** Max executions per node (loop guard). */
     maxNodeRuns?: number;
+    /** Optional LangGraph recursion limit override for ReAct nodes (tool/LLM steps). */
+    maxReactSteps?: number;
 };
 
 export interface AgentGraphDefinition {
@@ -229,6 +237,8 @@ export interface AgentGraphRun {
     threadApprovalMode?: ThreadApprovalMode;
     /** Code vs Work mode for tool allowlists and prompting (default `code`). */
     workMode?: "code" | "work";
+    /** Exhaustive (default) vs fast agent depth for prompts and ReAct step budget. */
+    researchDepth?: ResearchDepthId;
 }
 
 /**

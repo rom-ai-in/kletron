@@ -14,6 +14,7 @@ import {
 import { containsMetaLeakage } from "@kletron/shared/contentSanitizer";
 import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { normalizeToWorkModeId } from "@kletron/shared/workMode";
+import { normalizeResearchDepth } from "@kletron/shared/researchDepth";
 import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 /**
@@ -91,11 +92,13 @@ export async function GET(request: Request, { params }: { params: { id: string }
     };
 
     const workMode = normalizeToWorkModeId(run.workMode as string | undefined);
+    const researchDepth = normalizeResearchDepth((run as { researchDepth?: unknown }).researchDepth);
 
     return NextResponse.json({
       id: run._id?.toString(),
       graphId: run.graphId?.toString(),
       workMode,
+      researchDepth,
       title,
       status: run.status,
       archived: run.archived ?? false,

@@ -38,11 +38,23 @@ export interface EffectiveToolNamesResult {
 
 const DEFAULT_ALWAYS_ON = ["write_todos"];
 
+/** Legacy / LLM aliases → canonical bundled tool id (must match MCP tool \`name\` and capability set keys). */
+const BUNDLED_TOOL_ALIASES: Record<string, string> = {
+    find_references: "references",
+};
+
+function canonicalBundledToolName(name: string): string {
+    const lower = String(name ?? "")
+        .trim()
+        .toLowerCase();
+    return BUNDLED_TOOL_ALIASES[lower] ?? lower;
+}
+
 export function effectiveToolNames(
     input: EffectiveToolNamesInput
 ): EffectiveToolNamesResult {
     const alwaysOn = input.alwaysOn ?? DEFAULT_ALWAYS_ON;
-    const alwaysOnSet = new Set(alwaysOn.filter(Boolean));
+    const alwaysOnSet = new Set(alwaysOn.filter(Boolean).map((n) => n.trim().toLowerCase()));
 
     const requested = new Set<string>([
         ...input.nodeToolNames,
@@ -56,13 +68,19 @@ export function effectiveToolNames(
     // Apply the workspace gate to bundled / admin tool names.
     for (const name of requested) {
         if (!name) continue;
+        const capKey = canonicalBundledToolName(name);
+        const nameLower = name.trim().toLowerCase();
         // Always-on tools bypass caps but still appear on the graph allowlist — do not report as "dropped".
-        if (alwaysOnSet.has(name)) {
-            allowed.add(name);
+        if (alwaysOnSet.has(nameLower)) {
+            const exact = alwaysOn.find((n) => n && n.trim().toLowerCase() === nameLower);
+            if (exact) allowed.add(exact.trim());
             continue;
         }
-        if (input.capabilityToolSet.has(name) || input.adminToolNames.includes(name)) {
-            allowed.add(name);
+        const adminHit = input.adminToolNames.some(
+            (a) => a === name || a.trim().toLowerCase() === capKey || canonicalBundledToolName(a) === capKey,
+        );
+        if (input.capabilityToolSet.has(capKey) || input.adminToolNames.includes(name) || adminHit) {
+            allowed.add(capKey);
         } else {
             dropped.push(name);
         }

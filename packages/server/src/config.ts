@@ -321,7 +321,7 @@ const parsedGraphRecursionLimit = Number.parseInt(
 const graphRecursionLimit =
   Number.isFinite(parsedGraphRecursionLimit) && parsedGraphRecursionLimit > 0
     ? parsedGraphRecursionLimit
-    : 50;
+    : 120;
 
 if (!azureEndpoint && !openaiApiKey && !claudeApiKey && !geminiApiKey) {
   console.warn(

@@ -401,5 +401,6 @@ describe("system prompt anti-loop content verification", () => {
         assert.ok(simpleReactWorkSystemPrompt.includes("list_available_skills"));
         assert.ok(simpleReactWorkSystemPrompt.includes("Kletron"));
         assert.ok(!simpleReactWorkSystemPrompt.includes("Repository First Principle"));
+        assert.ok(simpleReactWorkSystemPrompt.includes("Evidence protocol"));
     });
 });

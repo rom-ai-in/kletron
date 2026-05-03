@@ -202,7 +202,7 @@ export type { ToolInvocationProps } from './Agent/ToolInvocation';
 
 // Message List (scrollable chat container with auto-scroll + tool pairing)
 export { MessageList, groupEvents } from './Agent/MessageList';
-export type { MessageListProps, ChatEvent, RenderItem } from './Agent/MessageList';
+export type { MessageListProps, ChatEvent, RenderItem, ThreadDomPaintLogOptions } from './Agent/MessageList';
 export { PendingSessionEditsStrip } from './Agent/PendingSessionEditsStrip';
 export type { PendingSessionEditsStripProps } from './Agent/PendingSessionEditsStrip';
 

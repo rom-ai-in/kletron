@@ -81,7 +81,7 @@ Manages graph and LLM selections with persistence:
 
 **Graph resolution**: When preferences and graphs are both loaded, the hook resolves the selected graph:
 1. Check if saved selection is valid
-2. Fallback to "Simple ReAct (agent graph)" by name
+2. Fallback by priority: Coder → Explorer → Planner → Company Growth & GTM (by exact preset name)
 3. Fallback to first available graph
 
 ### `useSessionStream`

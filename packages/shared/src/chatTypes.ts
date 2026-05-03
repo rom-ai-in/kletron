@@ -103,6 +103,7 @@ export function sessionStatusToSidebarLiveStatus(
 import type { AgentWorkflowResult, AgentWorkflowUpdate } from './types';
 import type { ThreadApprovalMode } from './threadApprovalTypes';
 import type { WorkModeId } from './workMode';
+import type { ResearchDepthId } from './researchDepth';
 
 /**
  * Per-`streamReactAgentMessages` KPIs (one NDJSON `stream_metrics` chunk per invocation).
@@ -151,6 +152,8 @@ export type AgentStreamKpiV1 = {
     upstreamPrepMs?: number;
     /** Executor wall ms from run start to this stream finishing */
     wallMsExecutorToStreamEnd?: number;
+    /** Count of tool messages in the final LangGraph transcript (successful stream). */
+    toolCallCount?: number;
 };
 
 export type StreamChunk =
@@ -173,6 +176,8 @@ export interface ConversationHistoryItem {
     lastRole?: 'user' | 'assistant' | 'system' | 'tool';
     /** Run creation mode; omitted on older clients until API returns it. */
     workMode?: WorkModeId;
+    /** Exhaustive (default) vs fast agent depth; omitted on older runs. */
+    researchDepth?: ResearchDepthId;
 }
 
 /** Conversation detail (thread detail with history). */

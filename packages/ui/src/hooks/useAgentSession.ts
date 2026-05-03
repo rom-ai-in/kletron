@@ -215,13 +215,20 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
     useEffect(() => {
         if (!graphOptionsLoaded || !llmPrefsLoaded) return;
         const hasAgentGraphs = agentGraphs.length > 0;
-        const defaultGraphId = hasAgentGraphs
-            ? String(
-                  agentGraphs.find((g) => g.name === "Simple ReAct (agent graph)")?._id ??
-                  agentGraphs[0]?._id ??
-                  ""
-              )
-            : "";
+        const defaultGraphId = (() => {
+            if (!hasAgentGraphs) return "";
+            const priority = [
+                "Coder Agent (agent graph)",
+                "Explorer Agent (agent graph)",
+                "Planner Agent (agent graph)",
+                "Company Growth & GTM (work graph)",
+            ] as const;
+            for (const name of priority) {
+                const g = agentGraphs.find((x) => x.name === name);
+                if (g?._id) return String(g._id);
+            }
+            return agentGraphs[0]?._id ? String(agentGraphs[0]._id) : "";
+        })();
         const savedIsValid = Boolean(
             savedGraphId &&
                 MONGO_GRAPH_ID_HEX24.test(savedGraphId) &&

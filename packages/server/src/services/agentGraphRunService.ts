@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
+import { normalizeResearchDepth, type ResearchDepthId } from "@kletron/shared/researchDepth";
 import { getDb } from "../lib/db";
 import type { AgentGraphNodeStatus, AgentGraphRun, AgentGraphStatus, AgentGraphState } from "./agentGraphTypes";
 import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
@@ -67,6 +68,8 @@ export type CreateRunOptions = {
     workMode?: "code" | "work";
     /** User id for per-tenant approval policy (interactive sessions). */
     createdByUserId?: string;
+    /** Agent research depth (default exhaustive). */
+    researchDepth?: ResearchDepthId | string;
 };
 
 export class AgentGraphRunService {
@@ -99,6 +102,7 @@ export class AgentGraphRunService {
                 : {}),
             ...(options?.workMode ? { workMode: options.workMode } : {}),
             ...(options?.createdByUserId ? { createdByUserId: options.createdByUserId } : {}),
+            researchDepth: normalizeResearchDepth(options?.researchDepth),
             status: "PENDING",
             startedAt: new Date(),
             nodeOrder: [],
@@ -168,9 +172,25 @@ export class AgentGraphRunService {
         }
     }
 
+    /** Research depth for prompts and LangGraph budget (defaults to exhaustive). */
+    async getRunResearchDepth(runId: string): Promise<ResearchDepthId> {
+        if (!ObjectId.isValid(runId)) return "exhaustive";
+        const collection = await getCollectionSafe();
+        const fromDoc = (r: AgentGraphRun | null | undefined) => normalizeResearchDepth(r?.researchDepth);
+        if (!collection) {
+            return fromDoc(getFallbackRun(runId));
+        }
+        try {
+            const doc = await collection.findOne({ _id: new ObjectId(runId) }, { projection: { researchDepth: 1 } });
+            return fromDoc(doc as AgentGraphRun | null);
+        } catch {
+            return fromDoc(getFallbackRun(runId));
+        }
+    }
+
     async patchRun(
         runId: string,
-        partial: Partial<Pick<AgentGraphRun, "threadApprovalMode" | "title" | "workMode">>,
+        partial: Partial<Pick<AgentGraphRun, "threadApprovalMode" | "title" | "workMode" | "researchDepth">>,
     ): Promise<void> {
         if (!ObjectId.isValid(runId)) {
             throw new Error("Invalid run ID format");

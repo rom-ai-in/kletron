@@ -256,11 +256,11 @@ CRUD operations for graph definitions (`agentGraphService.ts`):
 | `listGraphs(filter?)` | List all non-hidden graphs (text search on name/description) |
 | `updateGraph(graphId, updates)` | Partial update |
 | `deleteGraph(graphId)` | Remove graph |
-| `ensureDefaultGraphs()` | Seed default preset graphs on user registration |
+| `ensureDefaultGraphs()` | Seed the four canonical presets on user registration (Company Growth, Coder, Planner, Explorer) if missing |
 
 **Hidden graphs**: Legacy graph names are filtered from `listGraphs()` via `HIDDEN_GRAPH_NAMES` set.
 
-**Fallback**: When MongoDB is unavailable, graphs are stored in-memory via `fallbackGraphs` map. Preset graphs are seeded with fixed ObjectId strings.
+**Fallback**: When MongoDB is unavailable, graphs are stored in-memory via `fallbackGraphs` map. Only those four canonical presets are registered with fixed ObjectId strings (`…08` Coder, `…09` Explorer, `…0a` Planner, `…0e` Company Growth).
 
 ## Graph Catalog
 

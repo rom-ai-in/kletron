@@ -4,6 +4,7 @@ import type { Message, StreamStatus, StreamChunk } from '@kletron/shared/chatTyp
 import type { ThreadApprovalMode } from '@kletron/shared/threadApprovalTypes';
 import { joinApiOrigin } from '@kletron/shared';
 import { normalizeToWorkModeId } from '@kletron/shared/workMode';
+import { normalizeResearchDepth, type ResearchDepthId } from '@kletron/shared/researchDepth';
 import { extractThoughtsFromContent, sanitizeVisibleAssistantContent, normalizeMessage } from '@kletron/shared/contentSanitizer';
 
 // Re-export for backward compatibility
@@ -53,6 +54,8 @@ export interface UseSessionStreamOptions {
     workMode?: string | null;
     /** Optional plan mode flag in the JSON body. */
     planMode?: boolean;
+    /** Research depth for new sessions only (default exhaustive). */
+    researchDepth?: ResearchDepthId | null;
     /** Callback when a new session is created (receives runId, graphId, first user message body). */
     onSessionCreated?: (runId: string, graphId: string, firstUserMessage?: string) => void;
     /** Callback when a title should be generated. */
@@ -125,6 +128,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         category,
         workMode,
         planMode,
+        researchDepth,
         onSessionCreated,
         onTitleGenerate,
     } = options;
@@ -483,11 +487,11 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                     } else if (chunk.type === "activity") {
                         // Reserved for server-driven activity line
                     } else if (chunk.type === "update") {
-                        // Commit any token/reasoning deltas still in refs (flush RAF may not have run yet)
+                        // Cancel pending RAF; do not clear streaming refs here.
+                        // `text_delta` chunks after the first snapshot are often *suffix-only*; clearing refs
+                        // on every `update` left only the last suffix in `streamingTextRef` (broken streaming).
                         cancelStreamFlush();
                         streamFlushRafRef.current = null;
-                        setStreamingText(streamingTextRef.current);
-                        setStreamingReasoning(streamingReasoningRef.current);
                         const update = chunk.payload;
 
                         // Update timeline (full replacement — these are always complete)
@@ -500,6 +504,18 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                             setEventStream(update.eventStream);
                             // Merge into chat messages (append + dedup, preserving previous turns)
                             mergeStreamMessages(update.eventStream, optimisticTempId);
+                            // Re-anchor progressive deltas to the canonical assistant body from this snapshot.
+                            const lastPlainAssistant = [...update.eventStream]
+                                .reverse()
+                                .find(
+                                    (e) =>
+                                        e.kind === "assistant" &&
+                                        !(e.name ?? e.toolName) &&
+                                        !e.toolCallId,
+                                );
+                            if (typeof lastPlainAssistant?.content === "string") {
+                                streamingTextRef.current = lastPlainAssistant.content;
+                            }
                         }
 
                         // Extract token usage from meta
@@ -513,7 +529,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                         if (update.capabilityDroppedTools !== undefined) {
                             setCapabilityDroppedTools(update.capabilityDroppedTools);
                         }
-                        clearStreamBuffers();
+                        // Hide the live bubble while merged history is authoritative; refs stay aligned for suffix deltas.
+                        setStreamingText("");
+                        setStreamingReasoning("");
                     } else if (chunk.type === "final") {
                         // Final chunk logging (replaces debug-fetch instrumentation)
                         console.debug('[useSessionStream] Final chunk received', { eventStreamCount: chunk.payload.eventStream?.length ?? 0 });
@@ -607,6 +625,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 ...(threadApprovalMode && threadApprovalMode !== 'inherit' ? { threadApprovalMode } : {}),
                 ...modeBodyForCreate,
                 ...(effectivePlanMode ? { planMode: true } : {}),
+                researchDepth: normalizeResearchDepth(researchDepth),
             }
             : {
                 message: msg,
@@ -668,7 +687,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, workspaceId, threadApprovalMode, apiOrigin, category, workMode, planMode, processNdjsonStream]);
+    }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, workspaceId, threadApprovalMode, apiOrigin, category, workMode, planMode, researchDepth, processNdjsonStream]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {

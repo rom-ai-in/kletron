@@ -51,6 +51,8 @@ import {
 } from "lucide-react";
 import type { WorkModeId } from "@kletron/shared/workMode";
 import { WORK_MODES, normalizeToWorkModeId } from "@kletron/shared/workMode";
+import type { ResearchDepthId } from "@kletron/shared/researchDepth";
+import { normalizeResearchDepth } from "@kletron/shared/researchDepth";
 import { sessionStatusToSidebarLiveStatus } from "@kletron/shared/chatTypes";
 import { AgentSessionChrome } from "@kletron/ui/components/CommandCenter/AgentSessionChrome";
 import { AgentCodeRepoBar } from "../../../components/agent/AgentCodeRepoBar";
@@ -78,6 +80,7 @@ type SessionSummary = {
   automationId?: string | null;
   /** Stored Code vs Work mode for this run (defaults to `code` when unset server-side). */
   workMode?: WorkModeId;
+  researchDepth?: ResearchDepthId;
 };
 
 type SessionDetail = {
@@ -88,6 +91,8 @@ type SessionDetail = {
   threadApprovalMode?: ThreadApprovalMode;
   source?: string | null;
   startedAt?: string | null;
+  workMode?: WorkModeId;
+  researchDepth?: ResearchDepthId;
   graph: {
     name: string;
     nodeCount: number;
@@ -148,6 +153,9 @@ interface AgentComposerProps {
   activeWorkspaceId: string | null;
   planMode: boolean;
   onPlanModeToggle: () => void;
+  researchDepth: ResearchDepthId;
+  onResearchDepthChange: (depth: ResearchDepthId) => void;
+  activeSessionId: string | null;
 }
 
 const AgentComposer = memo(function AgentComposer({
@@ -177,6 +185,9 @@ const AgentComposer = memo(function AgentComposer({
   activeWorkspaceId,
   planMode,
   onPlanModeToggle,
+  researchDepth,
+  onResearchDepthChange,
+  activeSessionId,
 }: AgentComposerProps) {
   const router = useRouter();
   const queuedOrBusy = sending || runActive;
@@ -408,6 +419,23 @@ const AgentComposer = memo(function AgentComposer({
               disabled={threadApprovalLocked}
               disabledReason={threadApprovalLockedReason}
             />
+            <label className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
+              <span className="shrink-0">Depth</span>
+              <select
+                value={researchDepth}
+                onChange={(e) => onResearchDepthChange(e.target.value as ResearchDepthId)}
+                disabled={!!activeSessionId}
+                title={
+                  activeSessionId
+                    ? "Research depth is fixed for this thread (set when the session was created)."
+                    : "Exhaustive: more tools and context. Fast: fewer steps and shorter replies."
+                }
+                className="max-w-[120px] rounded border border-white/[0.12] bg-bg-elevated py-0.5 pl-1.5 pr-6 text-[10px] font-normal normal-case text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="exhaustive">Exhaustive</option>
+                <option value="fast">Fast</option>
+              </select>
+            </label>
           </div>
         }
       />
@@ -453,6 +481,8 @@ export default function AgentPage() {
   });
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [perfDebugEnabled, setPerfDebugEnabled] = useState(false);
+  /** Logs `[kletron:thread-dom]` from real DOM vs React fingerprint (`?threadLog=1` or toolbar). */
+  const [threadDomLogEnabled, setThreadDomLogEnabled] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   const [fps, setFps] = useState<number | null>(null);
   const [inputLatencyStats, setInputLatencyStats] = useState<{ avg: number; p95: number; count: number }>({
@@ -475,6 +505,8 @@ export default function AgentPage() {
 
   // ── Code vs Work mode (per workspace, persisted server + local mirror) ──
   const [workMode, setWorkMode] = useState<WorkModeId>("code");
+  /** New-session agent depth (stored on run at creation). */
+  const [researchDepth, setResearchDepth] = useState<ResearchDepthId>("exhaustive");
   useEffect(() => {
     if (!activeWorkspaceId) {
       setWorkMode("code");
@@ -718,6 +750,7 @@ export default function AgentPage() {
     onTitleGenerate: handleTitleGenerate,
     workMode,
     planMode,
+    researchDepth,
   });
 
   const truncateAndResend = useCallback(async (messageIndex: number, newContent: string) => {
@@ -885,6 +918,13 @@ export default function AgentPage() {
     setThreadApprovalMode(parseThreadApprovalMode(sessionDetail.threadApprovalMode));
   }, [sessionDetail?.id, sessionDetail?.threadApprovalMode]);
 
+  useEffect(() => {
+    if (!sessionDetail?.id) return;
+    if (sessionDetail.researchDepth != null) {
+      setResearchDepth(normalizeResearchDepth(sessionDetail.researchDepth));
+    }
+  }, [sessionDetail?.id, sessionDetail?.researchDepth]);
+
   // ── Pre-fill from BA handoff (URL search params) ──────────────────────
   const handoffAppliedRef = useRef(false);
   useEffect(() => {
@@ -907,6 +947,7 @@ export default function AgentPage() {
   useEffect(() => {
     const perfParam = searchParams?.get("perf");
     if (perfParam === "1") setPerfDebugEnabled(true);
+    if (searchParams?.get("threadLog") === "1") setThreadDomLogEnabled(true);
   }, [searchParams]);
 
   const initialBeforeIndexRef = useRef<number | null>(null);
@@ -1063,6 +1104,7 @@ export default function AgentPage() {
     setHistoryPage({ total: 0, start: 0, end: 0, hasOlder: false });
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
     setSessionDetailLoading(false);
+    setResearchDepth("exhaustive");
   }, [setMessages, handleStop]);
 
   useEffect(() => {
@@ -1267,6 +1309,37 @@ export default function AgentPage() {
   }, [activeSessionId, sessionDetail]);
 
   const agentBusy = sending || isServerSideRunActive;
+
+  /** React-side thread model (compact) — emitted inside each `[kletron:thread-dom]` log for diff vs `dom.*`. */
+  const threadReactFingerprint = useMemo(() => {
+    const tail = messages
+      .slice(-6)
+      .map((m) => `${m.role}:${m.id}:${(m.content ?? "").length}`)
+      .join("|");
+    const st = streamingText.slice(0, 72).replace(/\s+/g, " ").trim();
+    const sr = streamingReasoning.slice(0, 72).replace(/\s+/g, " ").trim();
+    return [
+      `n=${messages.length}`,
+      `tail=${tail}`,
+      `st=${streamingText.length}:${st}`,
+      `sr=${streamingReasoning.length}:${sr}`,
+      `busy=${agentBusy}`,
+      `send=${sending}`,
+      `ss=${streamStatus}`,
+    ].join(";");
+  }, [messages, streamingText, streamingReasoning, agentBusy, sending, streamStatus]);
+
+  const threadDomPaintLog = useMemo(
+    () =>
+      threadDomLogEnabled
+        ? {
+            enabled: true,
+            sessionId: activeSessionId,
+            reactFingerprint: threadReactFingerprint,
+          }
+        : undefined,
+    [threadDomLogEnabled, activeSessionId, threadReactFingerprint],
+  );
 
   /** Thread column placeholder: workspace switch, hydrate in flight, or stale detail vs selected id — not while a live stream/run should stay visible. */
   const showConversationSkeleton = useMemo(() => {
@@ -1654,6 +1727,17 @@ export default function AgentPage() {
             >
               Perf {perfDebugEnabled ? "ON" : "OFF"}
             </button>
+            <button
+              type="button"
+              onClick={() => setThreadDomLogEnabled((v) => !v)}
+              className={`rounded border px-2 py-1 text-[10px] transition ${threadDomLogEnabled
+                ? "border-status-info-border bg-status-info-bg text-status-info-text"
+                : "border-white/[0.08] bg-bg-elevated text-text-muted hover:bg-state-hover hover:text-text-primary"
+                }`}
+              title="Log [kletron:thread-dom] snapshots: text read from the painted thread (rows + streaming slot). Add ?threadLog=1 to open with logging on. Filter console by kletron:thread-dom."
+            >
+              Dom log {threadDomLogEnabled ? "ON" : "OFF"}
+            </button>
             {perfDebugEnabled && (
               <div className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted">
                 FPS: {fps ?? "…"} | input p95: {inputLatencyStats.p95.toFixed(1)}ms | avg: {inputLatencyStats.avg.toFixed(1)}ms
@@ -1747,6 +1831,7 @@ export default function AgentPage() {
                 virtualized
                 prefetchNearTop
                 onNearTop={handleLoadOlderMessages}
+                domPaintLog={threadDomPaintLog}
                 className="flex-1 min-h-0 p-0 px-2 py-4"
                 messageActions={(event) => (
                   <MessageActions
@@ -1856,6 +1941,9 @@ export default function AgentPage() {
           activeWorkspaceId={activeWorkspaceId}
           planMode={planMode}
           onPlanModeToggle={() => setPlanMode((p) => !p)}
+          researchDepth={researchDepth}
+          onResearchDepthChange={setResearchDepth}
+          activeSessionId={activeSessionId}
         />
       </div>
     </div>

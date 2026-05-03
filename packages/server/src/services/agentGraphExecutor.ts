@@ -45,6 +45,8 @@ import { applyThreadApprovalOverride, getToolApprovalPolicy } from "./toolApprov
 import { resolveEffectiveToolApprovalConfigForRun } from "./effectiveToolApprovalService";
 import { syncWorkspaceExternalMcpServers } from "./mcpWorkspaceSync";
 import { simpleReactPhaseId, simpleReactWorkSystemPrompt } from "./agentGraphPresets";
+import { config } from "../config";
+import { RESEARCH_DEPTH_FAST_SYSTEM_SUFFIX } from "@kletron/shared/researchDepth";
 
 const runApprovalConfigCache = new Map<string, ToolApprovalConfig>();
 
@@ -320,7 +322,8 @@ function extractThoughtsFromContent(content: string): { content: string; thought
         }
     };
 
-    // Strip <think> blocks (already extracted by extractThinkingFromMessage)
+    // Strip closed thinking blocks (already extracted by extractThinkingFromMessage for structured runs)
+    cleaned = cleaned.replace(/<redacted_thinking>[\s\S]*?<\/redacted_thinking>/gi, "").trim();
     cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 
     // Split on explicit Final/Answer markers
@@ -338,7 +341,7 @@ function extractThoughtsFromContent(content: string): { content: string; thought
     // Heuristic: if first paragraph looks like reasoning, split it out
     const cueRegex = /\b(we need to|we should|we have|the user|user wants|goal|plan|approach|next step|tool|call|let's|i will)\b/i;
     const paragraphs = cleaned.split(/\n\s*\n/);
-    if (paragraphs.length >= 2) {
+    if (paragraphs.length >= 3) {
         const first = paragraphs[0].trim();
         const rest = paragraphs.slice(1).join("\n\n").trim();
         if (rest && cueRegex.test(first)) {
@@ -1937,6 +1940,23 @@ export class AgentGraphExecutor {
                         dynamicExternalTools
                     );
 
+                    const researchDepth = await agentGraphRunService.getRunResearchDepth(runId);
+                    const webToolsMissing =
+                        !mergedToolNames.includes("web_search") && !mergedToolNames.includes("fetch_url");
+                    const webHintBlock = webToolsMissing
+                        ? "\n\n## AVAILABLE TOOLS NOTE\n`web_search` and `fetch_url` are **not** exposed for this run (workspace capabilities/connectors). Use workspace search and file tools only; **do not** cite or imply live web research you did not perform with an available tool.\n"
+                        : "";
+                    const fastSuffix =
+                        researchDepth === "fast" ? RESEARCH_DEPTH_FAST_SYSTEM_SUFFIX : "";
+                    const reactRecursionLimit =
+                        typeof node.react.recursionLimit === "number" && node.react.recursionLimit > 0
+                            ? Math.floor(node.react.recursionLimit)
+                            : typeof graph.execution?.maxReactSteps === "number" && graph.execution.maxReactSteps > 0
+                              ? Math.floor(graph.execution.maxReactSteps)
+                              : researchDepth === "fast"
+                                ? 48
+                                : config.graphRecursionLimit;
+
                     if (effective.dropped.length > 0) {
                         console.warn(
                             `[AgentGraph] Node ${node.id} requested ${effective.dropped.length} tool(s) ` +
@@ -2227,6 +2247,20 @@ export class AgentGraphExecutor {
                         globalEventStream.push(event);
                         state.conversationHistory!.push(event);
                     };
+
+                    const replaceEventById = (targetId: string, patch: AgentEvent) => {
+                        const apply = (arr: AgentEvent[]) => {
+                            const i = arr.findIndex((e) => e.id === targetId);
+                            if (i >= 0) arr[i] = { ...arr[i], ...patch };
+                        };
+                        apply(builtMessageEvents);
+                        apply(eventStream);
+                        apply(globalEventStream);
+                        const hist = state.conversationHistory!;
+                        const hi = hist.findIndex((e) => e.id === targetId);
+                        if (hi >= 0) hist[hi] = { ...hist[hi], ...patch };
+                    };
+
                     const handleStreamingMessage = async (message: BaseMessage) => {
                         await ensureNotAborted();
 
@@ -2269,6 +2303,44 @@ export class AgentGraphExecutor {
                             priorContentFingerprints.has(eventFp)
                         ) {
                             return; // silently skip — this is a replayed history message
+                        }
+
+                        // Values-mode streaming: merge growing assistant text into one event (any provider).
+                        const hist = state.conversationHistory!;
+                        const last = hist.at(-1);
+                        const lastIsPlainAssistant =
+                            last &&
+                            last.kind === "assistant" &&
+                            last.phaseId === node.id &&
+                            !(last.name ?? last.toolName) &&
+                            !last.toolCallId;
+                        const incomingIsPlainAssistant =
+                            event.kind === "assistant" &&
+                            !(event.name ?? event.toolName) &&
+                            !event.toolCallId;
+                        const prevTrim = (last?.content ?? "").trim();
+                        const nextTrim = (event.content ?? "").trim();
+                        if (lastIsPlainAssistant && incomingIsPlainAssistant && nextTrim === prevTrim) {
+                            return;
+                        }
+                        const canMergeGrowingAssistant =
+                            lastIsPlainAssistant &&
+                            incomingIsPlainAssistant &&
+                            nextTrim.length > prevTrim.length &&
+                            (prevTrim.length === 0 || nextTrim.startsWith(prevTrim));
+
+                        if (canMergeGrowingAssistant && last) {
+                            const merged: AgentEvent = {
+                                ...last,
+                                content: event.content,
+                                thoughts: event.thoughts,
+                                toolNote: event.toolNote,
+                                thinking: event.thinking,
+                                timestamp: event.timestamp,
+                            };
+                            replaceEventById(last.id, merged);
+                            await flushUpdate();
+                            return;
                         }
 
                         pushEvent(event);
@@ -2330,11 +2402,14 @@ export class AgentGraphExecutor {
                                   "Do NOT ask the user for generic folder access — tools already operate here.",
                                   "Do NOT re-plan indefinitely — proceed once you have a reasonable plan.",
                                   "",
+                                  "## INVESTIGATION DISCIPLINE",
+                                  "- Prefer **breadth then depth**: map candidates with list/glob/search, then read the highest-signal files.",
+                                  "- Gather **enough** corroborating evidence before firm conclusions; say when coverage is incomplete.",
+                                  "",
                                   "## ANTI-LOOPING RULES",
                                   "- Never call the same tool with identical arguments more than once per turn. Reuse prior results.",
                                   "- Never call write_todos more than twice without making progress between calls.",
                                   "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
-                                  "- After gathering enough information, synthesize and report.",
                               ].join("\n")
                             : [
                                   "\n\n## WORKSPACE ENVIRONMENT",
@@ -2344,14 +2419,17 @@ export class AgentGraphExecutor {
                                   "Do NOT ask the user for repository access — you already have it.",
                                   "Do NOT re-plan if you have already created a plan — proceed with execution.",
                                   "",
+                                  "## INVESTIGATION DISCIPLINE",
+                                  "- Prefer **breadth then depth**: search and map relevant modules before deep edits.",
+                                  "- Trace enough call sites / tests to be confident; incomplete traces should be stated explicitly.",
+                                  "",
                                   "## ANTI-LOOPING RULES",
                                   "- Never call the same tool with identical arguments more than once per turn. Reuse prior results.",
                                   "- Never call write_todos more than twice without making progress on actual tasks between calls.",
                                   "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
-                                  "- Focus on PRODUCING OUTPUT, not endlessly planning. After gathering information, synthesize and report.",
                               ].join("\n");
 
-                    const enhancedSystemPrompt = `${baseSystemPrompt}${workspaceContextBlock}${contextBlock}${taskContextBlock}${auditContextPrompt ? `\n\n${auditContextPrompt}` : ""}`;
+                    const enhancedSystemPrompt = `${baseSystemPrompt}${workspaceContextBlock}${contextBlock}${taskContextBlock}${webHintBlock}${fastSuffix}${auditContextPrompt ? `\n\n${auditContextPrompt}` : ""}`;
 
                     // Update timeline with the ACTUAL prompt used (including context)
                     if (timeline[0]) {
@@ -2406,6 +2484,7 @@ export class AgentGraphExecutor {
                                 systemPrompt: enhancedSystemPrompt,
                                 userPrompt: delegateInput,
                                 tools,
+                                recursionLimit: reactRecursionLimit,
                                 llmSelection: opts?.llmSelectionOverride,
                                 upstreamPrepMs: performance.now() - runWallClockT0,
                                 runId,
@@ -2465,6 +2544,7 @@ export class AgentGraphExecutor {
                                 systemPrompt: summaryPrompt,
                                 userPrompt: rawResult,
                                 tools: [],
+                                recursionLimit: reactRecursionLimit,
                                 llmSelection: opts?.llmSelectionOverride,
                                 upstreamPrepMs: performance.now() - runWallClockT0,
                                 runId,
@@ -2590,6 +2670,7 @@ export class AgentGraphExecutor {
                             systemPrompt: enhancedSystemPrompt,
                             userPrompt: userPrompt,
                             tools,
+                            recursionLimit: reactRecursionLimit,
                             llmSelection: opts?.llmSelectionOverride,
                             upstreamPrepMs: performance.now() - runWallClockT0,
                             runId,

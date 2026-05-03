@@ -1,28 +1,37 @@
 # Graph Presets
 
-> Source: `packages/server/src/services/agentGraphPresets.ts` (2484 lines)
+> Source: `packages/server/src/services/agentGraphPresets.ts`
 
 ## Overview
 
-The presets file defines 6 ready-to-use `AgentGraphDefinition` configurations, each tailored for a specific use case. Each preset includes system prompts, tool allowlists, output schema bindings, and execution topology.
+The presets file defines many `AgentGraphDefinition` builders. **Production database seeding** (`scripts/seed-agent-graphs-all.ts`, `ensureDefaultGraphs()` on registration) keeps **only four** single-node LangGraph ReAct graphs: **Company Growth & GTM**, **Coder**, **Planner**, and **Explorer**. The same file still exports **Simple ReAct**, **Drift Analysis**, **Business Analyst**, **Code Comparator**, and others for manual creation or tooling.
 
-## Preset Graphs
+**Company growth / GTM** uses `buildCompanyGrowthWorkGraph()` with node id `company_growth_react` so Work mode does not replace its system prompt with the generic `simple_react` work swap.
 
-| Preset | Builder Function | Category | Nodes | Mode |
-|---|---|---|---|---|
-| Simple ReAct | `buildSimpleReactAgentGraph()` | `graph` | 1 | — |
-| Coder Agent | `buildCoderAgentGraph()` | `graph` | 1 | — |
-| Explorer Agent | `buildExplorerAgentGraph()` | `graph` | 1 | — |
-| Planner Agent | `buildPlannerAgentGraph()` | `graph` | 1 | — |
-| Drift Analysis | `buildDriftAnalysisGraph()` | `drift` | 4 | DAG |
-| Business Analyst | `buildBusinessAnalystGraph()` | `business_analysis` | — | — |
+## Canonical graphs (default DB)
+
+| Role | Preset | Builder | Node id |
+|---|---|---|---|
+| Work / company growth | Company Growth & GTM (work graph) | `buildCompanyGrowthWorkGraph()` | `company_growth_react` |
+| Code | Coder Agent (agent graph) | `buildCoderAgentGraph()` | `coder_react` |
+| Plan (code) | Planner Agent (agent graph) | `buildPlannerAgentGraph()` | `planner_react` |
+| Explore (code) | Explorer Agent (agent graph) | `buildExplorerAgentGraph()` | `explorer_react` |
+
+## Other exported builders (not in default seed)
+
+| Preset | Builder | Notes |
+|---|---|---|
+| Simple ReAct | `buildSimpleReactAgentGraph()` | General single-node ReAct; create manually if needed |
+| Drift Analysis | `buildDriftAnalysisGraph()` | 4-node DAG |
+| Business Analyst | `buildBusinessAnalystGraph()` | Multi-node BA workflow |
+| Code Comparator | `buildCodeComparatorGraph()` | Comparator workflow |
 
 ## Tool Allowlists
 
-### CURSOR_CORE_TOOLS (22 tools)
-Base set for investigation and code analysis:
+### CURSOR_CORE_TOOLS (21 tools)
+Base set for investigation and code analysis (note: **Coder** and **Planner** presets prepend `glob_files` / `bootstrap_context` where needed):
 ```
-glob_files, list_files, read_file, read_file_range, search_code, repo_metrics,
+list_files, read_file, read_file_range, search_code, repo_metrics,
 dependency_info, describe_structure, git_log, git_diff, git_grep,
 git_blame, semantic_code_search, structural_search, symbols_list,
 find_symbol, go_to_definition, references,
@@ -51,64 +60,52 @@ execute_bash, output_format, write_file, str_replace_editor, web_search, fetch_u
 write_todos, list_available_skills, load_skill
 ```
 
-## Preset Details
+## Preset Details (canonical four)
 
-### 1. Simple ReAct Agent
+### 1. Company Growth & GTM (work graph)
 
-**Identity**: "Kletron" — autonomous software engineering agent  
-**Single node**: `simple_react` with `simpleReactSystemPrompt`  
-**Output schema**: `conversational` (no JSON parsing)  
-**Tools**: 23 tools (`simpleReactToolNames`)
-
-**System prompt structure** (285 lines):
-1. **Critical mandatory rules**: 5 rules enforcing tool verification
-2. **Identity**: Senior staff engineer persona
-3. **Core operating model**: 7-step ReAct loop (Understand → Plan → Gather → Reason → Execute → Verify → Output)
-4. **Repository First Principle**: Always inspect code before assumptions
-5. **Tool usage strategy**: Ordered information flow (overview → locate → inspect → trace → analyze → implement → shell)
-6. **Multi-step execution**: Use `write_todos` once for task queues
-7. **Code understanding strategy**: Entrypoints → modules → dependencies → call chains
-8. **Debugging strategy**: Reproduce → locate → trace → identify → fix → validate
-9. **Implementation strategy**: Minimal diff, match style, avoid new deps
-10. **Conversational output**: No headers/separators, natural pair-programmer style
-11. **Safety rules**: Never hallucinate, always verify via tools
-12. **Performance rules**: Minimal calls, precise queries
-13. **Termination condition**: Stop when task is solved
+**Identity**: "Kletron — Company Growth & GTM"  
+**Node id**: `company_growth_react` (not `simple_react`, so the dedicated prompt is preserved in Work mode)  
+**Tools**: `simpleReactToolNames` (general-purpose work + code tool surface)  
+**Focus**: Sales, BD, fundraising narrative, marketing/growth, daily/weekly operating rhythm — grounded in workspace markdown and optional web tools when allowed.
 
 ### 2. Coder Agent
 
-**Identity**: "Kletron Coder" — implementation engine  
-**Tools**: `CURSOR_CODER_TOOLS` (core + `write_file` + `str_replace_editor`)  
-**Focus**: Task queue execution, minimal diffs, production-quality code
+**Identity**: "Kletron" — autonomous coding agent  
+**Tools**: `glob_files`, `bootstrap_context`, `CURSOR_CORE_TOOLS`, `write_file`, `str_replace_editor`  
+**Focus**: Task queue execution, minimal diffs, production-quality code, exhaustive discovery when needed
 
 **Distinct system prompt elements**:
 - Operates from task queue (read → execute → update status → repeat)
 - Strict code modification rules (targeted edits, no full rewrites)
 - Safe edit patterns (check existing file first, preserve structure)
+- Breadth-then-depth repository discovery; optional structured markdown in long answers
 
-### 3. Explorer Agent
+### 3. Explorer Agent (code)
 
-**Identity**: "Kletron Explorer" — research and investigation agent  
-**Tools**: `CURSOR_RESEARCH_TOOLS` + `todo_search`, `bootstrap_context`, `github_api`  
-**Focus**: Deep investigation, evidence gathering, web research
+**Identity**: "Kletron Explorer" — repository audit / architecture exploration  
+**Tools**: `glob_files`, `CURSOR_RESEARCH_TOOLS`, `todo_search`, `bootstrap_context`, `github_api`  
+**Focus**: Read-only investigation, evidence-backed reporting, optional fenced JSON appendix for downstream tooling
 
 **Distinct system prompt elements**:
 - Read-only mode (no file modifications)
 - Evidence-based analysis
 - Web research enabled
+- Single-node ReAct (no separate synthesizer node)
 
-### 4. Planner Agent
+### 4. Planner Agent (code)
 
 **Identity**: "Kletron Planner" — architecture and planning agent  
-**Tools**: Read-only analysis tools + `write_todos` + `output_format`  
+**Tools**: `glob_files`, `bootstrap_context`, read-only analysis subset + `write_todos` + `output_format`  
 **Focus**: Task decomposition, planning, definition of done
 
 **Distinct system prompt elements**:
 - Produces structured plans with task queues
 - Defines acceptance criteria and constraints
 - No execution (planning only)
+- Discovery rules aligned with breadth-then-depth until impact surface is clear
 
-### 5. Drift Analysis (Multi-Node DAG)
+### Drift Analysis (Multi-Node DAG) — optional
 
 4-node directed acyclic graph with specialized agents:
 
@@ -136,9 +133,9 @@ graph LR
 
 **Output schema pattern**: Each node writes to a `statePath` with `stateMerge: true`, allowing cumulative state building across the pipeline.
 
-### 6. Business Analyst
+### Business Analyst — optional
 
-Multi-node graph for business analysis workflows.
+Multi-node graph for business analysis workflows (`buildBusinessAnalystGraph()`). Not inserted by `seed-agent-graphs-all.ts`.
 
 ## Prompt Template Variables
 
@@ -155,10 +152,10 @@ User prompt templates use `{{variable}}` syntax:
 
 ## Default Graph Seeding
 
-On user registration, `agentGraphService.ensureDefaultGraphs()` seeds `buildSimpleReactAgentGraph()` by name matching. The seed scripts in `scripts/` can be run manually:
+On user registration, `agentGraphService.ensureDefaultGraphs()` creates the **four canonical** graphs by name if they are missing. To reconcile the database with preset definitions and **remove** any non-canonical graphs:
 
 ```bash
-npx tsx scripts/seed-agent-graph-simple-react.ts
-npx tsx scripts/seed-agent-graph-drift.ts
 npx tsx scripts/seed-agent-graphs-all.ts
 ```
+
+Optional one-off scripts (`seed-agent-graph-simple-react.ts`, `seed-agent-graph-drift.ts`) still exist for manual use.

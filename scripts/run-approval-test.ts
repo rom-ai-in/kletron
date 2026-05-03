@@ -8,8 +8,8 @@ import { POST as approvalsPost } from "../apps/web/app/api/agent-graph-runs/[run
 async function main() {
   process.env.KLETRON_AUTH_BYPASS = "true";
 
-  const graphs = await agentGraphService.listGraphs({ search: "Simple ReAct" });
-  const graph = graphs.find((g) => g.name === "Simple ReAct (agent graph)") ?? graphs[0];
+  const graphs = await agentGraphService.listGraphs({ search: "Coder" });
+  const graph = graphs.find((g) => g.name === "Coder Agent (agent graph)") ?? graphs[0];
   if (!graph?._id) {
     throw new Error("No graph found to run");
   }

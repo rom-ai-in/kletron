@@ -25,6 +25,7 @@ const GraphSchema = z.object({
             entryNodeId: z.string().min(1).optional(),
             maxIterations: z.number().int().positive().optional(),
             maxNodeRuns: z.number().int().positive().optional(),
+            maxReactSteps: z.number().int().positive().optional(),
         })
         .optional(),
     stateDefaults: z.record(z.any()).optional(),
@@ -38,6 +39,7 @@ const GraphSchema = z.object({
                 userPromptTemplate: z.string(),
                 toolNames: z.array(z.string()).default([]),
                 maxToolCalls: z.number().int().positive().optional(),
+                recursionLimit: z.number().int().positive().optional(),
             }),
             output: z.object({
                 schemaId: z.string().min(1),

@@ -12,6 +12,7 @@ import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 import { heuristicTitle, sanitizeTitle, stripSystemPrefix, stripThoughtContent } from "@kletron/server/services/titleSanitizer";
 import { normalizeToWorkModeId } from "@kletron/shared/workMode";
+import { normalizeResearchDepth } from "@kletron/shared/researchDepth";
 import { categoryService } from "@kletron/server/services/categoryService";
 import { agentGraphExecutor } from "@kletron/server/services/agentGraphExecutor";
 import type { AgentStreamKpiV1 } from "@kletron/shared/chatTypes";
@@ -137,11 +138,14 @@ export async function POST(request: Request) {
   console.log(
     `[sessions/create] Creating run for graph "${graph.name}" (requested=${graphId}, resolved=${resolvedGraphId}), workspace=${workspace._id}`,
   );
+  const researchDepth = normalizeResearchDepth(payload?.researchDepth);
+
   const [runId, pre] = await Promise.all([
     agentGraphRunService.createRun(resolvedGraphId, workspace._id.toString(), "agent", {
       threadApprovalMode: resolvedThreadMode,
       workMode,
       createdByUserId: auth.userId,
+      researchDepth,
     }),
     preflightMissionForNewRun(message, workspace._id.toString()),
   ]);

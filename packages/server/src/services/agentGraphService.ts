@@ -12,13 +12,10 @@ function normalizeGraphToolAliases(nodes: AgentGraphDefinition["nodes"] | undefi
     }
 }
 import {
-    buildDriftAnalysisGraph,
-    buildSimpleReactAgentGraph,
-    buildCodeComparatorGraph,
     buildCoderAgentGraph,
     buildExplorerAgentGraph,
     buildPlannerAgentGraph,
-    buildBusinessAnalystGraph,
+    buildCompanyGrowthWorkGraph,
 } from "./agentGraphPresets";
 
 const COLLECTION_NAME = "agent_graphs";
@@ -39,15 +36,22 @@ const HIDDEN_GRAPH_NAMES = new Set<string>([
 /** 24-char hex ObjectId string — matches automation stages / runWorkflow. */
 const OBJECTID_HEX24_RE = /^[0-9a-fA-F]{24}$/;
 
-function pickSimpleReactGraph(graphs: AgentGraphDefinition[]): AgentGraphDefinition | undefined {
+/** Canonical single-node graphs — used when resolving a missing/legacy graphId. */
+const DEFAULT_STAGE_GRAPH_NAMES = [
+    "Coder Agent (agent graph)",
+    "Explorer Agent (agent graph)",
+    "Planner Agent (agent graph)",
+    "Company Growth & GTM (work graph)",
+] as const;
+
+function pickDefaultStageGraph(graphs: AgentGraphDefinition[]): AgentGraphDefinition | undefined {
+    for (const name of DEFAULT_STAGE_GRAPH_NAMES) {
+        const g = graphs.find((x) => x.name === name);
+        if (g) return g;
+    }
     const isSingleConversational = (g: AgentGraphDefinition) =>
         g.nodes?.length === 1 && g.nodes[0]?.output?.schemaId === "conversational";
-
-    return (
-        graphs.find((g) => isSingleConversational(g) && g.name.toLowerCase().includes("simple react")) ??
-        graphs.find((g) => isSingleConversational(g)) ??
-        graphs.find((g) => g.nodes?.length === 1)
-    );
+    return graphs.find((g) => isSingleConversational(g)) ?? graphs[0];
 }
 
 function warnFallback(error: unknown) {
@@ -72,13 +76,10 @@ function ensureFallbackGraphs() {
     if (fallbackGraphs.size > 0) return;
     const now = new Date();
     const entries: Array<{ id: string; graph: Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> }> = [
-        { id: "000000000000000000000002", graph: buildSimpleReactAgentGraph() },
-        { id: "000000000000000000000006", graph: buildDriftAnalysisGraph() },
         { id: "000000000000000000000008", graph: buildCoderAgentGraph() },
         { id: "000000000000000000000009", graph: buildExplorerAgentGraph() },
         { id: "00000000000000000000000a", graph: buildPlannerAgentGraph() },
-        { id: "00000000000000000000000c", graph: buildBusinessAnalystGraph() },
-        { id: "00000000000000000000000d", graph: buildCodeComparatorGraph() },
+        { id: "00000000000000000000000e", graph: buildCompanyGrowthWorkGraph() },
     ];
 
     for (const entry of entries) {
@@ -133,7 +134,7 @@ export class AgentGraphService {
     /**
      * Resolve a stage `graphId`: valid Mongo ObjectId loads that graph; legacy
      * preset strings (e.g. `simple_react`, `audit`) or missing graphs fall back
-     * to the lightest single-node ReAct graph — same behaviour as `runWorkflow`.
+     * to a canonical single-node graph (Coder → Explorer → Planner → Company Growth) — same behaviour as `runWorkflow`.
      */
     async resolveGraphForStage(graphId?: string): Promise<AgentGraphDefinition | null> {
         let graph: AgentGraphDefinition | null = null;
@@ -142,7 +143,7 @@ export class AgentGraphService {
         }
         if (!graph) {
             const graphs = await this.listGraphs();
-            graph = pickSimpleReactGraph(graphs) ?? graphs[0] ?? null;
+            graph = pickDefaultStageGraph(graphs) ?? null;
             if (graph && graphId && !OBJECTID_HEX24_RE.test(graphId)) {
                 console.info(
                     `[AgentGraph] Resolved legacy graphId="${graphId}" → "${graph.name}" (${graph._id})`
@@ -225,12 +226,14 @@ export class AgentGraphService {
      * Called during user registration to guarantee every new user has default graphs.
      */
     async ensureDefaultGraphs(): Promise<void> {
-        const defaultPresets = [
-            buildSimpleReactAgentGraph,
-            buildCodeComparatorGraph,
+        const builders = [
+            buildCompanyGrowthWorkGraph,
+            buildCoderAgentGraph,
+            buildPlannerAgentGraph,
+            buildExplorerAgentGraph,
         ];
 
-        for (const builder of defaultPresets) {
+        for (const builder of builders) {
             const preset = builder();
             const existing = await this.listGraphs({ search: preset.name });
             const match = existing.find((g) => g.name === preset.name);

@@ -113,6 +113,21 @@ describe("effectiveToolNames", () => {
         expect(result.dropped).toContain("unknown_tool");
     });
 
+    it("maps find_references to references for capability intersection", () => {
+        const caps = new Set(["read_file", "references", "list_files"]);
+        const result = effectiveToolNames({
+            nodeToolNames: ["find_references", "read_file"],
+            skillToolNames: [],
+            adminToolNames: [],
+            capabilityToolSet: caps,
+            externalNamespacedTools: [],
+            alwaysOn: ["write_todos"],
+        });
+        expect(result.names).toContain("references");
+        expect(result.names).toContain("read_file");
+        expect(result.dropped).not.toContain("find_references");
+    });
+
     it("never marks always-on tools as dropped when absent from caps", () => {
         const result = effectiveToolNames({
             nodeToolNames: ["write_todos", "write_file", "fetch_url"],

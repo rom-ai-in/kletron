@@ -94,7 +94,7 @@ export const WORK_MODES: Record<WorkModeId, WorkModeDefinition> = {
     icon: "code",
     color: "#3B82F6",
     defaultPrompt:
-      "You are a senior software engineer helping with code tasks. Focus on code quality, best practices, and maintainability. Respect the workspace boundary and prefer minimal, safe changes.",
+      "You are a senior software engineer. Prioritize correctness and evidence from the repo: search and read enough to be sure before changing code. Prefer minimal, safe diffs, but do not skip investigation to save time.",
     /** Full standard bundled toolkit (repo read/write, bash, git reads, semantic search). */
     availableTools: [...STANDARD_WORKSPACE_BUNDLED_TOOLS],
     requiredContextTypes: ["repository", "codebase"],
@@ -114,7 +114,7 @@ export const WORK_MODES: Record<WorkModeId, WorkModeDefinition> = {
     icon: "briefcase",
     color: "#6366F1",
     defaultPrompt:
-      "You are a thoughtful assistant for general work: clear writing, research, and planning. Do not assume a software engineering task unless the user asks. Prefer concise, well-structured answers. When the user wants material saved on disk, use write_file or str_replace_editor with paths relative to the workspace root (not arbitrary OS paths outside it).",
+      "You are a thorough assistant for general work: research, writing, and planning grounded in workspace files. Use search and multiple reads when the answer could span documents; cite paths. When saving material on disk, use write_file or str_replace_editor with paths relative to the workspace root.",
     /** Cowork-style surface: files + research connectors; no terminal or git CLI tools. */
     availableTools: WORK_MODE_TOOL_ALLOWLIST,
     requiredContextTypes: [],

@@ -45,16 +45,11 @@ function externalMcpConfigFingerprint(c: ExternalMcpClientConfig): string {
   });
 }
 
-/**
- * Min interval between tools/list refreshes for a healthy external MCP connection.
- * Set MCP_EXTERNAL_TOOLS_LIST_TTL_MS=0 to refresh on every sync (legacy behavior).
- */
+/** Min interval (ms) between tools/list refreshes for a healthy external MCP connection. Set 0 to refresh every sync. */
+const EXTERNAL_MCP_TOOLS_LIST_TTL_MS = 300_000;
+
 function externalMcpToolsListTtlMs(): number {
-  const raw = process.env.MCP_EXTERNAL_TOOLS_LIST_TTL_MS;
-  if (raw === "0") return 0;
-  const n = raw ? Number(raw) : NaN;
-  if (Number.isFinite(n) && n >= 0) return n;
-  return 300_000;
+  return EXTERNAL_MCP_TOOLS_LIST_TTL_MS;
 }
 
 /** JSON-RPC MCP server error -32603 + common SDK phrasing for unknown tools. */
@@ -279,9 +274,8 @@ export class McpClient {
    * connected but missing from `configs` get disconnected.
    *
    * Healthy connections are kept open. **`tools/list` is refreshed** when the
-   * connector config changes, on reconnect, or when the TTL expires (see
-   * `MCP_EXTERNAL_TOOLS_LIST_TTL_MS`, default 5 minutes) so agent runs are not
-   * blocked on every send. If `listTools` fails, the client reconnects once from stored config.
+   * connector config changes, on reconnect, or when `EXTERNAL_MCP_TOOLS_LIST_TTL_MS`
+   * expires so agent runs are not blocked on every send. If `listTools` fails, the client reconnects once from stored config.
    */
   async syncExternalServers(workspaceId: string, configs: ExternalMcpClientConfig[]) {
     const ws = workspaceId.trim();

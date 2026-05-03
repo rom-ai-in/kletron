@@ -49,6 +49,8 @@ export type StreamReactAgentOptions = {
   upstreamPrepMs?: number;
   /** Run id for KPI correlation (optional). */
   runId?: string;
+  /** LangGraph recursion limit (tool/model steps). Defaults to server `config.graphRecursionLimit`. */
+  recursionLimit?: number;
 };
 
 export type StreamReactAgentResult = {
@@ -81,17 +83,28 @@ function isAssistantLikeMessage(message: BaseMessage): boolean {
   return t === "ai" || t === "assistant" || role === "assistant";
 }
 
-/** Server logs: unset or non-production → on; set AGENT_STREAM_KPI=0 to disable. */
+/** One-line `[AgentStreamKPI]` JSON logs per LLM stream; flip to false to silence. */
+const AGENT_STREAM_KPI_CONSOLE = true;
+
+/** Lowercase `provider` ids that must not use LangGraph dual `["values","messages"]` (values-only + snapshot deltas). */
+const LANGGRAPH_DUAL_STREAM_DENYLIST = new Set<string>(["lmstudio"]);
+
+/** When true, all providers use values-only streaming (ignore denylist for dual). */
+const LANGGRAPH_FORCE_VALUES_ONLY_STREAM = false;
+
 function isAgentStreamKpiLogEnabled(): boolean {
-  const v = process.env.AGENT_STREAM_KPI?.trim().toLowerCase();
-  if (v === "0" || v === "false" || v === "off") return false;
-  if (v === "1" || v === "true" || v === "on") return true;
-  return process.env.NODE_ENV !== "production";
+  return AGENT_STREAM_KPI_CONSOLE;
 }
 
 function logAgentStreamKpiLine(kpi: AgentStreamKpiV1) {
   if (!isAgentStreamKpiLogEnabled()) return;
   console.info("[AgentStreamKPI]", JSON.stringify(kpi));
+}
+
+function shouldUseLangGraphDualStream(providerLower: string, wantTokenStream: boolean): boolean {
+  if (!wantTokenStream) return false;
+  if (LANGGRAPH_FORCE_VALUES_ONLY_STREAM) return false;
+  return !LANGGRAPH_DUAL_STREAM_DENYLIST.has(providerLower);
 }
 
 /**
@@ -176,22 +189,17 @@ export async function streamReactAgentMessages(
     ? null
     : { messages: [...(opts.extraMessages ?? []), { role: "user", content: opts.userPrompt }] };
 
-  // Use multi-mode streaming when token-level callbacks are provided.
-  // With ["values", "messages"], the stream yields [mode, data] tuples:
-  //   ["values", { messages: BaseMessage[] }]   — complete state snapshots
-  //   ["messages", [AIMessageChunk, metadata]]  — token-level LLM chunks
-  //
-  // LM Studio (and some other local OpenAI-compat servers) often stall indefinitely
-  // with LangGraph's dual stream mode when tools are bound — the async iterator never
-  // yields. Values-only streaming still emits full assistant messages via `onMessage`.
-  const disableDualStreamForProvider = resolvedLlm.provider === "lmstudio";
+  // Dual-stream LangGraph: ["values","messages"] yields token chunks + state snapshots.
+  // When disabled (denylist / force values-only), we use streamMode "values" only and still
+  // emit progressive text via growing assistant snapshots (see processValuesState).
   const wantTokenStream = !!(opts.onTextDelta || opts.onReasoningDelta);
-  const useMultiMode = !disableDualStreamForProvider && wantTokenStream;
-  if (disableDualStreamForProvider && wantTokenStream) {
+  const providerLower = String(resolvedLlm.provider ?? "").toLowerCase();
+  const useMultiMode = shouldUseLangGraphDualStream(providerLower, wantTokenStream);
+  if (wantTokenStream && !useMultiMode) {
     console.warn(
-      `[ReactAgentRunner] Using values-only stream for provider=${resolvedLlm.provider} ` +
-        `(dual ["values","messages"] mode can hang with LM Studio + tools). ` +
-        "Assistant output will arrive in larger chunks, not token-by-token.",
+      `[ReactAgentRunner] values-only LangGraph stream (provider=${resolvedLlm.provider}). ` +
+        "Partial assistant text still emits onTextDelta when state snapshots grow. " +
+        "Edit LANGGRAPH_DUAL_STREAM_DENYLIST / LANGGRAPH_FORCE_VALUES_ONLY_STREAM in reactAgentRunner.ts to change.",
     );
   }
   const streamMode = useMultiMode ? (["values", "messages"] as any) : "values";
@@ -199,7 +207,7 @@ export async function streamReactAgentMessages(
   // ── Build stream config ────────────────────────────────────────────
   const streamConfig: Record<string, any> = {
     streamMode,
-    recursionLimit: config.graphRecursionLimit,
+    recursionLimit: opts.recursionLimit ?? config.graphRecursionLimit,
     signal: opts.abortSignal,
   };
   // Thread configuration for checkpoint persistence
@@ -247,6 +255,20 @@ export async function streamReactAgentMessages(
   let outputDeltaChars = 0;
   let firstStreamWallClock: number | null = null;
   const streamLoopWallStart = performance.now();
+
+  /** Last plain text seen per LangGraph message id — used for values-only streaming deltas. */
+  const lastStreamedAssistantTextByIdKey = new Map<string, string>();
+
+  const assistantPlainText = (message: BaseMessage): string => {
+    const c = message.content as unknown;
+    if (typeof c === "string") return c;
+    if (Array.isArray(c)) {
+      return c
+        .map((b: { text?: string }) => (typeof b?.text === "string" ? b.text : ""))
+        .join("");
+    }
+    return "";
+  };
 
   const seenMessageIds = new Set<string>();
   const seenUsageIds = new Set<string>(); // Track which messages we've extracted usage from
@@ -334,6 +356,42 @@ export async function streamReactAgentMessages(
             if (firstAssistantOnMessageMs === null && isAssistantLikeMessage(message)) {
               firstAssistantOnMessageMs = performance.now() - t0;
             }
+            await opts.onMessage(message);
+          }
+        }
+        // Values-only / dual-stream off: track assistant text so growing snapshots emit onTextDelta.
+        // Emit the full plaintext on the first snapshot too: previously we only seeded the map, so if
+        // the first values event already contained visible text (or only one snapshot arrived), the
+        // client never saw text_delta and the bubble stayed empty until a later growing snapshot.
+        if (!useMultiMode && opts.onTextDelta && isAssistantLikeMessage(message)) {
+          const tc = (message as any).tool_calls?.length ?? 0;
+          if (!tc) {
+            const full = assistantPlainText(message);
+            lastStreamedAssistantTextByIdKey.set(idKey, full);
+            if (full) {
+              opts.onTextDelta(full);
+              outputDeltaChars += full.length;
+            }
+          }
+        }
+      } else if (
+        seenMessageIds.has(idKey) &&
+        !useMultiMode &&
+        opts.onMessage &&
+        shouldEmitToCallback(message) &&
+        isAssistantLikeMessage(message)
+      ) {
+        const tc = (message as any).tool_calls?.length ?? 0;
+        if (!tc) {
+          const nextText = assistantPlainText(message);
+          const prevText = lastStreamedAssistantTextByIdKey.get(idKey) ?? "";
+          if (nextText.length > prevText.length && nextText.startsWith(prevText)) {
+            const delta = nextText.slice(prevText.length);
+            if (delta && opts.onTextDelta) {
+              opts.onTextDelta(delta);
+              outputDeltaChars += delta.length;
+            }
+            lastStreamedAssistantTextByIdKey.set(idKey, nextText);
             await opts.onMessage(message);
           }
         }
@@ -431,6 +489,13 @@ export async function streamReactAgentMessages(
   );
   const timeToFirstVisibleMs = candidates.length ? Math.min(...candidates) : null;
 
+  const finalMessages = lastState?.messages ?? accumulatedMessages;
+
+  const toolCallCount = finalMessages.filter((m) => {
+    const t = (m.getType?.() ?? (m as any).type ?? "").toString().toLowerCase();
+    return t === "tool";
+  }).length;
+
   const kpi: AgentStreamKpiV1 = {
     v: 1,
     runId: opts.runId,
@@ -456,11 +521,10 @@ export async function streamReactAgentMessages(
     generationTps,
     generationTpm,
     upstreamPrepMs: opts.upstreamPrepMs,
+    toolCallCount,
   };
 
   logAgentStreamKpiLine(kpi);
-
-  const finalMessages = lastState?.messages ?? accumulatedMessages;
 
   // ── Detect interrupt ─────────────────────────────────────────────
   // When `interruptBeforeTools` is active, the stream ends normally but

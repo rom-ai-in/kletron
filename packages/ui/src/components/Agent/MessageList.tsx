@@ -16,9 +16,11 @@ import type { ActivitySourceEvent } from '../../lib/agentActivity';
 import type { ChatEvent, RenderItem } from '@kletron/shared/chatTypes';
 import { sanitizeAssistantStreamPreview } from '@kletron/shared/contentSanitizer';
 import { groupEvents, pairToolEvents } from '../../lib/toolPairing';
+import { useThreadDomPaintLog, type ThreadDomPaintLogOptions } from '../../hooks/useThreadDomPaintLog';
 
 // Re-export for backward compatibility
 export type { ChatEvent, RenderItem };
+export type { ThreadDomPaintLogOptions };
 export { groupEvents };
 
 /** Below this, use absolute positioning + height estimates; short threads render normally (no phantom gap). */
@@ -137,6 +139,12 @@ export interface MessageListProps {
     onEditDraftChange?: (draft: string) => void;
     onCancelEdit?: () => void;
     onResendEdit?: () => void;
+    /**
+     * When enabled, logs `[kletron:thread-dom]` snapshots: text read from the real DOM
+     * (rows + streaming slot) after paint and on subtree mutations — for comparing against
+     * backend / React state.
+     */
+    domPaintLog?: ThreadDomPaintLogOptions;
 }
 
 const MessageListInner: React.FC<MessageListProps> = ({
@@ -166,9 +174,13 @@ const MessageListInner: React.FC<MessageListProps> = ({
     onEditDraftChange,
     onCancelEdit,
     onResendEdit,
+    domPaintLog,
 }) => {
     const bottomRef = useRef<HTMLDivElement>(null);
-    const scrollRef = useRef<HTMLDivElement>(null);
+    const scrollRef = useRef<HTMLDivElement | null>(null);
+    const bindScrollRoot = useCallback((el: HTMLDivElement | null) => {
+        scrollRef.current = el;
+    }, []);
     const isAtBottomRef = useRef(true);
     const previousScrollHeightRef = useRef<number | null>(null);
     const previousScrollTopRef = useRef<number>(0);
@@ -180,6 +192,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const nodeMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
     const estimatedItemHeight = 92;
     const nearTopTriggeredRef = useRef(false);
+
+    useThreadDomPaintLog(scrollRef, domPaintLog);
 
     const { visibleEvents, hiddenCount } = useMemo(() => {
         if (externalRenderItems) {
@@ -371,8 +385,16 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const renderMessageItem = useCallback((item: RenderItem, index: number) => {
         if (item.type === 'tools') {
             const pairs = pairToolEvents(item.events);
+            const toolIds = item.events.map((e) => e.id ?? '').filter(Boolean).join('|').slice(0, 200);
             return (
-                <ToolBatchAccordion key={`tools-${index}`} pairs={pairs} compact={compactTools} />
+                <div
+                    key={`tools-${index}`}
+                    data-kletron-thread-row
+                    data-kletron-kind="tools"
+                    data-kletron-id={toolIds || `tools-${index}`}
+                >
+                    <ToolBatchAccordion pairs={pairs} compact={compactTools} />
+                </div>
             );
         }
 
@@ -396,6 +418,9 @@ const MessageListInner: React.FC<MessageListProps> = ({
         return (
             <div
                 key={event.id || `msg-${index}`}
+                data-kletron-thread-row
+                data-kletron-kind={event.kind}
+                data-kletron-id={event.id ?? `idx-${index}`}
                 className={event.toolName ? 'mb-0' : isUser ? 'mb-0.5' : 'mb-1'}
             >
                 {stageSeparator}
@@ -490,7 +515,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
 
     return (
         <div
-            ref={scrollRef}
+            ref={bindScrollRoot}
+            data-kletron-thread-scroll
             onScroll={handleScroll}
             className={cn('flex-1 overflow-y-auto p-2 scrollbar-elegant', className)}
         >
@@ -542,7 +568,10 @@ const MessageListInner: React.FC<MessageListProps> = ({
             </div>
 
             {streaming && (
-                <div className="mt-1.5 w-full max-w-[95%] flex flex-col items-start gap-1.5">
+                <div
+                    className="mt-1.5 w-full max-w-[95%] flex flex-col items-start gap-1.5"
+                    data-kletron-streaming-live
+                >
                     <AgentActivityStrip
                         streaming={streaming}
                         streamingText={streamingText ?? ''}
@@ -554,7 +583,10 @@ const MessageListInner: React.FC<MessageListProps> = ({
                         <ThoughtsPanel thoughts={[streamingReasoning]} isReasoning defaultExpanded={false} />
                     ) : null}
                     {(streamingText ?? '').trim() ? (
-                        <div className="w-full text-[13px] text-text-primary pl-0.5">
+                        <div
+                            className="w-full text-[13px] text-text-primary pl-0.5"
+                            data-kletron-streaming-markdown
+                        >
                             {streamingMarkdownSafe ? (
                                 <MarkdownRenderer content={streamingMarkdownSafe} variant="chat" />
                             ) : (
@@ -618,5 +650,9 @@ export const MessageList = React.memo(
         prev.editingMessageError === next.editingMessageError &&
         prev.onEditDraftChange === next.onEditDraftChange &&
         prev.onCancelEdit === next.onCancelEdit &&
-        prev.onResendEdit === next.onResendEdit,
+        prev.onResendEdit === next.onResendEdit &&
+        (prev.domPaintLog === next.domPaintLog ||
+            (prev.domPaintLog?.enabled === next.domPaintLog?.enabled &&
+                prev.domPaintLog?.sessionId === next.domPaintLog?.sessionId &&
+                prev.domPaintLog?.reactFingerprint === next.domPaintLog?.reactFingerprint)),
 );
