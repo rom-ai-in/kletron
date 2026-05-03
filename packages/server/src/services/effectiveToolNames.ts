@@ -41,6 +41,9 @@ const DEFAULT_ALWAYS_ON = ["write_todos"];
 export function effectiveToolNames(
     input: EffectiveToolNamesInput
 ): EffectiveToolNamesResult {
+    const alwaysOn = input.alwaysOn ?? DEFAULT_ALWAYS_ON;
+    const alwaysOnSet = new Set(alwaysOn.filter(Boolean));
+
     const requested = new Set<string>([
         ...input.nodeToolNames,
         ...input.skillToolNames,
@@ -53,6 +56,11 @@ export function effectiveToolNames(
     // Apply the workspace gate to bundled / admin tool names.
     for (const name of requested) {
         if (!name) continue;
+        // Always-on tools bypass caps but still appear on the graph allowlist — do not report as "dropped".
+        if (alwaysOnSet.has(name)) {
+            allowed.add(name);
+            continue;
+        }
         if (input.capabilityToolSet.has(name) || input.adminToolNames.includes(name)) {
             allowed.add(name);
         } else {
@@ -61,7 +69,6 @@ export function effectiveToolNames(
     }
 
     // Always-on tools (executor essentials) bypass the gate.
-    const alwaysOn = input.alwaysOn ?? DEFAULT_ALWAYS_ON;
     for (const name of alwaysOn) {
         if (name) allowed.add(name);
     }

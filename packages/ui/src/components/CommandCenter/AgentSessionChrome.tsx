@@ -4,6 +4,7 @@ import React from "react";
 import { Folder } from "lucide-react";
 import { WORK_MODES, type WorkModeId } from "@kletron/shared/workMode";
 import { WorkModeSegmented } from "./WorkModeSegmented";
+import { ThreadSearchHeaderTrigger } from "./ThreadSearchHeaderTrigger";
 
 export type AgentSessionChromeProps = {
   workMode: WorkModeId;
@@ -24,6 +25,15 @@ export type AgentSessionChromeProps = {
   trailing?: React.ReactNode;
   /** Second row for Code mode only (e.g. repo strip). Omitted when empty to keep chrome a single row. */
   codeModeSecondRow?: React.ReactNode;
+  /** Workspace thread quick search (web agent header). */
+  onOpenThreadSearch?: () => void;
+  threadSearchPlaceholder?: string;
+  threadSearchDisabled?: boolean;
+  /**
+   * Omit row 1 (mode switcher + workspace + thread search + trailing) — e.g. desktop when
+   * workspace context lives in the title bar and only the code strip should show.
+   */
+  suppressFirstRow?: boolean;
   className?: string;
 };
 
@@ -40,6 +50,10 @@ export function AgentSessionChrome({
   workspaceErrorSlot,
   trailing,
   codeModeSecondRow,
+  onOpenThreadSearch,
+  threadSearchPlaceholder = "",
+  threadSearchDisabled = false,
+  suppressFirstRow = false,
   className = "",
 }: AgentSessionChromeProps) {
   const modeChromeColor = WORK_MODES[workMode].color;
@@ -62,6 +76,11 @@ export function AgentSessionChrome({
       <div className="text-[11px] text-text-muted">No workspace selected</div>
     ));
 
+  const hasSecondRow = workMode === "code" && Boolean(codeModeSecondRow);
+  const hasFirstRow = !suppressFirstRow;
+
+  if (!hasFirstRow && !hasSecondRow) return null;
+
   return (
     <section
       aria-label={
@@ -76,21 +95,32 @@ export function AgentSessionChrome({
         borderBottomColor: `${modeChromeColor}35`,
       }}
     >
-      <div className="flex min-h-0 flex-nowrap items-center gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-          {showWorkModeSwitcher ? (
-            <WorkModeSegmented value={workMode} onChange={onWorkModeChange} />
-          ) : null}
-          <div className="min-w-0 flex-1">{workspaceMain}</div>
-        </div>
-        {trailing ? (
-          <div className="flex min-w-0 shrink items-center gap-2 overflow-x-auto whitespace-nowrap scrollbar-elegant">
-            {trailing}
+      {hasFirstRow ? (
+        <div className="flex min-h-0 flex-nowrap items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+            {showWorkModeSwitcher ? (
+              <WorkModeSegmented value={workMode} onChange={onWorkModeChange} />
+            ) : null}
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <div className="min-w-0 flex-1">{workspaceMain}</div>
+              {onOpenThreadSearch ? (
+                <ThreadSearchHeaderTrigger
+                  onClick={onOpenThreadSearch}
+                  placeholder={threadSearchPlaceholder}
+                  disabled={threadSearchDisabled}
+                />
+              ) : null}
+            </div>
           </div>
-        ) : null}
-      </div>
+          {trailing ? (
+            <div className="flex min-w-0 shrink items-center gap-2 overflow-x-auto whitespace-nowrap scrollbar-elegant">
+              {trailing}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
-      {workMode === "code" && codeModeSecondRow ? (
+      {hasSecondRow ? (
         <div className="flex flex-wrap items-center gap-2">{codeModeSecondRow}</div>
       ) : null}
     </section>

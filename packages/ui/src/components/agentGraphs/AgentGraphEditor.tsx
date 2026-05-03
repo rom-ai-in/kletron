@@ -25,13 +25,11 @@ type AgentGraphDto = {
             systemPrompt: string;
             userPromptTemplate: string;
             toolNames: string[];
-            llmSelection?: { provider: "azure" | "lmstudio"; model?: string };
         };
         delegate?: {
             mode?: "react" | "graph";
             graphId?: string;
             summaryPrompt?: string;
-            summaryLlmSelection?: { provider: "azure" | "lmstudio"; model?: string };
         };
         output: { schemaId: string; statePath?: string; stateMerge?: boolean };
     }>;
@@ -45,6 +43,7 @@ const DEFAULT_NODE_TOOLS = [
     "read_file",
     "read_file_range",
     "write_file",
+    "str_replace_editor",
     // Repo + code analysis
     "search_code",
     "repo_metrics",
@@ -92,7 +91,6 @@ function makeDefaultNode(idx: number) {
 - Ask for clarification if repo scope or intent is ambiguous.`,
             userPromptTemplate: "Analyze this state and produce the next output.\n\n{{state}}",
             toolNames: DEFAULT_NODE_TOOLS,
-            llmSelection: { provider: "azure" as const },
         },
         output: { schemaId: "generic_json" },
     };
@@ -167,12 +165,20 @@ export function AgentGraphEditor({
         if (!selectedNodeId) return null;
         const n = nodes.find((x) => x.id === selectedNodeId);
         if (!n) return null;
+        const react = { ...n.react };
+        delete (react as { llmSelection?: unknown }).llmSelection;
+        let delegate = n.delegate;
+        if (delegate) {
+            const d = { ...delegate };
+            delete (d as { summaryLlmSelection?: unknown }).summaryLlmSelection;
+            delegate = d;
+        }
         return {
             id: n.id,
             label: n.label,
             kind: n.kind ?? "react",
-            react: n.react,
-            delegate: n.delegate,
+            react,
+            delegate,
             output: n.output,
         } satisfies AgentNodeEditorValue;
     }, [nodes, selectedNodeId]);
@@ -269,7 +275,17 @@ export function AgentGraphEditor({
                 setSaveState("saving");
                 setSaveError("");
                 try {
-                    const graphNodes = nodes;
+                    const graphNodes = nodes.map((n) => {
+                        const react = { ...n.react };
+                        delete (react as { llmSelection?: unknown }).llmSelection;
+                        const next = { ...n, react };
+                        if (n.delegate) {
+                            const d = { ...n.delegate };
+                            delete (d as { summaryLlmSelection?: unknown }).summaryLlmSelection;
+                            return { ...next, delegate: d };
+                        }
+                        return next;
+                    });
                     const graphEdges = normalizeEdges(edges);
                     const payload = {
                         graph: {
@@ -485,6 +501,7 @@ export function AgentGraphEditor({
                 - Nodes can be ReAct, Router, or Delegate.\n
                 - Router nodes skip LLM execution and only route via edge conditions.\n
                 - Delegate nodes run a subagent or nested graph and return a summarized result.\n
+                - LLM is chosen on Agent / automation / Configuration defaults — not on nodes.\n
                 - Node output must be strict JSON.\n
                 - `{"{{state}}"}` injects the current run state JSON.
             </div>
@@ -594,7 +611,7 @@ export function AgentGraphEditor({
                     <div className="text-xs font-bold uppercase tracking-widest text-text-muted">Inspector</div>
                     <div className="mt-0.5 text-[11px] text-text-muted">
                         {selectedNodeId
-                            ? "Node details appear first; expand Graph settings when needed."
+                            ? "Node details appear first; expand Graph settings when needed. LLM comes from Agent, automations, or Configuration — see the note on the node panel."
                             : "Select a node on the left to edit prompts, tools, and edges."}
                     </div>
                 </div>

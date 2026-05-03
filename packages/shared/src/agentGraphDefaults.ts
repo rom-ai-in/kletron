@@ -23,7 +23,6 @@ export function defaultAgentGraphPayload(): {
               "You are a helpful ReAct agent. Use tools as needed. Output strict JSON only.",
             userPromptTemplate: "Analyze this state and produce the next output.\n\n{{state}}",
             toolNames: ["list_files", "read_file", "search_code"],
-            llmSelection: { provider: "azure" },
           },
           output: { schemaId: "generic_json" },
         },

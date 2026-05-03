@@ -117,6 +117,11 @@ export type AgentWorkflowUpdate = {
     timeline: TimelineEvent[];
     eventStream: AgentEvent[];
     outputs?: AgentWorkflowResult["outputs"];
+    /**
+     * Tool names declared on the graph/skill allowlist but not in workspace capabilities.
+     * Surfaced to the UI so users can fix presets vs workspace settings.
+     */
+    capabilityDroppedTools?: string[];
 };
 
 export type AgentWorkflowAbortReason = "PAUSED" | "CANCELLED" | "TIMEOUT";

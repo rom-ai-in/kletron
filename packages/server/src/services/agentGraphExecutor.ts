@@ -32,7 +32,6 @@ import {
 import { buildDynamicExternalTools } from "@kletron/agent-core/tools/dynamicExternalTools";
 import { KLETRON_ADMIN_TOOL_NAMES } from "@kletron/agent-core/tools/kletronAdminToolNames";
 import { kletronAdminTools } from "@kletron/agent-core/tools/kletronAdminTools";
-import { McpClient } from "@kletron/mcp-client/client";
 import { tokenUsageService } from "./tokenUsageService";
 import { ObjectId } from "mongodb";
 import { getWorkspaceContextConfig, type WorkspaceContextConfig } from "@kletron/server/services/auditContextService";
@@ -43,6 +42,7 @@ import { SafeEditGate } from "./agent/SafeEditGate";
 import type { ToolApprovalConfig } from "./toolApprovalPolicy";
 import { applyThreadApprovalOverride, getToolApprovalPolicy } from "./toolApprovalPolicy";
 import { resolveEffectiveToolApprovalConfigForRun } from "./effectiveToolApprovalService";
+import { syncWorkspaceExternalMcpServers } from "./mcpWorkspaceSync";
 
 const runApprovalConfigCache = new Map<string, ToolApprovalConfig>();
 
@@ -1140,11 +1140,43 @@ export class AgentGraphExecutor {
             async () => {
             let diskSkillRegistryOverlay = false;
             try {
-            // Ensure context is ready before we start
-            const workspaceGraphStore = await ensureContextGraphReady(
-                workspace._id!.toString(),
-                workspace.rootPath
-            );
+            const workspaceIdStr = workspace._id!.toString();
+            const rootPathForCtx = workspace.rootPath;
+
+            const loadGraphForRun = async () => {
+                let g = await agentGraphService.getGraph(run.graphId.toString());
+                if (!g) {
+                    const allGraphs = await agentGraphService.listGraphs();
+                    g = allGraphs[0] ?? null;
+                    if (!g) throw new Error(`No agent graphs available`);
+                    console.warn(`[AgentGraph] Graph ${run.graphId.toString()} not found, falling back to "${g.name}"`);
+                }
+                return g;
+            };
+
+            const [
+                workspaceGraphStore,
+                workspaceFullCtxResult,
+                workspaceCapsResult,
+                graph,
+            ] = await Promise.all([
+                ensureContextGraphReady(workspaceIdStr, rootPathForCtx),
+                getWorkspaceContextConfig(workspaceIdStr).catch((err) => {
+                    console.warn("[AgentGraph] Failed to load workspace context config:", err);
+                    return null as WorkspaceContextConfig | null;
+                }),
+                resolveWorkspaceCapabilities(workspaceIdStr).catch((capsErr) => {
+                    console.warn(
+                        "[AgentGraph] Failed to resolve workspace capabilities, falling back to permissive mode:",
+                        (capsErr as Error)?.message ?? capsErr
+                    );
+                    return null as WorkspaceCapabilities | null;
+                }),
+                loadGraphForRun(),
+            ]);
+
+            const workspaceFullCtx = workspaceFullCtxResult;
+            const workspaceCaps = workspaceCapsResult;
 
             // ── Checkpoint saver ─────────────────────────────────────────────
             // Only enable checkpoints when explicitly requested (e.g. when a
@@ -1199,26 +1231,11 @@ export class AgentGraphExecutor {
                 }
             };
 
-            let workspaceFullCtx: WorkspaceContextConfig | null = null;
-            try {
-                workspaceFullCtx = await getWorkspaceContextConfig(workspace._id!.toString());
-            } catch (err) {
-                console.warn("[AgentGraph] Failed to load workspace context config:", err);
-            }
             const injectionSettings = workspaceFullCtx?.injection ?? DEFAULT_WORKSPACE_CONTEXT_INJECTION;
             const documentContextEnabled = workspaceFullCtx?.enabled !== false;
             const auditContext = documentContextEnabled ? workspaceFullCtx?.context ?? null : null;
             const wantAutoContext =
                 injectionSettings.structuralInjectionEnabled || injectionSettings.semanticInjectionEnabled;
-
-            let graph = await agentGraphService.getGraph(run.graphId.toString());
-            if (!graph) {
-                // Graph was deleted — fall back to first available graph
-                const allGraphs = await agentGraphService.listGraphs();
-                graph = allGraphs[0] ?? null;
-                if (!graph) throw new Error(`No agent graphs available`);
-                console.warn(`[AgentGraph] Graph ${run.graphId.toString()} not found, falling back to "${graph.name}"`);
-            }
 
             const executionMode = resolveExecutionMode(graph);
             const timelineNodeIds = (run.nodeOrder?.length ? run.nodeOrder : getGraphNodeOrder(graph)).slice();
@@ -1232,79 +1249,54 @@ export class AgentGraphExecutor {
                 workspace._id && ObjectId.isValid(workspace._id.toString()) ? new ObjectId(workspace._id.toString()) : undefined;
             const rootDir = workspace.rootPath;
 
-            // Resolve workspace capabilities once per run. This drives both
-            // (1) which bundled / admin tools the node may use, and
-            // (2) which external MCP servers we attach for namespaced tools.
-            let workspaceCaps: WorkspaceCapabilities | null = null;
-            try {
-                workspaceCaps = await resolveWorkspaceCapabilities(workspace._id!.toString());
-            } catch (capsErr) {
-                console.warn(
-                    "[AgentGraph] Failed to resolve workspace capabilities, falling back to permissive mode:",
-                    (capsErr as Error)?.message ?? capsErr
-                );
-            }
-
-            // Sync external MCP servers for this workspace. Disabled servers
-            // get disconnected, new ones get connected. After this call,
-            // namespaced `slug__name` tools are available via McpClient.
+            // Sync external MCP and load disk skills in parallel — both were previously sequential
+            // bottlenecks before the first LLM call.
             let dynamicExternalTools: any[] = [];
             let externalNamespacedToolNames: string[] = [];
-            if (workspaceCaps?.externalMcpServers?.length) {
-                try {
-                    const client = await McpClient.getInstance();
-                    await client.syncExternalServers(
-                        workspaceCaps.externalMcpServers.map((s) => ({
-                            id: s.id,
-                            slug: s.slug,
-                            name: s.name,
-                            transport: s.transport,
-                            command: s.command,
-                            args: s.args,
-                            env: s.env,
-                            url: s.url,
-                            headers: s.headers,
-                        }))
-                    );
-                    dynamicExternalTools = await buildDynamicExternalTools();
-                    externalNamespacedToolNames = dynamicExternalTools.map(
-                        (t: any) => String(t?.name ?? "")
-                    );
-                } catch (extErr) {
-                    console.warn(
-                        "[AgentGraph] External MCP sync failed:",
-                        (extErr as Error)?.message ?? extErr
-                    );
-                }
-            } else if (workspaceCaps) {
-                // No external servers configured: still ensure any previously
-                // connected servers from a prior run are disconnected.
-                try {
-                    const client = await McpClient.getInstance();
-                    await client.syncExternalServers([]);
-                } catch {
-                    // ignore
-                }
+            const [mcpPack, diskRecs] = await Promise.all([
+                (async (): Promise<{ dynamicExternalTools: any[]; externalNamespacedToolNames: string[] }> => {
+                    let tools: any[] = [];
+                    let names: string[] = [];
+                    if (workspaceCaps?.externalMcpServers?.length) {
+                        try {
+                            await syncWorkspaceExternalMcpServers(workspaceIdStr);
+                            tools = await buildDynamicExternalTools(workspaceIdStr);
+                            names = tools.map((t: any) => String(t?.name ?? ""));
+                        } catch (extErr) {
+                            console.warn(
+                                "[AgentGraph] External MCP sync failed:",
+                                (extErr as Error)?.message ?? extErr
+                            );
+                        }
+                    } else if (workspaceCaps) {
+                        try {
+                            await syncWorkspaceExternalMcpServers(workspaceIdStr);
+                        } catch {
+                            // ignore
+                        }
+                    }
+                    return { dynamicExternalTools: tools, externalNamespacedToolNames: names };
+                })(),
+                rootDir
+                    ? listWorkspaceSkillRecords(rootDir).catch((diskErr) => {
+                          console.warn(
+                              "[AgentGraph] Failed to load .kletron/skills overlay:",
+                              (diskErr as Error)?.message ?? diskErr
+                          );
+                          return [] as Awaited<ReturnType<typeof listWorkspaceSkillRecords>>;
+                      })
+                    : Promise.resolve([] as Awaited<ReturnType<typeof listWorkspaceSkillRecords>>),
+            ]);
+            dynamicExternalTools = mcpPack.dynamicExternalTools;
+            externalNamespacedToolNames = mcpPack.externalNamespacedToolNames;
+            for (const r of diskRecs) {
+                skillRegistry.upsertSkill(skillRecordToSkillDefinition(r));
             }
+            diskSkillRegistryOverlay = diskRecs.length > 0;
 
             const persistState = async () => {
                 await agentGraphRunService.updateRunState(runId, cloneValue(state));
             };
-
-            if (rootDir) {
-                try {
-                    const diskRecs = await listWorkspaceSkillRecords(rootDir);
-                    for (const r of diskRecs) {
-                        skillRegistry.upsertSkill(skillRecordToSkillDefinition(r));
-                    }
-                    diskSkillRegistryOverlay = diskRecs.length > 0;
-                } catch (diskErr) {
-                    console.warn(
-                        "[AgentGraph] Failed to load .kletron/skills overlay:",
-                        (diskErr as Error)?.message ?? diskErr
-                    );
-                }
-            }
 
             const normalizeTaskStatus = (value: string) => {
                 if (value === "todo" || value === "done" || value === "in_progress") return value;
@@ -1680,10 +1672,12 @@ export class AgentGraphExecutor {
                         tokenUsage: runningTokenUsage,
                     },
                 });
+                const dropped = (state as { capabilityDroppedTools?: string[] }).capabilityDroppedTools ?? [];
                 await opts.onUpdate({
                     timeline: cloneValue(globalTimeline),
                     eventStream: cloneValue(globalEventStream),
                     outputs,
+                    capabilityDroppedTools: [...dropped],
                 });
             };
 
@@ -1895,7 +1889,12 @@ export class AgentGraphExecutor {
                         adminToolNames: [...KLETRON_ADMIN_TOOL_NAMES],
                         capabilityToolSet: effectiveCaps,
                         externalNamespacedTools: externalNamespacedToolNames,
-                        alwaysOn: ["write_todos", ...KLETRON_ADMIN_TOOL_NAMES],
+                        alwaysOn: [
+                            "write_todos",
+                            "list_available_skills",
+                            "load_skill",
+                            ...KLETRON_ADMIN_TOOL_NAMES,
+                        ],
                     });
                     const mergedToolNames = effective.names;
                     const selectedTools = selectToolsByName(
@@ -1910,6 +1909,9 @@ export class AgentGraphExecutor {
                                 `outside of workspace capabilities: ${effective.dropped.join(", ")}.`
                         );
                     }
+                    (state as { capabilityDroppedTools?: string[] }).capabilityDroppedTools = [
+                        ...effective.dropped,
+                    ];
                     const toolInvokerMap = new Map<string, (input: Record<string, unknown>) => Promise<string>>();
 
                     // ── Tool call deduplication ──────────────────────────────────
@@ -1925,6 +1927,7 @@ export class AgentGraphExecutor {
                         "find_symbol", "go_to_definition", "references", "find_references",
                         "todo_search", "bootstrap_context", "web_search", "fetch_url",
                         "output_format", "write_todos",
+                        "list_available_skills", "load_skill",
                     ]);
                     const toolCallCache = new Map<string, string>();
                     let toolCallCount = 0;
@@ -2342,7 +2345,7 @@ export class AgentGraphExecutor {
                                 systemPrompt: enhancedSystemPrompt,
                                 userPrompt: delegateInput,
                                 tools,
-                                llmSelection: opts?.llmSelectionOverride ?? node.react.llmSelection,
+                                llmSelection: opts?.llmSelectionOverride,
                                 abortSignal: abortController.signal,
                                 getAbortReason: () => abortReason,
                                 shouldAbort: checkAbortReason,
@@ -2350,7 +2353,7 @@ export class AgentGraphExecutor {
                                 onTokenUsage: async (usage, model) => {
                                     await tokenUsageService.logUsage({
                                         timestamp: new Date(),
-                                        provider: (opts?.llmSelectionOverride?.provider ?? node.react.llmSelection?.provider ?? "unknown") as any,
+                                        provider: (opts?.llmSelectionOverride?.provider ?? "default") as any,
                                         model,
                                         usage,
                                         ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
@@ -2398,7 +2401,7 @@ export class AgentGraphExecutor {
                                 systemPrompt: summaryPrompt,
                                 userPrompt: rawResult,
                                 tools: [],
-                                llmSelection: delegateConfig.summaryLlmSelection ?? node.react.llmSelection,
+                                llmSelection: opts?.llmSelectionOverride,
                                 abortSignal: abortController.signal,
                                 getAbortReason: () => abortReason,
                                 shouldAbort: checkAbortReason,
@@ -2406,7 +2409,7 @@ export class AgentGraphExecutor {
                                 onTokenUsage: async (usage, model) => {
                                     await tokenUsageService.logUsage({
                                         timestamp: new Date(),
-                                        provider: (delegateConfig.summaryLlmSelection?.provider ?? node.react.llmSelection?.provider ?? "unknown") as any,
+                                        provider: (opts?.llmSelectionOverride?.provider ?? "default") as any,
                                         model,
                                         usage,
                                         ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
@@ -2520,7 +2523,7 @@ export class AgentGraphExecutor {
                             systemPrompt: enhancedSystemPrompt,
                             userPrompt: userPrompt,
                             tools,
-                            llmSelection: opts?.llmSelectionOverride ?? node.react.llmSelection,
+                            llmSelection: opts?.llmSelectionOverride,
                             extraMessages: shouldResume ? undefined : extraMessages,
                             onMessage: handleStreamingMessage,
                             // Forward text deltas for progressive streaming
@@ -2541,7 +2544,7 @@ export class AgentGraphExecutor {
                                 // Log individual usage to MongoDB and accumulate in-memory
                                 await tokenUsageService.logUsage({
                                     timestamp: new Date(),
-                                    provider: (opts?.llmSelectionOverride?.provider ?? node.react.llmSelection?.provider ?? "unknown") as any,
+                                    provider: (opts?.llmSelectionOverride?.provider ?? "default") as any,
                                     model,
                                     usage,
                                     ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),

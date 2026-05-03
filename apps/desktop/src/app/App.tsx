@@ -28,6 +28,8 @@ import { Terminal } from "@kletron/ui/components/Terminal";
 import { TitleBar } from "@kletron/ui/components/CommandCenter/TitleBar";
 import { ProjectSidebar } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
 import type { SidebarProject } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import { ThreadSearchPalette } from "@kletron/ui/components/CommandCenter/ThreadSearchPalette";
+import { ThreadSearchHeaderTrigger } from "@kletron/ui/components/CommandCenter/ThreadSearchHeaderTrigger";
 import { MessageList } from "@kletron/ui/components/Agent/MessageList";
 import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
 import { useMessageEdit } from "@kletron/ui/hooks/useMessageEdit";
@@ -177,14 +179,15 @@ export default function App() {
         backendConnected,
         hasAccessToken: !!auth.auth?.accessToken,
         activeWorkspaceId,
-        llmStatus: agentSession.llmStatus,
-        llmProviderLabel: agentSession.llmProvider,
+        llmStatus: agentSession.llmSelectorLoading ? "loading" : agentSession.llmStatus,
+        llmProviderLabel: agentSession.llmProvider.trim() || "LLM",
       }),
     [
       backendUrlValid,
       backendConnected,
       auth.auth?.accessToken,
       activeWorkspaceId,
+      agentSession.llmSelectorLoading,
       agentSession.llmStatus,
       agentSession.llmProvider,
     ],
@@ -255,6 +258,7 @@ export default function App() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [threadSearchOpen, setThreadSearchOpen] = useState(false);
   const [rightSidebarVisible, setRightSidebarVisible] = useState(true);
   const [changesVisible, setChangesVisible] = useState(false);
   const [terminalVisible, setTerminalVisible] = useState(false);
@@ -560,6 +564,39 @@ export default function App() {
     workspace.workspace?.name,
   ]);
 
+  const threadSearchPaletteItems = useMemo(
+    () =>
+      sidebarProjects.flatMap((p) =>
+        p.threads.map((t) => ({
+          id: t.id,
+          title: t.title,
+          updatedAt: t.updatedAt,
+          archived: t.archived,
+          category: t.category,
+        })),
+      ),
+    [sidebarProjects],
+  );
+
+  const workspaceThreadSearchLabel =
+    workspace.workspace?.name ||
+    workspace.workspace?.path?.split("/").pop() ||
+    "";
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || el?.isContentEditable) return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (sidebarProjects.length > 0) setThreadSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarProjects.length]);
+
   // Build pending diffs for right sidebar
   const pendingDiffItems: PendingDiffItem[] = useMemo(() => {
     return diffs.diffs.map((d) => ({
@@ -660,7 +697,7 @@ export default function App() {
     [agentSession.agentGraphs]
   );
 
-  const agentGraphsLoading = !agentSession.graphOptionsLoaded || !agentSession.llmPrefsLoaded;
+  const agentGraphsLoading = agentSession.graphSelectorLoading;
 
   // Slash palette: library skills (GET /api/skills) + built-in commands
   const slashCommands: SlashCommandItem[] = useMemo(() => {
@@ -1629,7 +1666,19 @@ export default function App() {
         committing={isCodeMode ? git.committing : false}
         pushing={isCodeMode ? git.pushing : false}
         creatingPR={isCodeMode ? git.creatingPR : false}
-        threadTitle={activeThreadTitle}
+        hideLeadingWorkspaceLabel={sidebarProjects.length > 0}
+        center={
+          sidebarProjects.length > 0 ? (
+            <ThreadSearchHeaderTrigger
+              onClick={() => setThreadSearchOpen(true)}
+              placeholder={workspaceThreadSearchLabel}
+              disabled={workspace.switching || threads.threadsLoading}
+              density="compact"
+              className="w-full min-w-[200px] max-w-[min(100%,42rem)]"
+            />
+          ) : undefined
+        }
+        threadTitle={sidebarProjects.length > 0 ? undefined : activeThreadTitle}
         onToggleTerminal={isCodeMode ? () => setTerminalVisible((p) => !p) : undefined}
         onToggleChanges={
           isCodeMode
@@ -1653,6 +1702,7 @@ export default function App() {
         workMode={desktopWorkMode}
         onWorkModeChange={handleWorkModeSelect}
         showWorkModeSwitcher={false}
+        suppressFirstRow={sidebarProjects.length > 0}
         workspaceName={workspace.workspace?.name ?? workspace.workspace?.path?.split("/").pop() ?? null}
         workspaceRootPath={workspace.workspace?.path ?? null}
         codeModeSecondRow={
@@ -1733,6 +1783,17 @@ export default function App() {
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-elegant">
             {/* Same horizontal measure as web agent page (max-w-3xl + px-2 thread padding) */}
             <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
+              {conversation.capabilityDroppedTools.length > 0 && (
+                <div className="px-2 pt-3">
+                  <div
+                    className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text"
+                    role="status"
+                  >
+                    Some tools requested by this graph are disabled by workspace capabilities:{" "}
+                    <span className="font-mono">{conversation.capabilityDroppedTools.join(", ")}</span>
+                  </div>
+                </div>
+              )}
               <MessageList
                 events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
                 streaming={conversation.streaming}
@@ -1863,9 +1924,10 @@ export default function App() {
                   onSelect={agentSession.handleLlmChange}
                   size="sm"
                   direction="up"
-                  status={agentSession.llmStatus}
+                  loading={agentSession.llmSelectorLoading}
+                  status={agentSession.llmSelectorLoading ? "none" : agentSession.llmStatus}
                   menuAlign="end"
-                  statusTooltip={agentSession.llmStatusDetail}
+                  statusTooltip={agentSession.llmSelectorLoading ? null : agentSession.llmStatusDetail}
                 />
               }
               approvalSelector={
@@ -1978,6 +2040,15 @@ export default function App() {
         onConfirm={() => void editControl.executeReplay()}
         onCancel={editControl.cancelReplay}
         loading={editControl.editingMessageSaving}
+      />
+
+      <ThreadSearchPalette
+        open={threadSearchOpen}
+        onClose={() => setThreadSearchOpen(false)}
+        threads={threadSearchPaletteItems}
+        activeThreadId={threads.conversationId}
+        onSelect={handleThreadSelect}
+        placeholder="Search threads…"
       />
     </div>
     </DesktopWorkspaceProvider>

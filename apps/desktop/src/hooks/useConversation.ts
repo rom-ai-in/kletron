@@ -423,5 +423,6 @@ export function useConversation(
     loadingOlder,
     onLoadOlderMessages: handleLoadOlderMessages,
     sessionEdits,
+    capabilityDroppedTools: stream.capabilityDroppedTools,
   };
 }

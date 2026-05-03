@@ -226,15 +226,19 @@ the effective set, so misconfiguration becomes visible in the run timeline.
 
 ## External MCP servers (per-workspace)
 
-Workspace-scoped external servers (registered via the connectors page) are
-attached at run start through `McpClient.syncExternalServers(...)` and their
-tools are wrapped as LangChain tools by
-[`buildDynamicExternalTools()`](../../packages/agent-core/src/tools/dynamicExternalTools.ts).
-The wrappers route invocations back through `client.callTool("slug__name", args)`.
+Workspace connectors (Mongo `workspace_mcp_servers`) drive runtime MCP attachment.
 
-Schema strategy: when the server's JSON Schema is convertible we build a
-typed `z.object(...)`; otherwise we fall back to `z.record(z.any())` and let
-the server do final validation.
+**Invariants (do not regress):**
+
+1. **Isolation** — `McpClient` keeps external connections under `(workspaceId → serverSlug → session)`. Syncing workspace A never tears down workspace B's connectors.
+2. **Sync entrypoint** — [`syncWorkspaceExternalMcpServers(workspaceId)`](../../packages/server/src/services/mcpWorkspaceSync.ts) loads enabled servers via `getExternalMcpRuntimeConfig` and calls `McpClient.syncExternalServers(workspaceId, configs)`.
+3. **Fresh tool lists** — Each sync re-runs `tools/list` on healthy sessions (and reconnects if listing fails) so renamed tools on the MCP server are picked up without restarting Kletron.
+4. **Agent run** — The executor calls `syncWorkspaceExternalMcpServers` then [`buildDynamicExternalTools(workspaceId)`](../../packages/agent-core/src/tools/dynamicExternalTools.ts). Wrappers invoke `client.callTool("slug__toolName", args, { workspaceId })`.
+5. **Approval / HTTP replay** — Routes such as agent-graph approvals and `/api/tools/execute` must call `syncWorkspaceExternalMcpServers` before `callTool` and pass `{ workspaceId }` so namespaced tools never fall through to the bundled MCP server.
+6. **Routing** — Pure helper [`resolveExternalToolRoute`](../../packages/mcp-client/src/workspaceExternalRouting.ts) encodes ambiguous-slug rules; regression tests live in `packages/mcp-client/__tests__/workspaceExternalRouting.test.ts` and `packages/server/__tests__/mcpWorkspaceSync.test.ts`.
+7. **Legacy** — `MultiMcpClient` uses one global external map and is **not** used by the agent; use `McpClient` for any new integration.
+
+Schema strategy: when the server's JSON Schema is convertible we build a typed `z.object(...)`; otherwise we fall back to a passthrough object schema and let the server validate.
 
 ## Workspace-root pinning
 

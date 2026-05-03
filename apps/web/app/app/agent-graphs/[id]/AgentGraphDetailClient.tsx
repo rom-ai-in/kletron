@@ -93,7 +93,13 @@ export default function AgentGraphDetailClient({ params }: { params: { id: strin
     return (
         <div className="flex h-[calc(100dvh-3.5rem)] min-h-[28rem] flex-col overflow-hidden">
             <div className="flex shrink-0 items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-3">
-                <div className="text-sm text-text-muted">Agent graph editor</div>
+                <div>
+                    <div className="text-sm text-text-muted">Agent graph editor</div>
+                    <div className="mt-0.5 max-w-xl text-[10px] leading-snug text-text-muted/90">
+                        LLM is not configured on nodes. Use the Agent composer or automation stages for chat and
+                        scheduled runs; use Run here with defaults from Configuration → LLM.
+                    </div>
+                </div>
                 <div className="flex gap-2">
                     <Button variant="danger" onClick={() => void handleDelete()}>
                         <Trash2 className="h-4 w-4" />

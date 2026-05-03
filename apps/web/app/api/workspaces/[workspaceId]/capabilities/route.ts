@@ -14,6 +14,7 @@
 
 import { NextResponse } from "next/server";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { AGENT_BUNDLED_PROFILE_VERSION } from "@kletron/shared";
 import { resolveWorkspaceCapabilities } from "@kletron/server/services/workspaceCapabilityResolver";
 import {
     getWorkspaceById,
@@ -38,5 +39,8 @@ export async function GET(
     const capabilities = await resolveWorkspaceCapabilities(workspaceId);
     // Strip the runtime Set; only the array form serializes.
     const { enabledToolSet, ...payload } = capabilities;
-    return NextResponse.json(payload);
+    return NextResponse.json({
+        ...payload,
+        bundledProfileVersion: AGENT_BUNDLED_PROFILE_VERSION,
+    });
 }

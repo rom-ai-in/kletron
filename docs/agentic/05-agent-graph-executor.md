@@ -109,7 +109,7 @@ const result = await streamReactAgentMessages({
   userPrompt: renderedPrompt,
   tools: nodeTools,
   extraMessages: conversationMessages,  // Multi-turn history
-  llmSelection: node.react.llmSelection ?? opts?.llmSelectionOverride,
+  llmSelection: opts?.llmSelectionOverride /* undefined → Configuration → LLM defaults */,
   onMessage: async (message) => { /* emit AgentEvent */ },
   onTokenUsage: async (usage, model) => { /* track usage */ },
   onTextDelta: opts?.onTextDelta,

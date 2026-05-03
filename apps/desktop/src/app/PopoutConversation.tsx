@@ -128,6 +128,17 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
       {/* Conversation — same max width as web agent page */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-elegant">
         <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
+          {conversation.capabilityDroppedTools.length > 0 && (
+            <div className="px-2 pt-3">
+              <div
+                className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text"
+                role="status"
+              >
+                Some tools requested by this graph are disabled by workspace capabilities:{" "}
+                <span className="font-mono">{conversation.capabilityDroppedTools.join(", ")}</span>
+              </div>
+            </div>
+          )}
           <MessageList
             events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
             streaming={conversation.streaming}
@@ -192,7 +203,15 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
               void conversation.sendMessage();
             }
           }}
-          connected={backendConnected ? (agentSession.llmStatus === "loading" ? "checking" : agentSession.llmStatus === "success") : false}
+          connected={
+            backendConnected
+              ? agentSession.llmSelectorLoading
+                ? "checking"
+                : agentSession.llmStatus === "loading"
+                  ? "checking"
+                  : agentSession.llmStatus === "success"
+              : false
+          }
           modelSelector={
             <Selector
               label="LLM"
@@ -201,9 +220,10 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
               onSelect={agentSession.handleLlmChange}
               size="sm"
               direction="up"
-              status={agentSession.llmStatus}
+              loading={agentSession.llmSelectorLoading}
+              status={agentSession.llmSelectorLoading ? "none" : agentSession.llmStatus}
               menuAlign="end"
-              statusTooltip={agentSession.llmStatusDetail}
+              statusTooltip={agentSession.llmSelectorLoading ? null : agentSession.llmStatusDetail}
             />
           }
           approvalSelector={

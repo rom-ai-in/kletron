@@ -27,6 +27,7 @@ const baseToolNames = [
   "read_file",
   "read_file_range",
   "write_file",
+  "str_replace_editor",
   // Repo + code analysis
   "search_code",
   "repo_metrics",

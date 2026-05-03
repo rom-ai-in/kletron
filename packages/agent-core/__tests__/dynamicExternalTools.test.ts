@@ -42,7 +42,7 @@ describe("buildDynamicExternalTools", () => {
             callTool,
         });
 
-        const tools = await buildDynamicExternalTools();
+        const tools = await buildDynamicExternalTools("w1");
         expect(tools).toHaveLength(2);
         expect(tools.map((t: any) => t.name).sort()).toEqual([
             "acme__do_thing",
@@ -61,7 +61,7 @@ describe("buildDynamicExternalTools", () => {
             ],
             callTool: vi.fn(),
         });
-        const tools = await buildDynamicExternalTools();
+        const tools = await buildDynamicExternalTools("w1");
         expect(tools).toHaveLength(1);
         // Fallback schema accepts arbitrary keys but serializes with properties: {} for LM Studio.
         const schema: any = (tools[0] as any).schema;
@@ -81,18 +81,19 @@ describe("buildDynamicExternalTools", () => {
             ],
             callTool,
         });
-        const [tool] = await buildDynamicExternalTools();
+        const [tool] = await buildDynamicExternalTools("w1");
         const result = await (tool as any).invoke({ key: "value" });
         expect(result).toBe("result-payload");
         expect(callTool).toHaveBeenCalledWith(
             "acme__do_thing",
-            expect.objectContaining({ key: "value" })
+            expect.objectContaining({ key: "value" }),
+            { workspaceId: "w1" }
         );
     });
 
     it("returns an empty list if McpClient cannot be obtained", async () => {
         (McpClient.getInstance as any).mockRejectedValue(new Error("no mcp"));
-        const tools = await buildDynamicExternalTools();
+        const tools = await buildDynamicExternalTools("w1");
         expect(tools).toEqual([]);
     });
 });

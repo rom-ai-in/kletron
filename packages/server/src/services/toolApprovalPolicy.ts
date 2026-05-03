@@ -114,6 +114,8 @@ export const READONLY_TOOLS = new Set<string>([
     "fetch_url",
     "output_format",
     "write_todos",
+    "list_available_skills",
+    "load_skill",
 ]);
 
 export const EXECUTION_TOOLS = new Set<string>([

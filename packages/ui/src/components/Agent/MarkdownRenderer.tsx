@@ -30,10 +30,10 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
     const components = useMemo(() => {
         const isChat = variant === 'chat';
         const pBody = isChat
-            ? 'mb-1.5 last:mb-0 leading-[1.45] min-h-[1em] text-text-secondary'
+            ? 'mb-1.5 last:mb-0 leading-[1.45] min-h-[1em] text-text-primary'
             : 'mb-0.5 last:mb-0 leading-[1.35] min-h-[1em] text-text-secondary';
         const pFlat = isChat
-            ? 'mb-0 last:mb-0 leading-[1.35] min-h-[1em] text-text-secondary'
+            ? 'mb-0 last:mb-0 leading-[1.35] min-h-[1em] text-text-primary'
             : 'mb-0.5 last:mb-0 leading-[1.35] min-h-[1em] text-text-secondary';
         const listMb = isChat ? 'mb-1.5 last:mb-0' : 'mb-0.5';
         const liGap = isChat ? 'space-y-1' : 'space-y-0';
@@ -48,7 +48,15 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
                 <ol className={`list-decimal pl-3.5 ${listMb} ${liGap} marker:text-text-muted`}>{children}</ol>
             ),
             li: ({ children }: any) => (
-                <li className="pl-0.5 whitespace-normal leading-[1.4]">{children}</li>
+                <li
+                    className={
+                        isChat
+                            ? 'pl-0.5 whitespace-normal leading-[1.4] text-text-primary'
+                            : 'pl-0.5 whitespace-normal leading-[1.4]'
+                    }
+                >
+                    {children}
+                </li>
             ),
             /* Chat: real heading hierarchy so replies don’t look like one flat block */
             h1: ({ children }: any) =>
@@ -71,7 +79,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
                 ),
             h4: ({ children }: any) =>
                 isChat ? (
-                    <p className="mb-1 text-[12px] font-medium leading-snug text-text-secondary">{children}</p>
+                    <p className="mb-1 text-[12px] font-medium leading-snug text-text-primary/90">{children}</p>
                 ) : (
                     <p className={pFlat}>{children}</p>
                 ),

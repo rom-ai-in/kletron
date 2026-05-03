@@ -11,3 +11,4 @@ export * from './connectors/catalog';
 export * from './connectors/types';
 export * from './plugins/catalog';
 export * from './agentGraphDefaults';
+export * from './agentBundledTools';

@@ -47,4 +47,12 @@ describe("MCP multi-server tool namespacing", () => {
         expect(resolveExternalServerSlugKey(keys, "hunter")).toBe("hunter");
         expect(resolveExternalServerSlugKey(keys, "missing")).toBe(null);
     });
+
+    it("resolveExternalServerSlugKey works with Map.keys() (single-use iterator)", () => {
+        const m = new Map<string, unknown>([
+            ["hunter", 1],
+            ["slack", 2],
+        ]);
+        expect(resolveExternalServerSlugKey(m.keys(), "HUNTER")).toBe("hunter");
+    });
 });

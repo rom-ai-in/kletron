@@ -85,11 +85,13 @@ export function resolveCanonicalMcpToolName(
 export function resolveExternalServerSlugKey(externalSlugs: Iterable<string>, requestedSlug: string): string | null {
     const req = String(requestedSlug ?? "").trim();
     if (!req) return null;
-    for (const k of externalSlugs) {
+    // Snapshot — Map.keys() iterators are single-use; two passes would skip case-insensitive matching.
+    const keys = [...externalSlugs];
+    for (const k of keys) {
         if (k === req) return k;
     }
     const rl = req.toLowerCase();
-    for (const k of externalSlugs) {
+    for (const k of keys) {
         if (k.toLowerCase() === rl) return k;
     }
     return null;
@@ -118,6 +120,15 @@ function buildTransport(config: ExternalMcpClientConfig | { slug: ""; transport:
     return new SSEClientTransport(new URL(httpish.url));
 }
 
+/**
+ * Standalone multi-server MCP helper with a **single global** external connection map.
+ *
+ * **Do not use for Kletron agent or workspace connectors** — use `McpClient`
+ * (`@kletron/mcp-client/client`) instead: it isolates external MCP sessions per
+ * workspace and matches `syncWorkspaceExternalMcpServers` / approval replay semantics.
+ *
+ * Kept for experiments and scripting; not wired into the production executor.
+ */
 export class MultiMcpClient {
     private bundled: ManagedClient | null = null;
     private external: Map<string, ManagedClient> = new Map();
@@ -150,7 +161,10 @@ export class MultiMcpClient {
         return this.bundled;
     }
 
-    /** Replace the set of external connections (idempotent). */
+    /**
+     * Replace the set of external connections for this client instance (global map).
+     * For per-workspace sync see `McpClient.syncExternalServers`.
+     */
     async syncExternal(configs: ExternalMcpClientConfig[]): Promise<void> {
         const desired = new Map(configs.map((c) => [c.slug, c]));
 

@@ -13,6 +13,11 @@ import {
     invokeKletronAdminToolForApproval,
     isKletronAdminToolName,
 } from "@kletron/server/services/kletronAdminToolApprovalRunner";
+import { syncWorkspaceExternalMcpServers } from "@kletron/server/services/mcpWorkspaceSync";
+import {
+    invokeWriteFileApprovalFallback,
+    isMcpBundledToolNotFoundError,
+} from "@kletron/server/services/bundledToolApprovalFallback";
 
 const safeEditGate = SafeEditGate.getInstance();
 
@@ -137,8 +142,20 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
     // All other tools (read-only MCP, edits, bash, etc.) replay through the same MCP client as the agent.
     const client = await McpClient.getInstance();
+    await syncWorkspaceExternalMcpServers(workspace._id.toString());
     const resolvedArgs = resolveArgs(toolName, edit.args ?? {}, workspace.rootPath);
-    const raw = await client.callTool(toolName, resolvedArgs as any);
+    let raw: string;
+    try {
+      raw = await client.callTool(toolName, resolvedArgs as any, {
+        workspaceId: workspace._id.toString(),
+      });
+    } catch (mcpErr) {
+      if (toolName === "write_file" && isMcpBundledToolNotFoundError(mcpErr)) {
+        raw = await invokeWriteFileApprovalFallback(workspace.rootPath, resolvedArgs);
+      } else {
+        throw mcpErr;
+      }
+    }
     const evicted = await maybeEvictResult(workspace.rootPath, params.id, toolName, raw);
     return { executed: true, result: evicted.content, evictedPath: evicted.evictedPath ?? undefined };
   };

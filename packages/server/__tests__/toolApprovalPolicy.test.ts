@@ -325,6 +325,11 @@ describe("applyThreadApprovalOverride", () => {
         expect(p.decision).not.toBe("deny");
     });
 
+    it("work mode allows load_skill", () => {
+        const p = getToolApprovalPolicy({ source: "agent", toolName: "load_skill", workMode: "work" });
+        expect(p.decision).not.toBe("deny");
+    });
+
     it("work mode allows namespaced external MCP tools (slug__tool)", () => {
         expect(isNamespacedExternalMcpToolName("hunter__domain-search")).toBe(true);
         const p = getToolApprovalPolicy({

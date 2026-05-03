@@ -7,7 +7,7 @@ import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 
 /** Display labels for each provider (used when building the dynamic options list). */
 const PROVIDER_LABELS: Record<string, string> = {
-    azure: "Azure OpenAI",
+    azure: "Azure",
     openai: "OpenAI",
     claude: "Claude",
     gemini: "Gemini",
@@ -71,6 +71,10 @@ export interface UseAgentSessionReturn {
     llmStatus: 'success' | 'error' | 'loading' | 'none';
     /** Human-readable reason for llmStatus (e.g. from health check). Hover LLM selector to see. */
     llmStatusDetail: string | null;
+    /** True until LLM prefs + enabled-provider list are loaded — show selector skeleton, not a guessed provider. */
+    llmSelectorLoading: boolean;
+    /** True until graphs + LLM prefs resolved — matches desktop graph gate; use for GRAPH selector skeleton. */
+    graphSelectorLoading: boolean;
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
@@ -86,7 +90,7 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
         return { ...(await fn()) };
     }, []);
 
-    const [llmProvider, setLlmProvider] = useState<string>('azure');
+    const [llmProvider, setLlmProvider] = useState<string>('');
     const [enabledProviders, setEnabledProviders] = useState<LlmProviderType[]>([]);
     const [llmPrefsLoaded, setLlmPrefsLoaded] = useState(false);
     const [enabledProvidersLoaded, setEnabledProvidersLoaded] = useState(false);
@@ -327,6 +331,9 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
         [agentGraphs],
     );
 
+    const llmSelectorLoading = !llmPrefsLoaded || !enabledProvidersLoaded;
+    const graphSelectorLoading = !graphOptionsLoaded || !llmPrefsLoaded;
+
     return {
         llmProvider,
         enabledProviders,
@@ -344,5 +351,7 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
         handleGraphChange,
         llmStatus,
         llmStatusDetail,
+        llmSelectorLoading,
+        graphSelectorLoading,
     };
 }

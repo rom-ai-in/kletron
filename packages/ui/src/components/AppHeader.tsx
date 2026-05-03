@@ -5,8 +5,10 @@ import Link from "next/link";
 import { Plus, History } from "lucide-react";
 import { Breadcrumbs, Selector, type SelectorOption } from "@kletron/ui/components/design-system";
 import { useWorkspace } from "../context/WorkspaceContext";
+import { useOptionalAppHeaderCenter } from "./AppHeaderCenterSlot";
 
 export function AppHeader() {
+  const headerCenter = useOptionalAppHeaderCenter();
   const {
     workspaces,
     activeWorkspaceId,
@@ -41,9 +43,14 @@ export function AppHeader() {
   return (
     <header className="border-b border-white/[0.06] bg-bg-surface">
       {/* Fixed row height so bottom border lines up with Sidebar brand row (content height varies otherwise) */}
-      <div className="flex h-14 shrink-0 items-center justify-between gap-4 px-6">
-        <Breadcrumbs />
-        <div className="flex items-center gap-3">
+      <div className="flex h-14 shrink-0 items-center gap-4 px-6 min-w-0">
+        <div className="flex shrink-0 min-w-0">
+          <Breadcrumbs />
+        </div>
+        <div className="flex flex-1 justify-center min-w-0 px-2">
+          {headerCenter?.centerContent}
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
           <div className="flex items-center gap-2">
             <Selector
               label="Workspace"

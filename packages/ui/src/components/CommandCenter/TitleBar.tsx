@@ -19,6 +19,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { TrafficLights } from '../ui/TrafficLights';
+import { ThreadSearchHeaderTrigger } from './ThreadSearchHeaderTrigger';
 
 export interface GitDiffStats {
   additions: number;
@@ -54,6 +55,8 @@ export interface TitleBarProps {
   gitDiffStats?: GitDiffStats | null;
   /** Show custom traffic light dots (set false in Electron where native ones exist) */
   showTrafficLights?: boolean;
+  /** Hide the small workspace label on the leading edge (e.g. desktop when workspace appears in center search). */
+  hideLeadingWorkspaceLabel?: boolean;
   /** Callbacks for top-bar actions — opens workspace in external editor (e.g. VS Code) */
   onOpen?: () => void;
   /** Label for the editor button (default: "Editor") */
@@ -77,6 +80,10 @@ export interface TitleBarProps {
   sourceControlVisible?: boolean;
   onShare?: () => void;
   onRun?: () => void;
+  /** Opens workspace thread quick search (desktop command center). */
+  onOpenThreadSearch?: () => void;
+  threadSearchPlaceholder?: string;
+  threadSearchDisabled?: boolean;
 }
 
 export function TitleBar({
@@ -91,6 +98,7 @@ export function TitleBar({
   center,
   gitDiffStats,
   showTrafficLights = true,
+  hideLeadingWorkspaceLabel = false,
   onOpen,
   onCommit,
   onPush,
@@ -108,6 +116,9 @@ export function TitleBar({
   openEditorLabel = 'Folder',
   openEditorTitle = 'Open workspace folder in external editor',
   openActionVariant,
+  onOpenThreadSearch,
+  threadSearchPlaceholder = '',
+  threadSearchDisabled = false,
 }: TitleBarProps) {
   const [gitMenuOpen, setGitMenuOpen] = useState(false);
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
@@ -131,25 +142,42 @@ export function TitleBar({
 
   const hasGitActions = onCommit || onPush || onCreatePR;
 
+  const showLeadingCluster =
+    showTrafficLights || !hideLeadingWorkspaceLabel || Boolean(onOpenThreadSearch);
+
   return (
     <header className={`relative z-50 flex h-9 items-center justify-between glass-titlebar px-4 app-region-drag ${!showTrafficLights ? 'pl-[76px]' : ''}`}>
-      {/* Left: traffic lights + workspace name */}
-      <div className="flex min-w-0 flex-shrink-0 items-center gap-3 app-region-no-drag">
-        {showTrafficLights && <TrafficLights className="app-region-no-drag" />}
-        <div className="text-[11px] font-medium text-text-muted truncate max-w-[120px]">
-          {workspaceName}
+      {/* Left: traffic lights + workspace name + optional thread search */}
+      {showLeadingCluster ? (
+        <div className="flex min-w-0 max-w-[min(100%,50%)] shrink items-center gap-2 app-region-no-drag">
+          {showTrafficLights && <TrafficLights className="app-region-no-drag" />}
+          {!hideLeadingWorkspaceLabel ? (
+            <div className="text-[11px] font-medium text-text-muted truncate max-w-[120px]">
+              {workspaceName}
+            </div>
+          ) : null}
+          {onOpenThreadSearch ? (
+            <ThreadSearchHeaderTrigger
+              onClick={onOpenThreadSearch}
+              placeholder={threadSearchPlaceholder}
+              disabled={threadSearchDisabled}
+            />
+          ) : null}
         </div>
-      </div>
+      ) : null}
 
-      {/* Center: thread title (replaces tab bar) — must not inherit titlebar drag */}
-      <div className="flex-1 flex items-center justify-center min-w-0 px-4 app-region-no-drag">
-        {center ?? (
-          threadTitle && (
-            <span className="text-[13px] font-medium text-text-primary truncate max-w-[400px]">
-              {threadTitle}
-            </span>
-          )
-        )}
+      {/* Center: interactive strip is no-drag; flex siblings stay draggable for window move */}
+      <div className="flex flex-1 items-center min-w-0 self-stretch px-2">
+        <div className="app-region-drag flex-1 min-h-[1px] min-w-[12px] self-stretch" aria-hidden />
+        <div className="flex max-w-[min(100%,42rem)] w-full shrink-0 items-center justify-center px-2 app-region-no-drag">
+          {center ??
+            (threadTitle ? (
+              <span className="max-w-[400px] truncate text-[13px] font-medium text-text-primary">
+                {threadTitle}
+              </span>
+            ) : null)}
+        </div>
+        <div className="app-region-drag flex-1 min-h-[1px] min-w-[12px] self-stretch" aria-hidden />
       </div>
 
       {/* Right: action buttons */}

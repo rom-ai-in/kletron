@@ -13,9 +13,9 @@ import {
     namespacedExternalToolName,
     parseNamespacedToolName,
     resolveCanonicalMcpToolName,
-    resolveExternalServerSlugKey,
     type ExternalMcpClientConfig,
 } from "./multiClient";
+import { resolveExternalToolRoute } from "./workspaceExternalRouting";
 
 type ExternalToolRecord = {
   name: string;
@@ -37,11 +37,25 @@ function isRecoverableExternalToolNotFound(message: string): boolean {
   return m.includes("-32603") || m.includes("tool not found");
 }
 
+export type McpCallToolOptions = {
+  /** Required when multiple workspaces may host the same MCP slug; always set from HTTP handlers / agent runs. */
+  workspaceId?: string;
+};
+
 export class McpClient {
   private static instance: McpClient | null = null;
   private readonly client: Client;
-  /** Lazy-initialized multi-server client for external MCP servers. */
-  private external = new Map<string, ExternalServerConn>();
+  /** External MCP connections keyed by workspace id, then server slug. */
+  private externalByWorkspace = new Map<string, Map<string, ExternalServerConn>>();
+
+  private getExternalMap(workspaceId: string): Map<string, ExternalServerConn> {
+    let m = this.externalByWorkspace.get(workspaceId);
+    if (!m) {
+      m = new Map();
+      this.externalByWorkspace.set(workspaceId, m);
+    }
+    return m;
+  }
 
   private constructor(client: Client) {
     this.client = client;
@@ -134,15 +148,15 @@ export class McpClient {
     return McpClient.instance;
   }
 
-  async callTool(name: string, args: Record<string, unknown> = {}) {
+  async callTool(name: string, args: Record<string, unknown> = {}, callOpts?: McpCallToolOptions) {
     if (name === "semantic_code_search") {
       const { semanticSearch } = await import("@kletron/server/services/vectorService");
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { query, ...options } = args;
+      const { query, ...vectorOpts } = args;
       if (typeof query !== "string") {
         throw new Error("Missing query parameter for semantic_code_search");
       }
-      const results = await semanticSearch(query, options);
+      const results = await semanticSearch(query, vectorOpts);
       return JSON.stringify(results, null, 2);
     }
 
@@ -151,13 +165,24 @@ export class McpClient {
     const { serverSlug, toolName: parsedTool } = parseNamespacedToolName(name);
     let actualName = name;
     let slugKeyForReconnect: string | null = null;
+    let workspaceIdForReconnect: string | null = null;
     if (serverSlug) {
-      const slugKey = resolveExternalServerSlugKey(this.external.keys(), serverSlug);
-      const ext = slugKey ? this.external.get(slugKey) : undefined;
-      if (ext && !ext.error) {
+      const route = resolveExternalToolRoute(this.externalByWorkspace, serverSlug, callOpts?.workspaceId);
+      if (route) {
+        const ext = this.externalByWorkspace.get(route.workspaceId)?.get(route.slugKey);
+        if (!ext || ext.error) {
+          throw new Error(`Cannot route external tool '${name}': connector '${route.slugKey}' unavailable.`);
+        }
         targetClient = ext.client;
         actualName = resolveCanonicalMcpToolName(ext.tools, parsedTool);
-        slugKeyForReconnect = slugKey;
+        slugKeyForReconnect = route.slugKey;
+        workspaceIdForReconnect = route.workspaceId;
+      } else {
+        const hint =
+          callOpts?.workspaceId?.trim() ?
+            `Workspace '${callOpts.workspaceId.trim()}' has no active connection for MCP server '${serverSlug}'. Run agent sync or reconnect the connector.`
+            : `No active MCP connection for server '${serverSlug}' (pass workspaceId if multiple workspaces use the same slug).`;
+        throw new Error(`Cannot route external tool '${name}': ${hint}`);
       }
     }
 
@@ -188,10 +213,12 @@ export class McpClient {
       const msg = (firstErr as Error)?.message ?? String(firstErr);
       if (
         slugKeyForReconnect &&
+        workspaceIdForReconnect &&
         isRecoverableExternalToolNotFound(msg) &&
-        (await this.reconnectExternalServer(slugKeyForReconnect))
+        (await this.reconnectExternalServer(workspaceIdForReconnect, slugKeyForReconnect))
       ) {
-        const ext = this.external.get(slugKeyForReconnect)!;
+        const map = this.externalByWorkspace.get(workspaceIdForReconnect)!;
+        const ext = map.get(slugKeyForReconnect)!;
         targetClient = ext.client;
         actualName = resolveCanonicalMcpToolName(ext.tools, parsedTool);
         return await runExternalCall();
@@ -205,13 +232,15 @@ export class McpClient {
     const result = await this.client.listTools({});
     type ListedTool = NonNullable<(typeof result)["tools"]>[number];
     const merged: ListedTool[] = [...(result.tools ?? [])];
-    for (const [slug, ext] of this.external.entries()) {
-      if (ext.error) continue;
-      for (const tool of ext.tools) {
-        merged.push({
-          ...tool,
-          name: namespacedExternalToolName(slug, tool.name),
-        } as ListedTool);
+    for (const [, map] of this.externalByWorkspace) {
+      for (const [slug, ext] of map) {
+        if (ext.error) continue;
+        for (const tool of ext.tools) {
+          merged.push({
+            ...tool,
+            name: namespacedExternalToolName(slug, tool.name),
+          } as ListedTool);
+        }
       }
     }
     return merged;
@@ -226,28 +255,34 @@ export class McpClient {
    * sync** so renamed tools on the MCP server are picked up without a process
    * restart. If `listTools` fails, the client reconnects once from stored config.
    */
-  async syncExternalServers(configs: ExternalMcpClientConfig[]) {
+  async syncExternalServers(workspaceId: string, configs: ExternalMcpClientConfig[]) {
+    const ws = workspaceId.trim();
+    if (!ws) {
+      console.warn("[McpClient] syncExternalServers: empty workspaceId — skipping");
+      return;
+    }
+    const external = this.getExternalMap(ws);
     const desired = new Map(configs.map((c) => [c.slug, c]));
-    for (const slug of [...this.external.keys()]) {
+    for (const slug of [...external.keys()]) {
       if (!desired.has(slug)) {
         try {
-          await this.external.get(slug)!.client.close();
+          await external.get(slug)!.client.close();
         } catch {
           // ignore
         }
-        this.external.delete(slug);
+        external.delete(slug);
       }
     }
     for (const [slug, config] of desired.entries()) {
-      const existing = this.external.get(slug);
+      const existing = external.get(slug);
       if (existing && !existing.error) {
         try {
           const tools = ((await existing.client.listTools({})).tools ?? []) as ExternalToolRecord[];
-          this.external.set(slug, { client: existing.client, tools, config });
+          external.set(slug, { client: existing.client, tools, config });
           continue;
         } catch (err) {
           console.warn(
-            `[McpClient] tools/list failed for external '${slug}', reconnecting:`,
+            `[McpClient] tools/list failed for external '${slug}' (workspace ${ws}), reconnecting:`,
             (err as Error).message
           );
           try {
@@ -255,7 +290,7 @@ export class McpClient {
           } catch {
             // ignore
           }
-          this.external.delete(slug);
+          external.delete(slug);
         }
       }
       if (existing?.error) {
@@ -264,13 +299,20 @@ export class McpClient {
         } catch {
           // ignore
         }
-        this.external.delete(slug);
+        external.delete(slug);
       }
-      await this.connectExternalServer(slug, config);
+      await this.connectExternalServer(ws, slug, config);
+    }
+    if (external.size === 0) {
+      this.externalByWorkspace.delete(ws);
     }
   }
 
-  private async connectExternalServer(slug: string, config: ExternalMcpClientConfig): Promise<void> {
+  private async connectExternalServer(
+    workspaceId: string,
+    slug: string,
+    config: ExternalMcpClientConfig
+  ): Promise<void> {
     const disconnected = new Client(
       { name: "kletron-mcp-client", version: "1.0.0" },
       { capabilities: { tools: {} } }
@@ -300,10 +342,15 @@ export class McpClient {
         ),
       ]);
       const tools = ((await client.listTools({})).tools ?? []) as ExternalToolRecord[];
-      this.external.set(slug, { client, tools, config });
+      const external = this.getExternalMap(workspaceId);
+      external.set(slug, { client, tools, config });
     } catch (error) {
-      console.error(`[McpClient] Failed to connect external MCP '${slug}':`, (error as Error).message);
-      this.external.set(slug, {
+      console.error(
+        `[McpClient] Failed to connect external MCP '${slug}' (workspace ${workspaceId}):`,
+        (error as Error).message
+      );
+      const external = this.getExternalMap(workspaceId);
+      external.set(slug, {
         client: disconnected,
         tools: [],
         error: (error as Error).message,
@@ -313,50 +360,63 @@ export class McpClient {
   }
 
   /** Drop and reconnect one external server using the last successful sync config. */
-  private async reconnectExternalServer(slug: string): Promise<boolean> {
-    const ext = this.external.get(slug);
+  private async reconnectExternalServer(workspaceId: string, slugKey: string): Promise<boolean> {
+    const map = this.externalByWorkspace.get(workspaceId);
+    if (!map) return false;
+    const ext = map.get(slugKey);
     const config = ext?.config;
     if (!config) {
-      console.warn(`[McpClient] Cannot reconnect external MCP '${slug}': no stored config`);
+      console.warn(
+        `[McpClient] Cannot reconnect external MCP '${slugKey}' (workspace ${workspaceId}): no stored config`
+      );
       return false;
     }
     try {
-      await ext!.client.close();
+      await ext.client.close();
     } catch {
       // ignore
     }
-    this.external.delete(slug);
-    await this.connectExternalServer(slug, config);
-    return !this.external.get(slug)?.error;
+    map.delete(slugKey);
+    await this.connectExternalServer(workspaceId, slugKey, config);
+    return !map.get(slugKey)?.error;
   }
 
   /** Diagnostic summary of all connected servers. */
   externalStatus() {
-    return Array.from(this.external.entries()).map(([slug, ext]) => ({
-      slug,
-      tools: ext.tools.length,
-      error: ext.error,
-    }));
+    const rows: Array<{ workspaceId: string; slug: string; tools: number; error?: string }> = [];
+    for (const [workspaceId, map] of this.externalByWorkspace) {
+      for (const [slug, ext] of map) {
+        rows.push({
+          workspaceId,
+          slug,
+          tools: ext.tools.length,
+          error: ext.error,
+        });
+      }
+    }
+    return rows;
   }
 
   /**
-   * Snapshot of every tool exposed by currently-connected external servers.
-   * Names are returned namespaced as `slug__toolName` so callers can hand
-   * them straight to the agent runtime and route via `callTool`.
+   * Snapshot of external tools for one workspace (namespaced `slug__toolName`).
    */
-  listExternalTools(): Array<{
+  listExternalTools(workspaceId: string): Array<{
     serverSlug: string;
     name: string;
     description?: string;
     inputSchema?: unknown;
   }> {
+    const ws = workspaceId.trim();
     const out: Array<{
       serverSlug: string;
       name: string;
       description?: string;
       inputSchema?: unknown;
     }> = [];
-    for (const [slug, ext] of this.external.entries()) {
+    if (!ws) return out;
+    const map = this.externalByWorkspace.get(ws);
+    if (!map) return out;
+    for (const [slug, ext] of map) {
       if (ext.error) continue;
       for (const tool of ext.tools) {
         out.push({
@@ -371,14 +431,16 @@ export class McpClient {
   }
 
   async close() {
-    for (const ext of this.external.values()) {
-      try {
-        await ext.client.close();
-      } catch {
-        // ignore
+    for (const map of this.externalByWorkspace.values()) {
+      for (const ext of map.values()) {
+        try {
+          await ext.client.close();
+        } catch {
+          // ignore
+        }
       }
     }
-    this.external.clear();
+    this.externalByWorkspace.clear();
     await this.client.close();
     McpClient.instance = null;
   }

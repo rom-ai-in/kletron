@@ -13,6 +13,9 @@ import {
 import type { ContextChip } from "@kletron/ui/components/design-system";
 import { ProjectSidebar } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
 import type { SidebarProject, SidebarThread, ThreadLiveStatus } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import { ThreadSearchPalette } from "@kletron/ui/components/CommandCenter/ThreadSearchPalette";
+import { ThreadSearchHeaderTrigger } from "@kletron/ui/components/CommandCenter/ThreadSearchHeaderTrigger";
+import { useAppHeaderCenter } from "@kletron/ui/components/AppHeaderCenterSlot";
 import { AddWorkspaceModal } from "@kletron/ui/components/CommandCenter/AddWorkspaceModal";
 import { TimelinePanel } from "@kletron/ui/components/Agent/TimelinePanel";
 import { EventCard } from "@kletron/ui/components/Agent/EventCard";
@@ -143,6 +146,8 @@ interface AgentComposerProps {
   onLlmChange: (value: string) => void;
   llmStatus?: "none" | "loading" | "success" | "error";
   llmStatusDetail?: string | null;
+  graphSelectorLoading?: boolean;
+  llmSelectorLoading?: boolean;
   prefillText?: string | null;
   resetKey: string;
   perfDebugEnabled?: boolean;
@@ -172,6 +177,8 @@ const AgentComposer = memo(function AgentComposer({
   onLlmChange,
   llmStatus,
   llmStatusDetail,
+  graphSelectorLoading = false,
+  llmSelectorLoading = false,
   prefillText,
   resetKey,
   perfDebugEnabled = false,
@@ -395,6 +402,7 @@ const AgentComposer = memo(function AgentComposer({
               onSelect={onGraphChange}
               size="sm"
               direction="up"
+              loading={graphSelectorLoading}
             />
             <Selector
               label="LLM"
@@ -403,9 +411,10 @@ const AgentComposer = memo(function AgentComposer({
               onSelect={onLlmChange}
               size="sm"
               direction="up"
-              status={llmStatus}
+              loading={llmSelectorLoading}
+              status={llmSelectorLoading ? "none" : llmStatus}
               menuAlign="end"
-              statusTooltip={llmStatusDetail}
+              statusTooltip={llmSelectorLoading ? null : llmStatusDetail}
             />
             <ThreadApprovalModeSelector
               value={threadApprovalMode}
@@ -444,6 +453,7 @@ export default function AgentPage() {
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
   const [threadApprovalMode, setThreadApprovalMode] = useState<ThreadApprovalMode>("inherit");
   const [fullAutoConfirmOpen, setFullAutoConfirmOpen] = useState(false);
+  const [threadSearchOpen, setThreadSearchOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [messageQueue, setMessageQueue] = useState<QueuedMessageItem[]>([]);
@@ -535,6 +545,8 @@ export default function AgentPage() {
     llmStatusDetail,
     graphOptionsLoaded,
     agentGraphs,
+    graphSelectorLoading,
+    llmSelectorLoading,
   } = useAgentSession();
 
   // Determine if the selected graph is single-node (simple chat) or multi-node (timeline)
@@ -709,6 +721,7 @@ export default function AgentPage() {
     streamingReasoning,
     isStreaming,
     lastResult,
+    capabilityDroppedTools,
   } = useSessionStream({
     sessionId: activeSessionId,
     selectedGraphId,
@@ -1315,6 +1328,64 @@ export default function AgentPage() {
     ];
   }, [activeWorkspace, sessions, sending, activeSessionId, isServerSideRunActive]);
 
+  const threadSearchPaletteItems = useMemo(
+    () =>
+      sidebarProjects.flatMap((p) =>
+        p.threads.map((t) => ({
+          id: t.id,
+          title: t.title,
+          updatedAt: t.updatedAt,
+          archived: t.archived,
+          category: t.category,
+        })),
+      ),
+    [sidebarProjects],
+  );
+
+  const workspaceThreadSearchLabel = activeWorkspace?.name ?? "";
+
+  const openThreadSearch = useCallback(() => setThreadSearchOpen(true), []);
+
+  const { setCenterContent } = useAppHeaderCenter();
+
+  useLayoutEffect(() => {
+    if (!activeWorkspaceId || sidebarProjects.length === 0) {
+      setCenterContent(null);
+      return;
+    }
+    setCenterContent(
+      <ThreadSearchHeaderTrigger
+        onClick={openThreadSearch}
+        placeholder={workspaceThreadSearchLabel}
+        disabled={workspaceSwitching || sessionsLoading}
+        className="w-full min-w-[160px] max-w-[min(100%,28rem)]"
+      />,
+    );
+    return () => setCenterContent(null);
+  }, [
+    activeWorkspaceId,
+    sidebarProjects.length,
+    openThreadSearch,
+    workspaceThreadSearchLabel,
+    workspaceSwitching,
+    sessionsLoading,
+    setCenterContent,
+  ]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || el?.isContentEditable) return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (activeWorkspaceId && sidebarProjects.length > 0) setThreadSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeWorkspaceId, sidebarProjects.length]);
+
   const editControl = useMessageEdit({
     sessionId: activeSessionId,
     events: chatEventsForView,
@@ -1803,6 +1874,17 @@ export default function AgentPage() {
                 </p>
               </div>
             )}
+            {capabilityDroppedTools.length > 0 && (
+              <div className="max-w-3xl mx-auto px-2 pt-3">
+                <div
+                  className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text"
+                  role="status"
+                >
+                  Some tools requested by this graph are disabled by workspace capabilities:{" "}
+                  <span className="font-mono">{capabilityDroppedTools.join(", ")}</span>
+                </div>
+              </div>
+            )}
             {(messages.length > 0 || agentBusy) && (
               <MessageList
                 events={chatEventsForView}
@@ -1911,6 +1993,8 @@ export default function AgentPage() {
           onLlmChange={handleLlmChange}
           llmStatus={llmStatus}
           llmStatusDetail={llmStatusDetail}
+          graphSelectorLoading={graphSelectorLoading}
+          llmSelectorLoading={llmSelectorLoading}
           prefillText={composerPrefill}
           resetKey={activeSessionId ?? "new-session"}
           perfDebugEnabled={perfDebugEnabled}
@@ -1972,6 +2056,14 @@ export default function AgentPage() {
           .
         </p>
       </Modal>
+      <ThreadSearchPalette
+        open={threadSearchOpen}
+        onClose={() => setThreadSearchOpen(false)}
+        threads={threadSearchPaletteItems}
+        activeThreadId={activeSessionId}
+        onSelect={(id) => void handleSelectSession(id)}
+        placeholder="Search threads…"
+      />
       <WorkspaceLayout
         className="min-h-0"
         sidebar={memoSidebar}

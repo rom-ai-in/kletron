@@ -106,6 +106,8 @@ export interface UseSessionStreamReturn {
     lastResult: AgentWorkflowResult | null;
     /** Whether we are inside an active stream request. */
     isStreaming: boolean;
+    /** Graph-requested tools omitted from workspace capabilities (latest streaming update). */
+    capabilityDroppedTools: string[];
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
@@ -143,6 +145,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const [streamingText, setStreamingText] = useState('');
     const [streamingReasoning, setStreamingReasoning] = useState('');
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [capabilityDroppedTools, setCapabilityDroppedTools] = useState<string[]>([]);
 
     const abortControllerRef = useRef<AbortController | null>(null);
     const isAtBottomRef = useRef(true);
@@ -220,6 +223,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         setRunStartedAt(null);
         setRunEndedAt(null);
         setLastResult(null);
+        setCapabilityDroppedTools([]);
         clearStreamBuffers();
         // Reset first-message flag so title generation works for each new session
         isFirstMessageRef.current = true;
@@ -399,20 +403,12 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 }
             }
 
-            // Final pass: remove duplicate assistant messages in merged result.
-            // For assistant messages, use content-based dedup (catches duplicates
-            // even when tool events separate them, e.g. replayed history).
-            // For other roles, keep consecutive dedup only.
+            // Final pass: consecutive duplicate suppression only (same role + same trimmed body).
+            // Never dedupe assistant messages globally by content — distinct turns can legitimately
+            // repeat text ("OK", "Done.", same factual answer).
             const deduped: Message[] = [];
-            const seenAssistantContent = new Set<string>();
             for (const msg of result) {
-                if (msg.role === 'assistant' && !msg.toolName && !msg.toolArgs) {
-                    // Content-based dedup for non-tool-call assistant messages
-                    const key = (msg.content ?? '').trim();
-                    if (key && seenAssistantContent.has(key)) continue;
-                    if (key) seenAssistantContent.add(key);
-                } else if (deduped.length > 0) {
-                    // Consecutive dedup for tool/user/system messages
+                if (deduped.length > 0) {
                     const prev = deduped[deduped.length - 1];
                     if (
                         prev.role === msg.role &&
@@ -502,6 +498,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                                 setTokenUsage(usage);
                             }
                         }
+                        if (update.capabilityDroppedTools !== undefined) {
+                            setCapabilityDroppedTools(update.capabilityDroppedTools);
+                        }
                         clearStreamBuffers();
                     } else if (chunk.type === "final") {
                         // Final chunk logging (replaces debug-fetch instrumentation)
@@ -530,7 +529,6 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                                 setTokenUsage(usage);
                             }
                         }
-
                         // Generate title after first message
                         if (isNewSession && isFirstMessageRef.current && onTitleGenerate) {
                             const runId = chunk.payload.sessionId;
@@ -567,6 +565,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         setRunStartedAt(new Date().toISOString());
         setRunEndedAt(null);
         clearStreamBuffers();
+        setCapabilityDroppedTools([]);
         isAtBottomRef.current = true;
 
         const controller = new AbortController();
@@ -691,5 +690,6 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         isAtBottomRef,
         lastResult,
         isStreaming: sending,
+        capabilityDroppedTools,
     };
 }

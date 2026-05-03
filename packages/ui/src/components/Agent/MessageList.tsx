@@ -24,6 +24,16 @@ export { groupEvents };
 /** Below this, use absolute positioning + height estimates; short threads render normally (no phantom gap). */
 const VIRTUALIZE_MIN_ITEMS = 16;
 
+/** Stable row key for virtualization height cache — survives index shifts when grouping changes. */
+function renderItemStableKey(item: RenderItem, index: number): string {
+    if (item.type === 'tools') {
+        const ids = item.events.map((e) => e.id ?? '').join('|');
+        return ids ? `tools:${ids}` : `tools:idx-${index}`;
+    }
+    const id = item.event.id ?? '';
+    return id ? `evt:${id}` : `evt:idx-${index}`;
+}
+
 /**
  * Render a thin "── Stage X of Y — <name> ──" separator for events that come
  * from an automation thread. We render it above the synthetic user message
@@ -165,7 +175,9 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const [viewportHeight, setViewportHeight] = useState(0);
     const [scrollTop, setScrollTop] = useState(0);
     const [measureVersion, setMeasureVersion] = useState(0);
-    const itemHeightsRef = useRef<Map<number, number>>(new Map());
+    const itemHeightsRef = useRef<Map<string, number>>(new Map());
+    const observerMapRef = useRef<Map<string, ResizeObserver>>(new Map());
+    const nodeMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
     const estimatedItemHeight = 92;
     const nearTopTriggeredRef = useRef(false);
 
@@ -184,6 +196,25 @@ const MessageListInner: React.FC<MessageListProps> = ({
         () => externalRenderItems ?? groupEvents(visibleEvents),
         [visibleEvents, externalRenderItems],
     );
+
+    const rowKeys = useMemo(
+        () => items.map((item, index) => renderItemStableKey(item, index)),
+        [items],
+    );
+
+    const rowKeyFingerprint = rowKeys.join('\n');
+
+    useEffect(() => {
+        const valid = new Set(rowKeys);
+        for (const key of Array.from(observerMapRef.current.keys())) {
+            if (!valid.has(key)) {
+                observerMapRef.current.get(key)?.disconnect();
+                observerMapRef.current.delete(key);
+                nodeMapRef.current.delete(key);
+                itemHeightsRef.current.delete(key);
+            }
+        }
+    }, [rowKeyFingerprint, rowKeys]);
 
     const useVirtualList = virtualized && items.length >= VIRTUALIZE_MIN_ITEMS;
 
@@ -245,12 +276,13 @@ const MessageListInner: React.FC<MessageListProps> = ({
         let y = 0;
         for (let i = 0; i < items.length; i += 1) {
             starts[i] = y;
-            const h = itemHeightsRef.current.get(i) ?? estimatedItemHeight;
+            const rowKey = rowKeys[i] ?? `evt:idx-${i}`;
+            const h = itemHeightsRef.current.get(rowKey) ?? estimatedItemHeight;
             heights[i] = h;
             y += h;
         }
         return { starts, heights, totalHeight: y };
-    }, [items, measureVersion]);
+    }, [items, rowKeys, measureVersion]);
 
     const findStartIndex = useCallback((targetOffset: number) => {
         let lo = 0;
@@ -286,44 +318,38 @@ const MessageListInner: React.FC<MessageListProps> = ({
         };
     }, [useVirtualList, items.length, scrollTop, viewportHeight, findStartIndex, offsets.starts, offsets.heights]);
 
-    const observerMapRef = useRef<Map<number, ResizeObserver>>(new Map());
-    const nodeMapRef = useRef<Map<number, HTMLDivElement>>(new Map());
-
-    const measureItem = useCallback((index: number, node: HTMLDivElement | null) => {
-        // Clean up previous observer for this index
-        const prevObserver = observerMapRef.current.get(index);
-        const prevNode = nodeMapRef.current.get(index);
+    const measureItem = useCallback((rowKey: string, node: HTMLDivElement | null) => {
+        const prevObserver = observerMapRef.current.get(rowKey);
+        const prevNode = nodeMapRef.current.get(rowKey);
         if (prevNode && prevNode !== node && prevObserver) {
             prevObserver.disconnect();
-            observerMapRef.current.delete(index);
-            nodeMapRef.current.delete(index);
+            observerMapRef.current.delete(rowKey);
+            nodeMapRef.current.delete(rowKey);
         }
 
         if (!node) return;
 
-        // Initial measure
         const h = node.offsetHeight;
-        const prev = itemHeightsRef.current.get(index);
+        const prev = itemHeightsRef.current.get(rowKey);
         if (prev !== h) {
-            itemHeightsRef.current.set(index, h);
+            itemHeightsRef.current.set(rowKey, h);
             setMeasureVersion((v) => v + 1);
         }
 
-        // Set up ResizeObserver for dynamic size changes (accordion collapse/expand)
-        if (!observerMapRef.current.has(index) || nodeMapRef.current.get(index) !== node) {
+        if (!observerMapRef.current.has(rowKey) || nodeMapRef.current.get(rowKey) !== node) {
             const observer = new ResizeObserver((entries) => {
                 for (const entry of entries) {
                     const newH = Math.round(entry.borderBoxSize?.[0]?.blockSize ?? entry.target.getBoundingClientRect().height);
-                    const cached = itemHeightsRef.current.get(index);
+                    const cached = itemHeightsRef.current.get(rowKey);
                     if (cached !== newH && newH > 0) {
-                        itemHeightsRef.current.set(index, newH);
+                        itemHeightsRef.current.set(rowKey, newH);
                         setMeasureVersion((v) => v + 1);
                     }
                 }
             });
             observer.observe(node);
-            observerMapRef.current.set(index, observer);
-            nodeMapRef.current.set(index, node);
+            observerMapRef.current.set(rowKey, observer);
+            nodeMapRef.current.set(rowKey, node);
         }
     }, []);
 
@@ -336,11 +362,11 @@ const MessageListInner: React.FC<MessageListProps> = ({
         };
     }, []);
 
-    useEffect(() => {
-        if (isAtBottomRef.current) {
-            bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }
-    }, [items, streaming, streamingText, streamingReasoning]);
+    useLayoutEffect(() => {
+        if (!isAtBottomRef.current || !scrollRef.current) return;
+        const el = scrollRef.current;
+        el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    }, [items, streaming, streamingText, streamingReasoning, pendingApprovalCount, measureVersion]);
 
     const renderMessageItem = useCallback((item: RenderItem, index: number) => {
         if (item.type === 'tools') {
@@ -490,11 +516,12 @@ const MessageListInner: React.FC<MessageListProps> = ({
                     <div style={{ position: 'relative', height: offsets.totalHeight }}>
                         {items.slice(virtualizationWindow.startIndex, virtualizationWindow.endIndex + 1).map((item, localIndex) => {
                             const index = virtualizationWindow.startIndex + localIndex;
+                            const rowKey = rowKeys[index] ?? `evt:idx-${index}`;
                             const top = offsets.starts[index] ?? 0;
                             return (
                                 <div
-                                    key={`virtual-${index}`}
-                                    ref={(node) => measureItem(index, node)}
+                                    key={rowKey}
+                                    ref={(node) => measureItem(rowKey, node)}
                                     style={{ position: 'absolute', top, left: 0, right: 0 }}
                                 >
                                     {renderMessageItem(item, index)}
@@ -503,11 +530,14 @@ const MessageListInner: React.FC<MessageListProps> = ({
                         })}
                     </div>
                 ) : (
-                    items.map((item, index) => (
-                        <div key={`plain-${index}`} ref={(node) => measureItem(index, node)}>
-                            {renderMessageItem(item, index)}
-                        </div>
-                    ))
+                    items.map((item, index) => {
+                        const rowKey = rowKeys[index] ?? `evt:idx-${index}`;
+                        return (
+                            <div key={rowKey} ref={(node) => measureItem(rowKey, node)}>
+                                {renderMessageItem(item, index)}
+                            </div>
+                        );
+                    })
                 )}
             </div>
 
@@ -524,13 +554,13 @@ const MessageListInner: React.FC<MessageListProps> = ({
                         <ThoughtsPanel thoughts={[streamingReasoning]} isReasoning defaultExpanded={false} />
                     ) : null}
                     {(streamingText ?? '').trim() ? (
-                        <div className="w-full text-[12px] text-text-secondary pl-0.5">
+                        <div className="w-full text-[13px] text-text-primary pl-0.5">
                             {streamingMarkdownSafe ? (
                                 <MarkdownRenderer content={streamingMarkdownSafe} variant="chat" />
                             ) : (
-                                <span className="text-text-muted/70 text-[11px]"> … </span>
+                                <span className="text-text-muted/50 text-[11px]"> … </span>
                             )}
-                            <span className="inline-block w-[2px] h-[14px] bg-text-muted/80 align-text-bottom ml-0.5 animate-pulse" />
+                            <span className="inline-block w-[2px] h-[14px] bg-text-primary/50 align-text-bottom ml-0.5 animate-pulse" />
                         </div>
                     ) : null}
                 </div>

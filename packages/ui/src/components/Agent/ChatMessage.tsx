@@ -101,8 +101,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
     return (
         <div className={cn('group flex flex-col items-start', className)}>
-            <div className="relative w-full bg-transparent text-[12px] text-text-secondary">
-                <div className="break-words text-text-secondary">
+            <div className="relative w-full bg-transparent text-[13px] text-text-primary">
+                <div className="break-words text-text-primary">
                     <MarkdownRenderer content={content} variant="chat" />
                 </div>
 

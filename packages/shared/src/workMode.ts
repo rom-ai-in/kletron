@@ -3,6 +3,8 @@
  * Legacy four-way category ids map here via normalizeToWorkModeId / LEGACY_CATEGORY_TO_WORK_MODE.
  */
 
+import { STANDARD_WORKSPACE_BUNDLED_TOOLS } from "./agentBundledTools";
+
 export type WorkModeId = "code" | "work";
 
 export interface WorkModeDefinition {
@@ -53,6 +55,37 @@ export function isValidWorkModeId(id: string): id is WorkModeId {
   return id === "code" || id === "work";
 }
 
+/**
+ * Work mode = standard bundled toolkit minus terminal/git-read tools, plus research connectors
+ * and progressive-disclosure helpers. Keeps Cowork-style parity when STANDARD_WORKSPACE_BUNDLED_TOOLS grows.
+ */
+const WORK_MODE_STRIPPED_FROM_STANDARD = new Set<string>([
+  "execute_bash",
+  "git_log",
+  "git_diff",
+  "git_grep",
+  "git_blame",
+]);
+
+const WORK_MODE_TOOLS_BEYOND_STANDARD = [
+  "fetch_url",
+  "web_search",
+  "list_available_skills",
+  "load_skill",
+  "write_todos",
+] as const;
+
+function buildWorkModeToolAllowlist(): string[] {
+  const fromStandard = STANDARD_WORKSPACE_BUNDLED_TOOLS.filter(
+    (t) => !WORK_MODE_STRIPPED_FROM_STANDARD.has(t)
+  );
+  const merged = new Set<string>([...fromStandard, ...WORK_MODE_TOOLS_BEYOND_STANDARD]);
+  return Array.from(merged).sort();
+}
+
+/** Exported for policy (`toolApprovalPolicy`) and tests. */
+export const WORK_MODE_TOOL_ALLOWLIST: string[] = buildWorkModeToolAllowlist();
+
 export const WORK_MODES: Record<WorkModeId, WorkModeDefinition> = {
   code: {
     id: "code",
@@ -62,16 +95,8 @@ export const WORK_MODES: Record<WorkModeId, WorkModeDefinition> = {
     color: "#3B82F6",
     defaultPrompt:
       "You are a senior software engineer helping with code tasks. Focus on code quality, best practices, and maintainability. Respect the workspace boundary and prefer minimal, safe changes.",
-    availableTools: [
-      "list_files",
-      "read_file",
-      "search_code",
-      "edit_file",
-      "execute_bash",
-      "git_commit",
-      "git_push",
-      "str_replace_editor",
-    ],
+    /** Full standard bundled toolkit (repo read/write, bash, git reads, semantic search). */
+    availableTools: [...STANDARD_WORKSPACE_BUNDLED_TOOLS],
     requiredContextTypes: ["repository", "codebase"],
     capabilities: {
       canEditFiles: true,
@@ -89,19 +114,9 @@ export const WORK_MODES: Record<WorkModeId, WorkModeDefinition> = {
     icon: "briefcase",
     color: "#6366F1",
     defaultPrompt:
-      "You are a thoughtful assistant for general work: clear writing, research, and planning. Do not assume a software engineering task unless the user asks. Prefer concise, well-structured answers.",
-    /** Read-only repo discovery is allowed so users can ask “what’s in this workspace?” without switching to Code mode; terminal/git/bash remain Code-only. */
-    availableTools: [
-      "web_search",
-      "fetch_url",
-      "read_file",
-      "write_file",
-      "calculate",
-      "list_files",
-      "search_code",
-      "describe_structure",
-      "repo_metrics",
-    ],
+      "You are a thoughtful assistant for general work: clear writing, research, and planning. Do not assume a software engineering task unless the user asks. Prefer concise, well-structured answers. When the user wants material saved on disk, use write_file or str_replace_editor with paths relative to the workspace root (not arbitrary OS paths outside it).",
+    /** Cowork-style surface: files + research connectors; no terminal or git CLI tools. */
+    availableTools: WORK_MODE_TOOL_ALLOWLIST,
     requiredContextTypes: [],
     capabilities: {
       canEditFiles: true,

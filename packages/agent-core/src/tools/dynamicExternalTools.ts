@@ -1,12 +1,13 @@
 // Dynamic LangChain tools for external MCP servers.
 //
-// At run start the executor resolves the workspace's external MCP servers
-// (`workspaceCapabilityResolver`) and asks the McpClient to connect to them
-// (`syncExternalServers`). Once connected, each external tool is exposed via
-// `McpClient.listExternalTools()` as a namespaced `slug__toolName`. To make
-// these tools bindable to the LLM, we wrap each one in a LangChain `tool({})`
-// here so they can flow through the same `selectToolsByName` path as the
-// bundled tools.
+// Invariants (docs/agentic/07-mcp-tools.md): use the same `workspaceId` as
+// `syncWorkspaceExternalMcpServers` / `McpClient.syncExternalServers`. Wrappers
+// must call `callTool(..., { workspaceId })` so `slug__tool` names never route
+// to the bundled MCP server.
+//
+// At run start the executor resolves connectors via `workspaceCapabilityResolver`
+// and syncs with `syncWorkspaceExternalMcpServers(workspaceId)`. Tools come from
+// `McpClient.listExternalTools(workspaceId)` and are wrapped for `selectToolsByName`.
 //
 // Schema strategy: prefer the server's JSON Schema, but if conversion fails or
 // the schema is empty, fall back to `z.record(z.any())` so the agent can still
@@ -84,11 +85,12 @@ function jsonSchemaFieldToZod(def: any): ZodTypeAny {
  * (LangChain will prefer the first occurrence). Callers should pass bundled
  * tools first.
  */
-export async function buildDynamicExternalTools(): Promise<any[]> {
+export async function buildDynamicExternalTools(workspaceId: string): Promise<any[]> {
+    const ws = workspaceId.trim();
     let descriptors: ExternalToolDescriptor[] = [];
     try {
         const client = await McpClient.getInstance();
-        descriptors = client.listExternalTools();
+        descriptors = ws ? client.listExternalTools(ws) : [];
     } catch (error) {
         console.warn(
             "[dynamicExternalTools] Could not fetch external tools:",
@@ -112,7 +114,7 @@ export async function buildDynamicExternalTools(): Promise<any[]> {
         const wrapped = tool(
             async (input: Record<string, unknown>) => {
                 const client = await McpClient.getInstance();
-                const result = await client.callTool(d.name, input ?? {});
+                const result = await client.callTool(d.name, input ?? {}, { workspaceId: ws });
                 return result;
             },
             {

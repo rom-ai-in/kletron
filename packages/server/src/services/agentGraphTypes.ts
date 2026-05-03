@@ -1,5 +1,4 @@
 import type { ObjectId } from "mongodb";
-import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
 import type { AgentEvent } from "@kletron/shared/types";
@@ -7,11 +6,6 @@ import type { AgentEvent } from "@kletron/shared/types";
 export type AgentGraphStatus = "PENDING" | "RUNNING" | "PAUSED" | "CANCELLED" | "COMPLETED" | "FAILED";
 
 export type AgentGraphNodeStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
-
-export type AgentGraphLlmSelection = {
-    provider: LlmProviderType;
-    model?: string;
-};
 
 export type AgentGraphNodeReactConfig = {
     systemPrompt: string;
@@ -24,7 +18,6 @@ export type AgentGraphNodeReactConfig = {
     toolNames: string[];
     /** Skill IDs to inject into this node's context. */
     skillIds?: string[];
-    llmSelection?: AgentGraphLlmSelection;
     /** Future: enforce hard cap on tool calls. */
     maxToolCalls?: number;
     /**
@@ -45,8 +38,6 @@ export type AgentGraphNodeDelegateConfig = {
     graphId?: string;
     /** Optional summarization prompt for the delegate result. */
     summaryPrompt?: string;
-    /** Optional model override for summary. */
-    summaryLlmSelection?: AgentGraphLlmSelection;
 };
 
 export type AgentGraphNodeOutputConfig = {

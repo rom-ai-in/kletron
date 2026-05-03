@@ -51,6 +51,10 @@ describe("workspaceCapabilityResolver", () => {
         expect(caps.enabledTools).toContain("list_files");
         expect(caps.enabledTools).toContain("web_search");
         expect(caps.enabledTools).toContain("github_api");
+        expect(caps.enabledTools).toContain("write_file");
+        expect(caps.enabledTools).toContain("str_replace_editor");
+        expect(caps.enabledTools).toContain("execute_bash");
+        expect(caps.enabledTools).toContain("semantic_code_search");
         expect(caps.externalMcpServers).toHaveLength(1);
         expect(caps.externalMcpServers[0]?.slug).toBe("demo");
         for (const name of KLETRON_ADMIN_TOOL_NAMES) {

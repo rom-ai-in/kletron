@@ -42,6 +42,20 @@ describe("effectiveToolNames", () => {
         expect(result.externals).toEqual(["acme__do_thing", "acme__other"]);
     });
 
+    it("allows many MCP connectors at once (distinct slug__tool prefixes)", () => {
+        const ext = ["hunter__Discover", "slack__post_message", "linear__create_issue"];
+        const result = effectiveToolNames({
+            nodeToolNames: [],
+            skillToolNames: [],
+            adminToolNames: [],
+            capabilityToolSet: new Set(),
+            externalNamespacedTools: ext,
+            alwaysOn: [],
+        });
+        expect(result.externals).toEqual([...ext].sort());
+        for (const n of ext) expect(result.names).toContain(n);
+    });
+
     it("admin tools bypass the capability gate", () => {
         const result = effectiveToolNames({
             nodeToolNames: ["kletron_create_graph"],
@@ -76,5 +90,26 @@ describe("effectiveToolNames", () => {
             externalNamespacedTools: [],
         });
         expect(result.names).toContain("write_todos");
+    });
+
+    it("keeps write_file when workspace caps include standard bundled toolkit", () => {
+        const caps = new Set([
+            "list_files",
+            "read_file",
+            "write_file",
+            "str_replace_editor",
+            "semantic_code_search",
+        ]);
+        const result = effectiveToolNames({
+            nodeToolNames: ["write_file", "read_file", "unknown_tool"],
+            skillToolNames: [],
+            adminToolNames: [],
+            capabilityToolSet: caps,
+            externalNamespacedTools: [],
+            alwaysOn: ["write_todos"],
+        });
+        expect(result.names).toContain("write_file");
+        expect(result.names).toContain("read_file");
+        expect(result.dropped).toContain("unknown_tool");
     });
 });

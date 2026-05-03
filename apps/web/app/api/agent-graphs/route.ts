@@ -40,12 +40,6 @@ const GraphSchema = z.object({
                 systemPrompt: z.string(),
                 userPromptTemplate: z.string(),
                 toolNames: z.array(z.string()).default([]),
-                llmSelection: z
-                    .object({
-                        provider: z.enum(["azure", "lmstudio"]),
-                        model: z.string().optional(),
-                    })
-                    .optional(),
                 maxToolCalls: z.number().int().positive().optional(),
             }),
             output: z.object({

@@ -53,10 +53,15 @@ export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSel
     return (
         <div className={`relative min-w-0 ${fullWidth ? 'w-full' : ''}`} ref={containerRef}>
             {loading ? (
-                <div className={`flex items-center gap-1.5 bg-bg-surface/50 border border-border-subtle rounded ${isSmall ? 'px-2 py-1' : 'px-3 py-1.5'} ${fullWidth ? 'w-full justify-between' : ''}`}>
-                    <span className={`font-bold text-text-muted uppercase tracking-wider ${isSmall ? 'text-[9px]' : 'text-[10px]'}`}>{label}</span>
-                    <div className={`bg-bg-elevated/50 rounded animate-pulse w-full h-4`} />
-                    <ChevronDown className={`text-text-muted ${isSmall ? 'w-2.5 h-2.5' : 'w-3 h-3'}`} />
+                <div
+                    role="status"
+                    aria-busy="true"
+                    aria-label={`Loading ${label} options`}
+                    className={`flex items-center gap-1.5 bg-bg-surface/50 border border-border-subtle rounded ${isSmall ? 'px-2 py-1' : 'px-3 py-1.5'} ${fullWidth ? 'w-full justify-between' : ''}`}
+                >
+                    <span className={`font-bold text-text-muted uppercase tracking-wider shrink-0 ${isSmall ? 'text-[9px]' : 'text-[10px]'}`}>{label}</span>
+                    <div className="min-w-[5.5rem] flex-1 max-w-[10rem] h-4 rounded bg-bg-elevated/60 animate-pulse" />
+                    <ChevronDown className={`text-text-muted shrink-0 opacity-40 ${isSmall ? 'w-2.5 h-2.5' : 'w-3 h-3'}`} aria-hidden />
                 </div>
             ) : (
                 <button

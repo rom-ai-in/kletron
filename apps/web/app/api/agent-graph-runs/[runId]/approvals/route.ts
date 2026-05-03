@@ -13,6 +13,7 @@ import {
     invokeKletronAdminToolForApproval,
     isKletronAdminToolName,
 } from "@kletron/server/services/kletronAdminToolApprovalRunner";
+import { syncWorkspaceExternalMcpServers } from "@kletron/server/services/mcpWorkspaceSync";
 
 /**
  * Fire-and-forget: resume the agent loop after a successful tool approval.
@@ -218,8 +219,11 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
             return { executed: true, result: evicted.content, evictedPath: evicted.evictedPath ?? undefined };
         }
         const client = await McpClient.getInstance();
+        await syncWorkspaceExternalMcpServers(workspace._id.toString());
         const resolvedArgs = resolveArgs(toolName, edit.args ?? {}, workspace.rootPath);
-        const raw = await client.callTool(toolName, resolvedArgs as any);
+        const raw = await client.callTool(toolName, resolvedArgs as any, {
+            workspaceId: workspace._id.toString(),
+        });
         const evicted = await maybeEvictResult(workspace.rootPath, params.runId, toolName, raw);
         return { executed: true, result: evicted.content, evictedPath: evicted.evictedPath ?? undefined };
     };

@@ -834,8 +834,10 @@ export const strReplaceEditorTool = tool(
       "File editor tool. Commands: view (read file), create (new file), str_replace (replace exact unique text), insert (add lines after a line number), undo_edit (revert last edit). Use str_replace for surgical edits with old_str/new_str.",
     schema: z.object({
       repoPath: z.string().optional(),
-      command: z.enum(["view", "create", "str_replace", "insert", "undo_edit"]).optional()
-        .describe("Command to execute. Defaults to view."),
+      command: z
+        .enum(["view", "create", "str_replace", "insert", "undo_edit"])
+        .default("view")
+        .describe("Command to execute."),
       path: z.string().optional().describe("File path (absolute or relative to repo root)."),
       filePath: z.string().optional().describe("Alias for path."),
       old_str: z.string().optional().describe("Exact text to replace (must match once). Required for str_replace."),

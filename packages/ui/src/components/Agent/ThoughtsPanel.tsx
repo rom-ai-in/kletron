@@ -49,28 +49,28 @@ export const ThoughtsPanel: React.FC<ThoughtsPanelProps> = ({
                 onClick={() => setIsExpanded(!isExpanded)}
                 className="flex items-center gap-1.5 text-left transition-all duration-150 group"
             >
-                <div className="flex items-center justify-center shrink-0 text-text-muted/50">
+                <div className="flex items-center justify-center shrink-0 text-text-muted/30">
                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </div>
-                <span className="text-[13px] font-medium text-text-muted transition-colors group-hover:text-text-secondary">
+                <span className="text-[11px] font-normal text-text-muted/45 transition-colors group-hover:text-text-muted/65">
                     {isProse ? 'Thought' : 'Reasoning'} — {headerSummary}
                 </span>
             </button>
 
             {isExpanded && (
-                <div className="mt-1.5 pl-4 border-l-2 border-white/[0.06]">
+                <div className="mt-1.5 pl-4 border-l border-white/[0.04]">
                     {isProse ? (
-                        <div className="text-[13px] text-text-muted/70 leading-relaxed whitespace-pre-wrap">
+                        <div className="text-[11px] text-text-muted/40 leading-relaxed whitespace-pre-wrap">
                             {cleanedThoughts.join('\n\n')}
                         </div>
                     ) : (
                         <div className="space-y-0.5">
                             {cleanedThoughts.map((step, idx) => (
-                                <div key={idx} className="flex gap-2 text-[12px]">
-                                    <span className="shrink-0 text-text-muted/40 font-mono w-3 text-right select-none">
+                                <div key={idx} className="flex gap-2 text-[11px]">
+                                    <span className="shrink-0 text-text-muted/25 font-mono w-3 text-right select-none">
                                         {idx + 1}
                                     </span>
-                                    <span className="text-text-muted/70 leading-relaxed">
+                                    <span className="text-text-muted/40 leading-relaxed">
                                         {step}
                                     </span>
                                 </div>

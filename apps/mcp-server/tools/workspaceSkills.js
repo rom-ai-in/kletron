@@ -21,6 +21,7 @@ import {
     readLocalCapabilities,
     resolveWorkspaceIdFromRoot,
 } from "./capabilityClient.js";
+import manifest from "@kletron/shared/agentBundledTools.json" with { type: "json" };
 
 const CACHE_TTL_MS = 30_000;
 
@@ -152,28 +153,12 @@ class WorkspaceSkillsManager {
     }
 
     fallbackBaseline(allTools, categoryId) {
-        // NOTE: Kletron admin tools (kletron_create_graph etc.) are NOT in
-        // this list because they are LangChain tools registered in-process
-        // by the agent executor, not bundled MCP tools. The executor merges
-        // them into every run via `KLETRON_ADMIN_TOOL_NAMES` even when
-        // capability resolution falls through to permissive mode.
-        const baseTools = [
-            "list_files",
-            "read_file",
-            "read_file_range",
-            "search_code",
-            "describe_structure",
-            "symbols_list",
-            "find_symbol",
-            "go_to_definition",
-            "references",
-            "todo_search",
-            "repo_metrics",
-        ];
+        // Align with packages/shared/src/agentBundledTools.json standardWorkspaceBundledTools.
+        // Only attach tools that exist on this MCP server (executor-only tools like
+        // semantic_code_search are omitted here).
+        const baseTools = [...manifest.standardWorkspaceBundledTools];
         if (categoryId === "drafting") {
-            baseTools.push("write_file", "fetch_url", "web_search");
-        } else {
-            baseTools.push("execute_bash", "git_log", "git_diff", "git_grep", "git_blame");
+            baseTools.push("fetch_url", "web_search");
         }
         const out = {};
         for (const name of baseTools) {

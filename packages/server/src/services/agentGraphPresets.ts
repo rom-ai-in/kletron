@@ -100,7 +100,7 @@ Use tools deliberately and in the **correct order**.
 3️⃣ **Inspect files**: read_file, read_file_range
 4️⃣ **Trace logic**: go_to_definition, references, find_references, git_blame, git_log
 5️⃣ **Analyze dependencies**: dependency_info
-6️⃣ **Implement changes**: write_file
+6️⃣ **Implement changes**: write_file (new/overwrite) or str_replace_editor (small patches); prefer str_replace for surgical edits
 7️⃣ **Use shell only if necessary**: execute_bash
 
 ### Tool Rules
@@ -173,6 +173,12 @@ When writing code, follow these principles:
 - Ensure compatibility with existing architecture
 
 Always verify: imports, types, interfaces, dependency boundaries.
+
+---
+
+## Workspace documents and artifacts
+
+When the user asks for notes, drafts, markdown, plain-text exports, or other files **persisted under the workspace**, use **write_file** or **str_replace_editor** instead of only pasting content in chat. Use **paths relative to the workspace root** (the bundled tools enforce staying inside that root). For small edits to existing files, prefer **str_replace_editor**; for new files or full rewrites, use **write_file**.
 
 ---
 
@@ -318,6 +324,7 @@ export const simpleReactToolNames = [
   "execute_bash",
   "output_format",
   "write_file",
+  "str_replace_editor",
   "web_search",
   "fetch_url",
   "write_todos",
@@ -335,7 +342,6 @@ export function buildSimpleReactAgentGraph(): Omit<AgentGraphDefinition, "_id" |
         systemPrompt: simpleReactSystemPrompt,
         userPromptTemplate: "{{mission}}",
         toolNames: simpleReactToolNames,
-        llmSelection: { provider: "azure" },
       },
       output: { schemaId: "conversational" },
     },
@@ -390,7 +396,6 @@ export function buildCodeComparatorGraph(): Omit<AgentGraphDefinition, "_id" | "
         userPromptTemplate: "{{mission}}",
         toolNames: codeComparatorToolNames,
         skillIds: ["code-comparator"],
-        llmSelection: { provider: "azure" },
       },
       output: { schemaId: "conversational" },
     },
@@ -468,7 +473,6 @@ Return **ONLY a JSON object**. No markdown. No backticks. No commentary.
 If information is missing, use empty arrays or empty strings. Never fabricate details.`,
         userPromptTemplate: "Mission:\n{{mission}}",
         toolNames: [],
-        llmSelection: { provider: "azure" }
       },
       output: { schemaId: "cursor_intake_output", statePath: "state", stateMerge: true }
     },
@@ -562,7 +566,6 @@ Return **ONLY JSON**. No commentary.
           "Constraints: {{state.constraints}}"
         ].join("\n"),
         toolNames: CURSOR_RESEARCH_TOOLS,
-        llmSelection: { provider: "azure" }
       },
       output: { schemaId: "cursor_researcher_output", statePath: "state", stateMerge: true }
     },
@@ -649,7 +652,6 @@ Return **ONLY JSON**.
           "Working notes: {{state.workingNotes}}"
         ].join("\n"),
         toolNames: CURSOR_CORE_TOOLS,
-        llmSelection: { provider: "azure" }
       },
       delegate: {
         mode: "react",
@@ -713,7 +715,6 @@ Return **ONLY JSON**. No markdown. No commentary.
           "Mission: {{mission}}"
         ].join("\n"),
         toolNames: [],
-        llmSelection: { provider: "azure" }
       },
       output: { schemaId: "cursor_done_output", statePath: "state", stateMerge: true }
     }
@@ -1765,7 +1766,6 @@ export function buildCoderAgentGraph(): Omit<AgentGraphDefinition, "_id" | "crea
         systemPrompt: CODER_SYSTEM_PROMPT,
         userPromptTemplate: "{{mission}}",
         toolNames: CODER_AGENT_TOOLS,
-        llmSelection: { provider: "azure" },
       },
       output: { schemaId: "conversational" },
     },
@@ -1789,7 +1789,6 @@ export function buildExplorerAgentGraph(): Omit<AgentGraphDefinition, "_id" | "c
         systemPrompt: EXPLORER_SYSTEM_PROMPT,
         userPromptTemplate: "{{mission}}",
         toolNames: EXPLORER_AGENT_TOOLS,
-        llmSelection: { provider: "azure" },
       },
       output: { schemaId: "conversational", statePath: "state", stateMerge: true },
     },
@@ -1805,7 +1804,6 @@ export function buildExplorerAgentGraph(): Omit<AgentGraphDefinition, "_id" | "c
           "semantic_code_search",
           "dependency_info",
         ],
-        llmSelection: { provider: "azure" },
       },
       output: { schemaId: "generic_json" },
     },
@@ -1837,7 +1835,6 @@ export function buildPlannerAgentGraph(): Omit<AgentGraphDefinition, "_id" | "cr
         systemPrompt: PLANNER_SYSTEM_PROMPT,
         userPromptTemplate: "{{mission}}",
         toolNames: PLANNER_AGENT_TOOLS,
-        llmSelection: { provider: "azure" },
       },
       output: { schemaId: "conversational" },
     },
@@ -1950,7 +1947,6 @@ Return **ONLY JSON**. No markdown. No commentary.
 }`,
         userPromptTemplate: "Mission:\n{{mission}}\n\nBusiness Context:\n{{state.businessContext}}",
         toolNames: BA_DISCOVERY_TOOLS,
-        llmSelection: { provider: "azure" },
       },
       output: { schemaId: "generic_json", statePath: "state", stateMerge: true },
     },
@@ -2035,7 +2031,6 @@ Return **ONLY JSON**. No markdown. No commentary.
           "Strategic position: {{state.strategicPosition}}",
         ].join("\n"),
         toolNames: BA_WEB_TOOLS,
-        llmSelection: { provider: "azure" },
       },
       output: { schemaId: "generic_json", statePath: "state", stateMerge: true },
     },
@@ -2122,7 +2117,6 @@ Return **ONLY JSON**. No markdown. No commentary.
           "Market trends: {{state.keyTrends}}",
         ].join("\n"),
         toolNames: [...BA_WEB_TOOLS, "read_file", "search_code"],
-        llmSelection: { provider: "azure" },
       },
       output: { schemaId: "generic_json", statePath: "state", stateMerge: true },
     },
@@ -2230,7 +2224,6 @@ Return **ONLY JSON**. No markdown. No commentary.
           "Market gaps: {{state.marketGaps}}",
         ].join("\n"),
         toolNames: BA_DISCOVERY_TOOLS,
-        llmSelection: { provider: "azure" },
       },
       output: { schemaId: "generic_json", statePath: "state", stateMerge: true },
     },
@@ -2316,7 +2309,6 @@ Return **ONLY JSON**. No markdown. No commentary.
           "Architecture: {{state.architecturePattern}}",
         ].join("\n"),
         toolNames: BA_DISCOVERY_TOOLS,
-        llmSelection: { provider: "azure" },
       },
       output: { schemaId: "generic_json", statePath: "state", stateMerge: true },
     },
@@ -2396,7 +2388,6 @@ Return **ONLY JSON**. No markdown. No commentary.
           "Personas: {{state.personas}}",
         ].join("\n"),
         toolNames: [],
-        llmSelection: { provider: "azure" },
       },
       output: { schemaId: "generic_json", statePath: "state", stateMerge: true },
     },
@@ -2492,7 +2483,6 @@ Return **ONLY JSON**. No extra commentary outside the JSON.
           "Competitive score: {{state.competitiveScore}}",
         ].join("\n"),
         toolNames: [],
-        llmSelection: { provider: "azure" },
       },
       output: { schemaId: "generic_json", statePath: "state", stateMerge: true },
     },

@@ -313,22 +313,29 @@ export function ProjectSidebar({
       {/* ── Project & Thread List ── */}
       <div className="flex-1 overflow-y-auto scrollbar-elegant">
         {loading ? (
-          /* Skeleton loading state */
-          <div className="px-3 py-2 space-y-1 animate-in fade-in duration-200">
-            {/* Skeleton project header */}
-            <div className="flex items-center gap-1.5 py-2 mt-1">
-              <div className="h-3 w-3 rounded bg-bg-elevated animate-pulse flex-shrink-0" />
-              <div className="h-3.5 w-3.5 rounded bg-bg-elevated animate-pulse flex-shrink-0" />
-              <div className="h-3 w-24 rounded bg-bg-elevated animate-pulse" />
+          /* Skeleton — mirrors project header + thread rows (title + status dot + time), desktop + web */
+          <div
+            className="animate-in fade-in duration-200 px-3 py-2 space-y-1"
+            role="status"
+            aria-busy="true"
+            aria-label="Loading threads"
+          >
+            <div className="mt-1 flex items-center gap-1.5 py-2">
+              <div className="h-3 w-3 shrink-0 rounded bg-bg-elevated animate-pulse" />
+              <div className="h-3.5 w-3.5 shrink-0 rounded bg-bg-elevated animate-pulse" />
+              <div className="h-3 w-[52%] max-w-[140px] rounded bg-bg-elevated animate-pulse" />
             </div>
-            {/* Skeleton thread rows */}
-            {[75, 60, 85, 50, 70].map((width, i) => (
+            {[72, 58, 88, 48, 68, 55].map((width, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2 pl-9 pr-2 py-1.5 border-l-2 border-l-transparent"
+                className="flex items-center gap-2 border-l-2 border-l-transparent py-1.5 pl-9 pr-2"
               >
-                <div className="h-3 rounded bg-bg-elevated animate-pulse flex-1" style={{ maxWidth: `${width}%` }} />
-                <div className="h-3 w-6 rounded bg-bg-elevated animate-pulse flex-shrink-0" />
+                <div
+                  className="h-3 flex-1 rounded bg-bg-elevated animate-pulse"
+                  style={{ maxWidth: `${width}%` }}
+                />
+                <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-bg-elevated animate-pulse" />
+                <div className="h-3 w-7 shrink-0 rounded bg-bg-elevated/80 animate-pulse" />
               </div>
             ))}
           </div>

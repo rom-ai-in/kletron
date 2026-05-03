@@ -18,7 +18,7 @@ import {
     listEnabledIntegrationProviderIds,
     type ExternalMcpRuntimeConfig,
 } from "./connectorsService";
-import { toolsUnlockedByConnectors } from "@kletron/shared";
+import { STANDARD_WORKSPACE_BUNDLED_TOOLS, toolsUnlockedByConnectors } from "@kletron/shared";
 import type { ResolvedSkillRecord } from "@kletron/shared/skills/types";
 import { KLETRON_ADMIN_TOOL_NAMES } from "@kletron/agent-core/tools/kletronAdminToolNames";
 
@@ -80,6 +80,9 @@ export async function resolveWorkspaceCapabilities(
     ]);
 
     const tools = new Set<string>(BASELINE_TOOLS);
+    for (const t of STANDARD_WORKSPACE_BUNDLED_TOOLS) {
+        tools.add(t);
+    }
 
     // Tools requested by enabled skills.
     for (const skill of skills) {

@@ -5,6 +5,12 @@ export type { TitleBarProps, GitDiffStats } from './TitleBar';
 export { ProjectSidebar } from './ProjectSidebar';
 export type { ProjectSidebarProps, SidebarProject, SidebarThread, ThreadLiveStatus } from './ProjectSidebar';
 
+export { ThreadSearchPalette } from './ThreadSearchPalette';
+export type { ThreadSearchPaletteProps, ThreadSearchPaletteItem } from './ThreadSearchPalette';
+
+export { ThreadSearchHeaderTrigger } from './ThreadSearchHeaderTrigger';
+export type { ThreadSearchHeaderTriggerProps } from './ThreadSearchHeaderTrigger';
+
 export { ConversationTabs } from './ConversationTabs';
 export type { ConversationTabsProps, ConversationTabItem } from './ConversationTabs';
 

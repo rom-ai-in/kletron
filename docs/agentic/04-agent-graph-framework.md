@@ -49,7 +49,7 @@ type AgentGraphNode = {
 
 ### AgentGraphNodeReactConfig
 
-Controls how the LLM executes within a node:
+Controls how the LLM executes within a node (provider/model come from the Agent composer, automation stage, or Configuration → LLM — not from the node):
 
 ```typescript
 type AgentGraphNodeReactConfig = {
@@ -57,7 +57,6 @@ type AgentGraphNodeReactConfig = {
   userPromptTemplate: string;          // Template with {{state}} placeholders
   toolNames: string[];                 // Allowlisted tool names
   skillIds?: string[];                 // Agent skills to inject
-  llmSelection?: AgentGraphLlmSelection;  // Provider/model override
   maxToolCalls?: number;               // Hard cap on tool calls
   interruptBeforeTools?: boolean;      // Human-in-the-loop flag
 };
@@ -111,7 +110,6 @@ type AgentGraphNodeDelegateConfig = {
   mode: "react" | "graph";        // Execute as ReAct or sub-graph
   graphId?: string;                // Sub-graph ID (when mode="graph")
   summaryPrompt?: string;          // Summarization prompt for delegate result
-  summaryLlmSelection?: AgentGraphLlmSelection;
 };
 ```
 
