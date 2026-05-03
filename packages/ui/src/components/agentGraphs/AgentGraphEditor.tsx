@@ -326,6 +326,171 @@ export function AgentGraphEditor({
         }
     };
 
+    const graphSettingsFields = (
+        <>
+            <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                        Execution mode
+                    </label>
+                    <select
+                        value={execution?.mode ?? "dag"}
+                        onChange={(e) =>
+                            setExecution((prev) => ({
+                                ...prev,
+                                mode: e.target.value as "dag" | "state_machine",
+                            }))
+                        }
+                        className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
+                    >
+                        <option value="dag">DAG (static order)</option>
+                        <option value="state_machine">State machine (conditional)</option>
+                    </select>
+                </div>
+                <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                        Entry node
+                    </label>
+                    <select
+                        value={execution?.entryNodeId ?? ""}
+                        onChange={(e) =>
+                            setExecution((prev) => ({
+                                ...prev,
+                                entryNodeId: e.target.value || undefined,
+                            }))
+                        }
+                        className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
+                        disabled={(execution?.mode ?? "dag") !== "state_machine"}
+                    >
+                        <option value="">Auto (roots)</option>
+                        {nodes.map((n) => (
+                            <option key={n.id} value={n.id}>
+                                {n.label}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
+            {(execution?.mode ?? "dag") === "state_machine" && (
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                            Max iterations
+                        </label>
+                        <input
+                            type="number"
+                            min={1}
+                            value={execution?.maxIterations ?? ""}
+                            onChange={(e) =>
+                                setExecution((prev) => ({
+                                    ...prev,
+                                    maxIterations: e.target.value ? Number(e.target.value) : undefined,
+                                }))
+                            }
+                            className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
+                            placeholder="200"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                            Max node runs
+                        </label>
+                        <input
+                            type="number"
+                            min={1}
+                            value={execution?.maxNodeRuns ?? ""}
+                            onChange={(e) =>
+                                setExecution((prev) => ({
+                                    ...prev,
+                                    maxNodeRuns: e.target.value ? Number(e.target.value) : undefined,
+                                }))
+                            }
+                            className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
+                            placeholder="20"
+                        />
+                    </div>
+                </div>
+            )}
+
+            <div className="space-y-1.5">
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                    State defaults (JSON)
+                </label>
+                <textarea
+                    value={stateDefaultsRaw}
+                    onChange={(e) => handleStateDefaultsChange(e.target.value)}
+                    className="h-32 w-full resize-y rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary"
+                    placeholder='{"goal":"...","constraints":["..."]}'
+                />
+                {stateDefaultsError && <div className="text-xs text-status-error-text">{stateDefaultsError}</div>}
+            </div>
+        </>
+    );
+
+    const dependenciesPanel = (
+        <Panel className="mb-3 space-y-2 p-4">
+            <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold text-text-primary">Dependencies</div>
+                <div className="text-xs text-text-muted">Edges are “upstream → this node”</div>
+            </div>
+            {!selectedNodeId ? (
+                <div className="text-sm text-text-muted">Select a node to edit dependencies.</div>
+            ) : (
+                <div className="max-h-72 overflow-y-auto scrollbar-elegant rounded-md border border-border-subtle bg-bg-surface">
+                    <div className="divide-y divide-border-subtle">
+                        {nodes
+                            .filter((n) => n.id !== selectedNodeId)
+                            .map((n) => {
+                                const checked = selectedUpstream.includes(n.id);
+                                return (
+                                    <div key={n.id} className="px-3 py-2 hover:bg-state-hover">
+                                        <label className="flex cursor-pointer items-center justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="truncate text-sm text-text-primary">{n.label}</div>
+                                                <div className="text-[10px] font-mono text-text-muted">{n.id}</div>
+                                            </div>
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={() => toggleUpstream(n.id)}
+                                            />
+                                        </label>
+                                        {checked && (
+                                            <input
+                                                value={getEdgeCondition(n.id, selectedNodeId)}
+                                                onChange={(e) =>
+                                                    updateEdgeCondition(n.id, selectedNodeId, e.target.value)
+                                                }
+                                                className="mt-2 w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-[11px] font-mono text-text-secondary"
+                                                placeholder='Condition (e.g. state.nextStep == "debug")'
+                                            />
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        {nodes.length <= 1 && (
+                            <div className="p-3 text-sm text-text-muted">Add more nodes to create edges.</div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </Panel>
+    );
+
+    const notesPanel = (
+        <Panel className="mt-1 p-3">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Notes</div>
+            <div className="mt-1 text-xs text-text-muted leading-relaxed">
+                - Nodes can be ReAct, Router, or Delegate.\n
+                - Router nodes skip LLM execution and only route via edge conditions.\n
+                - Delegate nodes run a subagent or nested graph and return a summarized result.\n
+                - Node output must be strict JSON.\n
+                - `{"{{state}}"}` injects the current run state JSON.
+            </div>
+        </Panel>
+    );
+
     return (
         <div className="flex h-full min-h-0">
             <div className="flex min-w-0 flex-1 flex-col">
@@ -424,173 +589,52 @@ export function AgentGraphEditor({
                 </div>
             </div>
 
-            <div className="w-[420px] shrink-0 border-l border-border-subtle bg-bg-app p-4 overflow-y-auto scrollbar-elegant">
-                <div className="mb-3 text-xs font-bold uppercase tracking-widest text-text-muted">
-                    Inspector
+            <aside className="flex max-w-full min-w-[420px] w-[min(680px,48vw)] shrink-0 flex-col border-l border-border-subtle bg-bg-app min-h-0">
+                <div className="shrink-0 border-b border-border-subtle px-4 py-3">
+                    <div className="text-xs font-bold uppercase tracking-widest text-text-muted">Inspector</div>
+                    <div className="mt-0.5 text-[11px] text-text-muted">
+                        {selectedNodeId
+                            ? "Node details appear first; expand Graph settings when needed."
+                            : "Select a node on the left to edit prompts, tools, and edges."}
+                    </div>
                 </div>
-
-                <Panel className="mb-3 space-y-3 p-4">
-                    <div className="text-sm font-semibold text-text-primary">Graph settings</div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                                Execution mode
-                            </label>
-                            <select
-                                value={execution?.mode ?? "dag"}
-                                onChange={(e) =>
-                                    setExecution((prev) => ({
-                                        ...prev,
-                                        mode: e.target.value as "dag" | "state_machine",
-                                    }))
-                                }
-                                className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
-                            >
-                                <option value="dag">DAG (static order)</option>
-                                <option value="state_machine">State machine (conditional)</option>
-                            </select>
-                        </div>
-                        <div className="space-y-1.5">
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                                Entry node
-                            </label>
-                            <select
-                                value={execution?.entryNodeId ?? ""}
-                                onChange={(e) =>
-                                    setExecution((prev) => ({
-                                        ...prev,
-                                        entryNodeId: e.target.value || undefined,
-                                    }))
-                                }
-                                className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
-                                disabled={(execution?.mode ?? "dag") !== "state_machine"}
-                            >
-                                <option value="">Auto (roots)</option>
-                                {nodes.map((n) => (
-                                    <option key={n.id} value={n.id}>
-                                        {n.label}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    {(execution?.mode ?? "dag") === "state_machine" && (
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                                <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                                    Max iterations
-                                </label>
-                                <input
-                                    type="number"
-                                    min={1}
-                                    value={execution?.maxIterations ?? ""}
-                                    onChange={(e) =>
-                                        setExecution((prev) => ({
-                                            ...prev,
-                                            maxIterations: e.target.value ? Number(e.target.value) : undefined,
-                                        }))
-                                    }
-                                    className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
-                                    placeholder="200"
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                                    Max node runs
-                                </label>
-                                <input
-                                    type="number"
-                                    min={1}
-                                    value={execution?.maxNodeRuns ?? ""}
-                                    onChange={(e) =>
-                                        setExecution((prev) => ({
-                                            ...prev,
-                                            maxNodeRuns: e.target.value ? Number(e.target.value) : undefined,
-                                        }))
-                                    }
-                                    className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
-                                    placeholder="20"
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="space-y-1.5">
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                            State defaults (JSON)
-                        </label>
-                        <textarea
-                            value={stateDefaultsRaw}
-                            onChange={(e) => handleStateDefaultsChange(e.target.value)}
-                            className="h-28 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary"
-                            placeholder='{"goal":"...","constraints":["..."]}'
-                        />
-                        {stateDefaultsError && <div className="text-xs text-status-error-text">{stateDefaultsError}</div>}
-                    </div>
-                </Panel>
-
-                <Panel className="mb-3 space-y-2 p-4">
-                    <div className="flex items-center justify-between gap-2">
-                        <div className="text-sm font-semibold text-text-primary">Dependencies</div>
-                        <div className="text-xs text-text-muted">Edges are “upstream → this node”</div>
-                    </div>
-                    {!selectedNodeId ? (
-                        <div className="text-sm text-text-muted">Select a node to edit dependencies.</div>
+                <div className="min-h-0 flex-1 overflow-y-auto scrollbar-elegant px-4 pb-4 pt-3">
+                    {selectedNodeId ? (
+                        <>
+                            <NodeInspector
+                                node={selectedNode}
+                                onChange={handleUpdateSelectedNode}
+                                onDelete={handleDeleteNode}
+                                onResetPrompt={handleResetToDefault}
+                            />
+                            {dependenciesPanel}
+                            <details className="group mb-3 rounded-lg border border-border-subtle bg-bg-surface">
+                                <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-text-primary marker:content-none [&::-webkit-details-marker]:hidden hover:bg-state-hover rounded-lg">
+                                    Graph settings
+                                    <span className="ml-2 text-xs font-normal text-text-muted">(execution, state defaults)</span>
+                                </summary>
+                                <div className="space-y-3 border-t border-border-subtle p-4">{graphSettingsFields}</div>
+                            </details>
+                            {notesPanel}
+                        </>
                     ) : (
-                        <div className="max-h-56 overflow-y-auto scrollbar-elegant rounded-md border border-border-subtle bg-bg-surface">
-                            <div className="divide-y divide-border-subtle">
-                                {nodes
-                                    .filter((n) => n.id !== selectedNodeId)
-                                    .map((n) => {
-                                        const checked = selectedUpstream.includes(n.id);
-                                        return (
-                                            <div key={n.id} className="px-3 py-2 hover:bg-state-hover">
-                                                <label className="flex cursor-pointer items-center justify-between gap-3">
-                                                    <div className="min-w-0">
-                                                        <div className="truncate text-sm text-text-primary">{n.label}</div>
-                                                        <div className="text-[10px] font-mono text-text-muted">{n.id}</div>
-                                                    </div>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={checked}
-                                                        onChange={() => toggleUpstream(n.id)}
-                                                    />
-                                                </label>
-                                                {checked && (
-                                                    <input
-                                                        value={getEdgeCondition(n.id, selectedNodeId)}
-                                                        onChange={(e) =>
-                                                            updateEdgeCondition(n.id, selectedNodeId, e.target.value)
-                                                        }
-                                                        className="mt-2 w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-[11px] font-mono text-text-secondary"
-                                                        placeholder='Condition (e.g. state.nextStep == "debug")'
-                                                    />
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                {nodes.length <= 1 && (
-                                    <div className="p-3 text-sm text-text-muted">Add more nodes to create edges.</div>
-                                )}
-                            </div>
-                        </div>
+                        <>
+                            <Panel className="mb-3 space-y-3 p-4">
+                                <div className="text-sm font-semibold text-text-primary">Graph settings</div>
+                                {graphSettingsFields}
+                            </Panel>
+                            {dependenciesPanel}
+                            <NodeInspector
+                                node={selectedNode}
+                                onChange={handleUpdateSelectedNode}
+                                onDelete={handleDeleteNode}
+                                onResetPrompt={handleResetToDefault}
+                            />
+                            {notesPanel}
+                        </>
                     )}
-                </Panel>
-
-                <NodeInspector node={selectedNode} onChange={handleUpdateSelectedNode} onDelete={handleDeleteNode} onResetPrompt={handleResetToDefault} />
-
-                <Panel className="mt-4 p-3">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Notes</div>
-                    <div className="mt-1 text-xs text-text-muted">
-                        - Nodes can be ReAct, Router, or Delegate.\n
-                        - Router nodes skip LLM execution and only route via edge conditions.\n
-                        - Delegate nodes run a subagent or nested graph and return a summarized result.\n
-                        - Node output must be strict JSON.\n
-                        - `{"{{state}}"}` injects the current run state JSON.
-                    </div>
-                </Panel>
-            </div>
+                </div>
+            </aside>
         </div>
     );
 }

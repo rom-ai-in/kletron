@@ -17,11 +17,31 @@ import {
     type ExternalMcpClientConfig,
 } from "./multiClient";
 
+type ExternalToolRecord = {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+};
+
+type ExternalServerConn = {
+  client: Client;
+  tools: ExternalToolRecord[];
+  error?: string;
+  /** Last sync config — used to reconnect after tool-not-found or stale sessions. */
+  config?: ExternalMcpClientConfig;
+};
+
+/** JSON-RPC MCP server error -32603 + common SDK phrasing for unknown tools. */
+function isRecoverableExternalToolNotFound(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes("-32603") || m.includes("tool not found");
+}
+
 export class McpClient {
   private static instance: McpClient | null = null;
   private readonly client: Client;
   /** Lazy-initialized multi-server client for external MCP servers. */
-  private external = new Map<string, { client: Client; tools: Array<{ name: string; description?: string; inputSchema?: unknown }>; error?: string }>();
+  private external = new Map<string, ExternalServerConn>();
 
   private constructor(client: Client) {
     this.client = client;
@@ -130,33 +150,54 @@ export class McpClient {
     let targetClient: Client = this.client;
     const { serverSlug, toolName: parsedTool } = parseNamespacedToolName(name);
     let actualName = name;
+    let slugKeyForReconnect: string | null = null;
     if (serverSlug) {
       const slugKey = resolveExternalServerSlugKey(this.external.keys(), serverSlug);
       const ext = slugKey ? this.external.get(slugKey) : undefined;
       if (ext && !ext.error) {
         targetClient = ext.client;
         actualName = resolveCanonicalMcpToolName(ext.tools, parsedTool);
+        slugKeyForReconnect = slugKey;
       }
     }
 
-    const response = (await targetClient.callTool(
-      {
-        name: actualName,
-        arguments: args,
-      },
-      CallToolResultSchema
-    )) as CallToolResult;
+    const runExternalCall = async (): Promise<string> => {
+      const response = (await targetClient.callTool(
+        {
+          name: actualName,
+          arguments: args,
+        },
+        CallToolResultSchema
+      )) as CallToolResult;
 
-    const contents = response.content ?? [];
-    const text = contents
-      .map((chunk) => chunk.text ?? JSON.stringify(chunk))
-      .join("\n");
+      const contents = response.content ?? [];
+      const text = contents
+        .map((chunk) => chunk.text ?? JSON.stringify(chunk))
+        .join("\n");
 
-    if (response.isError) {
-      throw new Error(text || `Tool ${name} failed without error message`);
+      if (response.isError) {
+        throw new Error(text || `Tool ${name} failed without error message`);
+      }
+
+      return text;
+    };
+
+    try {
+      return await runExternalCall();
+    } catch (firstErr) {
+      const msg = (firstErr as Error)?.message ?? String(firstErr);
+      if (
+        slugKeyForReconnect &&
+        isRecoverableExternalToolNotFound(msg) &&
+        (await this.reconnectExternalServer(slugKeyForReconnect))
+      ) {
+        const ext = this.external.get(slugKeyForReconnect)!;
+        targetClient = ext.client;
+        actualName = resolveCanonicalMcpToolName(ext.tools, parsedTool);
+        return await runExternalCall();
+      }
+      throw firstErr;
     }
-
-    return text;
   }
 
 
@@ -180,6 +221,10 @@ export class McpClient {
    * Sync the set of external MCP servers connected to this client. Servers
    * present in `configs` that aren't connected get connected; servers
    * connected but missing from `configs` get disconnected.
+   *
+   * Healthy connections are kept open but **`tools/list` is refreshed every
+   * sync** so renamed tools on the MCP server are picked up without a process
+   * restart. If `listTools` fails, the client reconnects once from stored config.
    */
   async syncExternalServers(configs: ExternalMcpClientConfig[]) {
     const desired = new Map(configs.map((c) => [c.slug, c]));
@@ -195,9 +240,24 @@ export class McpClient {
     }
     for (const [slug, config] of desired.entries()) {
       const existing = this.external.get(slug);
-      // Healthy connection: keep it (tools already listed).
-      if (existing && !existing.error) continue;
-      // Failed prior attempt leaves a poisoned entry — remove so we retry each sync.
+      if (existing && !existing.error) {
+        try {
+          const tools = ((await existing.client.listTools({})).tools ?? []) as ExternalToolRecord[];
+          this.external.set(slug, { client: existing.client, tools, config });
+          continue;
+        } catch (err) {
+          console.warn(
+            `[McpClient] tools/list failed for external '${slug}', reconnecting:`,
+            (err as Error).message
+          );
+          try {
+            await existing.client.close();
+          } catch {
+            // ignore
+          }
+          this.external.delete(slug);
+        }
+      }
       if (existing?.error) {
         try {
           await existing.client.close();
@@ -206,47 +266,68 @@ export class McpClient {
         }
         this.external.delete(slug);
       }
-      try {
-        const client = new Client(
-          { name: "kletron-mcp-client", version: "1.0.0" },
-          { capabilities: { tools: {} } }
-        );
-        let transport;
-        if (config.transport === "stdio") {
-          if (!config.command) throw new Error(`stdio MCP '${slug}' missing command`);
-          transport = new StdioClientTransport({
-            command: config.command,
-            args: config.args ?? [],
-            env: { ...process.env, ...(config.env ?? {}) } as Record<string, string>,
-          });
-        } else {
-          if (!config.url) throw new Error(`MCP '${slug}' missing url`);
-          (globalThis as any).EventSource = EventSource as any;
-          transport = new SSEClientTransport(new URL(config.url));
-        }
-        await Promise.race([
-          client.connect(transport),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("connect timeout (10s)")), 10_000)
-          ),
-        ]);
-        const tools = (await client.listTools({})).tools ?? [];
-        this.external.set(slug, { client, tools });
-      } catch (error) {
-        console.error(
-          `[McpClient] Failed to connect external MCP '${slug}':`,
-          (error as Error).message
-        );
-        this.external.set(slug, {
-          client: new Client(
-            { name: "kletron-mcp-client", version: "1.0.0" },
-            { capabilities: { tools: {} } }
-          ),
-          tools: [],
-          error: (error as Error).message,
-        });
-      }
+      await this.connectExternalServer(slug, config);
     }
+  }
+
+  private async connectExternalServer(slug: string, config: ExternalMcpClientConfig): Promise<void> {
+    const disconnected = new Client(
+      { name: "kletron-mcp-client", version: "1.0.0" },
+      { capabilities: { tools: {} } }
+    );
+    try {
+      const client = new Client(
+        { name: "kletron-mcp-client", version: "1.0.0" },
+        { capabilities: { tools: {} } }
+      );
+      let transport;
+      if (config.transport === "stdio") {
+        if (!config.command) throw new Error(`stdio MCP '${slug}' missing command`);
+        transport = new StdioClientTransport({
+          command: config.command,
+          args: config.args ?? [],
+          env: { ...process.env, ...(config.env ?? {}) } as Record<string, string>,
+        });
+      } else {
+        if (!config.url) throw new Error(`MCP '${slug}' missing url`);
+        (globalThis as any).EventSource = EventSource as any;
+        transport = new SSEClientTransport(new URL(config.url));
+      }
+      await Promise.race([
+        client.connect(transport),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("connect timeout (10s)")), 10_000)
+        ),
+      ]);
+      const tools = ((await client.listTools({})).tools ?? []) as ExternalToolRecord[];
+      this.external.set(slug, { client, tools, config });
+    } catch (error) {
+      console.error(`[McpClient] Failed to connect external MCP '${slug}':`, (error as Error).message);
+      this.external.set(slug, {
+        client: disconnected,
+        tools: [],
+        error: (error as Error).message,
+        config,
+      });
+    }
+  }
+
+  /** Drop and reconnect one external server using the last successful sync config. */
+  private async reconnectExternalServer(slug: string): Promise<boolean> {
+    const ext = this.external.get(slug);
+    const config = ext?.config;
+    if (!config) {
+      console.warn(`[McpClient] Cannot reconnect external MCP '${slug}': no stored config`);
+      return false;
+    }
+    try {
+      await ext!.client.close();
+    } catch {
+      // ignore
+    }
+    this.external.delete(slug);
+    await this.connectExternalServer(slug, config);
+    return !this.external.get(slug)?.error;
   }
 
   /** Diagnostic summary of all connected servers. */

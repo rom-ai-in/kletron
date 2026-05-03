@@ -257,9 +257,10 @@ export function NodeInspector({
                 <textarea
                     value={node.react.systemPrompt}
                     onChange={(e) => onChange({ ...node, react: { ...node.react, systemPrompt: e.target.value } })}
-                    className="h-40 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary disabled:opacity-60"
+                    className="min-h-[220px] w-full resize-y rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm font-mono leading-relaxed text-text-secondary disabled:opacity-60"
                     placeholder="System prompt for this ReAct node"
                     disabled={node.kind === "router"}
+                    rows={12}
                 />
             </Panel>
 
@@ -273,9 +274,10 @@ export function NodeInspector({
                     onChange={(e) =>
                         onChange({ ...node, react: { ...node.react, userPromptTemplate: e.target.value } })
                     }
-                    className="h-40 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary disabled:opacity-60"
+                    className="min-h-[200px] w-full resize-y rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm font-mono leading-relaxed text-text-secondary disabled:opacity-60"
                     placeholder={"Example:\nAnalyze this state:\n{{state}}\nReturn strict JSON."}
                     disabled={node.kind === "router"}
+                    rows={10}
                 />
             </Panel>
 
@@ -331,8 +333,9 @@ export function NodeInspector({
                                     delegate: { ...(node.delegate ?? {}), summaryPrompt: e.target.value },
                                 })
                             }
-                            className="h-28 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary"
+                            className="min-h-[120px] w-full resize-y rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm font-mono leading-relaxed text-text-secondary"
                             placeholder="Summarize the delegate result. Return JSON compatible with the node output schema."
+                            rows={5}
                         />
                     </div>
                 </Panel>
@@ -356,7 +359,7 @@ export function NodeInspector({
                     placeholder="Search tools..."
                 />
 
-                <div className="max-h-80 overflow-y-auto scrollbar-elegant rounded-md border border-border-subtle bg-bg-surface">
+                <div className="max-h-[min(28rem,55vh)] overflow-y-auto scrollbar-elegant rounded-md border border-border-subtle bg-bg-surface">
                     <div className="divide-y divide-border-subtle">
                         {filteredTools.map((tool) => {
                             const checked = (node.react.toolNames ?? []).includes(tool.name);

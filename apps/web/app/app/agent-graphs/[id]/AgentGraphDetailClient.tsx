@@ -91,8 +91,8 @@ export default function AgentGraphDetailClient({ params }: { params: { id: strin
     if (!graph) return null;
 
     return (
-        <div className="flex h-full min-h-0 flex-col">
-            <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-3">
+        <div className="flex h-[calc(100dvh-3.5rem)] min-h-[28rem] flex-col overflow-hidden">
+            <div className="flex shrink-0 items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-3">
                 <div className="text-sm text-text-muted">Agent graph editor</div>
                 <div className="flex gap-2">
                     <Button variant="danger" onClick={() => void handleDelete()}>

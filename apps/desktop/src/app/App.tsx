@@ -1731,54 +1731,58 @@ export default function App() {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Conversation Messages */}
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-elegant">
-            <MessageList
-              events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
-              streaming={conversation.streaming}
-              streamingText={conversation.streamingText}
-              streamingReasoning={conversation.streamingReasoning}
-              activityEvents={conversation.conversationEvents}
-              pendingApprovalCount={conversation.sessionEdits.pendingEdits.length}
-              hasOlder={conversation.historyPage.hasOlder}
-              loadingOlder={conversation.loadingOlder}
-              onLoadOlder={() => void conversation.onLoadOlderMessages()}
-              virtualized
-              prefetchNearTop
-              onNearTop={() => void conversation.onLoadOlderMessages()}
-              messageActions={(event) => (
-                <MessageActions
-                  event={event}
-                  onStartEdit={() => editControl.startEditMessage(event.messageIndex!, event.content ?? "")}
+            {/* Same horizontal measure as web agent page (max-w-3xl + px-2 thread padding) */}
+            <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
+              <MessageList
+                events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
+                streaming={conversation.streaming}
+                streamingText={conversation.streamingText}
+                streamingReasoning={conversation.streamingReasoning}
+                activityEvents={conversation.conversationEvents}
+                pendingApprovalCount={conversation.sessionEdits.pendingEdits.length}
+                hasOlder={conversation.historyPage.hasOlder}
+                loadingOlder={conversation.loadingOlder}
+                onLoadOlder={() => void conversation.onLoadOlderMessages()}
+                virtualized
+                prefetchNearTop
+                onNearTop={() => void conversation.onLoadOlderMessages()}
+                className="flex-1 min-h-0 p-0 px-2 py-4"
+                messageActions={(event) => (
+                  <MessageActions
+                    event={event}
+                    onStartEdit={() => editControl.startEditMessage(event.messageIndex!, event.content ?? "")}
+                  />
+                )}
+              />
+              {inlineDiffs.length > 0 && (
+                <InlineDiffReview
+                  diffs={inlineDiffs}
+                  onAccept={(editId) => {
+                    void (async () => {
+                      await conversation.sessionEdits.approveEdit(editId);
+                      await diffs.applyAllDiff(editId);
+                    })();
+                  }}
+                  onReject={(editId) => {
+                    void conversation.sessionEdits.rejectEdit(editId);
+                    diffs.rejectAllDiff(editId);
+                  }}
+                  onOpenInIDE={(filePath) => {
+                    try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
+                  }}
+                  onRequestIteration={handleRequestIteration}
                 />
               )}
-            />
-            {inlineDiffs.length > 0 && (
-              <InlineDiffReview
-                diffs={inlineDiffs}
-                onAccept={(editId) => {
-                  void (async () => {
-                    await conversation.sessionEdits.approveEdit(editId);
-                    await diffs.applyAllDiff(editId);
-                  })();
-                }}
-                onReject={(editId) => {
-                  void conversation.sessionEdits.rejectEdit(editId);
-                  diffs.rejectAllDiff(editId);
-                }}
-                onOpenInIDE={(filePath) => {
-                  try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
-                }}
-                onRequestIteration={handleRequestIteration}
-              />
-            )}
-            {conversation.sendError && (
-              <div className="mx-4 my-2 rounded border border-status-error-border bg-status-error-bg px-3 py-2 text-[12px] text-status-error-text">
-                {conversation.sendError}
-              </div>
-            )}
+              {conversation.sendError && (
+                <div className="mx-2 my-2 rounded border border-status-error-border bg-status-error-bg px-3 py-2 text-[12px] text-status-error-text">
+                  {conversation.sendError}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Input Bar */}
-          <div className="relative z-10 shrink-0 app-region-no-drag">
+          <div className="relative z-10 mx-auto w-full max-w-3xl shrink-0 app-region-no-drag">
             {/* Slash command menu */}
             <SlashCommandMenu
               open={slashMenuOpen}
@@ -1815,6 +1819,7 @@ export default function App() {
               onDelete={handleQueueDelete}
               onForceSend={handleQueueForceSend}
               streaming={conversation.streaming}
+              className="mx-auto w-full max-w-3xl"
             />
             <InputBar
               value={conversation.input}
