@@ -11,6 +11,7 @@ import { ToolBatchAccordion } from './ToolBatchAccordion';
 import type { ToolPair } from './ToolBatchAccordion';
 import { ThoughtsPanel } from './ThoughtsPanel';
 import { AgentActivityStrip } from './AgentActivityStrip';
+import { AgentStatusShimmerLabel } from './AgentStatusShimmerLabel';
 import type { ActivitySourceEvent } from '../../lib/agentActivity';
 import type { ChatEvent, RenderItem } from '@kletron/shared/chatTypes';
 import { sanitizeAssistantStreamPreview } from '@kletron/shared/contentSanitizer';
@@ -99,6 +100,8 @@ export interface MessageListProps {
     activityEvents?: ActivitySourceEvent[];
     /** ISO time when the current run started (elapsed label on activity strip). */
     runStartedAt?: string | null;
+    /** Tool approvals waiting on the user — shown in-thread with wave emphasis (not in the strip). */
+    pendingApprovalCount?: number;
     /** Show tool calls in compact (single-line) mode */
     compactTools?: boolean;
     /** Additional className for the scroll container */
@@ -135,6 +138,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
     streamingReasoning,
     activityEvents,
     runStartedAt,
+    pendingApprovalCount = 0,
     compactTools = false,
     className,
     footer,
@@ -532,6 +536,19 @@ const MessageListInner: React.FC<MessageListProps> = ({
                 </div>
             )}
 
+            {pendingApprovalCount > 0 && (
+                <div className="mt-1.5 w-full max-w-[95%] flex flex-col items-start gap-0.5 pl-0.5">
+                    <AgentStatusShimmerLabel className="text-[12px]" textClassName="text-text-secondary font-medium">
+                        {pendingApprovalCount === 1
+                            ? 'Awaiting your approval…'
+                            : `Awaiting your approval (${pendingApprovalCount} actions)…`}
+                    </AgentStatusShimmerLabel>
+                    <p className="text-[11px] text-text-muted">
+                        Use Approve or Reject in the panel below.
+                    </p>
+                </div>
+            )}
+
             {footer}
 
             <div ref={bottomRef} />
@@ -549,6 +566,7 @@ export const MessageList = React.memo(
         prev.streamingReasoning === next.streamingReasoning &&
         prev.activityEvents === next.activityEvents &&
         prev.runStartedAt === next.runStartedAt &&
+        prev.pendingApprovalCount === next.pendingApprovalCount &&
         prev.compactTools === next.compactTools &&
         prev.className === next.className &&
         prev.footer === next.footer &&

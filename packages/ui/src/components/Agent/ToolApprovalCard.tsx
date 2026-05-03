@@ -8,12 +8,12 @@ import {
     Check,
     X,
     ChevronDown,
+    Loader2,
     Terminal as TerminalIcon,
     FileText,
     Pencil,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { AgentStatusShimmerLabel } from './AgentStatusShimmerLabel';
 import { ToolInvocationIcon } from './ToolInvocation';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -104,16 +104,12 @@ function PolicyDropdown({
                 )}
             >
                 {saving ? (
-                    <AgentStatusShimmerLabel className="text-[10px]" textClassName="text-text-muted font-medium">
-                        Saving…
-                    </AgentStatusShimmerLabel>
+                    <Loader2 className="w-3 h-3 animate-spin" />
                 ) : (
                     <CurrentIcon className={cn('w-3 h-3', current.color)} />
                 )}
-                {!saving ? <span className="hidden sm:inline">{current.label}</span> : null}
-                {!saving ? (
-                    <ChevronDown className={cn('w-2.5 h-2.5 transition-transform', open && 'rotate-180')} />
-                ) : null}
+                <span className="hidden sm:inline">{current.label}</span>
+                <ChevronDown className={cn('w-2.5 h-2.5 transition-transform', open && 'rotate-180')} />
             </button>
 
             {open && (
@@ -222,7 +218,11 @@ export function ToolApprovalCard({
                         'w-6 h-6 rounded-md flex items-center justify-center shrink-0',
                         isPending ? 'bg-status-warning-bg' : effectiveStatus === 'approved' ? 'bg-[var(--agent-success-bg)]' : 'bg-[var(--agent-error-bg)]',
                     )}>
-                        <ToolInvocationIcon name={toolName} className="w-3.5 h-3.5" />
+                        {isExecuting ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-status-warning-text" />
+                        ) : (
+                            <ToolInvocationIcon name={toolName} className="w-3.5 h-3.5" />
+                        )}
                     </div>
                     <div className="min-w-0">
                         <div className="text-[11px] font-semibold text-text-primary truncate">
@@ -268,12 +268,10 @@ export function ToolApprovalCard({
                             </button>
                         </>
                     ) : isExecuting ? (
-                        <AgentStatusShimmerLabel
-                            className="text-[10px]"
-                            textClassName="font-semibold text-status-warning-text"
-                        >
+                        <span className="flex items-center gap-1.5 text-[10px] font-medium text-status-warning-text">
+                            <Loader2 className="w-3 h-3 animate-spin" />
                             Executing…
-                        </AgentStatusShimmerLabel>
+                        </span>
                     ) : (
                         <span className={cn(
                             'text-[10px] font-bold uppercase tracking-wider',

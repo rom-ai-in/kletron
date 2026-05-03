@@ -1737,6 +1737,7 @@ export default function App() {
               streamingText={conversation.streamingText}
               streamingReasoning={conversation.streamingReasoning}
               activityEvents={conversation.conversationEvents}
+              pendingApprovalCount={conversation.sessionEdits.pendingEdits.length}
               hasOlder={conversation.historyPage.hasOlder}
               loadingOlder={conversation.loadingOlder}
               onLoadOlder={() => void conversation.onLoadOlderMessages()}

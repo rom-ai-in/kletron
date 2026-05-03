@@ -133,6 +133,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
           streamingText={conversation.streamingText}
           streamingReasoning={conversation.streamingReasoning}
           activityEvents={conversation.conversationEvents}
+          pendingApprovalCount={conversation.sessionEdits.pendingEdits.length}
           messageActions={(event) => (
             <MessageActions
               event={event}

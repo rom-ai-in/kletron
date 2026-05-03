@@ -38,6 +38,7 @@ import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadA
 import { AgentStatusShimmerLabel } from "@kletron/ui/components/Agent/AgentStatusShimmerLabel";
 import { Modal, Button } from "@kletron/ui/components/design-system";
 import {
+  Loader2,
   ClipboardCopy,
   CheckCircle2,
   XCircle,
@@ -1530,48 +1531,25 @@ export default function AgentPage() {
       {pendingEdits.length > 0 ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5 min-w-0">
-            <h3 className="min-w-0 text-[11px] font-bold uppercase tracking-wider">
-              <AgentStatusShimmerLabel
-                className="uppercase tracking-wider"
-                textClassName="text-text-muted font-bold"
-              >
-                Pending actions ({pendingEdits.length})
-              </AgentStatusShimmerLabel>
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-muted min-w-0">
+              Pending actions ({pendingEdits.length})
             </h3>
             <div className="flex flex-shrink-0 gap-1.5">
               <button
                 type="button"
                 onClick={() => void approveAll()}
                 disabled={approvingAll || rejectingAll}
-                className="rounded border border-status-success-border bg-status-success-bg px-2 py-1 text-[10px] hover:opacity-80 disabled:opacity-50"
+                className="px-2 py-1 text-[10px] rounded border border-status-success-border bg-status-success-bg text-status-success-text hover:opacity-80 disabled:opacity-50"
               >
-                {approvingAll ? (
-                  <AgentStatusShimmerLabel
-                    className="text-[10px]"
-                    textClassName="text-status-success-text font-semibold"
-                  >
-                    Approving…
-                  </AgentStatusShimmerLabel>
-                ) : (
-                  <span className="text-status-success-text">Approve All</span>
-                )}
+                {approvingAll ? "Approving..." : "Approve All"}
               </button>
               <button
                 type="button"
                 onClick={() => void rejectAll()}
                 disabled={approvingAll || rejectingAll}
-                className="rounded border border-status-error-border bg-status-error-bg px-2 py-1 text-[10px] hover:opacity-80 disabled:opacity-50"
+                className="px-2 py-1 text-[10px] rounded border border-status-error-border bg-status-error-bg text-status-error-text hover:opacity-80 disabled:opacity-50"
               >
-                {rejectingAll ? (
-                  <AgentStatusShimmerLabel
-                    className="text-[10px]"
-                    textClassName="text-status-error-text font-semibold"
-                  >
-                    Rejecting…
-                  </AgentStatusShimmerLabel>
-                ) : (
-                  <span className="text-status-error-text">Reject All</span>
-                )}
+                {rejectingAll ? "Rejecting..." : "Reject All"}
               </button>
             </div>
           </div>
@@ -1607,12 +1585,10 @@ export default function AgentPage() {
                       className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] border border-status-success-border bg-status-success-bg text-status-success-text hover:opacity-80 disabled:opacity-50"
                     >
                       {approvingThis ? (
-                        <AgentStatusShimmerLabel
-                          className="text-[9px]"
-                          textClassName="text-status-success-text font-semibold"
-                        >
-                          Approving…
-                        </AgentStatusShimmerLabel>
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" aria-hidden />
+                          <span>Approving…</span>
+                        </>
                       ) : (
                         "Approve"
                       )}
@@ -1624,12 +1600,10 @@ export default function AgentPage() {
                       className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] border border-status-error-border bg-status-error-bg text-status-error-text hover:opacity-80 disabled:opacity-50"
                     >
                       {rejectingThis ? (
-                        <AgentStatusShimmerLabel
-                          className="text-[9px]"
-                          textClassName="text-status-error-text font-semibold"
-                        >
-                          Rejecting…
-                        </AgentStatusShimmerLabel>
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" aria-hidden />
+                          <span>Rejecting…</span>
+                        </>
                       ) : (
                         "Reject"
                       )}
@@ -1837,6 +1811,7 @@ export default function AgentPage() {
                 streamingReasoning={streamingReasoning}
                 activityEvents={activityEventsForStrip}
                 runStartedAt={runStartedAtForUi}
+                pendingApprovalCount={pendingEdits.length}
                 maxVisibleEvents={320}
                 hasOlder={historyPage.hasOlder}
                 loadingOlder={loadingOlder}

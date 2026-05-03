@@ -1,7 +1,6 @@
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 import type { SessionEditFlushNotice, SessionPendingEdit } from "../../hooks/useSessionEdits";
-import { AgentStatusShimmerLabel } from "./AgentStatusShimmerLabel";
 
 export type PendingSessionEditsStripProps = {
     pendingEdits: SessionPendingEdit[];
@@ -94,48 +93,25 @@ export function PendingSessionEditsStrip({
                 {pendingEdits.length > 0 ? (
                     <>
                         <div className="mb-1.5 flex min-w-0 flex-wrap items-center justify-between gap-2">
-                            <h3 className="min-w-0 text-[11px] font-bold uppercase tracking-wider">
-                                <AgentStatusShimmerLabel
-                                    className="uppercase tracking-wider"
-                                    textClassName="text-text-muted font-bold"
-                                >
-                                    Pending actions ({pendingEdits.length})
-                                </AgentStatusShimmerLabel>
+                            <h3 className="min-w-0 text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                                Pending actions ({pendingEdits.length})
                             </h3>
                             <div className="flex flex-shrink-0 gap-1.5">
                                 <button
                                     type="button"
                                     onClick={() => void approveAll()}
                                     disabled={approvingAll || rejectingAll}
-                                    className="rounded border border-status-success-border bg-status-success-bg px-2 py-1 text-[10px] hover:opacity-80 disabled:opacity-50"
+                                    className="rounded border border-status-success-border bg-status-success-bg px-2 py-1 text-[10px] text-status-success-text hover:opacity-80 disabled:opacity-50"
                                 >
-                                    {approvingAll ? (
-                                        <AgentStatusShimmerLabel
-                                            className="text-[10px]"
-                                            textClassName="text-status-success-text font-semibold"
-                                        >
-                                            Approving…
-                                        </AgentStatusShimmerLabel>
-                                    ) : (
-                                        <span className="text-status-success-text">Approve All</span>
-                                    )}
+                                    {approvingAll ? "Approving..." : "Approve All"}
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => void rejectAll()}
                                     disabled={approvingAll || rejectingAll}
-                                    className="rounded border border-status-error-border bg-status-error-bg px-2 py-1 text-[10px] hover:opacity-80 disabled:opacity-50"
+                                    className="rounded border border-status-error-border bg-status-error-bg px-2 py-1 text-[10px] text-status-error-text hover:opacity-80 disabled:opacity-50"
                                 >
-                                    {rejectingAll ? (
-                                        <AgentStatusShimmerLabel
-                                            className="text-[10px]"
-                                            textClassName="text-status-error-text font-semibold"
-                                        >
-                                            Rejecting…
-                                        </AgentStatusShimmerLabel>
-                                    ) : (
-                                        <span className="text-status-error-text">Reject All</span>
-                                    )}
+                                    {rejectingAll ? "Rejecting..." : "Reject All"}
                                 </button>
                             </div>
                         </div>
@@ -166,12 +142,10 @@ export function PendingSessionEditsStrip({
                                                 className="inline-flex items-center gap-0.5 rounded border border-status-success-border bg-status-success-bg px-1.5 py-0.5 text-[9px] text-status-success-text hover:opacity-80 disabled:opacity-50"
                                             >
                                                 {approvingThis ? (
-                                                    <AgentStatusShimmerLabel
-                                                        className="text-[9px]"
-                                                        textClassName="text-status-success-text font-semibold"
-                                                    >
-                                                        Approving…
-                                                    </AgentStatusShimmerLabel>
+                                                    <>
+                                                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                                                        <span>Approving…</span>
+                                                    </>
                                                 ) : (
                                                     "Approve"
                                                 )}
@@ -183,12 +157,10 @@ export function PendingSessionEditsStrip({
                                                 className="inline-flex items-center gap-0.5 rounded border border-status-error-border bg-status-error-bg px-1.5 py-0.5 text-[9px] text-status-error-text hover:opacity-80 disabled:opacity-50"
                                             >
                                                 {rejectingThis ? (
-                                                    <AgentStatusShimmerLabel
-                                                        className="text-[9px]"
-                                                        textClassName="text-status-error-text font-semibold"
-                                                    >
-                                                        Rejecting…
-                                                    </AgentStatusShimmerLabel>
+                                                    <>
+                                                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                                                        <span>Rejecting…</span>
+                                                    </>
                                                 ) : (
                                                     "Reject"
                                                 )}
