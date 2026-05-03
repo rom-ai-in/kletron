@@ -12,6 +12,8 @@ import { getConfig } from "@kletron/server/config";
 import {
     namespacedExternalToolName,
     parseNamespacedToolName,
+    resolveCanonicalMcpToolName,
+    resolveExternalServerSlugKey,
     type ExternalMcpClientConfig,
 } from "./multiClient";
 
@@ -129,10 +131,11 @@ export class McpClient {
     const { serverSlug, toolName: parsedTool } = parseNamespacedToolName(name);
     let actualName = name;
     if (serverSlug) {
-      const ext = this.external.get(serverSlug);
+      const slugKey = resolveExternalServerSlugKey(this.external.keys(), serverSlug);
+      const ext = slugKey ? this.external.get(slugKey) : undefined;
       if (ext && !ext.error) {
         targetClient = ext.client;
-        actualName = parsedTool;
+        actualName = resolveCanonicalMcpToolName(ext.tools, parsedTool);
       }
     }
 

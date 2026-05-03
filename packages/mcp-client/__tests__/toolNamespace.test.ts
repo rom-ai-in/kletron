@@ -3,6 +3,8 @@ import {
     MCP_TOOL_NAMESPACE_SEP,
     namespacedExternalToolName,
     parseNamespacedToolName,
+    resolveCanonicalMcpToolName,
+    resolveExternalServerSlugKey,
 } from "../src/multiClient";
 
 describe("MCP multi-server tool namespacing", () => {
@@ -31,5 +33,18 @@ describe("MCP multi-server tool namespacing", () => {
             serverSlug: null,
             toolName: "__weird",
         });
+    });
+
+    it("resolveCanonicalMcpToolName matches server casing", () => {
+        const tools = [{ name: "domain-search" }, { name: "email-finder" }];
+        expect(resolveCanonicalMcpToolName(tools, "Domain-Search")).toBe("domain-search");
+        expect(resolveCanonicalMcpToolName(tools, "domain-search")).toBe("domain-search");
+    });
+
+    it("resolveExternalServerSlugKey matches slug casing", () => {
+        const keys = ["hunter", "Other"];
+        expect(resolveExternalServerSlugKey(keys, "Hunter")).toBe("hunter");
+        expect(resolveExternalServerSlugKey(keys, "hunter")).toBe("hunter");
+        expect(resolveExternalServerSlugKey(keys, "missing")).toBe(null);
     });
 });

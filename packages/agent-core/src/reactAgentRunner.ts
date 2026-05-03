@@ -2,7 +2,7 @@ import { BaseMessage, SystemMessage } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
 
-import { getChatModel, type LlmSelection } from "@kletron/server/llm";
+import { getChatModel, resolveResolvedLlmInfo, type LlmSelection } from "@kletron/server/llm";
 import { config } from "@kletron/server/config";
 import type { TokenUsage } from "@kletron/server/services/tokenUsageTypes";
 import type { AgentWorkflowAbortReason } from "@kletron/shared/types";
@@ -116,6 +116,7 @@ function extractTokenUsage(message: BaseMessage): TokenUsage | null {
 export async function streamReactAgentMessages(
   opts: StreamReactAgentOptions
 ): Promise<StreamReactAgentResult> {
+  const resolvedLlm = await resolveResolvedLlmInfo(opts.llmSelection);
   const model = await getChatModel(opts.llmSelection);
   const modelName = (model as any).modelName ?? (model as any).model ?? "unknown";
 
@@ -150,7 +151,20 @@ export async function streamReactAgentMessages(
   // With ["values", "messages"], the stream yields [mode, data] tuples:
   //   ["values", { messages: BaseMessage[] }]   — complete state snapshots
   //   ["messages", [AIMessageChunk, metadata]]  — token-level LLM chunks
-  const useMultiMode = !!(opts.onTextDelta || opts.onReasoningDelta);
+  //
+  // LM Studio (and some other local OpenAI-compat servers) often stall indefinitely
+  // with LangGraph's dual stream mode when tools are bound — the async iterator never
+  // yields. Values-only streaming still emits full assistant messages via `onMessage`.
+  const disableDualStreamForProvider = resolvedLlm.provider === "lmstudio";
+  const wantTokenStream = !!(opts.onTextDelta || opts.onReasoningDelta);
+  const useMultiMode = !disableDualStreamForProvider && wantTokenStream;
+  if (disableDualStreamForProvider && wantTokenStream) {
+    console.warn(
+      `[ReactAgentRunner] Using values-only stream for provider=${resolvedLlm.provider} ` +
+        `(dual ["values","messages"] mode can hang with LM Studio + tools). ` +
+        "Assistant output will arrive in larger chunks, not token-by-token.",
+    );
+  }
   const streamMode = useMultiMode ? (["values", "messages"] as any) : "values";
 
   // ── Build stream config ────────────────────────────────────────────

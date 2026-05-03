@@ -61,6 +61,40 @@ export function parseNamespacedToolName(fullName: string): {
     };
 }
 
+/**
+ * Map an LLM-emitted tool id to the server's registered name (MCP tool names are
+ * case-sensitive on the wire; models often change casing).
+ */
+export function resolveCanonicalMcpToolName(
+    tools: Array<{ name: string }>,
+    requested: string
+): string {
+    const r = String(requested ?? "").trim();
+    if (!r) return r;
+    for (const t of tools) {
+        if (t.name === r) return t.name;
+    }
+    const rl = r.toLowerCase();
+    for (const t of tools) {
+        if (t.name.toLowerCase() === rl) return t.name;
+    }
+    return r;
+}
+
+/** Resolve configured server slug when the model uses different casing. */
+export function resolveExternalServerSlugKey(externalSlugs: Iterable<string>, requestedSlug: string): string | null {
+    const req = String(requestedSlug ?? "").trim();
+    if (!req) return null;
+    for (const k of externalSlugs) {
+        if (k === req) return k;
+    }
+    const rl = req.toLowerCase();
+    for (const k of externalSlugs) {
+        if (k.toLowerCase() === rl) return k;
+    }
+    return null;
+}
+
 function buildClient() {
     return new Client(
         { name: "kletron-mcp-client", version: "1.0.0" },
@@ -207,10 +241,11 @@ export class MultiMcpClient {
         if (sepIndex > 0) {
             const slug = name.slice(0, sepIndex);
             const tail = name.slice(sepIndex + MCP_TOOL_NAMESPACE_SEP.length);
-            const managed = this.external.get(slug);
+            const slugKey = resolveExternalServerSlugKey(this.external.keys(), slug);
+            const managed = slugKey ? this.external.get(slugKey) : undefined;
             if (managed && !managed.error) {
                 targetClient = managed.client;
-                actualName = tail;
+                actualName = resolveCanonicalMcpToolName(managed.tools, tail);
             }
         }
         if (!targetClient) {

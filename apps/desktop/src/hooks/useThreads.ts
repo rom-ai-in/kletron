@@ -6,6 +6,21 @@ import {
   pickConversationIdAfterLoad,
 } from "../utils/threadListMerge";
 
+/** GET /api/sessions returns startedAt/endedAt; sidebar recency uses updatedAt. */
+type SessionListRow = ConversationHistoryItem & {
+  archived?: boolean;
+  startedAt?: string;
+  endedAt?: string | null;
+};
+
+function normalizeSessionListRow(raw: SessionListRow): ConversationHistoryItem & { archived?: boolean } {
+  const updatedAt =
+    raw.updatedAt ??
+    (typeof raw.endedAt === "string" && raw.endedAt ? raw.endedAt : undefined) ??
+    raw.startedAt;
+  return { ...raw, updatedAt };
+}
+
 export function useThreads(
   backendUrlTrimmed: string,
   backendReady: boolean,
@@ -71,7 +86,9 @@ export function useThreads(
           throw new Error(text || `Failed to load threads (${res.status})`);
         }
         const data = await res.json();
-        const list = Array.isArray(data) ? (data as (ConversationHistoryItem & { archived?: boolean })[]) : [];
+        const list = Array.isArray(data)
+          ? (data as SessionListRow[]).map(normalizeSessionListRow)
+          : [];
         const active = list.filter((item) => !isThreadArchived(item));
 
         const skipAuto = skipAutoSelectAfterModeChangeRef.current;
@@ -238,7 +255,9 @@ export function useThreads(
       const res = await fetch(sessionsListUrl(true), { headers });
       if (!res.ok) return;
       const data = await res.json();
-      const list = Array.isArray(data) ? (data as (ConversationHistoryItem & { archived?: boolean })[]) : [];
+      const list = Array.isArray(data)
+        ? (data as SessionListRow[]).map(normalizeSessionListRow)
+        : [];
       setArchivedThreads(list.filter((item) => isThreadArchived(item)));
     } catch {
       setArchivedThreads([]);
@@ -267,7 +286,9 @@ export function useThreads(
       const res = await fetch(sessionsListUrl(false), { headers });
       if (!res.ok) return;
       const data = await res.json();
-      const list = Array.isArray(data) ? (data as (ConversationHistoryItem & { archived?: boolean })[]) : [];
+      const list = Array.isArray(data)
+        ? (data as SessionListRow[]).map(normalizeSessionListRow)
+        : [];
       const active = list.filter((item) => !isThreadArchived(item));
       const preferredId = conversationIdRef.current ?? undefined;
       setThreads((prev) => {
