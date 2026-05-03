@@ -17,7 +17,7 @@ export interface AgentActivityStripProps {
 }
 
 /**
- * Single-line status while the agent runs (shimmer sweep over readable label).
+ * Single-line status while the agent runs (glyph-clipped shimmer label).
  * Hidden while answer tokens stream to avoid duplicating the markdown preview.
  */
 export const AgentActivityStrip: React.FC<AgentActivityStripProps> = ({

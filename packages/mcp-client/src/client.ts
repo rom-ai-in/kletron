@@ -29,7 +29,33 @@ type ExternalServerConn = {
   error?: string;
   /** Last sync config — used to reconnect after tool-not-found or stale sessions. */
   config?: ExternalMcpClientConfig;
+  /** When tools were last fetched via listTools (used to avoid listTools on every agent run). */
+  lastToolsListAt?: number;
 };
+
+/** Stable fingerprint of connector settings — if this changes, we must refresh tools / reconnect. */
+function externalMcpConfigFingerprint(c: ExternalMcpClientConfig): string {
+  return JSON.stringify({
+    t: c.transport,
+    cmd: c.command,
+    args: c.args,
+    url: c.url,
+    env: c.env,
+    headers: c.headers,
+  });
+}
+
+/**
+ * Min interval between tools/list refreshes for a healthy external MCP connection.
+ * Set MCP_EXTERNAL_TOOLS_LIST_TTL_MS=0 to refresh on every sync (legacy behavior).
+ */
+function externalMcpToolsListTtlMs(): number {
+  const raw = process.env.MCP_EXTERNAL_TOOLS_LIST_TTL_MS;
+  if (raw === "0") return 0;
+  const n = raw ? Number(raw) : NaN;
+  if (Number.isFinite(n) && n >= 0) return n;
+  return 300_000;
+}
 
 /** JSON-RPC MCP server error -32603 + common SDK phrasing for unknown tools. */
 function isRecoverableExternalToolNotFound(message: string): boolean {
@@ -163,7 +189,8 @@ export class McpClient {
     // External MCP server tools are namespaced as `<slug>__<toolName>`.
     let targetClient: Client = this.client;
     const { serverSlug, toolName: parsedTool } = parseNamespacedToolName(name);
-    let actualName = name;
+    // Legacy id: LangChain no longer exposes find_references; bundled server maps it too.
+    let actualName = !serverSlug && name === "find_references" ? "references" : name;
     let slugKeyForReconnect: string | null = null;
     let workspaceIdForReconnect: string | null = null;
     if (serverSlug) {
@@ -251,9 +278,10 @@ export class McpClient {
    * present in `configs` that aren't connected get connected; servers
    * connected but missing from `configs` get disconnected.
    *
-   * Healthy connections are kept open but **`tools/list` is refreshed every
-   * sync** so renamed tools on the MCP server are picked up without a process
-   * restart. If `listTools` fails, the client reconnects once from stored config.
+   * Healthy connections are kept open. **`tools/list` is refreshed** when the
+   * connector config changes, on reconnect, or when the TTL expires (see
+   * `MCP_EXTERNAL_TOOLS_LIST_TTL_MS`, default 5 minutes) so agent runs are not
+   * blocked on every send. If `listTools` fails, the client reconnects once from stored config.
    */
   async syncExternalServers(workspaceId: string, configs: ExternalMcpClientConfig[]) {
     const ws = workspaceId.trim();
@@ -273,12 +301,32 @@ export class McpClient {
         external.delete(slug);
       }
     }
+    const toolsListTtl = externalMcpToolsListTtlMs();
     for (const [slug, config] of desired.entries()) {
       const existing = external.get(slug);
       if (existing && !existing.error) {
+        const now = Date.now();
+        const configSame =
+          existing.config !== undefined &&
+          externalMcpConfigFingerprint(existing.config) === externalMcpConfigFingerprint(config);
+        const cacheFresh =
+          toolsListTtl > 0 &&
+          configSame &&
+          existing.tools.length > 0 &&
+          typeof existing.lastToolsListAt === "number" &&
+          now - existing.lastToolsListAt < toolsListTtl;
+        if (cacheFresh) {
+          external.set(slug, { ...existing, config });
+          continue;
+        }
         try {
           const tools = ((await existing.client.listTools({})).tools ?? []) as ExternalToolRecord[];
-          external.set(slug, { client: existing.client, tools, config });
+          external.set(slug, {
+            client: existing.client,
+            tools,
+            config,
+            lastToolsListAt: Date.now(),
+          });
           continue;
         } catch (err) {
           console.warn(
@@ -343,7 +391,7 @@ export class McpClient {
       ]);
       const tools = ((await client.listTools({})).tools ?? []) as ExternalToolRecord[];
       const external = this.getExternalMap(workspaceId);
-      external.set(slug, { client, tools, config });
+      external.set(slug, { client, tools, config, lastToolsListAt: Date.now() });
     } catch (error) {
       console.error(
         `[McpClient] Failed to connect external MCP '${slug}' (workspace ${workspaceId}):`,

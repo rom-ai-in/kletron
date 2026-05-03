@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { AgentStatusShimmerLabel } from './AgentStatusShimmerLabel';
 
 export interface ThinkingBubbleProps {
     /** Whether the AI is currently thinking */
@@ -48,10 +49,12 @@ export function ThinkingBubble({
                     </span>
                 )}
 
-                {/* Summary text — simple muted label */}
-                <span className={`text-[15px] font-medium text-text-muted ${isActive ? 'animate-pulse' : 'opacity-60'}`}>
-                    {summary}
-                </span>
+                {/* Summary — same glyph shimmer as MessageList / AgentActivityStrip when active */}
+                {isActive ? (
+                    <AgentStatusShimmerLabel className="text-[15px]">{summary}</AgentStatusShimmerLabel>
+                ) : (
+                    <span className="text-[15px] font-medium text-text-muted opacity-60">{summary}</span>
+                )}
 
                 {/* Expand chevron if content exists */}
                 {content && (

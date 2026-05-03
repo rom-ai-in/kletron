@@ -157,6 +157,9 @@ export type { ActivityBarItem, ActivityBarProps } from './ui/ActivityBar';
 export { ThinkingBubble, ThinkingList } from './Agent/ThinkingBubble';
 export type { ThinkingBubbleProps, ThoughtItem, ThinkingListProps } from './Agent/ThinkingBubble';
 
+export { AgentStatusShimmerLabel } from './Agent/AgentStatusShimmerLabel';
+export type { AgentStatusShimmerLabelProps } from './Agent/AgentStatusShimmerLabel';
+
 export { ToolLog } from './Agent/ToolLog';
 export type { ToolCall, ToolStatus, ToolLogProps } from './Agent/ToolLog';
 

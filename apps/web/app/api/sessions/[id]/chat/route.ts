@@ -5,6 +5,8 @@ import { agentGraphRunService } from "@kletron/server/services/agentGraphRunServ
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { normalizeToWorkModeId } from "@kletron/shared/workMode";
 import { categoryService } from "@kletron/server/services/categoryService";
+import { agentGraphExecutor } from "@kletron/server/services/agentGraphExecutor";
+import type { AgentStreamKpiV1 } from "@kletron/shared/chatTypes";
 
 const textEncoder = new TextEncoder();
 
@@ -13,6 +15,7 @@ type StreamChunk =
   | { type: "update"; payload: AgentWorkflowUpdate }
   | { type: "text_delta"; payload: { content: string } }
   | { type: "reasoning_delta"; payload: { content: string } }
+  | { type: "stream_metrics"; payload: AgentStreamKpiV1 }
   | { type: "final"; payload: AgentWorkflowResult }
   | { type: "error"; payload: { message: string } };
 
@@ -139,7 +142,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
       console.log(`[sessions/chat] Stream started for run ${params.id}`);
 
       try {
-        const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
         console.log(`[sessions/chat] Calling continueRun for ${params.id}...`);
         const result = await agentGraphExecutor.continueRun(params.id, message, {
           onUpdate: async (update) => {
@@ -150,6 +152,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
           },
           onReasoningDelta: (content) => {
             sendChunk({ type: "reasoning_delta", payload: { content } });
+          },
+          onLlmStreamKpi: (kpi) => {
+            sendChunk({ type: "stream_metrics", payload: kpi });
           },
           ...(llmSelection ? { llmSelectionOverride: llmSelection } : {}),
         });

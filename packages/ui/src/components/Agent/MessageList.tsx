@@ -568,7 +568,11 @@ const MessageListInner: React.FC<MessageListProps> = ({
 
             {pendingApprovalCount > 0 && (
                 <div className="mt-1.5 w-full max-w-[95%] flex flex-col items-start gap-0.5 pl-0.5">
-                    <AgentStatusShimmerLabel className="text-[12px]" textClassName="text-text-secondary font-medium">
+                    <AgentStatusShimmerLabel
+                        className="text-[12px]"
+                        tone="secondary"
+                        textClassName="font-medium"
+                    >
                         {pendingApprovalCount === 1
                             ? 'Awaiting your approval…'
                             : `Awaiting your approval (${pendingApprovalCount} actions)…`}

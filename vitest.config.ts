@@ -24,6 +24,14 @@ export default defineConfig({
             '**/dist/**',
             'apps/mcp-server/tests/tools.test.js',
             'apps/mcp-server/tests/mcpRegistration.test.js',
+            // Run with `npx tsx --test <file>` — Vitest does not collect `node:test` suites.
+            'packages/server/__tests__/agentGraphExecutorGuards.test.ts',
+            'packages/server/__tests__/replayImpact.test.ts',
+            'packages/server/__tests__/channelStoreService.test.ts',
+            'packages/server/__tests__/executeBash.integration.test.ts',
+            'packages/server/__tests__/channelSlashParse.test.ts',
+            'packages/server/__tests__/checkpointService.test.ts',
+            'packages/server/__tests__/channelSecretsCrypto.test.ts',
         ],
         coverage: {
             provider: 'v8',

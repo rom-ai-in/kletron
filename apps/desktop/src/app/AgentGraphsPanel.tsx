@@ -4,6 +4,7 @@ import { AgentGraphCard } from "@kletron/ui/components/agentGraphs/AgentGraphCar
 import { AgentGraphEditor } from "@kletron/ui/components/agentGraphs/AgentGraphEditor";
 import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
 import { Button } from "@kletron/ui/components/design-system";
+import { AgentStatusShimmerLabel } from "@kletron/ui/components/Agent/AgentStatusShimmerLabel";
 import type { AgentGraphSummary, AgentGraphRunSummary } from "../types";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 
@@ -156,7 +157,11 @@ export function AgentGraphsPanel({
           </Button>
         )}
       </div>
-      {graphsLoading && <div className="text-xs text-text-muted animate-pulse">Loading graphs…</div>}
+      {graphsLoading && (
+        <div className="text-xs text-text-muted">
+          <AgentStatusShimmerLabel className="text-xs">Loading graphs…</AgentStatusShimmerLabel>
+        </div>
+      )}
       {!graphsLoading && graphs.length === 0 && (
         <div className="text-sm text-text-muted rounded-md border border-border-subtle px-4 py-6 text-center">
           No agent graphs found for this workspace.

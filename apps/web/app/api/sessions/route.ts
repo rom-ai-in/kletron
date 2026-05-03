@@ -13,6 +13,8 @@ import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletro
 import { heuristicTitle, sanitizeTitle, stripSystemPrefix, stripThoughtContent } from "@kletron/server/services/titleSanitizer";
 import { normalizeToWorkModeId } from "@kletron/shared/workMode";
 import { categoryService } from "@kletron/server/services/categoryService";
+import { agentGraphExecutor } from "@kletron/server/services/agentGraphExecutor";
+import type { AgentStreamKpiV1 } from "@kletron/shared/chatTypes";
 
 const textEncoder = new TextEncoder();
 
@@ -21,6 +23,7 @@ type StreamChunk =
   | { type: "update"; payload: AgentWorkflowUpdate }
   | { type: "text_delta"; payload: { content: string } }
   | { type: "reasoning_delta"; payload: { content: string } }
+  | { type: "stream_metrics"; payload: AgentStreamKpiV1 }
   | { type: "final"; payload: AgentWorkflowResult }
   | { type: "error"; payload: { message: string } };
 
@@ -64,19 +67,15 @@ export async function POST(request: Request) {
     });
   }
 
-  // Resolve Mongo graph document (client may send legacy slugs: universal-v1, audit, simple_react, …)
-  const graph = await agentGraphService.resolveGraphForStage(graphId);
-  if (!graph?._id) {
-    return new Response(JSON.stringify({ error: "No agent graphs available. Please seed graphs first." }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-  const resolvedGraphId = String(graph._id);
-
-  let workspace;
+  let graph: Awaited<ReturnType<typeof agentGraphService.resolveGraphForStage>>;
+  let workspace: Awaited<ReturnType<typeof resolveWorkspaceFromRequestStrict>>;
+  let effectiveApproval: Awaited<ReturnType<typeof resolveEffectiveToolApprovalConfigForUser>>;
   try {
-    workspace = await resolveWorkspaceFromRequestStrict(request, auth.userId, payload as any);
+    [graph, workspace, effectiveApproval] = await Promise.all([
+      agentGraphService.resolveGraphForStage(graphId),
+      resolveWorkspaceFromRequestStrict(request, auth.userId, payload as any),
+      resolveEffectiveToolApprovalConfigForUser(auth.userId),
+    ]);
   } catch (error) {
     const workspaceError = workspaceErrorToHttp(error);
     if (workspaceError) {
@@ -87,14 +86,21 @@ export async function POST(request: Request) {
     }
     throw error;
   }
+
+  if (!graph?._id) {
+    return new Response(JSON.stringify({ error: "No agent graphs available. Please seed graphs first." }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const resolvedGraphId = String(graph._id);
+
   if (!workspace || !workspace._id) {
     return new Response(JSON.stringify({ error: "Workspace not configured" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
   }
-
-  const effectiveApproval = await resolveEffectiveToolApprovalConfigForUser(auth.userId);
   const resolvedThreadMode = parseThreadApprovalMode(
     payload.threadApprovalMode !== undefined && payload.threadApprovalMode !== null
       ? payload.threadApprovalMode
@@ -131,17 +137,19 @@ export async function POST(request: Request) {
   console.log(
     `[sessions/create] Creating run for graph "${graph.name}" (requested=${graphId}, resolved=${resolvedGraphId}), workspace=${workspace._id}`,
   );
-  const runId = await agentGraphRunService.createRun(resolvedGraphId, workspace._id.toString(), "agent", {
-    threadApprovalMode: resolvedThreadMode,
-    workMode,
-    createdByUserId: auth.userId,
-  });
+  const [runId, pre] = await Promise.all([
+    agentGraphRunService.createRun(resolvedGraphId, workspace._id.toString(), "agent", {
+      threadApprovalMode: resolvedThreadMode,
+      workMode,
+      createdByUserId: auth.userId,
+    }),
+    preflightMissionForNewRun(message, workspace._id.toString()),
+  ]);
   console.log(`[sessions/create] ✓ Run created: ${runId}`);
   const initialNodeStatuses: Record<string, any> = {};
   for (const node of graph.nodes) {
     initialNodeStatuses[node.id] = "PENDING";
   }
-  const pre = await preflightMissionForNewRun(message, workspace._id.toString());
   const initialState = {
     ...buildInitialState(graph as any, pre.mission),
     mission: pre.mission,
@@ -183,7 +191,6 @@ export async function POST(request: Request) {
       console.log(`[sessions/create] Stream started for run ${runId}`);
 
       try {
-        const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
         console.log(`[sessions/create] Calling executeRunStreaming for ${runId}...`);
         const result = await agentGraphExecutor.executeRunStreaming(runId, {
           onUpdate: async (update) => {
@@ -194,6 +201,9 @@ export async function POST(request: Request) {
           },
           onReasoningDelta: (content) => {
             sendChunk({ type: "reasoning_delta", payload: { content } });
+          },
+          onLlmStreamKpi: (kpi) => {
+            sendChunk({ type: "stream_metrics", payload: kpi });
           },
           ...(llmSelection ? { llmSelectionOverride: llmSelection } : {}),
         });

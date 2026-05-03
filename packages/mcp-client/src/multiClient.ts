@@ -267,6 +267,10 @@ export class MultiMcpClient {
             targetClient = this.bundled.client;
         }
 
+        if (sepIndex <= 0 && actualName === "find_references") {
+            actualName = "references";
+        }
+
         const response = (await targetClient.callTool(
             { name: actualName, arguments: args },
             CallToolResultSchema

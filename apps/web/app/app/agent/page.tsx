@@ -40,6 +40,7 @@ import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
 import { AgentStatusShimmerLabel } from "@kletron/ui/components/Agent/AgentStatusShimmerLabel";
+import { ConversationThreadSkeleton } from "@kletron/ui/components/Agent/ConversationThreadSkeleton";
 import { Modal, Button } from "@kletron/ui/components/design-system";
 import {
   ClipboardCopy,
@@ -1267,6 +1268,22 @@ export default function AgentPage() {
 
   const agentBusy = sending || isServerSideRunActive;
 
+  /** Thread column placeholder: workspace switch, hydrate in flight, or stale detail vs selected id — not while a live stream/run should stay visible. */
+  const showConversationSkeleton = useMemo(() => {
+    if (workspaceSwitching) return true;
+    if (!activeSessionId || agentBusy) return false;
+    if (sessionDetailLoading) return true;
+    if (sessionDetail && sessionDetail.id !== activeSessionId) return true;
+    if (!sessionDetail) return true;
+    return false;
+  }, [
+    workspaceSwitching,
+    activeSessionId,
+    agentBusy,
+    sessionDetailLoading,
+    sessionDetail,
+  ]);
+
   /**
    * Activity strip must follow the same timeline as the visible thread (`messages`).
    * Raw `eventStream` can still contain the *previous* turn until the first `update`
@@ -1690,38 +1707,9 @@ export default function AgentPage() {
       >
         {activeGraphIsSimple ? (
           <div className="max-w-3xl mx-auto h-full min-h-0 flex flex-col">
-            {workspaceSwitching ? (
-              /* Skeleton loading state while workspace is switching */
-              <div className="max-w-3xl mx-auto px-2 py-8 space-y-6 animate-pulse">
-                {/* Skeleton user message */}
-                <div className="flex justify-end">
-                  <div className="h-10 w-3/5 rounded-xl bg-bg-elevated" />
-                </div>
-                {/* Skeleton assistant response */}
-                <div className="space-y-2">
-                  <div className="h-4 w-4/5 rounded bg-bg-elevated" />
-                  <div className="h-4 w-3/4 rounded bg-bg-elevated" />
-                  <div className="h-4 w-2/3 rounded bg-bg-elevated" />
-                </div>
-                {/* Skeleton tool call */}
-                <div className="h-16 w-full rounded-lg bg-bg-elevated" />
-                {/* Skeleton assistant response */}
-                <div className="space-y-2">
-                  <div className="h-4 w-5/6 rounded bg-bg-elevated" />
-                  <div className="h-4 w-3/5 rounded bg-bg-elevated" />
-                </div>
-              </div>
-            ) : sessionDetailLoading && activeSessionId ? (
-              <div className="max-w-3xl mx-auto px-2 py-8 space-y-6 animate-pulse">
-                <div className="flex justify-end">
-                  <div className="h-10 w-3/5 rounded-xl bg-bg-elevated" />
-                </div>
-                <div className="space-y-2">
-                  <div className="h-4 w-4/5 rounded bg-bg-elevated" />
-                  <div className="h-4 w-3/4 rounded bg-bg-elevated" />
-                </div>
-              </div>
-            ) : messages.length === 0 && !sending && !isServerSideRunActive && (
+            {showConversationSkeleton ? (
+              <ConversationThreadSkeleton className="w-full" />
+            ) : messages.length === 0 && !sending && !isServerSideRunActive ? (
               <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                 <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>
                 <p className="text-[13px] text-center max-w-md">
@@ -1731,8 +1719,8 @@ export default function AgentPage() {
                   Use the Mode control above to switch.
                 </p>
               </div>
-            )}
-            {capabilityDroppedTools.length > 0 && (
+            ) : null}
+            {!showConversationSkeleton && capabilityDroppedTools.length > 0 && (
               <div className="max-w-3xl mx-auto px-2 pt-3">
                 <div
                   className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text"
@@ -1743,7 +1731,7 @@ export default function AgentPage() {
                 </div>
               </div>
             )}
-            {(messages.length > 0 || agentBusy) && (
+            {!showConversationSkeleton && (messages.length > 0 || agentBusy) && (
               <MessageList
                 events={chatEventsForView}
                 streaming={agentBusy}
@@ -1784,38 +1772,41 @@ export default function AgentPage() {
           </div>
         ) : (
           <div className="px-4 py-4 space-y-3">
-            {eventStream.length === 0 && !sending && !isServerSideRunActive && !(sessionDetailLoading && activeSessionId) && (
-              <div className="flex flex-col items-center justify-center py-20 text-text-muted">
-                <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>
-                <p className="text-[13px] text-center max-w-md">
-                  Select a multi-phase graph and send your mission to see the execution timeline.
-                </p>
-              </div>
-            )}
-            {eventStream.length === 0 && !sending && sessionDetailLoading && activeSessionId && (
-              <div className="flex flex-col items-center justify-center py-20 text-text-muted">
-                <AgentStatusShimmerLabel className="text-[13px]" textClassName="text-text-secondary font-medium">
-                  Loading thread…
-                </AgentStatusShimmerLabel>
-              </div>
-            )}
-            {eventStream
-              .filter((e) => e.kind !== "system")
-              .map((event) => (
-                <EventCard key={event.id} event={event} />
-              ))}
-            {(sending || isServerSideRunActive) && (
-              <div className="px-1 py-2 text-text-muted">
-                <AgentStatusShimmerLabel className="text-[12px]" textClassName="text-text-secondary font-medium">
-                  {sending ? "Executing…" : "Run in progress…"}
-                </AgentStatusShimmerLabel>
-              </div>
-            )}
-            {errorMessage && !sending && (
-              <div className="rounded-lg border border-status-error-border bg-status-error-bg px-4 py-3 text-[12px] text-status-error-text">
-                <p className="font-medium">Something went wrong</p>
-                <p className="mt-1 text-[11px] opacity-80">{errorMessage}</p>
-              </div>
+            {showConversationSkeleton ? (
+              <ConversationThreadSkeleton className="max-w-3xl mx-auto" />
+            ) : (
+              <>
+                {eventStream.length === 0 && !sending && !isServerSideRunActive && (
+                  <div className="flex flex-col items-center justify-center py-20 text-text-muted">
+                    <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>
+                    <p className="text-[13px] text-center max-w-md">
+                      Select a multi-phase graph and send your mission to see the execution timeline.
+                    </p>
+                  </div>
+                )}
+                {eventStream
+                  .filter((e) => e.kind !== "system")
+                  .map((event) => (
+                    <EventCard key={event.id} event={event} />
+                  ))}
+                {(sending || isServerSideRunActive) && (
+                  <div className="px-1 py-2 text-text-muted">
+                    <AgentStatusShimmerLabel
+                      className="text-[12px]"
+                      tone="secondary"
+                      textClassName="font-medium"
+                    >
+                      {sending ? "Executing…" : "Run in progress…"}
+                    </AgentStatusShimmerLabel>
+                  </div>
+                )}
+                {errorMessage && !sending && (
+                  <div className="rounded-lg border border-status-error-border bg-status-error-bg px-4 py-3 text-[12px] text-status-error-text">
+                    <p className="font-medium">Something went wrong</p>
+                    <p className="mt-1 text-[11px] opacity-80">{errorMessage}</p>
+                  </div>
+                )}
+              </>
             )}
             <div ref={bottomRef} />
           </div>

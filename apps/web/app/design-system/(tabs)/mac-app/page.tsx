@@ -959,7 +959,7 @@ export default function DesignSystemMacAppPage() {
                     rules={[
                         "Context chips auto-attach the active file; users can dismiss with ×.",
                         "File, folder, and model chips have distinct colors and icons.",
-                        "ThinkingBubble pulses when active; content is expandable when complete.",
+                        "ThinkingBubble uses the same glyph shimmer as live agent status when active; content is expandable when complete.",
                     ]}
                 />
                 <DocCode code={`<ContextChips chips={chips} onDismiss={dismiss} />\n<ThinkingBubble isActive summary="Working…" />`} />

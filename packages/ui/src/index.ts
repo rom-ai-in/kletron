@@ -64,6 +64,7 @@ export {
 
     // Agent
     ThinkingBubble, ThinkingList,
+    AgentStatusShimmerLabel,
     ToolLog,
     ToolBatchAccordion,
     DiffApproval,

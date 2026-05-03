@@ -146,6 +146,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const [streamingReasoning, setStreamingReasoning] = useState('');
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [capabilityDroppedTools, setCapabilityDroppedTools] = useState<string[]>([]);
+    /** Client-side timing: POST start → first `text_delta` (end-to-end perceived latency). */
+    const clientStreamMarkRef = useRef<{ sendAt: number; loggedFirstText: boolean } | null>(null);
 
     const abortControllerRef = useRef<AbortController | null>(null);
     const isAtBottomRef = useRef(true);
@@ -460,6 +462,14 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                             onSessionCreated(chunk.payload.runId, chunk.payload.graphId, userMessage);
                         }
                     } else if (chunk.type === "text_delta") {
+                        const mark = clientStreamMarkRef.current;
+                        if (mark && !mark.loggedFirstText) {
+                            mark.loggedFirstText = true;
+                            const ms = performance.now() - mark.sendAt;
+                            console.info("[AgentStreamKPI Client]", {
+                                time_request_to_first_text_delta_ms: Math.round(ms),
+                            });
+                        }
                         streamingTextRef.current += chunk.payload.content;
                         if (/\bwe need to\b|\bfinal answer\b|<think>/i.test(chunk.payload.content ?? "")) {
                             console.warn('[useSessionStream] Suspicious text delta observed', { delta: (chunk.payload.content ?? '').slice(0, 80) });
@@ -468,6 +478,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                     } else if (chunk.type === "reasoning_delta") {
                         streamingReasoningRef.current += chunk.payload.content;
                         scheduleStreamFlush();
+                    } else if (chunk.type === "stream_metrics") {
+                        console.info("[AgentStreamKPI]", chunk.payload);
                     } else if (chunk.type === "activity") {
                         // Reserved for server-driven activity line
                     } else if (chunk.type === "update") {
@@ -619,6 +631,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 ...authExtra,
             };
             if (workspaceId) headers['x-workspace-id'] = workspaceId;
+
+            clientStreamMarkRef.current = { sendAt: performance.now(), loggedFirstText: false };
 
             const res = await fetch(url, {
                 method: 'POST',

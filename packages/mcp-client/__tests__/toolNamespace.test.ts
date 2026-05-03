@@ -55,4 +55,5 @@ describe("MCP multi-server tool namespacing", () => {
         ]);
         expect(resolveExternalServerSlugKey(m.keys(), "HUNTER")).toBe("hunter");
     });
+
 });

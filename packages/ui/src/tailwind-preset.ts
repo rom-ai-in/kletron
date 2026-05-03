@@ -242,15 +242,10 @@ const preset: Partial<Config> = {
           from: { transform: 'translateX(-100%)' },
           to: { transform: 'translateX(0)' },
         },
-        /** Gradient drift for inline “working” tool summaries (bg-clip-text + gradient) */
+        /** Gradient drift clipped to glyphs (AgentStatusShimmerLabel) */
         'text-shimmer': {
           '0%': { backgroundPosition: '200% center' },
           '100%': { backgroundPosition: '-200% center' },
-        },
-        /** Highlight sweep across solid status text (AgentStatusShimmerLabel) */
-        'activity-sheen': {
-          '0%': { transform: 'translateX(-140%)' },
-          '100%': { transform: 'translateX(340%)' },
         },
       },
 
@@ -262,8 +257,7 @@ const preset: Partial<Config> = {
         'scale-in': 'scale-in 300ms cubic-bezier(0.4, 0, 0.2, 1)',
         'slide-in-right': 'slide-in-right 300ms cubic-bezier(0, 0, 0.2, 1)',
         'slide-in-left': 'slide-in-left 300ms cubic-bezier(0, 0, 0.2, 1)',
-        'text-shimmer': 'text-shimmer 2.8s ease-in-out infinite',
-        'activity-sheen': 'activity-sheen 3.1s ease-in-out infinite',
+        'text-shimmer': 'text-shimmer 1.35s ease-in-out infinite',
       },
     },
   },

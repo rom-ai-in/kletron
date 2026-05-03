@@ -79,10 +79,17 @@ describe('AutomationExecutor Integration', () => {
                 expect.objectContaining({
                     name: 'Test Automation',
                     description: 'Test description',
+                    triggerType: 'manual',
+                    createdAt: expect.any(Date),
                     stages: expect.arrayContaining([
-                        expect.objectContaining({ id: 'stage-1', name: 'Recon' }),
+                        expect.objectContaining({
+                            id: 'stage-1',
+                            name: 'Recon',
+                            prompt: 'Recon prompt',
+                            graphId: 'audit',
+                            llmProvider: 'openai',
+                        }),
                     ]),
-                    status: 'PENDING',
                 })
             );
             expect(automationId).toBe(VALID_AUTOMATION_ID);
@@ -126,18 +133,16 @@ describe('AutomationExecutor Integration', () => {
         });
     });
 
-    describe('updateAutomationStatus', () => {
-        it('should update automation status', async () => {
+    describe('updateAutomation', () => {
+        it('should persist configuration updates', async () => {
             const { AutomationExecutor } = await import('@kletron/server/services/automationExecutor');
             const executor = new AutomationExecutor();
 
-            await executor.updateAutomationStatus(VALID_AUTOMATION_ID, 'RUNNING');
+            await executor.updateAutomation(VALID_AUTOMATION_ID, { name: 'Renamed' });
 
             expect(mockUpdateOne).toHaveBeenCalledWith(
                 expect.objectContaining({ _id: expect.anything() }),
-                expect.objectContaining({
-                    $set: expect.objectContaining({ status: 'RUNNING' }),
-                })
+                { $set: expect.objectContaining({ name: 'Renamed' }) }
             );
         });
     });

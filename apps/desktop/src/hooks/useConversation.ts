@@ -245,6 +245,7 @@ export function useConversation(
     const token = await getAccessToken();
     if (!token) return;
     setConversationLoading(true);
+    stream.setMessages([]);
     setLoadError(null);
     setDiffs?.(() => []);
     try {

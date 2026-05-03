@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 
 import { HumanMessage, SystemMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
 import type { AgentEvent, AgentEventKind, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent, AgentWorkflowAbortReason, Finding } from "@kletron/shared/types";
+import type { AgentStreamKpiV1 } from "@kletron/shared/chatTypes";
 import { enhanceWorkflowResult } from "@kletron/shared/reportUtils";
 import { streamReactAgentMessages, AgentWorkflowAbortError } from "@kletron/agent-core/reactAgentRunner";
 import { allMcpTools } from "@kletron/agent-core/tools/mcpTools";
@@ -806,7 +807,14 @@ async function maybeExecuteJsonActionTool(opts: {
     };
 }
 
-// Helper to ensure graph is ready
+/** One background scan per workspace — avoids duplicate scans when multiple runs start together. */
+const contextGraphBackgroundScan = new Map<string, Promise<void>>();
+
+/**
+ * Returns the context graph store quickly for the first LLM call.
+ * If the graph is empty after disk load, a **background** workspace scan runs
+ * instead of blocking send → LM Studio on a full tree walk.
+ */
 async function ensureContextGraphReady(workspaceId: string, rootPath: string) {
     const store = getContextGraphStore(workspaceId, rootPath);
     if (store.getAllNodes().length > 0) return store;
@@ -814,11 +822,25 @@ async function ensureContextGraphReady(workspaceId: string, rootPath: string) {
     console.log("[AgentGraph] Context graph is empty, attempting load...");
     await store.load();
 
-    if (store.getAllNodes().length === 0) {
-        console.log("[AgentGraph] Context graph still empty, triggering fresh workspace scan...");
-        await contextScanner.scanWorkspace(rootPath, store);
-        await store.save();
-        console.log(`[AgentGraph] Scan complete. Graph now has ${store.getAllNodes().length} nodes.`);
+    if (store.getAllNodes().length > 0) return store;
+
+    const scanKey = workspaceId;
+    if (!contextGraphBackgroundScan.has(scanKey)) {
+        const work = (async () => {
+            try {
+                console.log(
+                    "[AgentGraph] Context graph still empty after load; background workspace scan started (send path not blocked)..."
+                );
+                await contextScanner.scanWorkspace(rootPath, store);
+                await store.save();
+                console.log(`[AgentGraph] Background scan complete. Graph now has ${store.getAllNodes().length} nodes.`);
+            } catch (err) {
+                console.warn("[AgentGraph] Background context scan failed:", (err as Error)?.message ?? err);
+            } finally {
+                contextGraphBackgroundScan.delete(scanKey);
+            }
+        })();
+        contextGraphBackgroundScan.set(scanKey, work);
     }
     return store;
 }
@@ -931,6 +953,7 @@ export class AgentGraphExecutor {
             shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
             /** Override audit/tool identity (e.g. channel-linked user). Defaults to workspace.ownerId. */
             workspaceContextUserId?: string;
+            onLlmStreamKpi?: (kpi: AgentStreamKpiV1) => void;
         }
     ): Promise<AgentWorkflowResult> {
         console.log(`[AgentGraphExecutor] continueRun: runId=${runId}, message="${message.slice(0, 40)}"`);
@@ -1120,6 +1143,8 @@ export class AgentGraphExecutor {
             resumeFromCheckpoint?: boolean;
             /** Override audit/tool identity (e.g. channel-linked user). Defaults to workspace.ownerId. */
             workspaceContextUserId?: string;
+            /** Fires once per `streamReactAgentMessages` completion (NDJSON / logs). */
+            onLlmStreamKpi?: (kpi: AgentStreamKpiV1) => void;
         }
     ): Promise<AgentWorkflowResult> {
         console.log(`[AgentGraphExecutor] executeRunStreaming: runId=${runId}`);
@@ -1141,6 +1166,14 @@ export class AgentGraphExecutor {
             async () => {
             let diskSkillRegistryOverlay = false;
             try {
+            const runWallClockT0 = performance.now();
+            const emitLlmKpi = (kpi: AgentStreamKpiV1 | undefined) => {
+                if (!kpi) return;
+                opts?.onLlmStreamKpi?.({
+                    ...kpi,
+                    wallMsExecutorToStreamEnd: performance.now() - runWallClockT0,
+                });
+            };
             const workspaceIdStr = workspace._id!.toString();
             const rootPathForCtx = workspace.rootPath;
 
@@ -2374,6 +2407,8 @@ export class AgentGraphExecutor {
                                 userPrompt: delegateInput,
                                 tools,
                                 llmSelection: opts?.llmSelectionOverride,
+                                upstreamPrepMs: performance.now() - runWallClockT0,
+                                runId,
                                 abortSignal: abortController.signal,
                                 getAbortReason: () => abortReason,
                                 shouldAbort: checkAbortReason,
@@ -2391,6 +2426,7 @@ export class AgentGraphExecutor {
                                     });
                                 },
                             });
+                            emitLlmKpi(delegateResult.kpi);
                             const delegateMessages = delegateResult.messages ?? [];
                             const delegateFinal =
                                 delegateMessages
@@ -2430,6 +2466,8 @@ export class AgentGraphExecutor {
                                 userPrompt: rawResult,
                                 tools: [],
                                 llmSelection: opts?.llmSelectionOverride,
+                                upstreamPrepMs: performance.now() - runWallClockT0,
+                                runId,
                                 abortSignal: abortController.signal,
                                 getAbortReason: () => abortReason,
                                 shouldAbort: checkAbortReason,
@@ -2447,6 +2485,7 @@ export class AgentGraphExecutor {
                                     });
                                 },
                             });
+                            emitLlmKpi(summaryResult.kpi);
                             const summaryMessages = summaryResult.messages ?? [];
                             const summaryFinal =
                                 summaryMessages
@@ -2552,6 +2591,8 @@ export class AgentGraphExecutor {
                             userPrompt: userPrompt,
                             tools,
                             llmSelection: opts?.llmSelectionOverride,
+                            upstreamPrepMs: performance.now() - runWallClockT0,
+                            runId,
                             extraMessages: shouldResume ? undefined : extraMessages,
                             onMessage: handleStreamingMessage,
                             // Forward text deltas for progressive streaming
@@ -2582,6 +2623,7 @@ export class AgentGraphExecutor {
                                 });
                             },
                         });
+                        emitLlmKpi(result.kpi);
 
                         // ── Handle interrupt (human-in-the-loop) ─────────────
                         if (result.interrupted) {

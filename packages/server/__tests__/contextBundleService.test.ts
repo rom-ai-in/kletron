@@ -27,6 +27,7 @@ import { countChunksForRepo, semanticSearch } from "@kletron/server/services/vec
 
 describe("contextBundleService", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.mocked(countChunksForRepo).mockResolvedValue(3);
     vi.mocked(semanticSearch).mockResolvedValue([
       {

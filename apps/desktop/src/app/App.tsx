@@ -31,6 +31,8 @@ import type { SidebarProject } from "@kletron/ui/components/CommandCenter/Projec
 import { ThreadSearchPalette } from "@kletron/ui/components/CommandCenter/ThreadSearchPalette";
 import { ThreadSearchHeaderTrigger } from "@kletron/ui/components/CommandCenter/ThreadSearchHeaderTrigger";
 import { MessageList } from "@kletron/ui/components/Agent/MessageList";
+import { AgentStatusShimmerLabel } from "@kletron/ui/components/Agent/AgentStatusShimmerLabel";
+import { ConversationThreadSkeleton } from "@kletron/ui/components/Agent/ConversationThreadSkeleton";
 import { PendingSessionEditsStrip } from "@kletron/ui/components/design-system";
 import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
 import { useMessageEdit } from "@kletron/ui/hooks/useMessageEdit";
@@ -1491,8 +1493,8 @@ export default function App() {
                     Agent graphs define different workflows for the AI. Select a graph when starting a conversation to guide the agent's behavior.
                   </p>
                   {agentGraphsLoading && (
-                    <div className="glass-card rounded-md px-3 py-4 text-xs text-text-muted text-center animate-pulse">
-                      Loading graphs...
+                    <div className="glass-card rounded-md px-3 py-4 text-center text-text-muted">
+                      <AgentStatusShimmerLabel className="text-xs">Loading graphs...</AgentStatusShimmerLabel>
                     </div>
                   )}
                   {!agentGraphsLoading && graphsForPanel.length === 0 && (
@@ -1790,7 +1792,8 @@ export default function App() {
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-elegant">
             {/* Same horizontal measure as web agent page (max-w-3xl + px-2 thread padding) */}
             <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-              {conversation.capabilityDroppedTools.length > 0 && (
+              {conversation.capabilityDroppedTools.length > 0 &&
+                !(conversation.conversationLoading && threads.conversationId) && (
                 <div className="px-2 pt-3">
                   <div
                     className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text"
@@ -1801,28 +1804,32 @@ export default function App() {
                   </div>
                 </div>
               )}
-              <MessageList
-                events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
-                streaming={conversation.streaming}
-                streamingText={conversation.streamingText}
-                streamingReasoning={conversation.streamingReasoning}
-                activityEvents={conversation.conversationEvents}
-                pendingApprovalCount={conversation.sessionEdits.pendingEdits.length}
-                hasOlder={conversation.historyPage.hasOlder}
-                loadingOlder={conversation.loadingOlder}
-                onLoadOlder={() => void conversation.onLoadOlderMessages()}
-                virtualized
-                prefetchNearTop
-                onNearTop={() => void conversation.onLoadOlderMessages()}
-                className="flex-1 min-h-0 p-0 px-2 py-4"
-                messageActions={(event) => (
-                  <MessageActions
-                    event={event}
-                    onStartEdit={() => editControl.startEditMessage(event.messageIndex!, event.content ?? "")}
-                  />
-                )}
-              />
-              {isCodeMode && inlineDiffs.length > 0 && (
+              {conversation.conversationLoading && threads.conversationId ? (
+                <ConversationThreadSkeleton className="flex-1 min-h-0" />
+              ) : (
+                <MessageList
+                  events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
+                  streaming={conversation.streaming}
+                  streamingText={conversation.streamingText}
+                  streamingReasoning={conversation.streamingReasoning}
+                  activityEvents={conversation.conversationEvents}
+                  pendingApprovalCount={conversation.sessionEdits.pendingEdits.length}
+                  hasOlder={conversation.historyPage.hasOlder}
+                  loadingOlder={conversation.loadingOlder}
+                  onLoadOlder={() => void conversation.onLoadOlderMessages()}
+                  virtualized
+                  prefetchNearTop
+                  onNearTop={() => void conversation.onLoadOlderMessages()}
+                  className="flex-1 min-h-0 p-0 px-2 py-4"
+                  messageActions={(event) => (
+                    <MessageActions
+                      event={event}
+                      onStartEdit={() => editControl.startEditMessage(event.messageIndex!, event.content ?? "")}
+                    />
+                  )}
+                />
+              )}
+              {isCodeMode && inlineDiffs.length > 0 && !(conversation.conversationLoading && threads.conversationId) && (
                 <InlineDiffReview
                   diffs={inlineDiffs}
                   onAccept={(editId) => {

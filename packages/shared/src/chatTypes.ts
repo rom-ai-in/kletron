@@ -104,11 +104,61 @@ import type { AgentWorkflowResult, AgentWorkflowUpdate } from './types';
 import type { ThreadApprovalMode } from './threadApprovalTypes';
 import type { WorkModeId } from './workMode';
 
+/**
+ * Per-`streamReactAgentMessages` KPIs (one NDJSON `stream_metrics` chunk per invocation).
+ * Use for diagnosing slow send → first token vs LM generation throughput.
+ */
+export type AgentStreamKpiV1 = {
+    v: 1;
+    runId?: string;
+    agentName: string;
+    provider: string;
+    model: string;
+    /** LangGraph stream mode */
+    streamMode: 'values' | 'values_messages';
+    /** ms: entry → LLM resolved + chat model constructed */
+    llmResolveAndModelMs: number;
+    /** ms: entry → after `createReactAgent` */
+    agentBuildMs: number;
+    /** ms: entry → `agent.stream()` returned (iterator ready) */
+    streamOpenMs: number;
+    /** ms: entry → first `for await` body (first event from graph stream) */
+    firstStreamEventMs: number | null;
+    /** Token-style streaming only (not LM Studio values-only path) */
+    firstTextDeltaMs: number | null;
+    firstReasoningDeltaMs: number | null;
+    /** Values-only / full-message path: first assistant message passed to `onMessage` */
+    firstAssistantOnMessageMs: number | null;
+    /** min(firstTextDelta, firstReasoning, firstAssistantOnMessage) — UX “time to first visible” */
+    timeToFirstVisibleMs: number | null;
+    /** Wall ms for entire `for await` loop */
+    streamLoopMs: number;
+    /** ms from first stream event to loop end (pure “generation” window); null if no events */
+    generationWindowMs: number | null;
+    /** Sum of string lengths passed to `onTextDelta` */
+    outputDeltaChars: number;
+    /** From LangChain `usage_metadata` when present */
+    outputTokensFromUsage: number;
+    /** Heuristic: outputDeltaChars / 4 */
+    approxOutputTokensFromChars: number;
+    /** outputTokensFromUsage / (streamLoopMs/1000) when usage > 0 */
+    effectiveOutputTps: number | null;
+    effectiveOutputTpm: number | null;
+    /** Same as effective* but using generationWindowMs */
+    generationTps: number | null;
+    generationTpm: number | null;
+    /** Executor prep before this call (executeRunStreaming wall clock) */
+    upstreamPrepMs?: number;
+    /** Executor wall ms from run start to this stream finishing */
+    wallMsExecutorToStreamEnd?: number;
+};
+
 export type StreamChunk =
     | { type: 'init'; payload: { runId: string; graphId: string } }
     | { type: 'update'; payload: AgentWorkflowUpdate }
     | { type: 'text_delta'; payload: { content: string } }
     | { type: 'reasoning_delta'; payload: { content: string } }
+    | { type: 'stream_metrics'; payload: AgentStreamKpiV1 }
     | { type: 'activity'; payload: { label?: string; detail?: string } }
     | { type: 'final'; payload: AgentWorkflowResult }
     | { type: 'error'; payload: { message: string } };

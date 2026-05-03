@@ -6,6 +6,7 @@ import { getChatModel, resolveResolvedLlmInfo, type LlmSelection } from "@kletro
 import { config } from "@kletron/server/config";
 import type { TokenUsage } from "@kletron/server/services/tokenUsageTypes";
 import type { AgentWorkflowAbortReason } from "@kletron/shared/types";
+import type { AgentStreamKpiV1 } from "@kletron/shared/chatTypes";
 
 export type StreamReactAgentOptions = {
   name: string;
@@ -44,6 +45,10 @@ export type StreamReactAgentOptions = {
    * the last checkpoint instead of starting fresh.
    */
   resumeFromCheckpoint?: boolean;
+  /** Wall ms already spent in executor before this LLM call (KPI / diagnostics only). */
+  upstreamPrepMs?: number;
+  /** Run id for KPI correlation (optional). */
+  runId?: string;
 };
 
 export type StreamReactAgentResult = {
@@ -56,6 +61,8 @@ export type StreamReactAgentResult = {
    * "INTERRUPTED" status and wait for human approval before resuming.
    */
   interrupted?: boolean;
+  /** Timing and throughput for this `streamReactAgentMessages` invocation */
+  kpi?: AgentStreamKpiV1;
 };
 
 export class AgentWorkflowAbortError extends Error {
@@ -66,6 +73,25 @@ export class AgentWorkflowAbortError extends Error {
     this.name = "AgentWorkflowAbortError";
     this.reason = reason;
   }
+}
+
+function isAssistantLikeMessage(message: BaseMessage): boolean {
+  const t = (message.getType?.() ?? (message as any).type ?? "").toString().toLowerCase();
+  const role = String((message as any).role ?? "").toLowerCase();
+  return t === "ai" || t === "assistant" || role === "assistant";
+}
+
+/** Server logs: unset or non-production → on; set AGENT_STREAM_KPI=0 to disable. */
+function isAgentStreamKpiLogEnabled(): boolean {
+  const v = process.env.AGENT_STREAM_KPI?.trim().toLowerCase();
+  if (v === "0" || v === "false" || v === "off") return false;
+  if (v === "1" || v === "true" || v === "on") return true;
+  return process.env.NODE_ENV !== "production";
+}
+
+function logAgentStreamKpiLine(kpi: AgentStreamKpiV1) {
+  if (!isAgentStreamKpiLogEnabled()) return;
+  console.info("[AgentStreamKPI]", JSON.stringify(kpi));
 }
 
 /**
@@ -116,9 +142,11 @@ function extractTokenUsage(message: BaseMessage): TokenUsage | null {
 export async function streamReactAgentMessages(
   opts: StreamReactAgentOptions
 ): Promise<StreamReactAgentResult> {
+  const t0 = performance.now();
   const resolvedLlm = await resolveResolvedLlmInfo(opts.llmSelection);
   const model = await getChatModel(opts.llmSelection);
   const modelName = (model as any).modelName ?? (model as any).model ?? "unknown";
+  const llmResolveAndModelMs = performance.now() - t0;
 
   // ── Build createReactAgent params ──────────────────────────────────
   const agentParams: Parameters<typeof createReactAgent>[0] = {
@@ -138,6 +166,7 @@ export async function streamReactAgentMessages(
   }
 
   const agent = createReactAgent(agentParams);
+  const agentBuildMs = performance.now() - t0;
 
   // ── Determine input ────────────────────────────────────────────────
   // When resuming from a checkpoint, pass `null` as input so LangGraph
@@ -209,6 +238,15 @@ export async function streamReactAgentMessages(
     input as any,
     streamConfig,
   );
+  const streamOpenMs = performance.now() - t0;
+
+  let firstStreamEventMs: number | null = null;
+  let firstTextDeltaMs: number | null = null;
+  let firstReasoningDeltaMs: number | null = null;
+  let firstAssistantOnMessageMs: number | null = null;
+  let outputDeltaChars = 0;
+  let firstStreamWallClock: number | null = null;
+  const streamLoopWallStart = performance.now();
 
   const seenMessageIds = new Set<string>();
   const seenUsageIds = new Set<string>(); // Track which messages we've extracted usage from
@@ -293,6 +331,9 @@ export async function streamReactAgentMessages(
         accumulatedMessages.push(message);
         if (opts.onMessage) {
           if (shouldEmitToCallback(message)) {
+            if (firstAssistantOnMessageMs === null && isAssistantLikeMessage(message)) {
+              firstAssistantOnMessageMs = performance.now() - t0;
+            }
             await opts.onMessage(message);
           }
         }
@@ -324,6 +365,10 @@ export async function streamReactAgentMessages(
     for await (const rawEvent of stream) {
       await checkAbort();
       if (!rawEvent || typeof rawEvent !== "object") continue;
+      if (firstStreamWallClock === null) {
+        firstStreamWallClock = performance.now();
+        firstStreamEventMs = firstStreamWallClock - t0;
+      }
 
       if (useMultiMode && Array.isArray(rawEvent)) {
         // Multi-mode: [mode, data] tuple
@@ -335,6 +380,9 @@ export async function streamReactAgentMessages(
           const content = typeof chunk?.content === "string" ? chunk.content : "";
           const reasoning = extractReasoningDeltaFromChunk(chunk);
           if (reasoning && opts.onReasoningDelta) {
+            if (firstReasoningDeltaMs === null) {
+              firstReasoningDeltaMs = performance.now() - t0;
+            }
             opts.onReasoningDelta(reasoning);
           }
           // Only emit text deltas for non-tool-call assistant chunks
@@ -344,6 +392,10 @@ export async function streamReactAgentMessages(
             !chunk?.tool_calls?.length &&
             !chunk?.tool_call_chunks?.length
           ) {
+            if (firstTextDeltaMs === null) {
+              firstTextDeltaMs = performance.now() - t0;
+            }
+            outputDeltaChars += content.length;
             opts.onTextDelta(content);
           }
         } else if (mode === "values") {
@@ -361,6 +413,52 @@ export async function streamReactAgentMessages(
     }
     throw error;
   }
+
+  const streamLoopMs = performance.now() - streamLoopWallStart;
+  const approxOutputTokensFromChars = Math.max(0, Math.round(outputDeltaChars / 4));
+  const outTok = totalUsage.outputTokens;
+  const genWindowMs = firstStreamWallClock !== null ? performance.now() - firstStreamWallClock : null;
+  const secLoop = streamLoopMs > 0 ? streamLoopMs / 1000 : 0;
+  const secGen = genWindowMs !== null && genWindowMs > 0 ? genWindowMs / 1000 : 0;
+  const effectiveOutputTps = outTok > 0 && secLoop > 0 ? outTok / secLoop : null;
+  const effectiveOutputTpm = effectiveOutputTps !== null ? effectiveOutputTps * 60 : null;
+  const generationTps =
+    outTok > 0 && secGen > 0 ? outTok / secGen : approxOutputTokensFromChars > 0 && secGen > 0 ? approxOutputTokensFromChars / secGen : null;
+  const generationTpm = generationTps !== null ? generationTps * 60 : null;
+
+  const candidates = [firstTextDeltaMs, firstReasoningDeltaMs, firstAssistantOnMessageMs].filter(
+    (x): x is number => typeof x === "number"
+  );
+  const timeToFirstVisibleMs = candidates.length ? Math.min(...candidates) : null;
+
+  const kpi: AgentStreamKpiV1 = {
+    v: 1,
+    runId: opts.runId,
+    agentName: opts.name,
+    provider: resolvedLlm.provider,
+    model: modelName,
+    streamMode: useMultiMode ? "values_messages" : "values",
+    llmResolveAndModelMs,
+    agentBuildMs,
+    streamOpenMs,
+    firstStreamEventMs,
+    firstTextDeltaMs,
+    firstReasoningDeltaMs,
+    firstAssistantOnMessageMs,
+    timeToFirstVisibleMs,
+    streamLoopMs,
+    generationWindowMs: genWindowMs,
+    outputDeltaChars,
+    outputTokensFromUsage: outTok,
+    approxOutputTokensFromChars,
+    effectiveOutputTps,
+    effectiveOutputTpm,
+    generationTps,
+    generationTpm,
+    upstreamPrepMs: opts.upstreamPrepMs,
+  };
+
+  logAgentStreamKpiLine(kpi);
 
   const finalMessages = lastState?.messages ?? accumulatedMessages;
 
@@ -391,5 +489,6 @@ export async function streamReactAgentMessages(
     tokenUsage: totalUsage,
     model: modelName,
     interrupted,
+    kpi,
   };
 }
