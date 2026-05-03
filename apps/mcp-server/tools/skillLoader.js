@@ -1,7 +1,7 @@
 // MCP tools that expose the skills library to the agent.
-// `list_skills` returns the catalog (built-in + user). `load_skill` returns a
-// resolved skill (frontmatter + body) which a node can splice into its system
-// prompt.
+// `list_all_skills` returns the global HTTP catalog. Workspace-scoped listing
+// is `list_available_skills` (registered from workspaceSkills.js). `load_skill`
+// returns resolved skill content (frontmatter + body).
 
 const DEFAULT_BASE_URL = process.env.KLETRON_WEB_BASE_URL || "http://127.0.0.1:3000";
 
@@ -57,26 +57,34 @@ export async function loadSkill(skillId) {
 }
 
 // MCP tool wrappers (used by server.js buildAllTools).
-export const list_skills = {
-    description: "List all skills available in the Kletron library (built-in + user).",
+export const list_all_skills = {
+    description:
+        "List all skills in the Kletron library via HTTP (built-in + user). For skills enabled in this workspace only, call list_available_skills instead.",
     inputSchema: { type: "object", properties: {} },
     async run() {
         return listSkills();
     },
 };
 
+/** @deprecated Use list_all_skills; kept for older MCP clients. */
+export const list_skills = list_all_skills;
+
 export const load_skill = {
-    description: "Load a skill by slug, returning its frontmatter and SKILL.md body.",
+    description:
+        "Load a skill by slug or skill_id, returning its frontmatter and SKILL.md body. Disabled workspace skills are rejected when capabilities are known.",
     inputSchema: {
         type: "object",
         properties: {
             slug: { type: "string", description: "Slug of the skill to load" },
+            skill_id: { type: "string", description: "Same as slug (matches executor load_skill)" },
         },
-        required: ["slug"],
     },
-    async run({ slug }) {
-        const skill = await loadSkill(slug);
-        if (!skill) throw new Error(`Skill not found: ${slug}`);
+    async run(args = {}) {
+        const raw = args.skill_id ?? args.slug;
+        const id = raw != null ? String(raw).trim() : "";
+        if (!id) throw new Error("load_skill requires slug or skill_id");
+        const skill = await loadSkill(id);
+        if (!skill) throw new Error(`Skill not found: ${id}`);
         return skill;
     },
 };

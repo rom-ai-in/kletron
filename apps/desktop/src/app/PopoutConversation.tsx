@@ -6,7 +6,7 @@ import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/Replay
 import { InputBar } from "@kletron/ui/components/CommandCenter/InputBar";
 import { InlineDiffReview } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
 import type { InlineDiff } from "@kletron/ui/components/CommandCenter/InlineDiffReview";
-import { Selector } from "@kletron/ui/components/design-system";
+import { PendingSessionEditsStrip, Selector } from "@kletron/ui/components/design-system";
 import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
 import { useAgentSession } from "@kletron/ui/hooks/useAgentSession";
 
@@ -116,6 +116,8 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
     hunks: d.hunks,
   }));
 
+  const isCodeMode = conversation.threadWorkMode === "code";
+
   return (
     <div className="flex h-screen flex-col text-text-primary">
       {/* Title Bar */}
@@ -125,116 +127,145 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
         </span>
       </header>
 
-      {/* Conversation — same max width as web agent page */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-elegant">
-        <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-          {conversation.capabilityDroppedTools.length > 0 && (
-            <div className="px-2 pt-3">
-              <div
-                className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text"
-                role="status"
-              >
-                Some tools requested by this graph are disabled by workspace capabilities:{" "}
-                <span className="font-mono">{conversation.capabilityDroppedTools.join(", ")}</span>
+      {/* Conversation — scroll area + work-mode strip + composer (matches main desktop agent) */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-elegant">
+          <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
+            {conversation.capabilityDroppedTools.length > 0 && (
+              <div className="px-2 pt-3">
+                <div
+                  className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text"
+                  role="status"
+                >
+                  Some tools requested by this graph are disabled by workspace capabilities:{" "}
+                  <span className="font-mono">{conversation.capabilityDroppedTools.join(", ")}</span>
+                </div>
               </div>
-            </div>
-          )}
-          <MessageList
-            events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
-            streaming={conversation.streaming}
-            streamingText={conversation.streamingText}
-            streamingReasoning={conversation.streamingReasoning}
-            activityEvents={conversation.conversationEvents}
-            pendingApprovalCount={conversation.sessionEdits.pendingEdits.length}
-            className="flex-1 min-h-0 p-0 px-2 py-4"
-            messageActions={(event) => (
-              <MessageActions
-                event={event}
-                onStartEdit={() => editControl.startEditMessage(event.messageIndex!, event.content ?? "")}
+            )}
+            <MessageList
+              events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
+              streaming={conversation.streaming}
+              streamingText={conversation.streamingText}
+              streamingReasoning={conversation.streamingReasoning}
+              activityEvents={conversation.conversationEvents}
+              pendingApprovalCount={conversation.sessionEdits.pendingEdits.length}
+              className="flex-1 min-h-0 p-0 px-2 py-4"
+              messageActions={(event) => (
+                <MessageActions
+                  event={event}
+                  onStartEdit={() => editControl.startEditMessage(event.messageIndex!, event.content ?? "")}
+                />
+              )}
+              editingMessageIndex={editControl.editingMessageIndex}
+              editingMessageDraft={editControl.editingMessageDraft}
+              editingMessageSaving={editControl.editingMessageSaving}
+              editingMessageError={editControl.editingMessageError}
+              onEditDraftChange={(draft) => editControl.setEditingMessageDraft(draft)}
+              onCancelEdit={editControl.cancelEditMessage}
+              onResendEdit={editControl.handleResendEdit}
+            />
+            {isCodeMode && inlineDiffs.length > 0 && (
+              <InlineDiffReview
+                diffs={inlineDiffs}
+                onAccept={(editId) => {
+                  void (async () => {
+                    await conversation.sessionEdits.approveEdit(editId);
+                    await diffs.applyAllDiff(editId);
+                  })();
+                }}
+                onReject={(editId) => {
+                  void conversation.sessionEdits.rejectEdit(editId);
+                  diffs.rejectAllDiff(editId);
+                }}
+                onOpenInIDE={(filePath) => {
+                  try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
+                }}
               />
             )}
-            editingMessageIndex={editControl.editingMessageIndex}
-            editingMessageDraft={editControl.editingMessageDraft}
-            editingMessageSaving={editControl.editingMessageSaving}
-            editingMessageError={editControl.editingMessageError}
-            onEditDraftChange={(draft) => editControl.setEditingMessageDraft(draft)}
-            onCancelEdit={editControl.cancelEditMessage}
-            onResendEdit={editControl.handleResendEdit}
-          />
-          {inlineDiffs.length > 0 && (
-            <InlineDiffReview
-              diffs={inlineDiffs}
-              onAccept={(editId) => {
-                void (async () => {
-                  await conversation.sessionEdits.approveEdit(editId);
-                  await diffs.applyAllDiff(editId);
-                })();
-              }}
-              onReject={(editId) => {
-                void conversation.sessionEdits.rejectEdit(editId);
-                diffs.rejectAllDiff(editId);
-              }}
-              onOpenInIDE={(filePath) => {
-                try { (window as any).kletron?.openInVSCode?.(filePath); } catch { /* ignore */ }
-              }}
-            />
-          )}
-          {conversation.sendError && (
-            <div className="mx-2 my-2 rounded border border-status-error-border bg-status-error-bg px-3 py-2 text-[12px] text-status-error-text">
-              {conversation.sendError}
-            </div>
-          )}
+            {conversation.sendError && (
+              <div className="mx-2 my-2 rounded border border-status-error-border bg-status-error-bg px-3 py-2 text-[12px] text-status-error-text">
+                {conversation.sendError}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Input Bar */}
-      <div className="mx-auto w-full max-w-3xl shrink-0">
-        <InputBar
-          value={conversation.input}
-          onChange={conversation.setInput}
-          onSend={() => void conversation.sendMessage()}
-          onStop={conversation.stopStreaming}
-          sending={conversation.streaming}
-          disabled={conversation.streaming || !backendReady || !auth.auth?.accessToken}
-          placeholder="Continue the conversation..."
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void conversation.sendMessage();
-            }
-          }}
-          connected={
-            backendConnected
-              ? agentSession.llmSelectorLoading
-                ? "checking"
-                : agentSession.llmStatus === "loading"
+        {!isCodeMode && (
+          <PendingSessionEditsStrip
+            pendingEdits={conversation.sessionEdits.pendingEdits}
+            flushNotice={conversation.sessionEdits.flushNotice}
+            dismissFlushNotice={conversation.sessionEdits.dismissFlushNotice}
+            processingOp={conversation.sessionEdits.processingOp}
+            approvingAll={conversation.sessionEdits.approvingAll}
+            rejectingAll={conversation.sessionEdits.rejectingAll}
+            approveEdit={async (editId, toolName) => {
+              await conversation.sessionEdits.approveEdit(editId, toolName);
+              await diffs.applyAllDiff(editId);
+            }}
+            rejectEdit={(editId, toolName) => {
+              void conversation.sessionEdits.rejectEdit(editId, toolName);
+              diffs.rejectAllDiff(editId);
+            }}
+            approveAll={async () => {
+              await conversation.sessionEdits.approveAll();
+              diffs.resetDiffs();
+            }}
+            rejectAll={async () => {
+              await conversation.sessionEdits.rejectAll();
+              diffs.resetDiffs();
+            }}
+          />
+        )}
+
+        {/* Input Bar */}
+        <div className="mx-auto w-full max-w-3xl shrink-0">
+          <InputBar
+            value={conversation.input}
+            onChange={conversation.setInput}
+            onSend={() => void conversation.sendMessage()}
+            onStop={conversation.stopStreaming}
+            sending={conversation.streaming}
+            disabled={conversation.streaming || !backendReady || !auth.auth?.accessToken}
+            placeholder="Continue the conversation..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void conversation.sendMessage();
+              }
+            }}
+            connected={
+              backendConnected
+                ? agentSession.llmSelectorLoading
                   ? "checking"
-                  : agentSession.llmStatus === "success"
-              : false
-          }
-          modelSelector={
-            <Selector
-              label="LLM"
-              value={agentSession.llmProvider}
-              options={agentSession.llmOptions}
-              onSelect={agentSession.handleLlmChange}
-              size="sm"
-              direction="up"
-              loading={agentSession.llmSelectorLoading}
-              status={agentSession.llmSelectorLoading ? "none" : agentSession.llmStatus}
-              menuAlign="end"
-              statusTooltip={agentSession.llmSelectorLoading ? null : agentSession.llmStatusDetail}
-            />
-          }
-          approvalSelector={
-            <ThreadApprovalModeSelector
-              value={conversation.threadApprovalMode}
-              onSelect={conversation.onThreadApprovalSelect}
-              disabled={conversation.conversationRunSource === "automation"}
-              disabledReason="Approval mode is fixed for automation threads."
-            />
-          }
-        />
+                  : agentSession.llmStatus === "loading"
+                    ? "checking"
+                    : agentSession.llmStatus === "success"
+                : false
+            }
+            modelSelector={
+              <Selector
+                label="LLM"
+                value={agentSession.llmProvider}
+                options={agentSession.llmOptions}
+                onSelect={agentSession.handleLlmChange}
+                size="sm"
+                direction="up"
+                loading={agentSession.llmSelectorLoading}
+                status={agentSession.llmSelectorLoading ? "none" : agentSession.llmStatus}
+                menuAlign="end"
+                statusTooltip={agentSession.llmSelectorLoading ? null : agentSession.llmStatusDetail}
+              />
+            }
+            approvalSelector={
+              <ThreadApprovalModeSelector
+                value={conversation.threadApprovalMode}
+                onSelect={conversation.onThreadApprovalSelect}
+                disabled={conversation.conversationRunSource === "automation"}
+                disabledReason="Approval mode is fixed for automation threads."
+              />
+            }
+          />
+        </div>
       </div>
       {/* Replay Confirmation Dialog */}
       <ReplayConfirmDialog

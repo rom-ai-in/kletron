@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PlayCircle, Trash2 } from "lucide-react";
 
 import { AgentGraphEditor } from "@kletron/ui/components/agentGraphs/AgentGraphEditor";
@@ -18,6 +18,8 @@ type AgentGraphDto = {
 
 export default function AgentGraphDetailClient({ params }: { params: { id: string } }) {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const defaultToolPalette = searchParams.get("palette") === "work" ? "work" : "code";
     const [graph, setGraph] = useState<AgentGraphDto | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -113,7 +115,11 @@ export default function AgentGraphDetailClient({ params }: { params: { id: strin
             </div>
 
             <div className="min-h-0 flex-1">
-                <AgentGraphEditor graphId={params.id} initialGraph={graph as any} />
+                <AgentGraphEditor
+                    graphId={params.id}
+                    initialGraph={graph as any}
+                    defaultToolPalette={defaultToolPalette}
+                />
             </div>
         </div>
     );

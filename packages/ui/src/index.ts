@@ -120,6 +120,10 @@ export {
     AddWorkspaceModal,
 } from './components/CommandCenter';
 
+/** Agent pending approvals strip (also exported from design-system). */
+export { PendingSessionEditsStrip } from './components/Agent/PendingSessionEditsStrip';
+export type { PendingSessionEditsStripProps } from './components/Agent/PendingSessionEditsStrip';
+
 export type {
     TitleBarProps, GitDiffStats,
     ProjectSidebarProps, SidebarProject, SidebarThread, ThreadLiveStatus,

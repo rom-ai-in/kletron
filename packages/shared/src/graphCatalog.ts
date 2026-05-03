@@ -23,6 +23,7 @@ export type GraphNodePrompt = {
 // Core file operations and coding tools
 const baseToolNames = [
   // File operations
+  "glob_files",
   "list_files",
   "read_file",
   "read_file_range",
@@ -43,7 +44,6 @@ const baseToolNames = [
   "find_symbol",
   "go_to_definition",
   "references",
-  "find_references",
   "web_search",
   "fetch_url",
   "semantic_code_search",

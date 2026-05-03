@@ -574,7 +574,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
                             : `Awaiting your approval (${pendingApprovalCount} actions)…`}
                     </AgentStatusShimmerLabel>
                     <p className="text-[11px] text-text-muted">
-                        Use Approve or Reject in the panel below.
+                        Use Approve or Reject in the approvals area below.
                     </p>
                 </div>
             )}

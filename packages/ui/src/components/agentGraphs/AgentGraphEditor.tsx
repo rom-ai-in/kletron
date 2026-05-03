@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { WORK_MODE_TOOL_ALLOWLIST } from "@kletron/shared/workMode";
+
 import { Button } from "../ui/Button";
 import { Panel } from "../ui/Panel";
 import { NodeInspector, type AgentNodeEditorValue } from "./NodeInspector";
@@ -39,6 +41,7 @@ type AgentGraphDto = {
 // Default tools for new nodes - focused on coding workflows
 const DEFAULT_NODE_TOOLS = [
     // File operations
+    "glob_files",
     "list_files",
     "read_file",
     "read_file_range",
@@ -59,7 +62,6 @@ const DEFAULT_NODE_TOOLS = [
     "find_symbol",
     "go_to_definition",
     "references",
-    "find_references",
     "web_search",
     "fetch_url",
     "semantic_code_search",
@@ -71,13 +73,9 @@ const DEFAULT_NODE_TOOLS = [
     "write_todos",
 ];
 
-function makeDefaultNode(idx: number) {
-    return {
-        id: `node-${idx}`,
-        label: `Node ${idx}`,
-        kind: "react" as const,
-        react: {
-            systemPrompt: `You are a coding assistant focused on code changes, debugging, and GitHub-centric workflows.
+const DEFAULT_WORK_NODE_TOOLS = [...WORK_MODE_TOOL_ALLOWLIST];
+
+const CODE_NODE_DEFAULT_PROMPT = `You are a coding assistant focused on code changes, debugging, and GitHub-centric workflows.
 
 ## PRIMARY CAPABILITIES:
 - Inspect and modify code in the local repository.
@@ -88,9 +86,25 @@ function makeDefaultNode(idx: number) {
 ## WORKING PRINCIPLES:
 - Prefer concrete file references and diffs.
 - When modifying files, keep changes minimal and explain why.
-- Ask for clarification if repo scope or intent is ambiguous.`,
+- Ask for clarification if repo scope or intent is ambiguous.`;
+
+const WORK_NODE_DEFAULT_PROMPT = `You are an assistant for general work in the user's workspace: writing, research, planning, and files on disk.
+
+Prefer clear, concise answers. Use read/search/write tools when they help. Avoid assuming a deep repository dive unless the user asks for code focus.
+
+When saving files, use paths relative to the workspace root.`;
+
+function makeDefaultNode(idx: number, palette: "code" | "work" = "code") {
+    const toolNames = palette === "work" ? DEFAULT_WORK_NODE_TOOLS : DEFAULT_NODE_TOOLS;
+    const systemPrompt = palette === "work" ? WORK_NODE_DEFAULT_PROMPT : CODE_NODE_DEFAULT_PROMPT;
+    return {
+        id: `node-${idx}`,
+        label: `Node ${idx}`,
+        kind: "react" as const,
+        react: {
+            systemPrompt,
             userPromptTemplate: "Analyze this state and produce the next output.\n\n{{state}}",
-            toolNames: DEFAULT_NODE_TOOLS,
+            toolNames,
         },
         output: { schemaId: "generic_json" },
     };
@@ -132,11 +146,14 @@ export function AgentGraphEditor({
     graphId,
     initialGraph,
     apiFetch,
+    defaultToolPalette = "code",
 }: {
     graphId: string;
     initialGraph: AgentGraphDto;
     /** When set (e.g. Electron), used instead of global `fetch` for save/reset. */
     apiFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+    /** New nodes use Code-style tools (full repo/git/bash) or Work-mode allowlist (shared `WORK_MODE_TOOL_ALLOWLIST`). */
+    defaultToolPalette?: "code" | "work";
 }) {
     const request = apiFetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
     const [nodes, setNodes] = useState<AgentGraphDto["nodes"]>(() => initialGraph.nodes ?? []);
@@ -185,7 +202,7 @@ export function AgentGraphEditor({
 
     const handleAddNode = () => {
         const nextIdx = nodes.length + 1;
-        const newNode = makeDefaultNode(nextIdx);
+        const newNode = makeDefaultNode(nextIdx, defaultToolPalette);
         setNodes((prev) => [...prev, newNode]);
         setSelectedNodeId(newNode.id);
     };

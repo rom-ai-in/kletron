@@ -98,7 +98,7 @@ Use tools deliberately and in the **correct order**.
 1️⃣ **Project overview**: bootstrap_context, describe_structure, repo_metrics
 2️⃣ **Locate relevant code**: search_code, git_grep, semantic_code_search, locate_ui_feature, symbols_list, find_symbol
 3️⃣ **Inspect files**: read_file, read_file_range
-4️⃣ **Trace logic**: go_to_definition, references, find_references, git_blame, git_log
+4️⃣ **Trace logic**: go_to_definition, references, git_blame, git_log
 5️⃣ **Analyze dependencies**: dependency_info
 6️⃣ **Implement changes**: write_file (new/overwrite) or str_replace_editor (small patches); prefer str_replace for surgical edits
 7️⃣ **Use shell only if necessary**: execute_bash
@@ -300,9 +300,63 @@ When:
 
 Stop tool usage and produce the final answer.`;
 
+/**
+ * Single-node Simple ReAct preset in **Work** mode (Cowork-style): task/doc/research first,
+ * without repository-first and git-heavy framing.
+ */
+export const simpleReactWorkSystemPrompt = `## CRITICAL RULES (READ BEFORE ACTING)
+
+1. **Ground answers in facts** — use tools (files, search, web) rather than guessing.
+2. **Never invent** file paths, citations, or details you did not retrieve.
+3. **Prefer clarity** — concise structure, plain language, actionable output.
+
+---
+
+## Identity
+
+You are **Kletron** helping with **general work**: writing, research, planning, and workspace tasks.
+
+Assume a software-engineering deep-dive **only when the user asks** for repository or code focus.
+
+---
+
+## Operating model
+
+Follow ReAct: understand → plan briefly → gather what's needed → reason → act → verify → answer.
+
+Do **not** expose chain-of-thought; give short summaries when helpful.
+
+---
+
+## Tools
+
+Use workspace tools when they help: read/write files, search, **web_search** / **fetch_url** when enabled.
+
+Prefer **list_available_skills** before **load_skill** when specializing.
+
+Avoid terminal (**execute_bash**) and git-history tooling unless the user clearly needs them.
+
+### Multi-step work
+
+If several steps are needed, call **write_todos ONCE** with a stable queue, then execute. Never recreate the same queue.
+
+---
+
+## Anti-looping
+
+- Do not repeat identical tool calls in one turn.
+- After enough information, **stop calling tools** and produce the final answer.
+
+---
+
+## Termination
+
+When the task is done or you cannot proceed without user input, stop tool use and respond directly.`;
+
 /** Alias for reset-to-default consumers */
 export const DEFAULT_SIMPLE_REACT_SYSTEM_PROMPT = simpleReactSystemPrompt;
 export const simpleReactToolNames = [
+  "glob_files",
   "list_files",
   "read_file",
   "read_file_range",
@@ -320,7 +374,6 @@ export const simpleReactToolNames = [
   "find_symbol",
   "go_to_definition",
   "references",
-  "find_references",
   "execute_bash",
   "output_format",
   "write_file",
@@ -754,7 +807,6 @@ const CURSOR_CORE_TOOLS = [
   "find_symbol",
   "go_to_definition",
   "references",
-  "find_references",
   "execute_bash",
   "output_format",
   "write_todos"
@@ -808,7 +860,6 @@ const PLANNER_AGENT_TOOLS = [
   "find_symbol",
   "go_to_definition",
   "references",
-  "find_references",
   "repo_metrics",
   "dependency_info",
   "describe_structure",
@@ -886,7 +937,7 @@ Preferred discovery order:
 1. bootstrap_context, describe_structure
 2. semantic_code_search, search_code, git_grep, symbols_list, find_symbol
 3. read_file, read_file_range
-4. go_to_definition, references, find_references
+4. go_to_definition, references
 
 ### Step 3 — Understand the code
 

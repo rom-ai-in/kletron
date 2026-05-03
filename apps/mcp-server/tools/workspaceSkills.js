@@ -244,3 +244,50 @@ class WorkspaceSkillsManager {
 }
 
 export const workspaceSkillsManager = new WorkspaceSkillsManager();
+
+/**
+ * Workspace-enabled skills only (matches executor list_available_skills).
+ * @param {string} workspaceRoot
+ */
+export function createListAvailableSkillsTool(workspaceRoot) {
+    return {
+        description:
+            "List skills enabled for this workspace (slug, name, description). Call before load_skill to pick an allowed specialization.",
+        inputSchema: { type: "object", properties: {} },
+        async run() {
+            const caps = await workspaceSkillsManager.getCapabilities(workspaceRoot);
+            const skills = caps.enabledSkills ?? [];
+            return skills.map((s) => ({
+                slug: s.slug,
+                name: s.name,
+                description: s.description ?? "",
+            }));
+        },
+    };
+}
+
+/**
+ * Enforces workspace enabledSkills when that set is non-empty (capabilities known).
+ * @param {string} workspaceRoot
+ * @param {{ description: string, inputSchema: object, run: (args: object) => Promise<unknown> }} baseLoadSkill
+ */
+export function createWorkspaceGatedLoadSkillTool(workspaceRoot, baseLoadSkill) {
+    return {
+        description: baseLoadSkill.description,
+        inputSchema: baseLoadSkill.inputSchema,
+        async run(args) {
+            const raw = args?.skill_id ?? args?.slug;
+            const id = raw != null ? String(raw).trim() : "";
+            if (!id) throw new Error("load_skill requires slug or skill_id");
+            const caps = await workspaceSkillsManager.getCapabilities(workspaceRoot);
+            const enabled = caps.enabledSkills ?? [];
+            const slugs = new Set(enabled.map((s) => s.slug).filter(Boolean));
+            if (slugs.size > 0 && !slugs.has(id)) {
+                throw new Error(
+                    `Skill "${id}" is not enabled for this workspace. Use list_available_skills for eligible slugs.`
+                );
+            }
+            return baseLoadSkill.run(args);
+        },
+    };
+}

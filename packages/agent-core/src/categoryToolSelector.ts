@@ -155,6 +155,7 @@ export class CategorySpecificToolSelector {
     return [
       // File system tools
       { name: 'list_files', group: 'file_system' },
+      { name: 'glob_files', group: 'file_system' },
       { name: 'read_file', group: 'file_system' },
       { name: 'read_file_range', group: 'file_system' },
       { name: 'write_file', group: 'file_system' },
@@ -174,7 +175,6 @@ export class CategorySpecificToolSelector {
       { name: 'find_symbol', group: 'code_analysis' },
       { name: 'go_to_definition', group: 'code_analysis' },
       { name: 'references', group: 'code_analysis' },
-      { name: 'find_references', group: 'code_analysis' },
       { name: 'repo_metrics', group: 'code_analysis' },
       { name: 'describe_structure', group: 'code_analysis' },
       { name: 'dependency_info', group: 'code_analysis' },
@@ -194,6 +194,8 @@ export class CategorySpecificToolSelector {
       // General tools
       { name: 'output_format', group: 'general_tools' },
       { name: 'bootstrap_context', group: 'general_tools' },
+      { name: 'list_all_skills', group: 'general_tools' },
+      { name: 'list_skills', group: 'general_tools' },
     ];
   }
 }

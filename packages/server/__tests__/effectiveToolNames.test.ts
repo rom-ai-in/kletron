@@ -112,4 +112,20 @@ describe("effectiveToolNames", () => {
         expect(result.names).toContain("read_file");
         expect(result.dropped).toContain("unknown_tool");
     });
+
+    it("never marks always-on tools as dropped when absent from caps", () => {
+        const result = effectiveToolNames({
+            nodeToolNames: ["write_todos", "write_file", "fetch_url"],
+            skillToolNames: [],
+            adminToolNames: [],
+            capabilityToolSet: new Set(["write_file"]),
+            externalNamespacedTools: [],
+            alwaysOn: ["write_todos", "list_available_skills", "load_skill"],
+        });
+        expect(result.names).toContain("write_todos");
+        expect(result.dropped).not.toContain("write_todos");
+        expect(result.dropped).not.toContain("list_available_skills");
+        expect(result.dropped).not.toContain("load_skill");
+        expect(result.dropped).toContain("fetch_url");
+    });
 });

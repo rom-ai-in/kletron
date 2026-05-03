@@ -90,6 +90,7 @@ export type ToolApprovalPolicyResult = {
 };
 
 export const READONLY_TOOLS = new Set<string>([
+    "glob_files",
     "list_files",
     "read_file",
     "read_file_range",
@@ -107,14 +108,16 @@ export const READONLY_TOOLS = new Set<string>([
     "find_symbol",
     "go_to_definition",
     "references",
-    "find_references",
     "todo_search",
     "bootstrap_context",
     "web_search",
     "fetch_url",
     "output_format",
+    "locate_ui_feature",
     "write_todos",
     "list_available_skills",
+    "list_all_skills",
+    "list_skills",
     "load_skill",
 ]);
 
@@ -179,8 +182,14 @@ export function isNamespacedExternalMcpToolName(toolName: string): boolean {
     return /^[a-z0-9][a-z0-9_-]{0,63}__[a-z0-9][a-z0-9_-]{0,127}$/.test(t);
 }
 
+/** Legacy graph / client alias → canonical MCP tool id. */
+export function canonicalAgentToolName(toolName: string): string {
+    const t = String(toolName ?? "").trim().toLowerCase();
+    return t === "find_references" ? "references" : t;
+}
+
 export const getToolApprovalPolicy = (input: ToolApprovalPolicyInput): ToolApprovalPolicyResult => {
-    const toolName = String(input.toolName ?? "").trim().toLowerCase();
+    const toolName = canonicalAgentToolName(String(input.toolName ?? ""));
     const source = String(input.source ?? "");
     const normalizedSource = normalizeRunSource(source);
     const toolClass = classifyTool(toolName);

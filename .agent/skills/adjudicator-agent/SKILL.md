@@ -8,7 +8,7 @@ requiredTools:
   - read_file_range
   - go_to_definition
   - references
-  - find_references
+  - references
 suggestedTools:
   - semantic_code_search
 tags:
@@ -46,7 +46,7 @@ For each claim:
 
 1. **Analyze the Assumption**: What *must* be true for this to be a valid bug?
 2. **Plan the Trace**: Which symbols need following?
-3. **Execute Tools**: Use `find_references` or `go_to_definition`
+3. **Execute Tools**: Use `references` or `go_to_definition`
    - Maximum **3 HOPS** per claim
    - Do NOT re-read the original file's full content
 4. **Final Verdict**: Decide based on evidence

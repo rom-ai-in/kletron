@@ -21,6 +21,20 @@ function ensurePathInsideWorkspaceRoot(workspaceRoot: string, resolvedTarget: st
     }
 }
 
+function enforceWritePolicyBasename(resolvedFilePath: string): void {
+    const basename = path.basename(resolvedFilePath);
+    if (BLOCKED_FILENAMES.has(basename)) {
+        throw new Error(`Security: Writing to sensitive file '${basename}' is blocked.`);
+    }
+    if (basename.startsWith(".") && basename !== ".gitignore" && basename !== ".npmignore") {
+        throw new Error("Security: Writing to dotfiles is blocked by default.");
+    }
+    const ext = path.extname(resolvedFilePath);
+    if (BLOCKED_EXTENSIONS.has(ext)) {
+        throw new Error(`Security: Writing to file type '${ext}' is blocked.`);
+    }
+}
+
 export function isMcpBundledToolNotFoundError(err: unknown): boolean {
     const msg = String((err as Error)?.message ?? err ?? "");
     return (
@@ -97,4 +111,110 @@ export async function invokeWriteFileApprovalFallback(
         filePath: path.relative(root, resolvedFilePath),
     };
     return JSON.stringify(out, null, 2);
+}
+
+/**
+ * Replay `str_replace_editor` **str_replace** when MCP returns tool-not-found (-32603).
+ * Mirrors apps/mcp-server/tools/strReplaceEditor.js safety rules without MCP config/workspaceRoots.
+ */
+export async function invokeStrReplaceEditorApprovalFallback(
+    workspaceRoot: string,
+    args: Record<string, unknown>
+): Promise<string> {
+    const root = path.resolve(workspaceRoot);
+    const repoPathRaw = args.repoPath;
+    const effectiveRepo =
+        typeof repoPathRaw === "string" && repoPathRaw.trim() ? path.resolve(String(repoPathRaw)) : root;
+    ensurePathInsideWorkspaceRoot(root, effectiveRepo);
+
+    const cmdRaw = args.command ?? args.action ?? args.operation ?? "str_replace";
+    const cmd = String(cmdRaw).trim().toLowerCase();
+    const normalized = cmd === "read" ? "view" : cmd === "replace" ? "str_replace" : cmd;
+
+    if (normalized !== "str_replace") {
+        throw new Error(
+            `str_replace_editor approval fallback only supports str_replace (got ${String(cmdRaw)})`
+        );
+    }
+
+    const targetRaw = args.path ?? args.filePath;
+    const target = typeof targetRaw === "string" ? targetRaw.trim() : "";
+    if (!target) throw new Error("str_replace_editor requires path or filePath");
+
+    const resolvedFilePath = path.isAbsolute(target)
+        ? path.resolve(target)
+        : path.resolve(effectiveRepo, target);
+
+    ensurePathInsideWorkspaceRoot(root, resolvedFilePath);
+    enforceWritePolicyBasename(resolvedFilePath);
+
+    const oldStr = args.old_str;
+    const newStr = args.new_str;
+    if (typeof oldStr !== "string" || typeof newStr !== "string") {
+        throw new Error("str_replace requires old_str and new_str");
+    }
+    if (oldStr === newStr) {
+        return JSON.stringify({ ok: false, error: "old_str and new_str are identical." }, null, 2);
+    }
+    if (!oldStr.length) {
+        throw new Error("old_str cannot be empty.");
+    }
+
+    let content: string;
+    try {
+        content = await fs.readFile(resolvedFilePath, "utf8");
+    } catch (e: unknown) {
+        const code = (e as NodeJS.ErrnoException)?.code;
+        if (code === "ENOENT") {
+            return JSON.stringify(
+                { ok: false, error: `File not found: ${path.relative(root, resolvedFilePath)}` },
+                null,
+                2
+            );
+        }
+        throw e;
+    }
+
+    const replacedPreview = content.replace(oldStr, newStr);
+    const resultSize = Buffer.byteLength(replacedPreview, "utf8");
+    if (resultSize > MAX_FILE_SIZE_BYTES) {
+        throw new Error(`Security: Result would exceed maximum allowed size of ${MAX_FILE_SIZE_BYTES} bytes.`);
+    }
+
+    const occurrences = content.split(oldStr).length - 1;
+    if (occurrences === 0) {
+        return JSON.stringify(
+            {
+                ok: false,
+                error: `No match found for old_str in ${path.relative(root, resolvedFilePath)}.`,
+            },
+            null,
+            2
+        );
+    }
+    if (occurrences > 1) {
+        return JSON.stringify(
+            {
+                ok: false,
+                error: `Found ${occurrences} occurrences; str_replace requires exactly one match.`,
+            },
+            null,
+            2
+        );
+    }
+
+    await fs.writeFile(resolvedFilePath, replacedPreview, "utf8");
+
+    const replacementIndex = content.indexOf(oldStr);
+    const lineNumber = content.slice(0, replacementIndex).split("\n").length;
+
+    return JSON.stringify(
+        {
+            ok: true,
+            file: path.relative(root, resolvedFilePath),
+            message: `Replacement applied at line ${lineNumber}.`,
+        },
+        null,
+        2
+    );
 }

@@ -41,7 +41,14 @@ export function useSkills(
       const tools = Array.isArray(data) ? data : data?.tools ?? [];
       // Filter for skill-type tools
       const skillTools: Skill[] = tools
-        .filter((t: any) => t.name?.startsWith("load_skill") || t.name?.startsWith("list_skills") || t.isSkill)
+        .filter(
+          (t: any) =>
+            t.name?.startsWith("load_skill") ||
+            t.name?.startsWith("list_skills") ||
+            t.name?.startsWith("list_all_skills") ||
+            t.name?.startsWith("list_available_skills") ||
+            t.isSkill
+        )
         .map((t: any) => ({
           id: t.name ?? t.id,
           name: t.name ?? "Unknown",

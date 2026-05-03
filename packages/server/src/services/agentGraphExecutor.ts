@@ -43,6 +43,7 @@ import type { ToolApprovalConfig } from "./toolApprovalPolicy";
 import { applyThreadApprovalOverride, getToolApprovalPolicy } from "./toolApprovalPolicy";
 import { resolveEffectiveToolApprovalConfigForRun } from "./effectiveToolApprovalService";
 import { syncWorkspaceExternalMcpServers } from "./mcpWorkspaceSync";
+import { simpleReactPhaseId, simpleReactWorkSystemPrompt } from "./agentGraphPresets";
 
 const runApprovalConfigCache = new Map<string, ToolApprovalConfig>();
 
@@ -1920,14 +1921,16 @@ export class AgentGraphExecutor {
                     // deduplicated since they have side effects.
                     const DEDUP_CACHE_MAX = 50;
                     const READ_ONLY_DEDUP_TOOLS = new Set([
+                        "glob_files",
                         "list_files", "read_file", "read_file_range", "search_code",
                         "repo_metrics", "dependency_info", "describe_structure",
                         "git_log", "git_diff", "git_grep", "git_blame",
                         "semantic_code_search", "structural_search", "symbols_list",
-                        "find_symbol", "go_to_definition", "references", "find_references",
+                        "find_symbol", "go_to_definition", "references",
                         "todo_search", "bootstrap_context", "web_search", "fetch_url",
                         "output_format", "write_todos",
                         "list_available_skills", "load_skill",
+                        "list_all_skills", "list_skills",
                     ]);
                     const toolCallCache = new Map<string, string>();
                     let toolCallCount = 0;
@@ -2242,6 +2245,13 @@ export class AgentGraphExecutor {
                     // ---------------------------------------------------------
                     // 3. Smart Context Injection (New Architecture)
                     // ---------------------------------------------------------
+                    const runWorkMode = await agentGraphRunService.getRunWorkMode(runId);
+                    const useWorkSimpleReactPrompt =
+                        runWorkMode === "work" &&
+                        graph.nodes.length === 1 &&
+                        (node.kind ?? "react") === "react" &&
+                        node.id === simpleReactPhaseId;
+
                     let contextBlock = "";
                     if (wantAutoContext) {
                         const editorState = getEditorStateManager(workspace._id!.toString()).getCurrentState();
@@ -2258,7 +2268,10 @@ export class AgentGraphExecutor {
                     }
 
                     // Compose final system prompt: skills prefix + base prompt + context
-                    const renderedSystemPrompt = renderUserPrompt(node.react.systemPrompt, state);
+                    const renderedSystemPrompt = renderUserPrompt(
+                        useWorkSimpleReactPrompt ? simpleReactWorkSystemPrompt : node.react.systemPrompt,
+                        state
+                    );
                     const baseSystemPrompt = skillPromptPrefix
                         ? `${skillPromptPrefix}\n\n---\n\n${renderedSystemPrompt}`
                         : renderedSystemPrompt;
@@ -2274,21 +2287,36 @@ export class AgentGraphExecutor {
                     ].join("\n");
 
                     // ── Workspace awareness block ────────────────────────────────
-                    // Prevents the agent from asking "how do I access the repo?"
-                    const workspaceContextBlock = [
-                        "\n\n## WORKSPACE ENVIRONMENT",
-                        `You are running inside the repository at: ${rootDir}`,
-                        `Workspace ID: ${workspace._id?.toString() ?? "default"}`,
-                        "You already have full filesystem access via tools (list_files, read_file, search_code, etc.).",
-                        "Do NOT ask the user for repository access — you already have it.",
-                        "Do NOT re-plan if you have already created a plan — proceed with execution.",
-                        "",
-                        "## ANTI-LOOPING RULES",
-                        "- Never call the same tool with identical arguments more than once per turn. Reuse prior results.",
-                        "- Never call write_todos more than twice without making progress on actual tasks between calls.",
-                        "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
-                        "- Focus on PRODUCING OUTPUT, not endlessly planning. After gathering information, synthesize and report.",
-                    ].join("\n");
+                    const workspaceContextBlock =
+                        runWorkMode === "work"
+                            ? [
+                                  "\n\n## WORKSPACE ENVIRONMENT",
+                                  `Working folder: ${rootDir}`,
+                                  `Workspace ID: ${workspace._id?.toString() ?? "default"}`,
+                                  "You can read and write files in this workspace with the provided tools.",
+                                  "Do NOT ask the user for generic folder access — tools already operate here.",
+                                  "Do NOT re-plan indefinitely — proceed once you have a reasonable plan.",
+                                  "",
+                                  "## ANTI-LOOPING RULES",
+                                  "- Never call the same tool with identical arguments more than once per turn. Reuse prior results.",
+                                  "- Never call write_todos more than twice without making progress between calls.",
+                                  "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
+                                  "- After gathering enough information, synthesize and report.",
+                              ].join("\n")
+                            : [
+                                  "\n\n## WORKSPACE ENVIRONMENT",
+                                  `You are running inside the repository at: ${rootDir}`,
+                                  `Workspace ID: ${workspace._id?.toString() ?? "default"}`,
+                                  "You already have full filesystem access via tools (list_files, read_file, search_code, etc.).",
+                                  "Do NOT ask the user for repository access — you already have it.",
+                                  "Do NOT re-plan if you have already created a plan — proceed with execution.",
+                                  "",
+                                  "## ANTI-LOOPING RULES",
+                                  "- Never call the same tool with identical arguments more than once per turn. Reuse prior results.",
+                                  "- Never call write_todos more than twice without making progress on actual tasks between calls.",
+                                  "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
+                                  "- Focus on PRODUCING OUTPUT, not endlessly planning. After gathering information, synthesize and report.",
+                              ].join("\n");
 
                     const enhancedSystemPrompt = `${baseSystemPrompt}${workspaceContextBlock}${contextBlock}${taskContextBlock}${auditContextPrompt ? `\n\n${auditContextPrompt}` : ""}`;
 

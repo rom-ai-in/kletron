@@ -1,6 +1,16 @@
 import { ObjectId } from "mongodb";
 import { getDb } from "../lib/db";
 import type { AgentGraphDefinition } from "./agentGraphTypes";
+
+/** Normalize legacy tool ids so graphs converge on canonical MCP names. */
+function normalizeGraphToolAliases(nodes: AgentGraphDefinition["nodes"] | undefined) {
+    if (!nodes?.length) return;
+    for (const node of nodes) {
+        const names = node.react?.toolNames;
+        if (!names?.length) continue;
+        node.react.toolNames = names.map((t) => (t === "find_references" ? "references" : t));
+    }
+}
 import {
     buildDriftAnalysisGraph,
     buildSimpleReactAgentGraph,
@@ -92,6 +102,7 @@ export class AgentGraphService {
     ): Promise<string> {
         const collection = await getCollectionSafe();
         const now = new Date();
+        normalizeGraphToolAliases(input.nodes);
         const graph: AgentGraphDefinition = {
             ...input,
             createdAt: now,
@@ -181,6 +192,7 @@ export class AgentGraphService {
         }
         const collection = await getCollectionSafe();
         const { _id: _, ...updateData } = updates as any;
+        if (updateData.nodes) normalizeGraphToolAliases(updateData.nodes);
         updateData.updatedAt = new Date();
         if (!collection) {
             ensureFallbackGraphs();

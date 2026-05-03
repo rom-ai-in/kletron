@@ -3,7 +3,7 @@ import type { Message } from "@kletron/shared/chatTypes";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { useSessionStream } from "@kletron/ui/hooks/useSessionStream";
-import { normalizeToWorkModeId } from "@kletron/shared/workMode";
+import { normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode";
 import { useAgentThread } from "@kletron/ui/hooks/useAgentThread";
 import { useSessionEdits } from "@kletron/ui/hooks/useSessionEdits";
 import type {
@@ -393,6 +393,15 @@ export function useConversation(
     };
   }, [stream.tokenUsage]);
 
+  /** Prefer persisted session workMode when hydrated; else workspace category (main window). */
+  const threadWorkMode = useMemo((): WorkModeId => {
+    const d = agentThread.sessionDetail;
+    if (d?.id === conversationId && d.workMode != null) {
+      return d.workMode;
+    }
+    return normalizeToWorkModeId(activeCategory ?? "code");
+  }, [agentThread.sessionDetail, conversationId, activeCategory]);
+
   return {
     conversationEvents,
     conversationLoading: conversationLoading || agentThread.sessionDetailLoading,
@@ -424,5 +433,6 @@ export function useConversation(
     onLoadOlderMessages: handleLoadOlderMessages,
     sessionEdits,
     capabilityDroppedTools: stream.capabilityDroppedTools,
+    threadWorkMode,
   };
 }

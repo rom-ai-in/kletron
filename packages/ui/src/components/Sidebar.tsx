@@ -152,13 +152,6 @@ export function Sidebar() {
 
             {/* Navigation */}
             <nav className="flex-1 space-y-1 p-3 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-border-strong scrollbar-track-transparent">
-                {!isCollapsed && (
-                    <div className="mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-text-muted whitespace-nowrap overflow-hidden transition-opacity duration-300 delay-100">
-                        Main Menu
-                    </div>
-                )}
-                {isCollapsed && <div className="h-4" />}
-
                 {/* Nav Items */}
                 {navItems.map((item) => {
                     const isActive = pathname === item.href || (item.href !== "/" && (pathname?.startsWith(item.href) ?? false));

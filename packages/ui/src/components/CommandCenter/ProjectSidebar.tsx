@@ -28,6 +28,7 @@ import {
   threadRecencyBucket,
 } from '@kletron/shared/threadRecency';
 import { WorkModeSegmented } from './WorkModeSegmented';
+import { Button } from '../ui/Button';
 
 export type ThreadLiveStatus = 'running' | 'completed' | 'idle' | 'waiting' | 'error';
 
@@ -97,6 +98,8 @@ export interface ProjectSidebarProps {
   onWorkModeChange?: (mode: WorkModeId) => void;
   /** Disable mode control (e.g. while workspace or threads are loading). */
   workModeSwitcherDisabled?: boolean;
+  /** Full-width primary CTA above the thread list (default matches shell-style copy). */
+  newSessionButtonLabel?: string;
 }
 
 function StatusDot({ status }: { status: ThreadLiveStatus }) {
@@ -149,6 +152,7 @@ export function ProjectSidebar({
   workMode,
   onWorkModeChange,
   workModeSwitcherDisabled = false,
+  newSessionButtonLabel = 'New Agent',
 }: ProjectSidebarProps) {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
@@ -160,6 +164,11 @@ export function ProjectSidebar({
   const [archivedExpandedProjects, setArchivedExpandedProjects] = useState<Set<string>>(() => new Set());
 
   const recencyNow = useMemo(() => new Date(), [projects, loading, threadFilter]);
+
+  /** One workspace / folder — hide redundant project name row (shown in shell search). */
+  const singleWorkspaceProject = projects.length === 1;
+  const threadRowPl = singleWorkspaceProject ? 'pl-3' : 'pl-9';
+  const threadRowPlActive = singleWorkspaceProject ? 'pl-[10px]' : 'pl-[34px]';
 
   const filterChip = (id: SidebarFilter, label: string) => (
     <button
@@ -256,7 +265,7 @@ export function ProjectSidebar({
       )}
 
       {/* ── Mode first (scopes list), then Threads header — icons stay muted, no accent stripe ── */}
-      <div className="mt-1 flex flex-col gap-2 px-3 py-2.5">
+      <div className="mt-1 flex flex-col gap-1.5 px-3 py-2">
         {workMode != null && onWorkModeChange ? (
           <div className="flex flex-col gap-1" role="region" aria-label="Code or work thread list">
             <WorkModeSegmented
@@ -273,34 +282,26 @@ export function ProjectSidebar({
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between gap-2">
-          <span
-            id="project-sidebar-threads-heading"
-            className="text-[11px] font-bold uppercase tracking-widest text-text-muted"
+        {onNewThreadInProject && projects.length > 0 ? (
+          <Button
+            type="button"
+            variant="primary"
+            size="md"
+            fullWidth
+            title="Start a new agent thread"
+            onClick={() => {
+              const targetId =
+                activeProjectId && projects.some((p) => p.id === activeProjectId)
+                  ? activeProjectId
+                  : projects[0]?.id;
+              if (targetId) {
+                onNewThreadInProject(targetId);
+              }
+            }}
           >
-            Threads
-          </span>
-          <div className="flex items-center gap-1">
-            {onNewThreadInProject && projects.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  const targetId =
-                    activeProjectId && projects.some((p) => p.id === activeProjectId)
-                      ? activeProjectId
-                      : projects[0]?.id;
-                  if (targetId) {
-                    onNewThreadInProject(targetId);
-                  }
-                }}
-                className="rounded-md px-2 py-1 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-state-hover transition-colors"
-                title="New thread"
-              >
-                New
-              </button>
-            )}
-          </div>
-        </div>
+            {newSessionButtonLabel}
+          </Button>
+        ) : null}
       </div>
 
       {/* ── Category filter chips (chat vs automation within this mode) ── */}
@@ -320,15 +321,22 @@ export function ProjectSidebar({
             aria-busy="true"
             aria-label="Loading threads"
           >
-            <div className="mt-1 flex items-center gap-1.5 py-2">
-              <div className="h-3 w-3 shrink-0 rounded bg-bg-elevated animate-pulse" />
-              <div className="h-3.5 w-3.5 shrink-0 rounded bg-bg-elevated animate-pulse" />
-              <div className="h-3 w-[52%] max-w-[140px] rounded bg-bg-elevated animate-pulse" />
-            </div>
+            {!singleWorkspaceProject ? (
+              <div className="mt-1 flex items-center gap-1.5 py-2">
+                <div className="h-3 w-3 shrink-0 rounded bg-bg-elevated animate-pulse" />
+                <div className="h-3.5 w-3.5 shrink-0 rounded bg-bg-elevated animate-pulse" />
+                <div className="h-3 w-[52%] max-w-[140px] rounded bg-bg-elevated animate-pulse" />
+              </div>
+            ) : (
+              <div className="mt-1 py-1" aria-hidden />
+            )}
             {[72, 58, 88, 48, 68, 55].map((width, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2 border-l-2 border-l-transparent py-1.5 pl-9 pr-2"
+                className={cn(
+                  'flex items-center gap-2 border-l-2 border-l-transparent py-1.5 pr-2',
+                  threadRowPl,
+                )}
               >
                 <div
                   className="h-3 flex-1 rounded bg-bg-elevated animate-pulse"
@@ -342,13 +350,15 @@ export function ProjectSidebar({
         ) : (
           <>
         {projects.map((project) => {
-          const isCollapsed = collapsedProjects.has(project.id);
+          const hideFolderHeader = singleWorkspaceProject;
+          const isCollapsed = hideFolderHeader ? false : collapsedProjects.has(project.id);
           const showContextMenu = contextMenuProjectId === project.id;
           const isHealthy = !project.health || project.health === 'healthy';
 
           return (
             <div key={project.id} className="relative">
-              {/* Project Header */}
+              {/* Project header — skipped for single workspace (name lives in app chrome). */}
+              {!hideFolderHeader ? (
               <div
                 className={`group/project flex w-full items-center gap-1 px-3 py-2 text-[12px] font-semibold transition-all duration-150 mt-1 first:mt-0 ${isHealthy ? 'text-text-secondary hover:bg-white/[0.03]' : 'text-text-muted opacity-50 cursor-not-allowed'}`}
                 title={!isHealthy ? (project.healthMessage || 'Project inaccessible') : undefined}
@@ -408,6 +418,7 @@ export function ProjectSidebar({
                   </div>
                 )}
               </div>
+              ) : null}
 
               {/* Context menu dropdown — rendered via portal to avoid overflow clipping */}
               {showContextMenu && menuPosition && ReactDOM.createPortal(
@@ -446,7 +457,7 @@ export function ProjectSidebar({
                     });
                     if (filteredThreads.length === 0) {
                       return (
-                        <div className="pl-9 pr-3 py-1.5 text-[11px] text-text-muted italic">
+                        <div className={cn('pr-3 py-1.5 text-[11px] text-text-muted italic', threadRowPl)}>
                           No threads
                         </div>
                       );
@@ -485,10 +496,16 @@ export function ProjectSidebar({
                         <div
                           key={thread.id}
                           className={cn(
-                            'group flex cursor-pointer items-center gap-2 border-l-2 py-1.5 pl-9 pr-2 transition-all duration-150',
+                            'group flex cursor-pointer items-center gap-2 border-l-2 py-1.5 pr-2 transition-all duration-150',
                             isActive
-                              ? 'border-l-white/25 bg-state-selected pl-[34px] text-text-primary'
-                              : 'border-l-transparent text-text-secondary hover:bg-white/[0.03] hover:text-text-primary',
+                              ? cn(
+                                  'border-l-white/25 bg-state-selected text-text-primary',
+                                  threadRowPlActive,
+                                )
+                              : cn(
+                                  'border-l-transparent text-text-secondary hover:bg-white/[0.03] hover:text-text-primary',
+                                  threadRowPl,
+                                ),
                           )}
                           onClick={() => !isEditing && onThreadSelect?.(thread.id)}
                         >
@@ -534,7 +551,21 @@ export function ProjectSidebar({
                                   </button>
                                 )}
                                 {onDeleteThread && (
-                                  <button type="button" onClick={(e) => { e.stopPropagation(); onDeleteThread(thread.id); }} className="p-0.5 text-text-muted hover:text-status-error-text" title="Delete">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (
+                                        window.confirm(
+                                          'Delete this thread? This cannot be undone.',
+                                        )
+                                      ) {
+                                        onDeleteThread(thread.id);
+                                      }
+                                    }}
+                                    className="p-0.5 text-text-muted hover:text-status-error-text"
+                                    title="Delete"
+                                  >
                                     <Trash2 className="h-2.5 w-2.5" />
                                   </button>
                                 )}
@@ -552,7 +583,12 @@ export function ProjectSidebar({
                           if (list.length === 0) return null;
                           return (
                             <div key={bucketId} className="flex flex-col">
-                              <div className="pl-9 pr-3 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                              <div
+                                className={cn(
+                                  'pr-3 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-text-muted',
+                                  threadRowPl,
+                                )}
+                              >
                                 {THREAD_RECENCY_LABELS[bucketId]}
                               </div>
                               {list.map((thread) => renderThreadRow(thread))}
@@ -571,7 +607,10 @@ export function ProjectSidebar({
                                   return next;
                                 });
                               }}
-                              className="flex w-full items-center gap-1.5 pl-9 pr-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary hover:bg-white/[0.03] transition-colors"
+                              className={cn(
+                                'flex w-full items-center gap-1.5 pr-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary hover:bg-white/[0.03] transition-colors',
+                                threadRowPl,
+                              )}
                             >
                               {archivedOpen ? (
                                 <ChevronDown className="h-3 w-3 flex-shrink-0" />

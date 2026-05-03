@@ -40,7 +40,7 @@ export function ToolInvocationIcon({ name, className }: { name: string; classNam
     if (name === 'run_command' || name === 'execute_bash') return <TerminalIcon className={cls} />;
     // Search tools
     if (['grep_search', 'codebase_search', 'search_code', 'todo_search', 'semantic_code_search',
-         'find_symbol', 'go_to_definition', 'references', 'find_references',
+         'find_symbol', 'go_to_definition', 'references',
          'structural_search', 'locate_ui_feature'].includes(name))
         return <Search className={cls} />;
     // Edit / write tools
@@ -109,7 +109,7 @@ function getToolSummary(name: string, parsedArgs: Record<string, any>): string {
         return parsedArgs.file || parsedArgs.path || parsedArgs.query || parsedArgs.pattern || '';
     }
     // Symbol tools
-    if (['find_symbol', 'go_to_definition', 'references', 'find_references', 'symbols_list'].includes(name)) {
+    if (['find_symbol', 'go_to_definition', 'references', 'symbols_list'].includes(name)) {
         return parsedArgs.symbol || parsedArgs.name || parsedArgs.query || '';
     }
     // Web / fetch

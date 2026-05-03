@@ -13,6 +13,7 @@ import {
 } from "@kletron/server/services/titleSanitizer";
 import { containsMetaLeakage } from "@kletron/shared/contentSanitizer";
 import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
+import { normalizeToWorkModeId } from "@kletron/shared/workMode";
 import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 /**
@@ -89,9 +90,12 @@ export async function GET(request: Request, { params }: { params: { id: string }
       nextBeforeIndex: startIndex > 0 ? startIndex : null,
     };
 
+    const workMode = normalizeToWorkModeId(run.workMode as string | undefined);
+
     return NextResponse.json({
       id: run._id?.toString(),
       graphId: run.graphId?.toString(),
+      workMode,
       title,
       status: run.status,
       archived: run.archived ?? false,

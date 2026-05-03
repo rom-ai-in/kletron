@@ -11,6 +11,7 @@ import http from "http";
 import { URL } from "url";
 
 import { listFiles } from "./tools/listFiles.js";
+import { globFiles } from "./tools/globFiles.js";
 import { readFile } from "./tools/readFile.js";
 import { readFileRange } from "./tools/readFileRange.js";
 import { searchCode } from "./tools/searchCode.js";
@@ -36,7 +37,11 @@ import { strReplaceEditor } from "./tools/strReplaceEditor.js";
 import { executeBash } from "./tools/executeBash.js";
 import { outputFormat } from "./tools/outputFormat.js";
 import { writeFile } from "./tools/writeFile.js";
-import { list_skills as listSkillsTool, load_skill as loadSkillTool } from "./tools/skillLoader.js";
+import {
+  list_all_skills as listAllSkillsTool,
+  list_skills as listSkillsDeprecatedAlias,
+  load_skill as loadSkillTool,
+} from "./tools/skillLoader.js";
 import { notify } from "./tools/notify.js";
 
 // Workspace-specific tools
@@ -124,6 +129,7 @@ async function runServer() {
 export function buildAllTools() {
   const tools = {
     list_files: listFiles,
+    glob_files: globFiles,
     read_file: readFile,
     read_file_range: readFileRange,
     search_code: searchCode,
@@ -157,7 +163,8 @@ export function buildAllTools() {
 
     // Skills system (backed by the web API skills service)
     load_skill: loadSkillTool,
-    list_skills: listSkillsTool,
+    list_all_skills: listAllSkillsTool,
+    list_skills: listSkillsDeprecatedAlias,
 
     // Notifications
     notify,
@@ -169,10 +176,22 @@ export function buildAllTools() {
 async function buildWorkspaceAwareTools(options = {}) {
   const allTools = buildAllTools();
 
-  const { workspaceSkillsManager } = await import("./tools/workspaceSkills.js");
+  const {
+    workspaceSkillsManager,
+    createListAvailableSkillsTool,
+    createWorkspaceGatedLoadSkillTool,
+  } = await import("./tools/workspaceSkills.js");
 
   const activeWorkspace = options.workspaceRoot || config.defaultDir;
   const categoryId = options.categoryId;
+
+  const augmentSkillTools = (base) => ({
+    ...base,
+    list_all_skills: allTools.list_all_skills,
+    list_skills: allTools.list_skills,
+    list_available_skills: createListAvailableSkillsTool(activeWorkspace),
+    load_skill: createWorkspaceGatedLoadSkillTool(activeWorkspace, allTools.load_skill),
+  });
 
   if (activeWorkspace) {
     try {
@@ -180,19 +199,13 @@ async function buildWorkspaceAwareTools(options = {}) {
         activeWorkspace,
         categoryId
       );
-      // Always keep skill management + capability inspection tools available
-      // so the agent can self-introspect.
-      return {
-        ...workspaceTools,
-        list_skills: allTools.list_skills,
-        load_skill: allTools.load_skill,
-      };
+      return augmentSkillTools(workspaceTools);
     } catch (error) {
       console.error("[MCP] Failed to get workspace-specific tools, using default:", error.message);
     }
   }
 
-  return allTools;
+  return augmentSkillTools(allTools);
 }
 
 async function wireToolHandlers({ server, allTools, workspaceRoot, categoryId }) {
@@ -210,11 +223,12 @@ async function wireToolHandlers({ server, allTools, workspaceRoot, categoryId })
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const toolName = request.params.name;
+    const rawName = request.params.name;
+    const toolName = rawName === "find_references" ? "references" : rawName;
     const tool = tools[toolName];
 
     if (!tool) {
-      throw new Error(`Tool not found: ${toolName}`);
+      throw new Error(`Tool not found: ${rawName}`);
     }
 
     try {

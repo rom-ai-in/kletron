@@ -1,4 +1,5 @@
 import type { ThreadApprovalMode } from "./threadApprovalTypes";
+import type { WorkModeId } from "./workMode";
 
 /** Pagination slice returned with GET /api/sessions/:id */
 export type ConversationPagination = {
@@ -14,6 +15,8 @@ export type ConversationPagination = {
 /** Core session detail payload from GET /api/sessions/:id (fields vary by API version). */
 export type SessionDetailPayload = {
   id: string;
+  /** Persisted run mode (code vs work); drives pop-out and session-aware UI. */
+  workMode?: WorkModeId;
   graphId?: string;
   title?: string;
   status?: string;

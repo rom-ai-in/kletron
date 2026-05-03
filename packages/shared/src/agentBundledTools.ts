@@ -11,8 +11,8 @@ export const AGENT_BUNDLED_PROFILE_VERSION: string = manifest.version;
  * (`github_api`, `notify`) — those stay behind integrations via existing resolver logic.
  *
  * Keep `standardWorkspaceBundledTools` in agentBundledTools.json in sync with
- * `buildAllTools()` in apps/mcp-server/server.js (plus `semantic_code_search` / `find_references`
- * which are executor-local LangChain tools).
+ * `buildAllTools()` in apps/mcp-server/server.js (plus `semantic_code_search`, which is
+ * executor-local).
  */
 export const STANDARD_WORKSPACE_BUNDLED_TOOLS: readonly string[] =
     manifest.standardWorkspaceBundledTools;

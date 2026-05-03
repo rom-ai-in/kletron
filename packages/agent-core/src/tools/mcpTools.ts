@@ -142,6 +142,30 @@ const createListFilesTool = (defaultMaxDepth?: number) =>
 export const listFilesTool = createListFilesTool();
 export { createListFilesTool };
 
+export const globFilesTool = tool(
+  async (
+    input: { pattern: string; cwd?: string; ignore?: string[]; maxResults?: number },
+    config: any
+  ) => {
+    const payload: Record<string, unknown> = { pattern: input.pattern };
+    if (input.cwd) payload.cwd = input.cwd;
+    if (input.ignore?.length) payload.ignore = input.ignore;
+    if (typeof input.maxResults === "number") payload.maxResults = input.maxResults;
+    return formatResult(await callMcpTool("glob_files", payload, config));
+  },
+  {
+    name: "glob_files",
+    description:
+      "Find files matching a glob pattern under the workspace (targeted discovery). Prefer over listing entire trees.",
+    schema: z.object({
+      pattern: z.string(),
+      cwd: z.string().optional(),
+      ignore: z.array(z.string()).optional(),
+      maxResults: z.number().int().positive().optional(),
+    }),
+  }
+);
+
 export const readFileTool = tool(
   async ({ filePath }: { filePath: string }, config: any) => {
     return formatResult(await callMcpTool("read_file", { filePath }, config));
@@ -549,43 +573,6 @@ export const referencesTool = tool(
   }
 );
 
-export const findReferencesTool = tool(
-  async (input: {
-    path?: string;
-    filePath: string;
-    line: number;
-    column: number;
-    maxResults?: number;
-    contextLines?: number;
-    cacheTtlMs?: number;
-  }, config: any) => {
-    return formatResult(
-      await callMcpTool("references", {
-        path: input.path,
-        filePath: input.filePath,
-        line: input.line,
-        column: input.column,
-        maxResults: input.maxResults,
-        contextLines: input.contextLines,
-        cacheTtlMs: input.cacheTtlMs,
-      }, config)
-    );
-  },
-  {
-    name: "find_references",
-    description: "Alias of references: find references for a TS/JS identifier at a given file/line/column.",
-    schema: z.object({
-      path: z.string().optional(),
-      filePath: z.string(),
-      line: z.number().int().positive(),
-      column: z.number().int().positive(),
-      maxResults: z.number().int().positive().optional(),
-      contextLines: z.number().int().nonnegative().optional(),
-      cacheTtlMs: z.number().int().positive().optional(),
-    }),
-  }
-);
-
 export const webSearchTool = tool(
   async (input: {
     query: string;
@@ -912,6 +899,30 @@ export const outputFormatTool = tool(
   }
 );
 
+export const listAllSkillsTool = tool(
+  async (_input: Record<string, never>, config: any) => {
+    return formatResult(await callMcpTool("list_all_skills", {}, config));
+  },
+  {
+    name: "list_all_skills",
+    description:
+      "List all skills in the Kletron library (global HTTP catalog). For workspace-enabled skills only, prefer list_available_skills.",
+    schema: z.object({}),
+  }
+);
+
+/** @deprecated Prefer list_all_skills; MCP still accepts this name. */
+export const listSkillsLegacyTool = tool(
+  async (_input: Record<string, never>, config: any) => {
+    return formatResult(await callMcpTool("list_skills", {}, config));
+  },
+  {
+    name: "list_skills",
+    description: "Deprecated alias for list_all_skills.",
+    schema: z.object({}),
+  }
+);
+
 import { semanticSearch } from "@kletron/server/services/vectorService";
 
 export const semanticCodeSearchTool = tool(
@@ -955,6 +966,7 @@ export const semanticCodeSearchTool = tool(
 export const allMcpTools = [
   // File operations
   listFilesTool,
+  globFilesTool,
   readFileTool,
   readFileRangeTool,
   writeFileTool,
@@ -964,6 +976,8 @@ export const allMcpTools = [
   // Semantic search
   semanticCodeSearchTool,
   outputFormatTool,
+  listAllSkillsTool,
+  listSkillsLegacyTool,
   // Legacy code tools (keep for compatibility)
   searchCodeTool,
   repoMetricsTool,
@@ -979,7 +993,6 @@ export const allMcpTools = [
   findSymbolTool,
   goToDefinitionTool,
   referencesTool,
-  findReferencesTool,
   githubApiTool,
   bootstrapContextTool,
   locateUiFeatureTool,

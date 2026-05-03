@@ -16,7 +16,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { getToolApprovalPolicy } from "../src/services/toolApprovalPolicy";
 import { findExistingMissionUserEvent } from "../src/services/agentGraphUtils";
-import { simpleReactSystemPrompt } from "../src/services/agentGraphPresets";
+import { simpleReactSystemPrompt, simpleReactWorkSystemPrompt } from "../src/services/agentGraphPresets";
 
 // ─── Helpers (replicated from executor for isolated testing) ────────────────
 
@@ -205,13 +205,16 @@ describe("write_todos deduplication", () => {
 describe("tool call cache (deduplication)", () => {
     const DEDUP_CACHE_MAX = 50;
     const READ_ONLY_DEDUP_TOOLS = new Set([
+        "glob_files",
         "list_files", "read_file", "read_file_range", "search_code",
         "repo_metrics", "dependency_info", "describe_structure",
         "git_log", "git_diff", "git_grep", "git_blame",
         "semantic_code_search", "structural_search", "symbols_list",
-        "find_symbol", "go_to_definition", "references", "find_references",
+        "find_symbol", "go_to_definition", "references",
         "todo_search", "bootstrap_context", "web_search", "fetch_url",
         "output_format", "write_todos",
+        "list_available_skills", "load_skill",
+        "list_all_skills", "list_skills",
     ]);
 
     function simulateToolCalls(calls: Array<{ name: string; input: Record<string, unknown> }>) {
@@ -392,5 +395,11 @@ describe("system prompt anti-loop content verification", () => {
         assert.ok(simpleReactSystemPrompt.includes("Stop tool usage and produce the final answer"));
         assert.ok(simpleReactSystemPrompt.includes("Kletron"));
         assert.ok(simpleReactSystemPrompt.includes("Repository First Principle"));
+    });
+
+    it("simpleReactWorkSystemPrompt de-emphasizes repo-first workflows", () => {
+        assert.ok(simpleReactWorkSystemPrompt.includes("list_available_skills"));
+        assert.ok(simpleReactWorkSystemPrompt.includes("Kletron"));
+        assert.ok(!simpleReactWorkSystemPrompt.includes("Repository First Principle"));
     });
 });

@@ -19,36 +19,36 @@ The presets file defines 6 ready-to-use `AgentGraphDefinition` configurations, e
 
 ## Tool Allowlists
 
-### CURSOR_CORE_TOOLS (21 tools)
+### CURSOR_CORE_TOOLS (22 tools)
 Base set for investigation and code analysis:
 ```
-list_files, read_file, read_file_range, search_code, repo_metrics,
+glob_files, list_files, read_file, read_file_range, search_code, repo_metrics,
 dependency_info, describe_structure, git_log, git_diff, git_grep,
 git_blame, semantic_code_search, structural_search, symbols_list,
-find_symbol, go_to_definition, references, find_references,
+find_symbol, go_to_definition, references,
 execute_bash, output_format, write_todos
 ```
 
-### CURSOR_RESEARCH_TOOLS (23 tools)
+### CURSOR_RESEARCH_TOOLS (24 tools)
 Core + web access:
 ```
 ...CURSOR_CORE_TOOLS, web_search, fetch_url
 ```
 
-### CURSOR_CODER_TOOLS (23 tools)
+### CURSOR_CODER_TOOLS (24 tools)
 Core + file modification:
 ```
 ...CURSOR_CORE_TOOLS, write_file, str_replace_editor
 ```
 
-### simpleReactToolNames (23 tools)
-Full general-purpose set:
+### simpleReactToolNames (full general-purpose set)
 ```
-list_files, read_file, read_file_range, search_code, repo_metrics,
+glob_files, list_files, read_file, read_file_range, search_code, repo_metrics,
 dependency_info, describe_structure, git_log, git_diff, git_grep,
 git_blame, semantic_code_search, structural_search, symbols_list,
-find_symbol, go_to_definition, references, find_references,
-execute_bash, output_format, write_file, web_search, fetch_url, write_todos
+find_symbol, go_to_definition, references,
+execute_bash, output_format, write_file, str_replace_editor, web_search, fetch_url,
+write_todos, list_available_skills, load_skill
 ```
 
 ## Preset Details

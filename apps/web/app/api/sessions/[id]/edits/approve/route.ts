@@ -16,6 +16,7 @@ import {
 import { syncWorkspaceExternalMcpServers } from "@kletron/server/services/mcpWorkspaceSync";
 import {
     invokeWriteFileApprovalFallback,
+    invokeStrReplaceEditorApprovalFallback,
     isMcpBundledToolNotFoundError,
 } from "@kletron/server/services/bundledToolApprovalFallback";
 
@@ -152,6 +153,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
     } catch (mcpErr) {
       if (toolName === "write_file" && isMcpBundledToolNotFoundError(mcpErr)) {
         raw = await invokeWriteFileApprovalFallback(workspace.rootPath, resolvedArgs);
+      } else if (toolName === "str_replace_editor" && isMcpBundledToolNotFoundError(mcpErr)) {
+        raw = await invokeStrReplaceEditorApprovalFallback(workspace.rootPath, resolvedArgs);
       } else {
         throw mcpErr;
       }

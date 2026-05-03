@@ -71,6 +71,33 @@ export type StreamStatus = StreamingState;
 export type ThreadLiveStatus = 'running' | 'completed' | 'idle' | 'waiting' | 'error';
 
 /**
+ * Map GET /api/sessions row `status` plus local streaming to {@link ThreadLiveStatus}.
+ * Used by web agent and desktop so sidebar dots match server run state.
+ */
+export function sessionStatusToSidebarLiveStatus(
+    status: string | undefined,
+    isStreaming: boolean,
+): ThreadLiveStatus {
+    if (isStreaming) return 'running';
+    const s = (status ?? '').toUpperCase();
+    switch (s) {
+        case 'RUNNING':
+            return 'running';
+        case 'COMPLETED':
+            return 'completed';
+        case 'FAILED':
+            return 'error';
+        case 'PAUSED':
+        case 'PENDING':
+            return 'waiting';
+        case 'CANCELLED':
+            return 'idle';
+        default:
+            return 'idle';
+    }
+}
+
+/**
  * NDJSON stream chunk types — shared between server routes and client parsers.
  */
 import type { AgentWorkflowResult, AgentWorkflowUpdate } from './types';
@@ -91,7 +118,8 @@ export interface ConversationHistoryItem {
     id: string;
     title: string;
     updatedAt?: string;
-    status?: 'active' | 'archived';
+    /** Legacy `active`/`archived` or agent graph run status (`RUNNING`, `COMPLETED`, …). */
+    status?: string;
     lastRole?: 'user' | 'assistant' | 'system' | 'tool';
     /** Run creation mode; omitted on older clients until API returns it. */
     workMode?: WorkModeId;

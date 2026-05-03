@@ -31,6 +31,7 @@ import type { SidebarProject } from "@kletron/ui/components/CommandCenter/Projec
 import { ThreadSearchPalette } from "@kletron/ui/components/CommandCenter/ThreadSearchPalette";
 import { ThreadSearchHeaderTrigger } from "@kletron/ui/components/CommandCenter/ThreadSearchHeaderTrigger";
 import { MessageList } from "@kletron/ui/components/Agent/MessageList";
+import { PendingSessionEditsStrip } from "@kletron/ui/components/design-system";
 import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
 import { useMessageEdit } from "@kletron/ui/hooks/useMessageEdit";
 import { InputBar } from "@kletron/ui/components/CommandCenter/InputBar";
@@ -66,6 +67,7 @@ import { useProjects } from "../hooks/useProjects";
 import { useSkills } from "../hooks/useSkills";
 import { useCategories } from "../hooks/useCategories";
 import { WORK_MODES, normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode";
+import { sessionStatusToSidebarLiveStatus } from "@kletron/shared/chatTypes";
 import { DesktopWorkspaceProvider } from "../providers/DesktopWorkspaceProvider";
 
 // Utils & types
@@ -534,12 +536,10 @@ export default function App() {
       title: t.title || "Untitled",
       updatedAt: t.updatedAt,
       archived: false as const,
-      liveStatus:
-        t.status === "archived"
-          ? ("idle" as const)
-          : threads.conversationId === t.id && conversation.streaming
-            ? ("running" as const)
-            : ("idle" as const),
+      liveStatus: sessionStatusToSidebarLiveStatus(
+        t.status,
+        threads.conversationId === t.id && conversation.streaming,
+      ),
     }));
     const archivedRows = threads.archivedThreads.map((t) => ({
       id: t.id,
@@ -797,6 +797,28 @@ export default function App() {
     threads.setConversationId(null);
     void workspace.switchWorkspaceById(workspaceId);
   }
+
+  const handleRemoveCurrentWorkspace = useCallback(() => {
+    const path = workspace.workspace?.path;
+    if (!path) return;
+    const ok = window.confirm(
+      "Remove this workspace from Kletron? Your threads remain on the server. You can add this folder again anytime.",
+    );
+    if (!ok) return;
+    conversation.stopStreaming();
+    conversation.resetConversation();
+    threads.resetThreads();
+    diffs.resetDiffs();
+    workspace.clearWorkspace();
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("sessionId");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${window.location.hash}`);
+    } catch {
+      /* ignore */
+    }
+    toast.info("Workspace removed", "Choose a folder or add a project when you're ready.");
+  }, [conversation, diffs, threads, toast, workspace]);
 
   async function handleAddProject() {
     try {
@@ -1610,6 +1632,7 @@ export default function App() {
         activeWorkspaceId={activeWorkspaceId}
         onWorkspaceSelect={handleWorkspaceSelect}
         onAddWorkspace={handleAddProject}
+        onRemoveWorkspace={workspace.workspace?.path ? handleRemoveCurrentWorkspace : undefined}
         showTrafficLights={false}
         openEditorLabel={isCodeMode ? "VS Code" : "Folder"}
         openEditorTitle={
@@ -1749,23 +1772,7 @@ export default function App() {
             onRemoveProject={(projectId) => {
               const path = workspace.workspace?.path;
               if (!path || !pathsEqual(projectId, path)) return;
-              const ok = window.confirm(
-                "Remove this workspace from Kletron? Your threads remain on the server. You can add this folder again anytime.",
-              );
-              if (!ok) return;
-              conversation.stopStreaming();
-              conversation.resetConversation();
-              threads.resetThreads();
-              diffs.resetDiffs();
-              workspace.clearWorkspace();
-              try {
-                const url = new URL(window.location.href);
-                url.searchParams.delete("sessionId");
-                window.history.replaceState({}, "", `${url.pathname}${url.search}${window.location.hash}`);
-              } catch {
-                /* ignore */
-              }
-              toast.info("Workspace removed", "Choose a folder or add a project when you're ready.");
+              handleRemoveCurrentWorkspace();
             }}
             style={{ width: leftPanel.width }}
           />
@@ -1815,7 +1822,7 @@ export default function App() {
                   />
                 )}
               />
-              {inlineDiffs.length > 0 && (
+              {isCodeMode && inlineDiffs.length > 0 && (
                 <InlineDiffReview
                   diffs={inlineDiffs}
                   onAccept={(editId) => {
@@ -1841,6 +1848,34 @@ export default function App() {
               )}
             </div>
           </div>
+
+          {/* Work mode: same compact approvals as web agent (Code mode uses InlineDiffReview above). */}
+          {!isCodeMode && (
+            <PendingSessionEditsStrip
+              pendingEdits={conversation.sessionEdits.pendingEdits}
+              flushNotice={conversation.sessionEdits.flushNotice}
+              dismissFlushNotice={conversation.sessionEdits.dismissFlushNotice}
+              processingOp={conversation.sessionEdits.processingOp}
+              approvingAll={conversation.sessionEdits.approvingAll}
+              rejectingAll={conversation.sessionEdits.rejectingAll}
+              approveEdit={async (editId, toolName) => {
+                await conversation.sessionEdits.approveEdit(editId, toolName);
+                await diffs.applyAllDiff(editId);
+              }}
+              rejectEdit={(editId, toolName) => {
+                void conversation.sessionEdits.rejectEdit(editId, toolName);
+                diffs.rejectAllDiff(editId);
+              }}
+              approveAll={async () => {
+                await conversation.sessionEdits.approveAll();
+                diffs.resetDiffs();
+              }}
+              rejectAll={async () => {
+                await conversation.sessionEdits.rejectAll();
+                diffs.resetDiffs();
+              }}
+            />
+          )}
 
           {/* Input Bar */}
           <div className="relative z-10 mx-auto w-full max-w-3xl shrink-0 app-region-no-drag">

@@ -83,6 +83,7 @@ Skipped when:
 | Tool | File | Purpose |
 |---|---|---|
 | `list_files` | `listFiles.js` | List directory contents with depth control |
+| `glob_files` | `globFiles.js` | Find paths matching a glob pattern (ignore-safe) |
 | `read_file` | `readFile.js` | Read file content (supports Office formats via `officeparser`) |
 | `read_file_range` | `readFileRange.js` | Read specific line range from a file |
 | `write_file` | `writeFile.js` | Create or overwrite file content |
@@ -96,8 +97,18 @@ Skipped when:
 | `find_symbol` | `findSymbol.js` | Find symbol definition by name |
 | `go_to_definition` | `goToDefinition.js` | Navigate to symbol definition |
 | `references` | `references.js` | Find symbol references |
-| `find_references` | `references.js` | Alias for references |
 | `text_search` | `textSearch.js` | Plain text search |
+
+Legacy clients may still call `find_references`; the MCP server maps it to `references`.
+
+#### Skills (via HTTP / workspace capabilities)
+
+| Tool | File | Purpose |
+|---|---|---|
+| `list_available_skills` | `workspaceSkills.js` | Skills enabled for this workspace |
+| `list_all_skills` | `skillLoader.js` | Full skills library (HTTP) |
+| `list_skills` | `skillLoader.js` | Deprecated alias for `list_all_skills` |
+| `load_skill` | `skillLoader.js` | Load skill body (`slug` or `skill_id`; gated when `enabledSkills` is known) |
 
 #### Git Operations (5 tools)
 | Tool | File | Purpose |

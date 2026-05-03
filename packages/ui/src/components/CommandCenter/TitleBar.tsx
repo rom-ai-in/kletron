@@ -17,6 +17,7 @@ import {
   Check,
   FolderPlus,
   AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import { TrafficLights } from '../ui/TrafficLights';
 import { ThreadSearchHeaderTrigger } from './ThreadSearchHeaderTrigger';
@@ -47,6 +48,8 @@ export interface TitleBarProps {
   onWorkspaceSelect?: (workspaceId: string) => void;
   /** Called when user clicks 'Add project' in dropdown */
   onAddWorkspace?: () => void;
+  /** Remove the active workspace from Kletron (e.g. desktop — sidebar no longer exposes this). */
+  onRemoveWorkspace?: () => void;
   /** Active thread title shown in the center */
   threadTitle?: string;
   /** Optional extra content rendered in the center */
@@ -94,6 +97,7 @@ export function TitleBar({
   activeWorkspaceId,
   onWorkspaceSelect,
   onAddWorkspace,
+  onRemoveWorkspace,
   threadTitle,
   center,
   gitDiffStats,
@@ -250,20 +254,50 @@ export function TitleBar({
                     </button>
                   </>
                 )}
+
+                {onRemoveWorkspace && (
+                  <>
+                    <div className="my-1 mx-2 border-t border-white/[0.06]" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWsMenuOpen(false);
+                        onRemoveWorkspace();
+                      }}
+                      className="flex items-center gap-2.5 w-full px-3 py-2 text-[12px] text-status-error-text hover:bg-white/[0.06] transition-all duration-150"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span>Remove workspace from Kletron</span>
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
-        ) : onWorkspaceSelectorClick && (
-          <button
-            type="button"
-            onClick={onWorkspaceSelectorClick}
-            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150"
-            title="Select workspace folder"
-          >
-            <span className="truncate max-w-[140px]">{workspaceSelectorLabel}</span>
-            <ChevronDown className="h-2.5 w-2.5" />
-          </button>
-          ))}
+        ) : onWorkspaceSelectorClick ? (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onWorkspaceSelectorClick}
+              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150"
+              title="Select workspace folder"
+            >
+              <span className="truncate max-w-[140px]">{workspaceSelectorLabel}</span>
+              <ChevronDown className="h-2.5 w-2.5" />
+            </button>
+            {onRemoveWorkspace ? (
+              <button
+                type="button"
+                onClick={() => onRemoveWorkspace()}
+                className="rounded-md p-1.5 text-text-muted hover:bg-white/[0.06] hover:text-status-error-text transition-all duration-150"
+                title="Remove workspace from Kletron"
+                aria-label="Remove workspace from Kletron"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
+        ) : null)}
 
         {/* Run */}
         {onRun && (

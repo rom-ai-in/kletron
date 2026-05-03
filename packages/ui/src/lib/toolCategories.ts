@@ -26,7 +26,6 @@ const SEARCH: ReadonlySet<string> = new Set([
     'find_symbol',
     'go_to_definition',
     'references',
-    'find_references',
     'git_grep',
     'todo_search',
 ]);
