@@ -82,8 +82,9 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    // Check for NextAuth session cookie
-    const sessionCookie = request.cookies.get('next-auth.session.token')?.value;
+    const sessionCookie =
+        request.cookies.get('__Secure-next-auth.session-token')?.value ??
+        request.cookies.get('next-auth.session-token')?.value;
     if (!sessionCookie) {
         const loginUrl = request.nextUrl.clone();
         loginUrl.pathname = "/auth/login";

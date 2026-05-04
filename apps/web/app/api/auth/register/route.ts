@@ -1,7 +1,6 @@
 // app/api/auth/register/route.ts
 // API route for user registration with MongoDB persistence
 import { NextResponse } from 'next/server';
-import bcrypt from 'bcrypt';
 import { getDb } from '@kletron/server/lib/db';
 import { agentGraphService } from '@kletron/server/services/agentGraphService';
 import * as organizationService from '@kletron/server/services/organizationService';
@@ -37,7 +36,7 @@ export async function POST(request: Request) {
             );
         }
 
-        // Hash password with bcrypt
+        const bcrypt = (await import('bcrypt')).default;
         const passwordHash = await bcrypt.hash(password, 12);
 
         // Insert user into MongoDB and create profile
@@ -47,6 +46,7 @@ export async function POST(request: Request) {
         const result = await usersCollection.insertOne({
             _id: new ObjectId(),
             email: email.toLowerCase().trim(),
+            passwordHash,
             password: passwordHash,
             name: fullName || null,
             createdAt: now,

@@ -51,12 +51,13 @@ export default function PrivacyPolicyPage() {
                             <li>Extension/app version information</li>
                         </ul>
 
-                        <h3 className="text-sm font-semibold text-text-primary mt-4 mb-2">2.3 Code and Content</h3>
+                        <h3 className="text-sm font-semibold text-text-primary mt-4 mb-2">2.3 Workspace content (code & documents)</h3>
                         <div className="p-3 rounded-lg border border-status-warning-border bg-status-warning-bg mt-2">
                             <p className="text-sm text-text-secondary">
-                                <strong className="text-status-warning-text">Important:</strong> We process your code only to provide the Service.
-                                We do NOT use your code to train AI models. We do NOT share your code with third parties
-                                except your chosen AI provider (for BYOK users) or our hosted AI infrastructure.
+                                <strong className="text-status-warning-text">Important:</strong> We process workspace content (including source code
+                                and documents you choose to index or open) only to provide the Agent Platform. We do NOT use your workspace
+                                content to train AI models. We do NOT share it with third parties except your chosen AI provider (for BYOK
+                                users), MCP tool servers you configure, or our hosted AI infrastructure when you opt in.
                             </p>
                         </div>
                     </Section>
@@ -64,7 +65,7 @@ export default function PrivacyPolicyPage() {
                     <Section title="3. How We Use Your Data">
                         <p>We process your personal data for:</p>
                         <ul>
-                            <li><strong>Service delivery:</strong> Providing AI-assisted coding features</li>
+                            <li><strong>Service delivery:</strong> Providing AI agent, graph, and automation features</li>
                             <li><strong>Account management:</strong> Authentication, billing, support</li>
                             <li><strong>Improvement:</strong> Analyzing usage patterns to improve features</li>
                             <li><strong>Communication:</strong> Service updates, security alerts, marketing (with consent)</li>
@@ -85,7 +86,7 @@ export default function PrivacyPolicyPage() {
                     <Section title="5. Data Sharing">
                         <p>We share data only with:</p>
                         <ul>
-                            <li><strong>AI Providers (BYOK):</strong> If you use your own API keys, your code is sent to your provider</li>
+                            <li><strong>AI Providers (BYOK):</strong> If you use your own API keys, prompts and context you send may be processed by your provider</li>
                             <li><strong>Infrastructure:</strong> EU-based cloud providers (Azure EU West, Swiss data centers)</li>
                             <li><strong>Payment:</strong> Stripe (for billing — PCI-DSS compliant)</li>
                             <li><strong>Analytics:</strong> Privacy-focused analytics (no cross-site tracking)</li>

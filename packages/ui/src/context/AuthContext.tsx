@@ -120,7 +120,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const result = await response.json();
 
             if (!response.ok) {
-                return { success: false, error: result.error || 'Registration failed' };
+                const msg =
+                    (typeof result?.error === 'string' && result.error) ||
+                    (typeof result?.message === 'string' && result.message) ||
+                    'Registration failed';
+                return { success: false, error: msg };
             }
 
             // NextAuth doesn't require confirmation for credentials provider

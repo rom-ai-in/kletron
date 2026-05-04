@@ -283,7 +283,21 @@ export { Breadcrumbs } from './ui/Breadcrumbs';
 export { BreadcrumbOverridesProvider, useBreadcrumbOverrides } from './ui/BreadcrumbOverridesProvider';
 
 // Marketing Layout
-export { MarketingHeader, MarketingFooter } from './ui/MarketingLayout';
+export { MarketingHeader, MarketingFooter, EarlyAccessBadge } from './ui/MarketingLayout';
+export {
+    marketingContainer,
+    MarketingEyebrow,
+    MarketingHeroTitle,
+    MarketingLead,
+    MarketingSectionTitle,
+    marketingBtnPrimary,
+    marketingBtnSecondary,
+    marketingBtnGhost,
+    marketingNavBtnPrimary,
+    marketingNavBtnGhost,
+    MarketingCard,
+    MarketingIconCircle,
+} from './ui/MarketingPrimitives';
 
 // Platform Components
 export { TrafficLights } from './ui/TrafficLights';

@@ -87,6 +87,7 @@ steps:
         {
           echo "NODE_ENV: production"
           echo 'NEXT_TELEMETRY_DISABLED: "1"'
+          printf 'AUTH_TRUST_HOST: "%s"\n' "true"
           printf 'MCP_URL: "%s"\n' "$${MCP_SSE}"
           printf 'NEXT_PUBLIC_APP_URL: "%s"\n' "${_NEXT_PUBLIC_APP_URL}"
           printf 'NEXTAUTH_URL: "%s"\n' "${_NEXT_PUBLIC_APP_URL}"

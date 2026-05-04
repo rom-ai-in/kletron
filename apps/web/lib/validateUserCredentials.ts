@@ -1,10 +1,10 @@
 // apps/web/lib/validateUserCredentials.ts
 // User credential validation using shared MongoDB connection
-import bcrypt from 'bcrypt';
 import { getDb } from '@kletron/server/lib/db';
 
 export async function validateUserCredentials(email: string, password: string) {
     try {
+        const bcrypt = (await import('bcrypt')).default;
         const db = await getDb();
         const user = await db.collection('users').findOne({ email: email.toLowerCase().trim() });
 
@@ -12,8 +12,17 @@ export async function validateUserCredentials(email: string, password: string) {
             return null;
         }
 
-        // Verify password with bcrypt
-        const isValid = await bcrypt.compare(password, user.password);
+        const storedHash =
+            typeof user.passwordHash === 'string'
+                ? user.passwordHash
+                : typeof user.password === 'string'
+                  ? user.password
+                  : null;
+        if (!storedHash) {
+            return null;
+        }
+
+        const isValid = await bcrypt.compare(password, storedHash);
 
         if (!isValid) {
             return null;

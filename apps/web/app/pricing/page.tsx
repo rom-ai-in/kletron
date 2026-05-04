@@ -5,7 +5,20 @@ import { Apple } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@kletron/ui/context/AuthContext';
 import { useSubscription } from '@kletron/ui/hooks/useSubscription';
-import { MarketingHeader, MarketingFooter } from '@kletron/ui/components/design-system';
+import {
+    MarketingHeader,
+    MarketingFooter,
+    EarlyAccessBadge,
+    marketingContainer,
+    MarketingEyebrow,
+    MarketingHeroTitle,
+    MarketingLead,
+    MarketingSectionTitle,
+    marketingBtnPrimary,
+    marketingBtnSecondary,
+    MarketingCard,
+    MarketingIconCircle,
+} from '@kletron/ui/components/design-system';
 
 const downloadUrl = '/auth/register' // Download after account creation
 
@@ -15,15 +28,16 @@ const tiers = [
         id: 'free',
         name: 'Starter',
         price: '0',
-        description: 'Great for trying out Kletron with your own API keys.',
+        description: 'Try the agent platform with your own API keys and local models.',
         highlight: false,
         cta: 'Start Free',
         ctaLink: '/auth/register',
         features: [
-            { text: 'Bring Your Own Key (BYOK)', included: true, tooltip: 'Use your existing OpenAI, Azure, Claude, or local models' },
+            { text: 'Bring Your Own Key (BYOK)', included: true, tooltip: 'OpenAI, Azure, Anthropic, Gemini, Ollama, LM Studio, vLLM' },
             { text: '1 workspace', included: true },
             { text: '3 agent graphs', included: true },
-            { text: '10K files semantic index', included: true },
+            { text: '10K-file workspace memory (semantic index)', included: true },
+            { text: 'Up to 3 custom MCP servers / workspace', included: true },
             { text: 'Community support', included: true },
             { text: 'Hosted AI models', included: false },
             { text: 'Advanced automations', included: false },
@@ -35,7 +49,7 @@ const tiers = [
         id: 'pro',
         name: 'Pro',
         price: '19',
-        description: 'For professional developers who want the full power of AI coding.',
+        description: 'For builders who want graphs, MCP, automations, and hosted tokens in one stack.',
         highlight: true,
         cta: 'Get Started',
         ctaLink: '/auth/register?plan=pro',
@@ -43,10 +57,11 @@ const tiers = [
             { text: 'Everything in Starter', included: true },
             { text: '5 workspaces', included: true },
             { text: 'Unlimited agent graphs', included: true },
-            { text: '100K files semantic index', included: true },
+            { text: '100K-file workspace memory (semantic index)', included: true },
+            { text: 'Unlimited custom MCP servers / workspace', included: true },
             { text: 'BYOK + 500K hosted tokens/mo', included: true, tooltip: 'Use our hosted models or your own — your choice' },
-            { text: 'Advanced automations', included: true },
-            { text: 'Anti-drift detection', included: true },
+            { text: 'Advanced automations (cron, webhooks, git)', included: true },
+            { text: 'Drift & comparator graph presets', included: true },
             { text: 'Priority email support', included: true },
         ],
         badge: 'Most Popular',
@@ -56,17 +71,17 @@ const tiers = [
         name: 'Team',
         price: '49',
         priceUnit: '/user',
-        description: 'Collaboration features for engineering teams building together.',
+        description: 'Collaboration for teams running agents, graphs, and automations together.',
         highlight: false,
         cta: 'Start Team Trial',
         ctaLink: '/auth/register?plan=team',
         features: [
             { text: 'Everything in Pro', included: true },
             { text: 'Unlimited workspaces', included: true },
-            { text: 'Unlimited semantic index', included: true },
+            { text: 'Unlimited workspace memory (semantic index)', included: true },
             { text: '1M hosted tokens/user/mo', included: true },
-            { text: 'Shared agent templates', included: true },
-            { text: 'Team collaboration', included: true },
+            { text: 'Shared agent graph templates', included: true },
+            { text: 'Team collaboration & skills sharing', included: true },
             { text: 'Admin dashboard', included: true },
             { text: 'Slack integration', included: true },
         ],
@@ -78,7 +93,7 @@ const tiers = [
 const enterpriseTier = {
     id: 'enterprise',
     name: 'Enterprise',
-    description: 'For organizations requiring maximum security, control, and custom integration.',
+    description: 'Maximum security, custom MCP governance, and deployment on your terms.',
     features: [
         'Self-hosted deployment option',
         'SSO / SAML integration',
@@ -86,7 +101,8 @@ const enterpriseTier = {
         'Dedicated success manager',
         'Volume token discounts',
         'Activity logs & compliance',
-        'Custom model fine-tuning',
+        'Custom model routing & fine-tuning',
+        'Air-gapped MCP + local LLM patterns',
         'Swiss data residency 🇨🇭',
     ],
 };
@@ -110,8 +126,9 @@ const faqs = [
         answer: 'We\'ll notify you as you approach your limit. You can either upgrade your plan, purchase additional token packs, or switch to BYOK mode where you control costs directly with your provider.',
     },
     {
-        question: 'Is my code sent to external servers?',
-        answer: 'With BYOK, your code goes directly to your chosen AI provider. With hosted models, we route through EU-based infrastructure. For Enterprise, we offer fully self-hosted options where nothing leaves your network.',
+        question: 'Are my repos and documents sent to external servers?',
+        answer:
+            'With BYOK, prompts and context go to the provider you configure (including local models on your hardware). With hosted models, we route through EU-based infrastructure. Enterprise can run fully self-hosted so nothing leaves your network.',
     },
     {
         question: 'Can I cancel anytime?',
@@ -120,7 +137,7 @@ const faqs = [
 ];
 
 export default function PricingPage() {
-    const { user, loading } = useAuth();
+    const { user } = useAuth();
     const { redirectToCheckout, planId: currentPlanId } = useSubscription();
     const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
     const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -187,99 +204,53 @@ export default function PricingPage() {
     };
 
     return (
-        <div className="min-h-screen w-full bg-bg-app">
-            {/* Navigation Header */}
-            <MarketingHeader
-                LinkComponent={Link}
-                navLinks={[
-                    { href: '/#features', label: 'Features' },
-                    { href: '/enterprise', label: 'Enterprise' },
-                    { href: '/pricing', label: 'Pricing' },
-                ]}
-                rightSlot={
-                    <div className="flex items-center gap-3">
-                        {loading ? (
-                            <div className="w-6 h-6 border-2 border-border-subtle border-t-text-secondary rounded-full animate-spin" />
-                        ) : user ? (
-                            <>
-                                <Link
-                                    href="/app/agent"
-                                    className="text-sm text-text-secondary hover:text-text-primary transition-colors"
-                                >
-                                    Dashboard
-                                </Link>
-                                <Link
-                                    href="/app/agent"
-                                    className="inline-flex items-center gap-2 rounded-md bg-bg-elevated hover:bg-state-hover border border-border-subtle px-3 py-1.5 text-sm font-medium text-text-primary transition-colors"
-                                >
-                                    Open App →
-                                </Link>
-                            </>
-                        ) : (
-                            <>
-                                <Link
-                                    href="/auth/login"
-                                    className="text-sm text-text-secondary hover:text-text-primary transition-colors"
-                                >
-                                    Sign In
-                                </Link>
-                                <Link
-                                    href="/auth/register"
-                                    className="inline-flex items-center gap-2 rounded-md bg-text-primary text-bg-app px-3 py-1.5 text-sm font-medium hover:bg-text-secondary transition-colors"
-                                >
-                                    Get Started
-                                </Link>
-                            </>
-                        )}
-                    </div>
-                }
-            />
+        <div className="min-h-screen marketing-page-bg text-text-primary">
+            <MarketingHeader LinkComponent={Link} />
 
-            {/* Hero Section */}
-            <section className="relative pt-32 pb-16 px-6">
-                <div className="absolute inset-0 bg-grid-pattern opacity-50" />
+            <section className="relative overflow-hidden pt-28 pb-12 sm:pt-32">
+                <div className="pointer-events-none absolute inset-0 marketing-grid-overlay opacity-60" aria-hidden />
 
-                <div className="relative z-10 max-w-4xl mx-auto text-center">
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border-subtle bg-bg-surface mb-6 text-xs text-text-muted">
-                        <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
-                        Simple, transparent pricing
-                    </div>
+                <div className={`${marketingContainer} relative z-[1] flex flex-col items-center text-center`}>
+                    <MarketingEyebrow className="mb-6">
+                        <span className="h-1.5 w-1.5 rounded-full bg-status-success shadow-[0_0_8px_rgba(34,197,94,0.45)]" />
+                        Predictable units
+                    </MarketingEyebrow>
 
-                    <h1 className="text-3xl sm:text-4xl lg:text-5xl font-semibold text-text-primary mb-4 tracking-tight">
-                        Pay for what you use.
-                        <br />
-                        <span className="text-text-secondary">Or bring your own keys.</span>
-                    </h1>
+                    <MarketingHeroTitle className="mb-5">
+                        Price the platform,
+                        <span className="text-text-secondary">
+                            <br />
+                            not just tokens.
+                        </span>
+                    </MarketingHeroTitle>
 
-                    <p className="text-base text-text-muted mb-4 max-w-xl mx-auto leading-relaxed">
-                        Choose hosted AI models with simple token pricing, or use your existing API keys.
-                        Either way, you get an early look at Kletron while the macOS experience matures.
-                    </p>
-                    <p className="text-xs text-status-warning-text uppercase tracking-[0.2em] mb-8">
-                        Early access preview • Expect the usual quirks while we polish the desktop app.
-                    </p>
+                    <MarketingLead className="mb-6 max-w-xl px-1">
+                        BYOK or hosted models—plans scale with workspaces, graphs, memory, and MCP. Fewer surprises for finance.
+                    </MarketingLead>
+                    <EarlyAccessBadge className="mx-auto mb-8 max-w-md text-center" />
 
-                    {/* Billing Toggle */}
-                    <div className="inline-flex items-center gap-3 p-1 rounded-lg border border-border-subtle bg-bg-surface">
+                    <div className="inline-flex items-center gap-1 rounded-xl border border-white/[0.08] bg-bg-surface/70 p-1 backdrop-blur-sm">
                         <button
+                            type="button"
                             onClick={() => setBillingPeriod('monthly')}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${billingPeriod === 'monthly'
-                                ? 'bg-bg-elevated text-text-primary'
+                            className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${billingPeriod === 'monthly'
+                                ? 'bg-bg-elevated text-text-primary shadow-sm'
                                 : 'text-text-muted hover:text-text-secondary'
                                 }`}
                         >
                             Monthly
                         </button>
                         <button
+                            type="button"
                             onClick={() => setBillingPeriod('yearly')}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${billingPeriod === 'yearly'
-                                ? 'bg-bg-elevated text-text-primary'
+                            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${billingPeriod === 'yearly'
+                                ? 'bg-bg-elevated text-text-primary shadow-sm'
                                 : 'text-text-muted hover:text-text-secondary'
                                 }`}
                         >
                             Yearly
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-status-success-bg text-status-success-text border border-status-success-border">
-                                -20%
+                            <span className="rounded-md border border-status-success-border bg-status-success-bg px-1.5 py-0.5 text-[10px] font-medium text-status-success-text">
+                                −20%
                             </span>
                         </button>
                     </div>
@@ -287,21 +258,19 @@ export default function PricingPage() {
             </section>
 
             {/* Pricing Cards */}
-            <section className="py-12 px-6">
-                <div className="max-w-5xl mx-auto">
-                    <div className="grid md:grid-cols-3 gap-4">
+            <section className="pb-16 pt-4 sm:pb-20">
+                <div className={marketingContainer}>
+                    <div className="grid gap-4 md:grid-cols-3">
                         {tiers.map((tier) => (
-                            <div
+                            <MarketingCard
                                 key={tier.id}
-                                className={`relative p-6 rounded-lg border bg-bg-surface transition-all ${tier.highlight
-                                    ? 'border-status-success-border ring-1 ring-status-success-border'
-                                    : 'border-border-subtle hover:border-border-strong'
-                                    }`}
+                                featured={tier.highlight}
+                                className={`relative pt-8 ${tier.highlight ? 'md:-mt-1 md:mb-1' : ''}`}
                             >
                                 {/* Badge */}
                                 {tier.badge && (
                                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                                        <span className="px-3 py-1 rounded-full text-[10px] font-medium bg-status-success text-white">
+                                        <span className="rounded-full bg-[color:var(--kletron-accent)] px-3 py-1 text-[10px] font-medium text-white shadow-md shadow-[color:var(--kletron-accent)]/30">
                                             {tier.badge}
                                         </span>
                                     </div>
@@ -354,16 +323,16 @@ export default function PricingPage() {
                                         </li>
                                     ))}
                                 </ul>
-                            </div>
+                            </MarketingCard>
                         ))}
                     </div>
                 </div>
             </section>
 
             {/* Enterprise Section */}
-            <section className="py-16 px-6">
-                <div className="max-w-4xl mx-auto">
-                    <div className="p-8 rounded-lg border border-border-subtle bg-bg-surface">
+            <section className="py-12 sm:py-16">
+                <div className={marketingContainer}>
+                    <MarketingCard featured className="p-8">
                         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
                             <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-3">
@@ -389,39 +358,28 @@ export default function PricingPage() {
                             <div className="lg:text-right">
                                 <div className="text-2xl font-bold text-text-primary mb-2">Custom Pricing</div>
                                 <p className="text-xs text-text-muted mb-4">Tailored to your organization</p>
-                                <a
-                                    href="mailto:enterprise@kletron.com?subject=Kletron%20Code%20Enterprise%20Inquiry"
-                                    className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-5 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
-                                >
-                                    Contact Sales
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <a href="mailto:enterprise@kletron.com?subject=Kletron%20Enterprise%20Inquiry" className={marketingBtnPrimary}>
+                                    Contact sales
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
                                     </svg>
                                 </a>
                             </div>
                         </div>
-                    </div>
+                    </MarketingCard>
                 </div>
             </section>
 
             {/* AI Compute Explainer */}
-            <section className="py-16 px-6 border-y border-border-subtle">
-                <div className="max-w-4xl mx-auto">
-                    <div className="text-center mb-12">
-                        <h2 className="text-2xl font-semibold text-text-primary mb-3">
-                            Two ways to power your AI
-                        </h2>
-                        <p className="text-sm text-text-muted max-w-lg mx-auto">
-                            Use our optimized hosted models, bring your own API keys, or mix both — you're always in control.
-                        </p>
-                    </div>
+            <section className="border-y border-white/[0.06] bg-bg-surface/20 py-16 sm:py-20">
+                <div className={marketingContainer}>
+                    <MarketingSectionTitle subtitle="Mix BYOK and hosted tokens on the same workspace when it makes sense.">
+                        Power models your way
+                    </MarketingSectionTitle>
 
-                    <div className="grid md:grid-cols-2 gap-4">
-                        {/* BYOK Card */}
-                        <div className="p-6 rounded-lg border border-border-subtle bg-bg-surface">
-                            <div className="w-10 h-10 rounded-lg bg-bg-elevated border border-border-subtle flex items-center justify-center mb-4">
-                                <span className="text-lg">🔑</span>
-                            </div>
+                    <div className="mx-auto grid max-w-4xl gap-4 md:grid-cols-2">
+                        <MarketingCard>
+                            <MarketingIconCircle className="mb-4 text-lg">🔑</MarketingIconCircle>
                             <h3 className="text-base font-semibold text-text-primary mb-2">Bring Your Own Key</h3>
                             <p className="text-xs text-text-muted mb-4">
                                 Connect your existing API keys from any provider. You pay them directly — we charge only the platform fee.
@@ -440,26 +398,24 @@ export default function PricingPage() {
                                     Full control over your AI spend
                                 </div>
                             </div>
-                            <div className="mt-4 pt-4 border-t border-border-subtle">
+                            <div className="mt-4 border-t border-white/[0.06] pt-4">
                                 <div className="text-xs text-text-muted">
-                                    <span className="text-text-secondary font-medium">Perfect for:</span> Teams with negotiated API contracts, security requirements, or existing infrastructure
+                                    <span className="font-medium text-text-secondary">Best for:</span> Existing contracts, strict routing rules, or local weights.
                                 </div>
                             </div>
-                        </div>
+                        </MarketingCard>
 
-                        {/* Hosted Card */}
-                        <div className="p-6 rounded-lg border border-border-subtle bg-bg-surface">
-                            <div className="w-10 h-10 rounded-lg bg-bg-elevated border border-border-subtle flex items-center justify-center mb-4">
-                                <span className="text-lg">☁️</span>
-                            </div>
+                        <MarketingCard>
+                            <MarketingIconCircle className="mb-4 text-lg">☁️</MarketingIconCircle>
                             <h3 className="text-base font-semibold text-text-primary mb-2">Kletron Hosted</h3>
                             <p className="text-xs text-text-muted mb-4">
-                                We handle everything — optimized models, prompt caching, EU infrastructure. Just code.
+                                We handle routing, caching, and EU infrastructure so your teams can focus on graphs and outcomes—not
+                                plumbing.
                             </p>
                             <div className="space-y-2">
                                 <div className="flex items-center gap-2 text-xs text-text-secondary">
                                     <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
-                                    Pre-tuned for coding tasks
+                                    Pre-tuned for agentic workloads
                                 </div>
                                 <div className="flex items-center gap-2 text-xs text-text-secondary">
                                     <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
@@ -470,34 +426,27 @@ export default function PricingPage() {
                                     Simple token-based pricing
                                 </div>
                             </div>
-                            <div className="mt-4 pt-4 border-t border-border-subtle">
+                            <div className="mt-4 border-t border-white/[0.06] pt-4">
                                 <div className="text-xs text-text-muted">
-                                    <span className="text-text-secondary font-medium">Pricing:</span> €0.002 per 1K tokens (Pro plans include 500K/mo free)
+                                    <span className="font-medium text-text-secondary">Extra usage:</span> €0.002 / 1K tokens (allowances included on Pro+).
                                 </div>
                             </div>
-                        </div>
+                        </MarketingCard>
                     </div>
                 </div>
             </section>
 
             {/* FAQ Section */}
-            <section className="py-20 px-6">
-                <div className="max-w-3xl mx-auto">
-                    <div className="text-center mb-12">
-                        <h2 className="text-2xl font-semibold text-text-primary mb-3">
-                            Frequently Asked Questions
-                        </h2>
-                        <p className="text-sm text-text-muted">
-                            Everything you need to know about pricing and billing.
-                        </p>
-                    </div>
+            <section className="py-16 sm:py-24">
+                <div className={marketingContainer}>
+                    <div className="mx-auto max-w-3xl">
+                    <MarketingSectionTitle subtitle="Billing, keys, and data routing—in plain language.">
+                        FAQ
+                    </MarketingSectionTitle>
 
                     <div className="space-y-2">
                         {faqs.map((faq, idx) => (
-                            <div
-                                key={idx}
-                                className="border border-border-subtle rounded-lg bg-bg-surface overflow-hidden"
-                            >
+                            <div key={idx} className="overflow-hidden rounded-2xl border border-white/[0.06] bg-bg-surface/50 backdrop-blur-sm">
                                 <button
                                     onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
                                     className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-state-hover transition-colors"
@@ -521,35 +470,30 @@ export default function PricingPage() {
                             </div>
                         ))}
                     </div>
+                    </div>
                 </div>
             </section>
 
             {/* Final CTA */}
-            <section className="py-20 px-6 border-t border-border-subtle">
-                <div className="max-w-2xl mx-auto text-center">
-                    <h2 className="text-2xl sm:text-3xl font-semibold text-text-primary mb-4">
-                        Start coding with AI <span className="text-text-secondary">today</span>
+            <section className="border-t border-white/[0.06] py-16 sm:py-24">
+                <div className={marketingContainer}>
+                    <div className="mx-auto max-w-2xl text-center">
+                    <h2 className="mb-4 text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
+                        Ship agents <span className="text-text-secondary">today</span>
                     </h2>
-                    <p className="text-sm text-text-muted mb-4">
-                        Free to start with your own API keys. No credit card required.
-                    </p>
-                    <p className="text-xs text-status-warning-text uppercase tracking-[0.2em] mb-6">
-                        Early access release • Mac app preview builds keep improving.
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                        <Link
-                            href={downloadUrl}
-                            className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-5 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
-                        >
-                            <Apple className="w-4 h-4" />
-                            Download Kletron — Free
+                    <MarketingLead className="mb-6">
+                        Start free with BYOK. Card only when you upgrade.
+                    </MarketingLead>
+                    <EarlyAccessBadge className="mb-6 text-center" />
+                    <div className="flex flex-col justify-center gap-3 sm:flex-row">
+                        <Link href={downloadUrl} className={marketingBtnPrimary}>
+                            <Apple className="h-4 w-4 opacity-90" />
+                            Download — free
                         </Link>
-                        <Link
-                            href="/auth/register"
-                            className="inline-flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-bg-surface hover:bg-bg-elevated px-5 py-2.5 text-sm font-medium text-text-primary transition-colors"
-                        >
-                            Create Account
+                        <Link href="/auth/register" className={marketingBtnSecondary}>
+                            Create account
                         </Link>
+                    </div>
                     </div>
                 </div>
             </section>

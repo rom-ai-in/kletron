@@ -37,6 +37,8 @@ ENV HOSTNAME=0.0.0.0
 COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+# Standalone file tracing omits bcrypt native prebuilds (.node); without them every route that loads bcrypt returns 500 HTML.
+COPY --from=builder /app/node_modules/bcrypt ./node_modules/bcrypt
 
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]

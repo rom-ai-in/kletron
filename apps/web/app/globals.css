@@ -409,4 +409,20 @@ code,
   .badge-glow:hover {
     box-shadow: 0 0 20px currentColor;
   }
+
+  /* Marketing landings — subtle depth without clutter */
+  .marketing-page-bg {
+    background-color: var(--bg-app);
+    background-image:
+      radial-gradient(ellipse 130% 70% at 50% -35%, rgba(57, 148, 188, 0.16), transparent 52%),
+      radial-gradient(ellipse 55% 45% at 100% 5%, rgba(139, 92, 246, 0.07), transparent 42%);
+  }
+
+  .marketing-grid-overlay {
+    background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 85% 75% at 50% 20%, black 15%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 20%, black 15%, transparent 70%);
+  }
 }

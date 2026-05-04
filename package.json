@@ -5,6 +5,9 @@
   "description": "LangGraph-based TS agentic coder backed by the GitHub MCP server.",
   "scripts": {
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true",
+    "dev:infra": "docker compose up -d mongo",
+    "seed:demo": "tsx scripts/seed-demo-workspace.ts",
+    "quickstart": "npm run dev:infra && npm install && npm run seed:demo && npm run dev",
     "start": "tsx scripts/start-all.ts",
     "dev": "tsx scripts/dev-all.ts",
     "dev:web": "npm --workspace apps/web run dev",

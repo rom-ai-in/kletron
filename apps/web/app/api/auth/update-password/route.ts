@@ -1,7 +1,6 @@
 // app/api/auth/update-password/route.ts
 // API route for updating password after reset - validates token from DB
 import { NextResponse } from 'next/server';
-import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { getDb } from '@kletron/server/lib/db';
 
@@ -39,11 +38,11 @@ export async function POST(request: Request) {
             );
         }
 
-        // Hash new password and update user
+        const bcrypt = (await import('bcrypt')).default;
         const passwordHash = await bcrypt.hash(newPassword, 12);
         await db.collection('users').updateOne(
             { _id: tokenDoc.userId },
-            { $set: { password: passwordHash, updatedAt: new Date() } }
+            { $set: { passwordHash, password: passwordHash, updatedAt: new Date() } }
         );
 
         // Invalidate the used token
