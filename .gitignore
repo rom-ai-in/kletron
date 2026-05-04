@@ -36,8 +36,8 @@ numezis_results.json
 .numezis/
 .DS_Store
 
-# Legacy finance artifacts (removed from active logic)
-graph/
+# Legacy finance artifacts (removed from active logic) — repo root only
+/graph/
 
 node_modules/
 github-mcp/node_modules/
