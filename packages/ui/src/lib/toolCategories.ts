@@ -55,7 +55,7 @@ export function categoryLabel(cat: ToolCategory): string {
 /**
  * Strip MCP namespace: `someServer__read_file` → `read_file`
  */
-function normalizeToolName(raw: string): string {
+export function normalizeToolName(raw: string): string {
     const s = String(raw ?? '').trim().toLowerCase();
     if (!s) return '';
     const idx = s.indexOf('__');
