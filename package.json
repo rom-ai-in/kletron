@@ -24,7 +24,8 @@
     "start:desktop": "npm --workspace apps/desktop run start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test:unit": "vitest",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
     "test": "npm run typecheck && npm run test:unit",
     "seed:skills": "tsx scripts/seed-builtin-skills.ts"
   },

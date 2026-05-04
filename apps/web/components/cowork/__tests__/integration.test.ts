@@ -50,7 +50,7 @@ describe('CoWork Integration', () => {
                 '/api/analytics/events'
             ];
 
-            expected(requiredEndpoints).toHaveLength(6);
+            expect(requiredEndpoints).toHaveLength(6);
         });
     });
 
@@ -66,7 +66,7 @@ describe('CoWork Integration', () => {
                 'security'
             ];
 
-            expected(requiredModules).toHaveLength(7);
+            expect(requiredModules).toHaveLength(7);
         });
     });
 
@@ -88,7 +88,7 @@ describe('CoWork Integration', () => {
                 'category_performance_metrics'
             ];
 
-            expected(requiredTables).toHaveLength(8);
+            expect(requiredTables).toHaveLength(8);
         });
     });
 
@@ -106,7 +106,7 @@ describe('CoWork Integration', () => {
                 preservedFrom: 'string | null'
             };
 
-            expected(requiredState).toBeDefined();
+            expect(requiredState).toBeDefined();
         });
 
         it('should have all required actions', () => {
@@ -119,12 +119,7 @@ describe('CoWork Integration', () => {
                 'restoreContext'
             ];
 
-            expected(requiredActions).toHaveLength(6);
+            expect(requiredActions).toHaveLength(6);
         });
     });
 });
-
-// Helper for type checking
-function expected<T>(value: T): T {
-    return value;
-}
