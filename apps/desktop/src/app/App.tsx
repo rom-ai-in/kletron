@@ -75,8 +75,10 @@ import { useCategories } from "../hooks/useCategories";
 import { WORK_MODES, normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode";
 import { sessionStatusToSidebarLiveStatus } from "@kletron/shared/chatTypes";
 import {
+  CAPABILITY_DROPPED_BANNER_TAIL,
+  CAPABILITY_DROPPED_SLIM_CTA_LABEL,
+  capabilityDroppedSlimBarTitle,
   formatDroppedToolsListPhrase,
-  formatDroppedToolsTooltipList,
 } from "@kletron/shared/capabilityDroppedToolsUx";
 import { DesktopWorkspaceProvider } from "../providers/DesktopWorkspaceProvider";
 
@@ -1821,8 +1823,7 @@ export default function App() {
                       <span className="font-medium text-status-warning-text">
                         {formatDroppedToolsListPhrase(conversation.capabilityDroppedTools)}
                       </span>
-                      , which aren’t turned on for this workspace yet. Enable them under Connectors or Skills
-                      (opens in browser). Hide this note — use Limited tools below to show it again.
+                      {CAPABILITY_DROPPED_BANNER_TAIL}
                     </p>
                     <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-1 sm:flex-col sm:items-end sm:justify-start">
                       <button
@@ -1872,11 +1873,11 @@ export default function App() {
                   <button
                     type="button"
                     className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-1.5 text-[10px] font-medium text-status-warning-text hover:opacity-90"
-                    title={`Some tools aren’t enabled: ${formatDroppedToolsTooltipList(conversation.capabilityDroppedTools)}. Click for Connectors / Skills links.`}
+                    title={capabilityDroppedSlimBarTitle(conversation.capabilityDroppedTools)}
                     onClick={() => setCapabilityToolsBannerDismissed(false)}
                   >
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    Limited tools — show setup
+                    {CAPABILITY_DROPPED_SLIM_CTA_LABEL}
                   </button>
                 </div>
               )}

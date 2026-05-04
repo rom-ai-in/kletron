@@ -25,7 +25,6 @@ import {
 import {
     ArrowLeft,
     ExternalLink,
-    FolderOpen,
     Link2,
     Play,
     Plus,
@@ -72,13 +71,6 @@ const MCP_TRANSPORT_OPTIONS: SelectorOption[] = [
     { id: "sse", label: "SSE", sub: "HTTP Server-Sent Events endpoint" },
     { id: "streamable-http", label: "Streamable HTTP", sub: "Remote MCP (streamable HTTP)" },
 ];
-
-function mcpStatusBadgeVariant(status: string): "success" | "error" | "warning" | "default" {
-    if (status === "connected") return "success";
-    if (status === "error") return "error";
-    if (status === "unknown") return "warning";
-    return "default";
-}
 
 function integrationStatusBadgeVariant(
     status: ConnectorIntegrationStatus,
@@ -264,21 +256,6 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
         );
     }, [mcpServers, search]);
 
-    const catalogGrouped = useMemo(() => {
-        const map = new Map<string, ConnectorTypeDefinition[]>();
-        for (const t of filteredCatalog) {
-            const arr = map.get(t.category) ?? [];
-            arr.push(t);
-            map.set(t.category, arr);
-        }
-        return Array.from(map.entries())
-            .sort((a, b) => a[0].localeCompare(b[0]))
-            .map(([category, items]) => ({
-                category,
-                items: sortCatalogDefs(items, integrations),
-            }));
-    }, [filteredCatalog, integrations]);
-
     const filteredMcpServersSorted = useMemo(() => {
         return [...filteredMcpServers].sort((a, b) => {
             const d = mcpListSortKey(b) - mcpListSortKey(a);
@@ -286,6 +263,21 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
             return a.name.localeCompare(b.name);
         });
     }, [filteredMcpServers]);
+
+    const filteredIntegrations = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return integrations;
+        return integrations.filter(
+            (i) =>
+                i.displayName.toLowerCase().includes(q) ||
+                i.providerId.toLowerCase().includes(q),
+        );
+    }, [integrations, search]);
+
+    /** Flat catalog for browse grid (no category bands — fewer scan jumps). */
+    const browseCatalogFlat = useMemo(() => {
+        return sortCatalogDefs(filteredCatalog, integrations);
+    }, [filteredCatalog, integrations]);
 
     const statusSummary = useMemo(() => {
         const saasActive = integrations.filter((i) => i.status === "active").length;
@@ -387,100 +379,81 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
     const mcpCount = mcpServers.length;
 
     return (
-        <div className="flex h-full min-h-0 flex-col bg-bg-app">
-            <div className="flex shrink-0 items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
-                <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-text-secondary/10 text-text-secondary">
-                        <Link2 className="h-5 w-5" aria-hidden />
-                    </div>
-                    <div className="min-w-0">
-                        <h1 className="text-lg font-semibold text-text-primary">Connectors</h1>
-                        <p className="text-sm text-text-muted">
-                            {plugin
-                                ? `Services for the ${plugin.name} plugin, plus MCP servers for this workspace.`
-                                : "SaaS credentials and custom MCP servers available to the agent here."}
-                        </p>
+        <div className="flex h-full flex-col overflow-hidden bg-bg-app">
+            {/* Match apps/web/app/app/config/channels/page.tsx chrome */}
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-border-subtle bg-bg-surface px-6 py-4">
+                <div className="flex min-w-0 items-center gap-4">
+                    <Link href="/app/agent">
+                        <button
+                            type="button"
+                            className="flex items-center justify-center rounded-md p-2 text-text-muted transition-colors hover:bg-bg-component-hover hover:text-text-primary"
+                            aria-label="Back to Agent"
+                        >
+                            <ArrowLeft className="h-4 w-4" />
+                        </button>
+                    </Link>
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-main/10 text-primary-main">
+                            <Link2 className="h-4 w-4" aria-hidden />
+                        </div>
+                        <div className="min-w-0">
+                            <h1 className="truncate text-lg font-semibold text-text-primary">Connectors</h1>
+                            <p className="text-sm text-text-muted">
+                                {pageWorkspace ? (
+                                    <>
+                                        <span className="font-medium text-text-secondary">{pageWorkspace.name}</span>
+                                        {" · "}
+                                        SaaS integrations and MCP servers for the agent.
+                                    </>
+                                ) : (
+                                    <span className="text-status-warning-text">No workspace selected</span>
+                                )}
+                            </p>
+                        </div>
                     </div>
                 </div>
-                <div className="flex shrink-0 flex-col items-end gap-1 text-xs text-text-muted">
+                <div className="flex shrink-0 flex-wrap items-center gap-3">
                     <Link
                         href={`/app/${workspaceId}/plugins`}
-                        className="text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+                        className="text-sm text-text-muted underline-offset-2 hover:text-text-primary hover:underline"
                     >
                         Plugins
                     </Link>
+                    <span className="text-sm text-text-muted/50" aria-hidden>
+                        ·
+                    </span>
                     <Link
                         href={`/app/${workspaceId}/skills`}
-                        className="text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+                        className="text-sm text-text-muted underline-offset-2 hover:text-text-primary hover:underline"
                     >
                         Skills
                     </Link>
-                    <span className="text-right">
-                        <span className="font-medium text-status-success-text">
-                            {statusSummary.saasActive} active
-                        </span>{" "}
-                        SaaS
-                        {statusSummary.saasAttention > 0 ? (
-                            <>
-                                {" "}
-                                ·{" "}
-                                <span className="font-medium text-status-warning-text">
-                                    {statusSummary.saasAttention} need attention
-                                </span>
-                            </>
-                        ) : null}
-                        <br />
-                        <span className="font-medium text-status-success-text">
-                            {statusSummary.mcpReady} ready
-                        </span>{" "}
-                        MCP · {statusSummary.mcpEnabled} on · {statusSummary.mcpDisabled} off
-                    </span>
+                    <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => openAddModal()}
+                        className="inline-flex items-center gap-1.5"
+                    >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add
+                    </Button>
                 </div>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-6 scrollbar-elegant">
-                {pageWorkspace ? (
-                    <Panel className="border border-border-subtle bg-bg-elevated/80 p-4">
-                        <div className="flex gap-3">
-                            <FolderOpen className="mt-0.5 h-5 w-5 shrink-0 text-text-secondary" />
-                            <div className="space-y-1 text-sm">
-                                <p className="font-medium text-text-primary">
-                                    Workspace:{" "}
-                                    <span className="text-text-primary">{pageWorkspace.name}</span>
-                                </p>
-                                <p className="text-xs text-text-muted">
-                                    Use <span className="font-medium text-text-secondary">Add connection</span>{" "}
-                                    for both catalog integrations and MCP servers. Remote MCP tools appear as{" "}
-                                    <code className="rounded bg-bg-surface px-1 py-0.5 font-mono text-[10px]">
-                                        slug__tool_name
-                                    </code>{" "}
-                                    after you run discover on the server card.
-                                </p>
-                            </div>
-                        </div>
-                    </Panel>
-                ) : (
-                    <Panel className="border border-status-warning-border bg-status-warning-bg/30 p-4">
-                        <p className="text-sm text-text-primary">
-                            <span className="font-medium">Workspace unavailable.</span> Select a workspace in
-                            the shell to manage connectors.
-                        </p>
-                    </Panel>
-                )}
-
+            <div className="min-h-0 flex-1 overflow-y-auto scrollbar-elegant">
+                <div className="w-full px-6 py-6 lg:px-8">
+                    <div className="flex w-full min-w-0 flex-col gap-8">
                 {plugin && (
-                    <Panel className="border border-border-subtle bg-bg-surface/80 p-4">
-                        <p className="text-sm text-text-secondary">
-                            Showing catalog entries for{" "}
-                            <span className="font-medium text-text-primary">{plugin.name}</span>.{" "}
-                            <Link
-                                href={`/app/${workspaceId}/connectors`}
-                                className="text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
-                            >
-                                Show all connectors
-                            </Link>
-                        </p>
-                    </Panel>
+                    <p className="text-[11px] text-text-muted">
+                        Catalog limited to{" "}
+                        <span className="font-medium text-text-secondary">{plugin.name}</span>.{" "}
+                        <Link
+                            href={`/app/${workspaceId}/connectors`}
+                            className="underline-offset-2 hover:text-text-primary hover:underline"
+                        >
+                            Show all
+                        </Link>
+                    </p>
                 )}
 
                 {toast && (
@@ -509,301 +482,125 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                     </p>
                 )}
 
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <Input
-                        leftIcon={Search}
-                        placeholder="Search integrations and MCP servers…"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        fullWidth
-                        size="sm"
-                        containerClassName="lg:max-w-md"
-                    />
-                    <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => openAddModal()}
-                        className="inline-flex shrink-0 items-center gap-2 self-start lg:self-auto"
-                    >
-                        <Plus className="h-4 w-4" />
-                        Add connection
-                    </Button>
-                </div>
-
-                {!isLoading && !typesLoading && (integrationCount > 0 || mcpCount > 0) && (
-                    <Panel className="flex flex-wrap items-center gap-x-4 gap-y-2 border-dashed border-border-subtle bg-bg-elevated/50 px-4 py-3">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
-                            Status
+                <section className="space-y-3">
+                    <div className="flex flex-wrap items-end justify-between gap-2">
+                        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                            Active
+                        </h2>
+                        <span className="text-[10px] tabular-nums text-text-muted">
+                            {statusSummary.saasActive} SaaS · {statusSummary.mcpEnabled} MCP on ·{" "}
+                            {statusSummary.mcpReady} ready
                         </span>
-                        <div className="flex flex-wrap gap-2">
-                            <Badge variant="success" size="sm" showIcon uppercase={false}>
-                                SaaS active: {statusSummary.saasActive}
-                            </Badge>
-                            {statusSummary.saasAttention > 0 ? (
-                                <Badge variant="warning" size="sm" uppercase={false}>
-                                    SaaS check: {statusSummary.saasAttention}
-                                </Badge>
-                            ) : (
-                                <Badge variant="outline" size="sm" uppercase={false}>
-                                    SaaS issues: none
-                                </Badge>
-                            )}
-                            <Badge variant={statusSummary.mcpReady > 0 ? "success" : "default"} size="sm" uppercase={false}>
-                                MCP tools ready: {statusSummary.mcpReady}
-                            </Badge>
-                            <Badge variant="default" size="sm" uppercase={false}>
-                                MCP on / off: {statusSummary.mcpEnabled} / {statusSummary.mcpDisabled}
-                            </Badge>
-                        </div>
-                    </Panel>
-                )}
-
-                <section className="space-y-3">
-                    <div>
-                        <h2 className="text-sm font-semibold text-text-primary">
-                            SaaS integrations ({filteredCatalog.length}{" "}
-                            {search.trim() ? "matching" : "in catalog"})
-                        </h2>
-                        <p className="mt-1 text-xs text-text-muted">
-                            Connect apps so the agent can call their APIs or unlock bundled tools. Cards with
-                            an <span className="font-medium text-text-secondary">active</span> connection are
-                            sorted to the top; the left border is green (healthy) or amber (check accounts).
-                        </p>
                     </div>
 
-                    {typesLoading || isLoading ? (
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                            {[1, 2, 3, 4, 5, 6].map((i) => (
-                                <Panel key={i} className="p-4">
-                                    <Skeleton className="mb-2 h-5 w-40" />
-                                    <Skeleton className="h-12 w-full" />
-                                    <Skeleton className="mt-3 h-8 w-24" />
-                                </Panel>
-                            ))}
-                        </div>
-                    ) : filteredCatalog.length === 0 ? (
-                        <EmptyState
-                            variant={search.trim() ? "search" : "no-data"}
-                            size="sm"
-                            title={search.trim() ? "No integrations match" : "No integrations"}
-                            description={
-                                search.trim()
-                                    ? "Try another search term."
-                                    : "No catalog entries for this filter."
-                            }
-                        />
-                    ) : (
-                        <div className="space-y-8">
-                            {catalogGrouped.map(({ category, items }) => (
-                                <div key={category}>
-                                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                                        {category}
-                                    </h3>
-                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                                        {items.map((def) => {
-                                            const active = integrations.filter((i) => i.providerId === def.id);
-                                            const hasActive = active.some((i) => i.status === "active");
-                                            const hasIssue = active.some((i) => i.status !== "active");
-                                            const borderAccent =
-                                                hasActive
-                                                    ? "border-l-status-success-border"
-                                                    : hasIssue
-                                                      ? "border-l-status-warning-border"
-                                                      : "border-l-border-subtle";
-                                            return (
-                                                <Card
-                                                    key={def.id}
-                                                    id={`connector-card-${def.id}`}
-                                                    variant="default"
-                                                    padding="md"
-                                                    className={`scroll-mt-4 border-l-4 bg-bg-surface/90 ${borderAccent}`}
-                                                >
-                                                    <div className="mb-3 flex min-h-[28px] flex-wrap items-center gap-2">
-                                                        {active.length === 0 ? (
-                                                            <Badge variant="default" size="sm" uppercase={false}>
-                                                                Not connected
-                                                            </Badge>
-                                                        ) : (
-                                                            <>
-                                                                {hasActive ? (
-                                                                    <Badge variant="success" size="sm" showIcon uppercase={false}>
-                                                                        Active ({active.filter((i) => i.status === "active").length})
-                                                                    </Badge>
-                                                                ) : null}
-                                                                {hasIssue ? (
-                                                                    <Badge variant="warning" size="sm" uppercase={false}>
-                                                                        Needs attention ({active.filter((i) => i.status !== "active").length})
-                                                                    </Badge>
-                                                                ) : null}
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex items-start justify-between gap-2">
-                                                        <div className="min-w-0">
-                                                            <h3 className="text-sm font-semibold text-text-primary">
-                                                                {def.name}
-                                                            </h3>
-                                                            <p className="mt-0.5 font-mono text-[10px] text-text-muted">
-                                                                {def.id} · {def.auth}
-                                                            </p>
-                                                        </div>
-                                                        {def.docsUrl && (
-                                                            <a
-                                                                href={def.docsUrl}
-                                                                target="_blank"
-                                                                rel="noreferrer"
-                                                                className="shrink-0 rounded-md p-1 text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-                                                                title="Documentation"
-                                                            >
-                                                                <ExternalLink className="h-4 w-4" />
-                                                            </a>
-                                                        )}
-                                                    </div>
-                                                    <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-text-secondary">
-                                                        {def.description}
-                                                    </p>
-                                                    {active.length > 0 && (
-                                                        <div className="mt-3 space-y-2 border-t border-border-subtle pt-3">
-                                                            <p className="text-[10px] font-medium uppercase tracking-wide text-text-muted">
-                                                                Accounts ({active.length})
-                                                            </p>
-                                                            {active.map((integration) => (
-                                                                <div
-                                                                    key={integration.id}
-                                                                    className="flex items-center justify-between gap-2 rounded-lg border border-border-subtle bg-bg-elevated/80 px-2.5 py-2"
-                                                                >
-                                                                    <div className="min-w-0">
-                                                                        <p className="truncate text-xs font-medium text-text-primary">
-                                                                            {integration.displayName}
-                                                                        </p>
-                                                                        <Badge
-                                                                            variant={integrationStatusBadgeVariant(
-                                                                                integration.status,
-                                                                            )}
-                                                                            size="xs"
-                                                                            uppercase={false}
-                                                                            showIcon={integration.status === "active"}
-                                                                        >
-                                                                            {integration.status === "active"
-                                                                                ? "Active"
-                                                                                : integration.status === "revoked"
-                                                                                  ? "Revoked"
-                                                                                  : "Error"}
-                                                                        </Badge>
-                                                                    </div>
-                                                                    <div className="flex shrink-0 items-center gap-0.5">
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="sm"
-                                                                            className="h-8 w-8 p-0"
-                                                                            title="Test credentials"
-                                                                            onClick={async () => {
-                                                                                const res =
-                                                                                    await testIntegration(
-                                                                                        integration.id,
-                                                                                    );
-                                                                                showToast(
-                                                                                    res.ok
-                                                                                        ? "success"
-                                                                                        : "error",
-                                                                                    res.message ??
-                                                                                        (res.ok
-                                                                                            ? "OK"
-                                                                                            : "Failed"),
-                                                                                );
-                                                                            }}
-                                                                        >
-                                                                            <Play className="h-3.5 w-3.5" />
-                                                                        </Button>
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="sm"
-                                                                            className="h-8 w-8 p-0 text-status-error-text"
-                                                                            title="Remove"
-                                                                            onClick={async () => {
-                                                                                if (
-                                                                                    !confirm(
-                                                                                        `Remove ${integration.displayName}?`,
-                                                                                    )
-                                                                                )
-                                                                                    return;
-                                                                                await deleteIntegration(
-                                                                                    integration.id,
-                                                                                );
-                                                                                showToast(
-                                                                                    "success",
-                                                                                    "Integration removed",
-                                                                                );
-                                                                            }}
-                                                                        >
-                                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                                        </Button>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    <div className="mt-4">
-                                                        <Button
-                                                            size="sm"
-                                                            variant="secondary"
-                                                            onClick={() =>
-                                                                openAddModal({ integration: def })
-                                                            }
-                                                            className="inline-flex w-full items-center justify-center gap-1.5 sm:w-auto"
-                                                        >
-                                                            <Plus className="h-3.5 w-3.5" />
-                                                            Connect
-                                                        </Button>
-                                                    </div>
-                                                </Card>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </section>
-
-                <section className="space-y-3">
-                    <div>
-                        <h2 className="text-sm font-semibold text-text-primary">
-                            MCP servers ({filteredMcpServers.length}
-                            {search.trim() ? " matching" : ""})
-                        </h2>
-                        <p className="mt-1 text-xs text-text-muted">
-                            External MCP servers (e.g. Hunter via{" "}
-                            <code className="rounded bg-bg-elevated px-1 py-0.5 font-mono text-[10px]">
-                                npx mcp-remote
-                            </code>
-                            ). <span className="font-medium text-text-secondary">On + green border</span> means
-                            enabled and discover succeeded. Disabled servers are greyed and listed last.
-                        </p>
-                    </div>
-
-                    {isLoading ? (
-                        <Panel className="p-6">
-                            <Skeleton className="h-6 w-48" />
-                            <Skeleton className="mt-3 h-16 w-full" />
+                    {!pageWorkspace ? (
+                        <Panel className="border border-status-warning-border bg-status-warning-bg/30 p-3">
+                            <p className="text-xs text-text-primary">Select a workspace in the shell.</p>
                         </Panel>
-                    ) : filteredMcpServers.length === 0 ? (
+                    ) : isLoading ? (
+                        <Panel className="p-4">
+                            <Skeleton className="h-10 w-full" />
+                            <Skeleton className="mt-2 h-14 w-full" />
+                        </Panel>
+                    ) : integrationCount === 0 && mcpCount === 0 ? (
                         <EmptyState
-                            variant={search.trim() ? "search" : "default"}
+                            variant="default"
                             size="sm"
-                            title={search.trim() ? "No MCP servers match" : "No MCP servers yet"}
-                            description={
-                                search.trim()
-                                    ? "Try another search."
-                                    : "Add a stdio command or remote endpoint with Add connection."
-                            }
-                            action={{
-                                label: "Add MCP server",
-                                onClick: () => openAddModal({ tab: "mcp" }),
-                            }}
+                            title="Nothing connected"
+                            description="Add MCP or connect SaaS."
+                            action={{ label: "Add", onClick: () => openAddModal() }}
                         />
                     ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
+                            {integrationCount > 0 && filteredIntegrations.length === 0 ? (
+                                <p className="text-[11px] text-text-muted">
+                                    No SaaS accounts match the filter below.
+                                </p>
+                            ) : null}
+                            {filteredIntegrations.length > 0 ? (
+                                <div className="overflow-hidden rounded-lg border border-border-subtle bg-bg-surface/80">
+                                    <ul className="divide-y divide-border-subtle">
+                                        {filteredIntegrations.map((integration) => (
+                                            <li
+                                                key={integration.id}
+                                                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5"
+                                            >
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-medium text-text-primary">
+                                                        {integration.displayName}
+                                                    </p>
+                                                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                                                        <span className="font-mono text-[10px] text-text-muted">
+                                                            {integration.providerId}
+                                                        </span>
+                                                        <Badge
+                                                            variant={integrationStatusBadgeVariant(
+                                                                integration.status,
+                                                            )}
+                                                            size="xs"
+                                                            uppercase={false}
+                                                            showIcon={integration.status === "active"}
+                                                        >
+                                                            {integration.status === "active"
+                                                                ? "Active"
+                                                                : integration.status === "revoked"
+                                                                  ? "Revoked"
+                                                                  : "Error"}
+                                                        </Badge>
+                                                    </div>
+                                                </div>
+                                                <div className="flex shrink-0 items-center gap-0.5">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0"
+                                                        title="Test credentials"
+                                                        onClick={() => {
+                                                            void (async () => {
+                                                                const res = await testIntegration(integration.id);
+                                                                showToast(
+                                                                    res.ok ? "success" : "error",
+                                                                    res.message ??
+                                                                        (res.ok ? "OK" : "Failed"),
+                                                                );
+                                                            })();
+                                                        }}
+                                                    >
+                                                        <Play className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0 text-status-error-text"
+                                                        title="Remove"
+                                                        onClick={() => {
+                                                            void (async () => {
+                                                                if (
+                                                                    !confirm(
+                                                                        `Remove ${integration.displayName}?`,
+                                                                    )
+                                                                )
+                                                                    return;
+                                                                await deleteIntegration(integration.id);
+                                                                showToast("success", "Integration removed");
+                                                            })();
+                                                        }}
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ) : null}
+
+                            {mcpCount > 0 && filteredMcpServers.length === 0 ? (
+                                <p className="text-[11px] text-text-muted">
+                                    No MCP servers match the filter below.
+                                </p>
+                            ) : null}
+
                             {filteredMcpServersSorted.map((server) => {
                                 const mcpReady = server.enabled && server.status === "connected";
                                 const mcpBroken = server.enabled && server.status === "error";
@@ -819,160 +616,316 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                               ? "border-l-status-warning-border"
                                               : "border-l-border-subtle";
                                 return (
-                                <Card
-                                    key={server.id}
-                                    variant="default"
-                                    padding="md"
-                                    className={`border-l-4 bg-bg-surface/90 ${leftBorder} ${!server.enabled ? "opacity-[0.92]" : ""}`}
-                                >
-                                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                                        <div className="min-w-0 flex-1 space-y-2">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <h3 className="text-sm font-semibold text-text-primary">
-                                                    {server.name}
-                                                </h3>
-                                                <span className="rounded-md border border-border-subtle bg-bg-elevated px-2 py-0.5 font-mono text-[10px] text-text-muted">
-                                                    {server.slug}
-                                                </span>
-                                                <span className="rounded-md border border-border-subtle bg-bg-elevated px-2 py-0.5 text-[10px] text-text-muted">
-                                                    {server.transport}
-                                                </span>
-                                            </div>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                {!server.enabled ? (
-                                                    <>
-                                                        <Badge variant="default" size="sm" uppercase={false}>
-                                                            Off for agent
+                                    <Card
+                                        key={server.id}
+                                        variant="default"
+                                        padding="sm"
+                                        className={`border-l-4 bg-bg-surface/90 ${leftBorder} ${!server.enabled ? "opacity-[0.92]" : ""}`}
+                                    >
+                                        <div className="flex flex-wrap items-start justify-between gap-3">
+                                            <div className="min-w-0 flex-1 space-y-1">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <h3 className="text-sm font-semibold text-text-primary">
+                                                        {server.name}
+                                                    </h3>
+                                                    <span className="rounded border border-border-subtle bg-bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
+                                                        {server.slug}
+                                                    </span>
+                                                    <span className="text-[10px] text-text-muted">
+                                                        {server.transport}
+                                                    </span>
+                                                    {!server.enabled ? (
+                                                        <Badge variant="default" size="xs" uppercase={false}>
+                                                            Off
                                                         </Badge>
-                                                        <span className="text-xs text-text-muted">
-                                                            Toggle on so runs can load this server.
-                                                        </span>
-                                                    </>
-                                                ) : mcpReady ? (
-                                                    <Badge variant="success" size="sm" showIcon uppercase={false}>
-                                                        On · tools discovered ({server.discoveredTools.length})
-                                                    </Badge>
-                                                ) : mcpBroken ? (
-                                                    <Badge variant="error" size="sm" uppercase={false}>
-                                                        On · connection failed
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge variant="warning" size="sm" uppercase={false}>
-                                                        On · run Discover to verify
-                                                    </Badge>
-                                                )}
-                                                <Badge
-                                                    variant={mcpStatusBadgeVariant(server.status)}
-                                                    size="xs"
-                                                    uppercase={false}
-                                                >
-                                                    {server.status}
-                                                </Badge>
-                                            </div>
-                                            {server.statusMessage && (
-                                                <p className="text-[11px] text-text-muted">
-                                                    {server.statusMessage}
-                                                </p>
-                                            )}
-                                            {server.transport === "stdio" ? (
-                                                <div className="rounded-lg border border-border-subtle bg-bg-elevated/50 px-3 py-2 font-mono text-[11px] leading-snug text-text-secondary break-all">
-                                                    {server.command}{" "}
-                                                    {(server.args ?? []).join(" ")}
+                                                    ) : mcpReady ? (
+                                                        <Badge
+                                                            variant="success"
+                                                            size="xs"
+                                                            showIcon
+                                                            uppercase={false}
+                                                        >
+                                                            {server.discoveredTools.length} tools
+                                                        </Badge>
+                                                    ) : mcpBroken ? (
+                                                        <Badge variant="error" size="xs" uppercase={false}>
+                                                            Error
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge variant="warning" size="xs" uppercase={false}>
+                                                            Discover
+                                                        </Badge>
+                                                    )}
                                                 </div>
-                                            ) : (
-                                                <div className="rounded-lg border border-border-subtle bg-bg-elevated/50 px-3 py-2 font-mono text-[11px] text-text-secondary break-all">
-                                                    {server.url}
-                                                </div>
-                                            )}
-                                            {server.discoveredTools.length > 0 && (
-                                                <details className="text-[11px]">
-                                                    <summary className="cursor-pointer font-medium text-text-secondary hover:text-text-primary">
-                                                        {server.discoveredTools.length} tools discovered
+                                                {server.statusMessage ? (
+                                                    <p className="text-[10px] text-text-muted">
+                                                        {server.statusMessage}
+                                                    </p>
+                                                ) : null}
+                                                <details className="text-[10px] text-text-muted">
+                                                    <summary className="cursor-pointer select-none hover:text-text-secondary">
+                                                        Command / URL
                                                     </summary>
-                                                    <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto pl-3 text-text-muted scrollbar-elegant">
-                                                        {server.discoveredTools.map((tool) => (
-                                                            <li key={tool.name}>
-                                                                <span className="font-mono text-text-secondary">
-                                                                    {server.slug}__{tool.name}
-                                                                </span>
-                                                                {tool.description && (
-                                                                    <span className="text-text-muted">
-                                                                        {" — "}
-                                                                        {tool.description}
-                                                                    </span>
-                                                                )}
-                                                            </li>
-                                                        ))}
-                                                    </ul>
+                                                    <pre className="mt-1 whitespace-pre-wrap break-all rounded bg-bg-elevated/80 p-2 font-mono text-[10px] text-text-secondary">
+                                                        {server.transport === "stdio"
+                                                            ? `${server.command ?? ""} ${(server.args ?? []).join(" ")}`.trim()
+                                                            : (server.url ?? "")}
+                                                    </pre>
                                                 </details>
-                                            )}
-                                        </div>
-                                        <div className="flex shrink-0 flex-col items-end gap-3 self-end sm:self-start">
-                                            <div className="flex items-center gap-2 rounded-lg border border-border-subtle bg-bg-elevated/50 px-2.5 py-1.5">
-                                                <span className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
-                                                    Agent
-                                                </span>
+                                                {server.discoveredTools.length > 0 ? (
+                                                    <details className="text-[10px]">
+                                                        <summary className="cursor-pointer select-none text-text-muted hover:text-text-secondary">
+                                                            {server.discoveredTools.length} tools
+                                                        </summary>
+                                                        <ul className="mt-1 max-h-28 space-y-0.5 overflow-y-auto pl-3 font-mono text-[10px] text-text-secondary scrollbar-elegant">
+                                                            {server.discoveredTools.map((tool) => (
+                                                                <li key={tool.name}>
+                                                                    {server.slug}__{tool.name}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </details>
+                                                ) : null}
+                                            </div>
+                                            <div className="flex shrink-0 items-center gap-1">
                                                 <Switch
                                                     checked={server.enabled}
-                                                    onChange={(next) =>
-                                                        updateMcpServer(server.id, { enabled: next })
-                                                    }
-                                                    aria-label={`Enable ${server.name} for the agent`}
+                                                    onChange={(next) => {
+                                                        void updateMcpServer(server.id, { enabled: next });
+                                                    }}
+                                                    aria-label={`Enable ${server.name}`}
                                                 />
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-9 w-9 p-0"
-                                                title="Discover tools"
-                                                disabled={discoveringId === server.id}
-                                                onClick={async () => {
-                                                    setDiscoveringId(server.id);
-                                                    try {
-                                                        const res = await discoverMcpServer(server.id);
-                                                        if (res.ok) {
-                                                            showToast(
-                                                                "success",
-                                                                `Discovered ${res.tools?.length ?? 0} tools`,
-                                                            );
-                                                        } else {
-                                                            showToast(
-                                                                "error",
-                                                                res.error ?? "Discover failed",
-                                                            );
-                                                        }
-                                                    } finally {
-                                                        setDiscoveringId(null);
-                                                    }
-                                                }}
-                                            >
-                                                <RefreshCw
-                                                    className={`h-4 w-4 ${discoveringId === server.id ? "animate-spin" : ""}`}
-                                                />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-9 w-9 p-0 text-status-error-text"
-                                                title="Delete server"
-                                                onClick={async () => {
-                                                    if (!confirm(`Delete ${server.name}?`)) return;
-                                                    await deleteMcpServer(server.id);
-                                                    showToast("success", "MCP server removed");
-                                                }}
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0"
+                                                    title="Discover tools"
+                                                    disabled={discoveringId === server.id}
+                                                    onClick={() => {
+                                                        void (async () => {
+                                                            setDiscoveringId(server.id);
+                                                            try {
+                                                                const res = await discoverMcpServer(server.id);
+                                                                if (res.ok) {
+                                                                    showToast(
+                                                                        "success",
+                                                                        `Discovered ${res.tools?.length ?? 0} tools`,
+                                                                    );
+                                                                } else {
+                                                                    showToast(
+                                                                        "error",
+                                                                        res.error ?? "Discover failed",
+                                                                    );
+                                                                }
+                                                            } finally {
+                                                                setDiscoveringId(null);
+                                                            }
+                                                        })();
+                                                    }}
+                                                >
+                                                    <RefreshCw
+                                                        className={`h-3.5 w-3.5 ${discoveringId === server.id ? "animate-spin" : ""}`}
+                                                    />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0 text-status-error-text"
+                                                    title="Delete server"
+                                                    onClick={() => {
+                                                        void (async () => {
+                                                            if (!confirm(`Delete ${server.name}?`)) return;
+                                                            await deleteMcpServer(server.id);
+                                                            showToast("success", "MCP server removed");
+                                                        })();
+                                                    }}
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
                                             </div>
                                         </div>
-                                    </div>
-                                </Card>
+                                    </Card>
                                 );
                             })}
                         </div>
                     )}
                 </section>
+
+                <section className="space-y-4 border-t border-border-subtle pt-8">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                        <div>
+                            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                                Browse catalog
+                            </h2>
+                            <p className="mt-0.5 max-w-lg text-[10px] leading-snug text-text-muted">
+                                Connect SaaS · MCP tools ={" "}
+                                <code className="rounded bg-bg-elevated px-1 font-mono text-[10px]">
+                                    slug__tool
+                                </code>{" "}
+                                after Discover.
+                            </p>
+                        </div>
+                        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
+                            <Input
+                                leftIcon={Search}
+                                placeholder="Filter catalog & connected…"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                fullWidth
+                                size="sm"
+                                containerClassName="sm:min-w-[220px] lg:max-w-xs"
+                            />
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => openAddModal({ tab: "mcp" })}
+                                className="inline-flex shrink-0 items-center gap-1.5"
+                            >
+                                <Plus className="h-3.5 w-3.5" />
+                                MCP only
+                            </Button>
+                        </div>
+                    </div>
+
+                    {typesLoading || isLoading ? (
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
+                                <Panel key={i} className="p-3">
+                                    <Skeleton className="h-4 w-24" />
+                                    <Skeleton className="mt-2 h-6 w-full" />
+                                </Panel>
+                            ))}
+                        </div>
+                    ) : browseCatalogFlat.length === 0 ? (
+                        <EmptyState
+                            variant={search.trim() ? "search" : "no-data"}
+                            size="sm"
+                            title={search.trim() ? "No matches" : "No catalog"}
+                            description={
+                                search.trim() ? "Try another filter." : "No catalog entries for this filter."
+                            }
+                        />
+                    ) : (
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                            {browseCatalogFlat.map((def) => {
+                                const active = integrations.filter((i) => i.providerId === def.id);
+                                const hasActive = active.some((i) => i.status === "active");
+                                const hasIssue = active.some((i) => i.status !== "active");
+                                const borderAccent =
+                                    hasActive
+                                        ? "border-l-status-success-border"
+                                        : hasIssue
+                                          ? "border-l-status-warning-border"
+                                          : "border-l-border-subtle";
+                                return (
+                                    <Card
+                                        key={def.id}
+                                        id={`connector-card-${def.id}`}
+                                        variant="default"
+                                        padding="sm"
+                                        className={`scroll-mt-4 border-l-4 bg-bg-surface/90 ${borderAccent}`}
+                                        title={def.description}
+                                    >
+                                        <div className="flex items-start justify-between gap-1">
+                                            <h3 className="line-clamp-2 text-xs font-semibold leading-tight text-text-primary">
+                                                {def.name}
+                                            </h3>
+                                            {def.docsUrl ? (
+                                                <a
+                                                    href={def.docsUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="shrink-0 rounded p-0.5 text-text-muted hover:bg-state-hover hover:text-text-primary"
+                                                    title="Docs"
+                                                >
+                                                    <ExternalLink className="h-3.5 w-3.5" />
+                                                </a>
+                                            ) : null}
+                                        </div>
+                                        <p className="mt-1 font-mono text-[9px] text-text-muted">{def.id}</p>
+                                        {active.length > 0 ? (
+                                            <details className="mt-2 border-t border-border-subtle pt-2 text-[10px]">
+                                                <summary className="cursor-pointer text-text-muted hover:text-text-secondary">
+                                                    {active.length} account{active.length > 1 ? "s" : ""}
+                                                </summary>
+                                                <ul className="mt-1 space-y-1">
+                                                    {active.map((integration) => (
+                                                        <li
+                                                            key={integration.id}
+                                                            className="flex items-center justify-between gap-1"
+                                                        >
+                                                            <span className="truncate text-text-secondary">
+                                                                {integration.displayName}
+                                                            </span>
+                                                            <span className="flex shrink-0 gap-0.5">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-6 w-6 p-0"
+                                                                    title="Test"
+                                                                    onClick={() => {
+                                                                        void (async () => {
+                                                                            const res = await testIntegration(
+                                                                                integration.id,
+                                                                            );
+                                                                            showToast(
+                                                                                res.ok ? "success" : "error",
+                                                                                res.message ??
+                                                                                    (res.ok ? "OK" : "Failed"),
+                                                                            );
+                                                                        })();
+                                                                    }}
+                                                                >
+                                                                    <Play className="h-3 w-3" />
+                                                                </Button>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-6 w-6 p-0 text-status-error-text"
+                                                                    title="Remove"
+                                                                    onClick={() => {
+                                                                        void (async () => {
+                                                                            if (
+                                                                                !confirm(
+                                                                                    `Remove ${integration.displayName}?`,
+                                                                                )
+                                                                            )
+                                                                                return;
+                                                                            await deleteIntegration(
+                                                                                integration.id,
+                                                                            );
+                                                                            showToast(
+                                                                                "success",
+                                                                                "Removed",
+                                                                            );
+                                                                        })();
+                                                                    }}
+                                                                >
+                                                                    <Trash2 className="h-3 w-3" />
+                                                                </Button>
+                                                            </span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </details>
+                                        ) : null}
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            onClick={() => openAddModal({ integration: def })}
+                                            className="mt-2 inline-flex h-7 w-full items-center justify-center gap-1 text-[11px]"
+                                        >
+                                            <Plus className="h-3 w-3" />
+                                            Connect
+                                        </Button>
+                                    </Card>
+                                );
+                            })}
+                        </div>
+                    )}
+                </section>
+                    </div>
+                </div>
             </div>
 
             <Modal
@@ -1002,7 +955,11 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                 Cancel
                             </Button>
                             {addTab === "integration" && intPhase === "configure" && selectedType && (
-                                <Button variant="primary" onClick={submitIntegration} disabled={submitBusy}>
+                                <Button
+                                    variant="primary"
+                                    onClick={() => void submitIntegration()}
+                                    disabled={submitBusy}
+                                >
                                     {submitBusy
                                         ? "Working…"
                                         : selectedType.auth === "oauth"
@@ -1011,7 +968,11 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                 </Button>
                             )}
                             {addTab === "mcp" && (
-                                <Button variant="primary" onClick={submitMcpServer} disabled={submitBusy}>
+                                <Button
+                                    variant="primary"
+                                    onClick={() => void submitMcpServer()}
+                                    disabled={submitBusy}
+                                >
                                     {submitBusy ? "Adding…" : "Add MCP server"}
                                 </Button>
                             )}

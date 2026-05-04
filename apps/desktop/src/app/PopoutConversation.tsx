@@ -11,8 +11,10 @@ import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadA
 import { useAgentSession } from "@kletron/ui/hooks/useAgentSession";
 import { Settings2, GraduationCap, X, AlertTriangle } from "lucide-react";
 import {
+  CAPABILITY_DROPPED_BANNER_TAIL,
+  CAPABILITY_DROPPED_SLIM_CTA_LABEL,
+  capabilityDroppedSlimBarTitle,
   formatDroppedToolsListPhrase,
-  formatDroppedToolsTooltipList,
 } from "@kletron/shared/capabilityDroppedToolsUx";
 
 import { useAuth } from "../hooks/useAuth";
@@ -154,7 +156,9 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-elegant">
           <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-            {conversation.capabilityDroppedTools.length > 0 && !capabilityToolsBannerDismissed && (
+            {conversation.capabilityDroppedTools.length > 0 &&
+              !(conversation.conversationLoading && conversationId) &&
+              !capabilityToolsBannerDismissed && (
               <div className="px-2 pt-3">
                 <div
                   className="flex flex-col gap-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text sm:flex-row sm:items-start sm:gap-3"
@@ -165,8 +169,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
                     <span className="font-medium text-status-warning-text">
                       {formatDroppedToolsListPhrase(conversation.capabilityDroppedTools)}
                     </span>
-                    , which aren’t turned on for this workspace yet. Enable them under Connectors or Skills
-                    (opens in browser). Hide this note — use Limited tools below to show it again.
+                    {CAPABILITY_DROPPED_BANNER_TAIL}
                   </p>
                   <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-1 sm:flex-col sm:items-end sm:justify-start">
                     <button
@@ -209,16 +212,18 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
                 </div>
               </div>
             )}
-            {conversation.capabilityDroppedTools.length > 0 && capabilityToolsBannerDismissed && (
+            {conversation.capabilityDroppedTools.length > 0 &&
+              !(conversation.conversationLoading && conversationId) &&
+              capabilityToolsBannerDismissed && (
               <div className="px-2 pt-3">
                 <button
                   type="button"
                   className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-1.5 text-[10px] font-medium text-status-warning-text hover:opacity-90"
-                  title={`Some tools aren’t enabled: ${formatDroppedToolsTooltipList(conversation.capabilityDroppedTools)}. Click for Connectors / Skills links.`}
+                  title={capabilityDroppedSlimBarTitle(conversation.capabilityDroppedTools)}
                   onClick={() => setCapabilityToolsBannerDismissed(false)}
                 >
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Limited tools — show setup
+                  {CAPABILITY_DROPPED_SLIM_CTA_LABEL}
                 </button>
               </div>
             )}

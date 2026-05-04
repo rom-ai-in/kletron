@@ -33,3 +33,17 @@ export function formatDroppedToolsListPhrase(toolNames: readonly string[]): stri
 export function formatDroppedToolsTooltipList(toolNames: readonly string[]): string {
   return toolNames.map(humanizeCapabilityToolName).join(", ");
 }
+
+/**
+ * Banner sentence tail (after the highlighted tool list). Keep web, desktop, and popout in sync.
+ */
+export const CAPABILITY_DROPPED_BANNER_TAIL =
+  ", which aren't turned on for this workspace yet. Enable them under Connectors or Skills (opens in browser). Hide this note — use Limited tools below to show it again.";
+
+/** Compact CTA label when the full banner is dismissed. */
+export const CAPABILITY_DROPPED_SLIM_CTA_LABEL = "Limited tools — show setup";
+
+/** `title` attribute for the slim CTA button. */
+export function capabilityDroppedSlimBarTitle(toolNames: readonly string[]): string {
+  return `Some tools aren't enabled: ${formatDroppedToolsTooltipList(toolNames)}. Click for Connectors / Skills links.`;
+}
