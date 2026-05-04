@@ -52,6 +52,7 @@ if [[ -n "${WEB_RUN_URL}" ]]; then
   echo "  OAuth Google — Authorized redirect URIs:"
   echo "    ${WEB_RUN_URL}/api/auth/connect/google-drive/callback"
   echo "    ${WEB_RUN_URL}/api/auth/connect/gmail/callback"
+  echo "    ${WEB_RUN_URL}/api/auth/connect/google-calendar/callback"
 else
   echo "  (Impossible de lire l’URL — vérifie les droits IAM ou attends la fin du déploiement.)"
 fi
@@ -61,3 +62,8 @@ fi
 echo ""
 echo "Lister les services:"
 echo "  gcloud run services list --project=${PROJECT_ID} --platform=managed --region=${REGION}"
+echo ""
+echo "Après un déploiement, réappliquer Secret Manager + variables runtime (Azure, Mongo, CORS, …) depuis .env:"
+echo "  python3 infra/gcp/provision_secrets.py"
+echo "Secret client Google OAuth seul (collé depuis la console Google):"
+echo "  GOOGLE_OAUTH_CLIENT_SECRET='…' python3 infra/gcp/provision_secrets.py --google-secret-only"

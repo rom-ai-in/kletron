@@ -94,6 +94,22 @@ export const OAUTH_PROVIDERS: Record<string, OauthProviderConfig> = {
             accessToken: String(resp.access_token ?? ""),
         }),
     },
+    "google-calendar": {
+        providerId: "google-calendar",
+        authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+        tokenUrl: "https://oauth2.googleapis.com/token",
+        defaultScopes: ["https://www.googleapis.com/auth/calendar"],
+        extraAuthParams: {
+            access_type: "offline",
+            prompt: "consent",
+        },
+        clientIdEnv: "GOOGLE_OAUTH_CLIENT_ID",
+        clientSecretEnv: "GOOGLE_OAUTH_CLIENT_SECRET",
+        buildCredentials: (resp) => ({
+            refreshToken: String(resp.refresh_token ?? ""),
+            accessToken: String(resp.access_token ?? ""),
+        }),
+    },
 };
 
 export function getOauthProvider(providerId: string): OauthProviderConfig | null {
