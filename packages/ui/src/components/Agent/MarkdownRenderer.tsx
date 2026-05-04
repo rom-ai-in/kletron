@@ -1,11 +1,71 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
+import { Check, Copy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeSanitize from 'rehype-sanitize';
 import { CodeBlock } from './CodeBlock';
+
+function normalizeCellText(raw: string): string {
+    return raw.replace(/\r?\n/g, ' ').replace(/\t/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Tab-separated rows for Excel / Sheets */
+function tableToTsv(table: HTMLTableElement): string {
+    const rows = Array.from(table.rows);
+    return rows
+        .map((row) =>
+            Array.from(row.cells)
+                .map((c) => normalizeCellText(c.textContent ?? ''))
+                .join('\t'),
+        )
+        .join('\n');
+}
+
+function MarkdownTableFrame({
+    tableClassName,
+    children,
+}: {
+    tableClassName: string;
+    children: React.ReactNode;
+}) {
+    const rootRef = useRef<HTMLDivElement>(null);
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        const table = rootRef.current?.querySelector('table');
+        if (!table) return;
+        const tsv = tableToTsv(table);
+        try {
+            await navigator.clipboard.writeText(tsv);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 2000);
+        } catch {
+            /* ignore */
+        }
+    };
+
+    return (
+        <div className="my-2.5 first:mt-0 last:mb-0 overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] shadow-[inset_0_1px_0_0_var(--border-subtle)]">
+            <div className="relative group flex items-center justify-between gap-2 border-b border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-1">
+                <span className="text-[10px] font-mono lowercase text-text-muted">table</span>
+                <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="rounded p-1 text-text-muted opacity-0 transition-opacity duration-150 hover:bg-[var(--state-hover)] hover:text-text-primary group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                    title="Copy table (TSV — paste in Excel, Sheets, etc.)"
+                >
+                    {copied ? <Check size={12} className="text-status-success-text" /> : <Copy size={12} />}
+                </button>
+            </div>
+            <div ref={rootRef} className="overflow-x-auto">
+                <table className={tableClassName}>{children}</table>
+            </div>
+        </div>
+    );
+}
 
 export type MarkdownRendererVariant = 'default' | 'chat';
 
@@ -38,13 +98,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
         const listMb = isChat ? 'mb-1.5 last:mb-0' : 'mb-0.5';
         const liGap = isChat ? 'space-y-1' : 'space-y-0';
 
-        /* Cursor / IDE-style data tables: visible grid, sticky-friendly header, horizontal scroll */
-        const tableWrap =
-            'my-2.5 first:mt-0 last:mb-0 overflow-x-auto rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] shadow-[inset_0_1px_0_0_var(--border-subtle)]';
+        /* Cursor / IDE-style data tables (+ MarkdownTableFrame toolbar for copy) */
         const tableEl =
             'w-full min-w-[16rem] border-collapse text-left text-[12px] leading-snug tabular-nums';
         const thCell =
-            'border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-2 font-semibold text-[var(--text-secondary)] first:rounded-tl-[calc(var(--radius-lg)-1px)] last:rounded-tr-[calc(var(--radius-lg)-1px)] [&_p]:m-0 [&_p]:leading-snug';
+            'border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-2 font-semibold text-[var(--text-secondary)] [&_p]:m-0 [&_p]:leading-snug';
         const tdCell =
             'border border-[var(--border-subtle)] px-2.5 py-1.5 align-top text-[var(--text-primary)] [&_p]:m-0 [&_p]:leading-snug [&_strong]:font-semibold';
 
@@ -113,11 +171,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
                     {children}
                 </blockquote>
             ),
-            table: ({ children }: any) => (
-                <div className={tableWrap}>
-                    <table className={tableEl}>{children}</table>
-                </div>
-            ),
+            table: ({ children }: any) => <MarkdownTableFrame tableClassName={tableEl}>{children}</MarkdownTableFrame>,
             thead: ({ children }: any) => <thead>{children}</thead>,
             tbody: ({ children }: any) => (
                 <tbody className="[&>tr:nth-child(even)]:bg-[var(--state-hover)]">{children}</tbody>
