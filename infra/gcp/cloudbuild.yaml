@@ -84,6 +84,13 @@ steps:
       - -ceu
       - |
         MCP_SSE="$(gcloud run services describe ${_MCP_SERVICE} --project="$PROJECT_ID" --region="${_REGION}" --format='value(status.url)')/sse"
+        {
+          echo "NODE_ENV: production"
+          echo 'NEXT_TELEMETRY_DISABLED: "1"'
+          printf 'MCP_URL: "%s"\n' "$${MCP_SSE}"
+          printf 'NEXT_PUBLIC_APP_URL: "%s"\n' "${_NEXT_PUBLIC_APP_URL}"
+          printf 'NEXTAUTH_URL: "%s"\n' "${_NEXT_PUBLIC_APP_URL}"
+        } > /tmp/kletron-web-env.yaml
         gcloud run deploy ${_WEB_SERVICE} \
           --project="$PROJECT_ID" \
           --region="${_REGION}" \
@@ -95,7 +102,7 @@ steps:
           --cpu=2 \
           --min-instances=0 \
           --max-instances=10 \
-          --set-env-vars=^|^NODE_ENV=production^|^NEXT_TELEMETRY_DISABLED=1^|^MCP_URL=$${MCP_SSE}^|^NEXT_PUBLIC_APP_URL=${_NEXT_PUBLIC_APP_URL}^|^NEXTAUTH_URL=${_NEXT_PUBLIC_APP_URL}
+          --env-vars-file=/tmp/kletron-web-env.yaml
 
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_WEB_SERVICE}:$BUILD_ID
