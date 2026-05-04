@@ -27,9 +27,10 @@ fi
 
 APP_URL="${NEXT_PUBLIC_APP_URL:-}"
 if [[ -z "${APP_URL}" ]]; then
-  echo "Pass NEXT_PUBLIC_APP_URL (URL publique du service web Cloud Run), ex.:"
+  echo "Pass NEXT_PUBLIC_APP_URL (origine HTTPS publique du site), ex.:"
+  echo "  NEXT_PUBLIC_APP_URL=https://www.kletron.com ./infra/gcp/deploy.sh"
+  echo "ou l’URL Cloud Run directe tant que le certificat managé du LB est en PROVISIONING:"
   echo "  NEXT_PUBLIC_APP_URL=https://kletron-web-xxxx.europe-west6.run.app ./infra/gcp/deploy.sh"
-  echo "(Pour un premier jet, mets une URL provisoire puis rebuild après la première création du service.)"
   APP_URL="https://placeholder.invalid"
 fi
 

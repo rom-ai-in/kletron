@@ -130,6 +130,22 @@ def patch_nextauth_in_env(text: str, new_secret: str) -> str:
     return out
 
 
+def resolve_public_web_url(env: dict[str, str]) -> str:
+    """HTTPS origin for Next.js public URL + NextAuth (no trailing slash)."""
+    override = os.environ.get("KLETRON_WEB_URL", "").strip().rstrip("/")
+    if override.startswith("https://"):
+        return override
+    for key in ("NEXT_PUBLIC_APP_URL", "NEXTAUTH_URL"):
+        raw = env.get(key, "").strip().rstrip("/")
+        if raw.startswith("https://"):
+            return raw
+    # Last resort: default Cloud Run hostname (update after first deploy if needed).
+    return os.environ.get(
+        "KLETRON_WEB_FALLBACK_URL",
+        "https://kletron-web-jve2iznmea-oa.a.run.app",
+    ).strip().rstrip("/")
+
+
 def build_mongodb_uri(env: dict[str, str]) -> str | None:
     user = env.get("MONGODB_USER", "").strip()
     password = env.get("MONGODB_PASS", "").strip()
@@ -247,13 +263,10 @@ def main() -> None:
         upsert_secret(sid, val)
         grant_accessor(sid, member)
 
-    web_url = os.environ.get(
-        "KLETRON_WEB_URL",
-        "https://kletron-web-jve2iznmea-oa.a.run.app",
-    )
+    web_url = resolve_public_web_url(env)
     cors = env.get("KLETRON_CORS_ALLOWLIST", "").strip()
     if web_url not in cors:
-        cors = f"{web_url},{cors}".strip(",")
+        cors = ",".join(x for x in (web_url, cors) if x)
 
     env_pairs = [
         f"NEXT_PUBLIC_APP_URL={web_url}",
@@ -269,7 +282,10 @@ def main() -> None:
         f"LANGSMITH_PROJECT={env.get('LANGSMITH_PROJECT', '').strip()}",
         f"KLETRON_CORS_ALLOWLIST={cors}",
     ]
-    update_env_arg = "^|^" + "^|^".join(env_pairs)
+    # gcloud dict flags: see `gcloud topic escaping`. Use ^DELIM^ then DELIM between KEY=VALUE items.
+    # Values include "https://" and commas (CORS). DELIM must not appear inside any value (avoid "--" in URLs/models).
+    delim = "--"
+    update_env_arg = f"^{delim}^" + f"{delim}".join(env_pairs)
 
     secret_refs = [
         "NEXTAUTH_SECRET=kletron-nextauth-secret:latest",
