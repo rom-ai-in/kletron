@@ -1,10 +1,16 @@
 // pages/api/workspaces/[workspaceId]/categories/[categoryId]/automations.ts
 import { NextApiRequest, NextApiResponse } from 'next';
+import { requirePagesRouteAuth } from '@kletron/server/lib/auth/apiAuth';
 
-export default function handler(
+export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
+    const auth = await requirePagesRouteAuth(req, res);
+    if (!auth) {
+        return;
+    }
+
     const { workspaceId, categoryId } = req.query;
     
     if (!workspaceId || typeof workspaceId !== 'string') {

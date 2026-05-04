@@ -2,11 +2,17 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getWorkspaceByIdUnsafe } from '@kletron/server/services/workspaceService';
 import { DEFAULT_WORK_CATEGORIES } from '@kletron/shared';
+import { requirePagesRouteAuth } from '@kletron/server/lib/auth/apiAuth';
 
 export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
+    const auth = await requirePagesRouteAuth(req, res);
+    if (!auth) {
+        return;
+    }
+
     const { workspaceId } = req.query;
     
     if (!workspaceId || typeof workspaceId !== 'string') {

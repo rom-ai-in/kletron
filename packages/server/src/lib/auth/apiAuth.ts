@@ -3,6 +3,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { API_TOKEN_PREFIX, hashApiToken } from './apiTokens';
 import * as apiTokenService from '@kletron/server/services/apiTokenService';
+import { getToken } from 'next-auth/jwt';
 import { jwtVerify } from 'jose';
 import { timingSafeEqual } from 'node:crypto';
 
@@ -19,6 +20,9 @@ export type AuthResult = {
 
 const INTERNAL_TOKEN_HEADERS = ['x-mcp-internal-token', 'x-internal-token'];
 const ON_BEHALF_HEADERS = ['x-on-behalf-of', 'x-kletron-user'];
+const NEXTAUTH_SESSION_COOKIE_NAMES = ['__Secure-next-auth.session-token', 'next-auth.session-token'] as const;
+
+type CookieMap = Record<string, string>;
 
 function readHeader(headers: Headers, names: string[]): string | null {
     for (const name of names) {
@@ -37,6 +41,79 @@ function readReqHeader(req: NextApiRequest, names: string[]): string | null {
         }
     }
     return null;
+}
+
+function readReqCookieHeader(req: NextApiRequest): string | null {
+    const cookie = req.headers.cookie;
+    if (typeof cookie === 'string' && cookie.trim()) return cookie.trim();
+    if (Array.isArray(cookie) && cookie.length > 0) {
+        const joined = cookie.map((part) => part.trim()).filter(Boolean).join('; ');
+        return joined || null;
+    }
+    return null;
+}
+
+function parseCookieHeader(cookieHeader: string | null): CookieMap {
+    if (!cookieHeader) return {};
+
+    const cookies: CookieMap = {};
+    for (const part of cookieHeader.split(';')) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+
+        const separatorIndex = trimmed.indexOf('=');
+        if (separatorIndex === -1) continue;
+
+        const name = trimmed.slice(0, separatorIndex).trim();
+        if (!name) continue;
+
+        const value = trimmed.slice(separatorIndex + 1);
+        try {
+            cookies[name] = decodeURIComponent(value);
+        } catch {
+            cookies[name] = value;
+        }
+    }
+
+    return cookies;
+}
+
+function getNextAuthUserId(token: Awaited<ReturnType<typeof getToken>>): string | null {
+    if (!token) return null;
+    const payload = token as Record<string, unknown>;
+    const userId = payload.id ?? payload.sub;
+    return typeof userId === 'string' && userId.trim() ? userId.trim() : null;
+}
+
+async function getNextAuthSessionAuthFromCookies(cookies: CookieMap): Promise<AuthResult | null> {
+    if (Object.keys(cookies).length === 0) return null;
+
+    const req = {
+        headers: new Headers(),
+        cookies,
+    } as unknown as Parameters<typeof getToken>[0]['req'];
+
+    for (const cookieName of NEXTAUTH_SESSION_COOKIE_NAMES) {
+        const token = await getToken({
+            req,
+            cookieName,
+        });
+        const userId = getNextAuthUserId(token);
+        if (userId) {
+            return { userId, authType: 'session' };
+        }
+    }
+
+    return null;
+}
+
+async function getNextAuthSessionAuthFromAppRequest(request: Request): Promise<AuthResult | null> {
+    return getNextAuthSessionAuthFromCookies(parseCookieHeader(request.headers.get('cookie')));
+}
+
+async function getNextAuthSessionAuthFromPagesRequest(req: NextApiRequest): Promise<AuthResult | null> {
+    const cookies = Object.keys(req.cookies ?? {}).length > 0 ? (req.cookies as CookieMap) : parseCookieHeader(readReqCookieHeader(req));
+    return getNextAuthSessionAuthFromCookies(cookies);
 }
 
 function constantTimeEqual(a: string, b: string): boolean {
@@ -155,10 +232,17 @@ export async function getAppRouteAuth(request: Request): Promise<AuthResult | nu
     }
 
     const token = extractBearerTokenFromHeaders(request.headers);
-    if (!token) return devBypass;
+    if (token) {
+        const verified = await verifyBearerToken(token);
+        return verified ?? devBypass;
+    }
 
-    const verified = await verifyBearerToken(token);
-    return verified ?? devBypass;
+    const sessionAuth = await getNextAuthSessionAuthFromAppRequest(request);
+    if (sessionAuth) {
+        return sessionAuth;
+    }
+
+    return devBypass;
 }
 
 export async function requireAppRouteAuth(request: Request) {
@@ -182,10 +266,17 @@ export async function getPagesRouteAuth(req: NextApiRequest): Promise<AuthResult
     }
 
     const token = extractBearerTokenFromReq(req);
-    if (!token) return devBypass;
+    if (token) {
+        const verified = await verifyBearerToken(token);
+        return verified ?? devBypass;
+    }
 
-    const verified = await verifyBearerToken(token);
-    return verified ?? devBypass;
+    const sessionAuth = await getNextAuthSessionAuthFromPagesRequest(req);
+    if (sessionAuth) {
+        return sessionAuth;
+    }
+
+    return devBypass;
 }
 
 export async function requirePagesRouteAuth(req: NextApiRequest, res: NextApiResponse) {

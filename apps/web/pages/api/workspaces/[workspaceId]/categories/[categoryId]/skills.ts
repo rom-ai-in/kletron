@@ -1,10 +1,16 @@
 // pages/api/workspaces/[workspaceId]/categories/[categoryId]/skills.ts
 import { NextApiRequest, NextApiResponse } from 'next';
+import { requirePagesRouteAuth } from '@kletron/server/lib/auth/apiAuth';
 
-export default function handler(
+export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
+    const auth = await requirePagesRouteAuth(req, res);
+    if (!auth) {
+        return;
+    }
+
     switch (req.method) {
         case 'GET':
             return handleGetCategorySkills(req, res);

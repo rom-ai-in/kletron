@@ -1,7 +1,7 @@
 /**
- * Organization UI uses cookie sessions (NextAuth). Other APIs fall back to
- * bearer tokens / dev bypass without reading cookies, so the wrong user id
- * (e.g. dev-user) was used and members showed as user@local.
+ * Organization UI uses cookie sessions (NextAuth). Shared API auth now accepts
+ * those cookies too, while still falling back to bearer tokens / dev bypass
+ * for desktop and internal callers.
  */
 import { getServerSession } from "next-auth";
 import { authConfig } from "../config/auth";

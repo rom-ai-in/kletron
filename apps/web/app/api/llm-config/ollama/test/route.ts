@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
 /**
  * POST /api/llm-config/ollama/test
@@ -6,6 +7,11 @@ import { NextResponse } from "next/server";
  */
 export async function POST(request: Request) {
     try {
+        const auth = await requireAppRouteAuth(request);
+        if (!auth) {
+            return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+        }
+
         const body = await request.json();
         const { baseUrl, model } = body;
 
