@@ -126,6 +126,91 @@ type SessionDetail = {
 
 const SESSION_STORAGE_KEY = "agent-active-session";
 
+/** Composer placeholder suffix for the slash-command palette. */
+const PLACEHOLDER_SLASH_HINT =
+  "Press / for slash commands (skills, plan, workspace).";
+
+/** Same UX as desktop: warning banner, then slim “Limited tools — show setup” when dismissed. */
+function CapabilityDroppedWorkspaceChrome({
+  showSkeleton,
+  tools,
+  bannerDismissed,
+  onSetBannerDismissed,
+  workspaceId,
+}: {
+  showSkeleton: boolean;
+  tools: readonly string[];
+  bannerDismissed: boolean;
+  onSetBannerDismissed: (value: boolean) => void;
+  workspaceId: string | null;
+}) {
+  if (showSkeleton || tools.length === 0) return null;
+  const outer = "max-w-3xl mx-auto px-2 pt-3";
+  const connectorsHref = workspaceId
+    ? `/app/${encodeURIComponent(workspaceId)}/connectors`
+    : "/app/config/connectors";
+  const skillsHref = workspaceId
+    ? `/app/${encodeURIComponent(workspaceId)}/skills`
+    : "/app/config/skills";
+  return (
+    <>
+      {!bannerDismissed && (
+        <div className={outer}>
+          <div
+            className="flex flex-col gap-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text sm:flex-row sm:items-start sm:gap-3"
+            role="status"
+          >
+            <p className="min-w-0 flex-1 leading-snug">
+              This graph can use{" "}
+              <span className="font-medium text-status-warning-text">
+                {formatDroppedToolsListPhrase(tools)}
+              </span>
+              {CAPABILITY_DROPPED_BANNER_TAIL}
+            </p>
+            <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-1 sm:flex-col sm:items-end sm:justify-start">
+              <Link
+                href={connectorsHref}
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
+              >
+                <Settings2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Connectors
+              </Link>
+              <Link
+                href={skillsHref}
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
+              >
+                <GraduationCap className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Skills
+              </Link>
+              <button
+                type="button"
+                className="rounded p-0.5 text-status-warning-text hover:bg-black/5 dark:hover:bg-white/10"
+                aria-label="Dismiss"
+                onClick={() => onSetBannerDismissed(true)}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {bannerDismissed && (
+        <div className={outer}>
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-1.5 text-[10px] font-medium text-status-warning-text hover:opacity-90"
+            title={capabilityDroppedSlimBarTitle(tools)}
+            onClick={() => onSetBannerDismissed(false)}
+          >
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {CAPABILITY_DROPPED_SLIM_CTA_LABEL}
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
 /** Append attachment labels to the outgoing message (API is text-only today). */
 function augmentMessageWithFileChips(text: string, chips: ContextChip[]): string {
   const files = chips.filter((c) => c.variant === "file");
@@ -373,10 +458,10 @@ const AgentComposer = memo(function AgentComposer({
         sending={queuedOrBusy}
         placeholder={
           planMode
-            ? "Describe what you want to plan…"
+            ? `Describe what you want to plan… ${PLACEHOLDER_SLASH_HINT}`
             : queuedOrBusy
-              ? "Add a follow-up (queued until agent finishes)..."
-              : "Ask anything…"
+              ? `Add a follow-up (queued until agent finishes). ${PLACEHOLDER_SLASH_HINT}`
+              : `Write your message… ${PLACEHOLDER_SLASH_HINT}`
         }
         containerClassName="w-full"
         leadingFooter={
@@ -1827,71 +1912,13 @@ export default function AgentPage() {
                 </p>
               </div>
             ) : null}
-            {!showConversationSkeleton &&
-              capabilityDroppedTools.length > 0 &&
-              !capabilityToolsBannerDismissed && (
-              <div className="max-w-3xl mx-auto px-2 pt-3">
-                <div
-                  className="flex flex-col gap-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text sm:flex-row sm:items-start sm:gap-3"
-                  role="status"
-                >
-                  <p className="min-w-0 flex-1 leading-snug">
-                    This graph can use{" "}
-                    <span className="font-medium text-status-warning-text">
-                      {formatDroppedToolsListPhrase(capabilityDroppedTools)}
-                    </span>
-                    {CAPABILITY_DROPPED_BANNER_TAIL}
-                  </p>
-                  <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-1 sm:flex-col sm:items-end sm:justify-start">
-                    <Link
-                      href={
-                        activeWorkspaceId
-                          ? `/app/${encodeURIComponent(activeWorkspaceId)}/connectors`
-                          : "/app/config/connectors"
-                      }
-                      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
-                    >
-                      <Settings2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      Connectors
-                    </Link>
-                    <Link
-                      href={
-                        activeWorkspaceId
-                          ? `/app/${encodeURIComponent(activeWorkspaceId)}/skills`
-                          : "/app/config/skills"
-                      }
-                      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
-                    >
-                      <GraduationCap className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      Skills
-                    </Link>
-                    <button
-                      type="button"
-                      className="rounded p-0.5 text-status-warning-text hover:bg-black/5 dark:hover:bg-white/10"
-                      aria-label="Dismiss"
-                      onClick={() => setCapabilityToolsBannerDismissed(true)}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            {!showConversationSkeleton &&
-              capabilityDroppedTools.length > 0 &&
-              capabilityToolsBannerDismissed && (
-              <div className="max-w-3xl mx-auto px-2 pt-3">
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-1.5 text-[10px] font-medium text-status-warning-text hover:opacity-90"
-                  title={capabilityDroppedSlimBarTitle(capabilityDroppedTools)}
-                  onClick={() => setCapabilityToolsBannerDismissed(false)}
-                >
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  {CAPABILITY_DROPPED_SLIM_CTA_LABEL}
-                </button>
-              </div>
-            )}
+            <CapabilityDroppedWorkspaceChrome
+              showSkeleton={showConversationSkeleton}
+              tools={capabilityDroppedTools}
+              bannerDismissed={capabilityToolsBannerDismissed}
+              onSetBannerDismissed={setCapabilityToolsBannerDismissed}
+              workspaceId={activeWorkspaceId}
+            />
             {!showConversationSkeleton && (messages.length > 0 || agentBusy) && (
               <MessageList
                 events={chatEventsForView}
@@ -1938,6 +1965,13 @@ export default function AgentPage() {
               <ConversationThreadSkeleton className="max-w-3xl mx-auto" />
             ) : (
               <>
+                <CapabilityDroppedWorkspaceChrome
+                  showSkeleton={showConversationSkeleton}
+                  tools={capabilityDroppedTools}
+                  bannerDismissed={capabilityToolsBannerDismissed}
+                  onSetBannerDismissed={setCapabilityToolsBannerDismissed}
+                  workspaceId={activeWorkspaceId}
+                />
                 {eventStream.length === 0 && !sending && !isServerSideRunActive && (
                   <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                     <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>

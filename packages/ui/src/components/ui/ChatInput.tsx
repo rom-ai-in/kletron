@@ -43,7 +43,8 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       inputClassName,
       maxHeight = 160,
       showSendButton = true,
-      placeholder = 'Ask anything…',
+      placeholder =
+        'Write your message… Press / for slash commands (skills, plan, workspace).',
       className,
       disabled,
       onKeyDown,

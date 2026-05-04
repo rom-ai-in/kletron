@@ -2010,10 +2010,10 @@ export default function App() {
               disabled={composerConnection.composerDisabled}
               placeholder={
                 conversation.streaming
-                  ? "Add a follow-up (queued until agent finishes)..."
+                  ? "Add a follow-up (queued until agent finishes). Press / for slash commands (skills, plan, workspace)."
                   : planMode
-                    ? "Describe what you want to plan..."
-                    : "Ask anything…"
+                    ? "Describe what you want to plan… Press / for slash commands (skills, plan, workspace)."
+                    : "Write your message… Press / for slash commands (skills, plan, workspace)."
               }
               onKeyDown={handleInputKeyDown}
               contextChips={contextChips}
