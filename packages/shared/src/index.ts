@@ -14,3 +14,4 @@ export * from './plugins/catalog';
 export * from './agentGraphDefaults';
 export * from './agentBundledTools';
 export * from './agentGraphToolNames';
+export * from './capabilityDroppedToolsUx';

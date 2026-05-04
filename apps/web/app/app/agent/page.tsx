@@ -48,12 +48,20 @@ import {
   Eye,
   Wrench,
   GitBranch,
+  Settings2,
+  GraduationCap,
+  X,
+  AlertTriangle,
 } from "lucide-react";
 import type { WorkModeId } from "@kletron/shared/workMode";
 import { WORK_MODES, normalizeToWorkModeId } from "@kletron/shared/workMode";
 import type { ResearchDepthId } from "@kletron/shared/researchDepth";
 import { normalizeResearchDepth } from "@kletron/shared/researchDepth";
 import { sessionStatusToSidebarLiveStatus } from "@kletron/shared/chatTypes";
+import {
+  formatDroppedToolsListPhrase,
+  formatDroppedToolsTooltipList,
+} from "@kletron/shared/capabilityDroppedToolsUx";
 import { AgentSessionChrome } from "@kletron/ui/components/CommandCenter/AgentSessionChrome";
 import { AgentCodeRepoBar } from "../../../components/agent/AgentCodeRepoBar";
 
@@ -357,9 +365,9 @@ const AgentComposer = memo(function AgentComposer({
         value={draft}
         onChange={setDraft}
         onSend={handleSend}
-        onStop={sending ? onStop : undefined}
+        onStop={queuedOrBusy ? onStop : undefined}
         onKeyDown={handleKeyDown}
-        sending={sending}
+        sending={queuedOrBusy}
         placeholder={
           planMode
             ? "Describe what you want to plan…"
@@ -753,8 +761,19 @@ export default function AgentPage() {
     researchDepth,
   });
 
+  const capabilityDroppedToolsKey = useMemo(
+    () => [...capabilityDroppedTools].sort().join("\0"),
+    [capabilityDroppedTools],
+  );
+  const [capabilityToolsBannerDismissed, setCapabilityToolsBannerDismissed] = useState(false);
+  useEffect(() => {
+    setCapabilityToolsBannerDismissed(false);
+  }, [capabilityDroppedToolsKey]);
+
   const truncateAndResend = useCallback(async (messageIndex: number, newContent: string) => {
-    if (!activeSessionId) return;
+    if (!activeSessionId) {
+      throw new Error("No active session — cannot resend from this message.");
+    }
     const res = await fetch(`/api/sessions/${activeSessionId}/truncate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1697,6 +1716,19 @@ export default function AgentPage() {
         }
         trailing={
           <>
+            {activeGraphIsSimple &&
+              capabilityDroppedTools.length > 0 &&
+              capabilityToolsBannerDismissed && (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded border border-status-warning-border bg-status-warning-bg px-2 py-1 text-[10px] font-medium text-status-warning-text hover:opacity-90"
+                title={`Some tools aren’t enabled for this workspace: ${formatDroppedToolsTooltipList(capabilityDroppedTools)}. Click to show how to turn them on.`}
+                onClick={() => setCapabilityToolsBannerDismissed(false)}
+              >
+                <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                Limited tools
+              </button>
+            )}
             {workMode === "code" && activeWorkspaceId ? (
               <AgentCodeRepoBar workspaceId={activeWorkspaceId} />
             ) : null}
@@ -1804,15 +1836,72 @@ export default function AgentPage() {
                 </p>
               </div>
             ) : null}
-            {!showConversationSkeleton && capabilityDroppedTools.length > 0 && (
+            {!showConversationSkeleton &&
+              capabilityDroppedTools.length > 0 &&
+              !capabilityToolsBannerDismissed && (
               <div className="max-w-3xl mx-auto px-2 pt-3">
                 <div
-                  className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text"
+                  className="flex flex-col gap-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text sm:flex-row sm:items-start sm:gap-3"
                   role="status"
                 >
-                  Some tools requested by this graph are disabled by workspace capabilities:{" "}
-                  <span className="font-mono">{capabilityDroppedTools.join(", ")}</span>
+                  <p className="min-w-0 flex-1 leading-snug">
+                    This graph can use{" "}
+                    <span className="font-medium text-status-warning-text">
+                      {formatDroppedToolsListPhrase(capabilityDroppedTools)}
+                    </span>
+                    , which aren’t turned on for this workspace yet. Enable them under{" "}
+                    <span className="font-medium">Connectors</span> (for example Notion) or{" "}
+                    <span className="font-medium">Skills</span>                    . You can hide this note —{" "}
+                    <span className="font-medium">Limited tools</span> in the header or above the thread brings it back.
+                  </p>
+                  <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-1 sm:flex-col sm:items-end sm:justify-start">
+                    <Link
+                      href={
+                        activeWorkspaceId
+                          ? `/app/${encodeURIComponent(activeWorkspaceId)}/connectors`
+                          : "/app/config/connectors"
+                      }
+                      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
+                    >
+                      <Settings2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      Connectors
+                    </Link>
+                    <Link
+                      href={
+                        activeWorkspaceId
+                          ? `/app/${encodeURIComponent(activeWorkspaceId)}/skills`
+                          : "/app/config/skills"
+                      }
+                      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
+                    >
+                      <GraduationCap className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      Skills
+                    </Link>
+                    <button
+                      type="button"
+                      className="rounded p-0.5 text-status-warning-text hover:bg-black/5 dark:hover:bg-white/10"
+                      aria-label="Dismiss"
+                      onClick={() => setCapabilityToolsBannerDismissed(true)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
+              </div>
+            )}
+            {!showConversationSkeleton &&
+              capabilityDroppedTools.length > 0 &&
+              capabilityToolsBannerDismissed && (
+              <div className="max-w-3xl mx-auto px-2 pt-3">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-1.5 text-[10px] font-medium text-status-warning-text hover:opacity-90"
+                  title={`Some tools aren’t enabled: ${formatDroppedToolsTooltipList(capabilityDroppedTools)}. Click for Connectors / Skills links.`}
+                  onClick={() => setCapabilityToolsBannerDismissed(false)}
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Limited tools — show setup
+                </button>
               </div>
             )}
             {!showConversationSkeleton && (messages.length > 0 || agentBusy) && (

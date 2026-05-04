@@ -4,6 +4,10 @@ import { useSlashSkills } from "@kletron/ui/hooks/useSlashSkills";
 import {
   Brain, Eye,
   Wrench, GitBranch, Paperclip, ChevronUp, ChevronDown, TerminalSquare,
+  Settings2,
+  GraduationCap,
+  X,
+  AlertTriangle,
 } from "lucide-react";
 
 // Design system components
@@ -70,6 +74,10 @@ import { useSkills } from "../hooks/useSkills";
 import { useCategories } from "../hooks/useCategories";
 import { WORK_MODES, normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode";
 import { sessionStatusToSidebarLiveStatus } from "@kletron/shared/chatTypes";
+import {
+  formatDroppedToolsListPhrase,
+  formatDroppedToolsTooltipList,
+} from "@kletron/shared/capabilityDroppedToolsUx";
 import { DesktopWorkspaceProvider } from "../providers/DesktopWorkspaceProvider";
 
 // Utils & types
@@ -248,6 +256,14 @@ export default function App() {
     activeWorkspaceId,
     categoriesHook.activeCategory
   );
+  const capabilityDroppedToolsKey = useMemo(
+    () => [...conversation.capabilityDroppedTools].sort().join("\0"),
+    [conversation.capabilityDroppedTools],
+  );
+  const [capabilityToolsBannerDismissed, setCapabilityToolsBannerDismissed] = useState(false);
+  useEffect(() => {
+    setCapabilityToolsBannerDismissed(false);
+  }, [capabilityDroppedToolsKey]);
   const git = useGit(workspace.workspace?.path ?? null, backendUrlTrimmed, auth.getAccessToken);
 
   const skillsHook = useSkills(backendUrlTrimmed, backendReady, auth.getAccessToken);
@@ -1793,15 +1809,75 @@ export default function App() {
             {/* Same horizontal measure as web agent page (max-w-3xl + px-2 thread padding) */}
             <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
               {conversation.capabilityDroppedTools.length > 0 &&
-                !(conversation.conversationLoading && threads.conversationId) && (
+                !(conversation.conversationLoading && threads.conversationId) &&
+                !capabilityToolsBannerDismissed && (
                 <div className="px-2 pt-3">
                   <div
-                    className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text"
+                    className="flex flex-col gap-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text sm:flex-row sm:items-start sm:gap-3"
                     role="status"
                   >
-                    Some tools requested by this graph are disabled by workspace capabilities:{" "}
-                    <span className="font-mono">{conversation.capabilityDroppedTools.join(", ")}</span>
+                    <p className="min-w-0 flex-1 leading-snug">
+                      This graph can use{" "}
+                      <span className="font-medium text-status-warning-text">
+                        {formatDroppedToolsListPhrase(conversation.capabilityDroppedTools)}
+                      </span>
+                      , which aren’t turned on for this workspace yet. Enable them under Connectors or Skills
+                      (opens in browser). Hide this note — use Limited tools below to show it again.
+                    </p>
+                    <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-1 sm:flex-col sm:items-end sm:justify-start">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
+                        onClick={() =>
+                          openPortalPath(
+                            activeWorkspaceId
+                              ? `/app/app/${encodeURIComponent(activeWorkspaceId)}/connectors`
+                              : "/app/config/connectors",
+                          )
+                        }
+                      >
+                        <Settings2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Connectors
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
+                        onClick={() =>
+                          openPortalPath(
+                            activeWorkspaceId
+                              ? `/app/app/${encodeURIComponent(activeWorkspaceId)}/skills`
+                              : "/app/config/skills",
+                          )
+                        }
+                      >
+                        <GraduationCap className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Skills
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded p-0.5 text-status-warning-text hover:bg-black/5 dark:hover:bg-white/10"
+                        aria-label="Dismiss"
+                        onClick={() => setCapabilityToolsBannerDismissed(true)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
+                </div>
+              )}
+              {conversation.capabilityDroppedTools.length > 0 &&
+                !(conversation.conversationLoading && threads.conversationId) &&
+                capabilityToolsBannerDismissed && (
+                <div className="px-2 pt-3">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-1.5 text-[10px] font-medium text-status-warning-text hover:opacity-90"
+                    title={`Some tools aren’t enabled: ${formatDroppedToolsTooltipList(conversation.capabilityDroppedTools)}. Click for Connectors / Skills links.`}
+                    onClick={() => setCapabilityToolsBannerDismissed(false)}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Limited tools — show setup
+                  </button>
                 </div>
               )}
               {conversation.conversationLoading && threads.conversationId ? (

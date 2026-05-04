@@ -86,7 +86,8 @@ export function splitThoughtDashLeadIn(content: string): { leadInThought: string
         const found = afterMarker.match(re);
         if (!found || found.index === undefined) continue;
         const idx = found.index;
-        if (idx >= 10 && (cut === -1 || idx < cut)) {
+        // Lower bound avoids cutting on a stray “Voici” inside English fluff; still allows short lead-ins.
+        if (idx >= 4 && (cut === -1 || idx < cut)) {
             cut = idx;
         }
     }

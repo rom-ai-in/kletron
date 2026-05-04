@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ChatEvent } from '@kletron/shared/chatTypes';
 import type { ReplayImpact } from '../components/CommandCenter/ReplayConfirmDialog';
 import { computeReplayImpactPure } from '@kletron/shared/replayImpact';
@@ -20,8 +20,14 @@ export interface UseMessageEditOptions {
     sessionId: string | null;
     /** Chat events with messageIndex for impact computation. */
     events: ChatEvent[];
-    /** Whether the agent is currently streaming (disables editing). */
+    /**
+     * Live browser stream (NDJSON / `sending`). When this turns on mid-edit, edit UI is cleared.
+     * Do **not** pass generic “run busy” here — server-side RUNNING without a stream would fight
+     * replay confirm (epoch / index cleared while the modal is open).
+     */
     streaming?: boolean;
+    /** When true, disallow entering edit mode (e.g. agent busy without treating it as `streaming`). */
+    blockEdit?: boolean;
     /**
      * Called when the user confirms the replay.
      * The consumer should truncate the conversation on the server and resend.
@@ -64,6 +70,7 @@ export function useMessageEdit({
     sessionId,
     events,
     streaming = false,
+    blockEdit = false,
     onTruncateAndResend,
 }: UseMessageEditOptions): UseMessageEditReturn {
     const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
@@ -73,13 +80,23 @@ export function useMessageEdit({
     const [replayImpact, setReplayImpact] = useState<ReplayImpact | null>(null);
     const [replayDialogOpen, setReplayDialogOpen] = useState(false);
     const [replayLoading, setReplayLoading] = useState(false);
+    /** Bumped when the user leaves edit mode so in-flight truncate/replay cannot leave saving flags stuck. */
+    const replayEpochRef = useRef(0);
+    /** Captured when opening the replay confirm dialog so Confirm still works if React state is cleared mid-flight. */
+    const replayConfirmSnapshotRef = useRef<{ messageIndex: number; draft: string } | null>(null);
 
     // Auto-cancel editing when streaming starts or session changes
     useEffect(() => {
         if (streaming && editingMessageIndex !== null) {
+            replayEpochRef.current += 1;
             setEditingMessageIndex(null);
             setEditingMessageDraft('');
             setEditingMessageError(null);
+            setEditingMessageSaving(false);
+            setReplayLoading(false);
+            setReplayDialogOpen(false);
+            setReplayImpact(null);
+            replayConfirmSnapshotRef.current = null;
         }
     }, [streaming, editingMessageIndex]);
 
@@ -88,52 +105,55 @@ export function useMessageEdit({
         if (editingMessageIndex === null) return;
         const exists = events.some((e) => e.messageIndex === editingMessageIndex);
         if (!exists) {
+            replayEpochRef.current += 1;
             setEditingMessageIndex(null);
             setEditingMessageDraft('');
             setEditingMessageError(null);
+            setEditingMessageSaving(false);
+            setReplayLoading(false);
+            setReplayDialogOpen(false);
+            setReplayImpact(null);
+            replayConfirmSnapshotRef.current = null;
         }
     }, [editingMessageIndex, events]);
 
     const startEditMessage = useCallback((index: number, content: string) => {
-        if (streaming) return;
+        if (streaming || blockEdit) return;
+        replayEpochRef.current += 1;
         setEditingMessageIndex(index);
         setEditingMessageDraft(content);
         setEditingMessageError(null);
-    }, [streaming]);
+        setEditingMessageSaving(false);
+        setReplayLoading(false);
+        setReplayDialogOpen(false);
+        setReplayImpact(null);
+        replayConfirmSnapshotRef.current = null;
+    }, [streaming, blockEdit]);
 
     const cancelEditMessage = useCallback(() => {
+        replayEpochRef.current += 1;
         setEditingMessageIndex(null);
         setEditingMessageDraft('');
         setEditingMessageError(null);
+        setEditingMessageSaving(false);
+        setReplayLoading(false);
+        setReplayDialogOpen(false);
+        setReplayImpact(null);
     }, []);
 
-    const handleResendEdit = useCallback(() => {
+    const executeReplayInner = useCallback(async (overrideDraft?: string) => {
         if (editingMessageIndex === null) return;
-        const draft = editingMessageDraft.trim();
-        if (!draft) return;
-
-        // Find the original content of the message being edited
-        const originalEvent = events.find((e) => e.messageIndex === editingMessageIndex);
-        const originalContent = originalEvent?.content ?? '';
-
-        // Compute impact
-        const impact = computeReplayImpactPure(events, editingMessageIndex, originalContent, draft);
-
-        // If there's nothing after this message, replay directly
-        if (impact.messagesRemoved === 0 && impact.toolCallsRemoved === 0 && impact.fileChanges.length === 0) {
-            void executeReplayInner(draft);
+        if (!sessionId) {
+            setEditingMessageError('No active session — open a thread before resending.');
+            return;
+        }
+        const draft = (overrideDraft ?? editingMessageDraft).trim();
+        if (!draft) {
+            setEditingMessageError('Message cannot be empty.');
             return;
         }
 
-        // Show confirmation dialog
-        setReplayImpact(impact);
-        setReplayDialogOpen(true);
-    }, [editingMessageIndex, editingMessageDraft, events]);
-
-    const executeReplayInner = useCallback(async (overrideDraft?: string) => {
-        if (editingMessageIndex === null || !sessionId) return;
-        const draft = (overrideDraft ?? editingMessageDraft).trim();
-        if (!draft) return;
+        const epoch = replayEpochRef.current;
 
         setReplayLoading(true);
         setReplayDialogOpen(false);
@@ -142,17 +162,42 @@ export function useMessageEdit({
 
         try {
             await onTruncateAndResend(editingMessageIndex, draft);
-            // Clear editing state on success
+            if (epoch !== replayEpochRef.current) return;
             setEditingMessageIndex(null);
             setEditingMessageDraft('');
         } catch (error) {
+            if (epoch !== replayEpochRef.current) return;
             setEditingMessageError((error as Error)?.message || 'Unable to replay from this message.');
         } finally {
-            setReplayImpact(null);
-            setReplayLoading(false);
-            setEditingMessageSaving(false);
+            if (epoch === replayEpochRef.current) {
+                setReplayImpact(null);
+                setReplayLoading(false);
+                setEditingMessageSaving(false);
+            }
         }
     }, [editingMessageIndex, editingMessageDraft, sessionId, onTruncateAndResend]);
+
+    const handleResendEdit = useCallback(() => {
+        if (editingMessageIndex === null) return;
+        const draft = editingMessageDraft.trim();
+        if (!draft) {
+            setEditingMessageError('Message cannot be empty.');
+            return;
+        }
+
+        const originalEvent = events.find((e) => e.messageIndex === editingMessageIndex);
+        const originalContent = originalEvent?.content ?? '';
+
+        const impact = computeReplayImpactPure(events, editingMessageIndex, originalContent, draft);
+
+        if (impact.messagesRemoved === 0 && impact.toolCallsRemoved === 0 && impact.fileChanges.length === 0) {
+            void executeReplayInner(draft);
+            return;
+        }
+
+        setReplayImpact(impact);
+        setReplayDialogOpen(true);
+    }, [editingMessageIndex, editingMessageDraft, events, executeReplayInner]);
 
     const executeReplay = useCallback(async () => {
         await executeReplayInner();
@@ -161,6 +206,7 @@ export function useMessageEdit({
     const cancelReplay = useCallback(() => {
         setReplayDialogOpen(false);
         setReplayImpact(null);
+        setReplayLoading(false);
     }, []);
 
     return {

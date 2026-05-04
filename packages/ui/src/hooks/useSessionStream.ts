@@ -5,6 +5,7 @@ import type { ThreadApprovalMode } from '@kletron/shared/threadApprovalTypes';
 import { joinApiOrigin } from '@kletron/shared';
 import { normalizeToWorkModeId } from '@kletron/shared/workMode';
 import { normalizeResearchDepth, type ResearchDepthId } from '@kletron/shared/researchDepth';
+import { lastPlainAssistantAfterLatestUser } from '@kletron/shared/agentEventTurn';
 import { extractThoughtsFromContent, sanitizeVisibleAssistantContent, normalizeMessage } from '@kletron/shared/contentSanitizer';
 
 // Re-export for backward compatibility
@@ -17,7 +18,6 @@ export { normalizeMessage };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 // StreamChunk is now imported from @kletron/shared/chatTypes above.
-
 
 export type TokenUsageForDisplay = {
     totalInputTokens: number;
@@ -263,19 +263,20 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             clearStreamBuffers();
             setRunEndedAt(new Date().toISOString());
             setStreamStatus("stopped");
+        }
 
-            // Fire-and-forget: notify the server so the run status is updated
-            if (sessionId) {
-                void (async () => {
-                    const extra = (await getRequestHeadersRef.current?.()) ?? {};
-                    const headers: Record<string, string> = { ...extra };
-                    if (workspaceId) headers["x-workspace-id"] = workspaceId;
-                    fetch(joinApiOrigin(apiOrigin, `/api/sessions/${sessionId}/stop`), {
-                        method: "POST",
-                        headers,
-                    }).catch(() => { });
-                })();
-            }
+        // Always ask the server to stop the run — covers RUNNING sessions without an active browser stream
+        // (e.g. LM Studio path) so the Stop control still does something useful.
+        if (sessionId) {
+            void (async () => {
+                const extra = (await getRequestHeadersRef.current?.()) ?? {};
+                const headers: Record<string, string> = { ...extra };
+                if (workspaceId) headers["x-workspace-id"] = workspaceId;
+                fetch(joinApiOrigin(apiOrigin, `/api/sessions/${sessionId}/stop`), {
+                    method: "POST",
+                    headers,
+                }).catch(() => { });
+            })();
         }
     }, [sessionId, workspaceId, apiOrigin, clearStreamBuffers]);
 
@@ -504,18 +505,10 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                             setEventStream(update.eventStream);
                             // Merge into chat messages (append + dedup, preserving previous turns)
                             mergeStreamMessages(update.eventStream, optimisticTempId);
-                            // Re-anchor progressive deltas to the canonical assistant body from this snapshot.
-                            const lastPlainAssistant = [...update.eventStream]
-                                .reverse()
-                                .find(
-                                    (e) =>
-                                        e.kind === "assistant" &&
-                                        !(e.name ?? e.toolName) &&
-                                        !e.toolCallId,
-                                );
-                            if (typeof lastPlainAssistant?.content === "string") {
-                                streamingTextRef.current = lastPlainAssistant.content;
-                            }
+                            // Re-anchor progressive deltas to the assistant for *this* turn only (after latest user).
+                            const turnAssistant = lastPlainAssistantAfterLatestUser(update.eventStream);
+                            streamingTextRef.current =
+                                typeof turnAssistant?.content === "string" ? turnAssistant.content : "";
                         }
 
                         // Extract token usage from meta
