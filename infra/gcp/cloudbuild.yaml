@@ -32,6 +32,14 @@ steps:
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_WEB_SERVICE}:latest
       - .
 
+  # Les images de la section `images:` ne sont poussées qu'après *toutes* les étapes :
+  # il faut pousser avant deploy vers Cloud Run.
+  - id: push-web
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_WEB_SERVICE}:$BUILD_ID
+
   - id: build-mcp
     name: gcr.io/cloud-builders/docker
     args:
@@ -43,6 +51,12 @@ steps:
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_MCP_SERVICE}:latest
       - .
+
+  - id: push-mcp
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_MCP_SERVICE}:$BUILD_ID
 
   - id: deploy-mcp
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
