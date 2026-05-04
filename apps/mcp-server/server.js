@@ -324,10 +324,10 @@ async function runSseServer({ allTools, port }) {
     }
   });
 
-  server.listen(port, () => {
+  server.listen(port, "0.0.0.0", () => {
     // SSE/HTTP transport: stdout is fine, but we still prefer stderr to keep
     // the convention identical to stdio mode.
-    console.error(`MCP server running on http://localhost:${port}/sse`);
+    console.error(`MCP server running on http://0.0.0.0:${port}/sse`);
   });
 }
 
