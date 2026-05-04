@@ -54,14 +54,15 @@ const resolverAutomationDetails: BreadcrumbResolver = (pathname) => {
   ];
 };
 
-const resolverRunDetails: BreadcrumbResolver = (pathname) => {
+/** Legacy bookmark URLs `/app/runs/:id` — runs UI removed; thread lives under Agent. */
+const resolverLegacyRunUrl: BreadcrumbResolver = (pathname) => {
   const m = pathname.match(/^\/app\/runs\/([^/]+)\/?$/);
   if (!m) return null;
   const id = m[1];
   const short = id.length > 10 ? `${id.slice(0, 6)}…${id.slice(-3)}` : id;
   return [
     { href: "/app/history", label: "Activity", isCurrent: false },
-    { href: `/app/runs/${id}`, label: `Run ${short}`, isCurrent: true },
+    { href: `/app/agent?sessionId=${id}`, label: `Thread ${short}`, isCurrent: true },
   ];
 };
 
@@ -77,7 +78,7 @@ const resolverBAFeatureDetails: BreadcrumbResolver = (pathname) => {
   ];
 };
 
-const resolvers: BreadcrumbResolver[] = [resolverAutomationDetails, resolverRunDetails, resolverBAFeatureDetails];
+const resolvers: BreadcrumbResolver[] = [resolverAutomationDetails, resolverLegacyRunUrl, resolverBAFeatureDetails];
 
 const segmentLabels: Record<string, string> = {
   "/": "Explore",
@@ -86,17 +87,18 @@ const segmentLabels: Record<string, string> = {
   "/app/deep-agent": "Agent",
   "/app/agent": "Agent",
   "/app/automations": "Automations",
-  "/app/runs": "Execution Runs",
-  "/app/vectors": "Vector Index",
-  "/app/vectors/history": "Vector History",
+  "/app/vectors": "Semantic index",
+  "/app/vectors/history": "Semantic history",
   "/app/history": "Activity",
   "/app/changes": "Code Comparator",
   "/app/agent-graphs": "Agent Graphs",
   "/app/config": "Configuration",
-  "/app/config/context": "Context",
+  "/app/config/context": "Context & retrieval",
   "/app/config/llm": "LLM",
-  "/app/config/graphs": "Graphs",
   "/app/account": "Account",
+  "/app/organization": "Organization",
+  "/app/organization/members": "Members",
+  "/app/organization/billing": "Billing",
   "/app/business-analyst": "Business Analyst",
   "/app/business-analyst/config": "BA Config",
   "/app/business-analyst/features": "Features",
@@ -106,16 +108,18 @@ const segmentLabels: Record<string, string> = {
   "deep-agent": "Agent",
   "agent": "Agent",
   "automations": "Automations",
-  "runs": "Execution Runs",
-  "vectors": "Vector Index",
+  "vectors": "Semantic index",
   "history": "Activity",
   "changes": "Code Comparator",
   "agent-graphs": "Agent Graphs",
   "config": "Configuration",
-  "context": "Context",
+  "context": "Context & retrieval",
   "llm": "LLM",
   "graphs": "Graphs",
   "account": "Account",
+  "organization": "Organization",
+  "members": "Members",
+  "billing": "Billing",
   "business-analyst": "Business Analyst",
   "features": "Features",
   "market": "Market Analysis",

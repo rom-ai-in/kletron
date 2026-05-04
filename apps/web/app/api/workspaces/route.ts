@@ -2,13 +2,25 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import type { Workspace } from "@kletron/server/services/workspaceService";
 import {
-  listWorkspaces,
   createWorkspace,
   getActiveWorkspaceId,
+  listWorkspaces,
   toWorkspaceSummary,
   validateWorkspaceRoot,
 } from "@kletron/server/services/workspaceService";
+
+function summaryWithHealth(workspace: Workspace) {
+  const base = toWorkspaceSummary(workspace);
+  const h = validateWorkspaceRoot(workspace);
+  return {
+    ...base,
+    health: h.status,
+    healthMessage: h.message ?? null,
+    selectable: h.status === "healthy",
+  };
+}
 
 export async function GET(request: Request) {
   const auth = await requireAppRouteAuth(request);
@@ -20,24 +32,13 @@ export async function GET(request: Request) {
   }
 
   try {
-    const workspaces = await listWorkspaces(auth.userId);
+    const raw = await listWorkspaces(auth.userId);
     const activeWorkspaceId = await getActiveWorkspaceId(auth.userId);
-    const workspacesWithHealth = workspaces.map((workspace) => {
-      const health = validateWorkspaceRoot(workspace);
-      return {
-        ...toWorkspaceSummary(workspace),
-        health: health.status,
-        healthMessage: health.message ?? null,
-        selectable: health.status === "healthy",
-      };
-    });
-    return NextResponse.json({
-      workspaces: workspacesWithHealth,
-      activeWorkspaceId,
-    });
+    const workspaces = raw.map(summaryWithHealth);
+    return NextResponse.json({ workspaces, activeWorkspaceId });
   } catch (error) {
     return NextResponse.json(
-      { error: (error as Error)?.message ?? "Failed to list workspaces" },
+      { error: (error as Error)?.message ?? "Failed to load workspaces" },
       { status: 500 }
     );
   }
@@ -46,32 +47,34 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await requireAppRouteAuth(request);
   if (!auth) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  const body = await request.json().catch(() => ({} as Record<string, unknown>));
-  const rootPath = typeof body.rootPath === "string" ? body.rootPath : typeof (body as any).workingFolder === "string" ? (body as any).workingFolder : "";
-  if (!rootPath) {
-    return NextResponse.json({ error: "rootPath is required" }, { status: 400 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    const body = (await request.json()) as {
+      rootPath?: string;
+      name?: string;
+      repoUrl?: string;
+      provider?: string;
+      defaultBranch?: string;
+    };
+    const rootPath = body.rootPath?.trim();
+    if (!rootPath) {
+      return NextResponse.json({ error: "rootPath is required" }, { status: 400 });
+    }
+
     const workspace = await createWorkspace({
       ownerId: auth.userId,
       rootPath,
-      name: typeof body.name === "string" ? body.name : undefined,
-      repoUrl: typeof body.repoUrl === "string" ? body.repoUrl : undefined,
-      provider: typeof body.provider === "string" ? body.provider : undefined,
-      defaultBranch: typeof body.defaultBranch === "string" ? body.defaultBranch : undefined,
+      name: body.name?.trim(),
+      repoUrl: body.repoUrl,
+      provider: body.provider,
+      defaultBranch: body.defaultBranch,
     });
-    return NextResponse.json({ workspace: toWorkspaceSummary(workspace) }, { status: 201 });
+
+    return NextResponse.json({ workspace: summaryWithHealth(workspace) }, { status: 201 });
   } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error)?.message ?? "Failed to create workspace" },
-      { status: 500 }
-    );
+    const message = (error as Error)?.message ?? "Failed to create workspace";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }

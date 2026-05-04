@@ -57,8 +57,8 @@ export interface MessageBubbleProps {
 
 /**
  * Shared message bubble component.
- * - User messages: right-aligned, bordered, plain text
- * - Assistant messages: left-aligned, transparent bg, markdown-rendered
+ * - User: compact right bubble (Cursor-like); copy/edit in corner on hover, no extra footer gap
+ * - Assistant: flat markdown, actions under content on hover
  */
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
     role,
@@ -71,28 +71,50 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 }) => {
     const isUser = role === 'user';
 
+    if (isUser) {
+        return (
+            <div className={cn('group flex w-full flex-col items-end', className)}>
+                <div
+                    className={cn(
+                        'relative inline-block w-max max-w-[min(85%,28rem)] rounded-xl border border-white/[0.08]',
+                        'bg-white/[0.04] px-3 py-2 text-[13px] leading-snug text-text-primary',
+                    )}
+                >
+                    <div className="break-words whitespace-pre-wrap [word-break:break-word] pr-1">{content}</div>
+                    {actions ? (
+                        <div
+                            className={cn(
+                                'absolute bottom-1.5 right-1.5 flex items-center gap-px rounded-md',
+                                'bg-bg-root/85 p-0.5 shadow-sm ring-1 ring-white/[0.06] backdrop-blur-sm',
+                                'opacity-0 transition-opacity duration-100',
+                                'pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100',
+                                'focus-within:pointer-events-auto focus-within:opacity-100',
+                            )}
+                        >
+                            {actions}
+                        </div>
+                    ) : null}
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className={cn(`group flex flex-col ${isUser ? 'items-end' : 'items-start'}`, className)}>
-            <div
-                className={cn(
-                    'relative rounded-lg px-3 py-2 text-[12px]',
-                    isUser
-                        ? 'border border-border-strong bg-bg-elevated text-text-primary max-w-[90%] shadow-sm'
-                        : 'bg-transparent text-text-secondary w-full',
-                )}
-            >
-                {/* Content */}
-                <div className={cn('break-words', isUser ? 'text-text-primary' : 'text-text-secondary')}>
-                    {isUser ? content : <MarkdownRenderer content={content} />}
+        <div className={cn('group flex flex-col items-start', className)}>
+            <div className="relative w-full bg-transparent text-[13px] text-text-primary">
+                <div className="break-words text-text-primary">
+                    <MarkdownRenderer content={content} variant="chat" />
                 </div>
 
-                {/* Actions slot */}
-                {actions}
+                {actions ? (
+                    <div className="mt-0.5 flex justify-start opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                        {actions}
+                    </div>
+                ) : null}
 
-                {/* Timestamp (hover reveal, assistant only by default) */}
-                {!isUser && showTimestamp !== false && timestamp && (
-                    <div className="mt-0.5 flex items-center opacity-0 group-hover:opacity-100 transition-opacity justify-start">
-                        <span className="text-[9px] text-text-muted font-mono">{timestamp}</span>
+                {showTimestamp !== false && timestamp && (
+                    <div className="mt-0.5 flex items-center justify-start opacity-0 transition-opacity group-hover:opacity-100">
+                        <span className="font-mono text-[9px] text-text-muted">{timestamp}</span>
                     </div>
                 )}
             </div>

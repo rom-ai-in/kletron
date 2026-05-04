@@ -16,8 +16,9 @@ export const DEFAULT_BACKEND_URL = "https://app.kletron.com";
 export const DEV_BACKEND_URL = "http://localhost:3000";
 
 export const SETTINGS_SECTIONS = [
-  { id: "general", label: "General" },
   { id: "configuration", label: "Configuration" },
+  { id: "portal", label: "Web portal" },
+  { id: "general", label: "General" },
   { id: "personalization", label: "Personalization" },
   { id: "mcp", label: "MCP servers" },
   { id: "skills", label: "Skills" },

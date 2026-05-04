@@ -9,8 +9,13 @@ import {
   sanitizeTitle,
   stripSystemPrefix,
   stripThoughtContent,
+  stripThoughtTagsForTranscript,
 } from "@kletron/server/services/titleSanitizer";
 import { containsMetaLeakage } from "@kletron/shared/contentSanitizer";
+import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
+import { normalizeToWorkModeId } from "@kletron/shared/workMode";
+import { normalizeResearchDepth } from "@kletron/shared/researchDepth";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 /**
  * GET /api/sessions/[id] - Get session details with conversation history and graph info.
@@ -46,7 +51,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const sanitizedConversationHistory = rawHistory
       .map((event) => {
         const original = typeof event?.content === "string" ? event.content : "";
-        const cleaned = sanitizeAssistantVisibleContent(stripThoughtContent(original)).trim();
+        const cleaned = sanitizeAssistantVisibleContent(stripThoughtTagsForTranscript(original)).trim();
         // Use shared containsMetaLeakage from contentSanitizer instead of inline regex
         if (
           !cleaned ||
@@ -86,12 +91,19 @@ export async function GET(request: Request, { params }: { params: { id: string }
       nextBeforeIndex: startIndex > 0 ? startIndex : null,
     };
 
+    const workMode = normalizeToWorkModeId(run.workMode as string | undefined);
+    const researchDepth = normalizeResearchDepth((run as { researchDepth?: unknown }).researchDepth);
+
     return NextResponse.json({
       id: run._id?.toString(),
       graphId: run.graphId?.toString(),
+      workMode,
+      researchDepth,
       title,
       status: run.status,
       archived: run.archived ?? false,
+      threadApprovalMode: run.threadApprovalMode ?? "inherit",
+      source: run.source ?? null,
       conversationTurns: run.conversationTurns ?? 1,
       startedAt: run.startedAt?.toISOString?.() ?? null,
       endedAt: run.endedAt?.toISOString?.() ?? null,
@@ -114,6 +126,53 @@ export async function GET(request: Request, { params }: { params: { id: string }
   } catch (error) {
     return NextResponse.json({ error: (error as Error)?.message ?? "Failed to get session" }, { status: 500 });
   }
+}
+
+/**
+ * PATCH /api/sessions/[id] — Update session fields (e.g. threadApprovalMode).
+ * Body: { threadApprovalMode?: "inherit" | "confirm_everything" | "full_auto_thread" }
+ */
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireAppRouteAuth(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const run = await agentGraphRunService.getRun(params.id);
+  if (!run) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  if (body.threadApprovalMode === undefined) {
+    return NextResponse.json({ error: "No updatable fields provided" }, { status: 400 });
+  }
+
+  const mode = parseThreadApprovalMode(body.threadApprovalMode);
+  const runWs = run.workspaceId?.toString();
+  const wsPayload: Record<string, unknown> = runWs ? { workspaceId: runWs } : {};
+  let workspace;
+  try {
+    workspace = await resolveWorkspaceFromRequestStrict(request, auth.userId, wsPayload);
+  } catch (error) {
+    const workspaceError = workspaceErrorToHttp(error);
+    if (workspaceError) {
+      return NextResponse.json(workspaceError.body, { status: workspaceError.status });
+    }
+    throw error;
+  }
+  if (!workspace || (runWs && workspace._id?.toString() !== runWs)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  await agentGraphRunService.patchRun(params.id, { threadApprovalMode: mode });
+  return NextResponse.json({ threadApprovalMode: mode });
 }
 
 /**

@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@kletron/server/lib/supabase/supabaseServer';
 import { generateIdeTokens } from '@kletron/server/lib/auth/ideTokens';
 import { getDeviceByUserCode, updateDeviceSession } from '@kletron/server/services/ideDeviceService';
+import { requireAppRouteAuth } from '@kletron/server/lib/auth/apiAuth';
 
 export async function POST(request: NextRequest) {
     try {
+        const auth = await requireAppRouteAuth(request);
+        if (!auth) {
+            return NextResponse.json({ success: false, error: 'Not authenticated. Please login first.' }, { status: 401 });
+        }
+
         const body = await request.json();
         const rawCode = String(body?.userCode || '').trim().toUpperCase();
         const normalized = rawCode.replace(/[^A-Z0-9]/g, '');
@@ -15,25 +20,16 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Missing userCode' }, { status: 400 });
         }
 
-        const supabase = await createServerSupabaseClient();
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (userError || !user) {
-            return NextResponse.json({ success: false, error: 'Not authenticated. Please login first.' }, { status: 401 });
-        }
-
         const session = await getDeviceByUserCode(userCode);
         if (!session) {
             return NextResponse.json({ success: false, error: 'Invalid or expired code' }, { status: 404 });
         }
 
-        const fullName = user.user_metadata?.full_name ||
-            user.user_metadata?.name ||
-            user.email?.split('@')[0] ||
-            null;
+        const fullName = null;
 
         const tokenResult = await generateIdeTokens({
-            id: user.id,
-            email: user.email || '',
+            id: auth.userId,
+            email: '',
             fullName,
         });
 

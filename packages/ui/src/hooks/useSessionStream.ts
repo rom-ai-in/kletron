@@ -1,6 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { AgentEvent, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent } from '@kletron/shared/types';
 import type { Message, StreamStatus, StreamChunk } from '@kletron/shared/chatTypes';
+import type { ThreadApprovalMode } from '@kletron/shared/threadApprovalTypes';
+import { joinApiOrigin } from '@kletron/shared';
+import { normalizeToWorkModeId } from '@kletron/shared/workMode';
+import { normalizeResearchDepth, type ResearchDepthId } from '@kletron/shared/researchDepth';
+import { lastPlainAssistantAfterLatestUser } from '@kletron/shared/agentEventTurn';
 import { extractThoughtsFromContent, sanitizeVisibleAssistantContent, normalizeMessage } from '@kletron/shared/contentSanitizer';
 
 // Re-export for backward compatibility
@@ -13,7 +18,6 @@ export { normalizeMessage };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 // StreamChunk is now imported from @kletron/shared/chatTypes above.
-
 
 export type TokenUsageForDisplay = {
     totalInputTokens: number;
@@ -34,8 +38,26 @@ export interface UseSessionStreamOptions {
     llmModel?: string;
     /** Active workspace ID to scope new sessions to. */
     workspaceId?: string | null;
-    /** Callback when a new session is created (receives runId). */
-    onSessionCreated?: (runId: string, graphId: string) => void;
+    /** Per-thread approval mode (sent when creating a new session). */
+    threadApprovalMode?: ThreadApprovalMode;
+    /**
+     * When set (e.g. Electron desktop), prepended to `/api/...` paths. No trailing slash.
+     */
+    apiOrigin?: string;
+    /**
+     * Extra headers for every request (e.g. `Authorization`, `x-workspace-id` from Bearer auth).
+     */
+    getRequestHeaders?: () => Promise<Record<string, string>>;
+    /** Optional work category in the JSON body (desktop / command-center parity). Legacy alias for work mode. */
+    category?: string | null;
+    /** Code vs Work (`code` | `work`). Takes precedence over `category` when both are set. */
+    workMode?: string | null;
+    /** Optional plan mode flag in the JSON body. */
+    planMode?: boolean;
+    /** Research depth for new sessions only (default exhaustive). */
+    researchDepth?: ResearchDepthId | null;
+    /** Callback when a new session is created (receives runId, graphId, first user message body). */
+    onSessionCreated?: (runId: string, graphId: string, firstUserMessage?: string) => void;
     /** Callback when a title should be generated. */
     onTitleGenerate?: (runId: string, userMessage: string) => void;
 }
@@ -70,9 +92,11 @@ export interface UseSessionStreamReturn {
     runEndedAt: string | null;
     /** Progressive streaming text — accumulates token-by-token content from the LLM. */
     streamingText: string;
+    /** Live reasoning stream from `reasoning_delta` chunks (when the model supports it). */
+    streamingReasoning: string;
     /** Send a message (creates a new session or continues existing one).
      *  Optionally accepts a `text` override to bypass the input state. */
-    handleSend: (options?: { text?: string }) => Promise<void>;
+    handleSend: (options?: { text?: string; planMode?: boolean }) => Promise<void>;
     /** Stop the current stream. */
     handleStop: () => void;
     /** Keyboard handler (Enter to send). */
@@ -85,6 +109,8 @@ export interface UseSessionStreamReturn {
     lastResult: AgentWorkflowResult | null;
     /** Whether we are inside an active stream request. */
     isStreaming: boolean;
+    /** Graph-requested tools omitted from workspace capabilities (latest streaming update). */
+    capabilityDroppedTools: string[];
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
@@ -96,9 +122,19 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         llmProvider,
         llmModel,
         workspaceId,
+        threadApprovalMode = 'inherit',
+        apiOrigin,
+        getRequestHeaders,
+        category,
+        workMode,
+        planMode,
+        researchDepth,
         onSessionCreated,
         onTitleGenerate,
     } = options;
+
+    const getRequestHeadersRef = useRef(getRequestHeaders);
+    getRequestHeadersRef.current = getRequestHeaders;
 
     const [messages, setMessages] = useState<Message[]>([]);
     const [eventStream, setEventStream] = useState<AgentEvent[]>([]);
@@ -111,19 +147,53 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const [runEndedAt, setRunEndedAt] = useState<string | null>(null);
     const [lastResult, setLastResult] = useState<AgentWorkflowResult | null>(null);
     const [streamingText, setStreamingText] = useState('');
+    const [streamingReasoning, setStreamingReasoning] = useState('');
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [capabilityDroppedTools, setCapabilityDroppedTools] = useState<string[]>([]);
+    /** Client-side timing: POST start → first `text_delta` (end-to-end perceived latency). */
+    const clientStreamMarkRef = useRef<{ sendAt: number; loggedFirstText: boolean } | null>(null);
 
     const abortControllerRef = useRef<AbortController | null>(null);
     const isAtBottomRef = useRef(true);
     const isFirstMessageRef = useRef(true);
-    /** Accumulates text deltas in a ref (state is flushed via batched setStreamingText). */
+    /** Accumulates streaming deltas; flushed via `scheduleStreamFlush` (max once per frame). */
     const streamingTextRef = useRef('');
+    const streamingReasoningRef = useRef('');
+    const streamFlushRafRef = useRef<number | null>(null);
     /**
      * Tracks whether we are currently inside a streaming request.
      * Used to prevent external callers (e.g. loadSessionDetail) from
      * replacing messages mid-stream, which causes duplicates.
      */
     const isStreamingRef = useRef(false);
+
+    const cancelStreamFlush = useCallback(() => {
+        if (streamFlushRafRef.current != null) {
+            cancelAnimationFrame(streamFlushRafRef.current);
+            streamFlushRafRef.current = null;
+        }
+    }, []);
+
+    const clearStreamBuffers = useCallback(() => {
+        cancelStreamFlush();
+        streamingTextRef.current = '';
+        streamingReasoningRef.current = '';
+        setStreamingText('');
+        setStreamingReasoning('');
+    }, [cancelStreamFlush]);
+
+    const scheduleStreamFlush = useCallback(() => {
+        if (streamFlushRafRef.current != null) return;
+        streamFlushRafRef.current = requestAnimationFrame(() => {
+            streamFlushRafRef.current = null;
+            setStreamingText(streamingTextRef.current);
+            setStreamingReasoning(streamingReasoningRef.current);
+        });
+    }, []);
+
+    useEffect(() => () => {
+        cancelStreamFlush();
+    }, [cancelStreamFlush]);
 
     // Track the previous sessionId so we can distinguish session creation
     // (null → id) from session switching (id → different id).
@@ -159,13 +229,13 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         setRunStartedAt(null);
         setRunEndedAt(null);
         setLastResult(null);
-        streamingTextRef.current = '';
-        setStreamingText('');
+        setCapabilityDroppedTools([]);
+        clearStreamBuffers();
         // Reset first-message flag so title generation works for each new session
         isFirstMessageRef.current = true;
         // Note: messages are NOT reset here — the page component loads them from session detail.
         // Clearing messages here would cause a flash. The page handles setMessages via loadSessionDetail.
-    }, [sessionId, workspaceId]);
+    }, [sessionId, workspaceId, clearStreamBuffers]);
 
     /**
      * Guarded setMessages exposed to callers — silently skips during active
@@ -190,17 +260,25 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             abortControllerRef.current = null;
             setSending(false);
             isStreamingRef.current = false;
+            clearStreamBuffers();
             setRunEndedAt(new Date().toISOString());
             setStreamStatus("stopped");
-
-            // Fire-and-forget: notify the server so the run status is updated
-            if (sessionId) {
-                const headers: Record<string, string> = {};
-                if (workspaceId) headers["x-workspace-id"] = workspaceId;
-                fetch(`/api/sessions/${sessionId}/stop`, { method: "POST", headers }).catch(() => { });
-            }
         }
-    }, [sessionId]);
+
+        // Always ask the server to stop the run — covers RUNNING sessions without an active browser stream
+        // (e.g. LM Studio path) so the Stop control still does something useful.
+        if (sessionId) {
+            void (async () => {
+                const extra = (await getRequestHeadersRef.current?.()) ?? {};
+                const headers: Record<string, string> = { ...extra };
+                if (workspaceId) headers["x-workspace-id"] = workspaceId;
+                fetch(joinApiOrigin(apiOrigin, `/api/sessions/${sessionId}/stop`), {
+                    method: "POST",
+                    headers,
+                }).catch(() => { });
+            })();
+        }
+    }, [sessionId, workspaceId, apiOrigin, clearStreamBuffers]);
 
     /**
      * Convert an AgentEvent to a Message for the simple chat view.
@@ -242,6 +320,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             toolCallId: e.toolCallId,
             isError: e.isError,
             thoughts: e.thoughts,
+            thinking: e.thinking,
         });
     }, []);
 
@@ -331,20 +410,12 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 }
             }
 
-            // Final pass: remove duplicate assistant messages in merged result.
-            // For assistant messages, use content-based dedup (catches duplicates
-            // even when tool events separate them, e.g. replayed history).
-            // For other roles, keep consecutive dedup only.
+            // Final pass: consecutive duplicate suppression only (same role + same trimmed body).
+            // Never dedupe assistant messages globally by content — distinct turns can legitimately
+            // repeat text ("OK", "Done.", same factual answer).
             const deduped: Message[] = [];
-            const seenAssistantContent = new Set<string>();
             for (const msg of result) {
-                if (msg.role === 'assistant' && !msg.toolName && !msg.toolArgs) {
-                    // Content-based dedup for non-tool-call assistant messages
-                    const key = (msg.content ?? '').trim();
-                    if (key && seenAssistantContent.has(key)) continue;
-                    if (key) seenAssistantContent.add(key);
-                } else if (deduped.length > 0) {
-                    // Consecutive dedup for tool/user/system messages
+                if (deduped.length > 0) {
                     const prev = deduped[deduped.length - 1];
                     if (
                         prev.role === msg.role &&
@@ -393,23 +464,35 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
                     if (chunk.type === "init") {
                         if (isNewSession && onSessionCreated) {
-                            onSessionCreated(chunk.payload.runId, chunk.payload.graphId);
+                            onSessionCreated(chunk.payload.runId, chunk.payload.graphId, userMessage);
                         }
                     } else if (chunk.type === "text_delta") {
-                        // Progressive text streaming — accumulate and flush to state
+                        const mark = clientStreamMarkRef.current;
+                        if (mark && !mark.loggedFirstText) {
+                            mark.loggedFirstText = true;
+                            const ms = performance.now() - mark.sendAt;
+                            console.info("[AgentStreamKPI Client]", {
+                                time_request_to_first_text_delta_ms: Math.round(ms),
+                            });
+                        }
                         streamingTextRef.current += chunk.payload.content;
-                        // Meta-reasoning in text deltas is logged at warn level (replaces debug-fetch instrumentation)
                         if (/\bwe need to\b|\bfinal answer\b|<think>/i.test(chunk.payload.content ?? "")) {
                             console.warn('[useSessionStream] Suspicious text delta observed', { delta: (chunk.payload.content ?? '').slice(0, 80) });
                         }
-                        setStreamingText(streamingTextRef.current);
+                        scheduleStreamFlush();
+                    } else if (chunk.type === "reasoning_delta") {
+                        streamingReasoningRef.current += chunk.payload.content;
+                        scheduleStreamFlush();
+                    } else if (chunk.type === "stream_metrics") {
+                        console.info("[AgentStreamKPI]", chunk.payload);
+                    } else if (chunk.type === "activity") {
+                        // Reserved for server-driven activity line
                     } else if (chunk.type === "update") {
-                        // A full update arrived — clear progressive text since the real
-                        // message is now in the event stream
-                        if (streamingTextRef.current) {
-                            streamingTextRef.current = '';
-                            setStreamingText('');
-                        }
+                        // Cancel pending RAF; do not clear streaming refs here.
+                        // `text_delta` chunks after the first snapshot are often *suffix-only*; clearing refs
+                        // on every `update` left only the last suffix in `streamingTextRef` (broken streaming).
+                        cancelStreamFlush();
+                        streamFlushRafRef.current = null;
                         const update = chunk.payload;
 
                         // Update timeline (full replacement — these are always complete)
@@ -422,6 +505,10 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                             setEventStream(update.eventStream);
                             // Merge into chat messages (append + dedup, preserving previous turns)
                             mergeStreamMessages(update.eventStream, optimisticTempId);
+                            // Re-anchor progressive deltas to the assistant for *this* turn only (after latest user).
+                            const turnAssistant = lastPlainAssistantAfterLatestUser(update.eventStream);
+                            streamingTextRef.current =
+                                typeof turnAssistant?.content === "string" ? turnAssistant.content : "";
                         }
 
                         // Extract token usage from meta
@@ -432,12 +519,19 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                                 setTokenUsage(usage);
                             }
                         }
+                        if (update.capabilityDroppedTools !== undefined) {
+                            setCapabilityDroppedTools(update.capabilityDroppedTools);
+                        }
+                        // Hide the live bubble while merged history is authoritative; refs stay aligned for suffix deltas.
+                        setStreamingText("");
+                        setStreamingReasoning("");
                     } else if (chunk.type === "final") {
                         // Final chunk logging (replaces debug-fetch instrumentation)
                         console.debug('[useSessionStream] Final chunk received', { eventStreamCount: chunk.payload.eventStream?.length ?? 0 });
-                        // Clear any residual streaming text
-                        streamingTextRef.current = '';
-                        setStreamingText('');
+                        cancelStreamFlush();
+                        streamFlushRafRef.current = null;
+                        setStreamingText(streamingTextRef.current);
+                        setStreamingReasoning(streamingReasoningRef.current);
                         setLastResult(chunk.payload);
                         setRunEndedAt(new Date().toISOString());
 
@@ -458,15 +552,16 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                                 setTokenUsage(usage);
                             }
                         }
-
                         // Generate title after first message
                         if (isNewSession && isFirstMessageRef.current && onTitleGenerate) {
                             const runId = chunk.payload.sessionId;
                             onTitleGenerate(runId, userMessage);
                             isFirstMessageRef.current = false;
                         }
+                        clearStreamBuffers();
                     } else if (chunk.type === "error") {
                         console.error("[useSessionStream] Stream error:", chunk.payload.message);
+                        clearStreamBuffers();
                         setErrorMessage(chunk.payload.message || "An unknown error occurred.");
                         setStreamStatus("error");
                     }
@@ -475,11 +570,16 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 }
             }
         }
-    }, [onSessionCreated, onTitleGenerate, mergeStreamMessages]);
+    }, [onSessionCreated, onTitleGenerate, mergeStreamMessages, clearStreamBuffers, cancelStreamFlush, scheduleStreamFlush]);
 
-    const handleSend = useCallback(async (options?: { text?: string }) => {
+    const handleSend = useCallback(async (options?: { text?: string; planMode?: boolean }) => {
         const msg = (options?.text ?? input).trim();
         if (!msg || sending) return;
+        if (!sessionId && !selectedGraphId) {
+            setErrorMessage("No agent graph selected. Please select a graph before sending.");
+            return;
+        }
+        const effectivePlanMode = options?.planMode ?? planMode;
         setInput('');
         setSending(true);
         isStreamingRef.current = true;
@@ -487,20 +587,45 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         setErrorMessage(null);
         setRunStartedAt(new Date().toISOString());
         setRunEndedAt(null);
-        streamingTextRef.current = '';
-        setStreamingText('');
+        clearStreamBuffers();
+        setCapabilityDroppedTools([]);
         isAtBottomRef.current = true;
 
         const controller = new AbortController();
         abortControllerRef.current = controller;
 
         const isNewSession = !sessionId;
-        const url = isNewSession
+        const path = isNewSession
             ? '/api/sessions'
             : `/api/sessions/${sessionId}/chat`;
+        const url = joinApiOrigin(apiOrigin, path);
+        const resolvedMode = normalizeToWorkModeId(
+            (workMode ?? category ?? null) as string | null,
+        );
+        /** Only attach work mode on session creation; continuations keep the run's stored workMode (see /api/sessions/[id]/chat). */
+        const modeBodyForCreate =
+            isNewSession && (workMode != null || category != null)
+                ? { workMode: resolvedMode, category: resolvedMode }
+                : {};
+
         const body = isNewSession
-            ? { graphId: selectedGraphId, message: msg, provider: llmProvider, model: llmModel, ...(workspaceId ? { workspaceId } : {}) }
-            : { message: msg, provider: llmProvider, model: llmModel };
+            ? {
+                graphId: selectedGraphId,
+                message: msg,
+                provider: llmProvider,
+                model: llmModel,
+                ...(workspaceId ? { workspaceId } : {}),
+                ...(threadApprovalMode && threadApprovalMode !== 'inherit' ? { threadApprovalMode } : {}),
+                ...modeBodyForCreate,
+                ...(effectivePlanMode ? { planMode: true } : {}),
+                researchDepth: normalizeResearchDepth(researchDepth),
+            }
+            : {
+                message: msg,
+                provider: llmProvider,
+                model: llmModel,
+                ...(effectivePlanMode ? { planMode: true } : {}),
+            };
 
         // Optimistic user message (temp ID will be replaced by the real event)
         const tempId = `temp-${Date.now()}`;
@@ -512,8 +637,14 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         }]);
 
         try {
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            const authExtra = (await getRequestHeadersRef.current?.()) ?? {};
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+                ...authExtra,
+            };
             if (workspaceId) headers['x-workspace-id'] = workspaceId;
+
+            clientStreamMarkRef.current = { sendAt: performance.now(), loggedFirstText: false };
 
             const res = await fetch(url, {
                 method: 'POST',
@@ -545,10 +676,11 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 setSending(false);
                 isStreamingRef.current = false;
                 abortControllerRef.current = null;
+                clearStreamBuffers();
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, workspaceId, processNdjsonStream]);
+    }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, workspaceId, threadApprovalMode, apiOrigin, category, workMode, planMode, researchDepth, processNdjsonStream]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -576,6 +708,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         runStartedAt,
         runEndedAt,
         streamingText,
+        streamingReasoning,
         handleSend,
         handleStop,
         handleKeyDown,
@@ -583,5 +716,6 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         isAtBottomRef,
         lastResult,
         isStreaming: sending,
+        capabilityDroppedTools,
     };
 }

@@ -1,11 +1,9 @@
 import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import {
-  buildSimpleReactAgentGraph,
-  buildDriftAnalysisGraph,
   buildCoderAgentGraph,
   buildExplorerAgentGraph,
   buildPlannerAgentGraph,
-  buildBusinessAnalystGraph,
+  buildCompanyGrowthWorkGraph,
 } from "@kletron/server/services/agentGraphPresets";
 import * as db from "@kletron/server/lib/db";
 
@@ -14,13 +12,12 @@ type GraphPreset = {
   builder: () => Omit<any, "_id" | "createdAt" | "updatedAt">;
 };
 
+/** Canonical agent graphs: work, code, plan, explore — only these are kept in the database. */
 const presets: GraphPreset[] = [
-  { name: "Simple ReAct (agent graph)", builder: buildSimpleReactAgentGraph },
+  { name: "Company Growth & GTM (work graph)", builder: buildCompanyGrowthWorkGraph },
   { name: "Coder Agent (agent graph)", builder: buildCoderAgentGraph },
-  { name: "Explorer Agent (agent graph)", builder: buildExplorerAgentGraph },
   { name: "Planner Agent (agent graph)", builder: buildPlannerAgentGraph },
-  { name: "Drift Analysis (agent graph)", builder: buildDriftAnalysisGraph },
-  { name: "Business Analyst", builder: buildBusinessAnalystGraph },
+  { name: "Explorer Agent (agent graph)", builder: buildExplorerAgentGraph },
 ];
 
 // Legacy / removed graph names — delete any remaining copies from the database
@@ -33,6 +30,10 @@ const LEGACY_NAMES = [
   "Cursor-like Robust Loop (agent graph)",
   "Complete Deep Agent (agent graph)",
   "Continuous Improvement (agent graph)",
+  "Simple ReAct (agent graph)",
+  "Drift Analysis (agent graph)",
+  "Business Analyst",
+  "Code Comparator (agent graph)",
 ];
 
 async function main() {
@@ -93,18 +94,24 @@ async function main() {
     }
   }
 
-  // 5. Report orphaned graphs (exist in DB but not in presets)
-  const presetNames = new Set(presets.map((p) => p.name));
-  const orphaned = allGraphs
-    .filter((g) => !presetNames.has(g.name) && !LEGACY_NAMES.includes(g.name))
-    .map((g) => ({ _id: String(g._id), name: g.name }));
+  // 5. Delete any graph whose name is not in the canonical preset list
+  const allowedNames = new Set(presets.map((p) => p.name));
+  const afterUpsert = await agentGraphService.listGraphs();
+  const deletedNonCanonical: Array<{ _id: string; name: string }> = [];
+  for (const g of afterUpsert) {
+    if (!allowedNames.has(g.name)) {
+      const id = String(g._id);
+      // eslint-disable-next-line no-console
+      console.log(`  Deleting non-canonical graph "${g.name}" (${id})`);
+      await agentGraphService.deleteGraph(id);
+      deletedNonCanonical.push({ _id: id, name: g.name });
+    }
+  }
 
   // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ results, deletedLegacy, orphanedGraphs: orphaned }, null, 2));
-  if (orphaned.length > 0) {
-    // eslint-disable-next-line no-console
-    console.warn(`⚠️  ${orphaned.length} orphaned graph(s) found (not in presets). Review manually if needed.`);
-  }
+  console.log(
+    JSON.stringify({ results, deletedLegacy, deletedNonCanonical }, null, 2),
+  );
 }
 
 main()

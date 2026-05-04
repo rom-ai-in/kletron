@@ -9,6 +9,11 @@ import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceS
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { SafeEditGate } from "@kletron/server/services/agent/SafeEditGate";
 import { McpClient } from "@kletron/mcp-client/client";
+import {
+    invokeKletronAdminToolForApproval,
+    isKletronAdminToolName,
+} from "@kletron/server/services/kletronAdminToolApprovalRunner";
+import { syncWorkspaceExternalMcpServers } from "@kletron/server/services/mcpWorkspaceSync";
 
 /**
  * Fire-and-forget: resume the agent loop after a successful tool approval.
@@ -152,9 +157,10 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
     if (!workspace || !workspace._id) {
         return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
     }
+    const workspaceIdStr = workspace._id.toString();
 
     const run = await agentGraphRunService.getRun(params.runId);
-    if (!run || run.workspaceId?.toString() !== workspace._id.toString()) {
+    if (!run || run.workspaceId?.toString() !== workspaceIdStr) {
         return NextResponse.json({ error: "Run not found" }, { status: 404 });
     }
 
@@ -202,12 +208,23 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
 
     const executeEdit = async (edit: any) => {
         const toolName = String(edit.toolName ?? "");
-        if (!["write_file", "execute_bash", "str_replace_editor"].includes(toolName)) {
-            return { executed: false, message: "Unsupported tool" };
+        if (isKletronAdminToolName(toolName)) {
+            const raw = await invokeKletronAdminToolForApproval({
+                toolName,
+                args: (edit.args ?? {}) as Record<string, unknown>,
+                workspace,
+                userId: auth.userId,
+                runId: params.runId,
+            });
+            const evicted = await maybeEvictResult(workspace.rootPath, params.runId, toolName, raw);
+            return { executed: true, result: evicted.content, evictedPath: evicted.evictedPath ?? undefined };
         }
         const client = await McpClient.getInstance();
+        await syncWorkspaceExternalMcpServers(workspaceIdStr);
         const resolvedArgs = resolveArgs(toolName, edit.args ?? {}, workspace.rootPath);
-        const raw = await client.callTool(toolName, resolvedArgs as any);
+        const raw = await client.callTool(toolName, resolvedArgs as any, {
+            workspaceId: workspaceIdStr,
+        });
         const evicted = await maybeEvictResult(workspace.rootPath, params.runId, toolName, raw);
         return { executed: true, result: evicted.content, evictedPath: evicted.evictedPath ?? undefined };
     };

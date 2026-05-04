@@ -1,3 +1,5 @@
+import type { AgentEvent } from "@kletron/shared/types";
+
 /**
  * Resolves a nested property path from an object
  * e.g., getNestedValue(obj, 'nodes.client_research.summary')
@@ -94,4 +96,24 @@ export function parseJsonOutput(raw: string): unknown {
             summary: cleaned.slice(0, 500),
         };
     }
+}
+
+/**
+ * Most recent user event whose content matches the current mission (scan backwards).
+ * Used when seeding executeRunStreaming so re-entrant runs do not append a second
+ * identical mission user row when the last persisted event is not the user message
+ * (e.g. history is [user(mission), assistant, …]).
+ */
+export function findExistingMissionUserEvent(
+    conversationHistory: AgentEvent[] | undefined | null,
+    missionContent: string,
+): AgentEvent | null {
+    if (!missionContent || !conversationHistory?.length) return null;
+    for (let i = conversationHistory.length - 1; i >= 0; i--) {
+        const ev = conversationHistory[i]!;
+        if (ev.kind === "user" && ev.content === missionContent) {
+            return ev;
+        }
+    }
+    return null;
 }

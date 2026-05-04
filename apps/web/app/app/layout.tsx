@@ -7,6 +7,7 @@ import { useAuth } from '@kletron/ui/context/AuthContext';
 import { WorkspaceProvider } from '@kletron/ui/context/WorkspaceContext';
 import { Sidebar } from '@kletron/ui/components/Sidebar';
 import { AppHeader } from '@kletron/ui/components/AppHeader';
+import { AppHeaderCenterProvider } from '@kletron/ui/components/AppHeaderCenterSlot';
 import { BreadcrumbOverridesProvider } from '@kletron/ui/components/ui/BreadcrumbOverridesProvider';
 
 interface AppLayoutProps {
@@ -55,8 +56,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <Sidebar />
                 <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
                     <BreadcrumbOverridesProvider>
-                        <AppHeader />
-                        <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
+                        <AppHeaderCenterProvider>
+                            <AppHeader />
+                            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-elegant">
+                                {children}
+                            </div>
+                        </AppHeaderCenterProvider>
                     </BreadcrumbOverridesProvider>
                 </main>
             </div>

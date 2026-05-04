@@ -20,7 +20,7 @@ export type WorkspaceSummary = {
   selectable?: boolean;
 };
 
-interface WorkspaceContextValue {
+export interface WorkspaceContextValue {
   /** All active workspaces for the current user */
   workspaces: WorkspaceSummary[];
   /** The currently active workspace ID */
@@ -217,6 +217,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       {children}
     </WorkspaceContext.Provider>
   );
+}
+
+/** Supply workspace context from an external source (e.g. Electron desktop). */
+export function WorkspaceContextBridge({
+  value,
+  children,
+}: {
+  value: WorkspaceContextValue;
+  children: React.ReactNode;
+}) {
+  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────

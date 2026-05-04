@@ -4,12 +4,30 @@ import {
   sanitizeAssistantVisibleContent,
   sanitizeTitle,
   stripThoughtContent,
+  stripThoughtTagsForTranscript,
 } from "@kletron/server/services/titleSanitizer";
 
 describe("titleSanitizer", () => {
   it("removes think blocks and prompt leakage content", () => {
     const dirty = `<think>internal chain of thought</think> Respond with ONLY the title, nothing else`;
     expect(stripThoughtContent(dirty)).toBe("");
+  });
+
+  it("stripThoughtTagsForTranscript preserves markdown fences (no whitespace collapse)", () => {
+    const md = [
+      "Here is the script:",
+      "",
+      "```javascript",
+      "const x = 1;",
+      "console.log(x);",
+      "```",
+      "",
+      "Run with node.",
+    ].join("\n");
+    expect(stripThoughtTagsForTranscript(md)).toBe(md);
+    const cleaned = sanitizeAssistantVisibleContent(stripThoughtTagsForTranscript(md));
+    expect(cleaned).toContain("```javascript");
+    expect(cleaned).toContain("const x = 1;");
   });
 
   it("sanitizes model output down to a short clean title", () => {

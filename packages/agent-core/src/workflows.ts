@@ -1,9 +1,11 @@
 import type { AgentWorkflowOptions, AgentWorkflowResult } from "@kletron/shared/types";
+import type { WorkCategoryConfig } from "@kletron/shared";
 import type { AgentGraphDefinition } from "@kletron/server/services/agentGraphTypes";
 import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { getGraphNodeOrder, buildInitialState } from "@kletron/server/services/agentGraphRuntime";
 import { agentGraphExecutor } from "@kletron/server/services/agentGraphExecutor";
+import { preflightMissionForNewRun } from "@kletron/server/services/skillSlashPreflight";
 
 const OBJECTID_RE = /^[0-9a-fA-F]{24}$/;
 
@@ -24,10 +26,24 @@ function findSimpleReactGraph(graphs: AgentGraphDefinition[]): AgentGraphDefinit
   );
 }
 
+export interface CategoryAwareWorkflowOptions extends AgentWorkflowOptions {
+  category?: WorkCategoryConfig;
+  /** Links the run to the automation config that triggered it. */
+  automationId?: string;
+  /** Marks this run as a hidden sub-stage of `parentRunId`. */
+  parentRunId?: string;
+  /** Stage index within the parent automation (0..N-1). */
+  stageIndex?: number;
+  /** Optional initial title for the run (used by automations to label sub-runs). */
+  title?: string;
+  /** Receives the runId immediately after it is created — useful for sub-stage tracking. */
+  onRunCreated?: (runId: string) => void;
+}
+
 export async function runWorkflow(
   message: string,
   graphId?: string,
-  options?: AgentWorkflowOptions
+  options?: CategoryAwareWorkflowOptions
 ): Promise<AgentWorkflowResult> {
   let graphRecord;
 
@@ -55,16 +71,36 @@ export async function runWorkflow(
   const runId = await agentGraphRunService.createRun(
     graphRecord._id!.toString(),
     options?.workspaceId,
-    options?.source
+    options?.source,
+    {
+      automationId: options?.automationId,
+      parentRunId: options?.parentRunId,
+      stageIndex: options?.stageIndex,
+      title: options?.title,
+    }
   );
+  options?.onRunCreated?.(runId);
   const initialNodeStatuses: Record<string, any> = {};
   for (const node of graphRecord.nodes) {
     initialNodeStatuses[node.id] = "PENDING";
   }
+  const pre = options?.workspaceId
+    ? await preflightMissionForNewRun(message, options.workspaceId)
+    : null;
+  const initialState = pre
+    ? {
+        ...buildInitialState(graphRecord, pre.mission),
+        mission: pre.mission,
+        userInput: pre.mission,
+        loadedSkillIds: pre.loadedSkillIds.length ? pre.loadedSkillIds : undefined,
+        skillLoads: pre.skillLoads.length ? pre.skillLoads : undefined,
+      }
+    : buildInitialState(graphRecord, message);
+
   await agentGraphRunService.updateRunStatus(runId, "RUNNING", {
     nodeOrder,
     nodeStatuses: initialNodeStatuses,
-    state: buildInitialState(graphRecord, message),
+    state: initialState,
   } as any);
 
   return agentGraphExecutor.executeRunStreaming(runId, {

@@ -53,8 +53,23 @@ async function callMcpTool<TArgs extends Record<string, unknown> | undefined>(
 ) {
   const client = await McpClient.getInstance();
   const workspaceContext = getWorkspaceContext();
-  const rootDir =
-    config?.configurable?.workspaceRoot ?? workspaceContext?.rootPath ?? (await getConfig()).workingFolder;
+  // Workspace root must be pinned by the caller (run start) or ambient
+  // workspace context. Falling back to the global working folder masks bugs
+  // where the agent ends up reading files from the wrong project.
+  let rootDir: string | undefined =
+    config?.configurable?.workspaceRoot ?? workspaceContext?.rootPath;
+  if (!rootDir) {
+    const fallback = (await getConfig()).workingFolder;
+    if (!fallback) {
+      throw new Error(
+        `Tool '${name}' requires a workspace root. Provide it via config.configurable.workspaceRoot or runWithWorkspaceContext.`
+      );
+    }
+    console.warn(
+      `[mcpTools] Tool '${name}' fell back to global workingFolder. Pin a workspace root in the executor for correctness.`
+    );
+    rootDir = fallback;
+  }
 
   const resolvedArgs = { ...args };
 
@@ -126,6 +141,30 @@ const createListFilesTool = (defaultMaxDepth?: number) =>
 
 export const listFilesTool = createListFilesTool();
 export { createListFilesTool };
+
+export const globFilesTool = tool(
+  async (
+    input: { pattern: string; cwd?: string; ignore?: string[]; maxResults?: number },
+    config: any
+  ) => {
+    const payload: Record<string, unknown> = { pattern: input.pattern };
+    if (input.cwd) payload.cwd = input.cwd;
+    if (input.ignore?.length) payload.ignore = input.ignore;
+    if (typeof input.maxResults === "number") payload.maxResults = input.maxResults;
+    return formatResult(await callMcpTool("glob_files", payload, config));
+  },
+  {
+    name: "glob_files",
+    description:
+      "Find files matching a glob pattern under the workspace (targeted discovery). Prefer over listing entire trees.",
+    schema: z.object({
+      pattern: z.string(),
+      cwd: z.string().optional(),
+      ignore: z.array(z.string()).optional(),
+      maxResults: z.number().int().positive().optional(),
+    }),
+  }
+);
 
 export const readFileTool = tool(
   async ({ filePath }: { filePath: string }, config: any) => {
@@ -534,43 +573,6 @@ export const referencesTool = tool(
   }
 );
 
-export const findReferencesTool = tool(
-  async (input: {
-    path?: string;
-    filePath: string;
-    line: number;
-    column: number;
-    maxResults?: number;
-    contextLines?: number;
-    cacheTtlMs?: number;
-  }, config: any) => {
-    return formatResult(
-      await callMcpTool("references", {
-        path: input.path,
-        filePath: input.filePath,
-        line: input.line,
-        column: input.column,
-        maxResults: input.maxResults,
-        contextLines: input.contextLines,
-        cacheTtlMs: input.cacheTtlMs,
-      }, config)
-    );
-  },
-  {
-    name: "find_references",
-    description: "Alias of references: find references for a TS/JS identifier at a given file/line/column.",
-    schema: z.object({
-      path: z.string().optional(),
-      filePath: z.string(),
-      line: z.number().int().positive(),
-      column: z.number().int().positive(),
-      maxResults: z.number().int().positive().optional(),
-      contextLines: z.number().int().nonnegative().optional(),
-      cacheTtlMs: z.number().int().positive().optional(),
-    }),
-  }
-);
-
 export const webSearchTool = tool(
   async (input: {
     query: string;
@@ -819,8 +821,10 @@ export const strReplaceEditorTool = tool(
       "File editor tool. Commands: view (read file), create (new file), str_replace (replace exact unique text), insert (add lines after a line number), undo_edit (revert last edit). Use str_replace for surgical edits with old_str/new_str.",
     schema: z.object({
       repoPath: z.string().optional(),
-      command: z.enum(["view", "create", "str_replace", "insert", "undo_edit"]).optional()
-        .describe("Command to execute. Defaults to view."),
+      command: z
+        .enum(["view", "create", "str_replace", "insert", "undo_edit"])
+        .default("view")
+        .describe("Command to execute."),
       path: z.string().optional().describe("File path (absolute or relative to repo root)."),
       filePath: z.string().optional().describe("Alias for path."),
       old_str: z.string().optional().describe("Exact text to replace (must match once). Required for str_replace."),
@@ -895,6 +899,30 @@ export const outputFormatTool = tool(
   }
 );
 
+export const listAllSkillsTool = tool(
+  async (_input: Record<string, never>, config: any) => {
+    return formatResult(await callMcpTool("list_all_skills", {}, config));
+  },
+  {
+    name: "list_all_skills",
+    description:
+      "List all skills in the Kletron library (global HTTP catalog). For workspace-enabled skills only, prefer list_available_skills.",
+    schema: z.object({}),
+  }
+);
+
+/** @deprecated Prefer list_all_skills; MCP still accepts this name. */
+export const listSkillsLegacyTool = tool(
+  async (_input: Record<string, never>, config: any) => {
+    return formatResult(await callMcpTool("list_skills", {}, config));
+  },
+  {
+    name: "list_skills",
+    description: "Deprecated alias for list_all_skills.",
+    schema: z.object({}),
+  }
+);
+
 import { semanticSearch } from "@kletron/server/services/vectorService";
 
 export const semanticCodeSearchTool = tool(
@@ -938,6 +966,7 @@ export const semanticCodeSearchTool = tool(
 export const allMcpTools = [
   // File operations
   listFilesTool,
+  globFilesTool,
   readFileTool,
   readFileRangeTool,
   writeFileTool,
@@ -947,6 +976,8 @@ export const allMcpTools = [
   // Semantic search
   semanticCodeSearchTool,
   outputFormatTool,
+  listAllSkillsTool,
+  listSkillsLegacyTool,
   // Legacy code tools (keep for compatibility)
   searchCodeTool,
   repoMetricsTool,
@@ -962,7 +993,6 @@ export const allMcpTools = [
   findSymbolTool,
   goToDefinitionTool,
   referencesTool,
-  findReferencesTool,
   githubApiTool,
   bootstrapContextTool,
   locateUiFeatureTool,

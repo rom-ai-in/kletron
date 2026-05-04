@@ -1,40 +1,57 @@
 // src/services/authService.ts
-// Core authentication service for Supabase auth operations
-import { getSupabaseClient } from '../lib/supabase/supabaseClient';
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
-import type { SignUpData, SignInData, AuthResponse, UserProfile, UserContext } from '@kletron/shared/supabase/types';
+// Core authentication service for NextAuth operations
+
+interface SignUpData {
+    email: string;
+    password: string;
+    fullName?: string;
+}
+
+interface SignInData {
+    email: string;
+    password: string;
+}
+
+interface UserProfile {
+    id: string;
+    email: string;
+    full_name: string | null;
+    avatar_url: string | null;
+    email_confirmed_at?: string | undefined;
+    created_at: string;
+    updated_at: string;
+}
+
+interface AuthResponse {
+    success: boolean;
+    message?: string;
+    error?: string;
+    user?: Partial<UserProfile>;
+}
 
 export class AuthService {
-    private supabase = getSupabaseClient();
-
     /**
      * Register a new user with email and password
      */
     async signUp(data: SignUpData): Promise<AuthResponse> {
         try {
-            const { data: authData, error } = await this.supabase.auth.signUp({
-                email: data.email,
-                password: data.password,
-                options: {
-                    data: {
-                        full_name: data.fullName || '',
-                    },
-                },
+            const response = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: data.email,
+                    password: data.password,
+                    fullName: data.fullName || ''
+                })
             });
 
-            if (error) {
-                return {
-                    success: false,
-                    message: 'Registration failed',
-                    error: error.message,
-                };
-            }
+            const result = await response.json();
 
-            if (!authData.user) {
+            if (!response.ok) {
                 return {
                     success: false,
                     message: 'Registration failed',
-                    error: 'No user returned from signup',
+                    error: result.error || 'Unknown error'
                 };
             }
 
@@ -42,18 +59,18 @@ export class AuthService {
                 success: true,
                 message: 'Registration successful',
                 user: {
-                    id: authData.user.id,
-                    email: authData.user.email || '',
-                    email_confirmed_at: authData.user.email_confirmed_at || undefined,
-                    created_at: authData.user.created_at,
-                    updated_at: authData.user.updated_at || authData.user.created_at,
-                },
+                    id: result.user?.id,
+                    email: result.user?.email || '',
+                    email_confirmed_at: undefined, // NextAuth doesn't have this concept
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }
             };
         } catch (err) {
             return {
                 success: false,
                 message: 'An unexpected error occurred',
-                error: err instanceof Error ? err.message : 'Unknown error',
+                error: err instanceof Error ? err.message : 'Unknown error'
             };
         }
     }
@@ -63,24 +80,22 @@ export class AuthService {
      */
     async signIn(data: SignInData): Promise<AuthResponse> {
         try {
-            const { data: authData, error } = await this.supabase.auth.signInWithPassword({
-                email: data.email,
-                password: data.password,
+            const response = await fetch('/api/auth/signin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: data.email,
+                    password: data.password
+                })
             });
 
-            if (error) {
-                return {
-                    success: false,
-                    message: 'Sign in failed',
-                    error: error.message,
-                };
-            }
+            const result = await response.json();
 
-            if (!authData.user) {
+            if (!response.ok) {
                 return {
                     success: false,
                     message: 'Sign in failed',
-                    error: 'No user returned from sign in',
+                    error: result.error || 'Unknown error'
                 };
             }
 
@@ -88,18 +103,18 @@ export class AuthService {
                 success: true,
                 message: 'Sign in successful',
                 user: {
-                    id: authData.user.id,
-                    email: authData.user.email || '',
-                    email_confirmed_at: authData.user.email_confirmed_at || undefined,
-                    created_at: authData.user.created_at,
-                    updated_at: authData.user.updated_at || authData.user.created_at,
-                },
+                    id: result.user?.id,
+                    email: result.user?.email || '',
+                    email_confirmed_at: undefined,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }
             };
         } catch (err) {
             return {
                 success: false,
                 message: 'An unexpected error occurred',
-                error: err instanceof Error ? err.message : 'Unknown error',
+                error: err instanceof Error ? err.message : 'Unknown error'
             };
         }
     }
@@ -109,25 +124,28 @@ export class AuthService {
      */
     async signOut(): Promise<AuthResponse> {
         try {
-            const { error } = await this.supabase.auth.signOut();
+            const response = await fetch('/api/auth/json/signout', {
+                method: 'POST'
+            });
 
-            if (error) {
+            if (!response.ok) {
+                const result = await response.json();
                 return {
                     success: false,
                     message: 'Sign out failed',
-                    error: error.message,
+                    error: result.error || 'Unknown error'
                 };
             }
 
             return {
                 success: true,
-                message: 'Sign out successful',
+                message: 'Sign out successful'
             };
         } catch (err) {
             return {
                 success: false,
                 message: 'An unexpected error occurred',
-                error: err instanceof Error ? err.message : 'Unknown error',
+                error: err instanceof Error ? err.message : 'Unknown error'
             };
         }
     }
@@ -137,27 +155,30 @@ export class AuthService {
      */
     async resetPassword(email: string): Promise<AuthResponse> {
         try {
-            const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/update-password`,
+            const response = await fetch('/api/auth/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
             });
 
-            if (error) {
+            if (!response.ok) {
+                const result = await response.json();
                 return {
                     success: false,
                     message: 'Password reset request failed',
-                    error: error.message,
+                    error: result.error || 'Unknown error'
                 };
             }
 
             return {
                 success: true,
-                message: 'Password reset email sent. Please check your inbox.',
+                message: 'Password reset email sent. Please check your inbox.'
             };
         } catch (err) {
             return {
                 success: false,
                 message: 'An unexpected error occurred',
-                error: err instanceof Error ? err.message : 'Unknown error',
+                error: err instanceof Error ? err.message : 'Unknown error'
             };
         }
     }
@@ -167,48 +188,51 @@ export class AuthService {
      */
     async updatePassword(newPassword: string): Promise<AuthResponse> {
         try {
-            const { error } = await this.supabase.auth.updateUser({
-                password: newPassword,
+            const response = await fetch('/api/auth/update-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ newPassword })
             });
 
-            if (error) {
+            if (!response.ok) {
+                const result = await response.json();
                 return {
                     success: false,
                     message: 'Password update failed',
-                    error: error.message,
+                    error: result.error || 'Unknown error'
                 };
             }
 
             return {
                 success: true,
-                message: 'Password updated successfully',
+                message: 'Password updated successfully'
             };
         } catch (err) {
             return {
                 success: false,
                 message: 'An unexpected error occurred',
-                error: err instanceof Error ? err.message : 'Unknown error',
+                error: err instanceof Error ? err.message : 'Unknown error'
             };
         }
     }
 
     /**
-     * Get the current authenticated user
+     * Get the current authenticated user from NextAuth session
      */
     async getCurrentUser() {
         try {
-            const { data: { user }, error } = await this.supabase.auth.getUser();
+            const response = await fetch('/api/auth/me');
+            if (!response.ok) return null;
 
-            if (error || !user) {
-                return null;
-            }
+            const data = await response.json();
+            if (!data.user) return null;
 
             return {
-                id: user.id,
-                email: user.email || '',
-                email_confirmed_at: user.email_confirmed_at || undefined,
-                created_at: user.created_at,
-                updated_at: user.updated_at || user.created_at,
+                id: data.user.id,
+                email: data.user.email || '',
+                email_confirmed_at: undefined, // NextAuth doesn't track this
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
             };
         } catch {
             return null;
@@ -224,15 +248,15 @@ export class AuthService {
             if (!response.ok) return null;
 
             const data = await response.json();
-            if (!data.success || !data.profile) return null;
+            if (!data.user) return null;
 
             return {
-                id: data.profile.id,
-                full_name: data.profile.fullName,
-                email: data.profile.email,
-                avatar_url: null,
-                created_at: data.profile.createdAt,
-                updated_at: data.profile.updatedAt,
+                id: data.user.id,
+                full_name: data.user.name || null,
+                email: data.user.email,
+                avatar_url: null, // Will need to be handled separately
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
             };
         } catch {
             return null;
@@ -242,7 +266,7 @@ export class AuthService {
     /**
      * Get user context (deprecated - returns empty array in MongoDB architecture)
      */
-    async getUserContext(): Promise<UserContext[] | null> {
+    async getUserContext(): Promise<[]> {
         // Context is not used in the MongoDB-only architecture
         return [];
     }
@@ -255,39 +279,31 @@ export class AuthService {
             const response = await fetch('/api/auth/profile', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fullName: updates.full_name ?? null }),
+                body: JSON.stringify({
+                    name: updates.full_name ?? null
+                })
             });
 
-            const data = await response.json();
-
-            if (!response.ok || !data.success) {
+            if (!response.ok) {
+                const data = await response.json();
                 return {
                     success: false,
                     message: 'Profile update failed',
-                    error: data.message || 'Unknown error',
+                    error: data.error || 'Unknown error'
                 };
             }
 
             return {
                 success: true,
-                message: 'Profile updated successfully',
+                message: 'Profile updated successfully'
             };
         } catch (err) {
             return {
                 success: false,
                 message: 'An unexpected error occurred',
-                error: err instanceof Error ? err.message : 'Unknown error',
+                error: err instanceof Error ? err.message : 'Unknown error'
             };
         }
-    }
-
-    /**
-     * Listen to auth state changes
-     */
-    onAuthStateChange(callback: (event: AuthChangeEvent, session: Session | null) => void) {
-        return this.supabase.auth.onAuthStateChange((event, session) => {
-            callback(event, session);
-        });
     }
 }
 

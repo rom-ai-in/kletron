@@ -23,8 +23,11 @@ describe("agentGraphUtils.parseJsonOutput", () => {
         expect(parseJsonOutput("```json\n{\"a\":1}\n```")).toEqual({ a: 1 });
     });
 
-    it("throws on invalid JSON", () => {
-        expect(() => parseJsonOutput("not json")).toThrow();
+    it("returns a structured fallback when text is not JSON (graph continues instead of hard-failing)", () => {
+        const out = parseJsonOutput("not json") as Record<string, unknown>;
+        expect(out._parseError).toBe(true);
+        expect(typeof out._errorMessage).toBe("string");
+        expect(out._rawContent).toBe("not json");
     });
 });
 

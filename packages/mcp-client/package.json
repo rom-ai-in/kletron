@@ -13,6 +13,10 @@
     "./client": {
       "types": "./src/client.ts",
       "default": "./src/client.ts"
+    },
+    "./multiClient": {
+      "types": "./src/multiClient.ts",
+      "default": "./src/multiClient.ts"
     }
   }
 }

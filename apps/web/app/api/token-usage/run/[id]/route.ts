@@ -4,11 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { tokenUsageService } from "@kletron/server/services/tokenUsageService";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
-import { automationExecutor } from "@kletron/server/services/automationExecutor";
+import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 
 /**
  * GET /api/token-usage/run/[id]
- * Get token usage for a specific run
+ * Get token usage for a specific agent thread / graph run.
  */
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
     try {
@@ -25,8 +25,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
 
-        const run = await automationExecutor.getRun(params.id, workspace._id.toString());
-        if (!run) {
+        const run = await agentGraphRunService.getRun(params.id);
+        if (!run || (run.workspaceId && run.workspaceId.toString() !== workspace._id.toString())) {
             return NextResponse.json({ error: "Execution run not found" }, { status: 404 });
         }
 

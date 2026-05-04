@@ -67,9 +67,9 @@ export function ContextVisualizer({ className }: ContextHUDProps) {
     });
 
     return (
-        <div className={`h-full w-full bg-bg-surface flex flex-col text-text-primary ${className}`}>
+        <div className={`flex h-full min-h-0 min-w-0 w-full flex-col bg-bg-surface text-text-primary ${className}`}>
             {/* Header / Controls */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle bg-bg-elevated/50 backdrop-blur-sm sticky top-0 z-10">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border-subtle bg-bg-elevated/50 px-6 py-3 backdrop-blur-sm lg:px-8">
                 <div className="flex items-center gap-2">
                     <FilterButton active={filter === 'all'} label="All" onClick={() => setFilter('all')} count={nodes.length} />
                     <FilterButton active={filter === 'file'} label="Files" onClick={() => setFilter('file')} count={nodes.filter(n => n.type === 'file').length} />
@@ -85,14 +85,14 @@ export function ContextVisualizer({ className }: ContextHUDProps) {
             </div>
 
             {/* Content List */}
-            <div className="flex-1 overflow-y-auto p-4 scrollbar-elegant">
+            <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-elegant lg:px-8">
                 {filteredNodes.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-48 text-text-muted italic gap-2">
                         <Globe className="opacity-20 w-12 h-12" />
                         <span>No context nodes found.</span>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                         {filteredNodes.map((node) => (
                             <ContextCard key={node.id} node={node} />
                         ))}
@@ -101,7 +101,7 @@ export function ContextVisualizer({ className }: ContextHUDProps) {
             </div>
 
             {/* Footer Stats */}
-            <div className="px-4 py-2 border-t border-border-subtle text-[10px] text-text-muted flex justify-between bg-bg-elevated/30">
+            <div className="flex justify-between border-t border-border-subtle bg-bg-elevated/30 px-6 py-2 text-[10px] text-text-muted lg:px-8">
                 <span>Total Nodes: {nodes.length}</span>
                 <span>Memory Usage: ~{(nodes.length * 0.5).toFixed(1)}KB</span>
             </div>

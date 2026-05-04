@@ -207,6 +207,44 @@ export function useAuth(backendUrlTrimmed: string, backendUrlValid: boolean) {
     return () => clearInterval(interval);
   }, [loginSession, backendUrlTrimmed]);
 
+  async function putIdeSessionInit(
+    deviceSessionId: string,
+    codeChallenge: string,
+    networkErrorLabel: string
+  ): Promise<boolean> {
+    try {
+      const res = await fetch(`${backendUrlTrimmed}/api/auth/ide-session`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceSessionId, codeChallenge }),
+      });
+      let data: { error?: string } = {};
+      try {
+        data = (await res.json()) as { error?: string };
+      } catch {
+        /* non-JSON body */
+      }
+      if (!res.ok) {
+        const detail =
+          typeof data.error === "string" && data.error.trim()
+            ? data.error
+            : `Server error (${res.status}). Check Backend URL and that the portal is running.`;
+        setLoginError(detail);
+        setLoginPending(false);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      const message =
+        e instanceof TypeError
+          ? "Cannot reach backend (offline, wrong URL, or blocked). Check the Backend URL and network."
+          : networkErrorLabel;
+      setLoginError(message);
+      setLoginPending(false);
+      return false;
+    }
+  }
+
   async function startWebLogin() {
     if (!backendUrlValid) {
       setLoginError("Enter a valid Backend URL first.");
@@ -219,17 +257,12 @@ export function useAuth(backendUrlTrimmed: string, backendUrlValid: boolean) {
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = await createCodeChallenge(codeVerifier);
 
-    try {
-      await fetch(`${backendUrlTrimmed}/api/auth/ide-session`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceSessionId, codeChallenge }),
-      });
-    } catch {
-      setLoginError("Failed to initialize login session.");
-      setLoginPending(false);
-      return;
-    }
+    const ok = await putIdeSessionInit(
+      deviceSessionId,
+      codeChallenge,
+      "Failed to initialize login session."
+    );
+    if (!ok) return;
 
     setLoginSession({ deviceSessionId, codeVerifier, startedAt: Date.now() });
 
@@ -257,17 +290,12 @@ export function useAuth(backendUrlTrimmed: string, backendUrlValid: boolean) {
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = await createCodeChallenge(codeVerifier);
 
-    try {
-      await fetch(`${backendUrlTrimmed}/api/auth/ide-session`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceSessionId, codeChallenge }),
-      });
-    } catch {
-      setLoginError("Failed to initialize registration session.");
-      setLoginPending(false);
-      return;
-    }
+    const ok = await putIdeSessionInit(
+      deviceSessionId,
+      codeChallenge,
+      "Failed to initialize registration session."
+    );
+    if (!ok) return;
 
     setLoginSession({ deviceSessionId, codeVerifier, startedAt: Date.now() });
 

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Info } from "lucide-react";
+
 import { Panel } from "../ui/Panel";
 import { Button } from "../ui/Button";
 import { nodeOutputSchemaOptions } from "@kletron/shared/nodeOutputSchemas";
@@ -20,13 +22,11 @@ export type AgentNodeEditorValue = {
         systemPrompt: string;
         userPromptTemplate: string;
         toolNames: string[];
-        llmSelection?: { provider: "azure" | "lmstudio"; model?: string };
     };
     delegate?: {
         mode?: "react" | "graph";
         graphId?: string;
         summaryPrompt?: string;
-        summaryLlmSelection?: { provider: "azure" | "lmstudio"; model?: string };
     };
     output: { schemaId: string; statePath?: string; stateMerge?: boolean };
 };
@@ -142,52 +142,21 @@ export function NodeInspector({
                     </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                            Provider
-                        </label>
-                        <select
-                            value={node.react.llmSelection?.provider ?? "azure"}
-                            onChange={(e) =>
-                                onChange({
-                                    ...node,
-                                    react: {
-                                        ...node.react,
-                                        llmSelection: {
-                                            provider: e.target.value as "azure" | "lmstudio",
-                                            model: node.react.llmSelection?.model,
-                                        },
-                                    },
-                                })
-                            }
-                            className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
-                        >
-                            <option value="azure">Azure OpenAI</option>
-                            <option value="lmstudio">LM Studio</option>
-                        </select>
-                    </div>
-                    <div className="space-y-1.5">
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                            Model (optional)
-                        </label>
-                        <input
-                            value={node.react.llmSelection?.model ?? ""}
-                            onChange={(e) =>
-                                onChange({
-                                    ...node,
-                                    react: {
-                                        ...node.react,
-                                        llmSelection: {
-                                            provider: node.react.llmSelection?.provider ?? "azure",
-                                            model: e.target.value || undefined,
-                                        },
-                                    },
-                                })
-                            }
-                            className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
-                            placeholder="e.g. gpt-4o-mini"
-                        />
+                <div
+                    className="rounded-md border border-border-subtle bg-bg-elevated/60 px-3 py-2.5 text-[11px] leading-snug text-text-secondary"
+                    role="note"
+                >
+                    <div className="flex gap-2">
+                        <Info className="h-4 w-4 shrink-0 text-text-muted" aria-hidden />
+                        <p>
+                            LLM is not set per node. Use the{" "}
+                            <span className="font-medium text-text-primary">Agent</span> composer LLM for chat
+                            threads, the LLM configured on each{" "}
+                            <span className="font-medium text-text-primary">automation</span> stage when present,
+                            or <span className="font-medium text-text-primary">Configuration → LLM</span> defaults
+                            when you start a run with <span className="font-medium text-text-primary">Run</span> on
+                            this graph.
+                        </p>
                     </div>
                 </div>
 
@@ -245,11 +214,7 @@ export function NodeInspector({
                 <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold text-text-primary">System prompt</div>
                     {onResetPrompt && (
-                        <Button
-                            variant="secondary"
-                            size="xs"
-                            onClick={onResetPrompt}
-                        >
+                        <Button variant="secondary" size="xs" onClick={onResetPrompt}>
                             Reset to default
                         </Button>
                     )}
@@ -257,9 +222,10 @@ export function NodeInspector({
                 <textarea
                     value={node.react.systemPrompt}
                     onChange={(e) => onChange({ ...node, react: { ...node.react, systemPrompt: e.target.value } })}
-                    className="h-40 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary disabled:opacity-60"
+                    className="min-h-[220px] w-full resize-y rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm font-mono leading-relaxed text-text-secondary disabled:opacity-60"
                     placeholder="System prompt for this ReAct node"
                     disabled={node.kind === "router"}
+                    rows={12}
                 />
             </Panel>
 
@@ -273,9 +239,10 @@ export function NodeInspector({
                     onChange={(e) =>
                         onChange({ ...node, react: { ...node.react, userPromptTemplate: e.target.value } })
                     }
-                    className="h-40 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary disabled:opacity-60"
+                    className="min-h-[200px] w-full resize-y rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm font-mono leading-relaxed text-text-secondary disabled:opacity-60"
                     placeholder={"Example:\nAnalyze this state:\n{{state}}\nReturn strict JSON."}
                     disabled={node.kind === "router"}
+                    rows={10}
                 />
             </Panel>
 
@@ -331,8 +298,9 @@ export function NodeInspector({
                                     delegate: { ...(node.delegate ?? {}), summaryPrompt: e.target.value },
                                 })
                             }
-                            className="h-28 w-full resize-none rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs font-mono text-text-secondary"
+                            className="min-h-[120px] w-full resize-y rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm font-mono leading-relaxed text-text-secondary"
                             placeholder="Summarize the delegate result. Return JSON compatible with the node output schema."
+                            rows={5}
                         />
                     </div>
                 </Panel>
@@ -356,7 +324,7 @@ export function NodeInspector({
                     placeholder="Search tools..."
                 />
 
-                <div className="max-h-80 overflow-y-auto scrollbar-elegant rounded-md border border-border-subtle bg-bg-surface">
+                <div className="max-h-[min(28rem,55vh)] overflow-y-auto scrollbar-elegant rounded-md border border-border-subtle bg-bg-surface">
                     <div className="divide-y divide-border-subtle">
                         {filteredTools.map((tool) => {
                             const checked = (node.react.toolNames ?? []).includes(tool.name);

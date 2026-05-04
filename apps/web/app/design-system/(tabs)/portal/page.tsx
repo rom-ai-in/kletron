@@ -677,7 +677,7 @@ export default function DesignSystemPortalPage() {
                             <EventCard
                                 kind="tool"
                                 toolName="read_file"
-                                content={`Reading: packages/ui/src/context/AuthContext.tsx\n\n// AuthContext.tsx (245 lines)\nimport { createContext, useContext, useState, useEffect } from 'react';\nimport type { UserProfile } from '@kletron/shared/supabase/types';\n\ninterface AuthState {\n  user: UserProfile | null;\n  token: string | null;\n  refreshToken: string | null;\n  isAuthenticated: boolean;\n  isLoading: boolean;\n}\n\n// ... 230 more lines`}
+                                content={`Reading: packages/ui/src/context/AuthContext.tsx\n\n// AuthContext.tsx\nimport { createContext, useContext, useState, useEffect } from 'react';\nimport { signIn, signOut, useSession } from 'next-auth/react';\n\ninterface AuthState {\n  user: any | null;\n  token: string | null;\n  isAuthenticated: boolean;\n  isLoading: boolean;\n}\n\n// ... 230 more lines`}
                                 meta="120ms"
                                 isExpanded
                             />

@@ -1,6 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient } from "@supabase/ssr";
 
+/**
+ * Dev defaults for `/api/*` CORS. Browsers send `Origin: null` for some `file://` and packaged
+ * Electron loads — include the literal string `null` (not the same as missing Origin).
+ *
+ * Production: set `KLETRON_CORS_ALLOWLIST` to a comma-separated list of allowed origins, e.g.
+ * `https://app.example.com,null` so the desktop app can call the API from `file://` or custom
+ * protocols. Use `*` to allow any origin (no credentials on wildcard per browser rules).
+ */
 const DEFAULT_DEV_CORS_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -9,6 +16,7 @@ const DEFAULT_DEV_CORS_ORIGINS = [
     "http://localhost:8080",
     "http://127.0.0.1:8080",
     "file://",
+    "null",
     "kletron://"
 ];
 
@@ -66,48 +74,25 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    const response = NextResponse.next();
-
+    // Bypass auth in dev when KLETRON_AUTH_BYPASS=true or when not explicitly set in dev
     const bypassAuth =
         process.env.KLETRON_AUTH_BYPASS === "true" ||
         (process.env.NODE_ENV !== "production" && process.env.KLETRON_AUTH_BYPASS !== "false");
     if (bypassAuth) {
-        return response;
+        return NextResponse.next();
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-        return response;
-    }
-
-    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-        cookies: {
-            get(name: string) {
-                return request.cookies.get(name)?.value;
-            },
-            set(name: string, value: string, options: any) {
-                response.cookies.set({ name, value, ...options });
-            },
-            remove(name: string, options: any) {
-                response.cookies.set({ name, value: "", ...options, maxAge: 0 });
-            }
-        }
-    });
-
-    const {
-        data: { user }
-    } = await supabase.auth.getUser();
-
-    if (!user) {
+    const sessionCookie =
+        request.cookies.get('__Secure-next-auth.session-token')?.value ??
+        request.cookies.get('next-auth.session-token')?.value;
+    if (!sessionCookie) {
         const loginUrl = request.nextUrl.clone();
         loginUrl.pathname = "/auth/login";
         loginUrl.searchParams.set("redirect", request.nextUrl.pathname);
         return NextResponse.redirect(loginUrl);
     }
 
-    return response;
+    return NextResponse.next();
 }
 
 export const config = {

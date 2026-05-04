@@ -39,6 +39,10 @@ export {
     ProgressBar, CircularProgress,
     Modal,
     Panel,
+    ConfigExplorerModal,
+    ConfigExplorerSection,
+    ConfigExplorerRow,
+    ConfigExplorerMonoBlock,
     Skeleton,
     Selector,
     SelectableRow,
@@ -60,6 +64,7 @@ export {
 
     // Agent
     ThinkingBubble, ThinkingList,
+    AgentStatusShimmerLabel,
     ToolLog,
     ToolBatchAccordion,
     DiffApproval,
@@ -116,6 +121,10 @@ export {
     AddWorkspaceModal,
 } from './components/CommandCenter';
 
+/** Agent pending approvals strip (also exported from design-system). */
+export { PendingSessionEditsStrip } from './components/Agent/PendingSessionEditsStrip';
+export type { PendingSessionEditsStripProps } from './components/Agent/PendingSessionEditsStrip';
+
 export type {
     TitleBarProps, GitDiffStats,
     ProjectSidebarProps, SidebarProject, SidebarThread, ThreadLiveStatus,
@@ -124,7 +133,7 @@ export type {
     InputBarProps,
     ProjectUtilitySidebarProps, PendingDiffItem, FileLink, GitSidebarData,
     InlineDiffReviewProps, InlineDiff,
-    SlashCommandMenuProps, SlashCommandItem,
+    SlashCommandMenuProps, SlashCommandItem, SlashCommandSectionId,
     MultimodalMenuProps,
     ReviewQueueProps, ReviewQueueItem,
     SkillsManagerProps, SkillItem,

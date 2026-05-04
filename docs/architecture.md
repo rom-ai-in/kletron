@@ -1,5 +1,7 @@
 # Architecture Overview
 
+> **Start here for the one-page map:** [ARCHITECTURE.md](../ARCHITECTURE.md) (diagram + “where things live”). This file is the deeper dependency and data-flow reference.
+
 ## Layout
 - `apps/web`: Next.js UI + App Router API routes.
 - `apps/cli`: CLI entrypoint for running agent workflows.

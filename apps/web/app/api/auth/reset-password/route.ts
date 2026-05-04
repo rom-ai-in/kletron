@@ -1,7 +1,8 @@
 // app/api/auth/reset-password/route.ts
-// API route for password reset request
+// API route for password reset request - generates token stored in MongoDB
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@kletron/server/lib/supabase/supabaseServer';
+import crypto from 'crypto';
+import { getDb } from '@kletron/server/lib/db';
 
 export async function POST(request: Request) {
     try {
@@ -15,22 +16,33 @@ export async function POST(request: Request) {
             );
         }
 
-        const { client } = createRouteHandlerClient(request);
+        const db = await getDb();
+        const usersCollection = db.collection('users');
+        const user = await usersCollection.findOne({ email: email.toLowerCase().trim() });
 
-        // Get the origin from the request headers for redirect URL
-        const origin = request.headers.get('origin') || '';
-        const redirectTo = `${origin}/auth/update-password`;
+        // Always return success to prevent email enumeration
+        if (!user) {
+            return NextResponse.json({
+                success: true,
+                message: 'Password reset email sent. Please check your inbox.',
+            });
+        }
 
-        const { error } = await client.auth.resetPasswordForEmail(email, {
-            redirectTo,
+        // Generate reset token (expires in 1 hour)
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+        await db.collection('password_reset_tokens').insertOne({
+            userId: user._id.toString(),
+            email: user.email,
+            tokenHash: crypto.createHash('sha256').update(token).digest('hex'),
+            expiresAt,
+            createdAt: new Date(),
         });
 
-        if (error) {
-            return NextResponse.json(
-                { success: false, message: error.message },
-                { status: 400 }
-            );
-        }
+    // In production, send an email with the reset link here.
+    // For now, the token is stored and can be retrieved from the DB.
+    // The reset link would be: /auth/update-password?token=<token>
 
         return NextResponse.json({
             success: true,

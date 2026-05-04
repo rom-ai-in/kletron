@@ -165,12 +165,12 @@ export function ConversationCenter({
           return (
             <div key={`event-${idx}-${event.id ?? 'msg'}`} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
               <div
-                className={`group max-w-[85%] rounded-xl px-4 py-3 text-[14px] leading-relaxed transition-all duration-200 ${
+                className={`group ${isUser ? 'inline-block w-max max-w-[min(85%,28rem)] ' : ''}${!isUser ? 'max-w-[min(85%,28rem)] ' : ''}rounded-xl text-[13px] leading-snug transition-all duration-200 ${
                   isUser
                     ? isEditing
-                      ? 'border border-brand-primary/40 bg-white/[0.06] text-text-primary ring-1 ring-brand-primary/20'
-                      : 'bg-white/[0.04] text-text-primary hover:bg-white/[0.06] cursor-text'
-                    : 'bg-transparent text-text-secondary pl-0'
+                      ? 'border border-white/[0.08] bg-white/[0.04] text-text-primary px-3 py-2'
+                      : 'border border-white/[0.08] bg-white/[0.04] text-text-primary px-3 py-2 hover:bg-white/[0.06] cursor-text'
+                    : 'bg-transparent text-text-secondary pl-0 px-4 py-3 text-[14px] leading-relaxed'
                 }`}
                 onClick={() => {
                   if (canEdit && !isEditing) {
@@ -188,7 +188,7 @@ export function ConversationCenter({
                         onChange={(e) => onEditDraftChange?.(e.target.value)}
                         disabled={editingMessageSaving}
                         noResize
-                        className="!bg-transparent !border-none !ring-0 !shadow-none !p-0 text-[14px]"
+                        className="!bg-transparent !border-none !ring-0 !shadow-none !p-0 text-[13px] leading-snug min-h-[2.5rem]"
                         autoFocus
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -201,16 +201,19 @@ export function ConversationCenter({
                           }
                         }}
                       />
-                      <div className="flex items-center justify-between pt-1 border-t border-border-subtle/50">
-                        <span className="text-[10px] text-text-muted">
-                          <kbd className="px-1 py-0.5 rounded bg-bg-elevated border border-border-subtle text-[9px] font-mono">⌘↵</kbd> resend · <kbd className="px-1 py-0.5 rounded bg-bg-elevated border border-border-subtle text-[9px] font-mono">esc</kbd> cancel
+                      <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-white/[0.06]">
+                        <span className="text-[10px] text-text-muted shrink min-w-0">
+                          <kbd className="px-1 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-[9px] font-mono">⌘↵</kbd>
+                          {' '}resend ·{' '}
+                          <kbd className="px-1 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-[9px] font-mono">esc</kbd>
+                          {' '}cancel
                         </span>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1 shrink-0">
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); onCancelEdit?.(); }}
                             disabled={editingMessageSaving}
-                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
+                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-text-primary hover:bg-white/[0.06] transition-colors"
                           >
                             <X className="w-3 h-3" />
                             Cancel

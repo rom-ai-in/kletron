@@ -5,6 +5,7 @@ import { z } from "zod";
 import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { getGraphNodeOrder, buildInitialState } from "@kletron/server/services/agentGraphRuntime";
+import { preflightMissionForNewRun } from "@kletron/server/services/skillSlashPreflight";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 import { runWithWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
@@ -71,17 +72,29 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         }
 
         const nodeOrder = getGraphNodeOrder(graph as any);
-        const runId = await agentGraphRunService.createRun(params.id, workspace._id.toString(), "agent");
+        const runId = await agentGraphRunService.createRun(params.id, workspace._id.toString(), "agent", {
+            createdByUserId: auth.userId,
+        });
 
         const initialNodeStatuses: Record<string, any> = {};
         for (const node of graph.nodes) {
             initialNodeStatuses[node.id] = "PENDING";
         }
 
+        const rawMission = validation.data.mission ?? "";
+        const pre = await preflightMissionForNewRun(rawMission, workspace._id.toString());
+        const initialState = {
+            ...buildInitialState(graph as any, pre.mission),
+            mission: pre.mission,
+            userInput: pre.mission,
+            loadedSkillIds: pre.loadedSkillIds.length ? pre.loadedSkillIds : undefined,
+            skillLoads: pre.skillLoads.length ? pre.skillLoads : undefined,
+        };
+
         await agentGraphRunService.updateRunStatus(runId, "RUNNING", {
             nodeOrder,
             nodeStatuses: initialNodeStatuses,
-            state: buildInitialState(graph as any, validation.data.mission ?? ""),
+            state: initialState,
         } as any);
 
         // Execute in the background (best-effort). The executor updates the run record.

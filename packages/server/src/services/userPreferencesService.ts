@@ -1,10 +1,19 @@
 // src/services/userPreferencesService.ts
 // MongoDB-based user preferences service for Deep Agent settings
+import { ObjectId } from "mongodb";
 import { getDb } from '../lib/db';
+
+/** Drop legacy catalog slugs (e.g. universal-v1) — only persisted agent_graph _id strings are valid. */
+function sanitizeSelectedGraphId(id: string | null | undefined): string | null {
+    if (id == null || id === "") return null;
+    const t = String(id).trim();
+    if (!t || !ObjectId.isValid(t)) return null;
+    return t;
+}
 
 export interface UserPreferences {
     _id?: string;
-    userId: string;           // Supabase auth user ID
+    userId: string;           // Auth user ID
     selectedLlmProvider: string | null;
     selectedGraphId: string | null;
     updatedAt: Date;
@@ -53,8 +62,8 @@ function upsertFallbackPreferences(
                 : existing?.selectedLlmProvider ?? null,
         selectedGraphId:
             updates.selectedGraphId !== undefined
-                ? updates.selectedGraphId
-                : existing?.selectedGraphId ?? null,
+                ? sanitizeSelectedGraphId(updates.selectedGraphId)
+                : sanitizeSelectedGraphId(existing?.selectedGraphId ?? null),
         updatedAt: now,
     };
     fallbackPreferences.set(userId, prefs);
@@ -84,7 +93,12 @@ export async function ensureIndexes() {
 export async function getPreferences(userId: string): Promise<UserPreferencesPublic | null> {
     const collection = await getCollectionSafe();
     if (!collection) {
-        return fallbackPreferences.get(userId) ?? null;
+        const fb = fallbackPreferences.get(userId);
+        if (!fb) return null;
+        return {
+            ...fb,
+            selectedGraphId: sanitizeSelectedGraphId(fb.selectedGraphId),
+        };
     }
     const prefs = await collection.findOne({ userId });
 
@@ -93,7 +107,7 @@ export async function getPreferences(userId: string): Promise<UserPreferencesPub
     return {
         userId: prefs.userId,
         selectedLlmProvider: prefs.selectedLlmProvider,
-        selectedGraphId: prefs.selectedGraphId,
+        selectedGraphId: sanitizeSelectedGraphId(prefs.selectedGraphId),
         updatedAt: prefs.updatedAt,
     };
 }
@@ -122,7 +136,7 @@ export async function updatePreferences(
         updateDoc.selectedLlmProvider = updates.selectedLlmProvider;
     }
     if (updates.selectedGraphId !== undefined) {
-        updateDoc.selectedGraphId = updates.selectedGraphId;
+        updateDoc.selectedGraphId = sanitizeSelectedGraphId(updates.selectedGraphId);
     }
 
     const result = await collection.findOneAndUpdate(
@@ -140,7 +154,7 @@ export async function updatePreferences(
     return {
         userId: prefs.userId,
         selectedLlmProvider: prefs.selectedLlmProvider,
-        selectedGraphId: prefs.selectedGraphId,
+        selectedGraphId: sanitizeSelectedGraphId(prefs.selectedGraphId),
         updatedAt: prefs.updatedAt,
     };
 }

@@ -1,7 +1,6 @@
 // app/api/auth/api-tokens/[id]/route.ts
 // API route for revoking extension API tokens (MongoDB version)
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@kletron/server/lib/supabase/supabaseServer';
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import * as apiTokenService from '@kletron/server/services/apiTokenService';
 
@@ -15,14 +14,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     }
 
     try {
-        const { client } = createRouteHandlerClient(request);
-        const { data: { user }, error } = await client.auth.getUser();
-
-        if (error || !user) {
-            return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-        }
-
-        const revoked = await apiTokenService.revokeToken(params.id, user.id);
+        const revoked = await apiTokenService.revokeToken(params.id, auth.userId);
 
         if (!revoked) {
             return NextResponse.json({ error: 'Token not found or already revoked' }, { status: 404 });

@@ -10,12 +10,86 @@ import { ToolInvocation } from './ToolInvocation';
 import { ToolBatchAccordion } from './ToolBatchAccordion';
 import type { ToolPair } from './ToolBatchAccordion';
 import { ThoughtsPanel } from './ThoughtsPanel';
+import { AgentActivityStrip } from './AgentActivityStrip';
+import { AgentStatusShimmerLabel } from './AgentStatusShimmerLabel';
+import type { ActivitySourceEvent } from '../../lib/agentActivity';
 import type { ChatEvent, RenderItem } from '@kletron/shared/chatTypes';
+import { sanitizeAssistantStreamPreview } from '@kletron/shared/contentSanitizer';
 import { groupEvents, pairToolEvents } from '../../lib/toolPairing';
+import { useThreadDomPaintLog, type ThreadDomPaintLogOptions } from '../../hooks/useThreadDomPaintLog';
 
 // Re-export for backward compatibility
 export type { ChatEvent, RenderItem };
+export type { ThreadDomPaintLogOptions };
 export { groupEvents };
+
+/** Below this, use absolute positioning + height estimates; short threads render normally (no phantom gap). */
+const VIRTUALIZE_MIN_ITEMS = 16;
+
+/** Stable row key for virtualization height cache — survives index shifts when grouping changes. */
+function renderItemStableKey(item: RenderItem, index: number): string {
+    if (item.type === 'tools') {
+        const ids = item.events.map((e) => e.id ?? '').join('|');
+        return ids ? `tools:${ids}` : `tools:idx-${index}`;
+    }
+    const id = item.event.id ?? '';
+    return id ? `evt:${id}` : `evt:idx-${index}`;
+}
+
+/**
+ * Render a thin "── Stage X of Y — <name> ──" separator for events that come
+ * from an automation thread. We render it above the synthetic user message
+ * (the stage prompt). Assistant replies in the same stage carry the same
+ * metadata but skip the separator since the user message already labelled it.
+ */
+function renderStageSeparator(event: ChatEvent, isUser: boolean): React.ReactNode {
+    const meta = event.metadata as Record<string, any> | undefined;
+    if (!meta) return null;
+    if (meta.source !== 'automation') return null;
+    const stageIndex = typeof meta.stageIndex === 'number' ? meta.stageIndex : null;
+    const stageTotal = typeof meta.stageTotal === 'number' ? meta.stageTotal : null;
+    if (stageIndex == null) return null;
+    // Only render the banner once per stage — above the user prompt that
+    // introduces the stage. Stage 0 has no banner because it is the very
+    // start of the conversation.
+    if (!isUser || stageIndex === 0) return null;
+    const stageName = typeof meta.stageName === 'string' ? meta.stageName : '';
+    const stageNum = stageIndex + 1;
+    const totalLabel = stageTotal ? ` of ${stageTotal}` : '';
+    return (
+        <div className="my-3 flex items-center gap-2 px-1">
+            <span className="h-px flex-1 bg-border-subtle" />
+            <span className="text-[10px] uppercase tracking-widest text-text-muted font-medium">
+                Stage {stageNum}{totalLabel}
+                {stageName ? ` — ${stageName}` : ''}
+            </span>
+            <span className="h-px flex-1 bg-border-subtle" />
+        </div>
+    );
+}
+
+/**
+ * Render the "View detailed stage trace" link below assistant replies that
+ * came from a hidden sub-stage run.
+ */
+function renderSubRunLink(event: ChatEvent): React.ReactNode {
+    const meta = event.metadata as Record<string, any> | undefined;
+    if (!meta || meta.source !== 'automation') return null;
+    const subRunId = typeof meta.subRunId === 'string' ? meta.subRunId : null;
+    if (!subRunId) return null;
+    return (
+        <div className="mt-1 ml-2">
+            <a
+                href={`/app/agent?sessionId=${subRunId}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-[10px] text-accent-cyan hover:underline"
+            >
+                View detailed stage trace →
+            </a>
+        </div>
+    );
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * MessageList — scrollable chat container with auto-scroll
@@ -32,6 +106,14 @@ export interface MessageListProps {
     streaming?: boolean;
     /** Progressive streaming text (token-by-token accumulation). */
     streamingText?: string;
+    /** Live reasoning stream (`reasoning_delta` chunks). */
+    streamingReasoning?: string;
+    /** Recent raw events for the activity strip (e.g. full `eventStream` while streaming). */
+    activityEvents?: ActivitySourceEvent[];
+    /** ISO time when the current run started (elapsed label on activity strip). */
+    runStartedAt?: string | null;
+    /** Tool approvals waiting on the user — shown in-thread with wave emphasis (not in the strip). */
+    pendingApprovalCount?: number;
     /** Show tool calls in compact (single-line) mode */
     compactTools?: boolean;
     /** Additional className for the scroll container */
@@ -57,6 +139,12 @@ export interface MessageListProps {
     onEditDraftChange?: (draft: string) => void;
     onCancelEdit?: () => void;
     onResendEdit?: () => void;
+    /**
+     * When enabled, logs `[kletron:thread-dom]` snapshots: text read from the real DOM
+     * (rows + streaming slot) after paint and on subtree mutations — for comparing against
+     * backend / React state.
+     */
+    domPaintLog?: ThreadDomPaintLogOptions;
 }
 
 const MessageListInner: React.FC<MessageListProps> = ({
@@ -65,6 +153,10 @@ const MessageListInner: React.FC<MessageListProps> = ({
     messageActions,
     streaming,
     streamingText,
+    streamingReasoning,
+    activityEvents,
+    runStartedAt,
+    pendingApprovalCount = 0,
     compactTools = false,
     className,
     footer,
@@ -82,18 +174,26 @@ const MessageListInner: React.FC<MessageListProps> = ({
     onEditDraftChange,
     onCancelEdit,
     onResendEdit,
+    domPaintLog,
 }) => {
     const bottomRef = useRef<HTMLDivElement>(null);
-    const scrollRef = useRef<HTMLDivElement>(null);
+    const scrollRef = useRef<HTMLDivElement | null>(null);
+    const bindScrollRoot = useCallback((el: HTMLDivElement | null) => {
+        scrollRef.current = el;
+    }, []);
     const isAtBottomRef = useRef(true);
     const previousScrollHeightRef = useRef<number | null>(null);
     const previousScrollTopRef = useRef<number>(0);
     const [viewportHeight, setViewportHeight] = useState(0);
     const [scrollTop, setScrollTop] = useState(0);
     const [measureVersion, setMeasureVersion] = useState(0);
-    const itemHeightsRef = useRef<Map<number, number>>(new Map());
+    const itemHeightsRef = useRef<Map<string, number>>(new Map());
+    const observerMapRef = useRef<Map<string, ResizeObserver>>(new Map());
+    const nodeMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
     const estimatedItemHeight = 92;
     const nearTopTriggeredRef = useRef(false);
+
+    useThreadDomPaintLog(scrollRef, domPaintLog);
 
     const { visibleEvents, hiddenCount } = useMemo(() => {
         if (externalRenderItems) {
@@ -109,6 +209,32 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const items = useMemo(
         () => externalRenderItems ?? groupEvents(visibleEvents),
         [visibleEvents, externalRenderItems],
+    );
+
+    const rowKeys = useMemo(
+        () => items.map((item, index) => renderItemStableKey(item, index)),
+        [items],
+    );
+
+    const rowKeyFingerprint = rowKeys.join('\n');
+
+    useEffect(() => {
+        const valid = new Set(rowKeys);
+        for (const key of Array.from(observerMapRef.current.keys())) {
+            if (!valid.has(key)) {
+                observerMapRef.current.get(key)?.disconnect();
+                observerMapRef.current.delete(key);
+                nodeMapRef.current.delete(key);
+                itemHeightsRef.current.delete(key);
+            }
+        }
+    }, [rowKeyFingerprint, rowKeys]);
+
+    const useVirtualList = virtualized && items.length >= VIRTUALIZE_MIN_ITEMS;
+
+    const streamingMarkdownSafe = useMemo(
+        () => sanitizeAssistantStreamPreview(streamingText ?? ''),
+        [streamingText],
     );
 
     const handleScroll = useCallback(() => {
@@ -164,12 +290,13 @@ const MessageListInner: React.FC<MessageListProps> = ({
         let y = 0;
         for (let i = 0; i < items.length; i += 1) {
             starts[i] = y;
-            const h = itemHeightsRef.current.get(i) ?? estimatedItemHeight;
+            const rowKey = rowKeys[i] ?? `evt:idx-${i}`;
+            const h = itemHeightsRef.current.get(rowKey) ?? estimatedItemHeight;
             heights[i] = h;
             y += h;
         }
         return { starts, heights, totalHeight: y };
-    }, [items, measureVersion]);
+    }, [items, rowKeys, measureVersion]);
 
     const findStartIndex = useCallback((targetOffset: number) => {
         let lo = 0;
@@ -188,7 +315,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
     }, [offsets.starts]);
 
     const virtualizationWindow = useMemo(() => {
-        if (!virtualized || items.length === 0) {
+        if (!useVirtualList || items.length === 0) {
             return { startIndex: 0, endIndex: items.length - 1 };
         }
         const overscan = 500;
@@ -203,46 +330,40 @@ const MessageListInner: React.FC<MessageListProps> = ({
             startIndex: Math.max(0, startIndex),
             endIndex: Math.min(items.length - 1, Math.max(startIndex, endIndex)),
         };
-    }, [virtualized, items.length, scrollTop, viewportHeight, findStartIndex, offsets.starts, offsets.heights]);
+    }, [useVirtualList, items.length, scrollTop, viewportHeight, findStartIndex, offsets.starts, offsets.heights]);
 
-    const observerMapRef = useRef<Map<number, ResizeObserver>>(new Map());
-    const nodeMapRef = useRef<Map<number, HTMLDivElement>>(new Map());
-
-    const measureItem = useCallback((index: number, node: HTMLDivElement | null) => {
-        // Clean up previous observer for this index
-        const prevObserver = observerMapRef.current.get(index);
-        const prevNode = nodeMapRef.current.get(index);
+    const measureItem = useCallback((rowKey: string, node: HTMLDivElement | null) => {
+        const prevObserver = observerMapRef.current.get(rowKey);
+        const prevNode = nodeMapRef.current.get(rowKey);
         if (prevNode && prevNode !== node && prevObserver) {
             prevObserver.disconnect();
-            observerMapRef.current.delete(index);
-            nodeMapRef.current.delete(index);
+            observerMapRef.current.delete(rowKey);
+            nodeMapRef.current.delete(rowKey);
         }
 
         if (!node) return;
 
-        // Initial measure
         const h = node.offsetHeight;
-        const prev = itemHeightsRef.current.get(index);
+        const prev = itemHeightsRef.current.get(rowKey);
         if (prev !== h) {
-            itemHeightsRef.current.set(index, h);
+            itemHeightsRef.current.set(rowKey, h);
             setMeasureVersion((v) => v + 1);
         }
 
-        // Set up ResizeObserver for dynamic size changes (accordion collapse/expand)
-        if (!observerMapRef.current.has(index) || nodeMapRef.current.get(index) !== node) {
+        if (!observerMapRef.current.has(rowKey) || nodeMapRef.current.get(rowKey) !== node) {
             const observer = new ResizeObserver((entries) => {
                 for (const entry of entries) {
                     const newH = Math.round(entry.borderBoxSize?.[0]?.blockSize ?? entry.target.getBoundingClientRect().height);
-                    const cached = itemHeightsRef.current.get(index);
+                    const cached = itemHeightsRef.current.get(rowKey);
                     if (cached !== newH && newH > 0) {
-                        itemHeightsRef.current.set(index, newH);
+                        itemHeightsRef.current.set(rowKey, newH);
                         setMeasureVersion((v) => v + 1);
                     }
                 }
             });
             observer.observe(node);
-            observerMapRef.current.set(index, observer);
-            nodeMapRef.current.set(index, node);
+            observerMapRef.current.set(rowKey, observer);
+            nodeMapRef.current.set(rowKey, node);
         }
     }, []);
 
@@ -255,17 +376,25 @@ const MessageListInner: React.FC<MessageListProps> = ({
         };
     }, []);
 
-    useEffect(() => {
-        if (isAtBottomRef.current) {
-            bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }
-    }, [items, streaming]);
+    useLayoutEffect(() => {
+        if (!isAtBottomRef.current || !scrollRef.current) return;
+        const el = scrollRef.current;
+        el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    }, [items, streaming, streamingText, streamingReasoning, pendingApprovalCount, measureVersion]);
 
     const renderMessageItem = useCallback((item: RenderItem, index: number) => {
         if (item.type === 'tools') {
             const pairs = pairToolEvents(item.events);
+            const toolIds = item.events.map((e) => e.id ?? '').filter(Boolean).join('|').slice(0, 200);
             return (
-                <ToolBatchAccordion key={`tools-${index}`} pairs={pairs} compact={compactTools} />
+                <div
+                    key={`tools-${index}`}
+                    data-kletron-thread-row
+                    data-kletron-kind="tools"
+                    data-kletron-id={toolIds || `tools-${index}`}
+                >
+                    <ToolBatchAccordion pairs={pairs} compact={compactTools} />
+                </div>
             );
         }
 
@@ -281,8 +410,20 @@ const MessageListInner: React.FC<MessageListProps> = ({
         const isUser = event.kind === 'user';
         const isEditing = isUser && typeof event.messageIndex === 'number' && event.messageIndex === editingMessageIndex;
 
+        // Automation stage separator — rendered above the synthetic user message
+        // that introduces stage i (and again above the assistant reply, which is
+        // suppressed because the user separator already labels the boundary).
+        const stageSeparator = renderStageSeparator(event, isUser);
+
         return (
-            <div key={event.id || `msg-${index}`} className={event.toolName ? 'mb-0' : 'mb-1'}>
+            <div
+                key={event.id || `msg-${index}`}
+                data-kletron-thread-row
+                data-kletron-kind={event.kind}
+                data-kletron-id={event.id ?? `idx-${index}`}
+                className={event.toolName ? 'mb-0' : isUser ? 'mb-0.5' : 'mb-1'}
+            >
+                {stageSeparator}
                 {isAssistant && (
                     <>
                         {event.thoughts && event.thoughts.length > 0 ? (
@@ -299,13 +440,19 @@ const MessageListInner: React.FC<MessageListProps> = ({
 
                 {isEditing ? (
                     <div className="flex flex-col items-end">
-                        <div className="w-full max-w-[90%] rounded-xl border border-brand-primary/40 bg-bg-elevated text-text-primary ring-1 ring-brand-primary/20 px-4 py-3 shadow-sm space-y-2">
+                        {/* Same shell as MessageBubble user — no brand ring / heavy border */}
+                        <div
+                            className={cn(
+                                'w-full max-w-[min(85%,28rem)] rounded-xl border border-white/[0.08]',
+                                'bg-white/[0.04] px-3 py-2 text-[13px] leading-snug text-text-primary space-y-2',
+                            )}
+                        >
                             <Textarea
                                 value={editingMessageDraft ?? ''}
                                 onChange={(e) => onEditDraftChange?.(e.target.value)}
                                 disabled={editingMessageSaving}
                                 noResize
-                                className="!bg-transparent !border-none !ring-0 !shadow-none !p-0 text-[14px] w-full"
+                                className="!bg-transparent !border-none !ring-0 !shadow-none !p-0 text-[13px] leading-snug w-full min-h-[2.5rem]"
                                 autoFocus
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -318,16 +465,19 @@ const MessageListInner: React.FC<MessageListProps> = ({
                                     }
                                 }}
                             />
-                            <div className="flex items-center justify-between pt-1 border-t border-border-subtle/50">
-                                <span className="text-[10px] text-text-muted">
-                                    <kbd className="px-1 py-0.5 rounded bg-bg-root border border-border-subtle text-[9px] font-mono">⌘↵</kbd> resend · <kbd className="px-1 py-0.5 rounded bg-bg-root border border-border-subtle text-[9px] font-mono">esc</kbd> cancel
+                            <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-white/[0.06]">
+                                <span className="text-[10px] text-text-muted shrink min-w-0">
+                                    <kbd className="px-1 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-[9px] font-mono">⌘↵</kbd>
+                                    {' '}resend ·{' '}
+                                    <kbd className="px-1 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-[9px] font-mono">esc</kbd>
+                                    {' '}cancel
                                 </span>
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1 shrink-0">
                                     <button
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); onCancelEdit?.(); }}
                                         disabled={editingMessageSaving}
-                                        className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
+                                        className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-text-primary hover:bg-white/[0.06] transition-colors"
                                     >
                                         <X className="w-3 h-3" />
                                         Cancel
@@ -349,12 +499,15 @@ const MessageListInner: React.FC<MessageListProps> = ({
                         </div>
                     </div>
                 ) : event.content ? (
-                    <MessageBubble
-                        role={event.kind === 'error' ? 'system' : event.kind}
-                        content={event.content}
-                        timestamp={event.timestamp}
-                        actions={messageActions?.(event)}
-                    />
+                    <>
+                        <MessageBubble
+                            role={event.kind === 'error' ? 'system' : event.kind}
+                            content={event.content ?? ''}
+                            timestamp={event.timestamp}
+                            actions={messageActions?.(event)}
+                        />
+                        {isAssistant && renderSubRunLink(event)}
+                    </>
                 ) : null}
             </div>
         );
@@ -362,7 +515,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
 
     return (
         <div
-            ref={scrollRef}
+            ref={bindScrollRoot}
+            data-kletron-thread-scroll
             onScroll={handleScroll}
             className={cn('flex-1 overflow-y-auto p-2 scrollbar-elegant', className)}
         >
@@ -384,15 +538,16 @@ const MessageListInner: React.FC<MessageListProps> = ({
                         {hiddenCount} older messages hidden for performance
                     </div>
                 )}
-                {virtualized && items.length > 0 ? (
+                {useVirtualList && items.length > 0 ? (
                     <div style={{ position: 'relative', height: offsets.totalHeight }}>
                         {items.slice(virtualizationWindow.startIndex, virtualizationWindow.endIndex + 1).map((item, localIndex) => {
                             const index = virtualizationWindow.startIndex + localIndex;
+                            const rowKey = rowKeys[index] ?? `evt:idx-${index}`;
                             const top = offsets.starts[index] ?? 0;
                             return (
                                 <div
-                                    key={`virtual-${index}`}
-                                    ref={(node) => measureItem(index, node)}
+                                    key={rowKey}
+                                    ref={(node) => measureItem(rowKey, node)}
                                     style={{ position: 'absolute', top, left: 0, right: 0 }}
                                 >
                                     {renderMessageItem(item, index)}
@@ -401,29 +556,62 @@ const MessageListInner: React.FC<MessageListProps> = ({
                         })}
                     </div>
                 ) : (
-                    items.map((item, index) => (
-                        <div key={`plain-${index}`} ref={(node) => measureItem(index, node)}>
-                            {renderMessageItem(item, index)}
-                        </div>
-                    ))
+                    items.map((item, index) => {
+                        const rowKey = rowKeys[index] ?? `evt:idx-${index}`;
+                        return (
+                            <div key={rowKey} ref={(node) => measureItem(rowKey, node)}>
+                                {renderMessageItem(item, index)}
+                            </div>
+                        );
+                    })
                 )}
             </div>
 
             {streaming && (
-                <div className="flex justify-start mt-1">
-                    {streamingText ? (
-                        /* Progressive text — show accumulated tokens with a blinking cursor */
-                        <div className="w-full rounded-lg px-3 py-2 text-[12px] bg-transparent text-text-secondary">
-                            <MarkdownRenderer content={streamingText} />
-                            <span className="inline-block w-[2px] h-[14px] bg-text-muted align-text-bottom ml-0.5 animate-pulse" />
+                <div
+                    className="mt-1.5 w-full max-w-[95%] flex flex-col items-start gap-1.5"
+                    data-kletron-streaming-live
+                >
+                    <AgentActivityStrip
+                        streaming={streaming}
+                        streamingText={streamingText ?? ''}
+                        streamingReasoning={streamingReasoning}
+                        events={activityEvents ?? []}
+                        runStartedAt={runStartedAt}
+                    />
+                    {streamingReasoning?.trim() ? (
+                        <ThoughtsPanel thoughts={[streamingReasoning]} isReasoning defaultExpanded={false} />
+                    ) : null}
+                    {(streamingText ?? '').trim() ? (
+                        <div
+                            className="w-full text-[13px] text-text-primary pl-0.5"
+                            data-kletron-streaming-markdown
+                        >
+                            {streamingMarkdownSafe ? (
+                                <MarkdownRenderer content={streamingMarkdownSafe} variant="chat" />
+                            ) : (
+                                <span className="text-text-muted/50 text-[11px]"> … </span>
+                            )}
+                            <span className="inline-block w-[2px] h-[14px] bg-text-primary/50 align-text-bottom ml-0.5 animate-pulse" />
                         </div>
-                    ) : (
-                        /* No text yet — show minimal "thinking" indicator */
-                        <div className="max-w-[90%] rounded-lg px-3 py-2 text-[12px] bg-transparent text-text-muted flex items-center gap-2">
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-text-muted animate-pulse" />
-                            Working on it...
-                        </div>
-                    )}
+                    ) : null}
+                </div>
+            )}
+
+            {pendingApprovalCount > 0 && (
+                <div className="mt-1.5 w-full max-w-[95%] flex flex-col items-start gap-0.5 pl-0.5">
+                    <AgentStatusShimmerLabel
+                        className="text-[12px]"
+                        tone="secondary"
+                        textClassName="font-medium"
+                    >
+                        {pendingApprovalCount === 1
+                            ? 'Awaiting your approval…'
+                            : `Awaiting your approval (${pendingApprovalCount} actions)…`}
+                    </AgentStatusShimmerLabel>
+                    <p className="text-[11px] text-text-muted">
+                        Use Approve or Reject in the approvals area below.
+                    </p>
                 </div>
             )}
 
@@ -441,6 +629,10 @@ export const MessageList = React.memo(
         prev.renderItems === next.renderItems &&
         prev.streaming === next.streaming &&
         prev.streamingText === next.streamingText &&
+        prev.streamingReasoning === next.streamingReasoning &&
+        prev.activityEvents === next.activityEvents &&
+        prev.runStartedAt === next.runStartedAt &&
+        prev.pendingApprovalCount === next.pendingApprovalCount &&
         prev.compactTools === next.compactTools &&
         prev.className === next.className &&
         prev.footer === next.footer &&
@@ -451,5 +643,16 @@ export const MessageList = React.memo(
         prev.onLoadOlder === next.onLoadOlder &&
         prev.virtualized === next.virtualized &&
         prev.prefetchNearTop === next.prefetchNearTop &&
-        prev.onNearTop === next.onNearTop,
+        prev.onNearTop === next.onNearTop &&
+        prev.editingMessageIndex === next.editingMessageIndex &&
+        prev.editingMessageDraft === next.editingMessageDraft &&
+        prev.editingMessageSaving === next.editingMessageSaving &&
+        prev.editingMessageError === next.editingMessageError &&
+        prev.onEditDraftChange === next.onEditDraftChange &&
+        prev.onCancelEdit === next.onCancelEdit &&
+        prev.onResendEdit === next.onResendEdit &&
+        (prev.domPaintLog === next.domPaintLog ||
+            (prev.domPaintLog?.enabled === next.domPaintLog?.enabled &&
+                prev.domPaintLog?.sessionId === next.domPaintLog?.sessionId &&
+                prev.domPaintLog?.reactFingerprint === next.domPaintLog?.reactFingerprint)),
 );

@@ -82,24 +82,6 @@ export async function GET(
             return NextResponse.json({ error: "Automation not found" }, { status: 404 });
         }
 
-        const latestRun = await automationExecutor.getLatestRun(automationId, workspace._id.toString());
-
-        if (latestRun) {
-            // Merge latest run stats/results into the automation object for UI compatibility
-            Object.assign(automation, {
-                status: latestRun.status,
-                startedAt: latestRun.startedAt,
-                endedAt: latestRun.endedAt,
-                currentStageIndex: latestRun.currentStageIndex,
-                sessionIds: latestRun.sessionIds,
-                aggregatedFindings: latestRun.aggregatedFindings,
-                crossStageInsights: latestRun.crossStageInsights,
-                finalReport: latestRun.finalReport,
-                metadata: latestRun.metadata,
-                latestRunId: latestRun._id?.toString()
-            });
-        }
-
         // Compute webhook URL for webhook/git_event trigger types
         let webhookUrl: string | undefined;
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL
@@ -112,7 +94,7 @@ export async function GET(
             webhookUrl = `${baseUrl}/api/webhooks/git`;
         }
 
-        return NextResponse.json({ automation, latestRun, webhookUrl }, { status: 200 });
+        return NextResponse.json({ automation, webhookUrl }, { status: 200 });
     } catch (error) {
         console.error(`[API /api/automations/${params.id} GET] Error:`, error);
         return NextResponse.json(
@@ -150,14 +132,6 @@ export async function DELETE(
 
         if (!automation) {
             return NextResponse.json({ error: "Automation not found" }, { status: 404 });
-        }
-
-        // Don't allow deleting running automations
-        if (automation.status === "RUNNING") {
-            return NextResponse.json(
-                { error: "Cannot delete a running automation. Pause it first." },
-                { status: 400 }
-            );
         }
 
         await automationExecutor.deleteAutomation(automationId, workspace._id.toString());
@@ -212,14 +186,6 @@ export async function PUT(
 
         if (!automation) {
             return NextResponse.json({ error: "Automation not found" }, { status: 404 });
-        }
-
-        // Don't allow editing running automations
-        if (automation.status === "RUNNING") {
-            return NextResponse.json(
-                { error: "Cannot edit a running automation. Pause it first." },
-                { status: 400 }
-            );
         }
 
         // Validate automation configuration

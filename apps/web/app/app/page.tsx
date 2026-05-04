@@ -18,6 +18,8 @@ import { useLlmHealth } from "@kletron/ui/hooks/useLlmHealth";
 import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 import {
   ArrowUpRight,
+  BookOpen,
+  Building2,
   CheckCircle2,
   Clock,
   Database,
@@ -28,52 +30,69 @@ import {
   RefreshCw,
   Scan,
   Settings,
-  Sparkles,
-  TerminalSquare,
-  Wand2,
+  Share2,
+  Terminal,
 } from "lucide-react";
 
-const DEFAULT_TITLE = "Explore Session";
-const STORAGE_KEY = "workbench-active-conversation";
-
-const LAUNCHPAD = [
+/** Build launchpad items; Skills URL follows the active workspace when set. */
+function buildLaunchpadItems(skillsHref: string) {
+  return [
   {
-    title: "Deep Agent",
-    description: "Run multi-step agents with live traces and tool calls.",
+    title: "Agent",
+    description: "Chat, tools, and sessions for the active workspace.",
     href: "/app/agent",
-    icon: Sparkles,
+    icon: Terminal,
   },
   {
-    title: "Explore",
-    description: "Start or resume exploration sessions.",
-    href: "/app/agent",
-    icon: TerminalSquare,
+    title: "Automations",
+    description: "Scheduled and event-driven agent workflows.",
+    href: "/app/automations",
+    icon: Layers,
   },
   {
-    title: "Workbench",
-    description: "Build prompts, inspect diffs, and iterate on tasks.",
-    href: "/app/workbench",
-    icon: Wand2,
+    title: "Agent Graphs",
+    description: "Design and run multi-node agent graphs.",
+    href: "/app/agent-graphs",
+    icon: Share2,
   },
   {
-    title: "Vectors",
-    description: "Index, search, and monitor your knowledge base.",
-    href: "/app/vectors",
+    title: "History",
+    description: "Past runs, threads, and activity.",
+    href: "/app/history",
+    icon: Clock,
+  },
+  {
+    title: "Semantic index",
+    description: "Vector RAG and indexing under Context & retrieval.",
+    href: "/app/config/context?tab=semantic",
     icon: Database,
   },
   {
     title: "Changes",
-    description: "Review and compare code changes quickly.",
+    description: "Review diffs and file-level changes.",
     href: "/app/changes",
     icon: FileCode,
   },
   {
-    title: "Config",
-    description: "Manage LLM providers, embeddings, and workspace settings.",
+    title: "Skills",
+    description: "Prompt skills, presets, and reusable instructions.",
+    href: skillsHref,
+    icon: BookOpen,
+  },
+  {
+    title: "Configuration",
+    description: "LLM, embeddings, plugins, tools, and workspace.",
     href: "/app/config",
     icon: Settings,
   },
-];
+  {
+    title: "Organization",
+    description: "Team, members, and billing.",
+    href: "/app/organization",
+    icon: Building2,
+  },
+] as const;
+}
 
 type ConversationHistoryItem = {
   id: string;
@@ -148,7 +167,14 @@ function statusBadge(status: string | undefined) {
 
 export default function AppDashboardPage() {
   const router = useRouter();
-  const { activeWorkspace: workspace } = useWorkspace();
+  const { activeWorkspace: workspace, activeWorkspaceId } = useWorkspace();
+  const launchpadItems = useMemo(
+    () =>
+      buildLaunchpadItems(
+        activeWorkspaceId ? `/app/${activeWorkspaceId}/skills` : "/app/config/skills",
+      ),
+    [activeWorkspaceId],
+  );
   const [sessions, setSessions] = useState<ConversationHistoryItem[]>([]);
   const [runs, setRuns] = useState<AgentGraphRunSummary[]>([]);
   const [graphs, setGraphs] = useState<AgentGraphSummary[]>([]);
@@ -162,23 +188,56 @@ export default function AppDashboardPage() {
   const [repoScanLogs, setRepoScanLogs] = useState<string[]>([]);
   const [repoScanRunning, setRepoScanRunning] = useState(false);
   const [repoScanError, setRepoScanError] = useState<string | null>(null);
+  const [structuralMapNodes, setStructuralMapNodes] = useState(0);
 
   const provider = llmConfig?.provider || llmConfig?.defaultProvider || "";
   const { status: llmStatus, message: llmMessage, recheck: recheckLlm } = useLlmHealth(provider);
 
+  /** Essential = agent + tools + cowork. RAG = optional semantic search over the repo. */
   const checklist = useMemo(() => {
-    const repoConnected = Boolean(workspace?.rootPath);
+    const workspaceLinked = Boolean(workspace?.rootPath);
     const llmReady = Boolean(provider);
+    const structuralReady = structuralMapNodes > 0;
     const embeddingsReady = Boolean(embeddingConfig?.provider);
     const vectorsReady = Boolean((vectorStatus?.indexedFiles ?? 0) > 0);
 
-    return [
-      { label: "Connect repo", done: repoConnected, href: "/app/config/context" },
-      { label: "Set LLM", done: llmReady, href: "/app/config/llm" },
-      { label: "Set embeddings", done: embeddingsReady, href: "/app/config/llm" },
-      { label: "Build vectors", done: vectorsReady, href: "/app/vectors" },
-    ];
-  }, [workspace?.rootPath, provider, embeddingConfig?.provider, vectorStatus?.indexedFiles]);
+    return {
+      essential: [
+        {
+          label: "Workspace & repo",
+          done: workspaceLinked,
+          href: "/app/config/context",
+          hint: "Root path on disk for this workspace.",
+        },
+        {
+          label: "LLM provider",
+          done: llmReady,
+          href: "/app/config/llm",
+          hint: "Required for chat, tools, and automations.",
+        },
+        {
+          label: "Structural code map",
+          done: structuralReady,
+          href: "/app/config/context",
+          hint: "Run repo scan on Context & retrieval to build file/import graph for agent prompts.",
+        },
+      ],
+      rag: [
+        {
+          label: "Embeddings model",
+          done: embeddingsReady,
+          href: "/app/config/embeddings",
+          hint: "Needed before vector indexing; skip if you only use structural context.",
+        },
+        {
+          label: "Semantic index",
+          done: vectorsReady,
+          href: "/app/config/context?tab=semantic",
+          hint: "Indexed chunks for semantic retrieval — optional; complements the structural map.",
+        },
+      ],
+    };
+  }, [workspace?.rootPath, provider, embeddingConfig?.provider, vectorStatus?.indexedFiles, structuralMapNodes]);
 
   const recentSessions = useMemo(() => sessions.filter((s) => s.status !== "archived").slice(0, 6), [sessions]);
   const recentRuns = useMemo(() => runs.slice(0, 6), [runs]);
@@ -207,17 +266,37 @@ export default function AppDashboardPage() {
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
-      const [sessionsRes, graphsRes, vectorRes, llmRes, embeddingRes] = await Promise.all([
-        fetch("/api/agent"),
+      const [sessionsRes, graphsRes, vectorRes, llmRes, embeddingRes, graphRes] = await Promise.all([
+        fetch("/api/sessions?limit=24&excludeSource=automation"),
         fetch("/api/agent-graphs"),
         fetch("/api/vectors"),
         fetch("/api/llm-config"),
         fetch("/api/embedding-config"),
+        fetch("/api/context/graph"),
       ]);
 
       if (sessionsRes.ok) {
-        const data = (await sessionsRes.json()) as ConversationHistoryItem[];
-        setSessions(Array.isArray(data) ? data : []);
+        const raw = (await sessionsRes.json()) as unknown;
+        const arr = Array.isArray(raw) ? raw : [];
+        const mapped: ConversationHistoryItem[] = arr.map((s: Record<string, unknown>) => {
+          const id = typeof s.id === "string" ? s.id : typeof s._id === "string" ? s._id : "";
+          const title = typeof s.title === "string" ? s.title : "Untitled";
+          const started =
+            typeof s.startedAt === "string"
+              ? s.startedAt
+              : typeof s.updatedAt === "string"
+                ? s.updatedAt
+                : new Date().toISOString();
+          const archived = Boolean(s.archived);
+          return {
+            id,
+            title,
+            updatedAt: started,
+            status: archived ? ("archived" as const) : ("active" as const),
+            lastRole: undefined,
+          };
+        });
+        setSessions(mapped.filter((s) => s.id));
       }
 
       if (graphsRes.ok) {
@@ -243,6 +322,13 @@ export default function AppDashboardPage() {
         setEmbeddingConfig(await embeddingRes.json());
       }
 
+      if (graphRes.ok) {
+        const g = (await graphRes.json()) as { nodes?: unknown[] };
+        setStructuralMapNodes(Array.isArray(g.nodes) ? g.nodes.length : 0);
+      } else {
+        setStructuralMapNodes(0);
+      }
+
       const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const tokenRes = await fetch(`/api/token-usage/summary?from=${encodeURIComponent(from)}`);
       if (tokenRes.ok) {
@@ -258,26 +344,11 @@ export default function AppDashboardPage() {
     void loadDashboard();
   }, [loadDashboard]);
 
-  const startNewSession = useCallback(async () => {
-    setActionLoading("new-session");
-    try {
-      const res = await fetch("/api/agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: DEFAULT_TITLE, ...(workspace?.id ? { workspaceId: workspace.id } : {}) }),
-      });
-      if (!res.ok) return;
-      const data = (await res.json()) as { id: string };
-      if (data?.id) {
-        sessionStorage.setItem(STORAGE_KEY, data.id);
-      }
-      router.push("/app/agent");
-    } finally {
-      setActionLoading(null);
-    }
-  }, [router, workspace?.id]);
+  const startNewSession = useCallback(() => {
+    router.push("/app/agent");
+  }, [router]);
 
-  const openDeepAgent = useCallback(() => {
+  const openAgent = useCallback(() => {
     router.push("/app/agent");
   }, [router]);
 
@@ -340,6 +411,15 @@ export default function AppDashboardPage() {
       setRepoScanError(error instanceof Error ? error.message : "Repo scan failed.");
     } finally {
       setRepoScanRunning(false);
+      try {
+        const gr = await fetch("/api/context/graph");
+        if (gr.ok) {
+          const g = (await gr.json()) as { nodes?: unknown[] };
+          setStructuralMapNodes(Array.isArray(g.nodes) ? g.nodes.length : 0);
+        }
+      } catch {
+        /* ignore */
+      }
     }
   }, []);
 
@@ -368,7 +448,9 @@ export default function AppDashboardPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-text-primary">App Overview</h1>
-          <p className="text-sm text-text-muted">Pick a surface, launch a task, or check system health.</p>
+          <p className="text-sm text-text-muted">
+            Shortcuts line up with the sidebar — open a feature or review health below.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" size="sm" onClick={loadDashboard} disabled={loading}>
@@ -384,13 +466,13 @@ export default function AppDashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-semibold text-text-primary">Launchpad</h2>
-                <p className="text-xs text-text-muted">Primary surfaces to jump into.</p>
+                <p className="text-xs text-text-muted">Same destinations as the left nav, one click away.</p>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {LAUNCHPAD.map((item) => {
+              {launchpadItems.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Link
@@ -423,13 +505,13 @@ export default function AppDashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <Button onClick={startNewSession} disabled={actionLoading === "new-session"}>
+            <Button onClick={startNewSession}>
               <Plus className="h-4 w-4" />
               New session
             </Button>
-            <Button variant="secondary" onClick={openDeepAgent}>
+            <Button variant="secondary" onClick={openAgent}>
               <Play className="h-4 w-4" />
-              Open Deep Agent
+              Open Agent
             </Button>
             <Button
               variant="secondary"
@@ -467,13 +549,13 @@ export default function AppDashboardPage() {
               {loading ? (
                 <LoadingState message="Loading sessions" />
               ) : recentSessions.length === 0 ? (
-                <EmptyState title="No sessions yet" description="Start a new exploration session." />
+                <EmptyState title="No sessions yet" description="Open Agent and start a conversation." />
               ) : (
                 <div className="space-y-2">
                   {recentSessions.map((session) => (
                     <Link
                       key={session.id}
-                      href="/app/agent"
+                      href={`/app/agent?sessionId=${encodeURIComponent(session.id)}`}
                       className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-xs text-text-muted transition hover:border-border-strong hover:text-text-primary"
                     >
                       <div className="min-w-0">
@@ -497,7 +579,7 @@ export default function AppDashboardPage() {
               {loading ? (
                 <LoadingState message="Loading runs" />
               ) : recentRuns.length === 0 ? (
-                <EmptyState title="No runs yet" description="Kick off a Deep Agent run." />
+                <EmptyState title="No runs yet" description="Run an automation or start a session from Agent Graphs." />
               ) : (
                 <div className="space-y-2">
                   {recentRuns.map((run) => (
@@ -521,24 +603,62 @@ export default function AppDashboardPage() {
         <Card>
           <CardHeader>
             <div>
-              <h2 className="text-sm font-semibold text-text-primary">Setup Checklist</h2>
-              <p className="text-xs text-text-muted">Complete these to unlock the full stack.</p>
+              <h2 className="text-sm font-semibold text-text-primary">Setup checklist</h2>
+              <p className="text-xs text-text-muted">
+                Workspace and LLM are required. Run a repo scan for the structural map; embeddings and vector index are
+                optional for semantic RAG.
+              </p>
             </div>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {checklist.map((item) => (
-              <Link
-                key={item.label}
-                href={item.href}
-                className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-muted transition hover:border-border-strong hover:text-text-primary"
-              >
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className={`h-4 w-4 ${item.done ? "text-status-success-text" : "text-text-muted"}`} />
-                  <span>{item.label}</span>
-                </div>
-                <Badge variant={item.done ? "success" : "default"}>{item.done ? "Done" : "Todo"}</Badge>
-              </Link>
-            ))}
+          <CardContent className="space-y-3">
+            <div>
+              <p className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                Essential
+              </p>
+              <div className="space-y-2">
+                {checklist.essential.map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    title={item.hint}
+                    className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-muted transition hover:border-border-strong hover:text-text-primary"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <CheckCircle2
+                        className={`h-4 w-4 shrink-0 ${item.done ? "text-status-success-text" : "text-text-muted"}`}
+                      />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    <Badge variant={item.done ? "success" : "default"}>{item.done ? "Done" : "Todo"}</Badge>
+                  </Link>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                Semantic search (optional)
+              </p>
+              <div className="space-y-2">
+                {checklist.rag.map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    title={item.hint}
+                    className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-muted transition hover:border-border-strong hover:text-text-primary"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <CheckCircle2
+                        className={`h-4 w-4 shrink-0 ${item.done ? "text-status-success-text" : "text-text-muted"}`}
+                      />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    <Badge variant={item.done ? "success" : "warning"}>
+                      {item.done ? "Done" : "Optional"}
+                    </Badge>
+                  </Link>
+                ))}
+              </div>
+            </div>
           </CardContent>
         </Card>
       </section>
@@ -582,7 +702,7 @@ export default function AppDashboardPage() {
             </Panel>
 
             <Panel className="p-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Vector Index</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Semantic index</p>
               <div className="mt-3 flex items-center gap-2">
                 <Badge variant={vectorStatusLabel === "Ready" ? "success" : vectorStatusLabel === "Indexing" ? "warning" : "default"}>
                   {vectorStatusLabel}

@@ -7,16 +7,13 @@ import { topoSortAgentGraph } from "@kletron/server/services/agentGraphTopo";
 import { validateCondition } from "@kletron/server/services/agentGraphConditions";
 import { resolveExecutionMode } from "@kletron/server/services/agentGraphRuntime";
 import { nodeOutputSchemaRegistry } from "@kletron/shared/nodeOutputSchemas";
+import { createGraphValidToolNameSet } from "@kletron/shared/agentGraphToolNames";
 import { allMcpTools } from "@kletron/agent-core/tools/mcpTools";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 
-// Allowed tool names for agent graph nodes.
-// Includes all MCP-backed tools plus special in-process tools like `write_todos`
-// that are provided by the agent graph executor rather than the MCP server.
-const mcpToolNames = new Set<string>([
-    ...allMcpTools.map((t: any) => String((t as any)?.name ?? "")),
-    "write_todos",
-]);
+const graphValidToolNames = createGraphValidToolNameSet(
+    allMcpTools.map((t: any) => String((t as any)?.name ?? "")),
+);
 const schemaIds = new Set<string>(Object.keys(nodeOutputSchemaRegistry));
 
 const GraphSchema = z.object({
@@ -28,6 +25,7 @@ const GraphSchema = z.object({
             entryNodeId: z.string().min(1).optional(),
             maxIterations: z.number().int().positive().optional(),
             maxNodeRuns: z.number().int().positive().optional(),
+            maxReactSteps: z.number().int().positive().optional(),
         })
         .optional(),
     stateDefaults: z.record(z.any()).optional(),
@@ -40,13 +38,8 @@ const GraphSchema = z.object({
                 systemPrompt: z.string(),
                 userPromptTemplate: z.string(),
                 toolNames: z.array(z.string()).default([]),
-                llmSelection: z
-                    .object({
-                        provider: z.enum(["azure", "lmstudio"]),
-                        model: z.string().optional(),
-                    })
-                    .optional(),
                 maxToolCalls: z.number().int().positive().optional(),
+                recursionLimit: z.number().int().positive().optional(),
             }),
             output: z.object({
                 schemaId: z.string().min(1),
@@ -87,7 +80,7 @@ function validateGraphSemantics(graph: z.infer<typeof GraphSchema>) {
     // Tool allowlist
     for (const node of graph.nodes) {
         for (const toolName of node.react.toolNames ?? []) {
-            if (!mcpToolNames.has(toolName)) {
+            if (!graphValidToolNames.has(toolName)) {
                 errors.push(`Node ${node.id} references unknown tool: ${toolName}`);
             }
         }

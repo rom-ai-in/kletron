@@ -6,19 +6,20 @@ import { runWithWorkspaceContext } from "@kletron/server/workspace/workspaceCont
 
 /**
  * PUT /api/automations/[id]/execute
- * Start automation execution (non-blocking)
+ * Start automation execution as an agent thread (non-blocking).
+ * Returns the threadId so the client can navigate to /app/agent?sessionId=<threadId>.
  */
 export async function PUT(
     req: NextRequest,
     { params }: { params: { id: string } }
 ) {
-  const auth = await requireAppRouteAuth(req);
-  if (!auth) {
-    return new Response(JSON.stringify({"error": "Unauthorized"}), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+    const auth = await requireAppRouteAuth(req);
+    if (!auth) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
 
     try {
         const automationId = params.id;
@@ -29,26 +30,14 @@ export async function PUT(
         }
 
         const automation = await automationExecutor.getAutomation(automationId, workspace._id.toString());
-
         if (!automation) {
             return NextResponse.json({ error: "Automation not found" }, { status: 404 });
-        }
-
-        if (automation.status === "RUNNING") {
-            return NextResponse.json(
-                { error: "Automation is already running" },
-                { status: 400 }
-            );
         }
 
         const promptIssues = automation.stages
             .map((stage, index) => {
                 if (stage.prompt && stage.prompt.trim().length > 0) return null;
-                return {
-                    index,
-                    stageId: stage.id,
-                    stageName: stage.name,
-                };
+                return { index, stageId: stage.id, stageName: stage.name };
             })
             .filter(Boolean);
 
@@ -62,17 +51,21 @@ export async function PUT(
             );
         }
 
-        // Create a run immediately so the UI can navigate to it deterministically.
-        const runId = await automationExecutor.startNewRun(automationId, workspace._id.toString());
-
-        // Execute run in background (don't await)
-        runWithWorkspaceContext(workspace, () => {
-            automationExecutor.executeRun(runId).catch((error) => {
-                console.error(`[AutomationExecution] Run ${runId} (Automation ${automationId}) failed:`, error);
-            });
+        // Kick off the automation thread inside the workspace context.
+        let threadId: string | undefined;
+        await runWithWorkspaceContext(workspace, async () => {
+            const result = await automationExecutor.runAutomationAsThread(
+                automationId,
+                workspace._id?.toString()
+            );
+            threadId = result.threadId;
         });
 
-        return NextResponse.json({ status: "STARTED", runId }, { status: 200 });
+        if (!threadId) {
+            return NextResponse.json({ error: "Failed to start automation thread" }, { status: 500 });
+        }
+
+        return NextResponse.json({ status: "STARTED", threadId }, { status: 200 });
     } catch (error) {
         const workspaceError = workspaceErrorToHttp(error);
         if (workspaceError) {
@@ -80,7 +73,7 @@ export async function PUT(
         }
         console.error(`[API /api/automations/${params.id}/execute PUT] Error:`, error);
         return NextResponse.json(
-            { error: "Failed to start automation execution" },
+            { error: error instanceof Error ? error.message : "Failed to start automation execution" },
             { status: 500 }
         );
     }

@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 
 const REQUIRED_TOOLS = [
+  "glob_files",
   "list_files",
   "read_file",
   "read_file_range",
@@ -21,14 +22,15 @@ const REQUIRED_TOOLS = [
   "find_symbol",
   "go_to_definition",
   "references",
-  "web_search",
-  "fetch_url",
-  "github_api",
   "bootstrap_context",
   "locate_ui_feature",
   "str_replace_editor",
   "execute_bash",
   "output_format",
+  "list_all_skills",
+  "list_skills",
+  "list_available_skills",
+  "load_skill",
 ];
 
 test("server registers expected tools via tools/list", async () => {

@@ -30,6 +30,8 @@ export interface RankedContextItem extends ContextNode {
 }
 
 export interface ContextEdge {
+  /** Stable id for deduplication / APIs */
+  id?: string;
   sourceId: string;
   targetId: string;
   type: 'imports' | 'referenced_in' | 'contains' | 'extends';

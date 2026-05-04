@@ -127,27 +127,17 @@ export async function POST(req: NextRequest) {
                 continue;
             }
 
-            // Don't trigger if already running
-            const latestRun = await automationExecutor.getLatestRun(automationId);
-            if (latestRun?.status === "RUNNING") {
-                errors.push(`Automation ${automationId}: already running`);
-                continue;
-            }
-
-            // Start a new run
+            // Launch the automation as an agent thread (fire-and-forget).
             try {
                 const workspaceId = automation.workspaceId?.toString();
-                const runId = await automationExecutor.startNewRun(automationId, workspaceId);
-
-                // Fire-and-forget
-                automationExecutor.executeRun(runId).catch((error) => {
-                    console.error(`[GitWebhook] Run ${runId} (automation ${automationId}) failed:`, error);
-                });
-
-                triggered.push(automationId);
+                const { threadId } = await automationExecutor.runAutomationAsThread(
+                    automationId,
+                    workspaceId
+                );
+                triggered.push(threadId);
             } catch (err) {
-                errors.push(`Automation ${automationId}: failed to start run`);
-                console.error(`[GitWebhook] Failed to start run for automation ${automationId}:`, err);
+                errors.push(`Automation ${automationId}: failed to start thread`);
+                console.error(`[GitWebhook] Failed to start automation ${automationId}:`, err);
             }
         }
 

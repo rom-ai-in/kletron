@@ -1,21 +1,22 @@
+/**
+ * Settings-focused LLM config, graph runs, and tools.
+ * Agent composer graph + provider selection lives in `useAgentSession` (shared UI hook).
+ */
 import { useEffect, useState } from "react";
-import type { AgentGraphRunSummary, AgentGraphSummary, LlmConfig, LLMProvider, ToolMetadata } from "../types";
-import { formatDateTime } from "../utils";
+import { defaultAgentGraphPayload } from "@kletron/shared";
+import type { AgentGraphRunSummary, LlmConfig, LLMProvider, ToolMetadata } from "../types";
 
 export function useModels(
   backendUrlTrimmed: string,
   backendReady: boolean,
-  getAccessToken: () => Promise<string | null>
+  getAccessToken: () => Promise<string | null>,
+  activeWorkspaceId?: string | null
 ) {
   const [modelLabel, setModelLabel] = useState<string>("Backend");
   const [modelConfig, setModelConfig] = useState<LlmConfig | null>(null);
   const [providers, setProviders] = useState<LLMProvider[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
-  const [graphs, setGraphs] = useState<AgentGraphSummary[]>([]);
-  const [graphsLoading, setGraphsLoading] = useState(false);
-  const [graphsError, setGraphsError] = useState<string | null>(null);
-  const [selectedGraph, setSelectedGraph] = useState<string | null>(null);
   const [graphRuns, setGraphRuns] = useState<AgentGraphRunSummary[]>([]);
   const [graphRunsLoading, setGraphRunsLoading] = useState(false);
   const [graphRunsError, setGraphRunsError] = useState<string | null>(null);
@@ -23,7 +24,6 @@ export function useModels(
   const [toolsLoading, setToolsLoading] = useState(false);
   const [toolsError, setToolsError] = useState<string | null>(null);
 
-  // LLM provider health status
   const [llmHealthy, setLlmHealthy] = useState<boolean | null>(null);
   const [llmHealthChecking, setLlmHealthChecking] = useState(false);
 
@@ -44,7 +44,6 @@ export function useModels(
       setSelectedProvider(provider);
       setSelectedModel(model);
 
-      // Build providers list from config
       const knownProviders = ["openai", "claude", "azure", "gemini", "ollama", "lmstudio", "vllm"];
       const providerLabels: Record<string, string> = {
         openai: "OpenAI",
@@ -69,56 +68,17 @@ export function useModels(
     }
   }
 
-  async function loadGraphs() {
-    const token = await getAccessToken();
-    if (!token) return;
-    try {
-      setGraphsLoading(true);
-      setGraphsError(null);
-      const res = await fetch(`${backendUrlTrimmed}/api/agent-graphs`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Failed to load graphs (${res.status})`);
-      }
-      const data = await res.json();
-      // API returns MongoDB docs with `_id`; normalise to `id` for the UI
-      const raw = Array.isArray(data?.graphs) ? data.graphs : [];
-      const list: AgentGraphSummary[] = raw
-        .map((g: any) => ({
-          id: String(g.id ?? g._id ?? ""),
-          name: g.name,
-          description: g.description,
-          updatedAt: g.updatedAt,
-        }))
-        .filter((g: any) => g.id); // discard entries without a usable id
-      setGraphs(list);
-      if (list.length > 0) {
-        // Use functional updater to avoid stale closure — never overwrite
-        // a selection the user just made while this fetch was in flight.
-        setSelectedGraph((prev) =>
-          prev && list.some((g) => g.id === prev) ? prev : list[0].id
-        );
-      } else {
-        setSelectedGraph(null);
-      }
-    } catch {
-      setGraphsError("Unable to load graphs.");
-    } finally {
-      setGraphsLoading(false);
-    }
-  }
-
   async function loadGraphRuns(graphId: string) {
     const token = await getAccessToken();
     if (!token) return;
     setGraphRunsLoading(true);
     setGraphRunsError(null);
     try {
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
       const res = await fetch(
         `${backendUrlTrimmed}/api/agent-graph-runs?graphId=${encodeURIComponent(graphId)}&limit=20`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers }
       );
       if (!res.ok) {
         const text = await res.text();
@@ -135,13 +95,40 @@ export function useModels(
     }
   }
 
+  async function createAgentGraph(): Promise<string | null> {
+    const token = await getAccessToken();
+    if (!token) return null;
+    try {
+      const h: Record<string, string> = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      };
+      if (activeWorkspaceId) h["x-workspace-id"] = activeWorkspaceId;
+      const res = await fetch(`${backendUrlTrimmed}/api/agent-graphs`, {
+        method: "POST",
+        headers: h,
+        body: JSON.stringify(defaultAgentGraphPayload()),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { graphId?: string };
+      return typeof data.graphId === "string" ? data.graphId : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function startGraphRun(graphId: string) {
     const token = await getAccessToken();
     if (!token) return;
     try {
+      const h: Record<string, string> = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      };
+      if (activeWorkspaceId) h["x-workspace-id"] = activeWorkspaceId;
       const res = await fetch(`${backendUrlTrimmed}/api/agent-graphs/${graphId}/runs`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: h,
         body: JSON.stringify({}),
       });
       if (!res.ok) {
@@ -178,15 +165,19 @@ export function useModels(
     }
   }
 
-  /** Check LLM provider health by calling POST /api/llm-config/test */
   async function checkLlmHealth(provider?: string, config?: Record<string, unknown>) {
     const token = await getAccessToken();
-    if (!token) { setLlmHealthy(false); return; }
+    if (!token) {
+      setLlmHealthy(false);
+      return;
+    }
 
     const providerToTest = provider || selectedProvider;
-    if (!providerToTest || !modelConfig) { setLlmHealthy(null); return; }
+    if (!providerToTest || !modelConfig) {
+      setLlmHealthy(null);
+      return;
+    }
 
-    // Build the config payload from what we know
     const providerConfig = config || (modelConfig as Record<string, unknown>)?.[providerToTest] || {};
 
     setLlmHealthChecking(true);
@@ -198,9 +189,12 @@ export function useModels(
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ provider: providerToTest, config: providerConfig }),
-        signal: AbortSignal.timeout(15000), // 15s timeout for health check
+        signal: AbortSignal.timeout(15000),
       });
-      if (!res.ok) { setLlmHealthy(false); return; }
+      if (!res.ok) {
+        setLlmHealthy(false);
+        return;
+      }
       const data = await res.json();
       setLlmHealthy(data.success === true);
     } catch {
@@ -210,19 +204,16 @@ export function useModels(
     }
   }
 
-  // Auto-check LLM health when provider/model changes
   useEffect(() => {
     if (backendReady && selectedProvider && modelConfig) {
       void checkLlmHealth();
     }
   }, [selectedProvider, selectedModel, backendReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Persist LLM config changes to backend. */
   async function saveModelConfig(provider: string, model: string) {
     const token = await getAccessToken();
     if (!token) return;
     try {
-      // 1. Set the default provider via POST /api/llm-config
       await fetch(`${backendUrlTrimmed}/api/llm-config`, {
         method: "POST",
         headers: {
@@ -231,7 +222,6 @@ export function useModels(
         },
         body: JSON.stringify({ provider }),
       });
-      // 2. Merge model into existing provider config (backend validates full schema)
       const existingProviderConfig = (modelConfig as Record<string, unknown>)?.[provider] ?? {};
       const mergedConfig = { ...existingProviderConfig, model };
       await fetch(`${backendUrlTrimmed}/api/llm-config/${provider}`, {
@@ -254,20 +244,16 @@ export function useModels(
     if (model) {
       setSelectedModel(model);
     }
-    // Update modelConfig so the chat request uses the new provider
     setModelConfig((prev) => (prev ? { ...prev, provider } : { provider }));
-    // Persist to backend
     if (model) void saveModelConfig(provider, model);
   }
 
   function changeModel(model: string) {
     setSelectedModel(model);
-    // Persist to backend
     if (selectedProvider) void saveModelConfig(selectedProvider, model);
   }
 
   const modelMeta = modelConfig?.provider ? `${modelConfig.provider} · ${modelLabel}` : modelLabel;
-  const selectedGraphName = graphs.find((g) => g.id === selectedGraph)?.name;
 
   return {
     modelLabel,
@@ -283,12 +269,6 @@ export function useModels(
     llmHealthy,
     llmHealthChecking,
     checkLlmHealth,
-    graphs,
-    graphsLoading,
-    graphsError,
-    selectedGraph,
-    setSelectedGraph,
-    selectedGraphName,
     graphRuns,
     graphRunsLoading,
     graphRunsError,
@@ -296,9 +276,9 @@ export function useModels(
     toolsLoading,
     toolsError,
     loadModel,
-    loadGraphs,
     loadGraphRuns,
     startGraphRun,
+    createAgentGraph,
     loadTools,
   };
 }

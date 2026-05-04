@@ -158,10 +158,12 @@ When `interruptBeforeTools` is enabled with a `checkpointer`:
 
 ### Stream Configuration
 
+`streamReactAgentMessages` passes `recursionLimit: opts.recursionLimit ?? config.graphRecursionLimit` (default **120**, overridable with env `GRAPH_RECURSION_LIMIT`). The graph executor sets `opts.recursionLimit` from the run (`researchDepth`), optional `graph.execution.maxReactSteps`, or `node.react.recursionLimit`. This is **not** the same as `graph.execution.maxIterations`, which caps **DAG node executions** in `AgentGraphExecutor`, not LangGraph ReAct steps.
+
 ```typescript
 const streamConfig = {
   streamMode: "values" | ["values", "messages"],
-  recursionLimit: config.graphRecursionLimit,
+  recursionLimit: opts.recursionLimit ?? config.graphRecursionLimit,
   signal: opts.abortSignal,
   configurable: {
     thread_id: opts.threadId,

@@ -4,19 +4,23 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Play,
   FolderOpen,
+  Code2,
   GitCommitHorizontal,
   TerminalSquare,
   Share2,
   ChevronDown,
   GitCompareArrows,
+  PanelRight,
   Upload,
   GitPullRequest,
   Loader2,
   Check,
   FolderPlus,
   AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import { TrafficLights } from '../ui/TrafficLights';
+import { ThreadSearchHeaderTrigger } from './ThreadSearchHeaderTrigger';
 
 export interface GitDiffStats {
   additions: number;
@@ -44,6 +48,8 @@ export interface TitleBarProps {
   onWorkspaceSelect?: (workspaceId: string) => void;
   /** Called when user clicks 'Add project' in dropdown */
   onAddWorkspace?: () => void;
+  /** Remove the active workspace from Kletron (e.g. desktop — sidebar no longer exposes this). */
+  onRemoveWorkspace?: () => void;
   /** Active thread title shown in the center */
   threadTitle?: string;
   /** Optional extra content rendered in the center */
@@ -52,8 +58,16 @@ export interface TitleBarProps {
   gitDiffStats?: GitDiffStats | null;
   /** Show custom traffic light dots (set false in Electron where native ones exist) */
   showTrafficLights?: boolean;
-  /** Callbacks for top-bar actions */
+  /** Hide the small workspace label on the leading edge (e.g. desktop when workspace appears in center search). */
+  hideLeadingWorkspaceLabel?: boolean;
+  /** Callbacks for top-bar actions — opens workspace in external editor (e.g. VS Code) */
   onOpen?: () => void;
+  /** Label for the editor button (default: "Editor") */
+  openEditorLabel?: string;
+  /** Tooltip for the editor button */
+  openEditorTitle?: string;
+  /** Desktop: Code mode shows VS Code icon; Work mode shows folder icon for native reveal */
+  openActionVariant?: 'vscode' | 'native-folder';
   onCommit?: () => void;
   onPush?: () => void;
   onCreatePR?: () => void;
@@ -64,8 +78,15 @@ export interface TitleBarProps {
   onToggleTerminal?: () => void;
   onToggleChanges?: () => void;
   changesVisible?: boolean;
+  /** Right source-control sidebar (e.g. Unstaged / Staged file list) */
+  onToggleSourceControl?: () => void;
+  sourceControlVisible?: boolean;
   onShare?: () => void;
   onRun?: () => void;
+  /** Opens workspace thread quick search (desktop command center). */
+  onOpenThreadSearch?: () => void;
+  threadSearchPlaceholder?: string;
+  threadSearchDisabled?: boolean;
 }
 
 export function TitleBar({
@@ -76,10 +97,12 @@ export function TitleBar({
   activeWorkspaceId,
   onWorkspaceSelect,
   onAddWorkspace,
+  onRemoveWorkspace,
   threadTitle,
   center,
   gitDiffStats,
   showTrafficLights = true,
+  hideLeadingWorkspaceLabel = false,
   onOpen,
   onCommit,
   onPush,
@@ -90,8 +113,16 @@ export function TitleBar({
   onToggleTerminal,
   onToggleChanges,
   changesVisible,
+  onToggleSourceControl,
+  sourceControlVisible,
   onShare,
   onRun,
+  openEditorLabel = 'Folder',
+  openEditorTitle = 'Open workspace folder in external editor',
+  openActionVariant,
+  onOpenThreadSearch,
+  threadSearchPlaceholder = '',
+  threadSearchDisabled = false,
 }: TitleBarProps) {
   const [gitMenuOpen, setGitMenuOpen] = useState(false);
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
@@ -115,25 +146,42 @@ export function TitleBar({
 
   const hasGitActions = onCommit || onPush || onCreatePR;
 
+  const showLeadingCluster =
+    showTrafficLights || !hideLeadingWorkspaceLabel || Boolean(onOpenThreadSearch);
+
   return (
     <header className={`relative z-50 flex h-9 items-center justify-between glass-titlebar px-4 app-region-drag ${!showTrafficLights ? 'pl-[76px]' : ''}`}>
-      {/* Left: traffic lights + workspace name */}
-      <div className="flex items-center gap-3 min-w-0 flex-shrink-0">
-        {showTrafficLights && <TrafficLights className="app-region-no-drag" />}
-        <div className="text-[11px] font-medium text-text-muted truncate max-w-[120px]">
-          {workspaceName}
+      {/* Left: traffic lights + workspace name + optional thread search */}
+      {showLeadingCluster ? (
+        <div className="flex min-w-0 max-w-[min(100%,50%)] shrink items-center gap-2 app-region-no-drag">
+          {showTrafficLights && <TrafficLights className="app-region-no-drag" />}
+          {!hideLeadingWorkspaceLabel ? (
+            <div className="text-[11px] font-medium text-text-muted truncate max-w-[120px]">
+              {workspaceName}
+            </div>
+          ) : null}
+          {onOpenThreadSearch ? (
+            <ThreadSearchHeaderTrigger
+              onClick={onOpenThreadSearch}
+              placeholder={threadSearchPlaceholder}
+              disabled={threadSearchDisabled}
+            />
+          ) : null}
         </div>
-      </div>
+      ) : null}
 
-      {/* Center: thread title (replaces tab bar) */}
-      <div className="flex-1 flex items-center justify-center min-w-0 px-4">
-        {center ?? (
-          threadTitle && (
-            <span className="text-[13px] font-medium text-text-primary truncate max-w-[400px]">
-              {threadTitle}
-            </span>
-          )
-        )}
+      {/* Center: interactive strip is no-drag; flex siblings stay draggable for window move */}
+      <div className="flex flex-1 items-center min-w-0 self-stretch px-2">
+        <div className="app-region-drag flex-1 min-h-[1px] min-w-[12px] self-stretch" aria-hidden />
+        <div className="flex max-w-[min(100%,42rem)] w-full shrink-0 items-center justify-center px-2 app-region-no-drag">
+          {center ??
+            (threadTitle ? (
+              <span className="max-w-[400px] truncate text-[13px] font-medium text-text-primary">
+                {threadTitle}
+              </span>
+            ) : null)}
+        </div>
+        <div className="app-region-drag flex-1 min-h-[1px] min-w-[12px] self-stretch" aria-hidden />
       </div>
 
       {/* Right: action buttons */}
@@ -206,20 +254,50 @@ export function TitleBar({
                     </button>
                   </>
                 )}
+
+                {onRemoveWorkspace && (
+                  <>
+                    <div className="my-1 mx-2 border-t border-white/[0.06]" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWsMenuOpen(false);
+                        onRemoveWorkspace();
+                      }}
+                      className="flex items-center gap-2.5 w-full px-3 py-2 text-[12px] text-status-error-text hover:bg-white/[0.06] transition-all duration-150"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span>Remove workspace from Kletron</span>
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
-        ) : onWorkspaceSelectorClick && (
-          <button
-            type="button"
-            onClick={onWorkspaceSelectorClick}
-            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150"
-            title="Select workspace folder"
-          >
-            <span className="truncate max-w-[140px]">{workspaceSelectorLabel}</span>
-            <ChevronDown className="h-2.5 w-2.5" />
-          </button>
-        ))}
+        ) : onWorkspaceSelectorClick ? (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onWorkspaceSelectorClick}
+              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150"
+              title="Select workspace folder"
+            >
+              <span className="truncate max-w-[140px]">{workspaceSelectorLabel}</span>
+              <ChevronDown className="h-2.5 w-2.5" />
+            </button>
+            {onRemoveWorkspace ? (
+              <button
+                type="button"
+                onClick={() => onRemoveWorkspace()}
+                className="rounded-md p-1.5 text-text-muted hover:bg-white/[0.06] hover:text-status-error-text transition-all duration-150"
+                title="Remove workspace from Kletron"
+                aria-label="Remove workspace from Kletron"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
+        ) : null)}
 
         {/* Run */}
         {onRun && (
@@ -233,16 +311,20 @@ export function TitleBar({
           </button>
         )}
 
-        {/* Open button */}
+        {/* Open workspace in external IDE */}
         {onOpen && (
           <button
             type="button"
             onClick={onOpen}
             className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-white/[0.06] transition-all duration-150"
-            title="Open in editor"
+            title={openEditorTitle}
           >
-            <FolderOpen className="h-3 w-3" />
-            Open
+            {openActionVariant === 'vscode' ? (
+              <Code2 className="h-3 w-3" />
+            ) : (
+              <FolderOpen className="h-3 w-3" />
+            )}
+            {openEditorLabel}
           </button>
         )}
 
@@ -315,7 +397,7 @@ export function TitleBar({
         )}
 
         {/* Separator */}
-        {(onOpen || hasGitActions) && (onToggleTerminal || onToggleChanges || onShare || gitDiffStats) && (
+        {(onOpen || hasGitActions) && (onToggleTerminal || onToggleChanges || onToggleSourceControl || onShare || gitDiffStats) && (
           <div className="w-px h-3.5 bg-white/[0.08] mx-1" />
         )}
 
@@ -328,6 +410,18 @@ export function TitleBar({
             title="Toggle uncommitted changes (⌘⇧G)"
           >
             <GitCompareArrows className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+        {/* Source control sidebar (Unstaged / Staged) */}
+        {onToggleSourceControl && (
+          <button
+            type="button"
+            onClick={onToggleSourceControl}
+            className={`rounded-md p-1.5 transition-all duration-150 ${sourceControlVisible ? 'text-accent-cyan bg-accent-cyan/10' : 'text-text-muted hover:text-text-primary hover:bg-white/[0.06]'}`}
+            title="Toggle source control sidebar (⌘⇧B)"
+          >
+            <PanelRight className="h-3.5 w-3.5" />
           </button>
         )}
 

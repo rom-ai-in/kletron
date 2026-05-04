@@ -2,7 +2,6 @@ import {
   ensurePortsFree,
   createLangGraphDevServer,
   createMcpLauncher,
-  createDriftAnalysisWorkerLauncher,
   createTerminalWorkerLauncher,
   createWebLauncher,
   createDesktopLauncher,
@@ -41,7 +40,6 @@ async function main() {
     }),
     createWebLauncher(WEB_PORT),
     createDesktopLauncher(),
-    createDriftAnalysisWorkerLauncher({ watch: true }),
     createTerminalWorkerLauncher({ watch: true }),
   ].filter(Boolean);
 

@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Modal, Button, Skeleton, Panel, SelectableRow, Selector } from "@kletron/ui/components/design-system";
+import { ListTree, ScrollText } from "lucide-react";
+import {
+    ConfigExplorerModal,
+    Button,
+    Skeleton,
+    Panel,
+    SelectableRow,
+    Selector,
+    ConfigExplorerSection,
+} from "@kletron/ui/components/design-system";
 import type { SelectorOption } from "@kletron/ui/components/design-system";
 import { AutomationConfigBuilder } from "@kletron/shared/automationConfigBuilder";
 import type { AutomationDefinition, AutomationStageConfig, AutomationTriggerType, GitEventType } from "@kletron/shared/automationTypes";
@@ -66,11 +75,14 @@ interface AutomationBuilderModalProps {
     /** Called when an automation is created or updated; receives the automation ID */
     onCreated: (automationId: string) => void;
     editAutomationId?: string;
+    /** When set (e.g. Electron), used instead of global `fetch` for all API calls. */
+    apiFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 }
 
 type WizardStep = 1 | 2 | 3 | 4;
 
-export function AutomationBuilderModal({ open, onClose, onCreated, editAutomationId }: AutomationBuilderModalProps) {
+export function AutomationBuilderModal({ open, onClose, onCreated, editAutomationId, apiFetch }: AutomationBuilderModalProps) {
+    const request = apiFetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
     const { activeWorkspaceId } = useWorkspace() ?? {};
     const [step, setStep] = useState<WizardStep>(1);
     const [loading, setLoading] = useState(false);
@@ -88,7 +100,7 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
         let cancelled = false;
         const loadGraphs = async () => {
             try {
-                const res = await fetch("/api/agent-graphs", { cache: "no-store" });
+                const res = await request("/api/agent-graphs", { cache: "no-store" });
                 if (!res.ok) return;
                 const data = await res.json();
                 const list = Array.isArray(data?.graphs) ? data.graphs : [];
@@ -108,21 +120,21 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
         const loadProviders = async () => {
             try {
                 // Fetch enabled providers
-                const enableRes = await fetch("/api/llm-config/enable", { cache: "no-store" });
+                const enableRes = await request("/api/llm-config/enable", { cache: "no-store" });
                 const enableData = enableRes.ok ? await enableRes.json() : {};
                 const enabled: LlmProviderType[] = Array.isArray(enableData.enabledProviders)
                     ? enableData.enabledProviders
                     : [];
 
                 // Fetch full config to get model names for each provider
-                const configRes = await fetch("/api/llm-config", { cache: "no-store" });
+                const configRes = await request("/api/llm-config", { cache: "no-store" });
                 const configData = configRes.ok ? await configRes.json() : {};
 
                 // Probe live status for local providers to get exact loaded models
                 let lmStudioLoadedModel: string | undefined = undefined;
                 if (enabled.includes("lmstudio" as LlmProviderType)) {
                     try {
-                        const lmsRes = await fetch("/api/llm-config/lmstudio/models", { cache: "no-store" });
+                        const lmsRes = await request("/api/llm-config/lmstudio/models", { cache: "no-store" });
                         if (lmsRes.ok) {
                             const lmsData = await lmsRes.json();
                             lmStudioLoadedModel = lmsData.loadedModel || undefined;
@@ -135,7 +147,7 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                 let vllmLoadedModel: string | undefined = undefined;
                 if (enabled.includes("vllm" as LlmProviderType)) {
                     try {
-                        const vllmRes = await fetch("/api/llm-config/vllm/models", { cache: "no-store" });
+                        const vllmRes = await request("/api/llm-config/vllm/models", { cache: "no-store" });
                         if (vllmRes.ok) {
                             const vllmData = await vllmRes.json();
                             vllmLoadedModel = vllmData.loadedModel || undefined;
@@ -188,7 +200,7 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
             try {
                 const headers: Record<string, string> = {};
                 if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
-                const res = await fetch(`/api/automations/${editAutomationId}`, { headers });
+                const res = await request(`/api/automations/${editAutomationId}`, { headers });
                 if (res.ok) {
                     const data = await res.json();
                     const chain = data.automation ?? data.chain;
@@ -269,7 +281,7 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
             const headers: Record<string, string> = { "Content-Type": "application/json" };
             if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
 
-            const res = await fetch(url, {
+            const res = await request(url, {
                 method,
                 headers,
                 body: JSON.stringify({ config: automationData }),
@@ -375,9 +387,9 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                 );
             case 2:
                 return (
-                    <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                            <h4 className="text-sm font-medium text-text-primary">Configure Stages</h4>
+                    <div className="space-y-5">
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm text-text-secondary">Configure each stage: graph, provider, and prompt.</p>
                             <Button variant="secondary" size="xs" onClick={handleAddStage}>
                                 + Add Stage
                             </Button>
@@ -387,86 +399,110 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                                 {promptIssues.length} stage{promptIssues.length > 1 ? "s" : ""} missing a prompt. Add a prompt to continue.
                             </div>
                         )}
-                        <div className="space-y-3">
-                            {automationData.stages?.map((stage: AutomationStageConfig, idx: number) => (
-                                <div
-                                    key={idx}
-                                    className={`rounded-lg border shadow-sm space-y-3 p-3 text-xs border-border-subtle bg-bg-elevated/50 ${(!stage.prompt || stage.prompt.trim() === "") ? "border-status-error-border bg-status-error-bg" : ""}`}
-                                >
-                                    <div className="flex items-center justify-between gap-2">
-                                        <input
-                                            value={stage.name}
-                                            onChange={(e) => handleUpdateStage(idx, { name: e.target.value })}
-                                            className="flex-1 bg-transparent border-none p-0 font-medium text-text-primary focus:ring-0"
-                                            placeholder="Stage Name"
-                                        />
-                                        <button
-                                            onClick={() => handleRemoveStage(idx)}
-                                            className="text-text-muted hover:text-status-error-text"
-                                        >
-                                            Remove
-                                        </button>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <Selector
-                                            label="Graph"
-                                            value={stage.graphId}
-                                            fullWidth
-                                            onSelect={(id) => handleUpdateStage(idx, { graphId: id })}
-                                            options={
-                                                graphOptions.length === 0
-                                                    ? [{ id: stage.graphId || "", label: "Loading graphs..." }]
-                                                    : [
-                                                        ...graphOptions.map(g => ({ id: g.id, label: g.name })),
-                                                        ...(stage.graphId && !graphOptions.some(g => g.id === stage.graphId)
-                                                            ? [{ id: stage.graphId, label: `${stage.graphId} (legacy)` }]
-                                                            : [])
-                                                    ]
-                                            }
-                                        />
-                                        <div>
-                                            <div className="mb-2 text-[10px] text-text-muted uppercase tracking-wider font-semibold">LLM Provider</div>
+                        <div className="space-y-4">
+                            {automationData.stages?.map((stage: AutomationStageConfig, idx: number) => {
+                                const promptMissing = !stage.prompt || stage.prompt.trim() === "";
+                                return (
+                                    <ConfigExplorerSection
+                                        key={idx}
+                                        title={`Stage ${idx + 1}`}
+                                        icon={ListTree}
+                                        variant="stack"
+                                        headerRight={
+                                            <>
+                                                <input
+                                                    value={stage.name}
+                                                    onChange={(e) => handleUpdateStage(idx, { name: e.target.value })}
+                                                    className="min-w-[8rem] max-w-[14rem] rounded border border-border-subtle bg-bg-app px-2 py-1 text-xs font-medium text-text-primary focus:outline-none focus:ring-1 focus:ring-text-primary/30"
+                                                    placeholder="Stage name"
+                                                    aria-label={`Stage ${idx + 1} name`}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveStage(idx)}
+                                                    className="text-xs text-text-muted hover:text-status-error-text"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </>
+                                        }
+                                        className={
+                                            promptMissing
+                                                ? "border-status-error-border bg-status-error-bg/35"
+                                                : undefined
+                                        }
+                                    >
+                                        <div className="grid grid-cols-2 gap-4">
                                             <Selector
-                                                label="Provider"
-                                                value={stage.llmProvider}
+                                                label="Graph"
+                                                value={stage.graphId}
                                                 fullWidth
-                                                onSelect={(id) => handleUpdateStage(idx, { llmProvider: id as LlmProviderType })}
+                                                onSelect={(id) => handleUpdateStage(idx, { graphId: id })}
                                                 options={
-                                                    llmProviderOptions.length === 0
-                                                        ? [{ id: stage.llmProvider || "", label: "Loading providers..." }]
+                                                    graphOptions.length === 0
+                                                        ? [{ id: stage.graphId || "", label: "Loading graphs..." }]
                                                         : [
-                                                            ...llmProviderOptions.map(p => ({
-                                                                id: p.id,
-                                                                label: p.label,
-                                                                sub: p.model ? p.model : undefined
-                                                            })),
-                                                            ...(stage.llmProvider && !llmProviderOptions.some(p => p.id === stage.llmProvider)
-                                                                ? [{
-                                                                    id: stage.llmProvider,
-                                                                    label: `${PROVIDER_LABELS[stage.llmProvider] ?? stage.llmProvider} (disabled)`
-                                                                }]
-                                                                : [])
-                                                        ]
+                                                              ...graphOptions.map((g) => ({ id: g.id, label: g.name })),
+                                                              ...(stage.graphId && !graphOptions.some((g) => g.id === stage.graphId)
+                                                                  ? [{ id: stage.graphId, label: `${stage.graphId} (legacy)` }]
+                                                                  : []),
+                                                          ]
                                                 }
                                             />
+                                            <div>
+                                                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                                                    LLM Provider
+                                                </div>
+                                                <Selector
+                                                    label="Provider"
+                                                    value={stage.llmProvider}
+                                                    fullWidth
+                                                    onSelect={(id) =>
+                                                        handleUpdateStage(idx, { llmProvider: id as LlmProviderType })
+                                                    }
+                                                    options={
+                                                        llmProviderOptions.length === 0
+                                                            ? [{ id: stage.llmProvider || "", label: "Loading providers..." }]
+                                                            : [
+                                                                  ...llmProviderOptions.map((p) => ({
+                                                                      id: p.id,
+                                                                      label: p.label,
+                                                                      sub: p.model ? p.model : undefined,
+                                                                  })),
+                                                                  ...(stage.llmProvider &&
+                                                                  !llmProviderOptions.some((p) => p.id === stage.llmProvider)
+                                                                      ? [
+                                                                            {
+                                                                                id: stage.llmProvider,
+                                                                                label: `${PROVIDER_LABELS[stage.llmProvider] ?? stage.llmProvider} (disabled)`,
+                                                                            },
+                                                                        ]
+                                                                      : []),
+                                                              ]
+                                                    }
+                                                />
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-text-muted uppercase mb-1">Prompt</label>
-                                        <textarea
-                                            value={stage.prompt ?? ""}
-                                            onChange={(e) => handleUpdateStage(idx, { prompt: e.target.value })}
-                                            className="w-full min-h-[84px] rounded border-border-subtle bg-bg-surface px-2 py-1 text-xs"
-                                            placeholder="Describe exactly what this stage should do..."
-                                        />
-                                        {(!stage.prompt || stage.prompt.trim() === "") && (
-                                            <div className="mt-1 text-[10px] text-status-error-text">Prompt is required.</div>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
+                                        <div className="space-y-1 pt-1">
+                                            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                                                <ScrollText className="h-3.5 w-3.5 shrink-0 text-status-success-text" />
+                                                Prompt
+                                            </div>
+                                            <textarea
+                                                value={stage.prompt ?? ""}
+                                                onChange={(e) => handleUpdateStage(idx, { prompt: e.target.value })}
+                                                className="w-full min-h-[120px] rounded border border-border-subtle bg-bg-app px-3 py-2 font-mono text-[11px] text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-text-primary/30"
+                                                placeholder="Describe exactly what this stage should do..."
+                                            />
+                                            {promptMissing && (
+                                                <div className="text-[10px] text-status-error-text">Prompt is required.</div>
+                                            )}
+                                        </div>
+                                    </ConfigExplorerSection>
+                                );
+                            })}
                             {automationData.stages?.length === 0 && (
-                                <div className="py-8 text-center text-xs text-text-muted border border-dashed border-border-subtle rounded-md">
+                                <div className="rounded-lg border border-dashed border-border-subtle py-8 text-center text-xs text-text-muted">
                                     No stages added. Add at least one stage to proceed.
                                 </div>
                             )}
@@ -777,28 +813,36 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
     };
 
     return (
-        <Modal
+        <ConfigExplorerModal
             open={open}
             onClose={onClose}
             title={`Step ${step} of 4`}
             subtitle={
-                step === 1 ? "Choose Template" :
-                    step === 2 ? "Configure Stages" :
-                        step === 3 ? "Settings & Trigger" :
-                            "Review & Create"
+                step === 1
+                    ? "Choose Template"
+                    : step === 2
+                      ? "Configure Stages"
+                      : step === 3
+                        ? "Settings & Trigger"
+                        : "Review & Create"
             }
-            footer={
-                <div className="flex items-center justify-between">
+            footerContent={
+                <div className="flex items-center justify-between gap-4">
                     <Button
                         variant="secondary"
-                        onClick={() => step > 1 ? setStep((step - 1) as WizardStep) : onClose()}
+                        onClick={() => (step > 1 ? setStep((step - 1) as WizardStep) : onClose())}
                     >
                         {step === 1 ? "Cancel" : "Back"}
                     </Button>
                     <div className="flex gap-3">
                         {step < 4 ? (
                             <Button
-                                disabled={step === 2 && (!automationData.stages || automationData.stages.length === 0 || hasPromptIssues)}
+                                disabled={
+                                    step === 2 &&
+                                    (!automationData.stages ||
+                                        automationData.stages.length === 0 ||
+                                        hasPromptIssues)
+                                }
                                 onClick={() => setStep((step + 1) as WizardStep)}
                             >
                                 Next
@@ -817,6 +861,6 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
             }
         >
             {renderStep()}
-        </Modal>
+        </ConfigExplorerModal>
     );
 }

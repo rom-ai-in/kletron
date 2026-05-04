@@ -294,16 +294,7 @@ export function createLangGraphDevServer(options: {
 }
 
 
-export function createDriftAnalysisWorkerLauncher(options?: { watch?: boolean }) {
-  const command = process.platform === "win32" ? "npx.cmd" : "npx";
-  const watch = options?.watch ?? false;
-  return spawnService({
-    name: "Drift Analysis Worker",
-    command,
-    args: watch ? ["tsx", "watch", "scripts/drift-analysis-worker.ts"] : ["tsx", "scripts/drift-analysis-worker.ts"],
-    stdio: "pipe",
-  });
-}
+
 
 export function createTerminalWorkerLauncher(options?: { watch?: boolean }) {
   const command = process.platform === "win32" ? "npx.cmd" : "npx";

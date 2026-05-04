@@ -1,16 +1,12 @@
 import type { ObjectId } from "mongodb";
-import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
+import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
+import type { ResearchDepthId } from "@kletron/shared/researchDepth";
 import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
 import type { AgentEvent } from "@kletron/shared/types";
 
 export type AgentGraphStatus = "PENDING" | "RUNNING" | "PAUSED" | "CANCELLED" | "COMPLETED" | "FAILED";
 
 export type AgentGraphNodeStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
-
-export type AgentGraphLlmSelection = {
-    provider: LlmProviderType;
-    model?: string;
-};
 
 export type AgentGraphNodeReactConfig = {
     systemPrompt: string;
@@ -23,9 +19,10 @@ export type AgentGraphNodeReactConfig = {
     toolNames: string[];
     /** Skill IDs to inject into this node's context. */
     skillIds?: string[];
-    llmSelection?: AgentGraphLlmSelection;
     /** Future: enforce hard cap on tool calls. */
     maxToolCalls?: number;
+    /** Optional LangGraph recursion limit for this node (overrides graph.execution.maxReactSteps). */
+    recursionLimit?: number;
     /**
      * If true, the agent will interrupt before executing tools so that a
      * human can review and approve the pending tool calls (human-in-the-loop).
@@ -44,8 +41,6 @@ export type AgentGraphNodeDelegateConfig = {
     graphId?: string;
     /** Optional summarization prompt for the delegate result. */
     summaryPrompt?: string;
-    /** Optional model override for summary. */
-    summaryLlmSelection?: AgentGraphLlmSelection;
 };
 
 export type AgentGraphNodeOutputConfig = {
@@ -91,10 +86,15 @@ export type AgentGraphExecutionConfig = {
     mode?: AgentGraphExecutionMode;
     /** Optional entry node for state machine mode. */
     entryNodeId?: string;
-    /** Max total node executions in a run (loop guard). */
+    /**
+     * Max total **graph node** executions (DAG / state-machine loop guard).
+     * This is **not** the LangGraph ReAct recursion limit; see `maxReactSteps` and `GRAPH_RECURSION_LIMIT`.
+     */
     maxIterations?: number;
     /** Max executions per node (loop guard). */
     maxNodeRuns?: number;
+    /** Optional LangGraph recursion limit override for ReAct nodes (tool/LLM steps). */
+    maxReactSteps?: number;
 };
 
 export interface AgentGraphDefinition {
@@ -162,6 +162,14 @@ export type AgentGraphState = {
     /** Accumulated conversation history for multi-turn sessions. */
     conversationHistory?: AgentEvent[];
     /**
+     * Runtime-loaded skill slugs for this session (progressive disclosure via `load_skill` or slash preflight).
+     * Order is significant: later entries override earlier ones when instructions conflict.
+     * Merged into the system prompt **after** pinned graph `react.skillIds` (pinned first, then loaded).
+     */
+    loadedSkillIds?: string[];
+    /** Optional audit trail for UI/debug when skills are loaded at runtime. */
+    skillLoads?: Array<{ slug: string; at: string; reason?: string }>;
+    /**
      * LangGraph checkpoint metadata — present when a run was interrupted
      * and is awaiting human approval to resume.
      */
@@ -192,6 +200,8 @@ export interface AgentGraphRun {
     workspaceId?: ObjectId;
     /** Origin of this run: "agent" (UI), "automation", "api", "cli", etc. */
     source?: string;
+    /** Authenticated user who started this run (used for per-tenant tool approval). */
+    createdByUserId?: string;
     status: AgentGraphStatus;
     startedAt: Date;
     endedAt?: Date;
@@ -212,4 +222,41 @@ export interface AgentGraphRun {
     conversationTurns?: number;
     /** Whether this run has an active LangGraph checkpoint (for resume). */
     hasCheckpoint?: boolean;
+    /** Links this thread back to the automation config that triggered it. */
+    automationId?: ObjectId;
+    /** When set, this run is a hidden sub-stage execution of `parentRunId`. */
+    parentRunId?: ObjectId;
+    /** Stage index for automation runs: 0 for the main thread, i for sub-runs. */
+    stageIndex?: number;
+    /** Per-stage results aggregated on the main automation thread. */
+    automationStageResults?: AutomationStageRunResult[];
+    /**
+     * Per-thread approval policy for interactive agent runs.
+     * Omitted or `inherit` uses workspace tool approval only.
+     */
+    threadApprovalMode?: ThreadApprovalMode;
+    /** Code vs Work mode for tool allowlists and prompting (default `code`). */
+    workMode?: "code" | "work";
+    /** Exhaustive (default) vs fast agent depth for prompts and ReAct step budget. */
+    researchDepth?: ResearchDepthId;
 }
+
+/**
+ * Per-stage outcome stored on the main automation thread (`stageIndex === 0`).
+ * Replaces the legacy `audit_runs.stageResults` field.
+ */
+export type AutomationStageRunResult = {
+    stageId: string;
+    stageName: string;
+    stageIndex: number;
+    /** Sub-run ID for stages 1..N (the main thread itself executes stage 0). */
+    subRunId?: string;
+    success: boolean;
+    error?: string;
+    errorKind?: string;
+    findingsCount?: number;
+    claimsCount?: number;
+    tasksCount?: number;
+    rawOutput?: string;
+    duration: number;
+};

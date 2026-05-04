@@ -11,16 +11,50 @@
 import { describe, it, expect } from 'vitest';
 import {
     sanitizeVisibleAssistantContent,
+    sanitizeAssistantStreamPreview,
     extractThoughtsFromContent,
     normalizeMessage,
     containsMetaLeakage,
     stripSystemPrefix,
+    splitThoughtDashLeadIn,
 } from '../src/contentSanitizer';
 import { normalizeMarkdown } from '../src/normalizeMarkdown';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // sanitizeVisibleAssistantContent
 // ═══════════════════════════════════════════════════════════════════════════════
+
+describe('sanitizeAssistantStreamPreview', () => {
+    it('does not blank the whole preview while a thinking block is unclosed (avoids flicker)', () => {
+        const partial = '<think>secret reasoning so far';
+        expect(sanitizeAssistantStreamPreview(partial).length).toBeGreaterThan(0);
+    });
+
+    it('shows only content after closed thinking block', () => {
+        const s = '<think>done</think>\n\nHello user';
+        expect(sanitizeAssistantStreamPreview(s)).toContain('Hello user');
+        expect(sanitizeAssistantStreamPreview(s)).not.toContain('done');
+    });
+
+    it('filters meta paragraphs like sanitizeVisibleAssistantContent', () => {
+        const s = 'we must obey policy.\n\nActual reply.';
+        expect(sanitizeAssistantStreamPreview(s)).toBe('Actual reply.');
+    });
+
+    it('hides Thought — lead-in until an answer anchor appears', () => {
+        const partial = 'Thought — The tool is pending approval without it.';
+        expect(sanitizeAssistantStreamPreview(partial)).toBe('');
+    });
+
+    it('shows only content after Thought — once Voici begins', () => {
+        const s =
+            'Thought — Internal reasoning here. Voici les codes de formes juridiques Zefix pour AG et GmbH.';
+        const out = sanitizeAssistantStreamPreview(s);
+        expect(out).toContain('Voici les codes');
+        expect(out).not.toContain('Thought');
+        expect(out).not.toContain('Internal reasoning');
+    });
+});
 
 describe('sanitizeVisibleAssistantContent', () => {
     it('returns empty string for empty input', () => {
@@ -75,6 +109,24 @@ describe('sanitizeVisibleAssistantContent', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // extractThoughtsFromContent
 // ═══════════════════════════════════════════════════════════════════════════════
+
+describe('splitThoughtDashLeadIn', () => {
+    it('splits French Thought — before Voici', () => {
+        const raw =
+            "Thought — L'utilisateur me confirme. Merci pour la confirmation. Voici le résumé.";
+        const r = splitThoughtDashLeadIn(raw);
+        expect(r.leadInThought).toContain("L'utilisateur");
+        expect(r.rest).toMatch(/^Merci pour la confirmation/);
+    });
+
+    it('splits before J\'ai trouvé', () => {
+        const raw =
+            'Thought — I have found detailed information about Novatix. J\'ai trouvé la société Novatix.';
+        const r = splitThoughtDashLeadIn(raw);
+        expect(r.leadInThought).toContain('Novatix');
+        expect(r.rest).toMatch(/^J'ai trouvé la société/);
+    });
+});
 
 describe('extractThoughtsFromContent', () => {
     it('returns empty thoughts for simple content', () => {
@@ -133,6 +185,20 @@ describe('normalizeMessage', () => {
         };
         const result = normalizeMessage(msg);
         expect(result.thoughts).toEqual(['existing thought']);
+    });
+
+    it('strips Thought — prefix into thoughts and keeps visible reply', () => {
+        const msg = {
+            id: '4',
+            role: 'assistant' as const,
+            content:
+                'Thought — Planning internally. Voici la liste des codes AG et GmbH pour Zefix.',
+            timestamp: new Date().toISOString(),
+        };
+        const result = normalizeMessage(msg);
+        expect(result.content).toContain('Voici la liste');
+        expect(result.content).not.toContain('Thought');
+        expect(result.thoughts?.join(' ')).toContain('Planning internally');
     });
 });
 

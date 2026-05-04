@@ -3,6 +3,10 @@ import fsSync from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import simpleGit, { type SimpleGit } from "simple-git";
+import {
+  readWorkspaceGitScopePrefix,
+  isRepoPathInGitScope,
+} from "./gitWorkspaceScope";
 
 export type WorkspaceInfo = {
   path: string;
@@ -107,7 +111,19 @@ function getGit(repoPath: string): SimpleGit {
   return simpleGit({ baseDir: repoPath });
 }
 
+function statusFileInWorkspaceScope(
+  filePath: string,
+  renameToFrom: Map<string, string>,
+  scopePrefix: string | null
+): boolean {
+  if (!scopePrefix) return true;
+  if (isRepoPathInGitScope(filePath, scopePrefix)) return true;
+  const from = renameToFrom.get(filePath);
+  return Boolean(from && isRepoPathInGitScope(from, scopePrefix));
+}
+
 export async function getGitStatus(workspacePath: string): Promise<GitStatus> {
+  const scopePrefix = await readWorkspaceGitScopePrefix(workspacePath);
   const git = getGit(workspacePath);
   const status = await git.status();
 
@@ -119,6 +135,7 @@ export async function getGitStatus(workspacePath: string): Promise<GitStatus> {
   const renameMap = new Map(status.renamed.map(r => [r.to, r.from]));
 
   for (const f of status.files) {
+    if (!statusFileInWorkspaceScope(f.path, renameMap, scopePrefix)) continue;
     const indexStatus = f.index;   // status in the staging area
     const wtStatus = f.working_dir; // status in the working tree
 
@@ -148,14 +165,21 @@ export async function getGitStatus(workspacePath: string): Promise<GitStatus> {
     }
   }
 
+  const renamedScoped = status.renamed
+    .filter(
+      (r) =>
+        isRepoPathInGitScope(r.from, scopePrefix) || isRepoPathInGitScope(r.to, scopePrefix)
+    )
+    .map((r) => ({ from: r.from, to: r.to }));
+
   return {
     branch: status.current || "",
     ahead: status.ahead || 0,
     behind: status.behind || 0,
-    modified: status.modified,
-    created: status.created,
-    deleted: status.deleted,
-    renamed: status.renamed.map(r => ({ from: r.from, to: r.to })),
+    modified: status.modified.filter((p) => isRepoPathInGitScope(p, scopePrefix)),
+    created: status.created.filter((p) => isRepoPathInGitScope(p, scopePrefix)),
+    deleted: status.deleted.filter((p) => isRepoPathInGitScope(p, scopePrefix)),
+    renamed: renamedScoped,
     staged,
     unstaged,
   };
@@ -295,14 +319,17 @@ export async function gitPush(workspacePath: string, remote = "origin", branch?:
 export type DiffNumstat = { additions: number; deletions: number };
 
 export async function gitDiffNumstat(workspacePath: string): Promise<DiffNumstat> {
+  const scopePrefix = await readWorkspaceGitScopePrefix(workspacePath);
   const git = getGit(workspacePath);
   let additions = 0;
   let deletions = 0;
 
-  // Unstaged changes
-  const unstaged = await git.diff(["--numstat"]);
+  const scopeArgs = scopePrefix ? (["--", scopePrefix] as string[]) : [];
+
+  // Unstaged changes (scoped to workspace folder when inside a monorepo)
+  const unstaged = await git.diff(["--numstat", ...scopeArgs]);
   // Staged changes
-  const staged = await git.diff(["--cached", "--numstat"]);
+  const staged = await git.diff(["--cached", "--numstat", ...scopeArgs]);
 
   for (const line of [...unstaged.split("\n"), ...staged.split("\n")]) {
     const match = line.match(/^(\d+|-)\t(\d+|-)\t/);

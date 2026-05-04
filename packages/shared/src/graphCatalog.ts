@@ -1,3 +1,8 @@
+/**
+ * Static catalog for docs / design-system demos only.
+ * Do **not** use `GraphOption.id` as `graphId` in API calls — persisted graphs live in
+ * `agent_graphs` and are identified by a 24-hex Mongo ObjectId from GET `/api/agent-graphs`.
+ */
 export type PhaseDefinition = {
   id: string;
   label: string;
@@ -18,10 +23,12 @@ export type GraphNodePrompt = {
 // Core file operations and coding tools
 const baseToolNames = [
   // File operations
+  "glob_files",
   "list_files",
   "read_file",
   "read_file_range",
   "write_file",
+  "str_replace_editor",
   // Repo + code analysis
   "search_code",
   "repo_metrics",
@@ -37,7 +44,6 @@ const baseToolNames = [
   "find_symbol",
   "go_to_definition",
   "references",
-  "find_references",
   "web_search",
   "fetch_url",
   "semantic_code_search",

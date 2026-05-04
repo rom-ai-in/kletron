@@ -3,6 +3,10 @@ import { resolveLlmSelection } from "@kletron/server/llm";
 import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@kletron/shared/types";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { normalizeToWorkModeId } from "@kletron/shared/workMode";
+import { categoryService } from "@kletron/server/services/categoryService";
+import { agentGraphExecutor } from "@kletron/server/services/agentGraphExecutor";
+import type { AgentStreamKpiV1 } from "@kletron/shared/chatTypes";
 
 const textEncoder = new TextEncoder();
 
@@ -10,6 +14,8 @@ type StreamChunk =
   | { type: "init"; payload: { runId: string; graphId: string } }
   | { type: "update"; payload: AgentWorkflowUpdate }
   | { type: "text_delta"; payload: { content: string } }
+  | { type: "reasoning_delta"; payload: { content: string } }
+  | { type: "stream_metrics"; payload: AgentStreamKpiV1 }
   | { type: "final"; payload: AgentWorkflowResult }
   | { type: "error"; payload: { message: string } };
 
@@ -96,6 +102,26 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   const graphId = run.graphId?.toString();
 
+  /**
+   * Do not retag an existing run's work mode from every chat continuation — that blurred Code vs Work.
+   * Only patch run + workspace current category when the client explicitly opts in (`alignWorkMode: true`).
+   * New sessions set workMode via POST /api/sessions.
+   */
+  const alignWorkMode = payload.alignWorkMode === true;
+  const modePayload =
+    typeof payload.workMode === "string"
+      ? payload.workMode
+      : typeof payload.category === "string"
+        ? payload.category
+        : null;
+  if (alignWorkMode && modePayload !== null) {
+    const wm = normalizeToWorkModeId(modePayload);
+    await agentGraphRunService.patchRun(params.id, { workMode: wm });
+    if (auth.userId && run.workspaceId) {
+      await categoryService.setCurrentCategory(auth.userId, wm, run.workspaceId.toString());
+    }
+  }
+
   // Track client disconnect via the request abort signal
   let clientDisconnected = false;
   request.signal?.addEventListener("abort", () => {
@@ -116,7 +142,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
       console.log(`[sessions/chat] Stream started for run ${params.id}`);
 
       try {
-        const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
         console.log(`[sessions/chat] Calling continueRun for ${params.id}...`);
         const result = await agentGraphExecutor.continueRun(params.id, message, {
           onUpdate: async (update) => {
@@ -124,6 +149,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
           },
           onTextDelta: (content) => {
             sendChunk({ type: "text_delta", payload: { content } });
+          },
+          onReasoningDelta: (content) => {
+            sendChunk({ type: "reasoning_delta", payload: { content } });
+          },
+          onLlmStreamKpi: (kpi) => {
+            sendChunk({ type: "stream_metrics", payload: kpi });
           },
           ...(llmSelection ? { llmSelectionOverride: llmSelection } : {}),
         });

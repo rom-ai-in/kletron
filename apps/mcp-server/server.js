@@ -11,6 +11,7 @@ import http from "http";
 import { URL } from "url";
 
 import { listFiles } from "./tools/listFiles.js";
+import { globFiles } from "./tools/globFiles.js";
 import { readFile } from "./tools/readFile.js";
 import { readFileRange } from "./tools/readFileRange.js";
 import { searchCode } from "./tools/searchCode.js";
@@ -36,8 +37,17 @@ import { strReplaceEditor } from "./tools/strReplaceEditor.js";
 import { executeBash } from "./tools/executeBash.js";
 import { outputFormat } from "./tools/outputFormat.js";
 import { writeFile } from "./tools/writeFile.js";
-import { loadSkill, listSkills } from "./tools/skillLoader.js";
+import {
+  list_all_skills as listAllSkillsTool,
+  list_skills as listSkillsDeprecatedAlias,
+  load_skill as loadSkillTool,
+} from "./tools/skillLoader.js";
 import { notify } from "./tools/notify.js";
+
+// Workspace-specific tools
+// Workspace management tools (skills/connectors CRUD) are not exposed by
+// the bundled MCP server. Agents manage these via the in-process Kletron
+// admin tool pack (`KLETRON_ADMIN_TOOL_NAMES`) registered by the executor.
 import { config } from "./config.js";
 
 const argv = process.argv.slice(2);
@@ -96,15 +106,30 @@ async function runServer() {
     }
   );
 
-  wireToolHandlers({ server, allTools });
+  // Allow callers (e.g. the McpClient launching us via stdio) to pin the
+  // workspace root for this MCP process via env so all tool calls operate
+  // against the correct desktop folder.
+  const stdioWorkspaceRoot =
+    (process.env.MCP_WORKSPACE_ROOT && process.env.MCP_WORKSPACE_ROOT.trim()) ||
+    config.defaultDir;
+  const stdioCategoryId =
+    (process.env.MCP_CATEGORY_ID && process.env.MCP_CATEGORY_ID.trim()) || undefined;
+
+  await wireToolHandlers({
+    server,
+    allTools,
+    workspaceRoot: stdioWorkspaceRoot,
+    categoryId: stdioCategoryId,
+  });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
 
-function buildAllTools() {
+export function buildAllTools() {
   const tools = {
     list_files: listFiles,
+    glob_files: globFiles,
     read_file: readFile,
     read_file_range: readFileRange,
     search_code: searchCode,
@@ -136,9 +161,10 @@ function buildAllTools() {
     execute_bash: executeBash,
     output_format: outputFormat,
 
-    // Skills system
-    load_skill: loadSkill,
-    list_skills: listSkills,
+    // Skills system (backed by the web API skills service)
+    load_skill: loadSkillTool,
+    list_all_skills: listAllSkillsTool,
+    list_skills: listSkillsDeprecatedAlias,
 
     // Notifications
     notify,
@@ -147,10 +173,48 @@ function buildAllTools() {
   return { ...tools, ...advancedTools };
 }
 
-function wireToolHandlers({ server, allTools }) {
+async function buildWorkspaceAwareTools(options = {}) {
+  const allTools = buildAllTools();
+
+  const {
+    workspaceSkillsManager,
+    createListAvailableSkillsTool,
+    createWorkspaceGatedLoadSkillTool,
+  } = await import("./tools/workspaceSkills.js");
+
+  const activeWorkspace = options.workspaceRoot || config.defaultDir;
+  const categoryId = options.categoryId;
+
+  const augmentSkillTools = (base) => ({
+    ...base,
+    list_all_skills: allTools.list_all_skills,
+    list_skills: allTools.list_skills,
+    list_available_skills: createListAvailableSkillsTool(activeWorkspace),
+    load_skill: createWorkspaceGatedLoadSkillTool(activeWorkspace, allTools.load_skill),
+  });
+
+  if (activeWorkspace) {
+    try {
+      const workspaceTools = await workspaceSkillsManager.getActiveToolsForWorkspace(
+        activeWorkspace,
+        categoryId
+      );
+      return augmentSkillTools(workspaceTools);
+    } catch (error) {
+      console.error("[MCP] Failed to get workspace-specific tools, using default:", error.message);
+    }
+  }
+
+  return augmentSkillTools(allTools);
+}
+
+async function wireToolHandlers({ server, allTools, workspaceRoot, categoryId }) {
+  // Use workspace-aware tools if available
+  const tools = await buildWorkspaceAwareTools({ workspaceRoot, categoryId });
+
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
-      tools: Object.entries(allTools).map(([name, tool]) => ({
+      tools: Object.entries(tools).map(([name, tool]) => ({
         name,
         description: tool.description,
         inputSchema: tool.inputSchema,
@@ -159,11 +223,12 @@ function wireToolHandlers({ server, allTools }) {
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const toolName = request.params.name;
-    const tool = allTools[toolName];
+    const rawName = request.params.name;
+    const toolName = rawName === "find_references" ? "references" : rawName;
+    const tool = tools[toolName];
 
     if (!tool) {
-      throw new Error(`Tool not found: ${toolName}`);
+      throw new Error(`Tool not found: ${rawName}`);
     }
 
     try {
@@ -220,10 +285,13 @@ async function runSseServer({ allTools, port }) {
         const transport = new SSEServerTransport("/message", res);
         const mcpServer = new Server(
           { name: "mcp-server", version: "1.0.0" },
-          { capabilities: { tools: {} } }
+          { capabilities: {} }
         );
 
-        wireToolHandlers({ server: mcpServer, allTools });
+        // Per-session workspace + category. Defaults come from config.json.
+        const workspaceRoot = url.searchParams.get("workspaceRoot") || config.defaultDir;
+        const categoryId = url.searchParams.get("category") || undefined;
+        await wireToolHandlers({ server: mcpServer, allTools, workspaceRoot, categoryId });
 
         const sessionId = transport.sessionId;
         sessions.set(sessionId, transport);
@@ -256,8 +324,10 @@ async function runSseServer({ allTools, port }) {
     }
   });
 
-  server.listen(port, () => {
-    console.log(`MCP server running on http://localhost:${port}/sse`);
+  server.listen(port, "0.0.0.0", () => {
+    // SSE/HTTP transport: stdout is fine, but we still prefer stderr to keep
+    // the convention identical to stdio mode.
+    console.error(`MCP server running on http://0.0.0.0:${port}/sse`);
   });
 }
 

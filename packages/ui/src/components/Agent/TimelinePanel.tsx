@@ -40,7 +40,7 @@ export function PhaseItem({
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full px-3 py-2.5 text-left transition-colors border-b border-border-subtle last:border-0 group ${
+      className={`w-full px-3 py-2.5 text-left transition-colors border-b border-white/[0.05] last:border-0 group ${
         isSelected ? "bg-state-selected" : "bg-transparent hover:bg-state-hover"
       }`}
     >
@@ -168,9 +168,9 @@ export function TimelinePanel({
 
   return (
     <section
-      className={`flex flex-col h-full bg-bg-surface border-b border-border-subtle overflow-hidden ${className}`}
+      className={`flex h-full flex-col overflow-hidden bg-bg-surface ${className}`}
     >
-      <div className="flex-none border-b border-border-subtle px-3 py-2 bg-bg-surface">
+      <div className="flex-none border-b border-white/[0.06] bg-bg-surface px-3 py-2">
         <div className="flex items-center justify-between">
           <h2 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
             Phases

@@ -18,7 +18,9 @@ export type AutomationErrorKind = "LLM_TIMEOUT" | "LLM_ERROR" | "TOOL_BLOCKED" |
 
 /**
  * Graph ID — references an AgentGraphDefinition stored in MongoDB.
- * This is a string (typically a MongoDB ObjectId or a legacy preset key).
+ * Runtime resolution: MongoDB ObjectId for DB-backed graphs, or legacy preset keys
+ * (`audit`, `simple_react`, …) resolved server-side via `resolveGraphForStage`.
+ * UI clients should persist only real graph document ids from `/api/agent-graphs`.
  */
 export type GraphId = string;
 
@@ -293,37 +295,12 @@ export interface Insight {
 }
 
 /**
- * Persisted summary of a single stage execution result.
- * Stored on the AutomationRun document for frontend display.
- */
-export interface PersistedStageResult {
-    /** Stage ID */
-    stageId: string;
-    /** Stage name */
-    stageName: string;
-    /** Audit session ID */
-    sessionId: string;
-    /** Whether stage succeeded */
-    success: boolean;
-    /** Error message if failed */
-    error?: string;
-    /** Structured error classification */
-    errorKind?: AutomationErrorKind;
-    /** Number of findings from this stage */
-    findingsCount: number;
-    /** Number of claims from this stage */
-    claimsCount: number;
-    /** Number of tasks from this stage */
-    tasksCount: number;
-    /** Raw report/output text from the workflow (rendered as markdown in the UI) */
-    rawOutput?: string;
-    /** Execution duration in milliseconds */
-    duration: number;
-}
-
-/**
- * Main automation entity stored in MongoDB
- * (Legacy collection name: audit_chains)
+ * Main automation configuration entity stored in MongoDB
+ * (Collection: audit_chains, kept for backward compatibility).
+ *
+ * Note: this document holds **only configuration**. Per-execution state
+ * (status, timing, stage results, findings) lives on the corresponding
+ * agent_graph_run documents that the executor creates per run.
  */
 export interface AutomationDefinition {
     /** MongoDB ObjectId */
@@ -334,14 +311,8 @@ export interface AutomationDefinition {
     name: string;
     /** Optional description */
     description?: string;
-    /** Current execution status */
-    status: AutomationStatus;
     /** When automation was created */
     createdAt: Date;
-    /** When execution started */
-    startedAt?: Date;
-    /** When execution completed/failed */
-    endedAt?: Date;
     /** Array of stages to execute */
     stages: AutomationStageConfig[];
     /** How this automation is triggered (default: "manual") */
@@ -352,173 +323,12 @@ export interface AutomationDefinition {
     webhookConfig?: WebhookTriggerConfig;
     /** Git event trigger configuration (used when triggerType is "git_event") */
     gitEventConfig?: GitEventTriggerConfig;
-    /** Current stage index (0-based) */
-    currentStageIndex: number;
-    /** Array of session IDs (one per stage) */
-    sessionIds: string[];
-    /** Aggregated findings across all stages */
-    aggregatedFindings: Finding[];
-    /** Detected cross-stage insights */
-    crossStageInsights: Insight[];
-    /** Final aggregated report (markdown) */
-    finalReport?: string;
-    /** Execution metadata */
-    metadata?: {
-        /** Total execution time in milliseconds */
-        totalDuration: number;
-        /** Total claims investigated */
-        totalClaims: number;
-        /** Total verified claims */
-        totalVerified: number;
-        /** Total rejected claims */
-        totalRejected: number;
-        /** Total tokens consumed across all stages */
-        totalTokens?: number;
-        /** Detailed token usage breakdown */
-        tokenUsage?: TokenUsageSummary;
-    };
 }
-
-/** @deprecated Use AutomationDefinition instead */
-export type AuditChain = AutomationDefinition;
-
-/**
- * A specific execution run of an automation
- * (Legacy collection name: audit_runs)
- */
-export interface AutomationRun {
-    /** MongoDB ObjectId */
-    _id?: ObjectId;
-    /** Workspace owning this run */
-    workspaceId?: ObjectId;
-    /** Reference to the automation (legacy DB field name) */
-    chainId: ObjectId;
-    /** Execution status */
-    status: AutomationStatus;
-    /** When run started */
-    startedAt: Date;
-    /** When run ended */
-    endedAt?: Date;
-    /** Current stage index (0-based) */
-    currentStageIndex: number;
-    /** Array of session IDs (one per stage) */
-    sessionIds: string[];
-    /** Aggregated findings across stages */
-    aggregatedFindings: Finding[];
-    /** Detected cross-stage insights */
-    crossStageInsights: Insight[];
-    /** Final aggregated report */
-    finalReport?: string;
-    /** Per-stage execution results for structured display */
-    stageResults?: PersistedStageResult[];
-    /** Execution metadata */
-    metadata?: {
-        totalDuration: number;
-        totalClaims: number;
-        totalVerified: number;
-        totalRejected: number;
-        /** Total tokens consumed across all stages */
-        totalTokens?: number;
-        /** Detailed token usage breakdown */
-        tokenUsage?: TokenUsageSummary;
-    };
-}
-
-/** @deprecated Use AutomationRun instead */
-export type AuditRun = AutomationRun;
-
-/**
- * Result of a single stage execution
- */
-export interface StageResult {
-    /** Stage ID */
-    stageId: string;
-    /** Stage name */
-    stageName: string;
-    /** Audit session ID created for this stage */
-    sessionId: string;
-    /** Whether stage succeeded */
-    success: boolean;
-    /** Error message if failed */
-    error?: string;
-    /** Structured error classification */
-    errorKind?: AutomationErrorKind;
-    /** Findings from this stage */
-    findings: Finding[];
-    /** Raw claims from investigation phase */
-    claims: Claim[];
-    /** Generated tasks */
-    tasks: Task[];
-    /** Raw report/output text from the workflow (used as fallback context between stages) */
-    rawOutput?: string;
-    /** Execution duration in milliseconds */
-    duration: number;
-    /** Number of retry attempts */
-    retries?: number;
-    /** Token usage for this stage */
-    tokenUsage?: TokenUsage;
-}
-
-/**
- * Result of full automation execution
- */
-export interface AutomationResult {
-    /** Automation ID (legacy DB field name) */
-    chainId: string;
-    /** Overall success */
-    success: boolean;
-    /** Results from each stage */
-    stages: StageResult[];
-    /** Aggregation results */
-    aggregation: {
-        /** All findings */
-        findings: Finding[];
-        /** Detected insights */
-        insights: Insight[];
-        /** Final report */
-        report: string;
-        /** Stats */
-        stats: {
-            totalStages: number;
-            totalFindings: number;
-            criticalCount: number;
-            warningCount: number;
-        };
-    };
-}
-
-/** @deprecated Use AutomationResult instead */
-export type ChainResult = AutomationResult;
-
-/**
- * Progress update during automation execution
- */
-export interface AutomationProgress {
-    /** Automation ID (legacy DB field name) */
-    chainId: string;
-    /** Current stage index */
-    stageIndex: number;
-    /** Stage status */
-    status: "PENDING" | "RUNNING" | "SKIPPED" | "COMPLETED" | "FAILED";
-    /** Current findings count */
-    findings?: Finding[];
-    /** Error message when status is FAILED */
-    error?: string;
-    /** Structured error classification */
-    errorKind?: AutomationErrorKind;
-    /** Human-readable stage name */
-    stageName?: string;
-}
-
-/** @deprecated Use AutomationProgress instead */
-export type ChainProgress = AutomationProgress;
 
 /**
  * Filter options for listing automations
  */
 export interface AutomationFilter {
-    /** Filter by status */
-    status?: AutomationStatus;
     /** Search in name/description */
     search?: string;
     /** Only scheduled automations */
@@ -527,7 +337,6 @@ export interface AutomationFilter {
     triggerType?: AutomationTriggerType;
     /** Limit to a workspace */
     workspaceId?: string;
+    /** @deprecated Status no longer lives on the config doc; ignored. */
+    status?: AutomationStatus;
 }
-
-/** @deprecated Use AutomationFilter instead */
-export type ChainFilter = AutomationFilter;

@@ -77,25 +77,11 @@ export async function POST(
             }
         }
 
-        // Don't trigger if already running
-        const latestRun = await automationExecutor.getLatestRun(automationId);
-        if (latestRun?.status === "RUNNING") {
-            return NextResponse.json(
-                { error: "Automation is already running", runId: latestRun._id?.toString() },
-                { status: 409 }
-            );
-        }
-
-        // Start a new run
+        // Launch the automation as an agent thread (fire-and-forget).
         const workspaceId = automation.workspaceId?.toString();
-        const runId = await automationExecutor.startNewRun(automationId, workspaceId);
+        const { threadId } = await automationExecutor.runAutomationAsThread(automationId, workspaceId);
 
-        // Execute in background (fire-and-forget)
-        automationExecutor.executeRun(runId).catch((error) => {
-            console.error(`[WebhookTrigger] Run ${runId} (automation ${automationId}) failed:`, error);
-        });
-
-        return NextResponse.json({ status: "TRIGGERED", runId }, { status: 200 });
+        return NextResponse.json({ status: "TRIGGERED", threadId }, { status: 200 });
     } catch (error) {
         console.error(`[API /api/automations/${params.id}/webhook POST] Error:`, error);
         return NextResponse.json(

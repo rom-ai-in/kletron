@@ -11,6 +11,7 @@
   },
   "description": "Local MCP server for GitHub file analysis",
   "dependencies": {
+    "@kletron/shared": "file:../../packages/shared",
     "@ast-grep/cli": "^0.40.5",
     "@cyntler/react-doc-viewer": "1.14.1",
     "@modelcontextprotocol/sdk": "^1.28.0",

@@ -1,3 +1,20 @@
+import { KLETRON_ADMIN_TOOL_NAMES } from "@kletron/agent-core/tools/kletronAdminToolNames";
+
+const KLETRON_ADMIN_TOOL_SET_EARLY = new Set(
+    KLETRON_ADMIN_TOOL_NAMES.map((n) => String(n).trim().toLowerCase()),
+);
+import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
+import { normalizeToWorkModeId, WORK_MODES } from "@kletron/shared/workMode";
+
+export type ToolApprovalConfig = {
+    autoApproveReadonlySources: string[];
+    neverAutoApproveTools: string[];
+    autoApproveSafeBash: boolean;
+    toolOverrides: Record<string, "always_approve" | "always_require" | "default">;
+    /** Default thread mode for new agent sessions (workspace setting; not used by policy resolution). */
+    defaultThreadApprovalMode?: ThreadApprovalMode;
+};
+
 /* ═══════════════════════════════════════════════════════════════════════════
  * Tool Approval Config resolution
  *
@@ -10,13 +27,6 @@
  * trigger dotenv + MongoDB connections at import time). The server calls
  * setToolApprovalConfigOverride() once after loading persisted config.
  * ═══════════════════════════════════════════════════════════════════════════ */
-
-export type ToolApprovalConfig = {
-    autoApproveReadonlySources: string[];
-    neverAutoApproveTools: string[];
-    autoApproveSafeBash: boolean;
-    toolOverrides: Record<string, "always_approve" | "always_require" | "default">;
-};
 
 let _configOverride: ToolApprovalConfig | null = null;
 
@@ -53,7 +63,7 @@ function resolveToolApprovalConfig(): ToolApprovalConfig {
     };
 }
 
-export type NormalizedRunSource = "agent" | "automation" | "unknown";
+export type NormalizedRunSource = "agent" | "automation" | "channel" | "unknown";
 
 export type ToolClass = "readonly" | "execution" | "write_repo" | "unknown";
 
@@ -64,6 +74,10 @@ export type ToolApprovalPolicyInput = {
     toolName: string;
     /** For execution tools like execute_bash, the command string for safe-command detection */
     command?: string;
+    /** When `work`, tools not in the Work allowlist are denied. */
+    workMode?: string | null;
+    /** When set, uses this snapshot instead of the process singleton / env defaults (per-tenant runs). */
+    approvalConfig?: ToolApprovalConfig;
 };
 
 export type ToolApprovalPolicyResult = {
@@ -76,6 +90,7 @@ export type ToolApprovalPolicyResult = {
 };
 
 export const READONLY_TOOLS = new Set<string>([
+    "glob_files",
     "list_files",
     "read_file",
     "read_file_range",
@@ -93,13 +108,17 @@ export const READONLY_TOOLS = new Set<string>([
     "find_symbol",
     "go_to_definition",
     "references",
-    "find_references",
     "todo_search",
     "bootstrap_context",
     "web_search",
     "fetch_url",
     "output_format",
+    "locate_ui_feature",
     "write_todos",
+    "list_available_skills",
+    "list_all_skills",
+    "list_skills",
+    "load_skill",
 ]);
 
 export const EXECUTION_TOOLS = new Set<string>([
@@ -141,6 +160,7 @@ export const normalizeRunSource = (source?: string): NormalizedRunSource => {
     const normalized = String(source ?? "").trim().toLowerCase();
     if (normalized === "agent") return "agent";
     if (normalized === "automation") return "automation";
+    if (normalized.startsWith("channel:")) return "channel";
     return "unknown";
 };
 
@@ -152,14 +172,50 @@ export const classifyTool = (toolName: string): ToolClass => {
     return "unknown";
 };
 
+/**
+ * External MCP tools exposed as `serverSlug__toolName` (double underscore).
+ * Work mode uses a small fixed allowlist; namespaced MCP tools must still pass
+ * so connectors (e.g. Hunter) work in Work threads.
+ */
+export function isNamespacedExternalMcpToolName(toolName: string): boolean {
+    const t = String(toolName ?? "").trim().toLowerCase();
+    return /^[a-z0-9][a-z0-9_-]{0,63}__[a-z0-9][a-z0-9_-]{0,127}$/.test(t);
+}
+
+/** Legacy graph / client alias → canonical MCP tool id. */
+export function canonicalAgentToolName(toolName: string): string {
+    const t = String(toolName ?? "").trim().toLowerCase();
+    return t === "find_references" ? "references" : t;
+}
+
 export const getToolApprovalPolicy = (input: ToolApprovalPolicyInput): ToolApprovalPolicyResult => {
-    const toolName = String(input.toolName ?? "").trim().toLowerCase();
+    const toolName = canonicalAgentToolName(String(input.toolName ?? ""));
     const source = String(input.source ?? "");
     const normalizedSource = normalizeRunSource(source);
     const toolClass = classifyTool(toolName);
 
-    // Read config from persisted config → env vars → defaults
-    const cfg: ToolApprovalConfig = resolveToolApprovalConfig();
+    const mode = normalizeToWorkModeId(input.workMode ?? "code");
+    if (mode === "work") {
+        const allowed = new Set(
+            WORK_MODES.work.availableTools.map((t) => t.trim().toLowerCase()),
+        );
+        if (
+            !KLETRON_ADMIN_TOOL_SET_EARLY.has(toolName) &&
+            !allowed.has(toolName) &&
+            !isNamespacedExternalMcpToolName(toolName)
+        ) {
+            return {
+                source,
+                normalizedSource,
+                toolName,
+                toolClass,
+                decision: "deny",
+                reason: `Tool "${toolName}" is not available in Work mode.`,
+            };
+        }
+    }
+
+    const cfg: ToolApprovalConfig = input.approvalConfig ?? resolveToolApprovalConfig();
 
     const autoApproveReadonlySources = new Set(cfg.autoApproveReadonlySources);
     const neverAutoApproveTools = new Set(cfg.neverAutoApproveTools);
@@ -270,4 +326,56 @@ export const getToolApprovalPolicy = (input: ToolApprovalPolicyInput): ToolAppro
         reason: "Unknown tool class defaults to requiring approval.",
     };
 };
+
+const KLETRON_ADMIN_TOOL_SET = new Set(
+    KLETRON_ADMIN_TOOL_NAMES.map((n) => String(n).trim().toLowerCase())
+);
+
+export function isKletronAdminToolName(toolName: string): boolean {
+    return KLETRON_ADMIN_TOOL_SET.has(String(toolName ?? "").trim().toLowerCase());
+}
+
+/**
+ * Applies per-thread (AgentGraphRun) approval mode on top of workspace policy.
+ * Automation runs ignore thread modes (caller should pass mode only for interactive agent).
+ */
+export function applyThreadApprovalOverride(
+    base: ToolApprovalPolicyResult,
+    input: { mode: ThreadApprovalMode | undefined; toolName: string; approvalConfig?: ToolApprovalConfig }
+): ToolApprovalPolicyResult {
+    const mode: ThreadApprovalMode = input.mode ?? "inherit";
+    if (mode === "inherit") return base;
+    if (base.normalizedSource === "automation") return base;
+    if (base.decision === "deny") return base;
+
+    const tool = String(input.toolName ?? "").trim().toLowerCase();
+    const cfg = input.approvalConfig ?? resolveToolApprovalConfig();
+    const never = new Set(cfg.neverAutoApproveTools.map((t) => t.trim().toLowerCase()).filter(Boolean));
+    const override = cfg.toolOverrides?.[tool];
+
+    if (mode === "confirm_everything") {
+        if (base.decision === "auto_approve") {
+            return {
+                ...base,
+                decision: "requires_approval",
+                reason: `Thread mode confirm_everything: approval required (${base.reason})`,
+            };
+        }
+        return base;
+    }
+
+    if (mode === "full_auto_thread") {
+        if (base.decision !== "requires_approval") return base;
+        if (never.has(tool)) return base;
+        if (override === "always_require") return base;
+        if (isKletronAdminToolName(tool)) return base;
+        return {
+            ...base,
+            decision: "auto_approve",
+            reason: `Thread mode full_auto_thread: auto-approved (${base.reason})`,
+        };
+    }
+
+    return base;
+}
 

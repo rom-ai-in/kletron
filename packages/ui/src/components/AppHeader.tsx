@@ -5,8 +5,10 @@ import Link from "next/link";
 import { Plus, History } from "lucide-react";
 import { Breadcrumbs, Selector, type SelectorOption } from "@kletron/ui/components/design-system";
 import { useWorkspace } from "../context/WorkspaceContext";
+import { useOptionalAppHeaderCenter } from "./AppHeaderCenterSlot";
 
 export function AppHeader() {
+  const headerCenter = useOptionalAppHeaderCenter();
   const {
     workspaces,
     activeWorkspaceId,
@@ -39,10 +41,16 @@ export function AppHeader() {
   };
 
   return (
-    <header className="border-b border-border-subtle bg-bg-surface">
-      <div className="flex items-center justify-between gap-4 px-6 py-3">
-        <Breadcrumbs />
-        <div className="flex items-center gap-3">
+    <header className="border-b border-white/[0.06] bg-bg-surface">
+      {/* Fixed row height so bottom border lines up with Sidebar brand row (content height varies otherwise) */}
+      <div className="flex h-14 shrink-0 items-center gap-4 px-6 min-w-0">
+        <div className="flex shrink-0 min-w-0">
+          <Breadcrumbs />
+        </div>
+        <div className="flex flex-1 justify-center min-w-0 px-2">
+          {headerCenter?.centerContent}
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
           <div className="flex items-center gap-2">
             <Selector
               label="Workspace"
@@ -55,7 +63,7 @@ export function AppHeader() {
             />
             <Link
               href="/app/config/workspace"
-              className="flex items-center justify-center rounded-md border border-border-subtle p-1.5 text-text-secondary hover:bg-state-hover hover:text-text-primary transition-colors"
+              className="flex items-center justify-center rounded-md border border-white/[0.08] p-1.5 text-text-secondary hover:bg-state-hover hover:text-text-primary transition-colors"
               title="Manage workspaces"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -63,7 +71,7 @@ export function AppHeader() {
           </div>
           <Link
             href="/app/history"
-            className="flex items-center gap-2 rounded-md border border-border-subtle px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:bg-state-hover hover:text-text-primary transition-colors"
+            className="flex items-center gap-2 rounded-md border border-white/[0.08] px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:bg-state-hover hover:text-text-primary transition-colors"
             title="History"
           >
             <History className="h-3.5 w-3.5" />

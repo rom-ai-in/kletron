@@ -73,6 +73,8 @@ export type AgentEvent = {
     toolOutput?: string; // Result of the tool execution
     isError?: boolean; // Whether this tool result is an error
     thoughts?: string[]; // Array of internal reasoning steps
+    /** Optional long-form reasoning block when distinct from `thoughts[]`. */
+    thinking?: string;
     metadata?: Record<string, any>; // Generic metadata for future extensibility (e.g. valid actions)
     timestamp: string;
 };
@@ -115,6 +117,11 @@ export type AgentWorkflowUpdate = {
     timeline: TimelineEvent[];
     eventStream: AgentEvent[];
     outputs?: AgentWorkflowResult["outputs"];
+    /**
+     * Tool names declared on the graph/skill allowlist but not in workspace capabilities.
+     * Surfaced to the UI so users can fix presets vs workspace settings.
+     */
+    capabilityDroppedTools?: string[];
 };
 
 export type AgentWorkflowAbortReason = "PAUSED" | "CANCELLED" | "TIMEOUT";

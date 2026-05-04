@@ -1,9 +1,8 @@
 // app/api/auth/api-tokens/route.ts
 // API route for managing extension API tokens (MongoDB version)
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@kletron/server/lib/supabase/supabaseServer';
-import { createRawApiToken, hashApiToken } from '@kletron/server/lib/auth/apiTokens';
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { createRawApiToken, hashApiToken } from '@kletron/server/lib/auth/apiTokens';
 import * as apiTokenService from '@kletron/server/services/apiTokenService';
 
 export async function GET(request: Request) {
@@ -16,15 +15,7 @@ export async function GET(request: Request) {
     }
 
     try {
-        const { client } = createRouteHandlerClient(request);
-        const { data: { user }, error } = await client.auth.getUser();
-
-        if (error || !user) {
-            return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-        }
-
-        const tokens = await apiTokenService.getTokensByUserId(user.id);
-
+        const tokens = await apiTokenService.getTokensByUserId(auth.userId);
         return NextResponse.json({ tokens });
     } catch (err) {
         console.error('API tokens fetch error:', err);
@@ -42,20 +33,13 @@ export async function POST(request: Request) {
     }
 
     try {
-        const { client } = createRouteHandlerClient(request);
-        const { data: { user }, error } = await client.auth.getUser();
-
-        if (error || !user) {
-            return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-        }
-
         const body = await request.json().catch(() => ({}));
         const label = typeof body.label === 'string' ? body.label.trim() : 'VS Code Extension';
 
         const rawToken = createRawApiToken();
         const tokenHash = hashApiToken(rawToken);
 
-        const tokenInfo = await apiTokenService.createToken(user.id, tokenHash, label);
+        const tokenInfo = await apiTokenService.createToken(auth.userId, tokenHash, label);
 
         return NextResponse.json({ token: rawToken, tokenInfo });
     } catch (err) {

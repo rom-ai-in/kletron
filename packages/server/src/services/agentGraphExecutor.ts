@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 
 import { HumanMessage, SystemMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
 import type { AgentEvent, AgentEventKind, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent, AgentWorkflowAbortReason, Finding } from "@kletron/shared/types";
+import type { AgentStreamKpiV1 } from "@kletron/shared/chatTypes";
 import { enhanceWorkflowResult } from "@kletron/shared/reportUtils";
 import { streamReactAgentMessages, AgentWorkflowAbortError } from "@kletron/agent-core/reactAgentRunner";
 import { allMcpTools } from "@kletron/agent-core/tools/mcpTools";
@@ -15,42 +16,93 @@ import { agentGraphService } from "./agentGraphService";
 import type { AgentGraphNode } from "./agentGraphTypes";
 import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 import { nodeOutputSchemaRegistry } from "@kletron/shared/nodeOutputSchemas";
-import { parseJsonOutput, renderUserPrompt } from "./agentGraphUtils";
+import { findExistingMissionUserEvent, parseJsonOutput, renderUserPrompt } from "./agentGraphUtils";
 import { evaluateCondition } from "./agentGraphConditions";
 import { buildInitialState, getEntryNodeIds, getGraphNodeOrder, resolveExecutionMode } from "./agentGraphRuntime";
 import { setNestedValue } from "./agentGraphState";
 import { skillRegistry } from "@kletron/agent-core/skills/registry";
+import type { ResolvedSkill, SkillDefinition } from "@kletron/agent-core/skills/types";
+import { loadAllSkillsForRegistry } from "./skillsService";
+import { resolveWorkspaceCapabilities, type WorkspaceCapabilities } from "./workspaceCapabilityResolver";
+import { effectiveToolNames } from "./effectiveToolNames";
+import { applySkillSlashPreflight, mergeLoadedSkillIds } from "./skillSlashPreflight";
+import {
+    listWorkspaceSkillRecords,
+    skillRecordToSkillDefinition,
+} from "./workspaceSkillFiles";
+import { buildDynamicExternalTools } from "@kletron/agent-core/tools/dynamicExternalTools";
+import { KLETRON_ADMIN_TOOL_NAMES } from "@kletron/agent-core/tools/kletronAdminToolNames";
+import { kletronAdminTools } from "@kletron/agent-core/tools/kletronAdminTools";
 import { tokenUsageService } from "./tokenUsageService";
 import { ObjectId } from "mongodb";
-import { getAuditContextConfig } from "@kletron/server/services/auditContextService";
+import { getWorkspaceContextConfig, type WorkspaceContextConfig } from "@kletron/server/services/auditContextService";
 import { formatAuditContextPrompt, type AuditContext } from "@kletron/shared/documentContext";
+import { DEFAULT_WORKSPACE_CONTEXT_INJECTION } from "@kletron/shared/workspaceContextInjection";
 import { agentMemoryService } from "./agentMemoryService";
 import { SafeEditGate } from "./agent/SafeEditGate";
-import { getToolApprovalPolicy } from "./toolApprovalPolicy";
-import { sanitizeAssistantVisibleContent, stripThoughtContent } from "./titleSanitizer";
+import type { ToolApprovalConfig } from "./toolApprovalPolicy";
+import { applyThreadApprovalOverride, getToolApprovalPolicy } from "./toolApprovalPolicy";
+import { resolveEffectiveToolApprovalConfigForRun } from "./effectiveToolApprovalService";
+import { syncWorkspaceExternalMcpServers } from "./mcpWorkspaceSync";
+import { simpleReactPhaseId, simpleReactWorkSystemPrompt } from "./agentGraphPresets";
+import { config } from "../config";
+import { RESEARCH_DEPTH_FAST_SYSTEM_SUFFIX } from "@kletron/shared/researchDepth";
+
+const runApprovalConfigCache = new Map<string, ToolApprovalConfig>();
+
+async function getCachedRunApprovalConfig(runId: string): Promise<ToolApprovalConfig> {
+    const hit = runApprovalConfigCache.get(runId);
+    if (hit) return hit;
+    const cfg = await resolveEffectiveToolApprovalConfigForRun(runId);
+    runApprovalConfigCache.set(runId, cfg);
+    return cfg;
+}
+import { sanitizeAssistantVisibleContent, stripThoughtTagsForTranscript } from "./titleSanitizer";
 
 // --- Checkpoint Imports ---
 import { getCheckpointSaver, hasCheckpoint, computeGraphHash, ensureCheckpointIndexes, deleteThreadCheckpoints } from "./checkpointService";
 
 // --- Context Management Imports ---
-import { contextGraphStore, type ContextGraphStore } from "@kletron/server/context/graph/ContextGraphStore";
-import { contextScanner, type ContextScanner } from "@kletron/server/context/graph/ContextScanner";
-import { editorStateManager, type EditorStateManager } from "@kletron/server/context/graph/EditorStateManager";
-
-// TODO: Implémenter ContextRanker quand les types seront prêts
-class ContextRankerStub {
-  async rank(_params: { userPrompt: string; editorState: any; limit: number; tokenBudget: number }): Promise<any[]> {
-    return [];
-  }
-}
-const contextRanker = new ContextRankerStub();
-
-// Aliases pour compatibilité avec le code existant
-const getContextGraphStore = () => contextGraphStore;
-const getEditorStateManager = () => editorStateManager;
+import type { ContextGraphStore } from "@kletron/server/context/graph/ContextGraphStore";
+import { contextScanner } from "@kletron/server/context/graph/ContextScanner";
+import { getEditorStateManager } from "@kletron/server/context/graph/EditorStateManager";
+import { getContextGraphStore } from "@kletron/server/context/graph/contextGraphRegistry";
+import {
+  buildContextBundle,
+  formatContextBundleForPrompt,
+} from "@kletron/server/context/contextBundleService";
 import { getWorkspaceByIdUnsafe, listAllWorkspaces } from "./workspaceService";
 import { runWithWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 
+
+let mongoSkillBridgeAttached = false;
+function ensureMongoSkillBridge(): void {
+    if (mongoSkillBridgeAttached) return;
+    mongoSkillBridgeAttached = true;
+    skillRegistry.registerProvider(async (): Promise<SkillDefinition[]> => {
+        try {
+            const rows = await loadAllSkillsForRegistry();
+            return rows.map((r) => ({
+                id: r.slug,
+                name: r.name,
+                version: r.version,
+                description: r.description,
+                systemPromptPrefix: r.body.trim() ? r.body : undefined,
+                requiredTools: r.requiredTools.length ? r.requiredTools : undefined,
+                suggestedTools: r.suggestedTools.length ? r.suggestedTools : undefined,
+                extends: r.extends.length ? r.extends : undefined,
+                tags: r.tags.length ? r.tags : undefined,
+            }));
+        } catch (error) {
+            console.warn(
+                "[agentGraphExecutor] Mongo skill bridge unavailable:",
+                (error as Error).message
+            );
+            return [];
+        }
+    });
+}
+ensureMongoSkillBridge();
 
 const cloneValue = <T>(value: T): T => {
     if (
@@ -270,7 +322,8 @@ function extractThoughtsFromContent(content: string): { content: string; thought
         }
     };
 
-    // Strip <think> blocks (already extracted by extractThinkingFromMessage)
+    // Strip closed thinking blocks (already extracted by extractThinkingFromMessage for structured runs)
+    cleaned = cleaned.replace(/<redacted_thinking>[\s\S]*?<\/redacted_thinking>/gi, "").trim();
     cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 
     // Split on explicit Final/Answer markers
@@ -288,7 +341,7 @@ function extractThoughtsFromContent(content: string): { content: string; thought
     // Heuristic: if first paragraph looks like reasoning, split it out
     const cueRegex = /\b(we need to|we should|we have|the user|user wants|goal|plan|approach|next step|tool|call|let's|i will)\b/i;
     const paragraphs = cleaned.split(/\n\s*\n/);
-    if (paragraphs.length >= 2) {
+    if (paragraphs.length >= 3) {
         const first = paragraphs[0].trim();
         const rest = paragraphs.slice(1).join("\n\n").trim();
         if (rest && cueRegex.test(first)) {
@@ -696,9 +749,13 @@ function createFormattedReport(result: AgentWorkflowResult): {
     };
 }
 
-function selectToolsByName(toolNames: string[], extraTools: any[] = []) {
+function selectToolsByName(
+    toolNames: string[],
+    extraTools: any[] = [],
+    dynamicTools: any[] = []
+) {
     const allow = new Set(toolNames ?? []);
-    const merged = [...allMcpTools, ...extraTools];
+    const merged = [...allMcpTools, ...extraTools, ...dynamicTools];
     return merged.filter((tool: any) => allow.has(String(tool?.name ?? "")));
 }
 
@@ -753,21 +810,40 @@ async function maybeExecuteJsonActionTool(opts: {
     };
 }
 
-// Helper to ensure graph is ready
-async function ensureContextGraphReady(_workspaceId: string, rootPath: string) {
-    const store = getContextGraphStore();
+/** One background scan per workspace — avoids duplicate scans when multiple runs start together. */
+const contextGraphBackgroundScan = new Map<string, Promise<void>>();
+
+/**
+ * Returns the context graph store quickly for the first LLM call.
+ * If the graph is empty after disk load, a **background** workspace scan runs
+ * instead of blocking send → LM Studio on a full tree walk.
+ */
+async function ensureContextGraphReady(workspaceId: string, rootPath: string) {
+    const store = getContextGraphStore(workspaceId, rootPath);
     if (store.getAllNodes().length > 0) return store;
 
     console.log("[AgentGraph] Context graph is empty, attempting load...");
     await store.load();
 
-    if (store.getAllNodes().length === 0) {
-        console.log("[AgentGraph] Context graph still empty, triggering fresh workspace scan...");
+    if (store.getAllNodes().length > 0) return store;
 
-        const scanner = contextScanner;
-        await scanner.scanWorkspace(rootPath);
-        await store.save();
-        console.log(`[AgentGraph] Scan complete. Graph now has ${store.getAllNodes().length} nodes.`);
+    const scanKey = workspaceId;
+    if (!contextGraphBackgroundScan.has(scanKey)) {
+        const work = (async () => {
+            try {
+                console.log(
+                    "[AgentGraph] Context graph still empty after load; background workspace scan started (send path not blocked)..."
+                );
+                await contextScanner.scanWorkspace(rootPath, store);
+                await store.save();
+                console.log(`[AgentGraph] Background scan complete. Graph now has ${store.getAllNodes().length} nodes.`);
+            } catch (err) {
+                console.warn("[AgentGraph] Background context scan failed:", (err as Error)?.message ?? err);
+            } finally {
+                contextGraphBackgroundScan.delete(scanKey);
+            }
+        })();
+        contextGraphBackgroundScan.set(scanKey, work);
     }
     return store;
 }
@@ -795,7 +871,7 @@ function isAiToolCallEvent(event: AgentEvent): boolean {
 function convertConversationHistoryToMessages(events: AgentEvent[]): BaseMessage[] {
     const messages: BaseMessage[] = [];
     const sanitizeEventContent = (value?: string) => {
-        const cleaned = sanitizeAssistantVisibleContent(stripThoughtContent(value ?? "")).trim();
+        const cleaned = sanitizeAssistantVisibleContent(stripThoughtTagsForTranscript(value ?? "")).trim();
         if (!cleaned) return "";
         // Prevent old policy/prompt leakage from re-entering model context
         if (
@@ -875,8 +951,12 @@ export class AgentGraphExecutor {
         opts?: {
             onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
             onTextDelta?: (delta: string) => void;
+            onReasoningDelta?: (delta: string) => void;
             llmSelectionOverride?: { provider: LlmProviderType; model?: string };
             shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
+            /** Override audit/tool identity (e.g. channel-linked user). Defaults to workspace.ownerId. */
+            workspaceContextUserId?: string;
+            onLlmStreamKpi?: (kpi: AgentStreamKpiV1) => void;
         }
     ): Promise<AgentWorkflowResult> {
         console.log(`[AgentGraphExecutor] continueRun: runId=${runId}, message="${message.slice(0, 40)}"`);
@@ -898,7 +978,9 @@ export class AgentGraphExecutor {
             throw new Error("Workspace not found for run continuation.");
         }
 
-        return await runWithWorkspaceContext(workspace, async () => {
+        return await runWithWorkspaceContext(
+            workspace,
+            async () => {
 
             // ── Check for checkpoint-based resume ────────────────────────────
             // If the run was interrupted (PAUSED with checkpoint metadata),
@@ -983,6 +1065,22 @@ export class AgentGraphExecutor {
 
             // ── Standard multi-turn continuation ─────────────────────────────
 
+            const { mission: preflightMission, loadedSkillIdsToAppend } = await applySkillSlashPreflight(
+                message,
+                workspace._id!.toString()
+            );
+            const mergedLoaded = mergeLoadedSkillIds(run.state.loadedSkillIds, loadedSkillIdsToAppend);
+            const prevLoaded = new Set(run.state.loadedSkillIds ?? []);
+            const newSlashSlugs = loadedSkillIdsToAppend.filter((id) => !prevLoaded.has(id));
+            const slashSkillLoads =
+                newSlashSlugs.length > 0
+                    ? newSlashSlugs.map((slug) => ({
+                          slug,
+                          at: new Date().toISOString(),
+                          reason: "slash_preflight" as const,
+                      }))
+                    : [];
+
             // Append user message to conversation history
             const history = run.state.conversationHistory ?? [];
             history.push({
@@ -998,9 +1096,11 @@ export class AgentGraphExecutor {
             // Update state with new mission and conversation history
             const updatedState = {
                 ...run.state,
-                mission: message,
-                userInput: message,
+                mission: preflightMission,
+                userInput: preflightMission,
                 conversationHistory: history,
+                loadedSkillIds: mergedLoaded,
+                skillLoads: [...(run.state.skillLoads ?? []), ...slashSkillLoads],
             };
 
             // Reset node statuses for re-execution
@@ -1019,7 +1119,9 @@ export class AgentGraphExecutor {
             await agentGraphRunService.incrementConversationTurns(runId);
 
             return this.executeRunStreaming(runId, opts);
-        });
+            },
+            { userId: opts?.workspaceContextUserId ?? workspace.ownerId, runId }
+        );
     }
 
     async executeRunStreaming(
@@ -1028,6 +1130,8 @@ export class AgentGraphExecutor {
             onUpdate?: (update: AgentWorkflowUpdate) => Promise<void> | void;
             /** Progressive text streaming callback — emits token-by-token text deltas */
             onTextDelta?: (delta: string) => void;
+            /** Reasoning / thinking deltas (e.g. Claude extended thinking blocks) */
+            onReasoningDelta?: (delta: string) => void;
             llmSelectionOverride?: { provider: LlmProviderType; model?: string };
             shouldAbort?: () => Promise<AgentWorkflowAbortReason | null> | AgentWorkflowAbortReason | null;
             /**
@@ -1040,6 +1144,10 @@ export class AgentGraphExecutor {
              * Requires enableCheckpoints to also be true.
              */
             resumeFromCheckpoint?: boolean;
+            /** Override audit/tool identity (e.g. channel-linked user). Defaults to workspace.ownerId. */
+            workspaceContextUserId?: string;
+            /** Fires once per `streamReactAgentMessages` completion (NDJSON / logs). */
+            onLlmStreamKpi?: (kpi: AgentStreamKpiV1) => void;
         }
     ): Promise<AgentWorkflowResult> {
         console.log(`[AgentGraphExecutor] executeRunStreaming: runId=${runId}`);
@@ -1056,12 +1164,56 @@ export class AgentGraphExecutor {
             throw new Error("Workspace not found for run execution.");
         }
 
-        return await runWithWorkspaceContext(workspace, async () => {
-            // Ensure context is ready before we start
-            const contextGraphStore = await ensureContextGraphReady(
-                workspace._id!.toString(),
-                workspace.rootPath
-            );
+        return await runWithWorkspaceContext(
+            workspace,
+            async () => {
+            let diskSkillRegistryOverlay = false;
+            try {
+            const runWallClockT0 = performance.now();
+            const emitLlmKpi = (kpi: AgentStreamKpiV1 | undefined) => {
+                if (!kpi) return;
+                opts?.onLlmStreamKpi?.({
+                    ...kpi,
+                    wallMsExecutorToStreamEnd: performance.now() - runWallClockT0,
+                });
+            };
+            const workspaceIdStr = workspace._id!.toString();
+            const rootPathForCtx = workspace.rootPath;
+
+            const loadGraphForRun = async () => {
+                let g = await agentGraphService.getGraph(run.graphId.toString());
+                if (!g) {
+                    const allGraphs = await agentGraphService.listGraphs();
+                    g = allGraphs[0] ?? null;
+                    if (!g) throw new Error(`No agent graphs available`);
+                    console.warn(`[AgentGraph] Graph ${run.graphId.toString()} not found, falling back to "${g.name}"`);
+                }
+                return g;
+            };
+
+            const [
+                workspaceGraphStore,
+                workspaceFullCtxResult,
+                workspaceCapsResult,
+                graph,
+            ] = await Promise.all([
+                ensureContextGraphReady(workspaceIdStr, rootPathForCtx),
+                getWorkspaceContextConfig(workspaceIdStr).catch((err) => {
+                    console.warn("[AgentGraph] Failed to load workspace context config:", err);
+                    return null as WorkspaceContextConfig | null;
+                }),
+                resolveWorkspaceCapabilities(workspaceIdStr).catch((capsErr) => {
+                    console.warn(
+                        "[AgentGraph] Failed to resolve workspace capabilities, falling back to permissive mode:",
+                        (capsErr as Error)?.message ?? capsErr
+                    );
+                    return null as WorkspaceCapabilities | null;
+                }),
+                loadGraphForRun(),
+            ]);
+
+            const workspaceFullCtx = workspaceFullCtxResult;
+            const workspaceCaps = workspaceCapsResult;
 
             // ── Checkpoint saver ─────────────────────────────────────────────
             // Only enable checkpoints when explicitly requested (e.g. when a
@@ -1116,23 +1268,11 @@ export class AgentGraphExecutor {
                 }
             };
 
-            let auditContextConfig: { enabled: boolean; context: AuditContext | null } | null = null;
-            try {
-                auditContextConfig = await getAuditContextConfig(workspace._id!.toString());
-            } catch (err) {
-                console.warn("[AgentGraph] Failed to load audit context config:", err);
-            }
-            const contextInjectionEnabled = auditContextConfig?.enabled !== false;
-            const auditContext = contextInjectionEnabled ? auditContextConfig?.context ?? null : null;
-
-            let graph = await agentGraphService.getGraph(run.graphId.toString());
-            if (!graph) {
-                // Graph was deleted — fall back to first available graph
-                const allGraphs = await agentGraphService.listGraphs();
-                graph = allGraphs[0] ?? null;
-                if (!graph) throw new Error(`No agent graphs available`);
-                console.warn(`[AgentGraph] Graph ${run.graphId.toString()} not found, falling back to "${graph.name}"`);
-            }
+            const injectionSettings = workspaceFullCtx?.injection ?? DEFAULT_WORKSPACE_CONTEXT_INJECTION;
+            const documentContextEnabled = workspaceFullCtx?.enabled !== false;
+            const auditContext = documentContextEnabled ? workspaceFullCtx?.context ?? null : null;
+            const wantAutoContext =
+                injectionSettings.structuralInjectionEnabled || injectionSettings.semanticInjectionEnabled;
 
             const executionMode = resolveExecutionMode(graph);
             const timelineNodeIds = (run.nodeOrder?.length ? run.nodeOrder : getGraphNodeOrder(graph)).slice();
@@ -1145,6 +1285,51 @@ export class AgentGraphExecutor {
             const workspaceObjectId =
                 workspace._id && ObjectId.isValid(workspace._id.toString()) ? new ObjectId(workspace._id.toString()) : undefined;
             const rootDir = workspace.rootPath;
+
+            // Sync external MCP and load disk skills in parallel — both were previously sequential
+            // bottlenecks before the first LLM call.
+            let dynamicExternalTools: any[] = [];
+            let externalNamespacedToolNames: string[] = [];
+            const [mcpPack, diskRecs] = await Promise.all([
+                (async (): Promise<{ dynamicExternalTools: any[]; externalNamespacedToolNames: string[] }> => {
+                    let tools: any[] = [];
+                    let names: string[] = [];
+                    if (workspaceCaps?.externalMcpServers?.length) {
+                        try {
+                            await syncWorkspaceExternalMcpServers(workspaceIdStr);
+                            tools = await buildDynamicExternalTools(workspaceIdStr);
+                            names = tools.map((t: any) => String(t?.name ?? ""));
+                        } catch (extErr) {
+                            console.warn(
+                                "[AgentGraph] External MCP sync failed:",
+                                (extErr as Error)?.message ?? extErr
+                            );
+                        }
+                    } else if (workspaceCaps) {
+                        try {
+                            await syncWorkspaceExternalMcpServers(workspaceIdStr);
+                        } catch {
+                            // ignore
+                        }
+                    }
+                    return { dynamicExternalTools: tools, externalNamespacedToolNames: names };
+                })(),
+                rootDir
+                    ? listWorkspaceSkillRecords(rootDir).catch((diskErr) => {
+                          console.warn(
+                              "[AgentGraph] Failed to load .kletron/skills overlay:",
+                              (diskErr as Error)?.message ?? diskErr
+                          );
+                          return [] as Awaited<ReturnType<typeof listWorkspaceSkillRecords>>;
+                      })
+                    : Promise.resolve([] as Awaited<ReturnType<typeof listWorkspaceSkillRecords>>),
+            ]);
+            dynamicExternalTools = mcpPack.dynamicExternalTools;
+            externalNamespacedToolNames = mcpPack.externalNamespacedToolNames;
+            for (const r of diskRecs) {
+                skillRegistry.upsertSkill(skillRecordToSkillDefinition(r));
+            }
+            diskSkillRegistryOverlay = diskRecs.length > 0;
 
             const persistState = async () => {
                 await agentGraphRunService.updateRunState(runId, cloneValue(state));
@@ -1230,6 +1415,12 @@ export class AgentGraphExecutor {
                 return output;
             };
 
+            /** Max runtime-loaded skills per session (load_skill + slash preflight). */
+            const RUNTIME_MAX_LOADED_SKILLS = 20;
+            const enabledWorkspaceSkillSlugs = new Set(
+                (workspaceCaps?.enabledSkills ?? []).map((s) => s.slug)
+            );
+
             // ── write_todos deduplication & loop guard ────────────────────────
             let lastTodosHash: string | null = null;
             let consecutiveTodosDuplicates = 0;
@@ -1290,7 +1481,114 @@ export class AgentGraphExecutor {
                 }
             );
 
-            const localTools = [writeTodosTool];
+            const listAvailableSkillsTool = createTool(
+                async () => {
+                    const skills = workspaceCaps?.enabledSkills ?? [];
+                    return JSON.stringify(
+                        skills.map((s) => ({
+                            slug: s.slug,
+                            name: s.name,
+                            description: s.description,
+                        })),
+                        null,
+                        2
+                    );
+                },
+                {
+                    name: "list_available_skills",
+                    description:
+                        "List skills enabled for this workspace (slug, name, short description). Call before load_skill to pick a specialization.",
+                    schema: z.object({}),
+                }
+            );
+
+            const loadSkillTool = createTool(
+                async (input: { skill_id: string; reason?: string }) => {
+                    const skillId = input.skill_id?.trim() ?? "";
+                    if (!skillId) {
+                        return JSON.stringify({ ok: false, error: "skill_id is required" }, null, 2);
+                    }
+                    if (!enabledWorkspaceSkillSlugs.has(skillId)) {
+                        return JSON.stringify(
+                            {
+                                ok: false,
+                                error: `Skill "${skillId}" is not enabled for this workspace. Use list_available_skills for eligible slugs.`,
+                            },
+                            null,
+                            2
+                        );
+                    }
+                    const currentLoaded = ((state as any).loadedSkillIds as string[] | undefined) ?? [];
+                    const already = currentLoaded.includes(skillId);
+                    if (!already && currentLoaded.length >= RUNTIME_MAX_LOADED_SKILLS) {
+                        return JSON.stringify(
+                            {
+                                ok: false,
+                                error: `At most ${RUNTIME_MAX_LOADED_SKILLS} skills can be loaded in one session.`,
+                            },
+                            null,
+                            2
+                        );
+                    }
+                    try {
+                        const resolved = await skillRegistry.getSkill(skillId);
+                        if (!already) {
+                            (state as any).loadedSkillIds = [...currentLoaded, skillId];
+                            const loads = [...(((state as any).skillLoads as Array<{ slug: string; at: string; reason?: string }>) ?? [])];
+                            loads.push({
+                                slug: skillId,
+                                at: new Date().toISOString(),
+                                reason:
+                                    input.reason && input.reason.trim()
+                                        ? input.reason.trim()
+                                        : "load_skill",
+                            });
+                            (state as any).skillLoads = loads;
+                            await persistState();
+                        }
+                        return JSON.stringify(
+                            {
+                                ok: true,
+                                skill_id: skillId,
+                                already_loaded: already,
+                                name: resolved.name,
+                                description: resolved.description,
+                                extendsChain: resolved.extendsChain,
+                                requiredTools: resolved.requiredTools ?? [],
+                                suggestedTools: resolved.suggestedTools ?? [],
+                                resolvedTools: resolved.resolvedTools,
+                                resolvedSystemPrompt: resolved.resolvedSystemPrompt,
+                            },
+                            null,
+                            2
+                        );
+                    } catch (err) {
+                        return JSON.stringify(
+                            {
+                                ok: false,
+                                error: (err as Error)?.message ?? String(err),
+                            },
+                            null,
+                            2
+                        );
+                    }
+                },
+                {
+                    name: "load_skill",
+                    description:
+                        "Load a workspace-enabled skill by slug. Returns full resolved instructions; session remembers loaded skills for later turns.",
+                    schema: z.object({
+                        skill_id: z.string().describe("Skill slug from list_available_skills"),
+                        reason: z.string().optional(),
+                    }),
+                }
+            );
+
+            // Always-on Kletron admin tools (graphs/automations/skills/...).
+            // Each tool reads identity from `runWithWorkspaceContext` and logs
+            // every call to the agent_audit collection. They are gated by zod
+            // schemas + safe-edit confirmation, not by skill activation.
+            const localTools = [writeTodosTool, listAvailableSkillsTool, loadSkillTool, ...kletronAdminTools];
 
             const runSubGraph = async (message: string, graphId: string) => {
                 const subGraph = await agentGraphService.getGraph(graphId);
@@ -1301,7 +1599,9 @@ export class AgentGraphExecutor {
                     throw new Error("Subgraph cannot reference the current graph");
                 }
                 const nodeOrder = getGraphNodeOrder(subGraph);
-                const subRunId = await agentGraphRunService.createRun(graphId, workspace._id?.toString(), runSource);
+                const subRunId = await agentGraphRunService.createRun(graphId, workspace._id?.toString(), runSource, {
+                    createdByUserId: run.createdByUserId,
+                });
                 const initialNodeStatuses: Record<string, any> = {};
                 for (const node of subGraph.nodes) {
                     initialNodeStatuses[node.id] = "PENDING";
@@ -1314,6 +1614,7 @@ export class AgentGraphExecutor {
 
                 return await this.executeRunStreaming(subRunId, {
                     llmSelectionOverride: opts?.llmSelectionOverride,
+                    workspaceContextUserId: opts?.workspaceContextUserId,
                 });
             };
             if (auditContext) {
@@ -1372,15 +1673,10 @@ export class AgentGraphExecutor {
             // Reuse that event for globalEventStream so IDs stay consistent
             // between the stream and the persisted conversation history.
             const missionContent = typeof state.mission === "string" ? state.mission : "";
-            const lastHistoryEvent = state.conversationHistory.length > 0
-                ? state.conversationHistory[state.conversationHistory.length - 1]
-                : null;
-            const existingUserEvent =
-                lastHistoryEvent &&
-                    lastHistoryEvent.kind === "user" &&
-                    lastHistoryEvent.content === missionContent
-                    ? lastHistoryEvent
-                    : null;
+            const existingUserEvent = findExistingMissionUserEvent(
+                state.conversationHistory,
+                missionContent,
+            );
 
             const initialUserEvent: AgentEvent = existingUserEvent ?? {
                 id: nextGlobalEventId(),
@@ -1413,10 +1709,12 @@ export class AgentGraphExecutor {
                         tokenUsage: runningTokenUsage,
                     },
                 });
+                const dropped = (state as { capabilityDroppedTools?: string[] }).capabilityDroppedTools ?? [];
                 await opts.onUpdate({
                     timeline: cloneValue(globalTimeline),
                     eventStream: cloneValue(globalEventStream),
                     outputs,
+                    capabilityDroppedTools: [...dropped],
                 });
             };
 
@@ -1567,26 +1865,107 @@ export class AgentGraphExecutor {
                     const nodeKind = node.kind ?? "react";
 
                     // ---------------------------------------------------------
-                    // 2.5. Skills Injection (NEW)
+                    // 2.5. Skills Injection (pinned graph skillIds + runtime loadedSkillIds)
                     // ---------------------------------------------------------
-                    const skillIds = node.react.skillIds ?? [];
+                    const pinnedSkillIds = node.react.skillIds ?? [];
+                    const loadedSkillIds = (state as any).loadedSkillIds as string[] | undefined;
                     let skillPromptPrefix = "";
                     let skillTools: string[] = [];
-                    if (skillIds.length > 0) {
+                    const pinnedResolved: ResolvedSkill[] = [];
+                    const loadedResolved: ResolvedSkill[] = [];
+                    if (pinnedSkillIds.length > 0) {
                         try {
-                            const resolvedSkills = await skillRegistry.getSkills(skillIds);
-                            skillPromptPrefix = resolvedSkills
-                                .map((s) => s.resolvedSystemPrompt)
-                                .filter(Boolean)
-                                .join("\n\n---\n\n");
-                            skillTools = [...new Set(resolvedSkills.flatMap((s) => s.resolvedTools))];
+                            const rs = await skillRegistry.getSkills(pinnedSkillIds);
+                            pinnedResolved.push(...rs);
                         } catch (err) {
-                            console.warn(`[AgentGraph] Failed to load skills ${skillIds.join(", ")}:`, err);
+                            console.warn(`[AgentGraph] Failed to load pinned skills ${pinnedSkillIds.join(", ")}:`, err);
                         }
                     }
-                    // Merge skill tools with node-defined tools
-                    const mergedToolNames = [...new Set([...(node.react.toolNames ?? []), ...skillTools, "write_todos"])];
-                    const selectedTools = selectToolsByName(mergedToolNames, localTools);
+                    if (loadedSkillIds?.length) {
+                        try {
+                            const rs = await skillRegistry.getSkills(loadedSkillIds);
+                            loadedResolved.push(...rs);
+                        } catch (err) {
+                            console.warn(`[AgentGraph] Failed to load runtime skills ${loadedSkillIds.join(", ")}:`, err);
+                        }
+                    }
+                    const promptChunks = [...pinnedResolved, ...loadedResolved]
+                        .map((s) => s.resolvedSystemPrompt)
+                        .filter(Boolean);
+                    if (promptChunks.length > 0) {
+                        skillPromptPrefix = promptChunks.join("\n\n---\n\n");
+                    }
+                    skillTools = [
+                        ...new Set([
+                            ...pinnedResolved.flatMap((s) => s.resolvedTools),
+                            ...loadedResolved.flatMap((s) => s.resolvedTools),
+                        ]),
+                    ];
+                    const workspaceSkillToolNames = [
+                        ...new Set((workspaceCaps?.enabledSkills ?? []).flatMap((s) => s.resolvedTools)),
+                    ];
+                    const skillToolNamesForEffective = [
+                        ...new Set([...skillTools, ...workspaceSkillToolNames]),
+                    ];
+                    // Resolve the effective tool list using the unified policy.
+                    // - Workspace capabilities gate bundled / admin tools.
+                    // - Always-on tools (e.g. `write_todos`) bypass the gate.
+                    // - External MCP tools (`slug__name`) are added wholesale.
+                    const capabilityToolSet = workspaceCaps?.enabledToolSet ?? new Set<string>();
+                    // When capabilities couldn't be resolved, fall back to the
+                    // full bundled + skill + node set (legacy behaviour).
+                    const effectiveCaps = workspaceCaps
+                        ? capabilityToolSet
+                        : new Set<string>([
+                              ...(node.react.toolNames ?? []),
+                              ...skillToolNamesForEffective,
+                          ]);
+                    const effective = effectiveToolNames({
+                        nodeToolNames: node.react.toolNames ?? [],
+                        skillToolNames: skillToolNamesForEffective,
+                        adminToolNames: [...KLETRON_ADMIN_TOOL_NAMES],
+                        capabilityToolSet: effectiveCaps,
+                        externalNamespacedTools: externalNamespacedToolNames,
+                        alwaysOn: [
+                            "write_todos",
+                            "list_available_skills",
+                            "load_skill",
+                            ...KLETRON_ADMIN_TOOL_NAMES,
+                        ],
+                    });
+                    const mergedToolNames = effective.names;
+                    const selectedTools = selectToolsByName(
+                        mergedToolNames,
+                        localTools,
+                        dynamicExternalTools
+                    );
+
+                    const researchDepth = await agentGraphRunService.getRunResearchDepth(runId);
+                    const webToolsMissing =
+                        !mergedToolNames.includes("web_search") && !mergedToolNames.includes("fetch_url");
+                    const webHintBlock = webToolsMissing
+                        ? "\n\n## AVAILABLE TOOLS NOTE\n`web_search` and `fetch_url` are **not** exposed for this run (workspace capabilities/connectors). Use workspace search and file tools only; **do not** cite or imply live web research you did not perform with an available tool.\n"
+                        : "";
+                    const fastSuffix =
+                        researchDepth === "fast" ? RESEARCH_DEPTH_FAST_SYSTEM_SUFFIX : "";
+                    const reactRecursionLimit =
+                        typeof node.react.recursionLimit === "number" && node.react.recursionLimit > 0
+                            ? Math.floor(node.react.recursionLimit)
+                            : typeof graph.execution?.maxReactSteps === "number" && graph.execution.maxReactSteps > 0
+                              ? Math.floor(graph.execution.maxReactSteps)
+                              : researchDepth === "fast"
+                                ? 48
+                                : config.graphRecursionLimit;
+
+                    if (effective.dropped.length > 0) {
+                        console.warn(
+                            `[AgentGraph] Node ${node.id} requested ${effective.dropped.length} tool(s) ` +
+                                `outside of workspace capabilities: ${effective.dropped.join(", ")}.`
+                        );
+                    }
+                    (state as { capabilityDroppedTools?: string[] }).capabilityDroppedTools = [
+                        ...effective.dropped,
+                    ];
                     const toolInvokerMap = new Map<string, (input: Record<string, unknown>) => Promise<string>>();
 
                     // ── Tool call deduplication ──────────────────────────────────
@@ -1595,16 +1974,40 @@ export class AgentGraphExecutor {
                     // deduplicated since they have side effects.
                     const DEDUP_CACHE_MAX = 50;
                     const READ_ONLY_DEDUP_TOOLS = new Set([
+                        "glob_files",
                         "list_files", "read_file", "read_file_range", "search_code",
                         "repo_metrics", "dependency_info", "describe_structure",
                         "git_log", "git_diff", "git_grep", "git_blame",
                         "semantic_code_search", "structural_search", "symbols_list",
-                        "find_symbol", "go_to_definition", "references", "find_references",
+                        "find_symbol", "go_to_definition", "references",
                         "todo_search", "bootstrap_context", "web_search", "fetch_url",
                         "output_format", "write_todos",
+                        "list_available_skills", "load_skill",
+                        "list_all_skills", "list_skills",
                     ]);
                     const toolCallCache = new Map<string, string>();
                     let toolCallCount = 0;
+                    // Per-tool telemetry for the run timeline.
+                    const toolCallSummary = new Map<
+                        string,
+                        { count: number; errors: number; totalMs: number }
+                    >();
+                    const recordToolCall = (
+                        name: string,
+                        startedAt: number,
+                        ok: boolean
+                    ) => {
+                        const elapsed = Math.max(0, Date.now() - startedAt);
+                        const entry = toolCallSummary.get(name) ?? {
+                            count: 0,
+                            errors: 0,
+                            totalMs: 0,
+                        };
+                        entry.count += 1;
+                        entry.totalMs += elapsed;
+                        if (!ok) entry.errors += 1;
+                        toolCallSummary.set(name, entry);
+                    };
 
                     const invokeBaseTool = async (baseTool: any, input: unknown) => {
                         if (typeof baseTool?.invoke === "function") {
@@ -1656,7 +2059,8 @@ export class AgentGraphExecutor {
                     const wrapTool = (baseTool: any) => {
                         const name = String(baseTool?.name ?? "unknown");
                         const description = baseTool?.description ?? "";
-                        const schema = baseTool?.schema ?? z.any();
+                        // Avoid z.any() — strict OpenAI/LM Studio validators require parameters.properties
+                        const schema = baseTool?.schema ?? z.object({}).catchall(z.any());
                         const returnDirect = (baseTool as any)?.returnDirect;
                         const wrapped = createTool(
                             async (input: Record<string, unknown>) => {
@@ -1694,15 +2098,25 @@ export class AgentGraphExecutor {
                                 }
 
 
-                                const policy = getToolApprovalPolicy({
+                                const threadMode = await agentGraphRunService.getRunThreadApprovalMode(runId);
+                                const workMode = await agentGraphRunService.getRunWorkMode(runId);
+                                const approvalCfg = await getCachedRunApprovalConfig(runId);
+                                const basePolicy = getToolApprovalPolicy({
                                     source: runSource,
                                     toolName: name,
+                                    workMode,
+                                    approvalConfig: approvalCfg,
                                     ...(name === "execute_bash" && typeof input?.command === "string"
                                         ? { command: input.command as string }
                                         : {}),
                                 });
+                                const policy = applyThreadApprovalOverride(basePolicy, {
+                                    mode: threadMode,
+                                    toolName: name,
+                                    approvalConfig: approvalCfg,
+                                });
                                 console.info(
-                                    `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} decision=${policy.decision} reason="${policy.reason}"`
+                                    `[ToolApprovalPolicy] runId=${runId} threadMode=${threadMode ?? "inherit"} source=${policy.normalizedSource} tool=${name} decision=${policy.decision} reason="${policy.reason}"`
                                 );
 
                                 if (policy.decision !== "auto_approve") {
@@ -1772,7 +2186,17 @@ export class AgentGraphExecutor {
                                     `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} action=auto_approved_execute`
                                 );
 
-                                const result = await invokeBaseTool(baseTool, input);
+                                const startedAt = Date.now();
+                                let toolOk = true;
+                                let result: unknown;
+                                try {
+                                    result = await invokeBaseTool(baseTool, input);
+                                } catch (err) {
+                                    toolOk = false;
+                                    recordToolCall(name, startedAt, false);
+                                    throw err;
+                                }
+                                recordToolCall(name, startedAt, toolOk);
                                 const finalResult = await maybeEvictToolResult({
                                     rootDir,
                                     runId,
@@ -1823,6 +2247,20 @@ export class AgentGraphExecutor {
                         globalEventStream.push(event);
                         state.conversationHistory!.push(event);
                     };
+
+                    const replaceEventById = (targetId: string, patch: AgentEvent) => {
+                        const apply = (arr: AgentEvent[]) => {
+                            const i = arr.findIndex((e) => e.id === targetId);
+                            if (i >= 0) arr[i] = { ...arr[i], ...patch };
+                        };
+                        apply(builtMessageEvents);
+                        apply(eventStream);
+                        apply(globalEventStream);
+                        const hist = state.conversationHistory!;
+                        const hi = hist.findIndex((e) => e.id === targetId);
+                        if (hi >= 0) hist[hi] = { ...hist[hi], ...patch };
+                    };
+
                     const handleStreamingMessage = async (message: BaseMessage) => {
                         await ensureNotAborted();
 
@@ -1867,6 +2305,44 @@ export class AgentGraphExecutor {
                             return; // silently skip — this is a replayed history message
                         }
 
+                        // Values-mode streaming: merge growing assistant text into one event (any provider).
+                        const hist = state.conversationHistory!;
+                        const last = hist.at(-1);
+                        const lastIsPlainAssistant =
+                            last &&
+                            last.kind === "assistant" &&
+                            last.phaseId === node.id &&
+                            !(last.name ?? last.toolName) &&
+                            !last.toolCallId;
+                        const incomingIsPlainAssistant =
+                            event.kind === "assistant" &&
+                            !(event.name ?? event.toolName) &&
+                            !event.toolCallId;
+                        const prevTrim = (last?.content ?? "").trim();
+                        const nextTrim = (event.content ?? "").trim();
+                        if (lastIsPlainAssistant && incomingIsPlainAssistant && nextTrim === prevTrim) {
+                            return;
+                        }
+                        const canMergeGrowingAssistant =
+                            lastIsPlainAssistant &&
+                            incomingIsPlainAssistant &&
+                            nextTrim.length > prevTrim.length &&
+                            (prevTrim.length === 0 || nextTrim.startsWith(prevTrim));
+
+                        if (canMergeGrowingAssistant && last) {
+                            const merged: AgentEvent = {
+                                ...last,
+                                content: event.content,
+                                thoughts: event.thoughts,
+                                toolNote: event.toolNote,
+                                thinking: event.thinking,
+                                timestamp: event.timestamp,
+                            };
+                            replaceEventById(last.id, merged);
+                            await flushUpdate();
+                            return;
+                        }
+
                         pushEvent(event);
                         await flushUpdate();
                     };
@@ -1874,38 +2350,33 @@ export class AgentGraphExecutor {
                     // ---------------------------------------------------------
                     // 3. Smart Context Injection (New Architecture)
                     // ---------------------------------------------------------
+                    const runWorkMode = await agentGraphRunService.getRunWorkMode(runId);
+                    const useWorkSimpleReactPrompt =
+                        runWorkMode === "work" &&
+                        graph.nodes.length === 1 &&
+                        (node.kind ?? "react") === "react" &&
+                        node.id === simpleReactPhaseId;
+
                     let contextBlock = "";
-                    if (contextInjectionEnabled) {
-                        // We rank context based on the rendered user prompt + editor state
-                        const editorState = getEditorStateManager().getCurrentState();
-                        const rankedContext = await contextRanker.rank({
-                            userPrompt: userPrompt, // Using existing `userPrompt`
+                    if (wantAutoContext) {
+                        const editorState = getEditorStateManager(workspace._id!.toString()).getCurrentState();
+                        const bundle = await buildContextBundle({
+                            rootPath: rootDir,
+                            userPrompt,
                             editorState,
-                            limit: 15, // Retrieve top 15 most relevant
-                            tokenBudget: 30000 // Reserve budget
+                            store: workspaceGraphStore,
+                            settings: injectionSettings,
                         });
-
-                        // Format the context for the System Prompt
-                        contextBlock = `\n\n## ACTIVE CONTEXT (Auto-Detected)\n`;
-                        if (editorState.activeFile) {
-                            contextBlock += `- Current File: ${editorState.activeFile}\n`;
-                        }
-
-                        if (rankedContext.length > 0) {
-                            contextBlock += `\nThe following files are likely relevant to your task:\n`;
-                            for (const item of rankedContext) {
-                                const rel = (item.score * 100).toFixed(0);
-                                const reasonText = Array.isArray(item.reasons) ? item.reasons.join(", ") : "";
-                                contextBlock += `- ${item.node.id} (Relevance: ${rel}% - ${reasonText})\n`;
-                                // Future: Inject snippets here if budget allows
-                            }
-                        } else {
-                            contextBlock += `No specific relevant files detected in context graph.\n`;
-                        }
+                        contextBlock = formatContextBundleForPrompt(bundle, {
+                            currentFile: editorState.activeFile,
+                        });
                     }
 
                     // Compose final system prompt: skills prefix + base prompt + context
-                    const renderedSystemPrompt = renderUserPrompt(node.react.systemPrompt, state);
+                    const renderedSystemPrompt = renderUserPrompt(
+                        useWorkSimpleReactPrompt ? simpleReactWorkSystemPrompt : node.react.systemPrompt,
+                        state
+                    );
                     const baseSystemPrompt = skillPromptPrefix
                         ? `${skillPromptPrefix}\n\n---\n\n${renderedSystemPrompt}`
                         : renderedSystemPrompt;
@@ -1921,23 +2392,44 @@ export class AgentGraphExecutor {
                     ].join("\n");
 
                     // ── Workspace awareness block ────────────────────────────────
-                    // Prevents the agent from asking "how do I access the repo?"
-                    const workspaceContextBlock = [
-                        "\n\n## WORKSPACE ENVIRONMENT",
-                        `You are running inside the repository at: ${rootDir}`,
-                        `Workspace ID: ${workspace._id?.toString() ?? "default"}`,
-                        "You already have full filesystem access via tools (list_files, read_file, search_code, etc.).",
-                        "Do NOT ask the user for repository access — you already have it.",
-                        "Do NOT re-plan if you have already created a plan — proceed with execution.",
-                        "",
-                        "## ANTI-LOOPING RULES",
-                        "- Never call the same tool with identical arguments more than once per turn. Reuse prior results.",
-                        "- Never call write_todos more than twice without making progress on actual tasks between calls.",
-                        "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
-                        "- Focus on PRODUCING OUTPUT, not endlessly planning. After gathering information, synthesize and report.",
-                    ].join("\n");
+                    const workspaceContextBlock =
+                        runWorkMode === "work"
+                            ? [
+                                  "\n\n## WORKSPACE ENVIRONMENT",
+                                  `Working folder: ${rootDir}`,
+                                  `Workspace ID: ${workspace._id?.toString() ?? "default"}`,
+                                  "You can read and write files in this workspace with the provided tools.",
+                                  "Do NOT ask the user for generic folder access — tools already operate here.",
+                                  "Do NOT re-plan indefinitely — proceed once you have a reasonable plan.",
+                                  "",
+                                  "## INVESTIGATION DISCIPLINE",
+                                  "- Prefer **breadth then depth**: map candidates with list/glob/search, then read the highest-signal files.",
+                                  "- Gather **enough** corroborating evidence before firm conclusions; say when coverage is incomplete.",
+                                  "",
+                                  "## ANTI-LOOPING RULES",
+                                  "- Never call the same tool with identical arguments more than once per turn. Reuse prior results.",
+                                  "- Never call write_todos more than twice without making progress between calls.",
+                                  "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
+                              ].join("\n")
+                            : [
+                                  "\n\n## WORKSPACE ENVIRONMENT",
+                                  `You are running inside the repository at: ${rootDir}`,
+                                  `Workspace ID: ${workspace._id?.toString() ?? "default"}`,
+                                  "You already have full filesystem access via tools (list_files, read_file, search_code, etc.).",
+                                  "Do NOT ask the user for repository access — you already have it.",
+                                  "Do NOT re-plan if you have already created a plan — proceed with execution.",
+                                  "",
+                                  "## INVESTIGATION DISCIPLINE",
+                                  "- Prefer **breadth then depth**: search and map relevant modules before deep edits.",
+                                  "- Trace enough call sites / tests to be confident; incomplete traces should be stated explicitly.",
+                                  "",
+                                  "## ANTI-LOOPING RULES",
+                                  "- Never call the same tool with identical arguments more than once per turn. Reuse prior results.",
+                                  "- Never call write_todos more than twice without making progress on actual tasks between calls.",
+                                  "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
+                              ].join("\n");
 
-                    const enhancedSystemPrompt = `${baseSystemPrompt}${workspaceContextBlock}${contextBlock}${taskContextBlock}${auditContextPrompt ? `\n\n${auditContextPrompt}` : ""}`;
+                    const enhancedSystemPrompt = `${baseSystemPrompt}${workspaceContextBlock}${contextBlock}${taskContextBlock}${webHintBlock}${fastSuffix}${auditContextPrompt ? `\n\n${auditContextPrompt}` : ""}`;
 
                     // Update timeline with the ACTUAL prompt used (including context)
                     if (timeline[0]) {
@@ -1992,14 +2484,18 @@ export class AgentGraphExecutor {
                                 systemPrompt: enhancedSystemPrompt,
                                 userPrompt: delegateInput,
                                 tools,
-                                llmSelection: opts?.llmSelectionOverride ?? node.react.llmSelection,
+                                recursionLimit: reactRecursionLimit,
+                                llmSelection: opts?.llmSelectionOverride,
+                                upstreamPrepMs: performance.now() - runWallClockT0,
+                                runId,
                                 abortSignal: abortController.signal,
                                 getAbortReason: () => abortReason,
                                 shouldAbort: checkAbortReason,
+                                workspaceRoot: rootDir,
                                 onTokenUsage: async (usage, model) => {
                                     await tokenUsageService.logUsage({
                                         timestamp: new Date(),
-                                        provider: (opts?.llmSelectionOverride?.provider ?? node.react.llmSelection?.provider ?? "unknown") as any,
+                                        provider: (opts?.llmSelectionOverride?.provider ?? "default") as any,
                                         model,
                                         usage,
                                         ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
@@ -2009,6 +2505,7 @@ export class AgentGraphExecutor {
                                     });
                                 },
                             });
+                            emitLlmKpi(delegateResult.kpi);
                             const delegateMessages = delegateResult.messages ?? [];
                             const delegateFinal =
                                 delegateMessages
@@ -2047,14 +2544,18 @@ export class AgentGraphExecutor {
                                 systemPrompt: summaryPrompt,
                                 userPrompt: rawResult,
                                 tools: [],
-                                llmSelection: delegateConfig.summaryLlmSelection ?? node.react.llmSelection,
+                                recursionLimit: reactRecursionLimit,
+                                llmSelection: opts?.llmSelectionOverride,
+                                upstreamPrepMs: performance.now() - runWallClockT0,
+                                runId,
                                 abortSignal: abortController.signal,
                                 getAbortReason: () => abortReason,
                                 shouldAbort: checkAbortReason,
+                                workspaceRoot: rootDir,
                                 onTokenUsage: async (usage, model) => {
                                     await tokenUsageService.logUsage({
                                         timestamp: new Date(),
-                                        provider: (delegateConfig.summaryLlmSelection?.provider ?? node.react.llmSelection?.provider ?? "unknown") as any,
+                                        provider: (opts?.llmSelectionOverride?.provider ?? "default") as any,
                                         model,
                                         usage,
                                         ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
@@ -2064,6 +2565,7 @@ export class AgentGraphExecutor {
                                     });
                                 },
                             });
+                            emitLlmKpi(summaryResult.kpi);
                             const summaryMessages = summaryResult.messages ?? [];
                             const summaryFinal =
                                 summaryMessages
@@ -2168,14 +2670,21 @@ export class AgentGraphExecutor {
                             systemPrompt: enhancedSystemPrompt,
                             userPrompt: userPrompt,
                             tools,
-                            llmSelection: opts?.llmSelectionOverride ?? node.react.llmSelection,
+                            recursionLimit: reactRecursionLimit,
+                            llmSelection: opts?.llmSelectionOverride,
+                            upstreamPrepMs: performance.now() - runWallClockT0,
+                            runId,
                             extraMessages: shouldResume ? undefined : extraMessages,
                             onMessage: handleStreamingMessage,
                             // Forward text deltas for progressive streaming
                             onTextDelta: opts?.onTextDelta,
+                            onReasoningDelta: opts?.onReasoningDelta,
                             abortSignal: abortController.signal,
                             getAbortReason: () => abortReason,
                             shouldAbort: checkAbortReason,
+                            // Pin the workspace root so MCP tools always
+                            // operate against the desktop-selected folder.
+                            workspaceRoot: rootDir,
                             // Checkpoint / persistence
                             checkpointer,
                             threadId,
@@ -2185,7 +2694,7 @@ export class AgentGraphExecutor {
                                 // Log individual usage to MongoDB and accumulate in-memory
                                 await tokenUsageService.logUsage({
                                     timestamp: new Date(),
-                                    provider: (opts?.llmSelectionOverride?.provider ?? node.react.llmSelection?.provider ?? "unknown") as any,
+                                    provider: (opts?.llmSelectionOverride?.provider ?? "default") as any,
                                     model,
                                     usage,
                                     ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
@@ -2195,6 +2704,7 @@ export class AgentGraphExecutor {
                                 });
                             },
                         });
+                        emitLlmKpi(result.kpi);
 
                         // ── Handle interrupt (human-in-the-loop) ─────────────
                         if (result.interrupted) {
@@ -2310,6 +2820,21 @@ export class AgentGraphExecutor {
                             outputTokens: nodeTokenUsage.outputTokens,
                             totalTokens: nodeTokenUsage.totalTokens,
                         } : undefined;
+                        // Per-tool telemetry: count, mean ms, errors.
+                        if (toolCallSummary.size > 0) {
+                            (timelineEntry as any).toolCallsSummary = Array.from(
+                                toolCallSummary.entries()
+                            )
+                                .map(([toolName, stats]) => ({
+                                    name: toolName,
+                                    count: stats.count,
+                                    errors: stats.errors,
+                                    meanMs: Math.round(
+                                        stats.totalMs / Math.max(1, stats.count)
+                                    ),
+                                }))
+                                .sort((a, b) => b.count - a.count);
+                        }
                     }
                     await emitUpdate();
 
@@ -2372,6 +2897,20 @@ export class AgentGraphExecutor {
                         timelineEntry.summary = `Failed: ${errorMessage}`;
                         timelineEntry.endedAt = new Date().toISOString();
                     }
+                    // Emit an error event so the UI can display the failure message
+                    const errorEvent: AgentEvent = {
+                        id: nextGlobalEventId(),
+                        phaseId: nodeId,
+                        phaseLabel: node.label ?? nodeId,
+                        kind: "assistant",
+                        role: "assistant",
+                        content: `**Error:** ${errorMessage}`,
+                        timestamp: new Date().toISOString(),
+                        isError: true,
+                    };
+                    eventStream.push(errorEvent);
+                    globalEventStream.push(errorEvent);
+                    state.conversationHistory?.push(errorEvent);
                     await emitUpdate();
 
                     const finalResult: AgentWorkflowResult = {
@@ -2425,7 +2964,19 @@ export class AgentGraphExecutor {
             await emitUpdate();
             cleanupCheckpoints();
             return successResult;
-        });
+            } finally {
+                if (diskSkillRegistryOverlay) {
+                    await skillRegistry.reload().catch((err) =>
+                        console.warn(
+                            "[AgentGraph] skillRegistry.reload after .kletron/skills:",
+                            (err as Error)?.message ?? err
+                        )
+                    );
+                }
+            }
+            },
+            { userId: opts?.workspaceContextUserId ?? workspace.ownerId, runId }
+        );
     }
 }
 

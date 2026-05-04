@@ -1,0 +1,34 @@
+# Dependencies & caches
+node_modules
+**/node_modules
+.npm
+.pnpm-store
+
+# Git / IDE
+.git
+.gitignore
+.cursor
+.idea
+.vscode
+
+# Build outputs (rebuilt in image)
+.next
+**/.next
+dist
+**/dist
+
+# Env & secrets (inject via Cloud Run / Secret Manager)
+.env
+.env.*
+!.env.example
+
+# Heavy / irrelevant app artifacts
+apps/desktop/dist-electron
+apps/desktop/release
+.langgraph
+.langgraph_api
+
+# Logs & misc
+*.log
+.DS_Store
+coverage

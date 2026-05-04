@@ -1,15 +1,22 @@
 "use client";
 
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState, useRef } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ChatInput,
+  ContextChips,
+  createFileChip,
+  PendingSessionEditsStrip,
   Selector,
   WorkspaceLayout,
 } from "@kletron/ui/components/design-system";
+import type { ContextChip } from "@kletron/ui/components/design-system";
 import { ProjectSidebar } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
-import type { SidebarProject, SidebarThread, ThreadLiveStatus } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import type { SidebarProject, SidebarThread } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import { ThreadSearchPalette } from "@kletron/ui/components/CommandCenter/ThreadSearchPalette";
+import { ThreadSearchHeaderTrigger } from "@kletron/ui/components/CommandCenter/ThreadSearchHeaderTrigger";
+import { useAppHeaderCenter } from "@kletron/ui/components/AppHeaderCenterSlot";
 import { AddWorkspaceModal } from "@kletron/ui/components/CommandCenter/AddWorkspaceModal";
 import { TimelinePanel } from "@kletron/ui/components/Agent/TimelinePanel";
 import { EventCard } from "@kletron/ui/components/Agent/EventCard";
@@ -24,13 +31,42 @@ import { useSessionEdits } from "@kletron/ui/hooks/useSessionEdits";
 import { useMessageEdit } from "@kletron/ui/hooks/useMessageEdit";
 import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
 import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
+import { SlashCommandMenu } from "@kletron/ui/components/CommandCenter/SlashCommandMenu";
+import type { SlashCommandItem } from "@kletron/ui/components/CommandCenter/SlashCommandMenu";
+import { useSlashSkills } from "@kletron/ui/hooks/useSlashSkills";
 
 import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
+import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
+import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
+import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
+import { AgentStatusShimmerLabel } from "@kletron/ui/components/Agent/AgentStatusShimmerLabel";
+import { ConversationThreadSkeleton } from "@kletron/ui/components/Agent/ConversationThreadSkeleton";
+import { Modal, Button } from "@kletron/ui/components/design-system";
 import {
-  Loader2,
-  Folder,
   ClipboardCopy,
+  Paperclip,
+  Eye,
+  Wrench,
+  GitBranch,
+  Settings2,
+  GraduationCap,
+  X,
+  AlertTriangle,
 } from "lucide-react";
+import type { WorkModeId } from "@kletron/shared/workMode";
+import { WORK_MODES, normalizeToWorkModeId } from "@kletron/shared/workMode";
+import type { ResearchDepthId } from "@kletron/shared/researchDepth";
+import { normalizeResearchDepth } from "@kletron/shared/researchDepth";
+import { sessionStatusToSidebarLiveStatus } from "@kletron/shared/chatTypes";
+import {
+  CAPABILITY_DROPPED_BANNER_TAIL,
+  CAPABILITY_DROPPED_SLIM_CTA_LABEL,
+  capabilityDroppedSlimBarTitle,
+  formatDroppedToolsListPhrase,
+} from "@kletron/shared/capabilityDroppedToolsUx";
+import { AgentSessionChrome } from "@kletron/ui/components/CommandCenter/AgentSessionChrome";
+import { AgentCodeRepoBar } from "../../../components/agent/AgentCodeRepoBar";
+import { WorkspaceConnectorsHint } from "../../../components/agent/WorkspaceConnectorsHint";
 
 // For simple chat view - reuse existing components (groups tool events, renders collapsible tool cards)
 import { MessageList, type ChatEvent } from "@kletron/ui/components/Agent/MessageList";
@@ -49,6 +85,13 @@ type SessionSummary = {
   conversationTurns: number;
   startedAt: string;
   endedAt: string | null;
+  /** Origin of the run: "agent" (chat) or "automation" (triggered run). */
+  source?: string | null;
+  /** When set, identifies the automation config this thread belongs to. */
+  automationId?: string | null;
+  /** Stored Code vs Work mode for this run (defaults to `code` when unset server-side). */
+  workMode?: WorkModeId;
+  researchDepth?: ResearchDepthId;
 };
 
 type SessionDetail = {
@@ -56,6 +99,11 @@ type SessionDetail = {
   graphId: string;
   title: string;
   status: string;
+  threadApprovalMode?: ThreadApprovalMode;
+  source?: string | null;
+  startedAt?: string | null;
+  workMode?: WorkModeId;
+  researchDepth?: ResearchDepthId;
   graph: {
     name: string;
     nodeCount: number;
@@ -78,21 +126,100 @@ type SessionDetail = {
 
 const SESSION_STORAGE_KEY = "agent-active-session";
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+/** Composer placeholder suffix for the slash-command palette. */
+const PLACEHOLDER_SLASH_HINT =
+  "Press / for slash commands (skills, plan, workspace).";
 
-/** Map server session status to ProjectSidebar's ThreadLiveStatus */
-function toThreadLiveStatus(status: string, isStreaming: boolean): ThreadLiveStatus {
-  if (isStreaming) return "running";
-  switch (status) {
-    case "RUNNING": return "running";
-    case "COMPLETED": return "completed";
-    case "FAILED": return "error";
-    case "PAUSED": return "waiting";
-    case "PENDING": return "waiting";
-    case "CANCELLED": return "idle";
-    default: return "idle";
-  }
+/** Same UX as desktop: warning banner, then slim “Limited tools — show setup” when dismissed. */
+function CapabilityDroppedWorkspaceChrome({
+  showSkeleton,
+  tools,
+  bannerDismissed,
+  onSetBannerDismissed,
+  workspaceId,
+}: {
+  showSkeleton: boolean;
+  tools: readonly string[];
+  bannerDismissed: boolean;
+  onSetBannerDismissed: (value: boolean) => void;
+  workspaceId: string | null;
+}) {
+  if (showSkeleton || tools.length === 0) return null;
+  const outer = "max-w-3xl mx-auto px-2 pt-3";
+  const connectorsHref = workspaceId
+    ? `/app/${encodeURIComponent(workspaceId)}/connectors`
+    : "/app/config/connectors";
+  const skillsHref = workspaceId
+    ? `/app/${encodeURIComponent(workspaceId)}/skills`
+    : "/app/config/skills";
+  return (
+    <>
+      {!bannerDismissed && (
+        <div className={outer}>
+          <div
+            className="flex flex-col gap-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-[11px] text-status-warning-text sm:flex-row sm:items-start sm:gap-3"
+            role="status"
+          >
+            <p className="min-w-0 flex-1 leading-snug">
+              This graph can use{" "}
+              <span className="font-medium text-status-warning-text">
+                {formatDroppedToolsListPhrase(tools)}
+              </span>
+              {CAPABILITY_DROPPED_BANNER_TAIL}
+            </p>
+            <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-1 sm:flex-col sm:items-end sm:justify-start">
+              <Link
+                href={connectorsHref}
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
+              >
+                <Settings2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Connectors
+              </Link>
+              <Link
+                href={skillsHref}
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
+              >
+                <GraduationCap className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Skills
+              </Link>
+              <button
+                type="button"
+                className="rounded p-0.5 text-status-warning-text hover:bg-black/5 dark:hover:bg-white/10"
+                aria-label="Dismiss"
+                onClick={() => onSetBannerDismissed(true)}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {bannerDismissed && (
+        <div className={outer}>
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-1.5 text-[10px] font-medium text-status-warning-text hover:opacity-90"
+            title={capabilityDroppedSlimBarTitle(tools)}
+            onClick={() => onSetBannerDismissed(false)}
+          >
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {CAPABILITY_DROPPED_SLIM_CTA_LABEL}
+          </button>
+        </div>
+      )}
+    </>
+  );
 }
+
+/** Append attachment labels to the outgoing message (API is text-only today). */
+function augmentMessageWithFileChips(text: string, chips: ContextChip[]): string {
+  const files = chips.filter((c) => c.variant === "file");
+  if (files.length === 0) return text;
+  const names = files.map((c) => c.label).join(", ");
+  return `${text}\n\n(Attached for context: ${names})`;
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 interface AgentComposerProps {
   sending: boolean;
@@ -105,15 +232,31 @@ interface AgentComposerProps {
   llmOptions: any[];
   onLlmChange: (value: string) => void;
   llmStatus?: "none" | "loading" | "success" | "error";
+  llmStatusDetail?: string | null;
+  graphSelectorLoading?: boolean;
+  llmSelectorLoading?: boolean;
   prefillText?: string | null;
   resetKey: string;
   perfDebugEnabled?: boolean;
   onInputLatencySample?: (ms: number) => void;
   editControl: ReturnType<typeof useMessageEdit>; // Added for editControl
+  /** Server-side run in progress (e.g. automation) — same queued placeholder as streaming */
+  runActive?: boolean;
+  threadApprovalMode: ThreadApprovalMode;
+  onThreadApprovalModeChange: (mode: ThreadApprovalMode) => void;
+  threadApprovalLocked?: boolean;
+  threadApprovalLockedReason?: string;
+  activeWorkspaceId: string | null;
+  planMode: boolean;
+  onPlanModeToggle: () => void;
+  researchDepth: ResearchDepthId;
+  onResearchDepthChange: (depth: ResearchDepthId) => void;
+  activeSessionId: string | null;
 }
 
 const AgentComposer = memo(function AgentComposer({
   sending,
+  runActive = false,
   onStop,
   onSendText,
   selectedGraphId,
@@ -123,13 +266,98 @@ const AgentComposer = memo(function AgentComposer({
   llmOptions,
   onLlmChange,
   llmStatus,
+  llmStatusDetail,
+  graphSelectorLoading = false,
+  llmSelectorLoading = false,
   prefillText,
   resetKey,
   perfDebugEnabled = false,
   onInputLatencySample,
   editControl, // Added for editControl
+  threadApprovalMode,
+  onThreadApprovalModeChange,
+  threadApprovalLocked,
+  threadApprovalLockedReason,
+  activeWorkspaceId,
+  planMode,
+  onPlanModeToggle,
+  researchDepth,
+  onResearchDepthChange,
+  activeSessionId,
 }: AgentComposerProps) {
+  const router = useRouter();
+  const queuedOrBusy = sending || runActive;
   const [draft, setDraft] = useState("");
+  const [contextChips, setContextChips] = useState<ContextChip[]>([]);
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const getSlashRequestHeaders = useCallback(async () => {
+    const h: Record<string, string> = {};
+    if (activeWorkspaceId) h["x-workspace-id"] = activeWorkspaceId;
+    return h;
+  }, [activeWorkspaceId]);
+
+  const { skills: slashSkillRows } = useSlashSkills({
+    apiOrigin: undefined,
+    getRequestHeaders: getSlashRequestHeaders,
+    enabled: true,
+    workspaceId: activeWorkspaceId,
+  });
+
+  const slashCommands = useMemo((): SlashCommandItem[] => {
+    const fromLibrary: SlashCommandItem[] = slashSkillRows.map((s) => ({
+      id: `skill-${s.slug}`,
+      sectionId: "skills",
+      label: s.slug,
+      description: s.description || undefined,
+      action: () => setDraft(`/${s.slug} `),
+    }));
+    const builtin: SlashCommandItem[] = [
+      {
+        id: "plan",
+        sectionId: "commands",
+        label: "plan",
+        description: "Toggle Plan Mode (read-only proposals)",
+        icon: <Eye className="h-3.5 w-3.5" />,
+        action: () => {
+          setDraft("/plan ");
+          onPlanModeToggle();
+        },
+      },
+      {
+        id: "skills",
+        sectionId: "commands",
+        label: "skills",
+        description: "Open Skills library & settings",
+        icon: <Wrench className="h-3.5 w-3.5" />,
+        action: () => {
+          setDraft("/skills ");
+          queueMicrotask(() => {
+            router.push(
+              activeWorkspaceId
+                ? `/app/${activeWorkspaceId}/skills`
+                : "/app/config/skills",
+            );
+          });
+        },
+      },
+      {
+        id: "worktree",
+        sectionId: "commands",
+        label: "worktree",
+        description: "Workspace & repository settings",
+        icon: <GitBranch className="h-3.5 w-3.5" />,
+        action: () => {
+          setDraft("/worktree ");
+          queueMicrotask(() => {
+            router.push("/app/config/workspace");
+          });
+        },
+      },
+    ];
+    return [...fromLibrary, ...builtin];
+  }, [slashSkillRows, onPlanModeToggle, router, activeWorkspaceId]);
 
   useEffect(() => {
     setDraft("");
@@ -141,46 +369,125 @@ const AgentComposer = memo(function AgentComposer({
     }
   }, [prefillText]);
 
+  useEffect(() => {
+    if (!draft.startsWith("/")) {
+      setSlashMenuOpen(false);
+    }
+  }, [draft]);
+
+  const onAttachFiles = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const list = e.target.files;
+    if (!list?.length) return;
+    setContextChips((prev) => {
+      const add: ContextChip[] = [];
+      for (let i = 0; i < list.length; i++) {
+        const f = list[i];
+        add.push(createFileChip(f.name, `${f.name}-${f.size}-${Date.now()}-${i}`));
+      }
+      return [...prev, ...add];
+    });
+    e.target.value = "";
+  }, []);
+
   const handleSend = useCallback(() => {
     const text = draft.trim();
     if (!text) return;
-    onSendText(text);
+    onSendText(augmentMessageWithFileChips(text, contextChips));
     setDraft("");
-  }, [draft, onSendText]);
+    setContextChips([]);
+  }, [draft, contextChips, onSendText]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (perfDebugEnabled) {
-      const isEditingKey =
-        e.key.length === 1 ||
-        e.key === "Backspace" ||
-        e.key === "Delete" ||
-        e.key === "Enter";
-      if (isEditingKey && onInputLatencySample) {
-        const t0 = performance.now();
-        requestAnimationFrame(() => {
-          onInputLatencySample(performance.now() - t0);
-        });
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (perfDebugEnabled) {
+        const isEditingKey =
+          e.key.length === 1 ||
+          e.key === "Backspace" ||
+          e.key === "Delete" ||
+          e.key === "Enter";
+        if (isEditingKey && onInputLatencySample) {
+          const t0 = performance.now();
+          requestAnimationFrame(() => {
+            onInputLatencySample(performance.now() - t0);
+          });
+        }
       }
-    }
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }, [handleSend, onInputLatencySample, perfDebugEnabled]);
+      if (draft === "" && e.key === "/") {
+        setSlashMenuOpen(true);
+        return;
+      }
+      if (
+        slashMenuOpen &&
+        (e.key === "Enter" || (e.key === "Tab" && !e.shiftKey))
+      ) {
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
+    },
+    [draft, handleSend, onInputLatencySample, perfDebugEnabled, slashMenuOpen]
+  );
 
   return (
     <>
-      <ChatInput
+      {contextChips.length > 0 && (
+        <div className="mx-auto mb-1.5 w-full max-w-3xl">
+          <ContextChips
+            chips={contextChips}
+            onDismiss={(id) => setContextChips((p) => p.filter((c) => c.id !== id))}
+            size="sm"
+          />
+        </div>
+      )}
+      <div className="relative mx-auto max-w-3xl">
+        <SlashCommandMenu
+          open={slashMenuOpen}
+          onClose={() => setSlashMenuOpen(false)}
+          commands={slashCommands}
+          filter={draft}
+        />
+        <ChatInput
         value={draft}
         onChange={setDraft}
         onSend={handleSend}
-        onStop={sending ? onStop : undefined}
+        onStop={queuedOrBusy ? onStop : undefined}
         onKeyDown={handleKeyDown}
-        sending={sending}
-        placeholder={sending ? "Add a follow-up (queued until agent finishes)..." : "Ask anything…"}
-        containerClassName="max-w-3xl mx-auto"
-        footerLeft={
-          <div className="flex items-center gap-2">
+        sending={queuedOrBusy}
+        placeholder={
+          planMode
+            ? `Describe what you want to plan… ${PLACEHOLDER_SLASH_HINT}`
+            : queuedOrBusy
+              ? `Add a follow-up (queued until agent finishes). ${PLACEHOLDER_SLASH_HINT}`
+              : `Write your message… ${PLACEHOLDER_SLASH_HINT}`
+        }
+        containerClassName="w-full"
+        leadingFooter={
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={onAttachFiles}
+              aria-hidden
+              tabIndex={-1}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-state-hover hover:text-text-primary"
+              title="Attach files"
+              aria-label="Attach files"
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+            </button>
+          </>
+        }
+        sessionStrip={
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <Selector
               label="GRAPH"
               value={selectedGraphId}
@@ -188,6 +495,7 @@ const AgentComposer = memo(function AgentComposer({
               onSelect={onGraphChange}
               size="sm"
               direction="up"
+              loading={graphSelectorLoading}
             />
             <Selector
               label="LLM"
@@ -196,11 +504,38 @@ const AgentComposer = memo(function AgentComposer({
               onSelect={onLlmChange}
               size="sm"
               direction="up"
-              status={llmStatus}
+              loading={llmSelectorLoading}
+              status={llmSelectorLoading ? "none" : llmStatus}
+              menuAlign="end"
+              statusTooltip={llmSelectorLoading ? null : llmStatusDetail}
             />
+            <ThreadApprovalModeSelector
+              value={threadApprovalMode}
+              onSelect={onThreadApprovalModeChange}
+              disabled={threadApprovalLocked}
+              disabledReason={threadApprovalLockedReason}
+            />
+            <label className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
+              <span className="shrink-0">Depth</span>
+              <select
+                value={researchDepth}
+                onChange={(e) => onResearchDepthChange(e.target.value as ResearchDepthId)}
+                disabled={!!activeSessionId}
+                title={
+                  activeSessionId
+                    ? "Research depth is fixed for this thread (set when the session was created)."
+                    : "Exhaustive: more tools and context. Fast: fewer steps and shorter replies."
+                }
+                className="max-w-[120px] rounded border border-white/[0.12] bg-bg-elevated py-0.5 pl-1.5 pr-6 text-[10px] font-normal normal-case text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="exhaustive">Exhaustive</option>
+                <option value="fast">Fast</option>
+              </select>
+            </label>
           </div>
         }
       />
+      </div>
 
       {/* Replay Confirmation Dialog */}
       <ReplayConfirmDialog
@@ -223,7 +558,12 @@ export default function AgentPage() {
   // ── State ─────────────────────────────────────────────────────────────
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  /** Sidebar thread list fetch (workspace + Code/Work scope) — drives ProjectSidebar skeleton. */
+  const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
+  const [threadApprovalMode, setThreadApprovalMode] = useState<ThreadApprovalMode>("inherit");
+  const [fullAutoConfirmOpen, setFullAutoConfirmOpen] = useState(false);
+  const [threadSearchOpen, setThreadSearchOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [messageQueue, setMessageQueue] = useState<QueuedMessageItem[]>([]);
@@ -237,6 +577,9 @@ export default function AgentPage() {
   });
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [perfDebugEnabled, setPerfDebugEnabled] = useState(false);
+  /** Logs `[kletron:thread-dom]` from real DOM vs React fingerprint (`?threadLog=1` or toolbar). */
+  const [threadDomLogEnabled, setThreadDomLogEnabled] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
   const [fps, setFps] = useState<number | null>(null);
   const [inputLatencyStats, setInputLatencyStats] = useState<{ avg: number; p95: number; count: number }>({
     avg: 0,
@@ -256,6 +599,54 @@ export default function AgentPage() {
     deleteWorkspace: deleteWorkspaceCtx,
   } = useWorkspace();
 
+  // ── Code vs Work mode (per workspace, persisted server + local mirror) ──
+  const [workMode, setWorkMode] = useState<WorkModeId>("code");
+  /** New-session agent depth (stored on run at creation). */
+  const [researchDepth, setResearchDepth] = useState<ResearchDepthId>("exhaustive");
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setWorkMode("code");
+      return;
+    }
+    const lsKey = `kletron-work-mode-${activeWorkspaceId}`;
+    const fromLs =
+      typeof window !== "undefined" ? window.localStorage.getItem(lsKey) : null;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/work-categories/current?workspaceId=${encodeURIComponent(activeWorkspaceId)}`,
+        );
+        if (res.ok) {
+          const json = (await res.json()) as { data?: string | null };
+          if (json.data != null && json.data !== "") {
+            const m = normalizeToWorkModeId(String(json.data));
+            if (!cancelled) {
+              setWorkMode(m);
+              try {
+                window.localStorage.setItem(lsKey, m);
+              } catch {
+                /* ignore */
+              }
+            }
+            return;
+          }
+        }
+      } catch {
+        /* fall through */
+      }
+      if (cancelled) return;
+      if (fromLs === "code" || fromLs === "work") {
+        setWorkMode(fromLs);
+      } else {
+        setWorkMode("code");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId]);
+
   // ── Hooks ─────────────────────────────────────────────────────────────
   const {
     llmProvider,
@@ -265,8 +656,11 @@ export default function AgentPage() {
     handleLlmChange,
     handleGraphChange,
     llmStatus,
+    llmStatusDetail,
     graphOptionsLoaded,
     agentGraphs,
+    graphSelectorLoading,
+    llmSelectorLoading,
   } = useAgentSession();
 
   // Determine if the selected graph is single-node (simple chat) or multi-node (timeline)
@@ -293,24 +687,107 @@ export default function AgentPage() {
     return isSimpleGraph;
   }, [sessionDetail, isSimpleGraph]);
 
+  const sessionsHydratedRef = useRef(false);
+  /**
+   * After POST /api/sessions, `activeSessionId` is set from the stream before GET /api/sessions
+   * returns an updated list. Pruning "unknown" ids would call handleNewSession() and wipe the
+   * optimistic user message — avoid until the sidebar list catches up or we confirm the session.
+   */
+  const pendingSessionListCatchUpRef = useRef<string | null>(null);
+  /** Skip stale-list clear on first paint (same pattern as desktop `useThreads`). */
+  const sessionListScopePrimedRef = useRef(false);
+
   // ── Fetch sessions (current workspace only) ─────────────────────────
+  // Includes both chat threads (source="agent") and automation threads
+  // (source="automation"). The sidebar visually distinguishes them.
+  // Scoped by Code vs Work via `workMode` so the list matches the chrome.
   const fetchSessions = useCallback(async () => {
+    sessionsHydratedRef.current = false;
+    setSessionsLoading(true);
     try {
-      const wsQuery = activeWorkspaceId ? `&workspaceId=${activeWorkspaceId}` : '';
-      const res = await fetch(`/api/sessions?limit=50&excludeSource=automation${wsQuery}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSessions(Array.isArray(data) ? data : []);
+      const wsQuery = activeWorkspaceId ? `&workspaceId=${encodeURIComponent(activeWorkspaceId)}` : "";
+      const wmQuery = `&workMode=${encodeURIComponent(workMode)}`;
+      const base = `/api/sessions?limit=50${wsQuery}${wmQuery}`;
+      const [activeRes, allRes] = await Promise.all([
+        fetch(base),
+        fetch(`${base}&includeArchived=true`),
+      ]);
+      let merged: SessionSummary[] = [];
+      if (activeRes.ok) {
+        const data = await activeRes.json();
+        merged = Array.isArray(data) ? (data as SessionSummary[]) : [];
       }
+      if (allRes.ok) {
+        const data = await allRes.json();
+        const full = Array.isArray(data) ? (data as SessionSummary[]) : [];
+        const seen = new Set(merged.map((s) => s.id));
+        for (const s of full) {
+          if (s.archived && !seen.has(s.id)) {
+            seen.add(s.id);
+            merged.push(s);
+          }
+        }
+      }
+      setSessions(merged);
+      sessionsHydratedRef.current = true;
     } catch (e) {
       console.error("Failed to fetch sessions:", e);
+    } finally {
+      setSessionsLoading(false);
     }
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, workMode]);
+
+  useLayoutEffect(() => {
+    if (!sessionListScopePrimedRef.current) {
+      sessionListScopePrimedRef.current = true;
+      return;
+    }
+    setSessions([]);
+    setSessionsLoading(true);
+  }, [workMode, activeWorkspaceId]);
 
   const handleSessionCreated = useCallback((runId: string, _graphId: string) => {
+    pendingSessionListCatchUpRef.current = runId;
     setActiveSessionId(runId);
     sessionStorage.setItem(SESSION_STORAGE_KEY, runId);
   }, []);
+
+  const commitThreadApprovalMode = useCallback(
+    async (mode: ThreadApprovalMode) => {
+      setThreadApprovalMode(mode);
+      if (!activeSessionId) return;
+      try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
+        const res = await fetch(`/api/sessions/${activeSessionId}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ threadApprovalMode: mode }),
+        });
+        if (!res.ok) {
+          const j = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(j.error || `HTTP ${res.status}`);
+        }
+      } catch (e) {
+        console.error("[threadApprovalMode] PATCH failed:", e);
+      }
+    },
+    [activeSessionId, activeWorkspaceId]
+  );
+
+  const onThreadApprovalSelect = useCallback(
+    (mode: ThreadApprovalMode) => {
+      if (mode === "full_auto_thread") {
+        const key = `kletron-full-auto-thread-ok-${activeWorkspaceId ?? "default"}`;
+        if (typeof sessionStorage !== "undefined" && !sessionStorage.getItem(key)) {
+          setFullAutoConfirmOpen(true);
+          return;
+        }
+      }
+      void commitThreadApprovalMode(mode);
+    },
+    [activeWorkspaceId, commitThreadApprovalMode]
+  );
 
   const handleTitleGenerate = useCallback((runId: string, userMessage: string) => {
     void (async () => {
@@ -355,18 +832,36 @@ export default function AgentPage() {
     handleStop,
     isAtBottomRef,
     streamingText,
+    streamingReasoning,
     isStreaming,
+    lastResult,
+    capabilityDroppedTools,
   } = useSessionStream({
     sessionId: activeSessionId,
     selectedGraphId,
     llmProvider,
     workspaceId: activeWorkspaceId,
+    threadApprovalMode,
     onSessionCreated: handleSessionCreated,
     onTitleGenerate: handleTitleGenerate,
+    workMode,
+    planMode,
+    researchDepth,
   });
 
+  const capabilityDroppedToolsKey = useMemo(
+    () => [...capabilityDroppedTools].sort().join("\0"),
+    [capabilityDroppedTools],
+  );
+  const [capabilityToolsBannerDismissed, setCapabilityToolsBannerDismissed] = useState(false);
+  useEffect(() => {
+    setCapabilityToolsBannerDismissed(false);
+  }, [capabilityDroppedToolsKey]);
+
   const truncateAndResend = useCallback(async (messageIndex: number, newContent: string) => {
-    if (!activeSessionId) return;
+    if (!activeSessionId) {
+      throw new Error("No active session — cannot resend from this message.");
+    }
     const res = await fetch(`/api/sessions/${activeSessionId}/truncate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -386,6 +881,9 @@ export default function AgentPage() {
 
   const {
     pendingEdits,
+    processingOp,
+    flushNotice,
+    dismissFlushNotice,
     approveEdit,
     rejectEdit,
     approveAll,
@@ -397,11 +895,21 @@ export default function AgentPage() {
     isStreaming: streamStatus === "streaming",
   });
 
+  /** True while the primary GET /api/sessions/:id (replace load) is in flight — avoids onboarding empty-state flash. */
+  const [sessionDetailLoading, setSessionDetailLoading] = useState(false);
+  const sessionHydrateSeqRef = useRef(0);
+
   // ── Fetch session detail when active session changes ──────────────────
   const loadSessionDetail = useCallback(async (
     sessionId: string,
     options?: { mergeMessages?: boolean; beforeIndex?: number; appendOlder?: boolean },
   ) => {
+    const isReplaceLoad = !options?.mergeMessages && !options?.appendOlder;
+    let seq = 0;
+    if (isReplaceLoad) {
+      seq = ++sessionHydrateSeqRef.current;
+      setSessionDetailLoading(true);
+    }
     try {
       const query = new URLSearchParams();
       query.set("limit", "120");
@@ -448,6 +956,7 @@ export default function AgentPage() {
               toolCallId: e.toolCallId,
               isError: e.isError,
               thoughts: e.thoughts,
+              thinking: e.thinking,
             }));
 
           // Dedup pass:
@@ -496,12 +1005,32 @@ export default function AgentPage() {
           } else {
             setMessages(loadedMessages);
           }
+        } else if (isReplaceLoad) {
+          // Server returned no chat events yet (new run, or history not persisted). Clear
+          // stale messages from a previous thread so we don't show wrong content.
+          setMessages([]);
         }
       }
     } catch (e) {
       console.error("Failed to load session detail:", e);
+    } finally {
+      if (isReplaceLoad && seq === sessionHydrateSeqRef.current) {
+        setSessionDetailLoading(false);
+      }
     }
   }, [setMessages]);
+
+  useEffect(() => {
+    if (!sessionDetail?.id) return;
+    setThreadApprovalMode(parseThreadApprovalMode(sessionDetail.threadApprovalMode));
+  }, [sessionDetail?.id, sessionDetail?.threadApprovalMode]);
+
+  useEffect(() => {
+    if (!sessionDetail?.id) return;
+    if (sessionDetail.researchDepth != null) {
+      setResearchDepth(normalizeResearchDepth(sessionDetail.researchDepth));
+    }
+  }, [sessionDetail?.id, sessionDetail?.researchDepth]);
 
   // ── Pre-fill from BA handoff (URL search params) ──────────────────────
   const handoffAppliedRef = useRef(false);
@@ -525,6 +1054,7 @@ export default function AgentPage() {
   useEffect(() => {
     const perfParam = searchParams?.get("perf");
     if (perfParam === "1") setPerfDebugEnabled(true);
+    if (searchParams?.get("threadLog") === "1") setThreadDomLogEnabled(true);
   }, [searchParams]);
 
   const initialBeforeIndexRef = useRef<number | null>(null);
@@ -539,6 +1069,18 @@ export default function AgentPage() {
     const parsed = Number(raw);
     initialBeforeIndexRef.current = Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : null;
     beforeIndexAppliedForSessionRef.current = null;
+  }, [searchParams]);
+
+  // ── Deep-link via ?sessionId=… ─────────────────────────────────────────
+  // Used by automation Run buttons, history page and notifications to focus
+  // a specific thread inside the agent UI.
+  const sessionIdLinkRef = useRef<string | null>(null);
+  useEffect(() => {
+    const sessionIdParam = searchParams?.get("sessionId");
+    if (!sessionIdParam || sessionIdLinkRef.current === sessionIdParam) return;
+    sessionIdLinkRef.current = sessionIdParam;
+    setActiveSessionId(sessionIdParam);
+    sessionStorage.setItem(SESSION_STORAGE_KEY, sessionIdParam);
   }, [searchParams]);
 
   const inputLatencySamplesRef = useRef<number[]>([]);
@@ -587,6 +1129,20 @@ export default function AgentPage() {
       sessionStorage.setItem(SESSION_STORAGE_KEY, activeSessionId);
     }
   }, [activeSessionId, loadSessionDetail]);
+
+  // Server-side runs (e.g. automations) stream only on the server — poll until the run finishes
+  // so the chat fills in without relying on the browser NDJSON stream.
+  useEffect(() => {
+    if (!activeSessionId || !sessionDetail || sessionDetail.id !== activeSessionId) return;
+    if (sending) return;
+    const status = sessionDetail.status;
+    if (status !== "RUNNING" && status !== "PENDING") return;
+
+    const id = window.setInterval(() => {
+      void loadSessionDetail(activeSessionId, { mergeMessages: true });
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [activeSessionId, sessionDetail?.id, sessionDetail?.status, sending, loadSessionDetail]);
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -637,6 +1193,7 @@ export default function AgentPage() {
         setMessages([]);
         setHistoryPage({ total: 0, start: 0, end: 0, hasOlder: false });
         sessionStorage.removeItem(SESSION_STORAGE_KEY);
+        setSessionDetailLoading(false);
       }
       void fetchSessions();
     }
@@ -647,12 +1204,80 @@ export default function AgentPage() {
     // Stop any active stream before clearing state — this also releases
     // the streaming guard so setMessages will work.
     handleStop();
+    pendingSessionListCatchUpRef.current = null;
     setActiveSessionId(null);
     setSessionDetail(null);
     setMessages([]);
     setHistoryPage({ total: 0, start: 0, end: 0, hasOlder: false });
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    setSessionDetailLoading(false);
+    setResearchDepth("exhaustive");
   }, [setMessages, handleStop]);
+
+  useEffect(() => {
+    if (!activeSessionId || !sessionsHydratedRef.current) return;
+    if (sessions.some((s) => s.id === activeSessionId)) {
+      if (pendingSessionListCatchUpRef.current === activeSessionId) {
+        pendingSessionListCatchUpRef.current = null;
+      }
+      return;
+    }
+    // Brand-new thread: sidebar list is stale until fetchSessions completes.
+    if (pendingSessionListCatchUpRef.current === activeSessionId) return;
+    if (sending || streamStatus === "streaming") return;
+    // Session exists server-side but list filtered / delayed — keep UI.
+    if (sessionDetail?.id === activeSessionId) return;
+    handleNewSession();
+  }, [
+    sessions,
+    activeSessionId,
+    handleNewSession,
+    sending,
+    streamStatus,
+    sessionDetail?.id,
+  ]);
+
+  /** Switching Code ↔ Work starts a fresh thread so messages stay scoped to the mode. */
+  const handleWorkModeSelect = useCallback(
+    async (categoryId: string) => {
+      const next = normalizeToWorkModeId(categoryId) as WorkModeId;
+      const prev = workMode;
+      if (next === prev) return;
+
+      handleNewSession();
+
+      setWorkMode(next);
+      const lsKey = activeWorkspaceId ? `kletron-work-mode-${activeWorkspaceId}` : null;
+      if (lsKey) {
+        try {
+          window.localStorage.setItem(lsKey, next);
+        } catch {
+          /* ignore */
+        }
+      }
+      try {
+        const res = await fetch("/api/work-categories/current", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workMode: next,
+            workspaceId: activeWorkspaceId ?? undefined,
+          }),
+        });
+        if (!res.ok) throw new Error("persist failed");
+      } catch {
+        setWorkMode(prev);
+        if (lsKey) {
+          try {
+            window.localStorage.setItem(lsKey, prev);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    },
+    [workMode, activeWorkspaceId, handleNewSession],
+  );
 
   const handleLoadOlderMessages = useCallback(async () => {
     if (!activeSessionId || loadingOlder || !historyPage.hasOlder) return;
@@ -747,29 +1372,6 @@ export default function AgentPage() {
     handleNewSession();
   }, [handleNewSession]);
 
-  // ── Build sidebar project from active workspace + its sessions ───────
-  const sidebarProjects: SidebarProject[] = useMemo(() => {
-    if (!activeWorkspace) return [];
-    const threadsForWorkspace = sessions
-      .filter((s) => s.workspaceId === activeWorkspace.id)
-      .map((s): SidebarThread => ({
-        id: s.id,
-        title: s.title || "Untitled",
-        updatedAt: s.startedAt,
-        liveStatus: toThreadLiveStatus(s.status, sending && activeSessionId === s.id),
-      }));
-    return [
-      {
-        id: activeWorkspace.id,
-        name: activeWorkspace.name,
-        health: activeWorkspace.health,
-        healthMessage: activeWorkspace.healthMessage,
-        selectable: activeWorkspace.selectable,
-        threads: threadsForWorkspace,
-      },
-    ];
-  }, [activeWorkspace, sessions, sending, activeSessionId]);
-
   // Convert Message[] from useSessionStream to ChatEvent[] for MessageList
   // Includes a final consecutive-duplicate guard to catch any remaining dupes
   const chatEventsForView = useMemo<ChatEvent[]>(() => {
@@ -786,7 +1388,9 @@ export default function AgentPage() {
         toolCallId: m.toolCallId,
         isError: m.isError,
         thoughts: m.thoughts,
+        thinking: m.thinking,
         timestamp: m.timestamp,
+        metadata: (m as any).metadata,
         messageIndex: (m.role === 'user' || m.role === 'assistant') ? i : undefined,
       };
       // Skip consecutive same-kind same-content duplicates
@@ -804,59 +1408,221 @@ export default function AgentPage() {
     }
     return events;
   }, [messages]);
-  const deferredChatEvents = useDeferredValue(chatEventsForView);
+  /** Automations and other server-only runs never open a browser NDJSON stream (`sending` stays false). */
+  const isServerSideRunActive = useMemo(() => {
+    if (!activeSessionId || !sessionDetail || sessionDetail.id !== activeSessionId) return false;
+    const st = sessionDetail.status;
+    return st === "RUNNING" || st === "PENDING";
+  }, [activeSessionId, sessionDetail]);
+
+  const agentBusy = sending || isServerSideRunActive;
+
+  /** React-side thread model (compact) — emitted inside each `[kletron:thread-dom]` log for diff vs `dom.*`. */
+  const threadReactFingerprint = useMemo(() => {
+    const tail = messages
+      .slice(-6)
+      .map((m) => `${m.role}:${m.id}:${(m.content ?? "").length}`)
+      .join("|");
+    const st = streamingText.slice(0, 72).replace(/\s+/g, " ").trim();
+    const sr = streamingReasoning.slice(0, 72).replace(/\s+/g, " ").trim();
+    return [
+      `n=${messages.length}`,
+      `tail=${tail}`,
+      `st=${streamingText.length}:${st}`,
+      `sr=${streamingReasoning.length}:${sr}`,
+      `busy=${agentBusy}`,
+      `send=${sending}`,
+      `ss=${streamStatus}`,
+    ].join(";");
+  }, [messages, streamingText, streamingReasoning, agentBusy, sending, streamStatus]);
+
+  const threadDomPaintLog = useMemo(
+    () =>
+      threadDomLogEnabled
+        ? {
+            enabled: true,
+            sessionId: activeSessionId,
+            reactFingerprint: threadReactFingerprint,
+          }
+        : undefined,
+    [threadDomLogEnabled, activeSessionId, threadReactFingerprint],
+  );
+
+  /** Thread column placeholder: workspace switch, hydrate in flight, or stale detail vs selected id — not while a live stream/run should stay visible. */
+  const showConversationSkeleton = useMemo(() => {
+    if (workspaceSwitching) return true;
+    if (!activeSessionId || agentBusy) return false;
+    if (sessionDetailLoading) return true;
+    if (sessionDetail && sessionDetail.id !== activeSessionId) return true;
+    if (!sessionDetail) return true;
+    return false;
+  }, [
+    workspaceSwitching,
+    activeSessionId,
+    agentBusy,
+    sessionDetailLoading,
+    sessionDetail,
+  ]);
+
+  /**
+   * Activity strip must follow the same timeline as the visible thread (`messages`).
+   * Raw `eventStream` can still contain the *previous* turn until the first `update`
+   * chunk — using it caused wrong “Continuing…” / old tool names right after send.
+   */
+  const activityEventsForStrip = useMemo(
+    () =>
+      chatEventsForView.map((e) => ({
+        kind: e.kind,
+        toolName: e.toolName,
+        name: e.toolName,
+        content: e.content,
+      })),
+    [chatEventsForView],
+  );
+
+  const runStartedAtForUi = runStartedAt ?? sessionDetail?.startedAt ?? null;
+
+  // ── Build sidebar project from active workspace + its sessions ───────
+  const sidebarProjects: SidebarProject[] = useMemo(() => {
+    if (!activeWorkspace) return [];
+    const threadsForWorkspace = sessions
+      .filter((s) => s.workspaceId === activeWorkspace.id)
+      .map((s): SidebarThread => ({
+        id: s.id,
+        title: s.title || "Untitled",
+        updatedAt: s.endedAt ?? s.startedAt,
+        liveStatus: sessionStatusToSidebarLiveStatus(
+          s.status,
+          activeSessionId === s.id && (sending || isServerSideRunActive),
+        ),
+        category: s.source === "automation" || s.automationId ? "automation" : "chat",
+        archived: s.archived,
+      }));
+    return [
+      {
+        id: activeWorkspace.id,
+        name: activeWorkspace.name,
+        health: activeWorkspace.health,
+        healthMessage: activeWorkspace.healthMessage,
+        selectable: activeWorkspace.selectable,
+        threads: threadsForWorkspace,
+      },
+    ];
+  }, [activeWorkspace, sessions, sending, activeSessionId, isServerSideRunActive]);
+
+  const threadSearchPaletteItems = useMemo(
+    () =>
+      sidebarProjects.flatMap((p) =>
+        p.threads.map((t) => ({
+          id: t.id,
+          title: t.title,
+          updatedAt: t.updatedAt,
+          archived: t.archived,
+          category: t.category,
+        })),
+      ),
+    [sidebarProjects],
+  );
+
+  const workspaceThreadSearchLabel = activeWorkspace?.name ?? "";
+
+  const openThreadSearch = useCallback(() => setThreadSearchOpen(true), []);
+
+  const { setCenterContent } = useAppHeaderCenter();
+
+  useLayoutEffect(() => {
+    if (!activeWorkspaceId || sidebarProjects.length === 0) {
+      setCenterContent(null);
+      return;
+    }
+    setCenterContent(
+      <ThreadSearchHeaderTrigger
+        onClick={openThreadSearch}
+        placeholder={workspaceThreadSearchLabel}
+        disabled={workspaceSwitching || sessionsLoading}
+        className="w-full min-w-[160px] max-w-[min(100%,28rem)]"
+      />,
+    );
+    return () => setCenterContent(null);
+  }, [
+    activeWorkspaceId,
+    sidebarProjects.length,
+    openThreadSearch,
+    workspaceThreadSearchLabel,
+    workspaceSwitching,
+    sessionsLoading,
+    setCenterContent,
+  ]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || el?.isContentEditable) return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (activeWorkspaceId && sidebarProjects.length > 0) setThreadSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeWorkspaceId, sidebarProjects.length]);
 
   const editControl = useMessageEdit({
     sessionId: activeSessionId,
     events: chatEventsForView,
     streaming: sending,
+    blockEdit: agentBusy,
     onTruncateAndResend: truncateAndResend,
   });
 
-  // ── Copy debug logs ──────────────────────────────────────────────────
+  // ── Copy full thread JSON (traceability: thoughts, tools, results, raw server history) ──
   const [logsCopied, setLogsCopied] = useState(false);
   const handleCopyLogs = useCallback(() => {
-    const debugState = {
-      timestamp: new Date().toISOString(),
-      activeSessionId,
-      streamStatus,
-      sending,
-      isStreaming,
-      errorMessage,
-      messagesCount: messages.length,
-      messages: messages.map((m) => ({
-        id: m.id,
-        role: m.role,
-        contentLength: m.content?.length ?? 0,
-        contentPreview: (m.content ?? "").slice(0, 120),
-        toolName: m.toolName,
-        timestamp: m.timestamp,
-      })),
-      eventStreamCount: eventStream.length,
-      eventStream: eventStream.slice(0, 30).map((e) => ({
-        id: e.id,
-        kind: e.kind,
-        contentLength: e.content?.length ?? 0,
-        contentPreview: (e.content ?? "").slice(0, 120),
-        name: e.name,
-        timestamp: e.timestamp,
-      })),
-      activeGraphIsSimple,
-      selectedGraphId,
-      llmProvider,
-      sessionDetail: sessionDetail ? {
-        id: sessionDetail.id,
-        graphId: sessionDetail.graphId,
-        status: sessionDetail.status,
-        graph: sessionDetail.graph,
-        conversationHistoryCount: sessionDetail.conversationHistory?.length ?? 0,
-      } : null,
-      tokenUsage,
-      runStartedAt,
-      runEndedAt,
-      timelineCount: timeline.length,
+    const threadExport = {
+      schema: "kletron.agent.thread_export.v1",
+      exportedAt: new Date().toISOString(),
+      context: {
+        activeSessionId,
+        activeWorkspaceId,
+        selectedGraphId,
+        llmProvider,
+        threadApprovalMode,
+        workMode,
+        planMode,
+        activeGraphIsSimple,
+      },
+      /**
+       * Last GET /api/sessions/:id response held in state — includes full `conversationHistory`
+       * as returned by the server (pagination via `conversationPagination` when present).
+       */
+      serverSessionSnapshot: sessionDetail,
+      /**
+       * Hydrated client thread: full message bodies, `thoughts` / `thinking`, tool args/output,
+       * NDJSON-derived `eventStream`, multi-node `timeline`, and final workflow payload when available.
+       */
+      client: {
+        streamStatus,
+        sending,
+        isStreaming,
+        errorMessage,
+        messages,
+        eventStream,
+        timeline,
+        lastResult,
+        /** In-flight token / reasoning buffers (non-empty while a stream is active). */
+        streamingText,
+        streamingReasoning,
+        tokenUsage,
+        runStartedAt,
+        runEndedAt,
+      },
+      messageQueue,
+      historyPagination: historyPage,
+      pendingEdits,
+      flushNotice,
     };
-    const text = JSON.stringify(debugState, null, 2);
+    const text = JSON.stringify(threadExport, null, 2);
     navigator.clipboard?.writeText(text).then(() => {
       setLogsCopied(true);
       setTimeout(() => setLogsCopied(false), 2000);
@@ -864,9 +1630,32 @@ export default function AgentPage() {
       console.error("Failed to copy logs:", err);
     });
   }, [
-    activeSessionId, streamStatus, sending, isStreaming, errorMessage,
-    messages, eventStream, activeGraphIsSimple, selectedGraphId, llmProvider,
-    sessionDetail, tokenUsage, runStartedAt, runEndedAt, timeline,
+    activeSessionId,
+    activeWorkspaceId,
+    selectedGraphId,
+    llmProvider,
+    threadApprovalMode,
+    workMode,
+    planMode,
+    activeGraphIsSimple,
+    sessionDetail,
+    streamStatus,
+    sending,
+    isStreaming,
+    errorMessage,
+    messages,
+    eventStream,
+    timeline,
+    lastResult,
+    streamingText,
+    streamingReasoning,
+    tokenUsage,
+    runStartedAt,
+    runEndedAt,
+    messageQueue,
+    historyPage,
+    pendingEdits,
+    flushNotice,
   ]);
 
   // Auto-scroll
@@ -942,66 +1731,20 @@ export default function AgentPage() {
     }
   }, [sending, messageQueue.length, dequeueAndSend]);
 
-  // ── Pending edits panel ───────────────────────────────────────────────
-  const pendingEditsPanel = pendingEdits.length > 0 ? (
-    <div className="border-t border-border-subtle bg-bg-surface p-3">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
-          Pending Edits ({pendingEdits.length})
-        </h3>
-        <div className="flex gap-1.5">
-          <button
-            onClick={() => void approveAll()}
-            disabled={approvingAll}
-            className="px-2 py-1 text-[10px] rounded border border-status-success-border bg-status-success-bg text-status-success-text hover:opacity-80 disabled:opacity-50"
-          >
-            {approvingAll ? "Approving..." : "Approve All"}
-          </button>
-          <button
-            onClick={() => void rejectAll()}
-            disabled={rejectingAll}
-            className="px-2 py-1 text-[10px] rounded border border-status-error-border bg-status-error-bg text-status-error-text hover:opacity-80 disabled:opacity-50"
-          >
-            {rejectingAll ? "Rejecting..." : "Reject All"}
-          </button>
-        </div>
-      </div>
-      <div className="space-y-1.5 max-h-48 overflow-y-auto">
-        {pendingEdits.map((edit) => (
-          <div
-            key={edit.id}
-            className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-elevated px-3 py-2 text-[11px]"
-          >
-            <div className="flex-1 min-w-0 mr-2">
-              <p className="font-mono text-text-primary truncate">{edit.toolName}</p>
-              {edit.description && (
-                <p className="text-text-muted truncate">{edit.description}</p>
-              )}
-              {edit.lastError && (
-                <p className="text-status-error-text truncate">
-                  Last error: {edit.lastError}
-                </p>
-              )}
-            </div>
-            <div className="flex gap-1">
-              <button
-                onClick={() => void approveEdit(edit.id)}
-                className="px-1.5 py-0.5 rounded text-[10px] border border-status-success-border bg-status-success-bg text-status-success-text hover:opacity-80"
-              >
-                Approve
-              </button>
-              <button
-                onClick={() => void rejectEdit(edit.id)}
-                className="px-1.5 py-0.5 rounded text-[10px] border border-status-error-border bg-status-error-bg text-status-error-text hover:opacity-80"
-              >
-                Reject
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  ) : null;
+  const pendingEditsPanel = (
+    <PendingSessionEditsStrip
+      pendingEdits={pendingEdits}
+      flushNotice={flushNotice}
+      dismissFlushNotice={dismissFlushNotice}
+      processingOp={processingOp}
+      approvingAll={approvingAll}
+      rejectingAll={rejectingAll}
+      approveEdit={approveEdit}
+      rejectEdit={rejectEdit}
+      approveAll={approveAll}
+      rejectAll={rejectAll}
+    />
+  );
 
   // ── Render ────────────────────────────────────────────────────────────
   const sidebar = (
@@ -1009,13 +1752,17 @@ export default function AgentPage() {
       projects={sidebarProjects}
       activeThreadId={activeSessionId}
       activeProjectId={activeWorkspaceId}
-      loading={workspaceSwitching}
+      loading={workspaceSwitching || sessionsLoading}
+      workMode={workMode}
+      onWorkModeChange={(mode) => void handleWorkModeSelect(mode)}
+      workModeSwitcherDisabled={workspaceSwitching || sessionsLoading}
       onThreadSelect={handleSelectSession}
       onNewThreadInProject={() => { void handleNewSessionInActiveWorkspace(); }}
       onRenameThread={(id, title) => void handleRenameSession(id, title)}
       onArchiveThread={(id) => void handleArchiveSession(id)}
       onDeleteThread={(id) => void handleDeleteSession(id)}
-      className="w-full"
+      surface="solid"
+      className="w-full min-h-0"
     />
   );
 
@@ -1024,6 +1771,9 @@ export default function AgentPage() {
     activeSessionId,
     activeWorkspaceId,
     workspaceSwitching,
+    sessionsLoading,
+    workMode,
+    handleWorkModeSelect,
     handleSelectSession,
     handleNewSessionInActiveWorkspace,
     handleRenameSession,
@@ -1032,76 +1782,105 @@ export default function AgentPage() {
   ]);
 
   const mainContent = (
-    <div className="flex flex-col h-full">
-      {/* Active workspace indicator + Token usage / duration header */}
-      <div className="flex-none flex items-center justify-between gap-3 px-4 py-2 border-b border-border-subtle bg-bg-surface">
-        {/* Left: workspace indicator */}
-        {activeWorkspace ? (
-          <div className="flex items-center gap-2 min-w-0">
-            <Folder className="h-3.5 w-3.5 text-text-muted flex-shrink-0" />
-            <span className="text-[11px] font-medium text-text-secondary truncate">
-              {activeWorkspace.name}
-            </span>
-            <span className="text-[10px] text-text-muted truncate hidden sm:inline">
-              {activeWorkspace.rootPath}
-            </span>
-          </div>
-        ) : workspaceError ? (
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-status-error-text">Failed to load workspaces</span>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <AgentSessionChrome
+        workMode={workMode}
+        onWorkModeChange={(mode) => void handleWorkModeSelect(mode)}
+        showWorkModeSwitcher={false}
+        workspaceName={activeWorkspace?.name ?? null}
+        workspaceRootPath={activeWorkspace?.rootPath ?? null}
+        workspaceErrorSlot={
+          workspaceError ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-status-error-text">Failed to load workspaces</span>
+              <button
+                type="button"
+                onClick={() => void refreshWorkspaces()}
+                className="text-[10px] text-text-muted underline hover:text-text-primary"
+              >
+                Retry
+              </button>
+            </div>
+          ) : undefined
+        }
+        trailing={
+          <>
+            {workMode === "code" && activeWorkspaceId ? (
+              <AgentCodeRepoBar workspaceId={activeWorkspaceId} />
+            ) : null}
+            <Link
+              href="/app/config/tools"
+              className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+              title="Manage tool catalog and policy"
+            >
+              Tools
+            </Link>
+            <Link
+              href={selectedGraphId ? `/app/agent-graphs/${selectedGraphId}` : "/app/agent-graphs"}
+              className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+              title="Manage graph tool allowlist"
+            >
+              Graph
+            </Link>
+            {runStartedAt && tokenUsage && <TokenUsageDisplay tokenUsage={tokenUsage} />}
+            {runStartedAt && <DurationDisplay startedAt={runStartedAt} endedAt={runEndedAt ?? undefined} />}
             <button
-              onClick={() => void refreshWorkspaces()}
-              className="text-[10px] text-text-muted underline hover:text-text-primary"
+              type="button"
+              onClick={() => setPerfDebugEnabled((v) => !v)}
+              className={`rounded border px-2 py-1 text-[10px] transition ${perfDebugEnabled
+                ? "border-status-info-border bg-status-info-bg text-status-info-text"
+                : "border-white/[0.08] bg-bg-elevated text-text-muted hover:bg-state-hover hover:text-text-primary"
+                }`}
+              title="Toggle performance debug metrics"
+            >
+              Perf {perfDebugEnabled ? "ON" : "OFF"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setThreadDomLogEnabled((v) => !v)}
+              className={`rounded border px-2 py-1 text-[10px] transition ${threadDomLogEnabled
+                ? "border-status-info-border bg-status-info-bg text-status-info-text"
+                : "border-white/[0.08] bg-bg-elevated text-text-muted hover:bg-state-hover hover:text-text-primary"
+                }`}
+              title="Log [kletron:thread-dom] snapshots: text read from the painted thread (rows + streaming slot). Add ?threadLog=1 to open with logging on. Filter console by kletron:thread-dom."
+            >
+              Dom log {threadDomLogEnabled ? "ON" : "OFF"}
+            </button>
+            {perfDebugEnabled && (
+              <div className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted">
+                FPS: {fps ?? "…"} | input p95: {inputLatencyStats.p95.toFixed(1)}ms | avg: {inputLatencyStats.avg.toFixed(1)}ms
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleCopyLogs}
+              className="flex items-center gap-1 rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+              title="Copy full thread JSON to clipboard (server history, messages, event stream, timeline, tools, thoughts, results)"
+            >
+              <ClipboardCopy className="h-3 w-3" />
+              {logsCopied ? "Copied!" : "Copy logs"}
+            </button>
+          </>
+        }
+      />
+
+      {/* Error snackbar - always visible at top when there's an error */}
+      {errorMessage && !sending && (
+        <div className="flex-none mx-4 mt-2 mb-1 rounded-lg border border-status-error-border bg-status-error-bg px-4 py-3 text-[12px] text-status-error-text shadow-md animate-in slide-in-from-top-2 duration-200">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold">Error</p>
+              <p className="mt-1 text-[11px] opacity-90 break-words">{errorMessage}</p>
+            </div>
+            <button
+              onClick={() => handleSend()}
+              className="flex-shrink-0 px-2 py-1 text-[10px] rounded border border-status-error-border hover:bg-status-error-text hover:text-white transition"
             >
               Retry
             </button>
           </div>
-        ) : (
-          <div className="text-[11px] text-text-muted">No workspace selected</div>
-        )}
-        {/* Right: metrics + debug */}
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <Link
-            href="/app/config/tools"
-            className="rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-            title="Manage tool catalog and policy"
-          >
-            Tools
-          </Link>
-          <Link
-            href={selectedGraphId ? `/app/agent-graphs/${selectedGraphId}` : "/app/config/graphs"}
-            className="rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-            title="Manage graph tool allowlist"
-          >
-            Graph
-          </Link>
-          {runStartedAt && tokenUsage && <TokenUsageDisplay tokenUsage={tokenUsage} />}
-          {runStartedAt && <DurationDisplay startedAt={runStartedAt} endedAt={runEndedAt ?? undefined} />}
-          <button
-            onClick={() => setPerfDebugEnabled((v) => !v)}
-            className={`rounded border px-2 py-1 text-[10px] transition ${perfDebugEnabled
-              ? "border-status-info-border bg-status-info-bg text-status-info-text"
-              : "border-border-subtle bg-bg-elevated text-text-muted hover:bg-state-hover hover:text-text-primary"
-              }`}
-            title="Toggle performance debug metrics"
-          >
-            Perf {perfDebugEnabled ? "ON" : "OFF"}
-          </button>
-          {perfDebugEnabled && (
-            <div className="rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-muted">
-              FPS: {fps ?? "…"} | input p95: {inputLatencyStats.p95.toFixed(1)}ms | avg: {inputLatencyStats.avg.toFixed(1)}ms
-            </div>
-          )}
-          <button
-            onClick={handleCopyLogs}
-            className="flex items-center gap-1 rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-            title="Copy debug logs to clipboard"
-          >
-            <ClipboardCopy className="h-3 w-3" />
-            {logsCopied ? "Copied!" : "Logs"}
-          </button>
         </div>
-      </div>
+      )}
 
       {/* Main content area - adaptive */}
       <div
@@ -1120,40 +1899,35 @@ export default function AgentPage() {
       >
         {activeGraphIsSimple ? (
           <div className="max-w-3xl mx-auto h-full min-h-0 flex flex-col">
-            {workspaceSwitching ? (
-              /* Skeleton loading state while workspace is switching */
-              <div className="max-w-3xl mx-auto px-2 py-8 space-y-6 animate-pulse">
-                {/* Skeleton user message */}
-                <div className="flex justify-end">
-                  <div className="h-10 w-3/5 rounded-xl bg-bg-elevated" />
-                </div>
-                {/* Skeleton assistant response */}
-                <div className="space-y-2">
-                  <div className="h-4 w-4/5 rounded bg-bg-elevated" />
-                  <div className="h-4 w-3/4 rounded bg-bg-elevated" />
-                  <div className="h-4 w-2/3 rounded bg-bg-elevated" />
-                </div>
-                {/* Skeleton tool call */}
-                <div className="h-16 w-full rounded-lg bg-bg-elevated" />
-                {/* Skeleton assistant response */}
-                <div className="space-y-2">
-                  <div className="h-4 w-5/6 rounded bg-bg-elevated" />
-                  <div className="h-4 w-3/5 rounded bg-bg-elevated" />
-                </div>
-              </div>
-            ) : messages.length === 0 && !sending && (
+            {showConversationSkeleton ? (
+              <ConversationThreadSkeleton className="w-full" />
+            ) : messages.length === 0 && !sending && !isServerSideRunActive ? (
               <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                 <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>
                 <p className="text-[13px] text-center max-w-md">
-                  Start a conversation. Select a graph and LLM provider below, then send your message.
+                  {workMode === "code"
+                    ? "Code mode: pick a graph and model, then ask for repo changes, reviews, or Git help."
+                    : "Work mode: pick a graph and model for research, drafting, and planning—without repo-first defaults."}{" "}
+                  Use the Mode control above to switch.
                 </p>
               </div>
-            )}
-            {(messages.length > 0 || sending) && (
+            ) : null}
+            <CapabilityDroppedWorkspaceChrome
+              showSkeleton={showConversationSkeleton}
+              tools={capabilityDroppedTools}
+              bannerDismissed={capabilityToolsBannerDismissed}
+              onSetBannerDismissed={setCapabilityToolsBannerDismissed}
+              workspaceId={activeWorkspaceId}
+            />
+            {!showConversationSkeleton && (messages.length > 0 || agentBusy) && (
               <MessageList
-                events={deferredChatEvents}
-                streaming={sending}
+                events={chatEventsForView}
+                streaming={agentBusy}
                 streamingText={streamingText}
+                streamingReasoning={streamingReasoning}
+                activityEvents={activityEventsForStrip}
+                runStartedAt={runStartedAtForUi}
+                pendingApprovalCount={pendingEdits.length}
                 maxVisibleEvents={320}
                 hasOlder={historyPage.hasOlder}
                 loadingOlder={loadingOlder}
@@ -1161,6 +1935,7 @@ export default function AgentPage() {
                 virtualized
                 prefetchNearTop
                 onNearTop={handleLoadOlderMessages}
+                domPaintLog={threadDomPaintLog}
                 className="flex-1 min-h-0 p-0 px-2 py-4"
                 messageActions={(event) => (
                   <MessageActions
@@ -1186,30 +1961,48 @@ export default function AgentPage() {
           </div>
         ) : (
           <div className="px-4 py-4 space-y-3">
-            {eventStream.length === 0 && !sending && (
-              <div className="flex flex-col items-center justify-center py-20 text-text-muted">
-                <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>
-                <p className="text-[13px] text-center max-w-md">
-                  Select a multi-phase graph and send your mission to see the execution timeline.
-                </p>
-              </div>
-            )}
-            {eventStream
-              .filter((e) => e.kind !== "system")
-              .map((event) => (
-                <EventCard key={event.id} event={event} />
-              ))}
-            {sending && eventStream.length > 0 && (
-              <div className="flex items-center gap-2 px-4 py-3 text-text-muted">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-[12px]">Executing...</span>
-              </div>
-            )}
-            {errorMessage && !sending && (
-              <div className="rounded-lg border border-status-error-border bg-status-error-bg px-4 py-3 text-[12px] text-status-error-text">
-                <p className="font-medium">Something went wrong</p>
-                <p className="mt-1 text-[11px] opacity-80">{errorMessage}</p>
-              </div>
+            {showConversationSkeleton ? (
+              <ConversationThreadSkeleton className="max-w-3xl mx-auto" />
+            ) : (
+              <>
+                <CapabilityDroppedWorkspaceChrome
+                  showSkeleton={showConversationSkeleton}
+                  tools={capabilityDroppedTools}
+                  bannerDismissed={capabilityToolsBannerDismissed}
+                  onSetBannerDismissed={setCapabilityToolsBannerDismissed}
+                  workspaceId={activeWorkspaceId}
+                />
+                {eventStream.length === 0 && !sending && !isServerSideRunActive && (
+                  <div className="flex flex-col items-center justify-center py-20 text-text-muted">
+                    <h2 className="text-lg font-semibold text-text-primary mb-2">Agent</h2>
+                    <p className="text-[13px] text-center max-w-md">
+                      Select a multi-phase graph and send your mission to see the execution timeline.
+                    </p>
+                  </div>
+                )}
+                {eventStream
+                  .filter((e) => e.kind !== "system")
+                  .map((event) => (
+                    <EventCard key={event.id} event={event} />
+                  ))}
+                {(sending || isServerSideRunActive) && (
+                  <div className="px-1 py-2 text-text-muted">
+                    <AgentStatusShimmerLabel
+                      className="text-[12px]"
+                      tone="secondary"
+                      textClassName="font-medium"
+                    >
+                      {sending ? "Executing…" : "Run in progress…"}
+                    </AgentStatusShimmerLabel>
+                  </div>
+                )}
+                {errorMessage && !sending && (
+                  <div className="rounded-lg border border-status-error-border bg-status-error-bg px-4 py-3 text-[12px] text-status-error-text">
+                    <p className="font-medium">Something went wrong</p>
+                    <p className="mt-1 text-[11px] opacity-80">{errorMessage}</p>
+                  </div>
+                )}
+              </>
             )}
             <div ref={bottomRef} />
           </div>
@@ -1219,20 +2012,22 @@ export default function AgentPage() {
       {/* Pending edits panel */}
       {pendingEditsPanel}
 
-      {/* Queued messages (visible when agent is busy) */}
+      {/* Queued messages — align width with thread + composer */}
       <MessageQueue
         messages={messageQueue}
         onEdit={handleQueueEdit}
         onMoveUp={handleQueueMoveUp}
         onDelete={handleQueueDelete}
         onForceSend={handleQueueForceSend}
-        streaming={sending}
+        streaming={agentBusy}
+        className="mx-auto w-full max-w-3xl"
       />
 
       {/* Chat input */}
-      <div className="flex-none border-t border-border-subtle bg-bg-surface px-4 py-3">
+      <div className="flex-none px-4 pb-3 pt-1">
         <AgentComposer
           sending={sending}
+          runActive={isServerSideRunActive}
           onStop={handleStop}
           onSendText={handleSendOrQueueText}
           selectedGraphId={selectedGraphId}
@@ -1242,12 +2037,26 @@ export default function AgentPage() {
           llmOptions={llmOptions}
           onLlmChange={handleLlmChange}
           llmStatus={llmStatus}
+          llmStatusDetail={llmStatusDetail}
+          graphSelectorLoading={graphSelectorLoading}
+          llmSelectorLoading={llmSelectorLoading}
           prefillText={composerPrefill}
           resetKey={activeSessionId ?? "new-session"}
           perfDebugEnabled={perfDebugEnabled}
           onInputLatencySample={handleInputLatencySample}
           editControl={editControl}
+          threadApprovalMode={threadApprovalMode}
+          onThreadApprovalModeChange={onThreadApprovalSelect}
+          threadApprovalLocked={sessionDetail?.source === "automation"}
+          threadApprovalLockedReason="Approval mode is fixed for automation threads."
+          activeWorkspaceId={activeWorkspaceId}
+          planMode={planMode}
+          onPlanModeToggle={() => setPlanMode((p) => !p)}
+          researchDepth={researchDepth}
+          onResearchDepthChange={setResearchDepth}
+          activeSessionId={activeSessionId}
         />
+        <WorkspaceConnectorsHint workspaceId={activeWorkspaceId} className="mt-2" />
       </div>
     </div>
   );
@@ -1264,12 +2073,55 @@ export default function AgentPage() {
 
   return (
     <>
+      <Modal
+        open={fullAutoConfirmOpen}
+        onClose={() => setFullAutoConfirmOpen(false)}
+        title="Full auto in this chat"
+        subtitle="Tools will run without asking, including file writes and shell commands. Kletron admin actions and your workspace blocklist still require approval."
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setFullAutoConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                const key = `kletron-full-auto-thread-ok-${activeWorkspaceId ?? "default"}`;
+                sessionStorage.setItem(key, "1");
+                setFullAutoConfirmOpen(false);
+                void commitThreadApprovalMode("full_auto_thread");
+              }}
+            >
+              Enable full auto
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-text-secondary">
+          You can tighten defaults anytime under{" "}
+          <Link href="/app/config/workspace" className="text-accent underline">
+            Configuration → Workspace
+          </Link>
+          .
+        </p>
+      </Modal>
+      <ThreadSearchPalette
+        open={threadSearchOpen}
+        onClose={() => setThreadSearchOpen(false)}
+        threads={threadSearchPaletteItems}
+        activeThreadId={activeSessionId}
+        onSelect={(id) => void handleSelectSession(id)}
+        placeholder="Search threads…"
+      />
       <WorkspaceLayout
+        className="min-h-0"
         sidebar={memoSidebar}
         content={mainContent}
         aside={timelineSidebar}
         sidebarWidth="w-[260px]"
         asideWidth="w-72"
+        sidebarClassName="min-h-0 border-r-0 bg-transparent p-0"
+        contentClassName="min-h-0 bg-bg-app"
       />
     </>
   );

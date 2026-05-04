@@ -3,6 +3,7 @@ import path from "node:path";
 import { McpClient } from "@kletron/mcp-client/client";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
+import { syncWorkspaceExternalMcpServers } from "@kletron/server/services/mcpWorkspaceSync";
 
 export async function POST(req: NextRequest) {
     const auth = await requireAppRouteAuth(req);
@@ -46,7 +47,10 @@ export async function POST(req: NextRequest) {
         resolvePathArg("repoPath", true);
 
         const client = await McpClient.getInstance();
-        const result = await client.callTool(toolName, resolvedArgs);
+        await syncWorkspaceExternalMcpServers(workspace._id.toString());
+        const result = await client.callTool(toolName, resolvedArgs, {
+            workspaceId: workspace._id.toString(),
+        });
 
         return NextResponse.json({ result });
     } catch (error: any) {

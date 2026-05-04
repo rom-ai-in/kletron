@@ -4,8 +4,8 @@ import { runRepoAnalysis } from "@kletron/agent-core/agents/repoScannerAgent";
 import { getLlmConfig } from "@kletron/server/services/llmConfigService";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
-import { contextGraphStore, ContextGraphStore } from "@kletron/server/context/graph/ContextGraphStore";
-import { contextScanner, ContextScanner } from "@kletron/server/context/graph/ContextScanner";
+import { getContextGraphStore } from "@kletron/server/context/graph/contextGraphRegistry";
+import { contextScanner } from "@kletron/server/context/graph/ContextScanner";
 
 // Ensure dynamic route
 export const dynamic = "force-dynamic";
@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
 
                 // 3. Use the configured workspace
                 const workspaceRoot = workspace.rootPath;
+                const workspaceId = workspace._id.toString();
                 sendEvent({ type: "log", message: `Target Workspace: ${workspaceRoot}` });
 
                 // 4. Run Analysis on the configured target repository
@@ -61,9 +62,10 @@ export async function POST(req: NextRequest) {
                 // 4b. Persist/update the server-side context graph
                 try {
                     sendEvent({ type: "log", message: "Updating context graph..." });
-                    const store = contextGraphStore;
+                    const store = getContextGraphStore(workspaceId, workspaceRoot);
                     await store.load();
-                    await contextScanner.scanWorkspace(workspaceRoot);
+                    await contextScanner.scanWorkspace(workspaceRoot, store);
+                    await store.save();
                     sendEvent({ type: "log", message: `Context graph updated (${store.getAllNodes().length} nodes).` });
                 } catch (err: any) {
                     sendEvent({ type: "log", message: `Context graph update failed: ${err?.message || "unknown error"}` });

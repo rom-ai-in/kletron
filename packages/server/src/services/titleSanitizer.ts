@@ -10,11 +10,30 @@ export function stripSystemPrefix(text: string): string {
 export function stripThoughtContent(text: string): string {
   if (!text) return "";
   let cleaned = text;
+  cleaned = cleaned.replace(/<redacted_thinking>[\s\S]*?<\/redacted_thinking>/gi, " ");
   cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, " ");
   cleaned = cleaned.replace(/respond with only the title[\s\S]*/gi, " ");
   cleaned = cleaned.replace(/we need to produce a short chat title[\s\S]*/gi, " ");
   cleaned = cleaned.replace(/<\/?think>/gi, " ");
   cleaned = cleaned.replace(/\s+/g, " ").trim();
+  return cleaned;
+}
+
+/**
+ * Same leakage / hidden-thought removals as {@link stripThoughtContent}, but **does not**
+ * collapse newlines. Use for conversation transcripts so markdown code fences, lists, and
+ * indentation survive API round-trips. Titles and one-line extracts should keep using
+ * {@link stripThoughtContent}.
+ */
+export function stripThoughtTagsForTranscript(text: string): string {
+  if (!text) return "";
+  let cleaned = text;
+  // Keep patterns aligned with stripThoughtContent (see that function for tag names).
+  cleaned = cleaned.replace(/<redacted_thinking>[\s\S]*?<\/redacted_thinking>/gi, "\n");
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "\n");
+  cleaned = cleaned.replace(/respond with only the title[\s\S]*/gi, "");
+  cleaned = cleaned.replace(/we need to produce a short chat title[\s\S]*/gi, "");
+  cleaned = cleaned.replace(/<\/?think>/gi, "");
   return cleaned;
 }
 
@@ -66,8 +85,11 @@ const META_REASONING_PATTERNS: RegExp[] = [
 export function sanitizeAssistantVisibleContent(text: string): string {
   if (!text) return "";
 
-  // Remove explicit hidden-thought blocks first.
-  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, " ").trim();
+  // Remove explicit hidden-thought blocks first (long and short tag names).
+  let cleaned = text
+    .replace(/<redacted_thinking>[\s\S]*?<\/redacted_thinking>/gi, " ")
+    .replace(/<think>[\s\S]*?<\/think>/gi, " ")
+    .trim();
   if (!cleaned) return "";
 
   const paragraphs = cleaned

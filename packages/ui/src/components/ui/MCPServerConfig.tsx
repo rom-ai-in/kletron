@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Plus, Trash2, Power, AlertCircle, CheckCircle, XCircle, Pencil, Check, X } from 'lucide-react';
+import { Plus, Trash2, Power, Pencil, Check, X } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
 export interface MCPServer {
     id: string;
@@ -27,6 +28,8 @@ export interface MCPServerConfigProps {
     onToggle?: (serverId: string, enabled: boolean) => void;
     onEdit?: (serverId: string, config: MCPServerInput) => void;
     className?: string;
+    /** When true, rows rely on a parent card's divide-y — no per-row box borders. */
+    embeddedInCard?: boolean;
 }
 
 function StatusDot({ status }: { status: MCPServer['status'] }) {
@@ -45,6 +48,7 @@ export function MCPServerConfig({
     onToggle,
     onEdit,
     className = '',
+    embeddedInCard = false,
 }: MCPServerConfigProps) {
     const [showAdd, setShowAdd] = useState(false);
     const [newName, setNewName] = useState('');
@@ -89,12 +93,16 @@ export function MCPServerConfig({
         setShowAdd(false);
     }
 
+    const rowShell = embeddedInCard
+        ? 'flex items-center justify-between px-3 py-2 bg-bg-app/30'
+        : 'flex items-center justify-between rounded-md border border-border-subtle bg-bg-surface/50 px-3 py-2';
+
     return (
-        <div className={`space-y-2 ${className}`}>
+        <div className={cn(embeddedInCard ? 'divide-y divide-border-subtle' : 'space-y-2', className)}>
             {servers.map(server => (
                 <div key={server.id}>
                     {editingId === server.id ? (
-                        <div className="rounded-md border border-border-strong bg-bg-surface p-3 space-y-2">
+                        <div className={cn('p-3 space-y-2', embeddedInCard ? 'bg-bg-surface/40' : 'rounded-md border border-border-strong bg-bg-surface')}>
                             <input
                                 value={editName}
                                 onChange={(e) => setEditName(e.target.value)}
@@ -129,7 +137,7 @@ export function MCPServerConfig({
                             </div>
                         </div>
                     ) : (
-                        <div className="flex items-center justify-between rounded-md border border-border-subtle bg-bg-surface/50 px-3 py-2">
+                        <div className={rowShell}>
                             <div className="flex items-center gap-2 min-w-0">
                                 <StatusDot status={server.status} />
                                 <div className="min-w-0">
@@ -175,13 +183,18 @@ export function MCPServerConfig({
             ))}
 
             {servers.length === 0 && !showAdd && (
-                <div className="rounded-md border border-border-subtle px-3 py-4 text-xs text-text-muted text-center">
+                <div
+                    className={cn(
+                        'px-3 py-4 text-xs text-text-muted text-center',
+                        !embeddedInCard && 'rounded-md border border-border-subtle'
+                    )}
+                >
                     No MCP servers configured.
                 </div>
             )}
 
             {showAdd ? (
-                <div className="rounded-md border border-border-strong bg-bg-surface p-3 space-y-2">
+                <div className={cn('p-3 space-y-2', embeddedInCard ? 'bg-bg-surface/40' : 'rounded-md border border-border-strong bg-bg-surface')}>
                     <input
                         value={newName}
                         onChange={(e) => setNewName(e.target.value)}
@@ -222,7 +235,12 @@ export function MCPServerConfig({
                 <button
                     type="button"
                     onClick={() => setShowAdd(true)}
-                    className="flex items-center gap-2 w-full rounded-md border border-dashed border-border-strong px-3 py-2 text-xs text-text-muted hover:text-text-primary hover:border-border-strong transition-colors"
+                    className={cn(
+                        'flex items-center gap-2 w-full px-3 py-2 text-xs text-text-muted hover:text-text-primary transition-colors',
+                        embeddedInCard
+                            ? 'border-t border-dashed border-border-subtle hover:bg-state-hover/40'
+                            : 'rounded-md border border-dashed border-border-strong hover:border-border-strong'
+                    )}
                 >
                     <Plus className="w-3.5 h-3.5" />
                     Add MCP Server

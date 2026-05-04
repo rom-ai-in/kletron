@@ -43,10 +43,47 @@ const api = {
   getWorkspace: (): Promise<WorkspaceInfo | null> => ipcRenderer.invoke("app:getWorkspace"),
   openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke("app:openExternal", url),
   openInVSCode: (targetPath?: string): Promise<boolean> => ipcRenderer.invoke("app:openInVSCode", targetPath),
+  /** Code mode: N/A — use openInVSCode. Work mode: reveal workspace in Finder / Explorer. */
+  openWorkspaceInSystemFileManager: (targetPath?: string): Promise<boolean> =>
+    ipcRenderer.invoke("app:openWorkspaceInSystemFileManager", targetPath),
   onAuthLink: (handler: (url: string) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, url: string) => handler(url);
     ipcRenderer.on("auth:deepLink", listener);
     return () => ipcRenderer.removeListener("auth:deepLink", listener);
+  },
+  /** Main-process menu navigates to primary views */
+  onNavigate: (handler: (view: "app" | "history" | "automations" | "agent-graphs" | "settings") => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, view: string) => {
+      if (
+        view === "app" ||
+        view === "history" ||
+        view === "automations" ||
+        view === "agent-graphs" ||
+        view === "settings"
+      ) {
+        handler(view);
+      }
+    };
+    ipcRenderer.on("app:navigate", listener);
+    return () => ipcRenderer.removeListener("app:navigate", listener);
+  },
+  /** Menu / accelerator: Add workspace (same as Cmd+O in renderer) */
+  onAddWorkspaceRequest: (handler: () => void): (() => void) => {
+    const listener = () => handler();
+    ipcRenderer.on("app:addWorkspace", listener);
+    return () => ipcRenderer.removeListener("app:addWorkspace", listener);
+  },
+  /** Menu: Settings (Cmd+,) */
+  onOpenSettingsRequest: (handler: () => void): (() => void) => {
+    const listener = () => handler();
+    ipcRenderer.on("app:openSettings", listener);
+    return () => ipcRenderer.removeListener("app:openSettings", listener);
+  },
+  /** Menu: toggle Code / Work mode (Cmd+Shift+M) */
+  onToggleWorkModeRequest: (handler: () => void): (() => void) => {
+    const listener = () => handler();
+    ipcRenderer.on("app:toggleWorkMode", listener);
+    return () => ipcRenderer.removeListener("app:toggleWorkMode", listener);
   },
   getAppVersion: (): Promise<string> => ipcRenderer.invoke("app:getVersion"),
   getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("app:getUpdateStatus"),

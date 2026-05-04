@@ -2,19 +2,38 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ListTree, ArrowRight, Wrench, Folder, Brain, Layers, TrendingUp } from "lucide-react";
+import {
+  ListTree,
+  ArrowRight,
+  Wrench,
+  Folder,
+  Brain,
+  Layers,
+  Link as LinkIcon,
+  Puzzle,
+  Settings,
+  MessagesSquare,
+} from "lucide-react";
 import { Panel } from "@kletron/ui/components/design-system";
+import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 
 type LlmConfigSummary = { provider?: string } | null;
 
 export default function ConfigOverviewPage() {
+  const { activeWorkspaceId } = useWorkspace();
+  const skillsHref = activeWorkspaceId
+    ? `/app/${activeWorkspaceId}/skills`
+    : "/app/config/skills";
+  const connectorsHref = activeWorkspaceId
+    ? `/app/${activeWorkspaceId}/connectors`
+    : "/app/config/connectors";
+  const pluginsHref = activeWorkspaceId
+    ? `/app/${activeWorkspaceId}/plugins`
+    : "/app/config/plugins";
   const [graphsCount, setGraphsCount] = useState<number>(0);
   const [toolsCount, setToolsCount] = useState<number>(0);
   const [llmProvider, setLlmProvider] = useState<LlmConfigSummary>(null);
   const [embeddingProvider, setEmbeddingProvider] = useState<string | null>(null);
-  const [baPersonasCount, setBaPersonasCount] = useState<number>(0);
-  const [baCompetitorsCount, setBaCompetitorsCount] = useState<number>(0);
-  const [baHasVision, setBaHasVision] = useState(false);
 
   useEffect(() => {
     // LLM provider (server)
@@ -73,24 +92,7 @@ export default function ConfigOverviewPage() {
     void fetchTools();
   }, []);
 
-  useEffect(() => {
-    const fetchBAContext = async () => {
-      try {
-        const res = await fetch("/api/business-analyst/context");
-        if (!res.ok) return;
-        const data = await res.json();
-        const ctx = data.context;
-        if (ctx) {
-          setBaPersonasCount(Array.isArray(ctx.personas) ? ctx.personas.length : 0);
-          setBaCompetitorsCount(Array.isArray(ctx.competitors) ? ctx.competitors.length : 0);
-          setBaHasVision(!!ctx.productVision);
-        }
-      } catch {
-        // Silently fail — card will show "Not configured"
-      }
-    };
-    void fetchBAContext();
-  }, []);
+
 
   // Format provider names for display
   const formatProvider = (provider: string | null | undefined) => {
@@ -105,15 +107,6 @@ export default function ConfigOverviewPage() {
       voyage: "Voyage",
     };
     return providerNames[provider] || provider;
-  };
-
-  // Build BA meta string
-  const getBaMeta = () => {
-    const parts: string[] = [];
-    if (baHasVision) parts.push("Vision set");
-    if (baPersonasCount > 0) parts.push(`${baPersonasCount} persona${baPersonasCount > 1 ? "s" : ""}`);
-    if (baCompetitorsCount > 0) parts.push(`${baCompetitorsCount} competitor${baCompetitorsCount > 1 ? "s" : ""}`);
-    return parts.length > 0 ? parts.join(" · ") : "Not configured yet";
   };
 
   // Build AI Models meta string
@@ -134,9 +127,14 @@ export default function ConfigOverviewPage() {
   return (
     <div className="flex h-full flex-col bg-bg-app overflow-hidden">
       <div className="flex items-center justify-between border-b border-border-subtle bg-bg-surface px-6 py-4">
-        <div>
-          <h1 className="text-lg font-semibold text-text-primary">Configuration</h1>
-          <p className="text-sm text-text-muted">One place to manage AI providers and Graph flows.</p>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-text-secondary/10 text-text-secondary">
+            <Settings className="h-5 w-5" aria-hidden />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold text-text-primary">Configuration</h1>
+            <p className="text-sm text-text-muted">One place to manage AI providers and Graph flows.</p>
+          </div>
         </div>
       </div>
 
@@ -158,17 +156,24 @@ export default function ConfigOverviewPage() {
             highlight
           />
           <ConfigCard
-            title="Context"
-            description="Project soul, cache, and graph debugging."
+            title="Context & retrieval"
+            description="Overview, structural map, semantic index, injection, and trace — single home for repo context."
             icon={<Layers className="h-4 w-4 text-text-muted" />}
             href="/app/config/context"
-            meta="Audit context & knowledge graph"
+            meta="Includes vector index & history"
+          />
+          <ConfigCard
+            title="Messenger channels"
+            description="Telegram, Slack, WhatsApp webhooks and identity linking."
+            icon={<MessagesSquare className="h-4 w-4 text-primary-main" />}
+            href="/app/config/channels"
+            meta="Dedicated setup · env vars on server"
           />
           <ConfigCard
             title="Graphs"
-            description="DB-backed agent graphs (nodes + edges)."
+            description="Edit DAGs, inspect structure, run live executions."
             icon={<ListTree className="h-4 w-4 text-text-muted" />}
-            href="/app/config/graphs"
+            href="/app/agent-graphs"
             meta={`${graphsCount} graphs`}
           />
           <ConfigCard
@@ -179,18 +184,39 @@ export default function ConfigOverviewPage() {
             meta={`${toolsCount} tools available`}
           />
           <ConfigCard
-            title="Business Analyst"
-            description="Product vision, user personas & competitors."
-            icon={<TrendingUp className="h-4 w-4 text-text-muted" />}
-            href="/app/business-analyst/config"
-            meta={getBaMeta()}
+            title="Code vs Work"
+            description="How Code and Work modes differ (tools and behavior)."
+            icon={<Layers className="h-4 w-4 text-text-muted" />}
+            href="/app/config/categories"
+            meta="Two modes"
+          />
+           <ConfigCard
+             title="Skills"
+             description="AI capabilities as .md files."
+             icon={<Wrench className="h-4 w-4 text-text-muted" />}
+             href={skillsHref}
+             meta={activeWorkspaceId ? "This workspace" : "Pick a workspace"}
+           />
+           <ConfigCard
+             title="Connectors"
+             description="External service integrations."
+             icon={<LinkIcon className="h-4 w-4 text-text-muted" />}
+             href={connectorsHref}
+             meta={activeWorkspaceId ? "OAuth & MCP" : "Pick a workspace"}
+           />
+          <ConfigCard
+            title="Plugins"
+            description="Cowork-style bundles of skills and connectors."
+            icon={<Puzzle className="h-4 w-4 text-text-muted" />}
+            href={pluginsHref}
+            meta={activeWorkspaceId ? "This workspace" : "Pick a workspace"}
           />
         </div>
 
         <div className="mt-6">
           <Panel className="p-4">
             <p className="text-xs text-text-secondary">
-              Tip: each section is deep-linkable. You can share links like <span className="font-mono">/config/graphs</span>{" "}
+              Tip: each section is deep-linkable. You can share links like <span className="font-mono">/app/agent-graphs</span>{" "}
               with your team.
             </p>
           </Panel>

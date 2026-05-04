@@ -33,15 +33,16 @@ export default function TermsOfServicePage() {
 
                     <Section title="2. Description of Service">
                         <p>
-                            Kletron is an AI-powered coding assistant provided as a desktop IDE and web platform.
-                            The Service includes:
+                            Kletron is an AI agent platform provided as a desktop IDE and web application. The Service includes
+                            software development workflows and broader &quot;Work&quot; workflows (research, documents, and automation),
+                            with the following representative capabilities:
                         </p>
                         <ul>
-                            <li>AI-assisted code generation and analysis</li>
-                            <li>Visual agent graph editor</li>
-                            <li>Semantic code indexing</li>
+                            <li>AI-assisted generation and analysis of code and other workspace content</li>
+                            <li>Visual agent graph editor and execution</li>
+                            <li>Workspace memory and semantic indexing of permitted files</li>
                             <li>Multi-repository automation management</li>
-                            <li>Integration with third-party AI providers (BYOK model)</li>
+                            <li>Integration with third-party AI providers and MCP tool servers (including BYOK)</li>
                         </ul>
                     </Section>
 

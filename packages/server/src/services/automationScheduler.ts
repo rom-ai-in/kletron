@@ -141,39 +141,23 @@ async function pollScheduledAutomations(): Promise<void> {
                 // Increment schedule count (updates lastScheduledAt, computes nextScheduledAt)
                 await automationExecutor.incrementScheduleCount(automationId);
 
-                // Resolve workspace for the automation to set proper AsyncLocalStorage context
                 const workspaceId = fresh.workspaceId?.toString();
-                let workspace;
-                try {
-                    workspace = workspaceId
-                        ? await getWorkspaceByIdUnsafe(workspaceId)
-                        : (await listAllWorkspaces())[0];
-                } catch {
-                    // Non-fatal: proceed without workspace context
-                }
 
-                // Start a new run in background
-                const runId = await automationExecutor.startNewRun(automationId, workspaceId);
-
-                // Execute run without awaiting (fire-and-forget), wrapped in workspace context
-                if (workspace) {
-                    runWithWorkspaceContext(workspace, () => {
-                        automationExecutor.executeRun(runId).catch((error) => {
-                            console.error(
-                                `[AutomationScheduler] Run ${runId} (automation ${automationId}) failed:`,
-                                error
-                            );
-                        });
-                    });
-                } else {
-                    // Fallback: execute without workspace context (best-effort)
-                    automationExecutor.executeRun(runId).catch((error) => {
+                // Launch the automation as an agent thread; runAutomationAsThread
+                // is non-blocking (fire-and-forget background execution).
+                automationExecutor
+                    .runAutomationAsThread(automationId, workspaceId)
+                    .then(({ threadId }) => {
+                        console.info(
+                            `[AutomationScheduler] Automation ${automationId} → thread ${threadId}`
+                        );
+                    })
+                    .catch((error) => {
                         console.error(
-                            `[AutomationScheduler] Run ${runId} (automation ${automationId}) failed:`,
+                            `[AutomationScheduler] Automation ${automationId} failed to start:`,
                             error
                         );
                     });
-                }
 
                 state.executionsTriggered++;
             } catch (error) {

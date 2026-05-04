@@ -1,0 +1,46 @@
+name: Bug report
+description: Something is broken or incorrect
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security:** do not use this public form for vulnerabilities — see `SECURITY.md` in the repo root (private advisory or email).
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Minimal steps (commands, clicks) to reproduce.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Node version, Docker yes/no, commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Paste relevant logs or attach screenshots.

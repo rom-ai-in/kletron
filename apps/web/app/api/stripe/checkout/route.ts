@@ -2,15 +2,14 @@
 // Create Stripe Checkout Session for subscription
 import { NextRequest, NextResponse } from 'next/server';
 import { createCheckoutSession } from '@kletron/server/services/stripeService';
-import { createServerSupabaseClient } from '@kletron/server/lib/supabase/supabaseServer';
+import { requireAppRouteAuth } from '@kletron/server/lib/auth/apiAuth';
 
 export async function POST(request: NextRequest) {
     try {
         // Get authenticated user
-        const supabase = await createServerSupabaseClient();
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        const auth = await requireAppRouteAuth(request);
 
-        if (authError || !user) {
+        if (!auth) {
             return NextResponse.json(
                 { error: 'Unauthorized. Please log in.' },
                 { status: 401 }
@@ -41,13 +40,13 @@ export async function POST(request: NextRequest) {
 
         // Build success/cancel URLs
         const origin = request.headers.get('origin') || 'http://localhost:3000';
-        const successUrl = `${origin}/app/account/billing?success=true&session_id={CHECKOUT_SESSION_ID}`;
+        const successUrl = `${origin}/app/organization/billing?success=true&session_id={CHECKOUT_SESSION_ID}`;
         const cancelUrl = `${origin}/pricing?canceled=true`;
 
         // Create checkout session
         const session = await createCheckoutSession({
-            userId: user.id,
-            userEmail: user.email || '',
+            userId: auth.userId,
+            userEmail: '',
             planId,
             billingPeriod,
             successUrl,

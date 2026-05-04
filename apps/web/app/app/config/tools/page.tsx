@@ -23,7 +23,7 @@ const TOOL_EXAMPLES: Record<string, object> = {
     web_search: { query: "market trends 2024" },
     fetch_url: { url: "https://example.com/api/data" },
     // Semantic search
-    semantic_code_search: { query: "drift analysis worker" },
+    semantic_code_search: { query: "code patterns" },
     output_format: { text: "Sample output" },
 };
 
@@ -151,7 +151,7 @@ export default function ToolsConfigPage() {
                         </div>
                         <div className="flex gap-2">
                             <Link
-                                href="/app/config/graphs"
+                                href="/app/agent-graphs"
                                 className="rounded-md border border-border-subtle bg-bg-elevated px-2.5 py-1.5 text-xs text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
                             >
                                 Configure per-graph tools

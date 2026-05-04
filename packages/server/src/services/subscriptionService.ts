@@ -11,7 +11,7 @@ export type BillingPeriod = 'monthly' | 'yearly';
 
 export interface Subscription {
     _id?: ObjectId;
-    userId: string;              // Supabase user ID
+    userId: string;              // Auth user ID
     stripeCustomerId: string;    // Stripe customer ID
     stripeSubscriptionId: string;
     planId: PlanId;

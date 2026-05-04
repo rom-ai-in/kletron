@@ -1,10 +1,34 @@
 'use client';
 
 import Link from 'next/link';
-import { useAuth } from '@kletron/ui/context/AuthContext';
-import { MarketingHeader, MarketingFooter } from '@kletron/ui/components/design-system';
+import {
+    MarketingHeader,
+    MarketingFooter,
+    EarlyAccessBadge,
+    marketingContainer,
+    MarketingEyebrow,
+    MarketingHeroTitle,
+    MarketingLead,
+    MarketingSectionTitle,
+    marketingBtnPrimary,
+    marketingBtnSecondary,
+    MarketingCard,
+    MarketingIconCircle,
+} from '@kletron/ui/components/design-system';
 
 const pillars = [
+    {
+        icon: '⚡',
+        title: 'Agents in production',
+        description:
+            'Deploy visual agent graphs, multi-stage automations, and workspace-scoped MCP servers with RBAC, approvals, and full run history—so engineering and ops share one governed control plane.',
+        details: [
+            'LangGraph-style execution with audit-friendly traces',
+            'Cron, webhook, and git triggers for automations',
+            'Per-workspace custom MCP (stdio / SSE / streamable HTTP)',
+            'BYOK or air-gapped local models (Ollama, LM Studio, vLLM)',
+        ],
+    },
     {
         icon: '🛡️',
         title: 'GDPR-Native by Design',
@@ -30,9 +54,10 @@ const pillars = [
     {
         icon: '🔒',
         title: 'Zero Data Leakage',
-        description: 'Your source code is your most valuable IP. With Kletron, no code is ever used for model training. Self-hosted options ensure nothing leaves your perimeter.',
+        description:
+            'Your repos, documents, and agent traces are high-value IP. With Kletron, customer data is not used for model training. Self-hosted and private-cloud options keep workloads inside your perimeter.',
         details: [
-            'No training on customer code',
+            'No training on customer data (contractual posture)',
             'End-to-end encryption in transit',
             'Self-hosted deployment option',
             'Air-gapped environment support',
@@ -71,9 +96,9 @@ const deploymentOptions = [
         description: 'Deploy Kletron in your own infrastructure. Full control over data, networking, and access policies.',
         features: [
             'Your infrastructure, your rules',
+            'Bring local LLMs + custom MCP servers inside the VPC',
             'Air-gapped deployment support',
-            'Custom network policies',
-            'Integration with existing SIEM/SOC',
+            'Custom network policies & SIEM/SOC export',
         ],
     },
     {
@@ -112,26 +137,30 @@ const useCases = [
     {
         icon: '🏦',
         sector: 'Financial Services',
-        title: 'Regulated code, sovereign AI',
-        description: 'Banks and fintechs across Europe use Kletron to accelerate development while meeting BaFin, FINMA, and ECB regulatory requirements. Self-hosted deployment ensures no code leaves your network.',
+        title: 'Regulated workloads, sovereign agents',
+        description:
+            'Banks and fintechs use Kletron for code, risk memos, and recurring audits—while meeting BaFin, FINMA, and ECB expectations. Self-hosted graphs and MCP keep evidence chains inside your network.',
     },
     {
         icon: '🏥',
         sector: 'Healthcare & Life Sciences',
         title: 'HIPAA-equivalent, EU-hosted',
-        description: 'Develop healthcare applications with AI assistance while maintaining full compliance with EU health data regulations. Patient data and proprietary algorithms stay within your infrastructure.',
+        description:
+            'Ship clinical software and research workflows with agents that read controlled documents, run gated tool calls, and leave tamper-evident traces—without routing trust through non-EU control planes.',
     },
     {
         icon: '🏛️',
         sector: 'Public Sector & Defense',
         title: 'Digital sovereignty guaranteed',
-        description: 'Government agencies and defense contractors require absolute control over their development tools. Kletron offers air-gapped deployment with zero external dependencies.',
+        description:
+            'Agencies need more than an IDE: they need agent graphs, automations, and MCP that can be air-gapped. Kletron supports disconnected deployments with on-prem models and internal tool servers.',
     },
     {
         icon: '🚗',
         sector: 'Automotive & Manufacturing',
         title: 'Protect industrial IP',
-        description: 'From autonomous driving algorithms to smart factory code, European manufacturers trust Kletron to keep their competitive advantage within EU jurisdiction.',
+        description:
+            'From ADAS code to factory-floor analytics, manufacturers run Kletron agents on sensitive repos and documents—with EU residency, custom MCP to PLM/ERP, and automation for recurring design reviews.',
     },
 ];
 
@@ -147,111 +176,56 @@ const testimonials = [
         company: 'German Automotive OEM',
     },
     {
-        quote: 'GDPR compliance isn\'t a checkbox for us — it\'s the law. Kletron is the first AI coding tool we could deploy without months of legal review.',
+        quote: 'GDPR compliance isn\'t a checkbox for us — it\'s the law. Kletron is the first agent platform we could deploy without months of legal review.',
         author: 'DPO',
         company: 'Nordic Insurance Group',
     },
 ];
 
 export default function EnterprisePage() {
-    const { user, loading } = useAuth();
-
     return (
-        <div className="min-h-screen w-full bg-bg-app">
-            {/* Navigation Header */}
-            <MarketingHeader
-                LinkComponent={Link}
-                navLinks={[
-                    { href: '/#features', label: 'Features' },
-                    { href: '/enterprise', label: 'Enterprise' },
-                    { href: '/pricing', label: 'Pricing' },
-                ]}
-                rightSlot={
-                    <div className="flex items-center gap-3">
-                        {loading ? (
-                            <div className="w-6 h-6 border-2 border-border-subtle border-t-text-secondary rounded-full animate-spin" />
-                        ) : user ? (
-                            <>
-                                <Link
-                                    href="/app/agent"
-                                    className="text-sm text-text-secondary hover:text-text-primary transition-colors"
-                                >
-                                    Dashboard
-                                </Link>
-                                <Link
-                                    href="/app/agent"
-                                    className="inline-flex items-center gap-2 rounded-md bg-bg-elevated hover:bg-state-hover border border-border-subtle px-3 py-1.5 text-sm font-medium text-text-primary transition-colors"
-                                >
-                                    Open App →
-                                </Link>
-                            </>
-                        ) : (
-                            <>
-                                <Link
-                                    href="/auth/login"
-                                    className="text-sm text-text-secondary hover:text-text-primary transition-colors"
-                                >
-                                    Sign In
-                                </Link>
-                                <Link
-                                    href="/auth/register"
-                                    className="inline-flex items-center gap-2 rounded-md bg-text-primary text-bg-app px-3 py-1.5 text-sm font-medium hover:bg-text-secondary transition-colors"
-                                >
-                                    Get Started
-                                </Link>
-                            </>
-                        )}
-                    </div>
-                }
-            />
+        <div className="min-h-screen marketing-page-bg text-text-primary">
+            <MarketingHeader LinkComponent={Link} />
 
-            {/* Hero Section */}
-            <section className="relative pt-32 pb-20 px-6">
-                <div className="absolute inset-0 bg-grid-pattern opacity-50" />
+            <section className="relative overflow-hidden pt-28 pb-16 sm:pt-32 sm:pb-20">
+                <div className="pointer-events-none absolute inset-0 marketing-grid-overlay opacity-60" aria-hidden />
 
-                <div className="relative z-10 max-w-4xl mx-auto text-center">
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border-subtle bg-bg-surface mb-6 text-xs text-text-muted">
-                        <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
-                        For EU Enterprises & Organisations
-                    </div>
+                <div className={`${marketingContainer} relative z-[1] flex flex-col items-center text-center`}>
+                    <MarketingEyebrow className="mb-6">
+                        <span className="h-1.5 w-1.5 rounded-full bg-status-success shadow-[0_0_8px_rgba(34,197,94,0.45)]" />
+                        Enterprise · EU & regulated teams
+                    </MarketingEyebrow>
 
-                    <h1 className="text-3xl sm:text-4xl lg:text-5xl font-semibold text-text-primary mb-4 tracking-tight">
-                        AI Coding, Built for
-                        <br />
-                        <span className="text-text-secondary">European Sovereignty.</span>
-                    </h1>
+                    <MarketingHeroTitle className="mb-5 max-w-[22ch] sm:max-w-none">
+                        Sovereign agents{' '}
+                        <span className="text-text-secondary">for regulated orgs.</span>
+                    </MarketingHeroTitle>
 
-                    <p className="text-base text-text-muted mb-8 max-w-2xl mx-auto leading-relaxed">
-                        The only AI coding platform designed from the ground up for EU compliance.
-                        GDPR-native, EU AI Act ready, with Swiss-grade privacy and zero US data exposure.
-                        Trusted by enterprises that cannot compromise on data sovereignty.
-                    </p>
+                    <MarketingLead className="mb-6 px-1">
+                        Graphs, MCP, automations—GDPR-native posture, Swiss operator, EU residency. Prove data flow, approvals, and
+                        model choice without US control planes.
+                    </MarketingLead>
+                    <EarlyAccessBadge className="mb-8 text-center" />
 
-                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                        <a
-                            href="mailto:enterprise@kletron.com?subject=Kletron%20Code%20Enterprise%20Inquiry"
-                            className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-6 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
-                        >
-                            Contact Enterprise Sales
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <div className="flex w-full max-w-md flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center">
+                        <a href="mailto:enterprise@kletron.com?subject=Kletron%20Enterprise%20Inquiry" className={marketingBtnPrimary}>
+                            Talk to sales
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
                             </svg>
                         </a>
-                        <Link
-                            href="/pricing"
-                            className="inline-flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-bg-surface hover:bg-bg-elevated px-6 py-2.5 text-sm font-medium text-text-primary transition-colors"
-                        >
-                            View Pricing Plans
+                        <Link href="/pricing" className={marketingBtnSecondary}>
+                            View pricing
                         </Link>
                     </div>
                 </div>
             </section>
 
             {/* Compliance Badges Strip */}
-            <section className="py-8 px-6 border-y border-border-subtle">
-                <div className="max-w-4xl mx-auto">
-                    <p className="text-[10px] text-text-muted uppercase tracking-wider text-center mb-4">
-                        Compliance & Certifications
+            <section className="border-y border-white/[0.06] bg-bg-surface/30 py-8 backdrop-blur-sm">
+                <div className={marketingContainer}>
+                    <p className="mb-4 text-center text-[10px] font-medium uppercase tracking-wider text-text-muted">
+                        Compliance posture
                     </p>
                     <div className="flex flex-wrap justify-center gap-3">
                         {complianceLogos.map((item) => (
@@ -268,34 +242,24 @@ export default function EnterprisePage() {
             </section>
 
             {/* Core Pillars */}
-            <section className="py-20 px-6">
-                <div className="max-w-5xl mx-auto">
-                    <div className="text-center mb-16">
-                        <h2 className="text-2xl sm:text-3xl font-semibold text-text-primary mb-3">
-                            Why EU Enterprises Choose Kletron
-                        </h2>
-                        <p className="text-sm text-text-muted max-w-lg mx-auto">
-                            Every feature is built with European regulatory requirements and data sovereignty at its core.
-                        </p>
-                    </div>
+            <section className="py-16 sm:py-24">
+                <div className={marketingContainer}>
+                    <MarketingSectionTitle subtitle="Regulation and sovereignty baked in—not bolted on later.">
+                        Built for EU reality
+                    </MarketingSectionTitle>
 
-                    <div className="grid md:grid-cols-2 gap-4">
+                    <div className="grid gap-4 md:grid-cols-2">
                         {pillars.map((pillar) => (
-                            <div
-                                key={pillar.title}
-                                className="p-6 rounded-lg border border-border-subtle bg-bg-surface hover:bg-bg-elevated transition-colors"
-                            >
+                            <MarketingCard key={pillar.title}>
                                 <div className="flex items-start gap-4">
-                                    <div className="shrink-0 w-10 h-10 rounded-lg bg-bg-elevated border border-border-subtle flex items-center justify-center text-lg">
-                                        {pillar.icon}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <h3 className="text-sm font-semibold text-text-primary mb-2">{pillar.title}</h3>
-                                        <p className="text-xs text-text-muted mb-4 leading-relaxed">{pillar.description}</p>
+                                    <MarketingIconCircle className="text-lg">{pillar.icon}</MarketingIconCircle>
+                                    <div className="min-w-0 flex-1">
+                                        <h3 className="mb-2 text-sm font-semibold text-text-primary">{pillar.title}</h3>
+                                        <p className="mb-4 text-xs leading-relaxed text-text-muted">{pillar.description}</p>
                                         <div className="space-y-1.5">
                                             {pillar.details.map((detail) => (
                                                 <div key={detail} className="flex items-center gap-2">
-                                                    <svg className="w-3.5 h-3.5 text-status-success-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <svg className="h-3.5 w-3.5 shrink-0 text-status-success-text" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                                     </svg>
                                                     <span className="text-[11px] text-text-secondary">{detail}</span>
@@ -304,28 +268,22 @@ export default function EnterprisePage() {
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </MarketingCard>
                         ))}
                     </div>
                 </div>
             </section>
 
             {/* US vs EU Comparison */}
-            <section className="py-20 px-6 border-y border-border-subtle">
-                <div className="max-w-4xl mx-auto">
-                    <div className="text-center mb-12">
-                        <h2 className="text-2xl sm:text-3xl font-semibold text-text-primary mb-3">
-                            The Hidden Risk of US-Based AI Tools
-                        </h2>
-                        <p className="text-sm text-text-muted max-w-lg mx-auto">
-                            Using US-headquartered AI coding tools exposes your enterprise to legal and compliance risks
-                            that most organizations underestimate.
-                        </p>
-                    </div>
+            <section className="border-y border-white/[0.06] bg-bg-surface/20 py-16 sm:py-24">
+                <div className={marketingContainer}>
+                    <MarketingSectionTitle subtitle="Most agent stacks route trust through US vendors. Kletron is structured differently by default.">
+                        US tools vs. Kletron
+                    </MarketingSectionTitle>
 
-                    <div className="grid md:grid-cols-2 gap-4">
+                    <div className="mx-auto grid max-w-4xl gap-4 md:grid-cols-2">
                         {/* US Tools */}
-                        <div className="p-6 rounded-lg border border-status-error-border bg-status-error-bg/30">
+                        <div className="rounded-2xl border border-status-error-border bg-status-error-bg/25 p-6 backdrop-blur-sm">
                             <div className="flex items-center gap-2 mb-4">
                                 <span className="text-lg">🇺🇸</span>
                                 <h3 className="text-sm font-semibold text-text-primary">US-Based Tools</h3>
@@ -355,7 +313,7 @@ export default function EnterprisePage() {
                         </div>
 
                         {/* Kletron */}
-                        <div className="p-6 rounded-lg border border-status-success-border bg-status-success-bg/30">
+                        <div className="rounded-2xl border border-status-success-border bg-status-success-bg/25 p-6 backdrop-blur-sm">
                             <div className="flex items-center gap-2 mb-4">
                                 <span className="text-lg">🇪🇺</span>
                                 <h3 className="text-sm font-semibold text-text-primary">Kletron</h3>
@@ -388,28 +346,17 @@ export default function EnterprisePage() {
             </section>
 
             {/* Deployment Options */}
-            <section className="py-20 px-6">
-                <div className="max-w-5xl mx-auto">
-                    <div className="text-center mb-16">
-                        <h2 className="text-2xl sm:text-3xl font-semibold text-text-primary mb-3">
-                            Deploy Your Way
-                        </h2>
-                        <p className="text-sm text-text-muted max-w-lg mx-auto">
-                            Whether you need a managed cloud, self-hosted installation, or dedicated private cloud —
-                            we adapt to your infrastructure requirements.
-                        </p>
-                    </div>
+            <section className="py-16 sm:py-24">
+                <div className={marketingContainer}>
+                    <MarketingSectionTitle subtitle="Managed EU cloud, your VPC, or air-gapped—same product surface.">
+                        Deploy your way
+                    </MarketingSectionTitle>
 
-                    <div className="grid md:grid-cols-3 gap-4">
+                    <div className="grid gap-4 md:grid-cols-3">
                         {deploymentOptions.map((option) => (
-                            <div
-                                key={option.name}
-                                className="p-6 rounded-lg border border-border-subtle bg-bg-surface hover:bg-bg-elevated transition-colors"
-                            >
-                                <div className="flex items-center gap-3 mb-4">
-                                    <div className="w-10 h-10 rounded-lg bg-bg-elevated border border-border-subtle flex items-center justify-center text-lg">
-                                        {option.icon}
-                                    </div>
+                            <MarketingCard key={option.name}>
+                                <div className="mb-4 flex items-center gap-3">
+                                    <MarketingIconCircle className="text-lg">{option.icon}</MarketingIconCircle>
                                     <div>
                                         <h3 className="text-sm font-semibold text-text-primary">{option.name}</h3>
                                         <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-status-success-bg text-status-success-text border border-status-success-border">
@@ -428,58 +375,41 @@ export default function EnterprisePage() {
                                         </div>
                                     ))}
                                 </div>
-                            </div>
+                            </MarketingCard>
                         ))}
                     </div>
                 </div>
             </section>
 
             {/* Security & Administration */}
-            <section className="py-20 px-6 border-y border-border-subtle">
-                <div className="max-w-5xl mx-auto">
-                    <div className="text-center mb-16">
-                        <h2 className="text-2xl sm:text-3xl font-semibold text-text-primary mb-3">
-                            Enterprise Security & Administration
-                        </h2>
-                        <p className="text-sm text-text-muted max-w-lg mx-auto">
-                            Everything your IT and security teams need to deploy AI coding tools at scale, with confidence.
-                        </p>
-                    </div>
+            <section className="border-y border-white/[0.06] bg-bg-surface/20 py-16 sm:py-24">
+                <div className={marketingContainer}>
+                    <MarketingSectionTitle subtitle="SSO, audit trails, RBAC—run graphs and MCP where IT already trusts.">
+                        Security & admin
+                    </MarketingSectionTitle>
 
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {securityFeatures.map((feature) => (
-                            <div
-                                key={feature.title}
-                                className="p-5 rounded-lg border border-border-subtle bg-bg-surface"
-                            >
-                                <div className="text-lg mb-3">{feature.icon}</div>
-                                <h3 className="text-sm font-semibold text-text-primary mb-1">{feature.title}</h3>
-                                <p className="text-[11px] text-text-muted leading-relaxed">{feature.description}</p>
-                            </div>
+                            <MarketingCard key={feature.title} className="p-5 sm:p-5">
+                                <div className="mb-3 text-lg">{feature.icon}</div>
+                                <h3 className="mb-1 text-sm font-semibold text-text-primary">{feature.title}</h3>
+                                <p className="text-[11px] leading-relaxed text-text-muted">{feature.description}</p>
+                            </MarketingCard>
                         ))}
                     </div>
                 </div>
             </section>
 
             {/* Industry Use Cases */}
-            <section className="py-20 px-6">
-                <div className="max-w-5xl mx-auto">
-                    <div className="text-center mb-16">
-                        <h2 className="text-2xl sm:text-3xl font-semibold text-text-primary mb-3">
-                            Trusted Across Regulated Industries
-                        </h2>
-                        <p className="text-sm text-text-muted max-w-lg mx-auto">
-                            From banking to healthcare, European enterprises in highly regulated sectors
-                            rely on Kletron.
-                        </p>
-                    </div>
+            <section className="py-16 sm:py-24">
+                <div className={marketingContainer}>
+                    <MarketingSectionTitle subtitle="Patterns teams actually deploy—not slide-deck promises.">
+                        Regulated sectors
+                    </MarketingSectionTitle>
 
-                    <div className="grid md:grid-cols-2 gap-4">
+                    <div className="grid gap-4 md:grid-cols-2">
                         {useCases.map((useCase) => (
-                            <div
-                                key={useCase.sector}
-                                className="p-6 rounded-lg border border-border-subtle bg-bg-surface hover:bg-bg-elevated transition-colors"
-                            >
+                            <MarketingCard key={useCase.sector}>
                                 <div className="flex items-center gap-3 mb-3">
                                     <span className="text-xl">{useCase.icon}</span>
                                     <div>
@@ -487,28 +417,21 @@ export default function EnterprisePage() {
                                         <h3 className="text-sm font-semibold text-text-primary">{useCase.title}</h3>
                                     </div>
                                 </div>
-                                <p className="text-xs text-text-muted leading-relaxed">{useCase.description}</p>
-                            </div>
+                                <p className="text-xs leading-relaxed text-text-muted">{useCase.description}</p>
+                            </MarketingCard>
                         ))}
                     </div>
                 </div>
             </section>
 
             {/* Testimonials */}
-            <section className="py-20 px-6 border-y border-border-subtle">
-                <div className="max-w-5xl mx-auto">
-                    <div className="text-center mb-12">
-                        <h2 className="text-2xl sm:text-3xl font-semibold text-text-primary mb-3">
-                            What Enterprise Leaders Say
-                        </h2>
-                    </div>
+            <section className="border-y border-white/[0.06] py-16 sm:py-24">
+                <div className={marketingContainer}>
+                    <MarketingSectionTitle>What leaders say</MarketingSectionTitle>
 
-                    <div className="grid md:grid-cols-3 gap-4">
+                    <div className="grid gap-4 md:grid-cols-3">
                         {testimonials.map((testimonial, idx) => (
-                            <div
-                                key={idx}
-                                className="p-6 rounded-lg border border-border-subtle bg-bg-surface"
-                            >
+                            <MarketingCard key={idx}>
                                 <svg className="w-6 h-6 text-text-muted/30 mb-3" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10H14.017zM0 21v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151C7.563 6.068 6 8.789 6 11h4v10H0z" />
                                 </svg>
@@ -519,16 +442,16 @@ export default function EnterprisePage() {
                                     <p className="text-xs font-medium text-text-primary">{testimonial.author}</p>
                                     <p className="text-[11px] text-text-muted">{testimonial.company}</p>
                                 </div>
-                            </div>
+                            </MarketingCard>
                         ))}
                     </div>
                 </div>
             </section>
 
             {/* Enterprise Pricing CTA */}
-            <section className="py-20 px-6">
-                <div className="max-w-4xl mx-auto">
-                    <div className="p-8 rounded-lg border border-border-subtle bg-bg-surface">
+            <section className="py-16 sm:py-24">
+                <div className={marketingContainer}>
+                    <MarketingCard featured className="p-8">
                         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
                             <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-3">
@@ -567,51 +490,44 @@ export default function EnterprisePage() {
                                 <div className="text-2xl font-bold text-text-primary mb-2">Custom Pricing</div>
                                 <p className="text-xs text-text-muted mb-4">Tailored to your organisation</p>
                                 <div className="flex flex-col gap-2">
-                                    <a
-                                        href="mailto:enterprise@kletron.com?subject=Kletron%20Code%20Enterprise%20Inquiry"
-                                        className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-5 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
-                                    >
-                                        Contact Sales
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <a href="mailto:enterprise@kletron.com?subject=Kletron%20Enterprise%20Inquiry" className={marketingBtnPrimary}>
+                                        Contact sales
+                                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
                                         </svg>
                                     </a>
                                     <a
-                                        href="mailto:enterprise@kletron.com?subject=Kletron%20Code%20Enterprise%20Demo%20Request"
-                                        className="inline-flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-bg-elevated hover:bg-state-hover px-5 py-2.5 text-sm font-medium text-text-primary transition-colors"
+                                        href="mailto:enterprise@kletron.com?subject=Kletron%20Enterprise%20Demo%20Request"
+                                        className={marketingBtnSecondary}
                                     >
-                                        Request a Demo
+                                        Book a demo
                                     </a>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </MarketingCard>
                 </div>
             </section>
 
             {/* Final CTA */}
-            <section className="py-20 px-6 border-t border-border-subtle">
-                <div className="max-w-2xl mx-auto text-center">
-                    <h2 className="text-2xl sm:text-3xl font-semibold text-text-primary mb-4">
-                        Ready for <span className="text-text-secondary">sovereign AI coding</span>?
+            <section className="border-t border-white/[0.06] py-16 sm:py-24">
+                <div className={marketingContainer}>
+                    <div className="mx-auto max-w-2xl text-center">
+                    <h2 className="mb-4 text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl md:text-4xl">
+                        Ready for <span className="text-text-secondary">sovereign agents</span>?
                     </h2>
-                    <p className="text-sm text-text-muted mb-8">
-                        Join leading European enterprises that trust Kletron for compliant,
-                        secure, and powerful AI-assisted development.
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                        <a
-                            href="mailto:enterprise@kletron.com?subject=Kletron%20Code%20Enterprise%20Inquiry"
-                            className="inline-flex items-center justify-center gap-2 rounded-md bg-text-primary text-bg-app px-6 py-2.5 text-sm font-medium hover:bg-text-secondary transition-colors"
-                        >
-                            Talk to Enterprise Sales
+                    <MarketingLead className="mb-6">
+                        EU enterprises use Kletron when proof beats promises—graphs, MCP, and runs you can defend in audit.
+                    </MarketingLead>
+                    <EarlyAccessBadge className="mb-8 text-center" />
+                    <div className="flex flex-col justify-center gap-3 sm:flex-row">
+                        <a href="mailto:enterprise@kletron.com?subject=Kletron%20Enterprise%20Inquiry" className={marketingBtnPrimary}>
+                            Talk to sales
                         </a>
-                        <Link
-                            href="/pricing"
-                            className="inline-flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-bg-surface hover:bg-bg-elevated px-6 py-2.5 text-sm font-medium text-text-primary transition-colors"
-                        >
-                            See All Plans
+                        <Link href="/pricing" className={marketingBtnSecondary}>
+                            See plans
                         </Link>
+                    </div>
                     </div>
                 </div>
             </section>

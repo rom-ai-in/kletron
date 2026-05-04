@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage, Menu } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import { spawn } from "node:child_process";
@@ -137,6 +137,138 @@ function dispatchUpdateStatus(status: UpdateStatus) {
   }
 }
 
+function installAppMenu() {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(process.platform === "darwin"
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: "about" },
+              { type: "separator" },
+              { role: "services" },
+              { type: "separator" },
+              { role: "hide" },
+              { role: "hideOthers" },
+              { role: "unhide" },
+              { type: "separator" },
+              { role: "quit" },
+            ],
+          } as Electron.MenuItemConstructorOptions,
+        ]
+      : []),
+    ...(process.platform === "darwin"
+      ? [
+          {
+            label: "File",
+            submenu: [
+              {
+                label: "Add workspace…",
+                accelerator: "CommandOrControl+O",
+                click: () => mainWindow?.webContents.send("app:addWorkspace"),
+              },
+              {
+                label: "Settings…",
+                accelerator: "CommandOrControl+,",
+                click: () => mainWindow?.webContents.send("app:openSettings"),
+              },
+              { type: "separator" },
+              { role: "close" },
+            ],
+          } as Electron.MenuItemConstructorOptions,
+        ]
+      : [
+          {
+            label: "File",
+            submenu: [
+              {
+                label: "Add workspace…",
+                accelerator: "CommandOrControl+O",
+                click: () => mainWindow?.webContents.send("app:addWorkspace"),
+              },
+              {
+                label: "Settings…",
+                accelerator: "CommandOrControl+,",
+                click: () => mainWindow?.webContents.send("app:openSettings"),
+              },
+              { type: "separator" },
+              { role: "quit" },
+            ],
+          } as Electron.MenuItemConstructorOptions,
+        ]),
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+      ],
+    },
+    {
+      label: "View",
+      submenu: [
+        {
+          label: "Toggle Code / Work mode",
+          accelerator: "CommandOrControl+Shift+M",
+          click: () => mainWindow?.webContents.send("app:toggleWorkMode"),
+        },
+        { type: "separator" },
+        { role: "reload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { type: "separator" },
+        { role: "togglefullscreen" },
+      ],
+    },
+    {
+      label: "Navigate",
+      submenu: [
+        {
+          label: "Agent",
+          click: () => {
+            mainWindow?.webContents.send("app:navigate", "app");
+          },
+        },
+        {
+          label: "History",
+          click: () => {
+            mainWindow?.webContents.send("app:navigate", "history");
+          },
+        },
+        {
+          label: "Automations",
+          click: () => {
+            mainWindow?.webContents.send("app:navigate", "automations");
+          },
+        },
+        {
+          label: "Agent Graphs",
+          click: () => {
+            mainWindow?.webContents.send("app:navigate", "agent-graphs");
+          },
+        },
+        {
+          label: "Settings",
+          click: () => {
+            mainWindow?.webContents.send("app:navigate", "settings");
+          },
+        },
+      ],
+    },
+    {
+      label: "Window",
+      submenu: [{ role: "minimize" }, { role: "close" }],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow() {
   const appIcon = loadAppIcon();
 
@@ -145,10 +277,9 @@ function createWindow() {
     height: 800,
     minWidth: 960,
     minHeight: 640,
-    transparent: true,
-    backgroundColor: "#00000000",
-    vibrancy: "sidebar",
-    visualEffectState: "active",
+    // Opaque window: transparent + vibrancy causes broken compositing on some macOS/Electron
+    // builds (blank or clipped UI while CSS backdrops still “work”). Glass look stays in CSS.
+    backgroundColor: "#09090b",
     titleBarStyle: "hiddenInset",
     icon: appIcon,
     webPreferences: {
@@ -260,7 +391,25 @@ async function setupAutoUpdates() {
   });
 }
 
+function findKletronProtocolUrl(argv: string[]): string | undefined {
+  return argv.find((arg) => typeof arg === "string" && arg.startsWith("kletron://"));
+}
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  process.exit(0);
+}
+
+app.on("second-instance", (_event, commandLine) => {
+  const url = findKletronProtocolUrl(commandLine);
+  if (url) dispatchAuthUrl(url);
+});
+
 app.on("ready", () => {
+  const coldStartAuthUrl = findKletronProtocolUrl(process.argv);
+  if (coldStartAuthUrl) {
+    pendingAuthUrl = coldStartAuthUrl;
+  }
   if (process.defaultApp && process.argv.length >= 2) {
     app.setAsDefaultProtocolClient("kletron", process.execPath, [path.resolve(process.argv[1])]);
   } else {
@@ -273,6 +422,7 @@ app.on("ready", () => {
     }
   }
   createWindow();
+  installAppMenu();
   void setupAutoUpdates();
 });
 
@@ -305,7 +455,10 @@ ipcMain.handle("app:selectWorkspace", async () => {
 });
 
 ipcMain.handle("app:setWorkspace", async (_event, workspacePath: string) => {
-  if (!workspacePath) return null;
+  if (!workspacePath?.trim()) {
+    currentWorkspacePath = null;
+    return null;
+  }
   currentWorkspacePath = workspacePath;
   return getWorkspaceInfo(currentWorkspacePath);
 });
@@ -372,6 +525,15 @@ ipcMain.handle("app:openInVSCode", async (_event, targetPath?: string) => {
     child.on("error", () => resolve(false));
     child.on("exit", (code) => resolve(code === 0));
   });
+});
+
+/** Open a folder in the OS file manager (Finder / Explorer / …). */
+ipcMain.handle("app:openWorkspaceInSystemFileManager", async (_event, targetPath?: string) => {
+  const resolved = targetPath || currentWorkspacePath;
+  if (!resolved) return false;
+  const normalized = path.normalize(resolved);
+  const err = await shell.openPath(normalized);
+  return err === "";
 });
 
 ipcMain.handle("fs:listFiles", async (_event, relativePath?: string, depth?: number) => {

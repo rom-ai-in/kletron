@@ -5,30 +5,26 @@ import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@kletron/shared/t
 import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { getGraphNodeOrder, buildInitialState } from "@kletron/server/services/agentGraphRuntime";
+import { preflightMissionForNewRun } from "@kletron/server/services/skillSlashPreflight";
+import { resolveEffectiveToolApprovalConfigForUser } from "@kletron/server/services/effectiveToolApprovalService";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 import { heuristicTitle, sanitizeTitle, stripSystemPrefix, stripThoughtContent } from "@kletron/server/services/titleSanitizer";
+import { normalizeToWorkModeId } from "@kletron/shared/workMode";
+import { normalizeResearchDepth } from "@kletron/shared/researchDepth";
+import { categoryService } from "@kletron/server/services/categoryService";
+import { agentGraphExecutor } from "@kletron/server/services/agentGraphExecutor";
+import type { AgentStreamKpiV1 } from "@kletron/shared/chatTypes";
 
 const textEncoder = new TextEncoder();
-
-let _backfillDone = false;
-async function backfillAutomationSourceOnce() {
-  if (_backfillDone) return;
-  _backfillDone = true;
-  try {
-    const count = await agentGraphRunService.backfillAutomationSource();
-    if (count > 0) {
-      console.log(`[sessions] Backfilled source="automation" on ${count} existing runs`);
-    }
-  } catch {
-    _backfillDone = false;
-  }
-}
 
 type StreamChunk =
   | { type: "init"; payload: { runId: string; graphId: string } }
   | { type: "update"; payload: AgentWorkflowUpdate }
   | { type: "text_delta"; payload: { content: string } }
+  | { type: "reasoning_delta"; payload: { content: string } }
+  | { type: "stream_metrics"; payload: AgentStreamKpiV1 }
   | { type: "final"; payload: AgentWorkflowResult }
   | { type: "error"; payload: { message: string } };
 
@@ -72,22 +68,15 @@ export async function POST(request: Request) {
     });
   }
 
-  let graph = await agentGraphService.getGraph(graphId);
-  if (!graph) {
-    // Requested graph was deleted — fall back to first available graph
-    const allGraphs = await agentGraphService.listGraphs();
-    graph = allGraphs[0] ?? null;
-    if (!graph) {
-      return new Response(JSON.stringify({ error: "No agent graphs available. Please seed graphs first." }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-  }
-
-  let workspace;
+  let graph: Awaited<ReturnType<typeof agentGraphService.resolveGraphForStage>>;
+  let workspace: Awaited<ReturnType<typeof resolveWorkspaceFromRequestStrict>>;
+  let effectiveApproval: Awaited<ReturnType<typeof resolveEffectiveToolApprovalConfigForUser>>;
   try {
-    workspace = await resolveWorkspaceFromRequestStrict(request, auth.userId, payload as any);
+    [graph, workspace, effectiveApproval] = await Promise.all([
+      agentGraphService.resolveGraphForStage(graphId),
+      resolveWorkspaceFromRequestStrict(request, auth.userId, payload as any),
+      resolveEffectiveToolApprovalConfigForUser(auth.userId),
+    ]);
   } catch (error) {
     const workspaceError = workspaceErrorToHttp(error);
     if (workspaceError) {
@@ -98,30 +87,89 @@ export async function POST(request: Request) {
     }
     throw error;
   }
+
+  if (!graph?._id) {
+    return new Response(JSON.stringify({ error: "No agent graphs available. Please seed graphs first." }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const resolvedGraphId = String(graph._id);
+
   if (!workspace || !workspace._id) {
     return new Response(JSON.stringify({ error: "Workspace not configured" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
   }
+  const resolvedThreadMode = parseThreadApprovalMode(
+    payload.threadApprovalMode !== undefined && payload.threadApprovalMode !== null
+      ? payload.threadApprovalMode
+      : effectiveApproval.defaultThreadApprovalMode
+  );
 
-  // Create run record
+  let workMode = normalizeToWorkModeId(
+    typeof payload.workMode === "string"
+      ? payload.workMode
+      : typeof payload.category === "string"
+        ? payload.category
+        : null,
+  );
+  if (
+    payload.workMode === undefined &&
+    payload.category === undefined &&
+    auth.userId &&
+    workspace._id
+  ) {
+    const stored = await categoryService.getCurrentCategory(auth.userId, workspace._id.toString());
+    if (stored) workMode = normalizeToWorkModeId(stored);
+  }
+
+  if (
+    auth.userId &&
+    workspace._id &&
+    (typeof payload.workMode === "string" || typeof payload.category === "string")
+  ) {
+    await categoryService.setCurrentCategory(auth.userId, workMode, workspace._id.toString());
+  }
+
+  // Create run record (always persist Mongo graph id — client may send legacy slug, not ObjectId)
   const nodeOrder = getGraphNodeOrder(graph as any);
-  console.log(`[sessions/create] Creating run for graph "${graph.name}" (${graphId}), workspace=${workspace._id}`);
-  const runId = await agentGraphRunService.createRun(graphId, workspace._id.toString(), "agent");
+  console.log(
+    `[sessions/create] Creating run for graph "${graph.name}" (requested=${graphId}, resolved=${resolvedGraphId}), workspace=${workspace._id}`,
+  );
+  const researchDepth = normalizeResearchDepth(payload?.researchDepth);
+
+  const [runId, pre] = await Promise.all([
+    agentGraphRunService.createRun(resolvedGraphId, workspace._id.toString(), "agent", {
+      threadApprovalMode: resolvedThreadMode,
+      workMode,
+      createdByUserId: auth.userId,
+      researchDepth,
+    }),
+    preflightMissionForNewRun(message, workspace._id.toString()),
+  ]);
   console.log(`[sessions/create] ✓ Run created: ${runId}`);
   const initialNodeStatuses: Record<string, any> = {};
   for (const node of graph.nodes) {
     initialNodeStatuses[node.id] = "PENDING";
   }
+  const initialState = {
+    ...buildInitialState(graph as any, pre.mission),
+    mission: pre.mission,
+    userInput: pre.mission,
+    loadedSkillIds: pre.loadedSkillIds.length ? pre.loadedSkillIds : undefined,
+    skillLoads: pre.skillLoads.length ? pre.skillLoads : undefined,
+  };
+  const titleSource =
+    pre.mission.startsWith("[System:") && pre.mission.indexOf("]\n\n") !== -1
+      ? pre.mission.slice(pre.mission.indexOf("]\n\n") + 3)
+      : pre.mission;
   await agentGraphRunService.updateRunStatus(runId, "RUNNING", {
     nodeOrder,
     nodeStatuses: initialNodeStatuses,
-    state: buildInitialState(graph as any, message),
-    title: (message.startsWith("[System:") && message.indexOf("]\n\n") !== -1
-      ? message.slice(message.indexOf("]\n\n") + 3)
-      : message
-    ).trim().slice(0, 80),
+    state: initialState,
+    title: titleSource.trim().slice(0, 80),
     conversationTurns: 1,
   } as any);
   console.log(`[sessions/create] ✓ Run status set to RUNNING`);
@@ -143,11 +191,10 @@ export async function POST(request: Request) {
           clientDisconnected = true;
         }
       };
-      sendChunk({ type: "init", payload: { runId, graphId } });
+      sendChunk({ type: "init", payload: { runId, graphId: resolvedGraphId } });
       console.log(`[sessions/create] Stream started for run ${runId}`);
 
       try {
-        const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
         console.log(`[sessions/create] Calling executeRunStreaming for ${runId}...`);
         const result = await agentGraphExecutor.executeRunStreaming(runId, {
           onUpdate: async (update) => {
@@ -155,6 +202,12 @@ export async function POST(request: Request) {
           },
           onTextDelta: (content) => {
             sendChunk({ type: "text_delta", payload: { content } });
+          },
+          onReasoningDelta: (content) => {
+            sendChunk({ type: "reasoning_delta", payload: { content } });
+          },
+          onLlmStreamKpi: (kpi) => {
+            sendChunk({ type: "stream_metrics", payload: kpi });
           },
           ...(llmSelection ? { llmSelectionOverride: llmSelection } : {}),
         });
@@ -197,7 +250,7 @@ export async function POST(request: Request) {
 
 /**
  * GET /api/sessions - List sessions (runs with title, status, timestamps).
- * Query params: ?workspaceId=, ?includeArchived=true, ?limit=50, ?graphId=
+ * Query params: ?workspaceId=, ?includeArchived=true, ?limit=50, ?graphId=, ?workMode=code|work
  */
 export async function GET(request: Request) {
   const auth = await requireAppRouteAuth(request);
@@ -212,11 +265,11 @@ export async function GET(request: Request) {
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "50", 10) || 50, 200);
   const graphId = searchParams.get("graphId") ?? undefined;
   const excludeSource = searchParams.get("excludeSource") ?? undefined;
-
-  // One-time migration: tag existing automation runs so excludeSource works on old data
-  if (excludeSource) {
-    await backfillAutomationSourceOnce();
-  }
+  const workModeRaw = searchParams.get("workMode");
+  const listWorkModeFilter =
+    workModeRaw != null && workModeRaw !== ""
+      ? normalizeToWorkModeId(workModeRaw)
+      : undefined;
 
   // If allWorkspaces=true, fetch sessions across all user workspaces
   // Otherwise resolve a single workspace to filter by
@@ -236,20 +289,17 @@ export async function GET(request: Request) {
 
   try {
     let runs;
+    const listOpts = {
+      includeArchived,
+      limit,
+      graphId,
+      excludeSource,
+      ...(listWorkModeFilter ? { workMode: listWorkModeFilter } : {}),
+    };
     if (allWorkspaces) {
-      runs = await agentGraphRunService.listSessions(undefined, {
-        includeArchived,
-        limit,
-        graphId,
-        excludeSource,
-      });
+      runs = await agentGraphRunService.listSessions(undefined, listOpts);
     } else {
-      runs = await agentGraphRunService.listSessions(resolvedWorkspaceId, {
-        includeArchived,
-        limit,
-        graphId,
-        excludeSource,
-      });
+      runs = await agentGraphRunService.listSessions(resolvedWorkspaceId, listOpts);
     }
 
     // Helper: strip injected [System: ...] personality prefix from titles
@@ -279,6 +329,9 @@ export async function GET(request: Request) {
       startedAt: run.startedAt?.toISOString?.() ?? new Date().toISOString(),
       endedAt: run.endedAt?.toISOString?.() ?? null,
       tokenUsage: run.tokenUsage ?? null,
+      source: run.source ?? null,
+      automationId: run.automationId?.toString() ?? null,
+      workMode: normalizeToWorkModeId(run.workMode as string | undefined),
     }));
 
 

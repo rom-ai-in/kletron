@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import {
     Archive, Check, Pencil, Trash2, Plus,
-    Settings, X, Brain, Eye, Zap, User,
+    Settings, X, Brain, Eye, Zap,
     Wrench, GitBranch, Paperclip, Monitor,
     FileUp, Camera, MessageSquare, Clock,
     ClipboardCheck, Play, Pause, RefreshCw,
@@ -135,11 +135,62 @@ const sampleInlineDiffs: InlineDiff[] = [
 ];
 
 const sampleSlashCommands: SlashCommandItem[] = [
-    { id: "plan", label: "plan", description: "Toggle Plan Mode (read-only proposals)", icon: <Eye className="h-3.5 w-3.5" />, action: () => {} },
-    { id: "personality-pragmatic", label: "personality pragmatic", description: "Terse, execution-focused style", icon: <Zap className="h-3.5 w-3.5" />, action: () => {} },
-    { id: "personality-empathetic", label: "personality empathetic", description: "Conversational, explanatory style", icon: <User className="h-3.5 w-3.5" />, action: () => {} },
-    { id: "skills", label: "skills", description: "Open Skills settings", icon: <Wrench className="h-3.5 w-3.5" />, action: () => {} },
-    { id: "worktree", label: "worktree", description: "Manage Git worktrees", icon: <GitBranch className="h-3.5 w-3.5" />, action: () => {} },
+    {
+        id: "babysit",
+        sectionId: "skills",
+        label: "babysit",
+        description: "Keep a PR merge-ready by triaging comments, resolving conflicts, and fixing CI.",
+        icon: <Zap className="h-3.5 w-3.5" />,
+        action: () => {},
+    },
+    {
+        id: "canvas",
+        sectionId: "skills",
+        label: "canvas",
+        description: "A Cursor Canvas is a live React app beside the chat for rich artifacts.",
+        icon: <Zap className="h-3.5 w-3.5" />,
+        action: () => {},
+    },
+    {
+        id: "capacity",
+        sectionId: "skills",
+        label: "capacity",
+        description: "Discover Azure OpenAI model capacity across regions.",
+        icon: <Zap className="h-3.5 w-3.5" />,
+        action: () => {},
+    },
+    {
+        id: "split-prs",
+        sectionId: "skills",
+        label: "split-to-prs",
+        description: "Split current work into small reviewable PRs.",
+        icon: <Zap className="h-3.5 w-3.5" />,
+        action: () => {},
+    },
+    {
+        id: "plan",
+        sectionId: "commands",
+        label: "plan",
+        description: "Toggle Plan Mode (read-only proposals)",
+        icon: <Eye className="h-3.5 w-3.5" />,
+        action: () => {},
+    },
+    {
+        id: "skills",
+        sectionId: "commands",
+        label: "skills",
+        description: "Open Skills settings",
+        icon: <Wrench className="h-3.5 w-3.5" />,
+        action: () => {},
+    },
+    {
+        id: "worktree",
+        sectionId: "commands",
+        label: "worktree",
+        description: "Manage Git worktrees",
+        icon: <GitBranch className="h-3.5 w-3.5" />,
+        action: () => {},
+    },
 ];
 
 const sampleReviewQueue: ReviewQueueItem[] = [
@@ -588,6 +639,7 @@ export default function DesignSystemMacAppPage() {
                             onClose={() => {}}
                             commands={sampleSlashCommands}
                             filter=""
+                            initialPerSection={3}
                         />
                         <div className="text-[10px] text-text-muted ml-2">
                             Menu is shown open for demo. In the app, it appears above the input bar.
@@ -598,7 +650,7 @@ export default function DesignSystemMacAppPage() {
                     rules={[
                         "Activated when typing / at the start of input.",
                         "Arrow keys navigate, Enter/Tab selects, Escape dismisses.",
-                        "Commands: /plan, /personality, /skills, /worktree, /model.",
+                        "Sections: Skills (from /api/skills) and Commands (product actions). “Show more” expands long lists.",
                         "Commands are filtered as you type (e.g. /per → personality).",
                         "Reuses keyboard navigation pattern from the old CommandPalette.",
                     ]}
@@ -608,6 +660,7 @@ export default function DesignSystemMacAppPage() {
   onClose={close}
   commands={commands}
   filter={input}
+  initialPerSection={5}
 />`} />
             </DocSection>
 
@@ -906,7 +959,7 @@ export default function DesignSystemMacAppPage() {
                     rules={[
                         "Context chips auto-attach the active file; users can dismiss with ×.",
                         "File, folder, and model chips have distinct colors and icons.",
-                        "ThinkingBubble pulses when active; content is expandable when complete.",
+                        "ThinkingBubble uses the same glyph shimmer as live agent status when active; content is expandable when complete.",
                     ]}
                 />
                 <DocCode code={`<ContextChips chips={chips} onDismiss={dismiss} />\n<ThinkingBubble isActive summary="Working…" />`} />

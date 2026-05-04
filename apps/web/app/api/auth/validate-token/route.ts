@@ -1,7 +1,6 @@
 // app/api/auth/validate-token/route.ts
 // Validates an API token and returns user info (MongoDB version)
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@kletron/server/lib/supabase/supabaseAdmin';
 import { hashApiToken } from '@kletron/server/lib/auth/apiTokens';
 import * as apiTokenService from '@kletron/server/services/apiTokenService';
 import * as userProfileService from '@kletron/server/services/userProfileService';
@@ -24,26 +23,18 @@ export async function POST(request: Request) {
             return NextResponse.json({ valid: false, error: 'Invalid or revoked token' });
         }
 
-        // Get user info from Supabase Auth (still used for authentication)
-        const admin = getSupabaseAdminClient();
-        const { data: { user }, error: userError } = await admin.auth.admin.getUserById(tokenData.userId);
-
-        if (userError || !user) {
-            return NextResponse.json({ valid: false, error: 'User not found' });
-        }
-
         // Update last_used_at in MongoDB
         await apiTokenService.updateLastUsed(tokenData._id);
 
-        // Get profile from MongoDB (or fall back to Supabase user metadata)
-        const profile = await userProfileService.getProfileBySupabaseId(user.id);
+        // Get profile from MongoDB
+        const profile = await userProfileService.getProfileByUserId(tokenData.userId);
 
         return NextResponse.json({
             valid: true,
             user: {
-                id: user.id,
-                email: user.email,
-                name: profile?.fullName || user.user_metadata?.full_name || null,
+                id: tokenData.userId,
+                email: profile?.email || '',
+                name: profile?.fullName || null,
             },
             tokenLabel: tokenData.label,
         });

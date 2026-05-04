@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   ChevronDown,
@@ -250,18 +251,24 @@ export function ReplayConfirmDialog({
   onCancel,
   loading = false,
 }: ReplayConfirmDialogProps) {
-  if (!open || !impact) return null;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const folderGroups = useMemo(() => {
+    if (!impact?.fileChanges?.length) return [];
+    return groupByFolder(impact.fileChanges);
+  }, [impact]);
+
+  if (!open || !impact || !mounted) return null;
 
   const hasFileChanges = impact.fileChanges.length > 0;
   const hasImpact = impact.messagesRemoved > 0 || impact.toolCallsRemoved > 0 || hasFileChanges;
-  const folderGroups = useMemo(
-    () => hasFileChanges ? groupByFolder(impact.fileChanges) : [],
-    [impact.fileChanges, hasFileChanges]
-  );
   const showFolderHeaders = folderGroups.length > 1;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+  const overlay = (
+    <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="relative w-full max-w-2xl mx-4 rounded-xl glass-elevated overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.06]">
@@ -411,4 +418,6 @@ export function ReplayConfirmDialog({
       </div>
     </div>
   );
+
+  return createPortal(overlay, document.body);
 }

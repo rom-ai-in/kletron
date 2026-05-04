@@ -1,114 +1,90 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import matter from "gray-matter";
-import { config } from "../config.js";
+// MCP tools that expose the skills library to the agent.
+// `list_all_skills` returns the global HTTP catalog. Workspace-scoped listing
+// is `list_available_skills` (registered from workspaceSkills.js). `load_skill`
+// returns resolved skill content (frontmatter + body).
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SKILL LOADER TOOLS
-// MCP tools for loading and listing skills
-// ─────────────────────────────────────────────────────────────────────────────
+const DEFAULT_BASE_URL = process.env.KLETRON_WEB_BASE_URL || "http://127.0.0.1:3000";
 
-const DEFAULT_SKILLS_DIR = ".agent/skills";
-const SKILL_FILE_NAME = "SKILL.md";
-
-function getSkillsDir() {
-    if (!config.defaultDir) {
-        throw new Error("Repository path not configured. Set it in Configuration > Repository Settings.");
-    }
-    return path.join(config.defaultDir, DEFAULT_SKILLS_DIR);
+function getBaseUrl() {
+    return (process.env.KLETRON_WEB_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, "");
 }
 
-/**
- * Load a skill's full definition and instructions.
- */
-export const loadSkill = {
-    name: "load_skill",
-    description: "Load a skill's definition and instructions by ID. Returns the skill metadata and system prompt.",
-    inputSchema: {
-        type: "object",
-        properties: {
-            skillId: {
-                type: "string",
-                description: "Skill identifier (folder name in .agent/skills/)",
-            },
-        },
-        required: ["skillId"],
-    },
+async function fetchSkills() {
+    const internalToken = process.env.MCP_INTERNAL_TOKEN || process.env.KLETRON_INTERNAL_TOKEN;
+    if (!internalToken) return [];
+    try {
+        const res = await fetch(`${getBaseUrl()}/api/skills`, {
+            headers: { "x-mcp-internal-token": internalToken },
+        });
+        if (!res.ok) return [];
+        const json = await res.json();
+        return Array.isArray(json?.skills) ? json.skills : [];
+    } catch {
+        return [];
+    }
+}
 
-    async handler({ skillId }) {
-        const skillPath = path.join(getSkillsDir(), skillId, SKILL_FILE_NAME);
+async function fetchSkill(slug) {
+    const internalToken = process.env.MCP_INTERNAL_TOKEN || process.env.KLETRON_INTERNAL_TOKEN;
+    if (!internalToken) return null;
+    try {
+        const res = await fetch(`${getBaseUrl()}/api/skills/${encodeURIComponent(slug)}`, {
+            headers: { "x-mcp-internal-token": internalToken },
+        });
+        if (!res.ok) return null;
+        const json = await res.json();
+        return json?.skill ?? null;
+    } catch {
+        return null;
+    }
+}
 
-        try {
-            const content = await fs.readFile(skillPath, "utf-8");
-            const { data, content: body } = matter(content);
+export async function listSkills() {
+    const skills = await fetchSkills();
+    return skills.map((s) => ({
+        slug: s.slug,
+        name: s.name,
+        description: s.description,
+        version: s.version,
+        tags: s.tags,
+        source: s.source,
+    }));
+}
 
-            return {
-                id: skillId,
-                name: data.name ?? skillId,
-                version: data.version ?? "1.0.0",
-                description: data.description ?? "",
-                systemPrompt: body.trim(),
-                requiredTools: data.requiredTools ?? [],
-                suggestedTools: data.suggestedTools ?? [],
-                extends: data.extends ?? [],
-                tags: data.tags ?? [],
-                outputFormat: data.outputFormat,
-                maxToolCalls: data.maxToolCalls,
-                author: data.author,
-            };
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            throw new Error(`Failed to load skill "${skillId}": ${message}`);
-        }
+export async function loadSkill(skillId) {
+    if (!skillId) return null;
+    return fetchSkill(skillId);
+}
+
+// MCP tool wrappers (used by server.js buildAllTools).
+export const list_all_skills = {
+    description:
+        "List all skills in the Kletron library via HTTP (built-in + user). For skills enabled in this workspace only, call list_available_skills instead.",
+    inputSchema: { type: "object", properties: {} },
+    async run() {
+        return listSkills();
     },
 };
 
-/**
- * List all available skills with their metadata.
- */
-export const listSkills = {
-    name: "list_skills",
-    description: "List all available skills with their IDs, names, and descriptions.",
+/** @deprecated Use list_all_skills; kept for older MCP clients. */
+export const list_skills = list_all_skills;
+
+export const load_skill = {
+    description:
+        "Load a skill by slug or skill_id, returning its frontmatter and SKILL.md body. Disabled workspace skills are rejected when capabilities are known.",
     inputSchema: {
         type: "object",
-        properties: {},
+        properties: {
+            slug: { type: "string", description: "Slug of the skill to load" },
+            skill_id: { type: "string", description: "Same as slug (matches executor load_skill)" },
+        },
     },
-
-    async handler() {
-        const skillsDir = getSkillsDir();
-        const skills = [];
-
-        try {
-            const entries = await fs.readdir(skillsDir, { withFileTypes: true });
-
-            for (const entry of entries) {
-                if (!entry.isDirectory()) continue;
-
-                const skillPath = path.join(skillsDir, entry.name, SKILL_FILE_NAME);
-                try {
-                    const content = await fs.readFile(skillPath, "utf-8");
-                    const { data } = matter(content);
-
-                    skills.push({
-                        id: entry.name,
-                        name: data.name ?? entry.name,
-                        version: data.version ?? "1.0.0",
-                        description: data.description ?? "",
-                        tags: data.tags ?? [],
-                        requiredTools: data.requiredTools ?? [],
-                        extends: data.extends ?? [],
-                    });
-                } catch {
-                    // Skip directories without valid SKILL.md
-                }
-            }
-
-            return { skills, count: skills.length };
-        } catch (error) {
-            if (error.code === "ENOENT") {
-                return { skills: [], count: 0, message: "Skills directory not found" };
-            }
-            throw error;
-        }
+    async run(args = {}) {
+        const raw = args.skill_id ?? args.slug;
+        const id = raw != null ? String(raw).trim() : "";
+        if (!id) throw new Error("load_skill requires slug or skill_id");
+        const skill = await loadSkill(id);
+        if (!skill) throw new Error(`Skill not found: ${id}`);
+        return skill;
     },
 };

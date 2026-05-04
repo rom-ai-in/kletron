@@ -55,7 +55,10 @@ export function useWorkspace(
   }, [workspace]);
 
   useEffect(() => {
-    if (!workspace?.path) return;
+    if (!workspace?.path) {
+      void window.kletron.setWorkspace("").catch(() => undefined);
+      return;
+    }
     window.kletron.setWorkspace(workspace.path).catch(() => undefined);
   }, [workspace?.path]);
 
@@ -149,6 +152,15 @@ export function useWorkspace(
     }
   }
 
+  /** Clear local workspace selection (folder stays on disk; user can add it again). */
+  function clearWorkspace() {
+    explicitSwitchRef.current = true;
+    setWorkspaceRaw(null);
+    setWorkspaceSummary(null);
+    localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+    void window.kletron.setWorkspace("").catch(() => undefined);
+  }
+
   return {
     workspace,
     setWorkspace,
@@ -158,6 +170,7 @@ export function useWorkspace(
     loadWorkspaceSummary,
     selectWorkspace,
     allowBackendSync,
+    clearWorkspace,
     allWorkspaces,
     refreshAllWorkspaces,
     switchWorkspaceById,

@@ -79,6 +79,21 @@ export { Modal } from './ui/Modal';
 // Panel
 export { Panel } from './ui/Panel';
 
+// Config explorer (Graphs / plugin skill detail — shared modal + sections)
+export { ConfigExplorerModal } from './config/ConfigExplorerModal';
+export type { ConfigExplorerModalProps } from './config/ConfigExplorerModal';
+export {
+    ConfigExplorerSection,
+    ConfigExplorerRow,
+    ConfigExplorerMonoBlock,
+} from './config/ConfigExplorerSection';
+export type {
+    ConfigExplorerSectionProps,
+    ConfigExplorerSectionVariant,
+    ConfigExplorerRowProps,
+    ConfigExplorerMonoBlockProps,
+} from './config/ConfigExplorerSection';
+
 // Skeleton
 export { Skeleton } from './ui/Skeleton';
 
@@ -142,6 +157,9 @@ export type { ActivityBarItem, ActivityBarProps } from './ui/ActivityBar';
 export { ThinkingBubble, ThinkingList } from './Agent/ThinkingBubble';
 export type { ThinkingBubbleProps, ThoughtItem, ThinkingListProps } from './Agent/ThinkingBubble';
 
+export { AgentStatusShimmerLabel } from './Agent/AgentStatusShimmerLabel';
+export type { AgentStatusShimmerLabelProps } from './Agent/AgentStatusShimmerLabel';
+
 export { ToolLog } from './Agent/ToolLog';
 export type { ToolCall, ToolStatus, ToolLogProps } from './Agent/ToolLog';
 
@@ -184,7 +202,9 @@ export type { ToolInvocationProps } from './Agent/ToolInvocation';
 
 // Message List (scrollable chat container with auto-scroll + tool pairing)
 export { MessageList, groupEvents } from './Agent/MessageList';
-export type { MessageListProps, ChatEvent, RenderItem } from './Agent/MessageList';
+export type { MessageListProps, ChatEvent, RenderItem, ThreadDomPaintLogOptions } from './Agent/MessageList';
+export { PendingSessionEditsStrip } from './Agent/PendingSessionEditsStrip';
+export type { PendingSessionEditsStripProps } from './Agent/PendingSessionEditsStrip';
 
 // Agent Task Queue (sidebar task list from agent graph runs)
 export { AgentTaskQueue } from './Agent/AgentTaskQueue';
@@ -204,7 +224,12 @@ export type { UseAgentSessionReturn } from '../hooks/useAgentSession';
 export { useSessionStream, normalizeMessage } from '../hooks/useSessionStream';
 export type { Message, StreamStatus, TokenUsageForDisplay, UseSessionStreamOptions, UseSessionStreamReturn } from '../hooks/useSessionStream';
 export { useSessionEdits } from '../hooks/useSessionEdits';
-export type { SessionPendingEdit, UseSessionEditsOptions, UseSessionEditsReturn } from '../hooks/useSessionEdits';
+export type {
+    SessionPendingEdit,
+    SessionEditFlushNotice,
+    UseSessionEditsOptions,
+    UseSessionEditsReturn,
+} from '../hooks/useSessionEdits';
 
 // =============================================================================
 // EDITOR COMPONENTS (Monaco-based)
@@ -258,7 +283,21 @@ export { Breadcrumbs } from './ui/Breadcrumbs';
 export { BreadcrumbOverridesProvider, useBreadcrumbOverrides } from './ui/BreadcrumbOverridesProvider';
 
 // Marketing Layout
-export { MarketingHeader, MarketingFooter } from './ui/MarketingLayout';
+export { MarketingHeader, MarketingFooter, EarlyAccessBadge } from './ui/MarketingLayout';
+export {
+    marketingContainer,
+    MarketingEyebrow,
+    MarketingHeroTitle,
+    MarketingLead,
+    MarketingSectionTitle,
+    marketingBtnPrimary,
+    marketingBtnSecondary,
+    marketingBtnGhost,
+    marketingNavBtnPrimary,
+    marketingNavBtnGhost,
+    MarketingCard,
+    MarketingIconCircle,
+} from './ui/MarketingPrimitives';
 
 // Platform Components
 export { TrafficLights } from './ui/TrafficLights';

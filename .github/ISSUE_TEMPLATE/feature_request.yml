@@ -1,0 +1,39 @@
+name: Feature request
+description: Propose an improvement or new capability
+labels: []
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What user or contributor pain does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: High-level approach; link to prior art if any.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - web
+        - graphs
+        - mcp
+        - desktop
+        - docs
+        - community
+        - other
+    validations:
+      required: true
+  - type: checkboxes
+    id: willing
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to open a PR for this
+          required: false

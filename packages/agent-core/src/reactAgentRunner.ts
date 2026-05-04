@@ -2,10 +2,11 @@ import { BaseMessage, SystemMessage } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
 
-import { getChatModel, type LlmSelection } from "@kletron/server/llm";
+import { getChatModel, resolveResolvedLlmInfo, type LlmSelection } from "@kletron/server/llm";
 import { config } from "@kletron/server/config";
 import type { TokenUsage } from "@kletron/server/services/tokenUsageTypes";
 import type { AgentWorkflowAbortReason } from "@kletron/shared/types";
+import type { AgentStreamKpiV1 } from "@kletron/shared/chatTypes";
 
 export type StreamReactAgentOptions = {
   name: string;
@@ -20,6 +21,8 @@ export type StreamReactAgentOptions = {
   onTokenUsage?: (usage: TokenUsage, model: string) => Promise<void> | void;
   /** Callback for progressive text streaming (token-by-token) */
   onTextDelta?: (delta: string) => void;
+  /** Callback for reasoning / extended-thinking deltas when the provider exposes them on chunks */
+  onReasoningDelta?: (delta: string) => void;
   /** Abort signal to stop streaming mid-run */
   abortSignal?: AbortSignal;
   /** Optional abort reason getter (used when abortSignal triggers) */
@@ -42,6 +45,12 @@ export type StreamReactAgentOptions = {
    * the last checkpoint instead of starting fresh.
    */
   resumeFromCheckpoint?: boolean;
+  /** Wall ms already spent in executor before this LLM call (KPI / diagnostics only). */
+  upstreamPrepMs?: number;
+  /** Run id for KPI correlation (optional). */
+  runId?: string;
+  /** LangGraph recursion limit (tool/model steps). Defaults to server `config.graphRecursionLimit`. */
+  recursionLimit?: number;
 };
 
 export type StreamReactAgentResult = {
@@ -54,6 +63,8 @@ export type StreamReactAgentResult = {
    * "INTERRUPTED" status and wait for human approval before resuming.
    */
   interrupted?: boolean;
+  /** Timing and throughput for this `streamReactAgentMessages` invocation */
+  kpi?: AgentStreamKpiV1;
 };
 
 export class AgentWorkflowAbortError extends Error {
@@ -66,10 +77,70 @@ export class AgentWorkflowAbortError extends Error {
   }
 }
 
+function isAssistantLikeMessage(message: BaseMessage): boolean {
+  const t = (message.getType?.() ?? (message as any).type ?? "").toString().toLowerCase();
+  const role = String((message as any).role ?? "").toLowerCase();
+  return t === "ai" || t === "assistant" || role === "assistant";
+}
+
+/** One-line `[AgentStreamKPI]` JSON logs per LLM stream; flip to false to silence. */
+const AGENT_STREAM_KPI_CONSOLE = true;
+
+/** Lowercase `provider` ids that must not use LangGraph dual `["values","messages"]` (values-only + snapshot deltas). */
+const LANGGRAPH_DUAL_STREAM_DENYLIST = new Set<string>(["lmstudio"]);
+
+/** When true, all providers use values-only streaming (ignore denylist for dual). */
+const LANGGRAPH_FORCE_VALUES_ONLY_STREAM = false;
+
+function isAgentStreamKpiLogEnabled(): boolean {
+  return AGENT_STREAM_KPI_CONSOLE;
+}
+
+function logAgentStreamKpiLine(kpi: AgentStreamKpiV1) {
+  if (!isAgentStreamKpiLogEnabled()) return;
+  console.info("[AgentStreamKPI]", JSON.stringify(kpi));
+}
+
+function shouldUseLangGraphDualStream(providerLower: string, wantTokenStream: boolean): boolean {
+  if (!wantTokenStream) return false;
+  if (LANGGRAPH_FORCE_VALUES_ONLY_STREAM) return false;
+  return !LANGGRAPH_DUAL_STREAM_DENYLIST.has(providerLower);
+}
+
 /**
  * Extract token usage from a LangChain message's usage_metadata.
  * LangChain messages from most providers include this metadata.
  */
+/** Best-effort extraction of streamed reasoning text from an AIMessageChunk (provider-dependent). */
+function extractReasoningDeltaFromChunk(chunk: any): string {
+  if (!chunk || typeof chunk !== "object") return "";
+  const ak = chunk.additional_kwargs ?? {};
+  const direct =
+    chunk.reasoning_content ??
+    ak.reasoning_content ??
+    ak.reasoning ??
+    chunk.reasoning;
+  if (typeof direct === "string" && direct.trim()) return direct;
+
+  const content = chunk.content;
+  if (!Array.isArray(content)) return "";
+  let out = "";
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const t = (block as any).type;
+    if (t === "reasoning" || t === "thinking" || t === "redacted_thinking") {
+      const text =
+        typeof (block as any).text === "string"
+          ? (block as any).text
+          : typeof (block as any).reasoning === "string"
+            ? (block as any).reasoning
+            : "";
+      if (text) out += text;
+    }
+  }
+  return out;
+}
+
 function extractTokenUsage(message: BaseMessage): TokenUsage | null {
   const usageMetadata = (message as any).usage_metadata;
   if (!usageMetadata) return null;
@@ -84,8 +155,11 @@ function extractTokenUsage(message: BaseMessage): TokenUsage | null {
 export async function streamReactAgentMessages(
   opts: StreamReactAgentOptions
 ): Promise<StreamReactAgentResult> {
+  const t0 = performance.now();
+  const resolvedLlm = await resolveResolvedLlmInfo(opts.llmSelection);
   const model = await getChatModel(opts.llmSelection);
   const modelName = (model as any).modelName ?? (model as any).model ?? "unknown";
+  const llmResolveAndModelMs = performance.now() - t0;
 
   // ── Build createReactAgent params ──────────────────────────────────
   const agentParams: Parameters<typeof createReactAgent>[0] = {
@@ -105,6 +179,7 @@ export async function streamReactAgentMessages(
   }
 
   const agent = createReactAgent(agentParams);
+  const agentBuildMs = performance.now() - t0;
 
   // ── Determine input ────────────────────────────────────────────────
   // When resuming from a checkpoint, pass `null` as input so LangGraph
@@ -114,17 +189,25 @@ export async function streamReactAgentMessages(
     ? null
     : { messages: [...(opts.extraMessages ?? []), { role: "user", content: opts.userPrompt }] };
 
-  // Use multi-mode streaming when onTextDelta is provided to get token-by-token output.
-  // With ["values", "messages"], the stream yields [mode, data] tuples:
-  //   ["values", { messages: BaseMessage[] }]   — complete state snapshots
-  //   ["messages", [AIMessageChunk, metadata]]  — token-level LLM chunks
-  const useMultiMode = !!opts.onTextDelta;
+  // Dual-stream LangGraph: ["values","messages"] yields token chunks + state snapshots.
+  // When disabled (denylist / force values-only), we use streamMode "values" only and still
+  // emit progressive text via growing assistant snapshots (see processValuesState).
+  const wantTokenStream = !!(opts.onTextDelta || opts.onReasoningDelta);
+  const providerLower = String(resolvedLlm.provider ?? "").toLowerCase();
+  const useMultiMode = shouldUseLangGraphDualStream(providerLower, wantTokenStream);
+  if (wantTokenStream && !useMultiMode) {
+    console.warn(
+      `[ReactAgentRunner] values-only LangGraph stream (provider=${resolvedLlm.provider}). ` +
+        "Partial assistant text still emits onTextDelta when state snapshots grow. " +
+        "Edit LANGGRAPH_DUAL_STREAM_DENYLIST / LANGGRAPH_FORCE_VALUES_ONLY_STREAM in reactAgentRunner.ts to change.",
+    );
+  }
   const streamMode = useMultiMode ? (["values", "messages"] as any) : "values";
 
   // ── Build stream config ────────────────────────────────────────────
   const streamConfig: Record<string, any> = {
     streamMode,
-    recursionLimit: config.graphRecursionLimit,
+    recursionLimit: opts.recursionLimit ?? config.graphRecursionLimit,
     signal: opts.abortSignal,
   };
   // Thread configuration for checkpoint persistence
@@ -163,6 +246,29 @@ export async function streamReactAgentMessages(
     input as any,
     streamConfig,
   );
+  const streamOpenMs = performance.now() - t0;
+
+  let firstStreamEventMs: number | null = null;
+  let firstTextDeltaMs: number | null = null;
+  let firstReasoningDeltaMs: number | null = null;
+  let firstAssistantOnMessageMs: number | null = null;
+  let outputDeltaChars = 0;
+  let firstStreamWallClock: number | null = null;
+  const streamLoopWallStart = performance.now();
+
+  /** Last plain text seen per LangGraph message id — used for values-only streaming deltas. */
+  const lastStreamedAssistantTextByIdKey = new Map<string, string>();
+
+  const assistantPlainText = (message: BaseMessage): string => {
+    const c = message.content as unknown;
+    if (typeof c === "string") return c;
+    if (Array.isArray(c)) {
+      return c
+        .map((b: { text?: string }) => (typeof b?.text === "string" ? b.text : ""))
+        .join("");
+    }
+    return "";
+  };
 
   const seenMessageIds = new Set<string>();
   const seenUsageIds = new Set<string>(); // Track which messages we've extracted usage from
@@ -247,6 +353,45 @@ export async function streamReactAgentMessages(
         accumulatedMessages.push(message);
         if (opts.onMessage) {
           if (shouldEmitToCallback(message)) {
+            if (firstAssistantOnMessageMs === null && isAssistantLikeMessage(message)) {
+              firstAssistantOnMessageMs = performance.now() - t0;
+            }
+            await opts.onMessage(message);
+          }
+        }
+        // Values-only / dual-stream off: track assistant text so growing snapshots emit onTextDelta.
+        // Emit the full plaintext on the first snapshot too: previously we only seeded the map, so if
+        // the first values event already contained visible text (or only one snapshot arrived), the
+        // client never saw text_delta and the bubble stayed empty until a later growing snapshot.
+        if (!useMultiMode && opts.onTextDelta && isAssistantLikeMessage(message)) {
+          const tc = (message as any).tool_calls?.length ?? 0;
+          if (!tc) {
+            const full = assistantPlainText(message);
+            lastStreamedAssistantTextByIdKey.set(idKey, full);
+            if (full) {
+              opts.onTextDelta(full);
+              outputDeltaChars += full.length;
+            }
+          }
+        }
+      } else if (
+        seenMessageIds.has(idKey) &&
+        !useMultiMode &&
+        opts.onMessage &&
+        shouldEmitToCallback(message) &&
+        isAssistantLikeMessage(message)
+      ) {
+        const tc = (message as any).tool_calls?.length ?? 0;
+        if (!tc) {
+          const nextText = assistantPlainText(message);
+          const prevText = lastStreamedAssistantTextByIdKey.get(idKey) ?? "";
+          if (nextText.length > prevText.length && nextText.startsWith(prevText)) {
+            const delta = nextText.slice(prevText.length);
+            if (delta && opts.onTextDelta) {
+              opts.onTextDelta(delta);
+              outputDeltaChars += delta.length;
+            }
+            lastStreamedAssistantTextByIdKey.set(idKey, nextText);
             await opts.onMessage(message);
           }
         }
@@ -278,6 +423,10 @@ export async function streamReactAgentMessages(
     for await (const rawEvent of stream) {
       await checkAbort();
       if (!rawEvent || typeof rawEvent !== "object") continue;
+      if (firstStreamWallClock === null) {
+        firstStreamWallClock = performance.now();
+        firstStreamEventMs = firstStreamWallClock - t0;
+      }
 
       if (useMultiMode && Array.isArray(rawEvent)) {
         // Multi-mode: [mode, data] tuple
@@ -287,9 +436,25 @@ export async function streamReactAgentMessages(
           // Token-level chunk: data is [AIMessageChunk, metadata]
           const chunk = Array.isArray(data) ? data[0] : data;
           const content = typeof chunk?.content === "string" ? chunk.content : "";
+          const reasoning = extractReasoningDeltaFromChunk(chunk);
+          if (reasoning && opts.onReasoningDelta) {
+            if (firstReasoningDeltaMs === null) {
+              firstReasoningDeltaMs = performance.now() - t0;
+            }
+            opts.onReasoningDelta(reasoning);
+          }
           // Only emit text deltas for non-tool-call assistant chunks
-          if (content && !chunk?.tool_calls?.length && !chunk?.tool_call_chunks?.length) {
-            opts.onTextDelta!(content);
+          if (
+            content &&
+            opts.onTextDelta &&
+            !chunk?.tool_calls?.length &&
+            !chunk?.tool_call_chunks?.length
+          ) {
+            if (firstTextDeltaMs === null) {
+              firstTextDeltaMs = performance.now() - t0;
+            }
+            outputDeltaChars += content.length;
+            opts.onTextDelta(content);
           }
         } else if (mode === "values") {
           await processValuesState(data as { messages?: BaseMessage[] });
@@ -307,7 +472,59 @@ export async function streamReactAgentMessages(
     throw error;
   }
 
+  const streamLoopMs = performance.now() - streamLoopWallStart;
+  const approxOutputTokensFromChars = Math.max(0, Math.round(outputDeltaChars / 4));
+  const outTok = totalUsage.outputTokens;
+  const genWindowMs = firstStreamWallClock !== null ? performance.now() - firstStreamWallClock : null;
+  const secLoop = streamLoopMs > 0 ? streamLoopMs / 1000 : 0;
+  const secGen = genWindowMs !== null && genWindowMs > 0 ? genWindowMs / 1000 : 0;
+  const effectiveOutputTps = outTok > 0 && secLoop > 0 ? outTok / secLoop : null;
+  const effectiveOutputTpm = effectiveOutputTps !== null ? effectiveOutputTps * 60 : null;
+  const generationTps =
+    outTok > 0 && secGen > 0 ? outTok / secGen : approxOutputTokensFromChars > 0 && secGen > 0 ? approxOutputTokensFromChars / secGen : null;
+  const generationTpm = generationTps !== null ? generationTps * 60 : null;
+
+  const candidates = [firstTextDeltaMs, firstReasoningDeltaMs, firstAssistantOnMessageMs].filter(
+    (x): x is number => typeof x === "number"
+  );
+  const timeToFirstVisibleMs = candidates.length ? Math.min(...candidates) : null;
+
   const finalMessages = lastState?.messages ?? accumulatedMessages;
+
+  const toolCallCount = finalMessages.filter((m) => {
+    const t = (m.getType?.() ?? (m as any).type ?? "").toString().toLowerCase();
+    return t === "tool";
+  }).length;
+
+  const kpi: AgentStreamKpiV1 = {
+    v: 1,
+    runId: opts.runId,
+    agentName: opts.name,
+    provider: resolvedLlm.provider,
+    model: modelName,
+    streamMode: useMultiMode ? "values_messages" : "values",
+    llmResolveAndModelMs,
+    agentBuildMs,
+    streamOpenMs,
+    firstStreamEventMs,
+    firstTextDeltaMs,
+    firstReasoningDeltaMs,
+    firstAssistantOnMessageMs,
+    timeToFirstVisibleMs,
+    streamLoopMs,
+    generationWindowMs: genWindowMs,
+    outputDeltaChars,
+    outputTokensFromUsage: outTok,
+    approxOutputTokensFromChars,
+    effectiveOutputTps,
+    effectiveOutputTpm,
+    generationTps,
+    generationTpm,
+    upstreamPrepMs: opts.upstreamPrepMs,
+    toolCallCount,
+  };
+
+  logAgentStreamKpiLine(kpi);
 
   // ── Detect interrupt ─────────────────────────────────────────────
   // When `interruptBeforeTools` is active, the stream ends normally but
@@ -336,5 +553,6 @@ export async function streamReactAgentMessages(
     tokenUsage: totalUsage,
     model: modelName,
     interrupted,
+    kpi,
   };
 }
