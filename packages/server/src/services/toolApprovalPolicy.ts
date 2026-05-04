@@ -100,14 +100,13 @@ export const READONLY_TOOLS = new Set<string>([
     "fetch_url",
     "output_format",
     "write_todos",
-    "str_replace_editor",
 ]);
 
 export const EXECUTION_TOOLS = new Set<string>([
     "execute_bash",
 ]);
 
-export const WRITE_REPO_TOOLS = new Set<string>(["write_file"]);
+export const WRITE_REPO_TOOLS = new Set<string>(["write_file", "str_replace_editor"]);
 
 /**
  * Safe command prefixes — read-only commands with no side effects.

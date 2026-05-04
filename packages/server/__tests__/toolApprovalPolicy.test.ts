@@ -47,8 +47,13 @@ describe("toolApprovalPolicy source normalization", () => {
 describe("toolApprovalPolicy tool classification", () => {
     it("classifies readonly tools", () => {
         assert.ok(READONLY_TOOLS.has("read_file"));
-        assert.ok(READONLY_TOOLS.has("str_replace_editor"));
+        assert.ok(!READONLY_TOOLS.has("str_replace_editor"));
         assert.equal(classifyTool("read_file"), "readonly");
+    });
+
+    it("classifies str_replace_editor as write_repo", () => {
+        assert.ok(WRITE_REPO_TOOLS.has("str_replace_editor"));
+        assert.equal(classifyTool("str_replace_editor"), "write_repo");
     });
 
     it("classifies execution tools", () => {

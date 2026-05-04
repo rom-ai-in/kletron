@@ -4,8 +4,8 @@ import { runRepoAnalysis } from "@kletron/agent-core/agents/repoScannerAgent";
 import { getLlmConfig } from "@kletron/server/services/llmConfigService";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
-import { getContextGraphStore } from "@kletron/server/context/graph/ContextGraphStore";
-import { ContextScanner } from "@kletron/server/context/graph/ContextScanner";
+import { contextGraphStore, ContextGraphStore } from "@kletron/server/context/graph/ContextGraphStore";
+import { contextScanner, ContextScanner } from "@kletron/server/context/graph/ContextScanner";
 
 // Ensure dynamic route
 export const dynamic = "force-dynamic";
@@ -61,10 +61,9 @@ export async function POST(req: NextRequest) {
                 // 4b. Persist/update the server-side context graph
                 try {
                     sendEvent({ type: "log", message: "Updating context graph..." });
-                    const store = getContextGraphStore(workspace._id.toString(), workspaceRoot);
+                    const store = contextGraphStore;
                     await store.load();
-                    const scanner = new ContextScanner();
-                    await scanner.scanWorkspace(workspaceRoot, store);
+                    await contextScanner.scanWorkspace(workspaceRoot);
                     sendEvent({ type: "log", message: `Context graph updated (${store.getAllNodes().length} nodes).` });
                 } catch (err: any) {
                     sendEvent({ type: "log", message: `Context graph update failed: ${err?.message || "unknown error"}` });

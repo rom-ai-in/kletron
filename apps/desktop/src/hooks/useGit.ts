@@ -32,6 +32,7 @@ export function useGit(
   const [diffLoading, setDiffLoading] = useState(false);
   const [allDiffs, setAllDiffs] = useState<Map<string, string | null>>(new Map());
   const [allDiffsLoading, setAllDiffsLoading] = useState(false);
+  const [diffStats, setDiffStats] = useState<{ additions: number; deletions: number } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Generation counter — incremented on every workspace switch ────────────
@@ -60,9 +61,13 @@ export function useGit(
     try {
       setGitLoading(true);
       setGitError(null);
-      const status = await window.kletron.gitStatus(cwd);
+      const [status, numstat] = await Promise.all([
+        window.kletron.gitStatus(cwd),
+        window.kletron.gitDiffNumstat(cwd).catch(() => null),
+      ]);
       if (g !== gen()) return; // stale — workspace changed while awaiting
       setGitStatus(status);
+      setDiffStats(numstat);
     } catch (error) {
       if (g !== gen()) return;
       setGitError((error as Error)?.message || "Failed to get git status");
@@ -452,6 +457,7 @@ export function useGit(
     totalChanges,
     stagedCount,
     unstagedCount,
+    diffStats,
     // Actions
     refreshStatus,
     commit,

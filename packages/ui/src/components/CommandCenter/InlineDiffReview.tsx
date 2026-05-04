@@ -105,7 +105,7 @@ function DiffCard({
 
       {/* Diff Content */}
       {expanded && (
-        <div className="font-mono text-[11px] leading-relaxed overflow-x-auto max-h-[400px] overflow-y-auto scrollbar-elegant">
+        <div className="font-mono text-[11px] leading-relaxed overflow-x-auto scrollbar-elegant">
           {diff.hunks.map((hunk) => (
             <div key={hunk.id} className="border-b border-border-subtle last:border-b-0">
               <div className="px-2 py-0.5 text-[10px] text-text-muted bg-bg-elevated/30">
@@ -126,7 +126,7 @@ function DiffCard({
         <div className="flex items-center gap-1.5">
           <Button size="xs" onClick={() => onAccept?.(diff.editId)}>
             <Check className="h-3 w-3 mr-1" />
-            Merge
+            Accept
           </Button>
           <Button size="xs" variant="ghost" onClick={() => onReject?.(diff.editId)}>
             <X className="h-3 w-3 mr-1" />

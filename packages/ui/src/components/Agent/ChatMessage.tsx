@@ -89,13 +89,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 {/* Actions slot */}
                 {actions}
 
-                {/* Timestamp + Copy (hover reveal, assistant only by default) */}
-                {!isUser && (showCopy !== false || showTimestamp !== false) && (
-                    <div className="mt-0.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-start">
-                        {showTimestamp !== false && timestamp && (
-                            <span className="text-[9px] text-text-muted font-mono">{timestamp}</span>
-                        )}
-                        {showCopy !== false && content && <CopyButton content={content} />}
+                {/* Timestamp (hover reveal, assistant only by default) */}
+                {!isUser && showTimestamp !== false && timestamp && (
+                    <div className="mt-0.5 flex items-center opacity-0 group-hover:opacity-100 transition-opacity justify-start">
+                        <span className="text-[9px] text-text-muted font-mono">{timestamp}</span>
                     </div>
                 )}
             </div>

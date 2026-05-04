@@ -58,7 +58,7 @@ When a tool receives a relative path, it resolves it against the configured dire
 - **github_api** – GitHub REST API helper for `issues|pulls|releases` (uses `GITHUB_TOKEN`/`GH_TOKEN` if set).
 - **bootstrap_context** – reads a small set of high-signal files (architecture/rules/config) and returns excerpts for grounding.
 - **locate_ui_feature** – multi-query “feature locator” over UI code/docs (useful to avoid false “missing feature” claims).
-- **str_replace_editor** – compatibility shim (read-only view/range). Avoids agent failures when they try to “open/view” files via other toolsets.
+- **str_replace_editor** – Full file editor supporting view, create, str_replace, insert, and undo_edit commands. Compatible with Anthropic's str_replace_editor spec.
 - **execute_bash** – compatibility shim (safe emulation only; no real shell). Supports a small subset like `find/grep/rg/ls/cat` via existing tools.
 - **output_format** – compatibility shim to prevent failures when agents try to call a formatting tool.
 
@@ -79,7 +79,7 @@ These examples assume your repo root is set in **Configuration > Repository Sett
 
 Some local models try to call tools that exist in other agent environments. To reduce “tool not found” failures, this MCP server exposes a few *read-only / safe* shims:
 
-- `str_replace_editor`: supports viewing files only (no edits). If the agent tries to edit, it returns an error message telling it to use the read/search tools.
+- `str_replace_editor`: Full file editor. Supports `view`, `create`, `str_replace` (surgical edits), `insert` (add lines), and `undo_edit`. Compatible with Anthropic's tool specification.
 - `execute_bash`: does **not** execute arbitrary shell. It emulates a small subset (`find`, `grep -r`, `rg`, `ls`, `cat`) via the safe MCP tools.
   - Supports absolute paths *inside* the configured root.
   - Supports simple pipes like `| head -N` to cap results.

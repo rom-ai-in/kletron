@@ -16,6 +16,12 @@ export interface MarkdownRendererProps {
  * Shared markdown renderer with design-system styling.
  * Wraps react-markdown + remark-gfm with consistent overrides for
  * headings, lists, links, blockquotes, and code blocks.
+ * 
+ * NOTE: For "Cursor-Parity" UI Minimalism, we do NOT use regex replacements
+ * to strip headers and separators (regex destroys markdown inside code blocks).
+ * Instead, we use "AST Flattening": ReactMarkdown parses the document safely,
+ * and we override the h1-h6 tags below to render as plain <p> tags,
+ * leaving raw code blocks entirely untouched!
  */
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className }) => {
     if (!content) return null;
@@ -40,17 +46,26 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
                         <li className="pl-0.5 whitespace-normal leading-[1.35]">{children}</li>
                     ),
                     h1: ({ children }: any) => (
-                        <h1 className="font-bold text-sm text-text-primary mt-1.5 mb-0.5">{children}</h1>
+                        <p className="mb-0.5 last:mb-0 leading-[1.35] min-h-[1em] text-text-secondary">{children}</p>
                     ),
                     h2: ({ children }: any) => (
-                        <h2 className="font-semibold text-sm text-text-primary mt-1.5 mb-0.5">{children}</h2>
+                        <p className="mb-0.5 last:mb-0 leading-[1.35] min-h-[1em] text-text-secondary">{children}</p>
                     ),
                     h3: ({ children }: any) => (
-                        <h3 className="font-medium text-[13px] text-text-primary mt-1 mb-0.5">{children}</h3>
+                        <p className="mb-0.5 last:mb-0 leading-[1.35] min-h-[1em] text-text-secondary">{children}</p>
                     ),
                     h4: ({ children }: any) => (
-                        <h4 className="font-medium text-[12px] text-text-primary mt-1 mb-0.5">{children}</h4>
+                        <p className="mb-0.5 last:mb-0 leading-[1.35] min-h-[1em] text-text-secondary">{children}</p>
                     ),
+                    h5: ({ children }: any) => (
+                        <p className="mb-0.5 last:mb-0 leading-[1.35] min-h-[1em] text-text-secondary">{children}</p>
+                    ),
+                    h6: ({ children }: any) => (
+                        <p className="mb-0.5 last:mb-0 leading-[1.35] min-h-[1em] text-text-secondary">{children}</p>
+                    ),
+                    strong: ({ children }: any) => <span className="text-text-primary">{children}</span>,
+                    b: ({ children }: any) => <span className="text-text-primary">{children}</span>,
+                    hr: () => null,
                     a: ({ href, children }: any) => (
                         <a
                             href={href}

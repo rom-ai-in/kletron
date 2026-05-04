@@ -87,7 +87,7 @@ function getToolSummary(name: string, parsedArgs: Record<string, any>): string {
     }
     // Edit / write tools
     if (['edit_file', 'replace_file_content', 'str_replace_editor'].includes(name)) {
-        return filename(parsedArgs.path || parsedArgs.TargetFile || '');
+        return filename(parsedArgs.path || parsedArgs.filePath || parsedArgs.TargetFile || '');
     }
     if (['write_file', 'write_to_file'].includes(name)) {
         return filename(parsedArgs.path || parsedArgs.TargetFile || '');
@@ -176,9 +176,9 @@ function ToolInvocationDetail({
 
     // ── edit_file / str_replace_editor: inline diff ──
     if (name === 'edit_file' || name === 'replace_file_content' || name === 'str_replace_editor') {
-        const filePath = parsedArgs.path || parsedArgs.TargetFile || '';
-        const oldStr: string = parsedArgs.old_string || '';
-        const newStr: string = parsedArgs.new_string || '';
+        const filePath = parsedArgs.path || parsedArgs.filePath || parsedArgs.TargetFile || '';
+        const oldStr: string = parsedArgs.old_str || parsedArgs.old_string || '';
+        const newStr: string = parsedArgs.new_str || parsedArgs.new_string || '';
 
         return (
             <div className="rounded-md bg-bg-elevated border border-border-subtle overflow-hidden">

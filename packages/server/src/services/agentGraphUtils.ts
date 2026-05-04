@@ -1,6 +1,6 @@
 /**
  * Resolves a nested property path from an object
- * e.g., getNestedValue(obj, 'nodes.client_research.summary') 
+ * e.g., getNestedValue(obj, 'nodes.client_research.summary')
  */
 function getNestedValue(obj: unknown, path: string): unknown {
     const parts = path.split('.');
@@ -42,12 +42,28 @@ export function renderUserPrompt(template: string, state: unknown) {
 }
 
 export function stripCodeFences(text: string) {
-    const trimmed = text.trim();
-    if (trimmed.startsWith("```")) {
-        const withoutFirst = trimmed.replace(/^```[a-zA-Z0-9_-]*\s*\n/, "");
-        return withoutFirst.replace(/\n```\s*$/, "").trim();
+    let trimmed = text.trim();
+
+    // Remove all code fence markers (```) from the beginning and end
+    while (trimmed.startsWith("```")) {
+        const firstNewline = trimmed.indexOf('\n');
+        if (firstNewline > 0) {
+            trimmed = trimmed.slice(firstNewline + 1);
+        } else {
+            break;
+        }
     }
-    return trimmed;
+
+    while (trimmed.endsWith("```")) {
+        const lastNewline = trimmed.lastIndexOf('\n');
+        if (lastNewline > 0) {
+            trimmed = trimmed.slice(0, lastNewline);
+        } else {
+            break;
+        }
+    }
+
+    return trimmed.trim();
 }
 
 export function parseJsonOutput(raw: string): unknown {
@@ -58,8 +74,9 @@ export function parseJsonOutput(raw: string): unknown {
         return JSON.parse(cleaned);
     } catch (e) {
         // If it's not valid JSON, try to extract JSON from the text
-        // Sometimes the model wraps JSON in extra text
-        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+        // Sometimes the model wraps JSON in extra text or includes multiple objects
+        // Try to find a complete JSON object by looking for top-level {}
+        const jsonMatch = cleaned.match(/\{[^{}]*\}/s);
         if (jsonMatch) {
             try {
                 return JSON.parse(jsonMatch[0]);
@@ -68,7 +85,7 @@ export function parseJsonOutput(raw: string): unknown {
             }
         }
 
-        // If no JSON found, return a fallback structure
+        // If no valid JSON found, return a fallback structure
         // This allows the graph to continue with an error message instead of crashing
         return {
             _parseError: true,
@@ -78,4 +95,3 @@ export function parseJsonOutput(raw: string): unknown {
         };
     }
 }
-

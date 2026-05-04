@@ -14,6 +14,7 @@ import {
   gitListBranches,
   gitDiff,
   gitDiffStaged,
+  gitDiffNumstat,
   gitStageFile,
   gitStageAll,
   gitUnstageFile,
@@ -477,6 +478,10 @@ ipcMain.handle("git:push", async (_event, remote?: string, branch?: string, cwd?
 
 ipcMain.handle("git:createPR", async (_event, title: string, body?: string, base?: string, cwd?: string) => {
   return gitCreatePR(resolveWorkspace(cwd), title, body, base);
+});
+
+ipcMain.handle("git:diffNumstat", async (_event, cwd?: string) => {
+  return gitDiffNumstat(resolveWorkspace(cwd));
 });
 
 // ── Command Center IPC ──────────────────────────────────────────────────────

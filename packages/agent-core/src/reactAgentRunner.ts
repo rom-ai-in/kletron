@@ -12,6 +12,7 @@ export type StreamReactAgentOptions = {
   systemPrompt: string;
   userPrompt: string;
   tools: any[];
+  workspaceRoot?: string;
   llmSelection?: LlmSelection;
   extraMessages?: BaseMessage[];
   onMessage?: (message: BaseMessage) => Promise<void> | void;
@@ -129,8 +130,16 @@ export async function streamReactAgentMessages(
   // Thread configuration for checkpoint persistence
   if (opts.threadId) {
     streamConfig.configurable = {
+      ...(streamConfig.configurable || {}),
       thread_id: opts.threadId,
       checkpoint_ns: "",
+    };
+  }
+  
+  if (opts.workspaceRoot) {
+    streamConfig.configurable = {
+      ...(streamConfig.configurable || {}),
+      workspaceRoot: opts.workspaceRoot,
     };
   }
 

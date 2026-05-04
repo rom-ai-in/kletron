@@ -67,7 +67,6 @@ const DEFAULT_NODE_TOOLS = [
     "github_api",
     "bootstrap_context",
     "locate_ui_feature",
-    "str_replace_editor",
     "execute_bash",
     "output_format",
     "write_todos",

@@ -18,7 +18,7 @@ exports.default = async function notarizeApp(context) {
 
   console.log("[notarize] Notarizing", appPath);
   await notarize({
-    appBundleId: "com.numezis.desktop",
+    appBundleId: "com.kletron.desktop",
     appPath,
     appleId,
     appleIdPassword,

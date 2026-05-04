@@ -20,7 +20,7 @@ async function checkServer() {
     console.log('Server is running and accessible');
     return true;
   } catch (error) {
-    console.error('Error checking server:', error.message);
+    console.error('Error checking server:', (error as Error).message);
     return false;
   }
 }
