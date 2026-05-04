@@ -3,6 +3,7 @@
 import React, { useEffect, useState, type AnchorHTMLAttributes } from 'react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../context/AuthContext';
+import { Github } from 'lucide-react';
 import { marketingNavBtnGhost, marketingNavBtnPrimary } from './MarketingPrimitives';
 
 export interface MarketingNavLink {
@@ -27,7 +28,6 @@ export interface MarketingHeaderProps {
     logo?: React.ReactNode;
     navLinks?: MarketingNavLink[];
     rightSlot?: React.ReactNode;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     LinkComponent?: React.ComponentType<any>;
     className?: string;
 }
@@ -39,6 +39,11 @@ const DefaultLink: React.FC<MarketingFallbackLinkProps> = ({ href, className, ch
         {children}
     </a>
 );
+
+const githubRepoUrl = 'https://github.com/rom-ai-in/kletron';
+
+const marketingHeaderExternalBtn =
+    'inline-flex items-center justify-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-medium text-text-muted transition hover:text-text-primary hover:bg-white/[0.05]';
 
 function MenuIcon({ open }: { open: boolean }) {
     return (
@@ -60,7 +65,6 @@ function MenuIcon({ open }: { open: boolean }) {
 function DefaultHeaderAuth({
     LinkComponent,
 }: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     LinkComponent: React.ComponentType<any>;
 }) {
     const Link = LinkComponent;
@@ -77,6 +81,17 @@ function DefaultHeaderAuth({
     if (user) {
         return (
             <>
+                <a
+                    href={githubRepoUrl}
+                    className={marketingHeaderExternalBtn}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    title="Kletron on GitHub"
+                    aria-label="Kletron on GitHub"
+                >
+                    <Github className="h-4 w-4" />
+                    <span className="hidden sm:inline">GitHub</span>
+                </a>
                 <Link href="/app/agent" className={marketingNavBtnGhost}>
                     Dashboard
                 </Link>
@@ -89,6 +104,17 @@ function DefaultHeaderAuth({
 
     return (
         <>
+            <a
+                href={githubRepoUrl}
+                className={marketingHeaderExternalBtn}
+                target="_blank"
+                rel="noreferrer noopener"
+                title="Kletron on GitHub"
+                aria-label="Kletron on GitHub"
+            >
+                <Github className="h-4 w-4" />
+                <span className="hidden sm:inline">GitHub</span>
+            </a>
             <Link href="/auth/login" className={cn(marketingNavBtnGhost, 'hidden min-[400px]:inline-flex')}>
                 Sign in
             </Link>
@@ -234,7 +260,6 @@ export interface MarketingFooterLink {
 }
 
 export interface MarketingFooterProps {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     LinkComponent?: React.ComponentType<any>;
     links?: MarketingFooterLink[];
     className?: string;

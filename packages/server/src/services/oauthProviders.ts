@@ -24,6 +24,15 @@ export interface OauthProviderConfig {
     extractScopes?: (tokenResponse: Record<string, unknown>) => string[];
 }
 
+function extractGoogleScopes(resp: Record<string, unknown>, fallback: string[]): string[] {
+    const raw = typeof resp.scope === "string" ? resp.scope : "";
+    const scopes = raw
+        .split(/\s+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    return scopes.length > 0 ? scopes : fallback;
+}
+
 export const OAUTH_PROVIDERS: Record<string, OauthProviderConfig> = {
     github: {
         providerId: "github",
@@ -66,7 +75,11 @@ export const OAUTH_PROVIDERS: Record<string, OauthProviderConfig> = {
         providerId: "google-drive",
         authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
         tokenUrl: "https://oauth2.googleapis.com/token",
-        defaultScopes: ["https://www.googleapis.com/auth/drive.readonly"],
+        defaultScopes: [
+            "https://www.googleapis.com/auth/drive.file",
+            "https://www.googleapis.com/auth/drive.metadata.readonly",
+            "https://www.googleapis.com/auth/drive.readonly",
+        ],
         extraAuthParams: {
             access_type: "offline",
             prompt: "consent",
@@ -77,12 +90,21 @@ export const OAUTH_PROVIDERS: Record<string, OauthProviderConfig> = {
             refreshToken: String(resp.refresh_token ?? ""),
             accessToken: String(resp.access_token ?? ""),
         }),
+        extractScopes: (resp) =>
+            extractGoogleScopes(resp, [
+                "https://www.googleapis.com/auth/drive.file",
+                "https://www.googleapis.com/auth/drive.metadata.readonly",
+                "https://www.googleapis.com/auth/drive.readonly",
+            ]),
     },
     gmail: {
         providerId: "gmail",
         authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
         tokenUrl: "https://oauth2.googleapis.com/token",
-        defaultScopes: ["https://www.googleapis.com/auth/gmail.modify"],
+        defaultScopes: [
+            "https://www.googleapis.com/auth/gmail.modify",
+            "https://www.googleapis.com/auth/gmail.metadata",
+        ],
         extraAuthParams: {
             access_type: "offline",
             prompt: "consent",
@@ -93,12 +115,22 @@ export const OAUTH_PROVIDERS: Record<string, OauthProviderConfig> = {
             refreshToken: String(resp.refresh_token ?? ""),
             accessToken: String(resp.access_token ?? ""),
         }),
+        extractScopes: (resp) =>
+            extractGoogleScopes(resp, [
+                "https://www.googleapis.com/auth/gmail.modify",
+                "https://www.googleapis.com/auth/gmail.metadata",
+            ]),
     },
     "google-calendar": {
         providerId: "google-calendar",
         authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
         tokenUrl: "https://oauth2.googleapis.com/token",
-        defaultScopes: ["https://www.googleapis.com/auth/calendar"],
+        defaultScopes: [
+            "https://www.googleapis.com/auth/calendar",
+            "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+            "https://www.googleapis.com/auth/calendar.events",
+            "https://www.googleapis.com/auth/calendar.freebusy",
+        ],
         extraAuthParams: {
             access_type: "offline",
             prompt: "consent",
@@ -109,6 +141,13 @@ export const OAUTH_PROVIDERS: Record<string, OauthProviderConfig> = {
             refreshToken: String(resp.refresh_token ?? ""),
             accessToken: String(resp.access_token ?? ""),
         }),
+        extractScopes: (resp) =>
+            extractGoogleScopes(resp, [
+                "https://www.googleapis.com/auth/calendar",
+                "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+                "https://www.googleapis.com/auth/calendar.events",
+                "https://www.googleapis.com/auth/calendar.freebusy",
+            ]),
     },
 };
 

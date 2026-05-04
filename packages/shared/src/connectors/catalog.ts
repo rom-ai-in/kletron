@@ -182,11 +182,15 @@ export const CONNECTOR_CATALOG: ConnectorTypeDefinition[] = [
     {
         id: "google-drive",
         name: "Google Drive",
-        description: "Read documents, sheets, and slides stored in Google Drive.",
+        description: "Read, inspect metadata, and manage documents, sheets, and slides in Google Drive.",
         category: "storage",
         icon: "google-drive",
         auth: "oauth",
-        oauthScopes: ["https://www.googleapis.com/auth/drive.readonly"],
+        oauthScopes: [
+            "https://www.googleapis.com/auth/drive.file",
+            "https://www.googleapis.com/auth/drive.metadata.readonly",
+            "https://www.googleapis.com/auth/drive.readonly",
+        ],
         credentialFields: [
             {
                 key: "refreshToken",
@@ -279,10 +283,15 @@ export const CONNECTOR_CATALOG: ConnectorTypeDefinition[] = [
     {
         id: "google-calendar",
         name: "Google Calendar",
-        description: "Read and manage calendar events.",
+        description: "Read and manage calendar events and availability.",
         category: "productivity",
         auth: "oauth",
-        oauthScopes: ["https://www.googleapis.com/auth/calendar"],
+        oauthScopes: [
+            "https://www.googleapis.com/auth/calendar",
+            "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+            "https://www.googleapis.com/auth/calendar.events",
+            "https://www.googleapis.com/auth/calendar.freebusy",
+        ],
         credentialFields: [
             { key: "refreshToken", label: "OAuth refresh token", secret: true, required: true },
         ],
@@ -292,10 +301,13 @@ export const CONNECTOR_CATALOG: ConnectorTypeDefinition[] = [
     {
         id: "gmail",
         name: "Gmail",
-        description: "Read and send mail via Google APIs.",
+        description: "Read, organize, draft, and send mail via Google APIs.",
         category: "communication",
         auth: "oauth",
-        oauthScopes: ["https://www.googleapis.com/auth/gmail.modify"],
+        oauthScopes: [
+            "https://www.googleapis.com/auth/gmail.modify",
+            "https://www.googleapis.com/auth/gmail.metadata",
+        ],
         credentialFields: [
             { key: "refreshToken", label: "OAuth refresh token", secret: true, required: true },
         ],
