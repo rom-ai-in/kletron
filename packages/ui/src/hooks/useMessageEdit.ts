@@ -139,15 +139,25 @@ export function useMessageEdit({
         setReplayLoading(false);
         setReplayDialogOpen(false);
         setReplayImpact(null);
+        replayConfirmSnapshotRef.current = null;
     }, []);
 
     const executeReplayInner = useCallback(async (overrideDraft?: string) => {
-        if (editingMessageIndex === null) return;
+        const snap = replayConfirmSnapshotRef.current;
+        const resolvedIndex = editingMessageIndex ?? snap?.messageIndex ?? null;
+        const draft = String(overrideDraft ?? editingMessageDraft ?? snap?.draft ?? '').trim();
+
+        if (resolvedIndex === null) {
+            setEditingMessageError('Could not resend — edit session expired. Close the dialog and try again.');
+            setReplayDialogOpen(false);
+            setReplayImpact(null);
+            replayConfirmSnapshotRef.current = null;
+            return;
+        }
         if (!sessionId) {
             setEditingMessageError('No active session — open a thread before resending.');
             return;
         }
-        const draft = (overrideDraft ?? editingMessageDraft).trim();
         if (!draft) {
             setEditingMessageError('Message cannot be empty.');
             return;
@@ -161,8 +171,9 @@ export function useMessageEdit({
         setEditingMessageError(null);
 
         try {
-            await onTruncateAndResend(editingMessageIndex, draft);
+            await onTruncateAndResend(resolvedIndex, draft);
             if (epoch !== replayEpochRef.current) return;
+            replayConfirmSnapshotRef.current = null;
             setEditingMessageIndex(null);
             setEditingMessageDraft('');
         } catch (error) {
@@ -191,10 +202,15 @@ export function useMessageEdit({
         const impact = computeReplayImpactPure(events, editingMessageIndex, originalContent, draft);
 
         if (impact.messagesRemoved === 0 && impact.toolCallsRemoved === 0 && impact.fileChanges.length === 0) {
+            replayConfirmSnapshotRef.current = null;
             void executeReplayInner(draft);
             return;
         }
 
+        replayConfirmSnapshotRef.current = {
+            messageIndex: editingMessageIndex,
+            draft,
+        };
         setReplayImpact(impact);
         setReplayDialogOpen(true);
     }, [editingMessageIndex, editingMessageDraft, events, executeReplayInner]);
@@ -207,6 +223,7 @@ export function useMessageEdit({
         setReplayDialogOpen(false);
         setReplayImpact(null);
         setReplayLoading(false);
+        replayConfirmSnapshotRef.current = null;
     }, []);
 
     return {

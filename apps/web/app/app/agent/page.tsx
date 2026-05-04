@@ -64,6 +64,7 @@ import {
 } from "@kletron/shared/capabilityDroppedToolsUx";
 import { AgentSessionChrome } from "@kletron/ui/components/CommandCenter/AgentSessionChrome";
 import { AgentCodeRepoBar } from "../../../components/agent/AgentCodeRepoBar";
+import { WorkspaceConnectorsHint } from "../../../components/agent/WorkspaceConnectorsHint";
 
 // For simple chat view - reuse existing components (groups tool events, renders collapsible tool cards)
 import { MessageList, type ChatEvent } from "@kletron/ui/components/Agent/MessageList";
@@ -1483,7 +1484,8 @@ export default function AgentPage() {
   const editControl = useMessageEdit({
     sessionId: activeSessionId,
     events: chatEventsForView,
-    streaming: agentBusy,
+    streaming: sending,
+    blockEdit: agentBusy,
     onTruncateAndResend: truncateAndResend,
   });
 
@@ -2034,6 +2036,7 @@ export default function AgentPage() {
           onResearchDepthChange={setResearchDepth}
           activeSessionId={activeSessionId}
         />
+        <WorkspaceConnectorsHint workspaceId={activeWorkspaceId} className="mt-2" />
       </div>
     </div>
   );
