@@ -11,7 +11,7 @@ function DesignSystemRedirect() {
     const searchParams = useSearchParams();
 
     useEffect(() => {
-        const rawTab = searchParams.get("tab") ?? "";
+        const rawTab = searchParams?.get("tab") ?? "";
         const normalized = rawTab.toLowerCase().replace(/\s+/g, "-");
         const target = TAB_ID_SET.has(normalized as TabId) ? normalized : DEFAULT_TAB_ID;
         router.replace(`/design-system/${target}`, { scroll: false });

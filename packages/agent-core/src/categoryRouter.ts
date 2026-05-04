@@ -125,7 +125,12 @@ export class CategoryAwareRouter {
           description: "General work assistance",
           availableTools: WORK_MODES.work.availableTools,
           requiredContextTypes: [],
-          capabilities: {},
+          capabilities: {
+            canEditFiles: false,
+            canAccessExternalServices: false,
+            canScheduleTasks: false,
+            canUseTerminal: false,
+          },
         };
 
     const workflow = this.determineWorkflow(userInput, category);

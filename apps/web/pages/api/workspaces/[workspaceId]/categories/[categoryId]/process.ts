@@ -1,9 +1,6 @@
 // apps/web/pages/api/workspaces/[workspaceId]/categories/[categoryId]/process.ts
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { workspaceCategoryService } from '@kletron/server/services/workspaceCategoryService';
-import { categoryWorkflowRunner } from '@kletron/agent-core';
+import { categoryWorkflowRunner } from '@kletron/agent-core/categoryWorkflowRunner';
 import { DEFAULT_WORK_CATEGORIES } from '@kletron/shared';
 import { normalizeToWorkModeId } from '@kletron/shared/workMode';
 
@@ -26,25 +23,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(404).json({ error: 'Category not found' });
         }
 
-        // Get workspace and category config
-        const workspaceConfig = await workspaceCategoryService.getWorkspaceCategoryConfig(
-            workspaceId as string,
-            mode,
-        );
-
         // Run workflow with category
-        const result = await categoryWorkflowRunner.runWithCategory(
-            message,
-            category,
-            workspaceId as string,
-            {
-                workspaceId: workspaceId as string,
-                onUpdate: async (update) => {
-                    // Stream updates back to client
-                    res.write(`data: ${JSON.stringify(update)}\n\n`);
-                }
-            }
-        );
+        const result = await categoryWorkflowRunner.runWithCategory({
+            userInput: message,
+            category: mode,
+            workspaceId: workspaceId as string,
+            onProgress: (progressMsg) => {
+                res.write(`data: ${JSON.stringify({ type: "progress", message: progressMsg })}\n\n`);
+            },
+        });
 
         // Send final result
         res.write(`data: ${JSON.stringify({ type: 'complete', result })}\n\n`);

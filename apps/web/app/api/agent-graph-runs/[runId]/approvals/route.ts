@@ -157,9 +157,10 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
     if (!workspace || !workspace._id) {
         return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
     }
+    const workspaceIdStr = workspace._id.toString();
 
     const run = await agentGraphRunService.getRun(params.runId);
-    if (!run || run.workspaceId?.toString() !== workspace._id.toString()) {
+    if (!run || run.workspaceId?.toString() !== workspaceIdStr) {
         return NextResponse.json({ error: "Run not found" }, { status: 404 });
     }
 
@@ -219,10 +220,10 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
             return { executed: true, result: evicted.content, evictedPath: evicted.evictedPath ?? undefined };
         }
         const client = await McpClient.getInstance();
-        await syncWorkspaceExternalMcpServers(workspace._id.toString());
+        await syncWorkspaceExternalMcpServers(workspaceIdStr);
         const resolvedArgs = resolveArgs(toolName, edit.args ?? {}, workspace.rootPath);
         const raw = await client.callTool(toolName, resolvedArgs as any, {
-            workspaceId: workspace._id.toString(),
+            workspaceId: workspaceIdStr,
         });
         const evicted = await maybeEvictResult(workspace.rootPath, params.runId, toolName, raw);
         return { executed: true, result: evicted.content, evictedPath: evicted.evictedPath ?? undefined };

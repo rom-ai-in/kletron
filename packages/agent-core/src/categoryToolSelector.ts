@@ -106,7 +106,15 @@ export class CategorySpecificToolSelector {
     }
 
     const allTools = this.getAllMcpTools();
-    return allTools.filter((tool) => groups.includes(tool.group));
+    return allTools
+      .filter((tool) => groups.includes(tool.group))
+      .map((tool) => ({
+        name: tool.name,
+        description: `${tool.name} (${tool.group})`,
+        parameters: {},
+        autoExecute: this.isAutoExecute(tool.name, mode),
+        category: mode,
+      }));
   }
 
   /**

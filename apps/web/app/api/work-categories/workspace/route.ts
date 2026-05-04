@@ -1,16 +1,23 @@
 // apps/web/app/api/work-categories/workspace/route.ts
 import { NextResponse } from 'next/server';
+import type { Session } from 'next-auth';
 import { getServerSession } from 'next-auth';
+import { authConfig as authOptions } from '../../../../config/auth';
 import { categoryService } from '@kletron/server/services/categoryService';
+
+function sessionUserId(session: Session | null): string | undefined {
+  const u = session?.user as { id?: string } | undefined;
+  return u?.id;
+}
 
 /**
  * GET /api/work-categories/workspace - Get workspace-specific categories
  */
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession();
-    
-    if (!session?.user?.id) {
+    const session = await getServerSession(authOptions);
+
+    if (!sessionUserId(session)) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -50,8 +57,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.id) {
+
+    if (!sessionUserId(session)) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }

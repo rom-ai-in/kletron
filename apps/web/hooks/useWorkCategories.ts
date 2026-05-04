@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { WorkCategoryConfig } from "@kletron/shared/types";
+import type { WorkCategoryConfig } from "@kletron/shared";
 
 export function useWorkCategories() {
   const [categories, setCategories] = useState<WorkCategoryConfig[]>([]);

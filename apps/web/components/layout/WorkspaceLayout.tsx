@@ -1,6 +1,6 @@
 "use client";
 
-import { WorkspaceSelector } from "../../../components/workspace/WorkspaceSelector";
+import { WorkspaceSelector } from "../workspace/WorkspaceSelector";
 import Link from "next/link";
 import { Settings, Wrench, Link as LinkIcon } from "lucide-react";
 

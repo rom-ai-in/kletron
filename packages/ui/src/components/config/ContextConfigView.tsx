@@ -395,7 +395,7 @@ function ScanConsole({ logs, isActive }: { logs: string[]; isActive: boolean }) 
 function ContextConfigViewInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const isSemanticHistory = searchParams.get("sub") === "history";
+  const isSemanticHistory = searchParams?.get("sub") === "history";
 
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [auditContext, setAuditContext] = useState<AuditContext>({});
@@ -420,7 +420,7 @@ function ContextConfigViewInner() {
 
   // Deep-link: ?tab=…&sub=history
   useEffect(() => {
-    const t = searchParams.get("tab");
+    const t = searchParams?.get("tab");
     if (t && CONTEXT_TAB_IDS.has(t as TabId)) {
       setActiveTab(t as TabId);
     }
@@ -429,7 +429,7 @@ function ContextConfigViewInner() {
   const navigateToTab = useCallback(
     (id: TabId) => {
       setActiveTab(id);
-      const p = new URLSearchParams(searchParams.toString());
+      const p = new URLSearchParams(searchParams?.toString() ?? "");
       p.set("tab", id);
       if (id !== "semantic") {
         p.delete("sub");

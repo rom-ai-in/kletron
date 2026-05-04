@@ -53,10 +53,18 @@ export async function POST(
         let transport;
         if (config.transport === "stdio") {
             if (!config.command) throw new Error("stdio transport requires command");
+            const mergedEnv: Record<string, string> = {};
+            for (const [k, v] of Object.entries(process.env)) {
+                if (v !== undefined) mergedEnv[k] = v;
+            }
+            const cfgEnv = "env" in config && config.env ? config.env : {};
+            for (const [k, v] of Object.entries(cfgEnv)) {
+                if (v !== undefined) mergedEnv[k] = String(v);
+            }
             transport = new StdioClientTransport({
                 command: config.command,
                 args: config.args ?? [],
-                env: { ...process.env, ...(("env" in config && config.env) || {}) },
+                env: mergedEnv,
             });
         } else {
             if (!config.url) throw new Error("HTTP transport requires url");

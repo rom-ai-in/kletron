@@ -100,7 +100,7 @@ export default function WorkspacesPage() {
                         </div>
                     </div>
                     <div className="flex justify-end gap-2">
-                        <Button variant="outline" onClick={() => setShowAddForm(false)}>Cancel</Button>
+                        <Button variant="secondary" onClick={() => setShowAddForm(false)}>Cancel</Button>
                         <Button onClick={handleAddWorkspace}>Create Workspace</Button>
                     </div>
                 </Card>
@@ -143,13 +143,13 @@ export default function WorkspacesPage() {
                                 ) : (
                                     <Button
                                         size="sm"
-                                        variant="outline"
+                                        variant="secondary"
                                         onClick={() => window.location.href = `/app/${workspace.id}/workbench`}
                                     >
                                         Open
                                     </Button>
                                 )}
-                                <Button size="sm" variant="outline">
+                                <Button size="sm" variant="secondary">
                                     <Settings className="w-4 h-4" />
                                 </Button>
                             </div>

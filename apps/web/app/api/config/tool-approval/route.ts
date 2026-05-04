@@ -10,7 +10,7 @@ import { saveTenantToolApprovalConfig } from "@kletron/server/services/tenantToo
  * GET /api/config/tool-approval — Effective tool approval config for the signed-in user.
  * Multi-tenant: per-organization doc when present; otherwise inherits deployment defaults.
  */
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
     const auth = await requireAppRouteAuth(req);
     if (!auth) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

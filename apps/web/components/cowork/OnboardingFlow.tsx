@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { DEFAULT_WORK_CATEGORIES } from "@kletron/shared";
-import type { WorkCategory } from "@kletron/agent-core";
+import type { WorkCategory } from "@kletron/shared";
 
 interface OnboardingState {
     step: number;
@@ -252,6 +252,7 @@ interface AnalyticsEvent {
     previousCategory?: string;
     duration?: number;
     metadata?: Record<string, unknown>;
+    timestamp?: number;
 }
 
 let eventQueue: AnalyticsEvent[] = [];

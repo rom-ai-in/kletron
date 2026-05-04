@@ -1,9 +1,41 @@
 // app/api/auth/signin/route.ts
-// API route for user sign in using NextAuth server-side
-import { NextResponse } from 'next/server';
-import { authConfig as authOptions } from '../../../../config/auth';
-import { getServerSession } from 'next-auth';
-import { signIn } from 'next-auth';
+// JSON sign-in API used by desktop / internal clients. Delegates to NextAuth credentials
+// flow (CSRF + /api/auth/callback/credentials) so session cookies match [...nextauth].
+import { NextResponse } from "next/server";
+import { authConfig as authOptions } from "../../../../config/auth";
+import { getServerSession } from "next-auth";
+import { validateUserCredentials } from "../../../../lib/validateUserCredentials";
+import { findTestUser, initializeTestUser, verifyPassword } from "../../../../lib/auth";
+
+async function resolveSignedInUser(email: string, password: string) {
+    await initializeTestUser();
+    const testUser = findTestUser(email);
+    if (testUser) {
+        const ok = await verifyPassword(password, testUser.passwordHash);
+        if (ok) {
+            return { id: "test-user-1", email: testUser.email, name: "Romain Client" as string | undefined };
+        }
+    }
+    const user = await validateUserCredentials(email, password);
+    if (!user) return null;
+    return { id: user.id, email: user.email, name: user.fullName };
+}
+
+function appendSetCookies(from: Response, to: NextResponse) {
+    const headersWithGetter = from.headers as Headers & { getSetCookie?: () => string[] };
+    const list =
+        typeof headersWithGetter.getSetCookie === "function" ? headersWithGetter.getSetCookie() : null;
+    if (list?.length) {
+        for (const c of list) {
+            to.headers.append("Set-Cookie", c);
+        }
+        return;
+    }
+    const single = from.headers.get("set-cookie");
+    if (single) {
+        to.headers.append("Set-Cookie", single);
+    }
+}
 
 export async function POST(request: Request) {
     try {
@@ -12,57 +44,98 @@ export async function POST(request: Request) {
 
         if (!email || !password) {
             return NextResponse.json(
-                { success: false, message: 'Email and password are required' },
+                { success: false, message: "Email and password are required" },
                 { status: 400 }
             );
         }
 
-        // Check if user is already authenticated
         const existingSession = await getServerSession(authOptions);
         if (existingSession?.user) {
             return NextResponse.json(
-                { success: true, message: 'Already signed in', user: existingSession.user },
+                {
+                    success: true,
+                    message: "Already signed in",
+                    user: existingSession.user,
+                },
                 { status: 200 }
             );
         }
 
-        // Sign in using NextAuth credentials provider (server-side)
-        const result = await signIn('credentials', {
-            email,
-            password,
-            redirect: false,
+        const origin = new URL(request.url).origin;
+        const cookieHeader = request.headers.get("cookie") ?? "";
+
+        const csrfRes = await fetch(`${origin}/api/auth/csrf`, {
+            headers: { cookie: cookieHeader },
+        });
+        if (!csrfRes.ok) {
+            return NextResponse.json(
+                { success: false, message: "Authentication bootstrap failed" },
+                { status: 500 }
+            );
+        }
+        const csrfJson = (await csrfRes.json()) as { csrfToken?: string };
+        if (!csrfJson.csrfToken) {
+            return NextResponse.json(
+                { success: false, message: "Missing CSRF token" },
+                { status: 500 }
+            );
+        }
+
+        const params = new URLSearchParams({
+            csrfToken: csrfJson.csrfToken,
+            email: String(email),
+            password: String(password),
+            callbackUrl: `${origin}/app`,
+            json: "true",
         });
 
-        if (result?.error) {
+        const authRes = await fetch(`${origin}/api/auth/callback/credentials`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                cookie: cookieHeader,
+            },
+            body: params.toString(),
+        });
+
+        const raw = await authRes.text();
+        let parsed: { error?: string; url?: string } = {};
+        try {
+            parsed = JSON.parse(raw) as typeof parsed;
+        } catch {
+            // Non-JSON response — treat as failure
+        }
+
+        if (!authRes.ok || parsed.error) {
             return NextResponse.json(
-                { success: false, message: 'Invalid credentials' },
+                { success: false, message: "Invalid credentials" },
                 { status: 401 }
             );
         }
 
-        // Get the session after successful sign in
-        const session = await getServerSession(authOptions);
-
-        if (!session?.user) {
+        const profile = await resolveSignedInUser(String(email), String(password));
+        if (!profile) {
             return NextResponse.json(
-                { success: false, message: 'Sign in failed' },
+                { success: false, message: "Sign in failed" },
                 { status: 401 }
             );
         }
 
-        return NextResponse.json({
+        const res = NextResponse.json({
             success: true,
-            message: 'Sign in successful',
+            message: "Sign in successful",
             user: {
-                id: (session.user as any).id,
-                email: session.user.email,
-                name: session.user.name,
+                id: profile.id,
+                email: profile.email,
+                name: profile.name,
             },
         });
+        appendSetCookies(authRes, res);
+        return res;
     } catch (err) {
-        console.error('Sign in error:', err);
+        console.error("Sign in error:", err);
         return NextResponse.json(
-            { success: false, message: 'An unexpected error occurred' },
+            { success: false, message: "An unexpected error occurred" },
             { status: 500 }
         );
     }

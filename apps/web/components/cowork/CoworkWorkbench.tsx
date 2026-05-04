@@ -8,7 +8,7 @@ import { CategorySpecificInput } from "../workspace/CategorySpecificInput";
 import { ThreadFeed } from "../chat/ThreadFeed";
 import { Message } from "../chat/Message";
 import { DEFAULT_WORK_CATEGORIES } from "@kletron/shared";
-import type { WorkCategory } from "@kletron/agent-core";
+import type { WorkCategory } from "@kletron/shared";
 import { normalizeToWorkModeId } from "@kletron/shared/workMode";
 import { AnimatePresence, motion } from "framer-motion";
 

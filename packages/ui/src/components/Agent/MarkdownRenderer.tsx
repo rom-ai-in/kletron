@@ -38,6 +38,16 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
         const listMb = isChat ? 'mb-1.5 last:mb-0' : 'mb-0.5';
         const liGap = isChat ? 'space-y-1' : 'space-y-0';
 
+        /* Cursor / IDE-style data tables: visible grid, sticky-friendly header, horizontal scroll */
+        const tableWrap =
+            'my-2.5 first:mt-0 last:mb-0 overflow-x-auto rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] shadow-[inset_0_1px_0_0_var(--border-subtle)]';
+        const tableEl =
+            'w-full min-w-[16rem] border-collapse text-left text-[12px] leading-snug tabular-nums';
+        const thCell =
+            'border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-2 font-semibold text-[var(--text-secondary)] first:rounded-tl-[calc(var(--radius-lg)-1px)] last:rounded-tr-[calc(var(--radius-lg)-1px)] [&_p]:m-0 [&_p]:leading-snug';
+        const tdCell =
+            'border border-[var(--border-subtle)] px-2.5 py-1.5 align-top text-[var(--text-primary)] [&_p]:m-0 [&_p]:leading-snug [&_strong]:font-semibold';
+
         return {
             pre: ({ children }: any) => <>{children}</>,
             p: ({ children }: any) => <p className={pBody}>{children}</p>,
@@ -103,6 +113,18 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
                     {children}
                 </blockquote>
             ),
+            table: ({ children }: any) => (
+                <div className={tableWrap}>
+                    <table className={tableEl}>{children}</table>
+                </div>
+            ),
+            thead: ({ children }: any) => <thead>{children}</thead>,
+            tbody: ({ children }: any) => (
+                <tbody className="[&>tr:nth-child(even)]:bg-[var(--state-hover)]">{children}</tbody>
+            ),
+            tr: ({ children }: any) => <tr>{children}</tr>,
+            th: ({ children }: any) => <th className={thCell}>{children}</th>,
+            td: ({ children }: any) => <td className={tdCell}>{children}</td>,
             code: ({ node, inline, className: codeClass, children, ...props }: any) => (
                 <CodeBlock inline={inline} className={codeClass} {...props}>
                     {children}

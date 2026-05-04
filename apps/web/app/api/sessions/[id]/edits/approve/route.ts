@@ -118,6 +118,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   if (!workspace || !workspace._id) {
     return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
   }
+  const workspaceIdStr = workspace._id.toString();
 
   const run = await agentGraphRunService.getRun(params.id);
   if (!run) {
@@ -143,12 +144,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
     // All other tools (read-only MCP, edits, bash, etc.) replay through the same MCP client as the agent.
     const client = await McpClient.getInstance();
-    await syncWorkspaceExternalMcpServers(workspace._id.toString());
+    await syncWorkspaceExternalMcpServers(workspaceIdStr);
     const resolvedArgs = resolveArgs(toolName, edit.args ?? {}, workspace.rootPath);
     let raw: string;
     try {
       raw = await client.callTool(toolName, resolvedArgs as any, {
-        workspaceId: workspace._id.toString(),
+        workspaceId: workspaceIdStr,
       });
     } catch (mcpErr) {
       if (toolName === "write_file" && isMcpBundledToolNotFoundError(mcpErr)) {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DEFAULT_WORK_CATEGORIES } from '@kletron/shared';
-import { WorkCategory } from '@kletron/agent-core';
+import type { WorkCategory } from "@kletron/shared";
 import { normalizeToWorkModeId } from '@kletron/shared/workMode';
 
 interface WorkspaceCategorySelectorProps {

@@ -1,6 +1,6 @@
 // pages/api/workspaces/[workspaceId]/categories.ts
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getWorkspaceById } from '@kletron/server';
+import { getWorkspaceByIdUnsafe } from '@kletron/server/services/workspaceService';
 import { DEFAULT_WORK_CATEGORIES } from '@kletron/shared';
 
 export default async function handler(
@@ -14,7 +14,7 @@ export default async function handler(
     }
     
     // Verify workspace exists
-    const workspace = await getWorkspaceById(workspaceId, req.user?.id);
+    const workspace = await getWorkspaceByIdUnsafe(workspaceId);
     if (!workspace) {
         return res.status(404).json({ error: 'Workspace not found' });
     }

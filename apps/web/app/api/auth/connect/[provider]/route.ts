@@ -77,6 +77,11 @@ export async function GET(
         state,
         response_type: "code",
     });
+    if (def.extraAuthParams) {
+        for (const [k, v] of Object.entries(def.extraAuthParams)) {
+            params2.set(k, v);
+        }
+    }
 
     const target = `${def.authUrl}?${params2.toString()}`;
     return NextResponse.redirect(target);

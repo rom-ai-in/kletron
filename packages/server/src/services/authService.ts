@@ -124,7 +124,7 @@ export class AuthService {
      */
     async signOut(): Promise<AuthResponse> {
         try {
-            const response = await fetch('/api/auth/signout', {
+            const response = await fetch('/api/auth/json/signout', {
                 method: 'POST'
             });
 

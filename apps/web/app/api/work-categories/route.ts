@@ -1,6 +1,6 @@
 // apps/web/app/api/work-categories/route.ts
 import { NextResponse } from "next/server";
-import type { WorkCategoryConfig } from "@kletron/shared/types";
+import type { WorkCategoryConfig } from "@kletron/shared";
 
 const builtInCategories: WorkCategoryConfig[] = [
   {

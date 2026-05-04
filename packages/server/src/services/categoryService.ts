@@ -124,7 +124,6 @@ export class CategoryService {
     const collection = db.collection<WorkspaceCategoryDoc>(WORKSPACE_CATEGORY_COLLECTION);
     for (const leg of LEGACY_CATEGORY_IDS) {
       const next = normalizeToWorkModeId(leg);
-      if (next === leg) continue;
       await collection.updateMany(
         { categoryId: leg },
         { $set: { categoryId: next, updatedAt: new Date() } },

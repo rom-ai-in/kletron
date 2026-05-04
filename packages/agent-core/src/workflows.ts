@@ -1,5 +1,5 @@
 import type { AgentWorkflowOptions, AgentWorkflowResult } from "@kletron/shared/types";
-import type { WorkCategoryConfig } from "@kletron/shared/types";
+import type { WorkCategoryConfig } from "@kletron/shared";
 import type { AgentGraphDefinition } from "@kletron/server/services/agentGraphTypes";
 import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";

@@ -19,7 +19,7 @@ type AgentGraphDto = {
 export default function AgentGraphDetailClient({ params }: { params: { id: string } }) {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const defaultToolPalette = searchParams.get("palette") === "work" ? "work" : "code";
+    const defaultToolPalette = searchParams?.get("palette") === "work" ? "work" : "code";
     const [graph, setGraph] = useState<AgentGraphDto | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");

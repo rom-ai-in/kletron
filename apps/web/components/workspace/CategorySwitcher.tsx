@@ -2,7 +2,7 @@
 "use client";
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Tabs, TabsList, TabsTrigger } from "@kletron/ui/components/ui/tabs";
+import { Tabs, TabsList, TabTrigger } from "@kletron/ui/components/ui/Tabs";
 import { normalizeToWorkModeId } from "@kletron/shared/workMode";
 
 interface CategorySwitcherProps {
@@ -24,24 +24,26 @@ export function CategorySwitcher({ workspaceId }: CategorySwitcherProps) {
 
   return (
     <Tabs
+      defaultValue={activeCategory}
       value={activeTab}
       onValueChange={(value) => {
-        setActiveTab(value);
+        const mode = normalizeToWorkModeId(value);
+        setActiveTab(mode);
         const params = new URLSearchParams(searchParams?.toString() || "");
-        params.set("category", value);
+        params.set("category", mode);
         router.push(`${pathname}?${params.toString()}`, undefined);
       }}
     >
       <TabsList className="grid grid-cols-2 gap-1 bg-transparent p-0">
         {categories.map((category) => (
-          <TabsTrigger
+          <TabTrigger
             key={category.id}
             value={category.id}
             className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary h-8 px-2 py-1 text-xs"
             style={{ borderColor: category.color }}
           >
             <span className="flex items-center gap-1">{category.name}</span>
-          </TabsTrigger>
+          </TabTrigger>
         ))}
       </TabsList>
     </Tabs>

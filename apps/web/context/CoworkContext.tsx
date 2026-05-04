@@ -3,7 +3,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 import { DEFAULT_WORK_CATEGORIES } from "@kletron/shared";
-import type { WorkCategory } from "@kletron/agent-core";
+import type { WorkCategory } from "@kletron/shared";
 import { normalizeToWorkModeId } from "@kletron/shared/workMode";
 
 export interface CoworkState {

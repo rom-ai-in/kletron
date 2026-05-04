@@ -12,6 +12,8 @@ export interface OauthProviderConfig {
     tokenUrl: string;
     /** Default scopes if the user does not request any. */
     defaultScopes: string[];
+    /** Appended to the authorize URL (e.g. Google `access_type=offline`). */
+    extraAuthParams?: Record<string, string>;
     /** env var holding the client id. */
     clientIdEnv: string;
     /** env var holding the client secret. */
@@ -65,6 +67,26 @@ export const OAUTH_PROVIDERS: Record<string, OauthProviderConfig> = {
         authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
         tokenUrl: "https://oauth2.googleapis.com/token",
         defaultScopes: ["https://www.googleapis.com/auth/drive.readonly"],
+        extraAuthParams: {
+            access_type: "offline",
+            prompt: "consent",
+        },
+        clientIdEnv: "GOOGLE_OAUTH_CLIENT_ID",
+        clientSecretEnv: "GOOGLE_OAUTH_CLIENT_SECRET",
+        buildCredentials: (resp) => ({
+            refreshToken: String(resp.refresh_token ?? ""),
+            accessToken: String(resp.access_token ?? ""),
+        }),
+    },
+    gmail: {
+        providerId: "gmail",
+        authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+        tokenUrl: "https://oauth2.googleapis.com/token",
+        defaultScopes: ["https://www.googleapis.com/auth/gmail.modify"],
+        extraAuthParams: {
+            access_type: "offline",
+            prompt: "consent",
+        },
         clientIdEnv: "GOOGLE_OAUTH_CLIENT_ID",
         clientSecretEnv: "GOOGLE_OAUTH_CLIENT_SECRET",
         buildCredentials: (resp) => ({

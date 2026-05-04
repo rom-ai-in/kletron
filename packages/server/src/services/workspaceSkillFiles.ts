@@ -5,6 +5,7 @@
  * Same format as the global library (YAML frontmatter + markdown body).
  */
 
+import type { Dirent } from "node:fs";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
@@ -69,7 +70,7 @@ function parseSkillMarkdownFile(raw: string, slug: string, source: SkillRecord["
 /** List all skills: each `.kletron/skills/<slug>/SKILL.md` under the workspace root. */
 export async function listWorkspaceSkillRecords(rootPath: string): Promise<SkillRecord[]> {
     const base = workspaceSkillsBase(rootPath);
-    let entries: Awaited<ReturnType<typeof readdir>>;
+    let entries: Dirent[];
     try {
         entries = await readdir(base, { withFileTypes: true });
     } catch {

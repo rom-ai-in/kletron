@@ -1,7 +1,17 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from 'react';
-import { flushSync } from 'react-dom';
+import * as ReactDOM from 'react-dom';
+
+/** `moduleResolution: "bundler"` + react-dom exports can drop the named `flushSync` type; runtime API is unchanged. */
+function flushDomSync(fn: () => void): void {
+  const rd = ReactDOM as typeof ReactDOM & { flushSync?: (callback: () => void) => void };
+  if (typeof rd.flushSync === 'function') {
+    rd.flushSync(fn);
+  } else {
+    fn();
+  }
+}
 import { CornerDownLeft, Zap, GitBranch, Wrench, Eye } from 'lucide-react';
 import {
   filterSlashCommandItems,
@@ -181,7 +191,7 @@ export function SlashCommandMenu({
         const idx = selectedRef.current;
         const cmd = flat[idx];
         if (cmd) {
-          flushSync(() => {
+          flushDomSync(() => {
             cmd.action();
           });
           onClose();
@@ -235,7 +245,7 @@ export function SlashCommandMenu({
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    flushSync(() => {
+                    flushDomSync(() => {
                       cmd.action();
                     });
                     onClose();
