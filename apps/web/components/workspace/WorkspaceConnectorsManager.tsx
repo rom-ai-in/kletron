@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
     Badge,
@@ -184,6 +184,7 @@ const blankMcpDraft = {
 
 export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: string }) {
     const searchParams = useSearchParams();
+    const pathname = usePathname();
     const pluginId = searchParams?.get("plugin") ?? undefined;
     const providerFocus = searchParams?.get("provider")?.trim() || undefined;
     const plugin = pluginId ? getPlugin(pluginId) : undefined;
@@ -294,6 +295,27 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
     const showToast = useCallback((kind: "success" | "error", text: string) => {
         setToast({ kind, text });
     }, []);
+
+    useEffect(() => {
+        const connectedProvider = searchParams?.get("connected");
+        const connectError = searchParams?.get("connect_error");
+        if (!connectedProvider && !connectError) {
+            return;
+        }
+
+        if (connectError) {
+            showToast("error", connectError);
+        } else if (connectedProvider) {
+            const label = getConnectorType(connectedProvider)?.name ?? connectedProvider;
+            showToast("success", `${label} connected`);
+        }
+
+        const next = new URLSearchParams(searchParams?.toString() ?? "");
+        next.delete("connected");
+        next.delete("connect_error");
+        const query = next.toString();
+        window.history.replaceState(null, "", query ? `${pathname}?${query}` : pathname);
+    }, [pathname, searchParams, showToast]);
 
     const saveWorkspaceBindings = async () => {
         if (!bindingsModal) return;

@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import { closeDb, getDb } from "../packages/server/src/lib/db";
 import path from "node:path";
 import fs from "node:fs";

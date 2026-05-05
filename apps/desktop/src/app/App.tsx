@@ -1814,6 +1814,7 @@ export default function App() {
             onNewThreadInProject={handleNewThreadInProject}
             onAddProject={handleAddProject}
             showAddProjectButton={false}
+            className="border-r-0"
             onSettings={() => settings.setActiveView("settings")}
             onRenameThread={(threadId, newTitle) => {
               threads.startEditThread({ id: threadId, title: newTitle });
@@ -2141,6 +2142,7 @@ export default function App() {
           />
           <div className="flex-shrink-0" style={{ width: changesPanel.width }}>
             <UncommittedChangesPanel
+              className="border-x-0 glass-dock-split"
               fileDiffs={uncommittedFileDiffs}
               loading={git.allDiffsLoading}
               onClose={() => setChangesVisible(false)}

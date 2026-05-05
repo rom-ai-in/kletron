@@ -4,7 +4,7 @@
 
 ## Overview
 
-The presets file defines many `AgentGraphDefinition` builders. **Production database seeding** (`scripts/seed-agent-graphs-all.ts`, `ensureDefaultGraphs()` on registration) keeps **only four** single-node LangGraph ReAct graphs: **Company Growth & GTM**, **Coder**, **Planner**, and **Explorer**. The same file still exports **Simple ReAct**, **Drift Analysis**, **Business Analyst**, **Code Comparator**, and others for manual creation or tooling.
+The presets file defines many `AgentGraphDefinition` builders. **Production database seeding** (`scripts/seed-agent-graphs-all.ts`, `ensureDefaultGraphs()` on registration, and **`apps/web/instrumentation.ts`** on each web server boot) keeps **five** single-node LangGraph ReAct graphs: **Company Growth & GTM**, **Operations / Incident**, **Coder**, **Planner**, and **Explorer**. Disable boot sync locally with `KLETRON_SKIP_CANONICAL_GRAPH_SYNC_ON_BOOT=true`. The same file still exports **Simple ReAct**, **Drift Analysis**, **Business Analyst**, **Code Comparator**, and others for manual creation or tooling.
 
 **Company growth / GTM** uses `buildCompanyGrowthWorkGraph()` with node id `company_growth_react` so Work mode does not replace its system prompt with the generic `simple_react` work swap.
 
@@ -13,6 +13,7 @@ The presets file defines many `AgentGraphDefinition` builders. **Production data
 | Role | Preset | Builder | Node id |
 |---|---|---|---|
 | Work / company growth | Company Growth & GTM (work graph) | `buildCompanyGrowthWorkGraph()` | `company_growth_react` |
+| Work / operations | Operations / Incident (work graph) | `buildOperationsIncidentWorkGraph()` | `operations_incident_react` |
 | Code | Coder Agent (agent graph) | `buildCoderAgentGraph()` | `coder_react` |
 | Plan (code) | Planner Agent (agent graph) | `buildPlannerAgentGraph()` | `planner_react` |
 | Explore (code) | Explorer Agent (agent graph) | `buildExplorerAgentGraph()` | `explorer_react` |
@@ -60,7 +61,7 @@ execute_bash, output_format, write_file, str_replace_editor, web_search, fetch_u
 write_todos, list_available_skills, load_skill
 ```
 
-## Preset Details (canonical four)
+## Preset Details (canonical five)
 
 ### 1. Company Growth & GTM (work graph)
 
@@ -69,7 +70,14 @@ write_todos, list_available_skills, load_skill
 **Tools**: `simpleReactToolNames` (general-purpose work + code tool surface)  
 **Focus**: Sales, BD, fundraising narrative, marketing/growth, daily/weekly operating rhythm — grounded in workspace markdown and optional web tools when allowed.
 
-### 2. Coder Agent
+### 2. Operations / Incident (work graph)
+
+**Identity**: "Operations & Incident Response"  
+**Node id**: `operations_incident_react`  
+**Tools**: `simpleReactToolNames` plus `sentry_api`, `github_api`  
+**Focus**: Production incidents, Sentry triage, operational checks, evidence-backed next actions.
+
+### 3. Coder Agent
 
 **Identity**: "Kletron" — autonomous coding agent  
 **Tools**: `glob_files`, `bootstrap_context`, `CURSOR_CORE_TOOLS`, `write_file`, `str_replace_editor`  
@@ -81,7 +89,7 @@ write_todos, list_available_skills, load_skill
 - Safe edit patterns (check existing file first, preserve structure)
 - Breadth-then-depth repository discovery; optional structured markdown in long answers
 
-### 3. Explorer Agent (code)
+### 4. Explorer Agent (code)
 
 **Identity**: "Kletron Explorer" — repository audit / architecture exploration  
 **Tools**: `glob_files`, `CURSOR_RESEARCH_TOOLS`, `todo_search`, `bootstrap_context`, `github_api`  
@@ -93,7 +101,7 @@ write_todos, list_available_skills, load_skill
 - Web research enabled
 - Single-node ReAct (no separate synthesizer node)
 
-### 4. Planner Agent (code)
+### 5. Planner Agent (code)
 
 **Identity**: "Kletron Planner" — architecture and planning agent  
 **Tools**: `glob_files`, `bootstrap_context`, read-only analysis subset + `write_todos` + `output_format`  

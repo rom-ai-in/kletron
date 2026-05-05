@@ -2,7 +2,6 @@
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import dotenv from "dotenv";
 import { z } from "zod";
 import { getDatabase } from "./lib/db";
 
@@ -28,8 +27,8 @@ export function getProjectRoot(): string {
   return process.cwd(); // Final fallback
 }
 
-
-dotenv.config();
+// Env: Next.js loads .env* for the app; CLI scripts should `import "dotenv/config"` first.
+// Avoid `dotenv` in this module — webpack may bundle it for instrumentation and fail on Node builtins.
 
 // -------------------------------------------------------------------
 // 1️⃣ Schema – shape of persisted config

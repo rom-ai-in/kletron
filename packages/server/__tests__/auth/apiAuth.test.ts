@@ -10,6 +10,7 @@ vi.mock("@kletron/server/services/apiTokenService", () => apiTokenServiceMock);
 
 const TEST_SECRET = "test-secret-for-api-auth";
 const TEST_URL = "https://www.kletron.com";
+const SESSION_USER_ID = "507f1f77bcf86cd799439011";
 
 const envKeys = [
   "NODE_ENV",
@@ -77,7 +78,7 @@ describe("apiAuth", () => {
 
   it("accepts NextAuth session cookies for browser app routes", async () => {
     const token = await encode({
-      token: { id: "user-123" },
+      token: { id: SESSION_USER_ID },
       secret: TEST_SECRET,
       maxAge: 30 * 24 * 60 * 60,
     });
@@ -87,12 +88,12 @@ describe("apiAuth", () => {
       makeBrowserRequest(`__Secure-next-auth.session-token=${token}`),
     );
 
-    expect(auth).toEqual({ userId: "user-123", authType: "session" });
+    expect(auth).toEqual({ userId: SESSION_USER_ID, authType: "session" });
   });
 
   it("prefers a valid browser session cookie over an invalid bearer header", async () => {
     const token = await encode({
-      token: { id: "user-123" },
+      token: { id: SESSION_USER_ID },
       secret: TEST_SECRET,
       maxAge: 30 * 24 * 60 * 60,
     });
@@ -107,12 +108,12 @@ describe("apiAuth", () => {
       }),
     );
 
-    expect(auth).toEqual({ userId: "user-123", authType: "session" });
+    expect(auth).toEqual({ userId: SESSION_USER_ID, authType: "session" });
   });
 
   it("accepts NextAuth session cookies for pages routes too", async () => {
     const token = await encode({
-      token: { id: "user-123" },
+      token: { id: SESSION_USER_ID },
       secret: TEST_SECRET,
       maxAge: 30 * 24 * 60 * 60,
     });
@@ -125,7 +126,22 @@ describe("apiAuth", () => {
       },
     } as any);
 
-    expect(auth).toEqual({ userId: "user-123", authType: "session" });
+    expect(auth).toEqual({ userId: SESSION_USER_ID, authType: "session" });
+  });
+
+  it("rejects non-Mongo session ids in production", async () => {
+    const token = await encode({
+      token: { id: "test-user-1" },
+      secret: TEST_SECRET,
+      maxAge: 30 * 24 * 60 * 60,
+    });
+
+    const { getAppRouteAuth } = await loadApiAuth();
+    const auth = await getAppRouteAuth(
+      makeBrowserRequest(`__Secure-next-auth.session-token=${token}`),
+    );
+
+    expect(auth).toBeNull();
   });
 
   it("still accepts bearer API tokens", async () => {

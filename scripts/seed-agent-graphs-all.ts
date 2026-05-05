@@ -1,18 +1,12 @@
-import { agentGraphService } from "@kletron/server/services/agentGraphService";
+import "dotenv/config";
+
 import {
-  buildCoderAgentGraph,
-  buildExplorerAgentGraph,
-  buildPlannerAgentGraph,
-  buildCompanyGrowthWorkGraph,
-} from "@kletron/server/services/agentGraphPresets";
+  agentGraphService,
+  listCanonicalUpsertedGraphNames,
+} from "@kletron/server/services/agentGraphService";
 import * as db from "@kletron/server/lib/db";
 
-const CANONICAL_GRAPH_NAMES = new Set([
-  buildCompanyGrowthWorkGraph().name,
-  buildCoderAgentGraph().name,
-  buildPlannerAgentGraph().name,
-  buildExplorerAgentGraph().name,
-]);
+const CANONICAL_GRAPH_NAMES = new Set(listCanonicalUpsertedGraphNames());
 
 // Legacy / removed graph names — delete any remaining copies from the database
 const LEGACY_NAMES = [

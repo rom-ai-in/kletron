@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import "dotenv/config";
+
 // Test script for category system
 import { CategoryService } from "@kletron/server/services/categoryService";
 

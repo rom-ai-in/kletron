@@ -5,16 +5,12 @@ import { NextResponse } from "next/server";
 import { authConfig as authOptions } from "../../../../config/auth";
 import { getServerSession } from "next-auth";
 import { validateUserCredentials } from "../../../../lib/validateUserCredentials";
-import { findTestUser, initializeTestUser, verifyPassword } from "../../../../lib/auth";
+import { resolveDemoCredentials } from "../../../../lib/demoCredentials";
 
 async function resolveSignedInUser(email: string, password: string) {
-    await initializeTestUser();
-    const testUser = findTestUser(email);
-    if (testUser) {
-        const ok = await verifyPassword(password, testUser.passwordHash);
-        if (ok) {
-            return { id: "test-user-1", email: testUser.email, name: "Romain Client" as string | undefined };
-        }
+    const demoProfile = await resolveDemoCredentials(email, password);
+    if (demoProfile) {
+        return demoProfile;
     }
     const user = await validateUserCredentials(email, password);
     if (!user) return null;

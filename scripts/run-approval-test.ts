@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { buildInitialState, getGraphNodeOrder } from "@kletron/server/services/agentGraphRuntime";

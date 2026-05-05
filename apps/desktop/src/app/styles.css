@@ -23,14 +23,8 @@
 
   #root {
     height: 100vh;
-    /* Layered gradient gives the glass panels something to show through.
-       On macOS with Electron vibrancy, the desktop wallpaper also bleeds in. */
-    background:
-      radial-gradient(ellipse 80% 50% at 10% 0%, rgba(57, 148, 188, 0.14), transparent 60%),
-      radial-gradient(ellipse 60% 60% at 90% 100%, rgba(139, 92, 246, 0.10), transparent 60%),
-      radial-gradient(ellipse 50% 40% at 50% 50%, rgba(99, 102, 241, 0.07), transparent 60%),
-      radial-gradient(ellipse 40% 30% at 70% 20%, rgba(14, 165, 233, 0.06), transparent 50%),
-      rgba(9, 9, 11, 0.85);
+    /* Flat shell — matches design system (--bg-app) and Cursor-like restraint; see docs/DESIGN_SYSTEM.md */
+    background-color: var(--bg-app);
   }
 }
 
@@ -46,13 +40,27 @@
                 0 1px 0 0 rgba(255, 255, 255, 0.05) inset;
   }
 
+  /**
+   * Docked split panes (e.g. uncommitted diff column): drop inset ring so it never stacks
+   * with ResizeHandle hairlines or reads as a second vertical rule.
+   */
+  .glass.glass-dock-split {
+    box-shadow: none;
+  }
+
   .glass-sidebar {
     background: var(--glass-bg-sidebar);
     backdrop-filter: blur(var(--glass-blur-xl)) saturate(210%) brightness(1.08);
     -webkit-backdrop-filter: blur(var(--glass-blur-xl)) saturate(210%) brightness(1.08);
     border-right: 1px solid var(--glass-border);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07) inset,
-                1px 0 24px rgba(0, 0, 0, 0.15);
+    /* Outer depth only — full inset ring duplicates adjacent resize separators */
+    box-shadow: 1px 0 24px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Desktop thread sidebar: Tailwind `border-r-0` + explicit kill for component-layer border */
+  .glass-sidebar.border-r-0 {
+    border-right-width: 0;
+    border-right-style: none;
   }
 
   .glass-titlebar {

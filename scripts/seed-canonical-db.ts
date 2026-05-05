@@ -9,22 +9,14 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { agentGraphService } from "@kletron/server/services/agentGraphService";
-import { automationExecutor } from "@kletron/server/services/automationExecutor";
 import {
-    buildCoderAgentGraph,
-    buildExplorerAgentGraph,
-    buildPlannerAgentGraph,
-    buildCompanyGrowthWorkGraph,
-} from "@kletron/server/services/agentGraphPresets";
+    agentGraphService,
+    listCanonicalUpsertedGraphNames,
+} from "@kletron/server/services/agentGraphService";
+import { automationExecutor } from "@kletron/server/services/automationExecutor";
 import * as db from "@kletron/server/lib/db";
 
-const CANONICAL_GRAPH_NAMES = new Set([
-    buildCompanyGrowthWorkGraph().name,
-    buildCoderAgentGraph().name,
-    buildPlannerAgentGraph().name,
-    buildExplorerAgentGraph().name,
-]);
+const CANONICAL_GRAPH_NAMES = new Set(listCanonicalUpsertedGraphNames());
 
 async function main() {
     const workspaceId = process.env.WORKSPACE_ID?.trim();

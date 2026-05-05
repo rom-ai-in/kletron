@@ -21,6 +21,21 @@ import {
 } from "./agentGraphPresets";
 
 const COLLECTION_NAME = "agent_graphs";
+
+/** Single source of truth for Mongo upserts at fixed ObjectIds — keep in sync with CANONICAL_AGENT_GRAPH_IDS. */
+const CANONICAL_PRESET_ENTRIES = [
+    { id: CANONICAL_AGENT_GRAPH_IDS.COMPANY_GROWTH_GTM, build: buildCompanyGrowthWorkGraph },
+    { id: CANONICAL_AGENT_GRAPH_IDS.OPERATIONS_INCIDENT, build: buildOperationsIncidentWorkGraph },
+    { id: CANONICAL_AGENT_GRAPH_IDS.CODER, build: buildCoderAgentGraph },
+    { id: CANONICAL_AGENT_GRAPH_IDS.PLANNER, build: buildPlannerAgentGraph },
+    { id: CANONICAL_AGENT_GRAPH_IDS.EXPLORER, build: buildExplorerAgentGraph },
+] as const;
+
+/** Graph display names produced by {@link AgentGraphService.upsertCanonicalPresetGraphs} — use in seed cleanup scripts. */
+export function listCanonicalUpsertedGraphNames(): string[] {
+    return CANONICAL_PRESET_ENTRIES.map((e) => e.build().name);
+}
+
 const fallbackGraphs = new Map<string, AgentGraphDefinition>();
 let fallbackEnabled = false;
 let fallbackWarned = false;
@@ -236,19 +251,11 @@ export class AgentGraphService {
             return { upserted: 5, deletedDuplicateNames: 0 };
         }
 
-        const entries = [
-            { id: CANONICAL_AGENT_GRAPH_IDS.COMPANY_GROWTH_GTM, build: buildCompanyGrowthWorkGraph },
-            { id: CANONICAL_AGENT_GRAPH_IDS.OPERATIONS_INCIDENT, build: buildOperationsIncidentWorkGraph },
-            { id: CANONICAL_AGENT_GRAPH_IDS.CODER, build: buildCoderAgentGraph },
-            { id: CANONICAL_AGENT_GRAPH_IDS.PLANNER, build: buildPlannerAgentGraph },
-            { id: CANONICAL_AGENT_GRAPH_IDS.EXPLORER, build: buildExplorerAgentGraph },
-        ] as const;
-
         const canonicalNames = new Set<string>();
-        const canonicalOids = entries.map((e) => new ObjectId(e.id));
+        const canonicalOids = CANONICAL_PRESET_ENTRIES.map((e) => new ObjectId(e.id));
         let upserted = 0;
 
-        for (const { id, build } of entries) {
+        for (const { id, build } of CANONICAL_PRESET_ENTRIES) {
             const preset = build();
             canonicalNames.add(preset.name);
             normalizeGraphToolAliases(preset.nodes);

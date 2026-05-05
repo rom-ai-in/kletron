@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { buildSimpleReactAgentGraph } from "@kletron/server/services/agentGraphPresets";
 import * as db from "@kletron/server/lib/db";

@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import * as workflows from "../packages/agent-core/src/workflows";
 import * as db from "../packages/server/src/lib/db";
 

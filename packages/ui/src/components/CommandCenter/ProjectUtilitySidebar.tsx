@@ -135,7 +135,7 @@ export function ProjectUtilitySidebar({
   const isStaged = activeTab === 'staged';
 
   return (
-    <div className={`flex flex-col h-full flex-shrink-0 glass-sidebar border-l border-white/[0.06] ${className}`} style={{ width: 300, ...style }}>
+    <div className={`flex flex-col h-full flex-shrink-0 glass-sidebar ${className}`} style={{ width: 300, ...style }}>
 
       {/* ── Unstaged / Staged Pill Tabs ── */}
       <div className="flex items-center gap-2 px-2 py-2 border-b border-white/[0.06]">

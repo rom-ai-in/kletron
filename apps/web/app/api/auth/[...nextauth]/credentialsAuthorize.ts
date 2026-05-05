@@ -1,5 +1,5 @@
 import { validateUserCredentials } from '../../../../lib/validateUserCredentials';
-import { initializeTestUser, findTestUser, verifyPassword } from '../../../../lib/auth';
+import { resolveDemoCredentials } from "../../../../lib/demoCredentials";
 
 /** Loaded only when Credentials `authorize` runs (not on GET /api/auth/session). */
 export async function authorizeCredentials(
@@ -9,20 +9,9 @@ export async function authorizeCredentials(
         return null;
     }
 
-    // Demo credentials only in non-production — avoids JWT ids like `test-user-1` that cannot use Mongo-backed profile APIs.
-    if (process.env.NODE_ENV !== 'production') {
-        await initializeTestUser();
-        const testUser = findTestUser(credentials.email);
-        if (testUser) {
-            const isValid = await verifyPassword(credentials.password, testUser.passwordHash);
-            if (isValid) {
-                return {
-                    id: 'test-user-1',
-                    email: testUser.email,
-                    name: 'Romain Client',
-                };
-            }
-        }
+    const demoProfile = await resolveDemoCredentials(credentials.email, credentials.password);
+    if (demoProfile) {
+        return demoProfile;
     }
 
     const user = await validateUserCredentials(credentials.email, credentials.password);

@@ -1,4 +1,6 @@
 // scripts/test-api-routes.ts
+import 'dotenv/config';
+
 import { categoryService } from '@kletron/server/services/categoryService';
 import type { WorkCategoryConfig } from '@kletron/shared/categoryTypes';
 import { ObjectId } from 'mongodb';

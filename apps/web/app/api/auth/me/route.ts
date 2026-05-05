@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { authConfig as authOptions } from '../../../../config/auth';
 import { getServerSession } from 'next-auth';
+import { isMongoBackedUserId } from '../../../../lib/accountEligibility';
 
 export async function GET(_request: Request) {
     try {
@@ -15,10 +16,18 @@ export async function GET(_request: Request) {
             );
         }
 
+        const userId = (session.user as any).id;
+        if (process.env.NODE_ENV === "production" && !isMongoBackedUserId(userId)) {
+            return NextResponse.json(
+                { success: false, message: 'Unauthorized', user: null },
+                { status: 401 }
+            );
+        }
+
         return NextResponse.json({
             success: true,
             user: {
-                id: (session.user as any).id,
+                id: userId,
                 email: session.user.email,
                 name: session.user.name,
             },

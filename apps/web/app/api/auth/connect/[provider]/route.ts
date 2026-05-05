@@ -16,6 +16,7 @@ import {
 import {
     getWorkspaceById,
 } from "@kletron/server/services/workspaceService";
+import { isMongoBackedUserId } from "../../../../../lib/accountEligibility";
 import { getPublicAppOrigin } from "../../../../../lib/publicAppUrl";
 
 export const dynamic = "force-dynamic";
@@ -24,10 +25,21 @@ export async function GET(
     request: Request,
     { params }: { params: Promise<{ provider: string }> }
 ) {
-    const auth = await requireAppRouteAuth(request);
-    if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const { provider } = await params;
     const url = new URL(request.url);
+    const publicOrigin = getPublicAppOrigin(request);
+    const redirectTarget = url.searchParams.get("redirect") ?? "/app/config/connectors";
+    const auth = await requireAppRouteAuth(request);
+    if (!auth) {
+        return redirectToLogin(publicOrigin, redirectTarget);
+    }
+    if (!isMongoBackedUserId(auth.userId)) {
+        return redirectWithError(
+            publicOrigin,
+            redirectTarget,
+            "Your current session is not a real Kletron account. Sign out, then sign in with your registered email before connecting Gmail."
+        );
+    }
+    const { provider } = await params;
     const workspaceId = url.searchParams.get("workspaceId");
     if (!workspaceId) {
         return NextResponse.json(
@@ -58,7 +70,6 @@ export async function GET(
         );
     }
 
-    const publicOrigin = getPublicAppOrigin(request);
     const callbackUrl = new URL(`/api/auth/connect/${provider}/callback`, publicOrigin);
 
     const state = encodeState({
@@ -66,7 +77,7 @@ export async function GET(
         userId: auth.userId,
         providerId: provider,
         iat: Date.now(),
-        redirect: url.searchParams.get("redirect") ?? `/app/config/connectors`,
+        redirect: redirectTarget,
     });
 
     const params2 = new URLSearchParams({
@@ -84,4 +95,16 @@ export async function GET(
 
     const target = `${def.authUrl}?${params2.toString()}`;
     return NextResponse.redirect(target);
+}
+
+function redirectToLogin(origin: string, target: string) {
+    const loginUrl = new URL("/auth/login", origin);
+    loginUrl.searchParams.set("redirect", target);
+    return NextResponse.redirect(loginUrl);
+}
+
+function redirectWithError(origin: string, target: string, message: string) {
+    const dest = new URL(target, origin);
+    dest.searchParams.set("connect_error", message);
+    return NextResponse.redirect(dest.toString());
 }

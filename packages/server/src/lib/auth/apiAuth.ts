@@ -46,6 +46,10 @@ const NEXTAUTH_SESSION_OPTIONS: AuthOptions = {
 
 type CookieMap = Record<string, string>;
 
+function isMongoBackedUserId(value: unknown): value is string {
+    return typeof value === 'string' && /^[a-f0-9]{24}$/i.test(value);
+}
+
 function readHeader(headers: Headers, names: string[]): string | null {
     for (const name of names) {
         const v = headers.get(name);
@@ -104,7 +108,14 @@ function getNextAuthUserId(token: Awaited<ReturnType<typeof getToken>>): string 
     if (!token) return null;
     const payload = token as Record<string, unknown>;
     const userId = payload.id ?? payload.sub;
-    return typeof userId === 'string' && userId.trim() ? userId.trim() : null;
+    if (typeof userId !== 'string' || !userId.trim()) {
+        return null;
+    }
+    const normalized = userId.trim();
+    if (process.env.NODE_ENV === 'production' && !isMongoBackedUserId(normalized)) {
+        return null;
+    }
+    return normalized;
 }
 
 async function getNextAuthSessionAuthFromCookies(cookies: CookieMap): Promise<AuthResult | null> {
@@ -144,7 +155,11 @@ async function getNextAuthSessionAuthFromServer(): Promise<AuthResult | null> {
         const user = session?.user as Record<string, unknown> | undefined;
         const userId = user?.id ?? user?.sub;
         if (typeof userId === 'string' && userId.trim()) {
-            return { userId: userId.trim(), authType: 'session' };
+            const normalized = userId.trim();
+            if (process.env.NODE_ENV === 'production' && !isMongoBackedUserId(normalized)) {
+                return null;
+            }
+            return { userId: normalized, authType: 'session' };
         }
     } catch {
         // Ignore and fall back to cookie parsing / bearer auth.

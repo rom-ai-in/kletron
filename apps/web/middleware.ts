@@ -7,6 +7,10 @@ const NEXTAUTH_SESSION_COOKIE_NAMES = [
     "next-auth.session-token",
 ] as const;
 
+function isMongoBackedUserId(value: unknown): value is string {
+    return typeof value === "string" && /^[a-f0-9]{24}$/i.test(value);
+}
+
 /**
  * Dev defaults for `/api/*` CORS. Browsers send `Origin: null` for some `file://` and packaged
  * Electron loads — include the literal string `null` (not the same as missing Origin).
@@ -111,6 +115,14 @@ export async function middleware(request: NextRequest) {
     }
 
     if (!token) {
+        const loginUrl = request.nextUrl.clone();
+        loginUrl.pathname = "/auth/login";
+        loginUrl.searchParams.set("redirect", request.nextUrl.pathname);
+        return NextResponse.redirect(loginUrl);
+    }
+
+    const tokenUserId = (token as Record<string, unknown>).id ?? (token as Record<string, unknown>).sub;
+    if (process.env.NODE_ENV === "production" && !isMongoBackedUserId(tokenUserId)) {
         const loginUrl = request.nextUrl.clone();
         loginUrl.pathname = "/auth/login";
         loginUrl.searchParams.set("redirect", request.nextUrl.pathname);

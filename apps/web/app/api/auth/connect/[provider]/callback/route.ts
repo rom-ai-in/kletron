@@ -9,6 +9,8 @@ import {
     getOauthProvider,
 } from "@kletron/server/services/oauthProviders";
 import { createIntegration } from "@kletron/server/services/connectorsService";
+import { getWorkspaceById } from "@kletron/server/services/workspaceService";
+import { isMongoBackedUserId } from "../../../../../../lib/accountEligibility";
 import { getPublicAppOrigin } from "../../../../../../lib/publicAppUrl";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +42,22 @@ export async function GET(
     const state = decodeState(stateRaw);
     if (!state || state.providerId !== provider) {
         return NextResponse.json({ error: "Invalid OAuth state" }, { status: 400 });
+    }
+    if (!isMongoBackedUserId(state.userId)) {
+        return redirectWithError(
+            publicOrigin,
+            state.redirect ?? "/app",
+            "Your session is not eligible for account connectors. Sign out and sign back in with your registered Kletron account."
+        );
+    }
+
+    const workspace = await getWorkspaceById(state.workspaceId, state.userId);
+    if (!workspace) {
+        return redirectWithError(
+            publicOrigin,
+            state.redirect ?? "/app",
+            "Workspace not found for the signed-in account."
+        );
     }
 
     const clientId = process.env[def.clientIdEnv];

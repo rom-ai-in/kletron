@@ -1,7 +1,6 @@
 import { MongoClient, ServerApiVersion } from "mongodb";
-import dotenv from "dotenv";
 
-dotenv.config();
+/** Env is loaded by Next.js (.env*) or by CLI scripts via `import "dotenv/config"`. Do not import `dotenv` here — it breaks Next/webpack instrumentation bundling (Node `path`). */
 
 if (!process.env.MONGODB_URI) {
     console.warn("⚠️ MONGODB_URI is not defined in the environment variables.");
