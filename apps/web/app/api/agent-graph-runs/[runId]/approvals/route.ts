@@ -21,7 +21,8 @@ import { syncWorkspaceExternalMcpServers } from "@kletron/server/services/mcpWor
  */
 async function resumeAgentAfterApproval(
     runId: string,
-    executionSummaries: Array<{ id: string; toolName: string; args?: Record<string, unknown>; result?: string; evictedPath?: string }>
+    executionSummaries: Array<{ id: string; toolName: string; args?: Record<string, unknown>; result?: string; evictedPath?: string }>,
+    userId?: string,
 ) {
     try {
         const run = await agentGraphRunService.getRun(runId);
@@ -68,6 +69,7 @@ async function resumeAgentAfterApproval(
             historyEvents,
             preserveMission: true,
             countAsConversationTurn: false,
+            ...(userId ? { workspaceContextUserId: userId } : {}),
         });
         console.log(`[approvals] ✓ Agent resumed successfully for run ${runId}`);
     } catch (err) {
@@ -77,7 +79,8 @@ async function resumeAgentAfterApproval(
 
 async function resumeAgentAfterRejection(
     runId: string,
-    rejectionSummaries: Array<{ id: string; toolName: string; args?: Record<string, unknown> }>
+    rejectionSummaries: Array<{ id: string; toolName: string; args?: Record<string, unknown> }>,
+    userId?: string,
 ) {
     try {
         const run = await agentGraphRunService.getRun(runId);
@@ -122,6 +125,7 @@ async function resumeAgentAfterRejection(
             historyEvents,
             preserveMission: true,
             countAsConversationTurn: false,
+            ...(userId ? { workspaceContextUserId: userId } : {}),
         });
         console.log(`[approvals] ✓ Agent resumed successfully after rejection for ${runId}`);
     } catch (err) {
@@ -365,7 +369,7 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
                     args: (edit.args ?? {}) as Record<string, unknown>,
                     result: executionResult.result,
                     evictedPath: executionResult.evictedPath,
-                }]);
+                }], auth.userId);
             }
 
             return NextResponse.json({ approved: executionResult?.executed ? edit : null, executionResult, approvals }, {
@@ -399,7 +403,7 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
                 id: String(edit.id),
                 toolName: edit.toolName,
                 args: (edit.args ?? {}) as Record<string, unknown>,
-            }]);
+            }], auth.userId);
             return NextResponse.json({ rejected: edit, approvals }, { status: 200 });
         }
         if (action === "approve_all") {
@@ -454,7 +458,7 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
                         result: String(g?.result ?? ""),
                         evictedPath: g?.evictedPath as string | undefined,
                     };
-                }));
+                }), auth.userId);
             }
 
             return NextResponse.json({ approved: edits, approvals }, { status: 200 });
@@ -488,7 +492,8 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
                         id: String(edit.id),
                         toolName: String(edit.toolName),
                         args: (edit.args ?? {}) as Record<string, unknown>,
-                    }))
+                    })),
+                    auth.userId,
                 );
             }
             return NextResponse.json({ rejected: edits, approvals }, { status: 200 });

@@ -119,29 +119,187 @@ async function gmailFetchReplyContext(auth: GoogleWorkspaceAuth, replyToMessageI
     return { threadId, subject, messageId };
 }
 
-async function gmailListMessages(auth: GoogleWorkspaceAuth, input: {
-    query?: string;
-    maxResults?: number;
-    labelIds?: string[];
-    includeSpamTrash?: boolean;
-    pageToken?: string;
-}) {
+export type GmailMessageSummary = {
+    id: string;
+    threadId: string;
+    labelIds: unknown[];
+    snippet: string;
+    historyId: string;
+    internalDate: string;
+    subject: string;
+    from: string;
+    to: string;
+    date: string;
+};
+
+export type GmailLocalQuery = {
+    labelIds: string[];
+    fromTerms: string[];
+    toTerms: string[];
+    subjectTerms: string[];
+    freeTextTerms: string[];
+    newerThanDays?: number;
+    unsupportedTokens: string[];
+};
+
+export function isGmailMetadataQueryScopeError(error: unknown): boolean {
+    const message = (error as Error)?.message ?? String(error ?? "");
+    return message.includes("Metadata scope does not support 'q' parameter");
+}
+
+export function parseGmailLocalQuery(rawQuery?: string): GmailLocalQuery {
+    const query = (rawQuery ?? "in:inbox").trim();
+    const tokens = query.split(/\s+/).filter(Boolean);
+    const parsed: GmailLocalQuery = {
+        labelIds: [],
+        fromTerms: [],
+        toTerms: [],
+        subjectTerms: [],
+        freeTextTerms: [],
+        unsupportedTokens: [],
+    };
+
+    const pushLabel = (value: string) => {
+        if (value && !parsed.labelIds.includes(value)) parsed.labelIds.push(value);
+    };
+
+    for (const token of tokens) {
+        const lower = token.toLowerCase();
+        if (lower === "in:inbox") {
+            pushLabel("INBOX");
+        } else if (lower === "in:sent") {
+            pushLabel("SENT");
+        } else if (lower === "in:drafts") {
+            pushLabel("DRAFT");
+        } else if (lower === "in:trash") {
+            pushLabel("TRASH");
+        } else if (lower === "in:spam") {
+            pushLabel("SPAM");
+        } else if (lower === "is:unread") {
+            pushLabel("UNREAD");
+        } else if (lower === "is:starred") {
+            pushLabel("STARRED");
+        } else if (lower === "is:important") {
+            pushLabel("IMPORTANT");
+        } else if (lower.startsWith("from:")) {
+            parsed.fromTerms.push(token.slice(5));
+        } else if (lower.startsWith("to:")) {
+            parsed.toTerms.push(token.slice(3));
+        } else if (lower.startsWith("subject:")) {
+            parsed.subjectTerms.push(token.slice(8));
+        } else if (/^newer_than:\d+d$/i.test(token)) {
+            parsed.newerThanDays = Number.parseInt(token.slice("newer_than:".length, -1), 10);
+        } else if (
+            lower.startsWith("label:") ||
+            lower.startsWith("after:") ||
+            lower.startsWith("before:") ||
+            lower.startsWith("older_than:")
+        ) {
+            parsed.unsupportedTokens.push(token);
+        } else {
+            parsed.freeTextTerms.push(token);
+        }
+    }
+
+    return parsed;
+}
+
+function matchesAllTerms(haystack: string, terms: string[]): boolean {
+    const lower = haystack.toLowerCase();
+    return terms.every((term) => lower.includes(term.toLowerCase()));
+}
+
+export function filterGmailMessagesLocally(messages: GmailMessageSummary[], rawQuery?: string) {
+    const parsed = parseGmailLocalQuery(rawQuery);
+    const now = Date.now();
+    const filtered = messages.filter((message) => {
+        if (parsed.fromTerms.length > 0 && !matchesAllTerms(message.from, parsed.fromTerms)) return false;
+        if (parsed.toTerms.length > 0 && !matchesAllTerms(message.to, parsed.toTerms)) return false;
+        if (parsed.subjectTerms.length > 0 && !matchesAllTerms(message.subject, parsed.subjectTerms)) return false;
+        if (
+            parsed.freeTextTerms.length > 0 &&
+            !matchesAllTerms(
+                [message.subject, message.from, message.to, message.snippet].join(" "),
+                parsed.freeTextTerms
+            )
+        ) {
+            return false;
+        }
+        if (parsed.newerThanDays !== undefined) {
+            const internalDateMs = Number.parseInt(message.internalDate, 10);
+            if (Number.isFinite(internalDateMs)) {
+                const ageMs = now - internalDateMs;
+                if (ageMs > parsed.newerThanDays * 24 * 60 * 60 * 1000) return false;
+            }
+        }
+        return true;
+    });
+
+    const warnings: string[] = [];
+    if (parsed.unsupportedTokens.length > 0) {
+        warnings.push(
+            `Local Gmail fallback ignored unsupported query tokens: ${parsed.unsupportedTokens.join(", ")}`
+        );
+    }
+
+    return {
+        filtered,
+        labelIds: parsed.labelIds,
+        warnings,
+    };
+}
+
+async function gmailListMessageIds(
+    auth: GoogleWorkspaceAuth,
+    input: {
+        query?: string;
+        maxResults?: number;
+        labelIds?: string[];
+        includeSpamTrash?: boolean;
+        pageToken?: string;
+    },
+    mode: "query" | "fallback"
+) {
     const url = new URL("/gmail/v1/users/me/messages", GMAIL_BASE);
-    url.searchParams.set("q", input.query ?? "in:inbox");
-    url.searchParams.set("maxResults", String(input.maxResults ?? 10));
+    if (mode === "query") {
+        url.searchParams.set("q", input.query ?? "in:inbox");
+        url.searchParams.set("maxResults", String(input.maxResults ?? 10));
+    } else {
+        const filtered = filterGmailMessagesLocally([], input.query);
+        const fallbackLabels = [
+            ...(input.labelIds ?? []),
+            ...filtered.labelIds,
+        ];
+        const uniqueLabels = Array.from(new Set(fallbackLabels.filter(Boolean)));
+        url.searchParams.set(
+            "maxResults",
+            String(Math.min(Math.max((input.maxResults ?? 10) * 5, 20), 50))
+        );
+        for (const labelId of uniqueLabels) {
+            url.searchParams.append("labelIds", labelId);
+        }
+    }
     url.searchParams.set("includeSpamTrash", String(input.includeSpamTrash ?? false));
     if (input.pageToken) url.searchParams.set("pageToken", input.pageToken);
     for (const labelId of input.labelIds ?? []) {
-        url.searchParams.append("labelIds", labelId);
+        if (mode === "query") {
+            url.searchParams.append("labelIds", labelId);
+        }
     }
-    const data = await googleJson<{
+    return await googleJson<{
         messages?: Array<{ id?: string; threadId?: string }>;
         nextPageToken?: string;
         resultSizeEstimate?: number;
     }>(auth, url.toString());
-    const messages = Array.isArray(data.messages) ? data.messages : [];
+}
+
+async function gmailHydrateMessageRows(
+    auth: GoogleWorkspaceAuth,
+    messages: Array<{ id?: string; threadId?: string }>,
+    limit: number
+): Promise<GmailMessageSummary[]> {
     const rows = await Promise.all(
-        messages.slice(0, input.maxResults ?? 10).map(async (message) => {
+        messages.slice(0, limit).map(async (message) => {
             if (!message.id) return null;
             const full = await gmailFetchMessage(auth, message.id, "metadata");
             const payload = (full.payload as Record<string, unknown> | undefined) ?? {};
@@ -160,12 +318,48 @@ async function gmailListMessages(auth: GoogleWorkspaceAuth, input: {
             };
         })
     );
-    return {
-        query: input.query ?? "in:inbox",
-        resultSizeEstimate: data.resultSizeEstimate ?? rows.length,
-        nextPageToken: data.nextPageToken ?? null,
-        messages: rows.filter(Boolean),
-    };
+    return rows.filter(Boolean) as GmailMessageSummary[];
+}
+
+async function gmailListMessages(auth: GoogleWorkspaceAuth, input: {
+    query?: string;
+    maxResults?: number;
+    labelIds?: string[];
+    includeSpamTrash?: boolean;
+    pageToken?: string;
+}) {
+    try {
+        const data = await gmailListMessageIds(auth, input, "query");
+        const messages = Array.isArray(data.messages) ? data.messages : [];
+        const rows = await gmailHydrateMessageRows(auth, messages, input.maxResults ?? 10);
+        return {
+            query: input.query ?? "in:inbox",
+            resultSizeEstimate: data.resultSizeEstimate ?? rows.length,
+            nextPageToken: data.nextPageToken ?? null,
+            messages: rows,
+        };
+    } catch (error) {
+        if (!isGmailMetadataQueryScopeError(error)) {
+            throw error;
+        }
+
+        const data = await gmailListMessageIds(auth, input, "fallback");
+        const messages = Array.isArray(data.messages) ? data.messages : [];
+        const hydrated = await gmailHydrateMessageRows(auth, messages, Math.min(Math.max((input.maxResults ?? 10) * 5, 20), 50));
+        const filtered = filterGmailMessagesLocally(hydrated, input.query);
+        const limited = filtered.filtered.slice(0, input.maxResults ?? 10);
+        return {
+            query: input.query ?? "in:inbox",
+            resultSizeEstimate: limited.length,
+            nextPageToken: data.nextPageToken ?? null,
+            queryAppliedLocally: true,
+            queryWarning: [
+                "Gmail API rejected the query parameter for the current scope; fallback filtering was applied locally.",
+                ...filtered.warnings,
+            ].join(" "),
+            messages: limited,
+        };
+    }
 }
 
 async function gmailSendOrDraftMessage(auth: GoogleWorkspaceAuth, input: {

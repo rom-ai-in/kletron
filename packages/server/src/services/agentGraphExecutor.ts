@@ -2406,6 +2406,9 @@ export class AgentGraphExecutor {
                         (wrapped as any).invoke = async (input: unknown) => {
                             return await toolImpl((input ?? {}) as Record<string, unknown>);
                         };
+                        (wrapped as any).call = async (input: unknown) => {
+                            return await toolImpl((input ?? {}) as Record<string, unknown>);
+                        };
                         (wrapped as any).func = toolImpl;
                         toolInvokerMap.set(name, async (input: Record<string, unknown>) => {
                             return await (wrapped as any).invoke(input);

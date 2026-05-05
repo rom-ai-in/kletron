@@ -166,16 +166,11 @@ export function repairToolInputValue(schema: z.ZodTypeAny, value: unknown): unkn
     if (schema instanceof z.ZodDiscriminatedUnion) {
         const objectValue = coerceObject(value);
         if (!objectValue || typeof objectValue !== "object" || Array.isArray(objectValue)) return objectValue;
-        const discriminator = schema.discriminator;
-        const selected = (objectValue as Record<string, unknown>)[discriminator];
-        const option = Array.from((schema as any).options.values()).find((candidate: z.ZodTypeAny) => {
-            try {
-                return candidate.shape?.[discriminator]?.safeParse(selected).success;
-            } catch {
-                return false;
-            }
-        });
-        return option ? repairToolInputValue(option, objectValue) : objectValue;
+        for (const option of Array.from((schema as any).options.values()) as z.ZodTypeAny[]) {
+            const repaired = repairToolInputValue(option, objectValue);
+            if (option.safeParse(repaired).success) return repaired;
+        }
+        return objectValue;
     }
 
     return value;
