@@ -7,6 +7,18 @@ import Link from 'next/link';
 import { useAuth } from '@kletron/ui/context/AuthContext';
 import { Input, PasswordInput, Button, Checkbox } from '@kletron/ui/components/design-system';
 
+function getSafeRedirect(redirect: string | null | undefined): string | null {
+    if (!redirect || redirect === 'ide' || redirect === 'ide-device' || redirect === 'device') {
+        return null;
+    }
+
+    if (!redirect.startsWith('/') || redirect.startsWith('//') || redirect.startsWith('/auth/')) {
+        return null;
+    }
+
+    return redirect;
+}
+
 export default function LoginClient() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -20,6 +32,7 @@ export default function LoginClient() {
     const { signIn, resendConfirmation } = useAuth();
     const isExtensionFlow = searchParams?.get('source') === 'extension';
     const redirect = searchParams?.get('redirect');
+    const safeRedirect = getSafeRedirect(redirect);
     const isIDEFlow = redirect === 'ide';
     const isDeviceFlow = redirect === 'ide-device' || redirect === 'device';
 
@@ -59,7 +72,7 @@ export default function LoginClient() {
             } else if (isExtensionFlow) {
                 router.push('/auth/extension-success');
             } else {
-                router.push('/');
+                router.push(safeRedirect ?? '/');
             }
         } else {
             setError(result.error || 'Sign in failed');
@@ -184,7 +197,7 @@ export default function LoginClient() {
                 <p className="text-center text-xs text-text-muted mt-6">
                     Don't have an account?{' '}
                     <Link
-                        href="/auth/register"
+                        href={safeRedirect ? `/auth/register?redirect=${encodeURIComponent(safeRedirect)}` : '/auth/register'}
                         className="text-text-secondary hover:text-text-primary transition-colors"
                     >
                         Create one

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { dispatchAuthSessionInvalid } from './authSessionEvents';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -74,6 +75,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const res = await fetch(`/api/workspaces?t=${Date.now()}`);
+      if (res.status === 401) {
+        dispatchAuthSessionInvalid();
+        if (mountedRef.current) {
+          setWorkspaces([]);
+          setActiveWorkspaceId(null);
+          setError('Session expired');
+        }
+        return;
+      }
       if (!res.ok) throw new Error('Failed to load workspaces');
       const data = await res.json();
       if (!mountedRef.current) return;
@@ -121,6 +131,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setSwitching(true);
     try {
       const res = await fetch(`/api/workspaces/${id}/select`, { method: 'POST' });
+      if (res.status === 401) {
+        dispatchAuthSessionInvalid();
+        return;
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error((err as Record<string, string>).message || (err as Record<string, string>).error || 'Failed to select workspace');
@@ -150,6 +164,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       });
+      if (res.status === 401) {
+        dispatchAuthSessionInvalid();
+        return null;
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error((err as Record<string, string>).error || 'Failed to create workspace');
@@ -169,6 +187,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const deleteWorkspace = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/workspaces/${id}`, { method: 'DELETE' });
+      if (res.status === 401) {
+        dispatchAuthSessionInvalid();
+        return;
+      }
       if (!res.ok) throw new Error('Failed to delete workspace');
       if (!mountedRef.current) return;
       // Refresh list and update active if necessary

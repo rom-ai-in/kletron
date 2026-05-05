@@ -6,6 +6,18 @@ import Link from 'next/link';
 import { useAuth } from '@kletron/ui/context/AuthContext';
 import { Input, PasswordInput, Button } from '@kletron/ui/components/design-system';
 
+function getSafeRedirect(redirect: string | null | undefined): string | null {
+    if (!redirect || redirect === 'ide' || redirect === 'ide-device' || redirect === 'device') {
+        return null;
+    }
+
+    if (!redirect.startsWith('/') || redirect.startsWith('//') || redirect.startsWith('/auth/')) {
+        return null;
+    }
+
+    return redirect;
+}
+
 function buildIdeCallbackPath(searchParams: ReturnType<typeof useSearchParams> | null): string {
     const deviceSessionId = searchParams?.get('deviceSessionId');
     const redirectUri = searchParams?.get('redirectUri');
@@ -42,6 +54,7 @@ export default function RegisterClient() {
     const { signUp, signIn } = useAuth();
 
     const redirect = searchParams?.get('redirect');
+    const safeRedirect = getSafeRedirect(redirect);
     const isIDEFlow = redirect === 'ide';
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -73,7 +86,7 @@ export default function RegisterClient() {
                     router.replace(buildIdeLoginPath(searchParams));
                 }
             } else {
-                router.push('/');
+                router.push(safeRedirect ?? '/');
             }
         } else {
             setError(result.error || 'Registration failed');
@@ -83,7 +96,11 @@ export default function RegisterClient() {
     };
 
     if (showConfirmation) {
-        const loginHref = isIDEFlow ? buildIdeLoginPath(searchParams) : '/auth/login';
+        const loginHref = isIDEFlow
+            ? buildIdeLoginPath(searchParams)
+            : safeRedirect
+              ? `/auth/login?redirect=${encodeURIComponent(safeRedirect)}`
+              : '/auth/login';
         return (
             <div className="min-h-screen flex items-center justify-center bg-bg-app px-4">
                 <div className="w-full max-w-sm text-center">
@@ -208,7 +225,13 @@ export default function RegisterClient() {
                 <p className="text-center text-xs text-text-muted mt-6">
                     Already have an account?{' '}
                     <Link
-                        href={isIDEFlow ? buildIdeLoginPath(searchParams) : '/auth/login'}
+                        href={
+                            isIDEFlow
+                                ? buildIdeLoginPath(searchParams)
+                                : safeRedirect
+                                  ? `/auth/login?redirect=${encodeURIComponent(safeRedirect)}`
+                                  : '/auth/login'
+                        }
                         className="text-text-secondary hover:text-text-primary transition-colors"
                     >
                         Sign in

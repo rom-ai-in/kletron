@@ -1,8 +1,9 @@
 'use client';
 // src/context/AuthContext.tsx
 // React context provider for authentication state management using NextAuth
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from 'next-auth/react';
+import { AUTH_SESSION_INVALID_EVENT } from './authSessionEvents';
 
 // Development auth bypass - set NEXT_PUBLIC_SKIP_AUTH=true in .env to skip authentication
 const SKIP_AUTH = process.env.NEXT_PUBLIC_SKIP_AUTH === 'true';
@@ -52,15 +53,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [userContext, setUserContext] = useState<UserContextType[] | null>(null);
     const [loading, setLoading] = useState(true);
+    const [sessionRejected, setSessionRejected] = useState(false);
+    const invalidatingSessionRef = useRef(false);
 
     // Use NextAuth session
     const { data: session, status, update: updateSession } = useSession();
+    const hasSessionUser = Boolean(session?.user);
+
+    const invalidateSession = useCallback(async () => {
+        if (invalidatingSessionRef.current) {
+            return;
+        }
+
+        invalidatingSessionRef.current = true;
+        setSessionRejected(true);
+        setProfile(null);
+        setUserContext(null);
+
+        try {
+            await nextAuthSignOut({ redirect: false });
+        } catch (err) {
+            console.error('Error clearing invalid session:', err);
+        } finally {
+            invalidatingSessionRef.current = false;
+        }
+    }, []);
 
     // Fetch user profile from MongoDB via API
     const fetchProfile = useCallback(async () => {
         try {
-            const response = await fetch('/api/auth/me');
-            if (!response.ok) return;
+            const response = await fetch('/api/auth/me', { cache: 'no-store' });
+            if (response.status === 401) {
+                await invalidateSession();
+                return false;
+            }
+            if (!response.ok) return false;
 
             const data = await response.json();
             if (data.success && data.user) {
@@ -72,11 +99,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                 });
+                setSessionRejected(false);
+                return true;
             }
         } catch (err) {
             console.error('Error fetching profile:', err);
         }
-    }, []);
+        return false;
+    }, [invalidateSession]);
 
     // User context is no longer stored (simplified architecture)
     const fetchUserContext = useCallback(async () => {
@@ -85,10 +115,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Refresh profile and context
     const refreshProfile = useCallback(async () => {
-        await Promise.all([
-            fetchProfile(),
-            fetchUserContext(),
-        ]);
+        const isAuthenticated = await fetchProfile();
+        if (!isAuthenticated) {
+            return;
+        }
+
+        await fetchUserContext();
     }, [fetchProfile, fetchUserContext]);
 
     // Initialize auth state
@@ -100,8 +132,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const initAuth = async () => {
             try {
-                if (session?.user) {
+                if (hasSessionUser) {
                     await refreshProfile();
+                } else {
+                    setProfile(null);
+                    setUserContext(null);
+                    setSessionRejected(false);
                 }
             } catch (err) {
                 console.error('Error initializing auth:', err);
@@ -111,7 +147,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
         void initAuth();
-    }, [session, refreshProfile]);
+    }, [hasSessionUser, refreshProfile]);
+
+    useEffect(() => {
+        if (SKIP_AUTH) {
+            return;
+        }
+
+        const handleSessionInvalid = () => {
+            void invalidateSession();
+        };
+
+        window.addEventListener(AUTH_SESSION_INVALID_EVENT, handleSessionInvalid);
+        return () => window.removeEventListener(AUTH_SESSION_INVALID_EVENT, handleSessionInvalid);
+    }, [invalidateSession]);
+
+    useEffect(() => {
+        if (SKIP_AUTH || !hasSessionUser || sessionRejected) {
+            return;
+        }
+
+        const revalidateSession = () => {
+            void fetchProfile();
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                revalidateSession();
+            }
+        };
+
+        window.addEventListener('focus', revalidateSession);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('focus', revalidateSession);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [fetchProfile, hasSessionUser, sessionRejected]);
 
     // Sign up - calls our custom API route which will handle NextAuth registration
     const signUp = async (email: string, password: string, fullName?: string) => {
@@ -152,6 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return { success: false, error: 'Invalid credentials' };
             }
 
+            setSessionRejected(false);
             // Refresh profile after successful sign in
             await refreshProfile();
 
@@ -164,6 +238,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Sign out - uses NextAuth signOut
     const signOut = async () => {
         try {
+            setSessionRejected(false);
+            setUserContext(null);
             await nextAuthSignOut({ redirect: false });
             setProfile(null);
             return { success: true };
@@ -276,7 +352,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const value: AuthContextValue = {
-        user: session?.user || null,
+        user: sessionRejected ? null : session?.user || null,
         session: session || null,
         profile,
         userContext,

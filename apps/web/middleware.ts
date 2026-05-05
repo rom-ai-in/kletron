@@ -1,4 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
+
+/** Same order as packages/server/src/lib/auth/apiAuth.ts — try secure cookie first on HTTPS. */
+const NEXTAUTH_SESSION_COOKIE_NAMES = [
+    "__Secure-next-auth.session-token",
+    "next-auth.session-token",
+] as const;
 
 /**
  * Dev defaults for `/api/*` CORS. Browsers send `Origin: null` for some `file://` and packaged
@@ -82,10 +89,28 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    const sessionCookie =
-        request.cookies.get('__Secure-next-auth.session-token')?.value ??
-        request.cookies.get('next-auth.session-token')?.value;
-    if (!sessionCookie) {
+    const secret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
+    if (!secret) {
+        console.error("[middleware] NEXTAUTH_SECRET (or AUTH_SECRET) is not set; refusing /app access.");
+        const loginUrl = request.nextUrl.clone();
+        loginUrl.pathname = "/auth/login";
+        loginUrl.searchParams.set("redirect", request.nextUrl.pathname);
+        return NextResponse.redirect(loginUrl);
+    }
+
+    // Presence of a cookie is not enough: expired JWT / wrong NEXTAUTH_SECRET still leaves a cookie
+    // string that decrypts to nothing → APIs return 401 while the shell looked "logged in".
+    let token: Awaited<ReturnType<typeof getToken>> = null;
+    for (const cookieName of NEXTAUTH_SESSION_COOKIE_NAMES) {
+        token = await getToken({
+            req: request,
+            secret,
+            cookieName,
+        });
+        if (token) break;
+    }
+
+    if (!token) {
         const loginUrl = request.nextUrl.clone();
         loginUrl.pathname = "/auth/login";
         loginUrl.searchParams.set("redirect", request.nextUrl.pathname);

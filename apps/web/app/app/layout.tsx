@@ -2,7 +2,7 @@
 // app/app/layout.tsx
 // Layout for authenticated /app/* pages with Sidebar
 import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@kletron/ui/context/AuthContext';
 import { WorkspaceProvider } from '@kletron/ui/context/WorkspaceContext';
 import { Sidebar } from '@kletron/ui/components/Sidebar';
@@ -17,13 +17,19 @@ interface AppLayoutProps {
 export default function AppLayout({ children }: AppLayoutProps) {
     const { user, loading } = useAuth();
     const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
 
     // Redirect to login if not authenticated
     useEffect(() => {
         if (!loading && !user) {
-            router.push('/auth/login');
+            const query = searchParams?.toString();
+            const redirectTarget = pathname
+                ? (query ? `${pathname}?${query}` : pathname)
+                : '/app';
+            router.replace(`/auth/login?redirect=${encodeURIComponent(redirectTarget)}`);
         }
-    }, [user, loading, router]);
+    }, [user, loading, pathname, router, searchParams]);
 
     // Show loading while checking auth
     if (loading) {
