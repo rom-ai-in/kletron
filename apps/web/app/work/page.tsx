@@ -64,7 +64,7 @@ export default function WorkMarketingPage() {
                         Agents for{' '}
                         <span className="text-text-secondary">everything but the repo loop.</span>
                     </MarketingHeroTitle>
-                    <MarketingLead className="mb-6 max-w-2xl">
+                    <MarketingLead className="mb-6">
                         Research-first defaults, office ingest, grounded outputs—same runtime as Code mode, different tool surface.
                     </MarketingLead>
                     <EarlyAccessBadge />
@@ -72,7 +72,7 @@ export default function WorkMarketingPage() {
             </section>
 
             <div className={`${marketingContainer} pb-20 sm:pb-28`}>
-                <MarketingSectionTitle subtitle="Shipped today vs roadmap—labeled honestly.">
+                <MarketingSectionTitle align="start" subtitle="Shipped today vs roadmap—labeled honestly.">
                     Capabilities
                 </MarketingSectionTitle>
                 <div className="mb-12 grid gap-4 sm:grid-cols-2">

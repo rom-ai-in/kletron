@@ -153,7 +153,7 @@ export default function HomePage() {
             <span className="text-text-secondary">everything you build.</span>
           </MarketingHeroTitle>
 
-          <MarketingLead className="mb-6 px-1">
+          <MarketingLead className="mx-auto mb-6 max-w-2xl px-1">
             Own your models, tools, and graphs. One platform—European infrastructure by default.
           </MarketingLead>
           <EarlyAccessBadge className="mb-8" />

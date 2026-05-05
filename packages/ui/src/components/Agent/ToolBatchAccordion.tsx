@@ -69,11 +69,11 @@ export const ToolBatchAccordion: React.FC<ToolBatchAccordionProps> = ({ pairs, c
                     aria-expanded={isExpanded}
                     title={title}
                 >
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-white/[0.03] text-[var(--agent-tool)] transition-colors group-hover:border-white/[0.1]">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-white/[0.03] text-text-primary transition-colors group-hover:border-white/[0.1]">
                         {hasRunning ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--agent-running)]" aria-hidden />
                         ) : (
-                            <Wrench className="h-3.5 w-3.5 opacity-90" aria-hidden />
+                            <Wrench className="h-3.5 w-3.5 opacity-95" aria-hidden />
                         )}
                     </span>
 

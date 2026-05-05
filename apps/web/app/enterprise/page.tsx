@@ -201,7 +201,7 @@ export default function EnterprisePage() {
                         <span className="text-text-secondary">for regulated orgs.</span>
                     </MarketingHeroTitle>
 
-                    <MarketingLead className="mb-6 px-1">
+                    <MarketingLead className="mx-auto mb-6 max-w-2xl px-1">
                         Graphs, MCP, automations—GDPR-native posture, Swiss operator, EU residency. Prove data flow, approvals, and
                         model choice without US control planes.
                     </MarketingLead>
@@ -516,7 +516,7 @@ export default function EnterprisePage() {
                     <h2 className="mb-4 text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl md:text-4xl">
                         Ready for <span className="text-text-secondary">sovereign agents</span>?
                     </h2>
-                    <MarketingLead className="mb-6">
+                    <MarketingLead className="mx-auto mb-6 max-w-2xl">
                         EU enterprises use Kletron when proof beats promises—graphs, MCP, and runs you can defend in audit.
                     </MarketingLead>
                     <EarlyAccessBadge className="mb-8 text-center" />

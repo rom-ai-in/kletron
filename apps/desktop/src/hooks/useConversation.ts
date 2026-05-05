@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { Message } from "@kletron/shared/chatTypes";
+import type { SessionContextAssemblySlice } from "@kletron/shared";
+import type { ThreadSkillState } from "@kletron/shared/skills/types";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { useSessionStream } from "@kletron/ui/hooks/useSessionStream";
@@ -442,6 +444,18 @@ export function useConversation(
 
   const serverRunActive = sessionStatus === "RUNNING" || sessionStatus === "PENDING";
   const runActive = stream.sending || serverRunActive;
+
+  const threadSkills = useMemo((): ThreadSkillState | null => {
+    const d = agentThread.sessionDetail;
+    if (!conversationId || d?.id !== conversationId) return null;
+    return d.skills ?? null;
+  }, [agentThread.sessionDetail, conversationId]);
+
+  const sessionContextAssembly = useMemo((): SessionContextAssemblySlice | null => {
+    const d = agentThread.sessionDetail;
+    if (!conversationId || d?.id !== conversationId) return null;
+    return d.state?.contextAssembly ?? null;
+  }, [agentThread.sessionDetail, conversationId]);
   const runStartedAt = stream.runStartedAt ?? (
     agentThread.sessionDetail?.id === conversationId
       ? agentThread.sessionDetail.startedAt ?? null
@@ -485,5 +499,7 @@ export function useConversation(
     threadWorkMode,
     researchDepth,
     setResearchDepth,
+    threadSkills,
+    sessionContextAssembly,
   };
 }

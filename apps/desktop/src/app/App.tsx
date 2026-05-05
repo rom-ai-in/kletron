@@ -14,6 +14,7 @@ import {
 import {
   Selector,
   createFileChip,
+  createSkillChip,
   useToast,
 } from "@kletron/ui/components/design-system";
 import type { ContextChip } from "@kletron/ui/components/design-system";
@@ -28,6 +29,9 @@ import type { SidebarProject } from "@kletron/ui/components/CommandCenter/Projec
 import { ThreadSearchPalette } from "@kletron/ui/components/CommandCenter/ThreadSearchPalette";
 import { ThreadSearchHeaderTrigger } from "@kletron/ui/components/CommandCenter/ThreadSearchHeaderTrigger";
 import { MessageList } from "@kletron/ui/components/Agent/MessageList";
+import { ThreadContextRail } from "@kletron/ui/components/Agent/ThreadContextRail";
+import { ThreadSkillsRail } from "@kletron/ui/components/Agent/ThreadSkillsRail";
+import { deriveThreadContextFootprint } from "@kletron/ui/lib/threadContextFootprint";
 import { ConversationThreadSkeleton } from "@kletron/ui/components/Agent/ConversationThreadSkeleton";
 import { PendingSessionEditsStrip } from "@kletron/ui/components/design-system";
 import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
@@ -92,11 +96,22 @@ import { HistoryPanel } from "./HistoryPanel";
 import { CodeRepoConnectorStrip } from "@kletron/ui/components/CommandCenter/CodeRepoConnectorStrip";
 import { WorkspaceConnectorsHint } from "@kletron/ui/components/CommandCenter/WorkspaceConnectorsHint";
 import { AgentSessionChrome } from "@kletron/ui/components/CommandCenter/AgentSessionChrome";
+import {
+  composeMessageWithSlashSkillChips,
+  stripLeadingSlashSkillSlugs,
+} from "@kletron/shared/slashSkillComposer";
 import { pathsEqual, isSettingsSectionId } from "../utils";
 import { getComposerConnectionState } from "../composerConnection";
 import { usePortalConfigSnapshot } from "../hooks/usePortalConfigSnapshot";
 import { DesktopAutomationDetailShell } from "./DesktopAutomationDetailShell";
 import { DesktopSettingsView } from "./DesktopSettingsView";
+
+function augmentMessageWithFileChips(text: string, chips: ContextChip[]): string {
+  const files = chips.filter((c) => c.variant === "file");
+  if (files.length === 0) return text;
+  const names = files.map((c) => c.label).join(", ");
+  return `${text}\n\n(Attached for context: ${names})`;
+}
 
 export default function App() {
   // ═══════════════════════════════════════════════════════════════════════════
@@ -352,6 +367,8 @@ export default function App() {
   const [openTabs, setOpenTabs] = useState<ConversationTab[]>([]);
   const [envVariables, setEnvVariables] = useState<EnvVariable[]>([]);
   const [contextChips, setContextChips] = useState<ContextChip[]>([]);
+  /** Slash skills chosen from / palette — composed into outgoing message as `/slug …`. */
+  const [slashSkillChips, setSlashSkillChips] = useState<ContextChip[]>([]);
   const [multimodalOpen, setMultimodalOpen] = useState(false);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [planMode, setPlanMode] = useState(false);
@@ -817,8 +834,11 @@ export default function App() {
       sectionId: "skills",
       label: s.slug,
       description: s.description || undefined,
-      // Prefix only — workspace skill injection stays server-side; user continues the message after the slug.
-      action: () => conversation.setInput(`/${s.slug} `),
+      action: () => {
+        const chip = createSkillChip(s.slug);
+        setSlashSkillChips((prev) => (prev.some((c) => c.id === chip.id) ? prev : [...prev, chip]));
+        conversation.setInput("");
+      },
     }));
     const builtin: SlashCommandItem[] = [
       {
@@ -858,7 +878,39 @@ export default function App() {
       },
     ];
     return [...fromLibrary, ...builtin];
-  }, [slashSkillRows, conversation.setInput, settings]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [slashSkillRows, conversation.setInput, settings]);
+
+  const leadingSlugsFromInput = useMemo(
+    () => stripLeadingSlashSkillSlugs(conversation.input).slugs,
+    [conversation.input],
+  );
+  const threadContextFootprint = useMemo(
+    () =>
+      deriveThreadContextFootprint(
+        conversation.conversationEvents.map((e) => ({
+          id: e.id,
+          kind: e.kind,
+          role: e.role,
+          toolName: e.toolName,
+          toolArgs: e.toolArgs,
+          toolCallId: e.toolCallId,
+        })),
+        conversation.sessionContextAssembly,
+      ),
+    [conversation.conversationEvents, conversation.sessionContextAssembly],
+  );
+
+  const draftSkillMirrorChips = useMemo(() => {
+    const ids = new Set(slashSkillChips.map((c) => c.id));
+    const seen = new Set<string>();
+    const out: ContextChip[] = [];
+    for (const slug of leadingSlugsFromInput) {
+      if (ids.has(`skill:${slug}`) || seen.has(slug)) continue;
+      seen.add(slug);
+      out.push(createSkillChip(slug, { dismissible: false }));
+    }
+    return out;
+  }, [leadingSlugsFromInput, slashSkillChips]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // HANDLERS
@@ -1067,8 +1119,9 @@ export default function App() {
   }
 
   function handleSendMessage() {
-    const text = conversation.input.trim();
-    if (!text) return;
+    const composed = composeMessageWithSlashSkillChips(conversation.input.trim(), slashSkillChips);
+    const text = augmentMessageWithFileChips(composed, contextChips);
+    if (!text.trim()) return;
 
     // If agent is streaming, queue the message instead of blocking
     if (conversation.runActive) {
@@ -1077,10 +1130,14 @@ export default function App() {
         { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() },
       ]);
       conversation.setInput("");
+      setSlashSkillChips([]);
+      setContextChips([]);
       return;
     }
 
-    void conversation.sendMessage({ planMode });
+    void conversation.sendMessage({ planMode, text });
+    setSlashSkillChips([]);
+    setContextChips([]);
   }
 
   /** Send a specific text directly (used by queue dequeue). */
@@ -1198,6 +1255,10 @@ export default function App() {
       return [...prev, { id: threads.conversationId!, title: thread?.title || "Untitled" }];
     });
   }, [threads.conversationId, threads.threads]);
+
+  useEffect(() => {
+    setSlashSkillChips([]);
+  }, [threads.conversationId]);
 
   // No project auto-assignment: threads are now scoped purely by workspace.
 
@@ -1818,8 +1879,12 @@ export default function App() {
                     : "Write your message… Press / for slash commands (skills, plan, workspace)."
               }
               onKeyDown={handleInputKeyDown}
-              contextChips={contextChips}
-              onDismissChip={(id) => setContextChips((p) => p.filter((c) => c.id !== id))}
+              contextChips={[...slashSkillChips, ...draftSkillMirrorChips, ...contextChips]}
+              onDismissChip={(id) => {
+                setSlashSkillChips((p) => p.filter((c) => c.id !== id));
+                setContextChips((p) => p.filter((c) => c.id !== id));
+              }}
+              allowSendWhenEmpty={slashSkillChips.length > 0}
               onPaperclipClick={() => setMultimodalOpen((p) => !p)}
               planMode={planMode}
               graphSelector={
@@ -1909,6 +1974,26 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* Thread skills (work + code): same rail as web agent aside; sits left of Git / changes panels. */}
+        {threads.conversationId ? (
+          <div className="flex min-h-0 w-[280px] shrink-0 flex-col overflow-y-auto scrollbar-elegant border-l border-white/[0.06] bg-bg-surface">
+            <ThreadSkillsRail
+              skills={conversation.threadSkills}
+              layout="inline"
+              openSkillsControl={
+                <button
+                  type="button"
+                  className="ml-auto text-[10px] font-medium text-status-info-text hover:underline"
+                  onClick={() => openPortalPath("/app/skills")}
+                >
+                  Open
+                </button>
+              }
+            />
+            <ThreadContextRail footprint={threadContextFootprint} layout="inline" />
+          </div>
+        ) : null}
 
         {/* Middle Panel: Uncommitted Changes Diffs (Code mode only) */}
         {isCodeMode && changesVisible && (

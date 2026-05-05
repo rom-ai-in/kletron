@@ -31,5 +31,7 @@ The extension will expose several UI surfaces:
 
 ## 5. Settings
 - `backendUrl` (string)
-- API token (required). Copy it from the Kletron account page (`/account`).
+- API token (required). Create it on the web portal **Account** page (VS Code / API tokens section) or via the extension OAuth success flow.
 - Settings are surfaced under `kletron.backendUrl` and `kletron.apiToken`; changes are persisted globally so the `connectBackend` command can pre-fill the last URL/token pair.
+
+**Kletron desktop app (Electron)** does not use this command: it signs in from **Settings → Configuration** with **Backend URL** + **Sign in** (browser). Do not confuse that flow with VS Code token setup.

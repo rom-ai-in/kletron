@@ -1,5 +1,6 @@
 import type { ThreadApprovalMode } from "./threadApprovalTypes";
 import type { ResearchDepthId } from "./researchDepth";
+import type { ThreadSkillState } from "./skills/types";
 import type { WorkModeId } from "./workMode";
 
 /** Pagination slice returned with GET /api/sessions/:id */
@@ -11,6 +12,17 @@ export type ConversationPagination = {
   hasOlder: boolean;
   hasNewer?: boolean;
   nextBeforeIndex?: number | null;
+};
+
+/** Subset of run `state.contextAssembly` exposed to the client for sidebar / debugging. */
+export type SessionContextAssemblySlice = {
+  dynamicItemCount?: number;
+  dynamicSnippetCount?: number;
+  summaryCoveredEventCount?: number;
+  derivedMemorySync?: {
+    updatedPaths?: string[];
+    unchangedPaths?: string[];
+  };
 };
 
 /** Core session detail payload from GET /api/sessions/:id (fields vary by API version). */
@@ -37,4 +49,10 @@ export type SessionDetailPayload = {
    
   tokenUsage?: any;
   conversationPagination?: ConversationPagination;
+  /** Workspace / thread / graph skill resolution (GET /api/sessions/:id). */
+  skills?: ThreadSkillState;
+  /** Persisted run state (context assembly, conversation, skills, …). */
+  state?: {
+    contextAssembly?: SessionContextAssemblySlice;
+  } | null;
 };

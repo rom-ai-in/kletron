@@ -2,6 +2,8 @@
 
 import React, { forwardRef, useEffect, useRef } from 'react';
 import { ArrowUp, Square } from 'lucide-react';
+import { ContextChips } from '../Agent/ContextChips';
+import type { ContextChip } from '../Agent/ContextChips';
 import { cn } from '../../lib/utils';
 import { buttonVariants } from './Button';
 
@@ -25,6 +27,11 @@ export interface ChatInputProps
   inputClassName?: string;
   maxHeight?: number;
   showSendButton?: boolean;
+  /** Allow sending when the textarea is empty (e.g. slash skill chips carry the command). */
+  allowSendWhenEmpty?: boolean;
+  /** Chips rendered inside the composer card above the textarea (skills, file refs, …). */
+  inlineChips?: ContextChip[];
+  onDismissInlineChip?: (id: string) => void;
 }
 
 export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
@@ -43,6 +50,9 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       inputClassName,
       maxHeight = 160,
       showSendButton = true,
+      allowSendWhenEmpty = false,
+      inlineChips,
+      onDismissInlineChip,
       placeholder =
         'Write your message… Press / for slash commands (skills, plan, workspace).',
       className,
@@ -71,7 +81,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       }
     };
 
-    const canSend = !!value.trim() && !disabled;
+    const canSend = (!!value.trim() || allowSendWhenEmpty) && !disabled;
 
     const sendStopButton =
       showSendButton && (onSend || onStop) ? (
@@ -100,6 +110,12 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     const cardBody = (
       <>
+        {inlineChips && inlineChips.length > 0 ? (
+          <div className="mb-2.5 border-b border-white/[0.06] pb-2.5">
+            <ContextChips chips={inlineChips} onDismiss={onDismissInlineChip} size="sm" />
+          </div>
+        ) : null}
+
         <textarea
           ref={setRefs}
           value={value}

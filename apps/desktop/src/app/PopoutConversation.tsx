@@ -1,5 +1,8 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { MessageList } from "@kletron/ui/components/Agent/MessageList";
+import { ThreadContextRail } from "@kletron/ui/components/Agent/ThreadContextRail";
+import { ThreadSkillsRail } from "@kletron/ui/components/Agent/ThreadSkillsRail";
+import { deriveThreadContextFootprint } from "@kletron/ui/lib/threadContextFootprint";
 import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
 import { useMessageEdit } from "@kletron/ui/hooks/useMessageEdit";
 import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
@@ -140,6 +143,22 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
 
   const isCodeMode = conversation.threadWorkMode === "code";
 
+  const threadContextFootprint = useMemo(
+    () =>
+      deriveThreadContextFootprint(
+        conversation.conversationEvents.map((e) => ({
+          id: e.id,
+          kind: e.kind,
+          role: e.role,
+          toolName: e.toolName,
+          toolArgs: e.toolArgs,
+          toolCallId: e.toolCallId,
+        })),
+        conversation.sessionContextAssembly,
+      ),
+    [conversation.conversationEvents, conversation.sessionContextAssembly],
+  );
+
   return (
     <div className="flex h-screen flex-col text-text-primary">
       {/* Title Bar */}
@@ -149,8 +168,9 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
         </span>
       </header>
 
-      {/* Conversation — scroll area + work-mode strip + composer (matches main desktop agent) */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* Conversation — scroll area + work-mode strip + composer; skills rail on the right like main window */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-row">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-elegant">
           <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
             {conversation.capabilityDroppedTools.length > 0 &&
@@ -375,6 +395,25 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
             className="mt-2"
           />
         </div>
+        </div>
+        {conversationId ? (
+          <div className="flex min-h-0 w-[280px] shrink-0 flex-col overflow-y-auto scrollbar-elegant border-l border-white/[0.06] bg-bg-surface">
+            <ThreadSkillsRail
+              skills={conversation.threadSkills}
+              layout="inline"
+              openSkillsControl={
+                <button
+                  type="button"
+                  className="ml-auto text-[10px] font-medium text-status-info-text hover:underline"
+                  onClick={() => openPortalPath("/app/skills")}
+                >
+                  Open
+                </button>
+              }
+            />
+            <ThreadContextRail footprint={threadContextFootprint} layout="inline" />
+          </div>
+        ) : null}
       </div>
       {/* Replay Confirmation Dialog */}
       <ReplayConfirmDialog

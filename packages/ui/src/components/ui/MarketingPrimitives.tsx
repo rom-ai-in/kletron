@@ -24,17 +24,28 @@ export const MarketingHeroTitle: React.FC<{ children: React.ReactNode; className
 );
 
 export const MarketingLead: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
-    <p className={cn('text-base sm:text-lg text-text-muted max-w-2xl mx-auto leading-relaxed', className)}>{children}</p>
+    <p className={cn('text-base sm:text-lg text-text-muted max-w-2xl leading-relaxed', className)}>{children}</p>
 );
 
-export const MarketingSectionTitle: React.FC<{ children: React.ReactNode; subtitle?: React.ReactNode; className?: string }> = ({
-    children,
-    subtitle,
-    className,
-}) => (
-    <div className={cn('text-center mb-10 sm:mb-14', className)}>
-        <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold text-text-primary tracking-tight mb-3">{children}</h2>
-        {subtitle ? <div className="text-sm text-text-muted max-w-lg mx-auto leading-relaxed">{subtitle}</div> : null}
+export const MarketingSectionTitle: React.FC<{
+    children: React.ReactNode;
+    subtitle?: React.ReactNode;
+    className?: string;
+    /** `start` aligns with left-column marketing layouts; `center` for centered heroes and editorial sections. */
+    align?: 'center' | 'start';
+}> = ({ children, subtitle, className, align = 'center' }) => (
+    <div className={cn('mb-10 sm:mb-14', align === 'center' ? 'text-center' : 'text-left', className)}>
+        <h2 className="mb-3 text-xl font-semibold tracking-tight text-text-primary sm:text-2xl md:text-3xl">{children}</h2>
+        {subtitle ? (
+            <div
+                className={cn(
+                    'text-sm leading-relaxed text-text-muted',
+                    align === 'center' ? 'mx-auto max-w-lg' : 'max-w-2xl',
+                )}
+            >
+                {subtitle}
+            </div>
+        ) : null}
     </div>
 );
 

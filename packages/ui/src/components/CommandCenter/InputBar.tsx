@@ -3,7 +3,6 @@
 import React, { useMemo } from 'react';
 import { Paperclip, Mic } from 'lucide-react';
 import { ChatInput } from '../ui/ChatInput';
-import { ContextChips } from '../Agent/ContextChips';
 import type { ContextChip } from '../Agent/ContextChips';
 
 export interface InputBarProps {
@@ -32,6 +31,8 @@ export interface InputBarProps {
   depthSelector?: React.ReactNode;
   /** Plan mode badge */
   planMode?: boolean;
+  /** True when slash skill chips (or similar) make send valid without textarea text. */
+  allowSendWhenEmpty?: boolean;
   /** @deprecated LLM health is shown on the LLM `Selector` (web parity); ignored by this component. */
   connected?: boolean | 'checking';
   /** @deprecated Ignored (see `connected`). */
@@ -57,6 +58,7 @@ export function InputBar({
   approvalSelector,
   depthSelector,
   planMode = false,
+  allowSendWhenEmpty = false,
   connected: _connected = true,
   connectionLabel: _connectionLabel,
   className = '',
@@ -110,12 +112,6 @@ export function InputBar({
         </div>
       )}
 
-      {contextChips && contextChips.length > 0 && (
-        <div className="pb-1.5">
-          <ContextChips chips={contextChips} onDismiss={onDismissChip} size="sm" />
-        </div>
-      )}
-
       <div>
         <ChatInput
           value={value}
@@ -128,6 +124,9 @@ export function InputBar({
           onKeyDown={onKeyDown}
           leadingFooter={leadingFooter ?? undefined}
           sessionStrip={sessionStrip ?? undefined}
+          allowSendWhenEmpty={allowSendWhenEmpty}
+          inlineChips={contextChips}
+          onDismissInlineChip={onDismissChip}
         />
       </div>
     </div>

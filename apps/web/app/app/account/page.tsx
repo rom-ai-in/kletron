@@ -30,7 +30,7 @@ export default function AccountPage() {
     const [passwordStatus, setPasswordStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
     const [passwordError, setPasswordError] = useState('');
 
-    const [tokenLabel, setTokenLabel] = useState('Kletron IDE');
+    const [tokenLabel, setTokenLabel] = useState('VS Code extension');
     const [tokens, setTokens] = useState<ApiTokenInfo[]>([]);
     const [tokensLoading, setTokensLoading] = useState(false);
     const [tokenError, setTokenError] = useState('');
@@ -218,7 +218,10 @@ export default function AccountPage() {
                     </Button>
                 </div>
                 <p className="mt-2 text-[11px] text-status-success-text/80">
-                    This token will not be shown again. Paste it in the Kletron IDE.
+                    This token will not be shown again. In VS Code, run{' '}
+                    <code className="rounded bg-bg-app/80 px-1 py-0.5">kletron.connectBackend</code> and paste it, or set{' '}
+                    <code className="rounded bg-bg-app/80 px-1 py-0.5">kletron.apiToken</code> (and{' '}
+                    <code className="rounded bg-bg-app/80 px-1 py-0.5">kletron.backendUrl</code>) in settings. Treat it like a password.
                 </p>
             </div>
         );
@@ -386,15 +389,44 @@ export default function AccountPage() {
                 </Panel>
 
                 <Panel className="p-6">
-                    <h2 className="text-sm font-semibold text-text-primary">Kletron IDE</h2>
+                    <h2 className="text-sm font-semibold text-text-primary">Desktop app &amp; VS Code</h2>
                     <p className="mt-1 text-xs text-text-muted">
-                        Generate a token to sync your Kletron account with the desktop IDE.
+                        The Kletron <span className="text-text-secondary">desktop app</span> and the{' '}
+                        <span className="text-text-secondary">VS Code extension</span> use different sign-in flows. Tokens you create
+                        here are <span className="font-medium text-text-secondary">only for the extension</span> (or other API
+                        clients using <code className="rounded bg-bg-elevated px-1 py-0.5">Authorization: Bearer</code>).
                     </p>
 
-                    <div className="mt-4 space-y-3 text-xs text-text-secondary">
-                        <p>1. Generate a token below.</p>
-                        <p>2. In Kletron, run <code className="rounded bg-bg-elevated px-1.5 py-0.5">kletron.connectBackend</code> and paste the token.</p>
-                        <p>3. The IDE will use this token to connect to your account.</p>
+                    <div className="mt-5 grid gap-5 sm:grid-cols-2">
+                        <div className="rounded-lg border border-border-subtle bg-bg-elevated/40 p-4">
+                            <h3 className="text-xs font-semibold text-text-primary">Kletron desktop app</h3>
+                            <ol className="mt-3 list-decimal space-y-2 pl-4 text-xs text-text-secondary marker:text-text-muted">
+                                <li>Open the app and go to Settings → Configuration.</li>
+                                <li>
+                                    Set <span className="font-medium text-text-secondary">Backend URL</span> to this portal&apos;s
+                                    base URL (same origin you use in the browser).
+                                </li>
+                                <li>
+                                    Click <span className="font-medium text-text-secondary">Sign in</span> and finish login in your
+                                    browser. No token from this page is required.
+                                </li>
+                            </ol>
+                        </div>
+                        <div className="rounded-lg border border-border-subtle bg-bg-elevated/40 p-4">
+                            <h3 className="text-xs font-semibold text-text-primary">VS Code extension</h3>
+                            <ol className="mt-3 list-decimal space-y-2 pl-4 text-xs text-text-secondary marker:text-text-muted">
+                                <li>Generate a token below and copy it once.</li>
+                                <li>
+                                    Run{' '}
+                                    <code className="rounded bg-bg-elevated px-1.5 py-0.5 text-[11px]">kletron.connectBackend</code>{' '}
+                                    and paste the token, <span className="text-text-muted">or</span> set{' '}
+                                    <code className="rounded bg-bg-elevated px-1.5 py-0.5 text-[11px]">kletron.backendUrl</code> and{' '}
+                                    <code className="rounded bg-bg-elevated px-1.5 py-0.5 text-[11px]">kletron.apiToken</code> in VS Code
+                                    settings.
+                                </li>
+                                <li>The extension uses the token to call the Kletron API as your account.</li>
+                            </ol>
+                        </div>
                     </div>
 
                     <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">

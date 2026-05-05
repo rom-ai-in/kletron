@@ -155,7 +155,7 @@ export default function IdeCallbackClient() {
                             Connecting to Kletron...
                         </h1>
                         <p className="text-text-muted text-sm">
-                            Please wait while we authenticate your IDE.
+                            Please wait while we finish signing you in to the desktop app.
                         </p>
                     </>
                 )}
@@ -171,10 +171,10 @@ export default function IdeCallbackClient() {
                             Authentication Successful!
                         </h1>
                         <p className="text-text-muted text-sm mb-6">
-                            Redirecting to Kletron IDE...
+                            Returning to the Kletron desktop app…
                         </p>
                         <p className="text-xs text-text-muted mb-4">
-                            If the IDE doesn&apos;t open automatically:
+                            If the app doesn&apos;t open automatically:
                         </p>
                         <a
                             href={redirectUrl || '#'}

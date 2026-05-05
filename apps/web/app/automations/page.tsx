@@ -78,7 +78,7 @@ export default function AutomationsMarketingPage() {
                         Agents that run{' '}
                         <span className="text-text-secondary">on your clock.</span>
                     </MarketingHeroTitle>
-                    <MarketingLead className="mb-6 max-w-2xl">
+                    <MarketingLead className="mb-6">
                         Multi-stage pipelines over graphs: explicit prompts, provider choice, context handoff—audits and gates as
                         infrastructure.
                     </MarketingLead>
@@ -87,7 +87,7 @@ export default function AutomationsMarketingPage() {
             </section>
 
             <div className={`${marketingContainer} pb-20 sm:pb-28`}>
-                <MarketingSectionTitle subtitle="How runs get kicked off in product.">
+                <MarketingSectionTitle align="start" subtitle="How runs get kicked off in product.">
                     Triggers
                 </MarketingSectionTitle>
                 <div className="mb-12 grid gap-3 sm:grid-cols-2">
@@ -99,7 +99,7 @@ export default function AutomationsMarketingPage() {
                     ))}
                 </div>
 
-                <MarketingSectionTitle subtitle="From AutomationConfigBuilder—more presets ship in-app.">
+                <MarketingSectionTitle align="start" subtitle="From AutomationConfigBuilder—more presets ship in-app.">
                     Preset library
                 </MarketingSectionTitle>
                 <div className="mb-8 space-y-3">

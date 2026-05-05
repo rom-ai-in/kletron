@@ -169,7 +169,16 @@ export type { ToolBatchAccordionProps, ToolPair } from './Agent/ToolBatchAccordi
 export { DiffApproval } from './Agent/DiffApproval';
 export type { DiffFile, DiffHunk, DiffLine, DiffState, DiffApprovalProps } from './Agent/DiffApproval';
 
-export { ContextChips, createFileChip, createFolderChip, createAgentChip, createModelChip, createTagChip } from './Agent/ContextChips';
+export {
+  ContextChips,
+  SkillPill,
+  createFileChip,
+  createFolderChip,
+  createAgentChip,
+  createModelChip,
+  createTagChip,
+  createSkillChip,
+} from './Agent/ContextChips';
 export type { ContextChip, ContextChipsProps, ChipVariant } from './Agent/ContextChips';
 
 export { InlineCompletion, MultiLineCompletion, useInlineCompletion } from './Agent/InlineCompletion';

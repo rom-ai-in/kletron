@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { FolderOpen, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import {
     Button,
@@ -18,7 +18,6 @@ import {
     SLUG_REGEX,
     type SkillCreateInput,
     type SkillRecord,
-    type ThreadSkillState,
     type WorkspaceSkillView,
 } from "@kletron/shared";
 import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
@@ -121,31 +120,6 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
 
     const [workspaceLinkBusy, setWorkspaceLinkBusy] = useState(false);
     const [workspaceLinkError, setWorkspaceLinkError] = useState<string | null>(null);
-    const [currentThreadSkills, setCurrentThreadSkills] = useState<ThreadSkillState | null>(null);
-    const [currentThreadWorkspaceId, setCurrentThreadWorkspaceId] = useState<string | null>(null);
-    const [currentThreadGraphName, setCurrentThreadGraphName] = useState<string | null>(null);
-
-    const refreshCurrentThreadSkills = useCallback(async () => {
-        const runId = typeof window !== "undefined" ? window.sessionStorage.getItem("agent-active-session") : null;
-        if (!runId) {
-            setCurrentThreadSkills(null);
-            setCurrentThreadWorkspaceId(null);
-            setCurrentThreadGraphName(null);
-            return;
-        }
-        try {
-            const res = await fetch(`/api/sessions/${runId}?limit=1`, { cache: "no-store" });
-            if (!res.ok) return;
-            const data = await res.json();
-            setCurrentThreadSkills((data?.skills as ThreadSkillState | null) ?? null);
-            setCurrentThreadWorkspaceId(typeof data?.workspaceId === "string" ? data.workspaceId : null);
-            setCurrentThreadGraphName(typeof data?.graph?.name === "string" ? data.graph.name : null);
-        } catch {
-            setCurrentThreadSkills(null);
-            setCurrentThreadWorkspaceId(null);
-            setCurrentThreadGraphName(null);
-        }
-    }, []);
 
     const setSkillEnabledForWorkspace = useCallback(
         async (slug: string, enabled: boolean) => {
@@ -153,14 +127,14 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
             setWorkspaceLinkError(null);
             try {
                 await setEnabled(slug, enabled);
-                await Promise.all([refreshSkillsLibrary(), refreshCurrentThreadSkills()]);
+                await refreshSkillsLibrary();
             } catch (err) {
                 setWorkspaceLinkError((err as Error).message);
             } finally {
                 setWorkspaceLinkBusy(false);
             }
         },
-        [refreshCurrentThreadSkills, refreshSkillsLibrary, setEnabled],
+        [refreshSkillsLibrary, setEnabled],
     );
 
     const setSkillAutoLoad = useCallback(
@@ -169,14 +143,14 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
             setWorkspaceLinkError(null);
             try {
                 await setAutoLoadInNewThreads(slug, autoLoadInNewThreads);
-                await Promise.all([refreshSkillsLibrary(), refreshCurrentThreadSkills()]);
+                await refreshSkillsLibrary();
             } catch (err) {
                 setWorkspaceLinkError((err as Error).message);
             } finally {
                 setWorkspaceLinkBusy(false);
             }
         },
-        [refreshCurrentThreadSkills, refreshSkillsLibrary, setAutoLoadInNewThreads],
+        [refreshSkillsLibrary, setAutoLoadInNewThreads],
     );
 
     const { activeForWorkspace, libraryOnlyForWorkspace } = useMemo(() => {
@@ -208,19 +182,6 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
         () => new Map(workspaceSkills.map((skill) => [skill.slug, skill])),
         [workspaceSkills],
     );
-    const activeLoadedSlugSet = useMemo(
-        () => new Set((currentThreadSkills?.loadedSkills ?? []).map((skill) => skill.slug)),
-        [currentThreadSkills],
-    );
-    const activePinnedSlugSet = useMemo(
-        () => new Set((currentThreadSkills?.pinnedSkills ?? []).map((skill) => skill.slug)),
-        [currentThreadSkills],
-    );
-    const currentThreadMatchesWorkspace = currentThreadWorkspaceId === workspaceId;
-
-    useEffect(() => {
-        void refreshCurrentThreadSkills();
-    }, [refreshCurrentThreadSkills, workspaceId]);
 
     const openCreate = () => {
         setSaveError(null);
@@ -253,11 +214,7 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                     body: input.body,
                 });
             }
-            await Promise.all([
-                refreshSkillsLibrary(),
-                refreshWorkspaceSkills(),
-                refreshCurrentThreadSkills(),
-            ]);
+            await Promise.all([refreshSkillsLibrary(), refreshWorkspaceSkills()]);
             closeEditor();
         } catch (err) {
             setSaveError((err as Error).message);
@@ -271,11 +228,7 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
         if (!confirm(`Delete skill "${skill.name}"?`)) return;
         try {
             await deleteSkill(skill.slug);
-            await Promise.all([
-                refreshSkillsLibrary(),
-                refreshWorkspaceSkills(),
-                refreshCurrentThreadSkills(),
-            ]);
+            await Promise.all([refreshSkillsLibrary(), refreshWorkspaceSkills()]);
         } catch (err) {
             alert((err as Error).message);
         }
@@ -417,44 +370,6 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                     </p>
                 )}
 
-                {!workspaceSkillsLoading && currentThreadMatchesWorkspace && currentThreadSkills ? (
-                    <Panel className="border border-border-subtle bg-bg-elevated/60 p-4">
-                        <div className="space-y-3">
-                            <div>
-                                <h2 className="text-sm font-semibold text-text-primary">Current thread</h2>
-                                <p className="text-xs text-text-muted">
-                                    {currentThreadGraphName
-                                        ? `Runtime state for the active thread on ${currentThreadGraphName}.`
-                                        : "Runtime state for the active thread."}
-                                </p>
-                            </div>
-                            <div className="grid gap-3 md:grid-cols-3">
-                                <StatusList
-                                    title={`Available in workspace (${currentThreadSkills.availableSkills.length})`}
-                                    items={currentThreadSkills.availableSkills.map((skill) =>
-                                        skill.autoLoadInNewThreads
-                                            ? `${skill.name} · auto-load`
-                                            : skill.name,
-                                    )}
-                                    empty="None"
-                                />
-                                <StatusList
-                                    title={`Loaded in this thread (${currentThreadSkills.loadedSkills.length})`}
-                                    items={currentThreadSkills.loadedSkills.map((skill) =>
-                                        skill.reason ? `${skill.name} · ${skill.reason}` : skill.name,
-                                    )}
-                                    empty="None"
-                                />
-                                <StatusList
-                                    title={`Pinned by this graph (${currentThreadSkills.pinnedSkills.length})`}
-                                    items={currentThreadSkills.pinnedSkills.map((skill) => skill.name)}
-                                    empty="None"
-                                />
-                            </div>
-                        </div>
-                    </Panel>
-                ) : null}
-
                 {!workspaceSkillsLoading ? (
                     <>
                         <section className="space-y-3">
@@ -480,8 +395,6 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                                             key={skill.slug}
                                             skill={skill}
                                             readOnly={skill.source === "builtin"}
-                                            loadedInCurrentThread={currentThreadMatchesWorkspace && activeLoadedSlugSet.has(skill.slug)}
-                                            pinnedByCurrentGraph={currentThreadMatchesWorkspace && activePinnedSlugSet.has(skill.slug)}
                                             onDisableForWorkspace={
                                                 skill.repoNativePresent
                                                     ? undefined
@@ -529,8 +442,6 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                                             key={skill.slug}
                                             skill={skill}
                                             readOnly={skill.source === "builtin"}
-                                            loadedInCurrentThread={currentThreadMatchesWorkspace && activeLoadedSlugSet.has(skill.slug)}
-                                            pinnedByCurrentGraph={currentThreadMatchesWorkspace && activePinnedSlugSet.has(skill.slug)}
                                             onEnableForWorkspace={() =>
                                                 void setSkillEnabledForWorkspace(skill.slug, true)
                                             }
@@ -780,28 +691,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     );
 }
 
-function StatusList({ title, items, empty }: { title: string; items: string[]; empty: string }) {
-    return (
-        <div className="rounded-lg border border-border-subtle bg-bg-surface p-3">
-            <div className="text-[11px] font-medium text-text-primary">{title}</div>
-            <div className="mt-2 flex flex-wrap gap-2">
-                {items.length > 0 ? (
-                    items.map((item) => (
-                        <span
-                            key={item}
-                            className="rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-secondary"
-                        >
-                            {item}
-                        </span>
-                    ))
-                ) : (
-                    <span className="text-[10px] text-text-muted">{empty}</span>
-                )}
-            </div>
-        </div>
-    );
-}
-
 function SkillPanel({
     skill,
     onEdit,
@@ -811,8 +700,6 @@ function SkillPanel({
     onDisableForWorkspace,
     onAutoLoadChange,
     enableForWorkspaceBusy,
-    loadedInCurrentThread,
-    pinnedByCurrentGraph,
 }: {
     skill: WorkspaceSkillView;
     onEdit: (skill: SkillRecord) => void;
@@ -822,8 +709,6 @@ function SkillPanel({
     onDisableForWorkspace?: () => void;
     onAutoLoadChange?: (next: boolean) => void;
     enableForWorkspaceBusy?: boolean;
-    loadedInCurrentThread?: boolean;
-    pinnedByCurrentGraph?: boolean;
 }) {
     return (
         <Panel className="p-4">
@@ -850,16 +735,6 @@ function SkillPanel({
                         {skill.repoNativePresent ? (
                             <span className="shrink-0 rounded-md border border-border-subtle bg-bg-app px-2 py-0.5 text-[10px] text-text-muted">
                                 Repo-native
-                            </span>
-                        ) : null}
-                        {loadedInCurrentThread ? (
-                            <span className="shrink-0 rounded-md border border-status-info-border bg-status-info-bg px-2 py-0.5 text-[10px] font-medium text-status-info-text">
-                                Loaded in current thread
-                            </span>
-                        ) : null}
-                        {pinnedByCurrentGraph ? (
-                            <span className="shrink-0 rounded-md border border-status-warning-border bg-status-warning-bg px-2 py-0.5 text-[10px] font-medium text-status-warning-text">
-                                Pinned by current graph
                             </span>
                         ) : null}
                     </div>

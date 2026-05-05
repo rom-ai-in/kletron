@@ -224,7 +224,7 @@ export default function PricingPage() {
                         </span>
                     </MarketingHeroTitle>
 
-                    <MarketingLead className="mb-6 max-w-xl px-1">
+                    <MarketingLead className="mx-auto mb-6 max-w-xl px-1">
                         BYOK or hosted models—plans scale with workspaces, graphs, memory, and MCP. Fewer surprises for finance.
                     </MarketingLead>
                     <EarlyAccessBadge className="mx-auto mb-8 max-w-md text-center" />
@@ -481,7 +481,7 @@ export default function PricingPage() {
                     <h2 className="mb-4 text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
                         Ship agents <span className="text-text-secondary">today</span>
                     </h2>
-                    <MarketingLead className="mb-6">
+                    <MarketingLead className="mx-auto mb-6 max-w-2xl">
                         Start free with BYOK. Card only when you upgrade.
                     </MarketingLead>
                     <EarlyAccessBadge className="mb-6 text-center" />

@@ -49,7 +49,7 @@ function navItemActive(pathname: string | null, href: string): boolean {
 function headerSubtitle(pathname: string | null): string {
     if (!pathname) return "Account settings";
     if (pathname === "/app/account" || pathname === "/app/account/") {
-        return "Profile — name, password, IDE tokens, and sign out.";
+        return "Profile — name, password, VS Code API tokens, and sign out.";
     }
     if (pathname.startsWith("/app/account/privacy")) {
         return "Privacy & Data — export, deletion, and your rights.";

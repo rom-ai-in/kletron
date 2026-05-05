@@ -72,10 +72,10 @@ export default function AgentGraphsMarketingPage() {
                                 Compose agents{' '}
                                 <span className="text-text-secondary">you can ship.</span>
                             </MarketingHeroTitle>
-                            <MarketingLead className="mb-6 max-w-xl lg:mx-0 lg:text-left">
+                            <MarketingLead className="mb-6 max-w-xl">
                                 Nodes, branches, and MCP scopes—not one endless thread. Design runs your auditors can replay.
                             </MarketingLead>
-                            <EarlyAccessBadge className="lg:mx-0" />
+                            <EarlyAccessBadge />
                         </div>
 
                         <div className="min-w-0">
@@ -94,7 +94,7 @@ export default function AgentGraphsMarketingPage() {
 
             <div className={`${marketingContainer} pb-20 sm:pb-28`}>
 
-                <MarketingSectionTitle subtitle="Starter library—extend and fork in your workspace.">
+                <MarketingSectionTitle align="start" subtitle="Starter library—extend and fork in your workspace.">
                     Shipped presets
                 </MarketingSectionTitle>
                 <div className="mb-12 grid gap-3 md:grid-cols-2">

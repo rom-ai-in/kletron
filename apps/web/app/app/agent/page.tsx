@@ -5,10 +5,11 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ChatInput,
-  ContextChips,
   createFileChip,
+  createSkillChip,
   PendingSessionEditsStrip,
   Selector,
+  SkillPill,
   WorkspaceLayout,
 } from "@kletron/ui/components/design-system";
 import type { ContextChip } from "@kletron/ui/components/design-system";
@@ -17,6 +18,9 @@ import type { SidebarProject, SidebarThread } from "@kletron/ui/components/Comma
 import { ThreadSearchPalette } from "@kletron/ui/components/CommandCenter/ThreadSearchPalette";
 import { ThreadSearchHeaderTrigger } from "@kletron/ui/components/CommandCenter/ThreadSearchHeaderTrigger";
 import { useAppHeaderCenter } from "@kletron/ui/components/AppHeaderCenterSlot";
+import { ThreadContextRail } from "@kletron/ui/components/Agent/ThreadContextRail";
+import { ThreadSkillsRail } from "@kletron/ui/components/Agent/ThreadSkillsRail";
+import { deriveThreadContextFootprint } from "@kletron/ui/lib/threadContextFootprint";
 import { TimelinePanel } from "@kletron/ui/components/Agent/TimelinePanel";
 import { EventCard } from "@kletron/ui/components/Agent/EventCard";
 import {
@@ -61,7 +65,12 @@ import {
   inferSessionListStatus,
   sessionStatusToSidebarLiveStatus,
 } from "@kletron/shared/chatTypes";
+import {
+  composeMessageWithSlashSkillChips,
+  stripLeadingSlashSkillSlugs,
+} from "@kletron/shared/slashSkillComposer";
 import { useThreadReadCursors } from "@kletron/ui/hooks/useThreadReadCursors";
+import type { SessionContextAssemblySlice } from "@kletron/shared";
 import type { ThreadSkillState } from "@kletron/shared/skills/types";
 import {
   CAPABILITY_DROPPED_BANNER_TAIL,
@@ -120,6 +129,7 @@ type SessionDetail = {
   nodeStatuses: Record<string, string>;
   tokenUsage: any;
   skills?: ThreadSkillState;
+  state?: { contextAssembly?: SessionContextAssemblySlice } | null;
   conversationPagination?: {
     total: number;
     start: number;
@@ -133,72 +143,6 @@ type SessionDetail = {
 
 function formatPerfMs(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? `${Math.round(value)}ms` : "—";
-}
-
-function ThreadSkillsSummary({ skills }: { skills: ThreadSkillState | null | undefined }) {
-  const available = skills?.availableSkills ?? [];
-  const loaded = skills?.loadedSkills ?? [];
-  const pinned = skills?.pinnedSkills ?? [];
-  const renderItems = (items: string[]) =>
-    items.length > 0 ? (
-      <div className="mt-2 flex flex-wrap gap-2">
-        {items.map((item) => (
-          <span
-            key={item}
-            className="rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-secondary"
-          >
-            {item}
-          </span>
-        ))}
-      </div>
-    ) : (
-      <div className="mt-2 text-[10px] text-text-muted">None</div>
-    );
-
-  return (
-    <div className="mx-4 mt-2 rounded-lg border border-border-subtle bg-bg-surface/90 px-4 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="text-[12px] font-semibold text-text-primary">Skills</div>
-          <div className="text-[11px] text-text-muted">
-            Runtime skill state for this thread.
-          </div>
-        </div>
-        <Link
-          href="/app/skills"
-          className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
-        >
-          Open Skills
-        </Link>
-      </div>
-      <div className="mt-3 grid gap-3 md:grid-cols-3">
-        <div className="rounded-md border border-border-subtle bg-bg-app/40 p-3">
-          <div className="text-[11px] font-medium text-text-primary">
-            Available in workspace ({available.length})
-          </div>
-          {renderItems(
-            available.map((skill) =>
-              skill.autoLoadInNewThreads ? `${skill.name} · auto-load` : skill.name,
-            ),
-          )}
-        </div>
-        <div className="rounded-md border border-border-subtle bg-bg-app/40 p-3">
-          <div className="text-[11px] font-medium text-text-primary">
-            Loaded in this thread ({loaded.length})
-          </div>
-          {renderItems(
-            loaded.map((skill) => (skill.reason ? `${skill.name} · ${skill.reason}` : skill.name)),
-          )}
-        </div>
-        <div className="rounded-md border border-border-subtle bg-bg-app/40 p-3">
-          <div className="text-[11px] font-medium text-text-primary">
-            Pinned by this graph ({pinned.length})
-          </div>
-          {renderItems(pinned.map((skill) => skill.name))}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 const SESSION_STORAGE_KEY = "agent-active-session";
@@ -360,6 +304,7 @@ const AgentComposer = memo(function AgentComposer({
   const queuedOrBusy = sending || runActive;
   const [draft, setDraft] = useState("");
   const [contextChips, setContextChips] = useState<ContextChip[]>([]);
+  const [slashSkillChips, setSlashSkillChips] = useState<ContextChip[]>([]);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -376,13 +321,30 @@ const AgentComposer = memo(function AgentComposer({
     workspaceId: activeWorkspaceId,
   });
 
+  const leadingSlugsFromDraft = useMemo(() => stripLeadingSlashSkillSlugs(draft).slugs, [draft]);
+  const draftSkillMirrorChips = useMemo(() => {
+    const ids = new Set(slashSkillChips.map((c) => c.id));
+    const seen = new Set<string>();
+    const out: ContextChip[] = [];
+    for (const slug of leadingSlugsFromDraft) {
+      if (ids.has(`skill:${slug}`) || seen.has(slug)) continue;
+      seen.add(slug);
+      out.push(createSkillChip(slug, { dismissible: false }));
+    }
+    return out;
+  }, [leadingSlugsFromDraft, slashSkillChips]);
+
   const slashCommands = useMemo((): SlashCommandItem[] => {
     const fromLibrary: SlashCommandItem[] = slashSkillRows.map((s) => ({
       id: `skill-${s.slug}`,
       sectionId: "skills",
       label: s.slug,
       description: s.description || undefined,
-      action: () => setDraft(`/${s.slug} `),
+      action: () => {
+        const chip = createSkillChip(s.slug);
+        setSlashSkillChips((prev) => (prev.some((c) => c.id === chip.id) ? prev : [...prev, chip]));
+        setDraft("");
+      },
     }));
     const builtin: SlashCommandItem[] = [
       {
@@ -428,6 +390,7 @@ const AgentComposer = memo(function AgentComposer({
 
   useEffect(() => {
     setDraft("");
+    setSlashSkillChips([]);
   }, [resetKey]);
 
   useEffect(() => {
@@ -457,12 +420,14 @@ const AgentComposer = memo(function AgentComposer({
   }, []);
 
   const handleSend = useCallback(() => {
-    const text = draft.trim();
-    if (!text) return;
-    onSendText(augmentMessageWithFileChips(text, contextChips));
+    const composed = composeMessageWithSlashSkillChips(draft.trim(), slashSkillChips);
+    const text = augmentMessageWithFileChips(composed, contextChips);
+    if (!text.trim()) return;
+    onSendText(text);
     setDraft("");
+    setSlashSkillChips([]);
     setContextChips([]);
-  }, [draft, contextChips, onSendText]);
+  }, [draft, slashSkillChips, contextChips, onSendText]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -500,15 +465,6 @@ const AgentComposer = memo(function AgentComposer({
 
   return (
     <>
-      {contextChips.length > 0 && (
-        <div className="mx-auto mb-1.5 w-full max-w-3xl">
-          <ContextChips
-            chips={contextChips}
-            onDismiss={(id) => setContextChips((p) => p.filter((c) => c.id !== id))}
-            size="sm"
-          />
-        </div>
-      )}
       <div className="relative mx-auto max-w-3xl">
         <SlashCommandMenu
           open={slashMenuOpen}
@@ -523,6 +479,12 @@ const AgentComposer = memo(function AgentComposer({
         onStop={queuedOrBusy ? onStop : undefined}
         onKeyDown={handleKeyDown}
         sending={queuedOrBusy}
+        allowSendWhenEmpty={slashSkillChips.length > 0}
+        inlineChips={[...slashSkillChips, ...draftSkillMirrorChips, ...contextChips]}
+        onDismissInlineChip={(id) => {
+          setSlashSkillChips((p) => p.filter((c) => c.id !== id));
+          setContextChips((p) => p.filter((c) => c.id !== id));
+        }}
         placeholder={
           planMode
             ? `Describe what you want to plan… ${PLACEHOLDER_SLASH_HINT}`
@@ -1482,6 +1444,30 @@ export default function AgentPage() {
     }
     return events;
   }, [messages]);
+
+  const threadContextFootprint = useMemo(() => {
+    const asm =
+      activeSessionId && sessionDetail?.id === activeSessionId
+        ? (sessionDetail.state?.contextAssembly ?? null)
+        : null;
+    return deriveThreadContextFootprint(
+      chatEventsForView.map((e) => ({
+        id: e.id,
+        kind: e.kind,
+        role: e.role,
+        toolName: e.toolName,
+        toolArgs: e.toolArgs,
+        toolCallId: e.toolCallId,
+      })),
+      asm,
+    );
+  }, [
+    chatEventsForView,
+    activeSessionId,
+    sessionDetail?.id,
+    sessionDetail?.state?.contextAssembly,
+  ]);
+
   /** Automations and other server-only runs never open a browser NDJSON stream (`sending` stays false). */
   const isServerSideRunActive = useMemo(() => {
     if (!activeSessionId || !sessionDetail || sessionDetail.id !== activeSessionId) return false;
@@ -1974,7 +1960,6 @@ export default function AgentPage() {
           </>
         }
       />
-      {sessionDetail?.id ? <ThreadSkillsSummary skills={sessionDetail?.skills} /> : null}
 
       {/* Error snackbar - always visible at top when there's an error */}
       {errorMessage && !sending && (
@@ -2171,15 +2156,64 @@ export default function AgentPage() {
     </div>
   );
 
-  // Timeline sidebar (right side) for multi-node graphs
-  const timelineSidebar = !activeGraphIsSimple && timeline.length > 0 ? (
-    <TimelinePanel
-      timeline={timeline}
-      selectedEventId={null}
-      onPhaseSelect={() => { }}
-      tokenUsage={tokenUsage ?? undefined}
-    />
-  ) : undefined;
+  // Right aside: skills + context footprint + timeline (multi-node graphs).
+  const rightAside = useMemo(() => {
+    const showTimeline = !activeGraphIsSimple && timeline.length > 0;
+    const hasSession = Boolean(sessionDetail?.id);
+
+    const rails =
+      hasSession ? (
+        <>
+          <ThreadSkillsRail
+            skills={sessionDetail!.skills}
+            layout="inline"
+            openSkillsControl={
+              <Link
+                href="/app/skills"
+                className="ml-auto text-[10px] font-medium text-status-info-text hover:underline"
+              >
+                Open
+              </Link>
+            }
+          />
+          <ThreadContextRail footprint={threadContextFootprint} layout="inline" />
+        </>
+      ) : null;
+
+    const timelineEl = showTimeline ? (
+      <TimelinePanel
+        timeline={timeline}
+        selectedEventId={null}
+        onPhaseSelect={() => { }}
+        tokenUsage={tokenUsage ?? undefined}
+      />
+    ) : null;
+
+    if (!rails && !timelineEl) return undefined;
+    if (rails && !timelineEl) {
+      return (
+        <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto scrollbar-elegant bg-bg-surface">
+          {rails}
+        </div>
+      );
+    }
+    if (!rails && timelineEl) return timelineEl;
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto scrollbar-elegant border-b border-white/[0.06] bg-bg-surface">
+          {rails}
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden border-t border-white/[0.06]">{timelineEl}</div>
+      </div>
+    );
+  }, [
+    sessionDetail?.id,
+    sessionDetail?.skills,
+    threadContextFootprint,
+    activeGraphIsSimple,
+    timeline,
+    tokenUsage,
+  ]);
 
   return (
     <>
@@ -2227,7 +2261,7 @@ export default function AgentPage() {
         className="min-h-0"
         sidebar={memoSidebar}
         content={mainContent}
-        aside={timelineSidebar}
+        aside={rightAside}
         sidebarWidth="w-[260px]"
         asideWidth="w-72"
         sidebarClassName="min-h-0 border-r-0 bg-transparent p-0"

@@ -52,7 +52,7 @@ export default function McpMarketingPage() {
                         Plug tools into{' '}
                         <span className="text-text-secondary">every agent.</span>
                     </MarketingHeroTitle>
-                    <MarketingLead className="mb-6 max-w-2xl">
+                    <MarketingLead className="mb-6">
                         Bundled MCP plus workspace servers. External tools stay namespaced{' '}
                         <code className="rounded bg-bg-elevated px-1.5 py-0.5 font-mono text-[0.85em] text-text-secondary">
                             serverSlug__toolName
@@ -64,7 +64,7 @@ export default function McpMarketingPage() {
             </section>
 
             <div className={`${marketingContainer} pb-20 sm:pb-28`}>
-                <MarketingSectionTitle subtitle="Representative groups—full list lives in the MCP server implementation.">
+                <MarketingSectionTitle align="start" subtitle="Representative groups—full list lives in the MCP server implementation.">
                     Bundled Kletron MCP
                 </MarketingSectionTitle>
                 <div className="mb-12 space-y-4">
@@ -98,10 +98,10 @@ export default function McpMarketingPage() {
                     </pre>
                 </MarketingCard>
 
-                <MarketingSectionTitle subtitle="Same router powers graphs and automations.">
+                <MarketingSectionTitle align="start" subtitle="Same router powers graphs and automations.">
                     Any model
                 </MarketingSectionTitle>
-                <p className="mx-auto mb-4 max-w-2xl text-center text-xs text-text-muted">
+                <p className="mb-4 max-w-2xl text-xs text-text-muted">
                     Local-first or burst to hosted tokens—pick what fits policy per stage.
                 </p>
                 <div className="mb-10 flex flex-wrap justify-center gap-2">

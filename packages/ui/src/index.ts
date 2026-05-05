@@ -68,7 +68,7 @@ export {
     ToolLog,
     ToolBatchAccordion,
     DiffApproval,
-    ContextChips, createFileChip, createFolderChip, createAgentChip, createModelChip, createTagChip,
+    ContextChips, SkillPill, createFileChip, createFolderChip, createAgentChip, createModelChip, createTagChip, createSkillChip,
     InlineCompletion, MultiLineCompletion, useInlineCompletion,
     CodeBlock,
     ToolOutput,

@@ -57,7 +57,7 @@ export default function PlatformPage() {
                     <MarketingHeroTitle className="mb-5 max-w-[16ch] leading-[1.08] sm:max-w-none">
                         One runtime. <span className="text-text-secondary">Two modes.</span>
                     </MarketingHeroTitle>
-                    <MarketingLead className="mb-6 max-w-2xl">
+                    <MarketingLead className="mb-6">
                         Desktop shell meets server-side graphs, MCP, and routing—Code and Work share one stack, not two products.
                     </MarketingLead>
                     <EarlyAccessBadge />
@@ -89,7 +89,7 @@ export default function PlatformPage() {
                     </p>
                 </MarketingCard>
 
-                <MarketingSectionTitle subtitle="How the product is wired in code—not a slide outline.">
+                <MarketingSectionTitle align="start" subtitle="How the product is wired in code—not a slide outline.">
                     Six pillars
                 </MarketingSectionTitle>
                 <div className="mb-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
