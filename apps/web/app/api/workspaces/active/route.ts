@@ -9,6 +9,7 @@ import {
   listWorkspaces,
   setActiveWorkspaceId,
   validateWorkspaceRoot,
+  workspaceSkipLocalFsValidation,
 } from "@kletron/server/services/workspaceService";
 
 export async function GET(request: Request) {
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
     let activeWorkspaceId = await getActiveWorkspaceId(auth.userId);
     if (workspace && workspace._id) {
       const health = validateWorkspaceRoot(workspace);
-      if (health.status !== "healthy") {
+      if (health.status !== "healthy" && !workspaceSkipLocalFsValidation()) {
         const candidates = await listWorkspaces(auth.userId);
         const nextHealthy = candidates.find((candidate) => validateWorkspaceRoot(candidate).status === "healthy");
         await setActiveWorkspaceId(auth.userId, nextHealthy?._id?.toString() ?? null);

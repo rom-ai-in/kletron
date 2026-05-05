@@ -1,11 +1,58 @@
 import path from "node:path";
+import process from "node:process";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
 import { McpClient } from "@kletron/mcp-client/client";
+import { namespacedExternalToolName, parseNamespacedToolName } from "@kletron/mcp-client/multiClient";
 import { getConfig } from "@kletron/server/config";
 import { getWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 import { buildGoogleWorkspaceTools } from "@kletron/server/services/googleWorkspaceTools";
+
+/**
+ * Bundled MCP tool names that touch the workspace tree or local git/bash.
+ * When `KLETRON_REMOTE_FILE_MCP_SLUG` is set and the workspace has a matching
+ * external MCP connector, `callMcpTool` routes these to `<slug>__<tool>` so the
+ * hosted backend executes filesystem work on the machine that hosts the tunnel
+ * (typically your desktop).
+ *
+ * Not listed here: `semantic_code_search` (vectors on the server), web/network/API helpers.
+ */
+export const REMOTE_REDIRECT_BUNDLED_MCP_TOOLS = new Set([
+  "list_files",
+  "glob_files",
+  "read_file",
+  "read_file_range",
+  "search_code",
+  "repo_metrics",
+  "describe_structure",
+  "git_log",
+  "git_diff",
+  "git_blame",
+  "git_grep",
+  "todo_search",
+  "dependency_info",
+  "structural_search",
+  "symbols_list",
+  "find_symbol",
+  "go_to_definition",
+  "references",
+  "write_file",
+  "str_replace_editor",
+  "execute_bash",
+  "bootstrap_context",
+  "locate_ui_feature",
+]);
+
+/** @internal tests */
+export function resolveRemoteBundledMcpToolName(toolName: string): string | null {
+  const slug = process.env.KLETRON_REMOTE_FILE_MCP_SLUG?.trim();
+  if (!slug) return null;
+  const { serverSlug, toolName: base } = parseNamespacedToolName(toolName);
+  if (serverSlug) return null;
+  if (!REMOTE_REDIRECT_BUNDLED_MCP_TOOLS.has(base)) return null;
+  return namespacedExternalToolName(slug, base);
+}
 
 // ── LLM-tolerant Zod helpers ────────────────────────────────────────────────
 // Many LLMs (especially local ones via LM Studio) send "True"/"False" strings
@@ -111,7 +158,19 @@ async function callMcpTool<TArgs extends Record<string, unknown> | undefined>(
     }
   }
 
-  return client.callTool(name, resolvedArgs);
+  const wsId = workspaceContext?.workspaceId?.trim();
+  const callOpts = wsId ? { workspaceId: wsId } : undefined;
+  const redirected = resolveRemoteBundledMcpToolName(name);
+  if (redirected) {
+    if (!wsId) {
+      throw new Error(
+        `[mcpTools] KLETRON_REMOTE_FILE_MCP_SLUG is set but workspaceId is missing; cannot route '${name}' to external MCP.`
+      );
+    }
+    return client.callTool(redirected, resolvedArgs, callOpts);
+  }
+
+  return client.callTool(name, resolvedArgs, callOpts);
 }
 
 const createListFilesTool = (defaultMaxDepth?: number) =>

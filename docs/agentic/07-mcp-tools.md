@@ -45,6 +45,10 @@ class McpClient {
 | `MCP_URL` is set | SSE (`SSEClientTransport`) | Connects to `MCP_URL` (default: `http://localhost:9000/sse`) |
 | `MCP_URL` not set | Stdio (`StdioClientTransport`) | Spawns `apps/mcp-server/server.js --mcp` |
 
+### Hosted Kletron + local repo filesystem
+
+When the web app runs on Cloud Run but workspace `rootPath` values point at developer laptops, set **`WORKSPACE_SKIP_LOCAL_FS_VALIDATION`** so APIs resolve workspaces without checking the path on the server. To execute **bundled** repo/git/bash tools against your machine, set **`KLETRON_REMOTE_FILE_MCP_SLUG`** to the workspace MCP connector slug and expose your local **`apps/mcp-server`** SSE endpoint via HTTPS. The agent core then routes listed tools as `<slug>__<toolName>` to that external server. See **[`docs/workspace-local-files-hosted-kletron.md`](../workspace-local-files-hosted-kletron.md)**.
+
 ### Hybrid Tool Pattern
 
 `semantic_code_search` is handled **natively** by the client instead of being forwarded to the MCP server:

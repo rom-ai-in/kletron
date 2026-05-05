@@ -9,16 +9,18 @@ import {
   listWorkspaces,
   toWorkspaceSummary,
   validateWorkspaceRoot,
+  workspaceSkipLocalFsValidation,
 } from "@kletron/server/services/workspaceService";
 
 function summaryWithHealth(workspace: Workspace) {
   const base = toWorkspaceSummary(workspace);
   const h = validateWorkspaceRoot(workspace);
+  const skipFs = workspaceSkipLocalFsValidation();
   return {
     ...base,
     health: h.status,
     healthMessage: h.message ?? null,
-    selectable: h.status === "healthy",
+    selectable: h.status === "healthy" || skipFs,
   };
 }
 

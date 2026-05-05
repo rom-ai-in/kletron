@@ -337,6 +337,14 @@ def main() -> None:
         f"LANGSMITH_PROJECT={env.get('LANGSMITH_PROJECT', '').strip()}",
         f"KLETRON_CORS_ALLOWLIST={cors}",
     ]
+    skip_ws_fs = env.get("WORKSPACE_SKIP_LOCAL_FS_VALIDATION", "").strip().lower()
+    if skip_ws_fs in ("1", "true", "yes"):
+        env_pairs.append("WORKSPACE_SKIP_LOCAL_FS_VALIDATION=true")
+
+    remote_file_slug = env.get("KLETRON_REMOTE_FILE_MCP_SLUG", "").strip()
+    if remote_file_slug:
+        env_pairs.append(f"KLETRON_REMOTE_FILE_MCP_SLUG={remote_file_slug}")
+
     # gcloud dict flags: see `gcloud topic escaping`. Use ^DELIM^ then DELIM between KEY=VALUE items.
     # Values include "https://" and commas (CORS). DELIM must not appear inside any value (avoid "--" in URLs/models).
     delim = "--"

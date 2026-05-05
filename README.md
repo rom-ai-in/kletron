@@ -84,6 +84,14 @@ Deep dive tables and API notes live in **[docs/README-archive.md](./docs/README-
 
 ---
 
+## LM Studio on a remote machine (GPU server + ngrok)
+
+If LM Studio runs on another host (e.g. **ai-beast**) and you use Kletron from the web or from your Mac, see **[docs/lm-studio-ai-beast-remote.md](./docs/lm-studio-ai-beast-remote.md)** for SSH forwards (`lm_up`), ngrok, Tailscale notes, and workspace paths on hosted Kletron (`WORKSPACE_SKIP_LOCAL_FS_VALIDATION`).
+
+For **hosted Kletron + real files on your laptop**, see **[docs/workspace-local-files-hosted-kletron.md](./docs/workspace-local-files-hosted-kletron.md)** (`WORKSPACE_SKIP_LOCAL_FS_VALIDATION` + `KLETRON_REMOTE_FILE_MCP_SLUG` and a tunneled local MCP).
+
+---
+
 ## Telegram (Messenger channel)
 
 1. **HTTPS URL** — Telegram requires a public `https://` endpoint. Local dev: use a tunnel (ngrok, Cloudflare Tunnel, etc.) toward your Next.js port (default `3000`).

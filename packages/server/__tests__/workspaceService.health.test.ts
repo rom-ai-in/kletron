@@ -23,6 +23,7 @@ function makeWorkspace(rootPath: string): Workspace {
 
 describe("workspaceService health", () => {
   afterEach(() => {
+    delete process.env.WORKSPACE_SKIP_LOCAL_FS_VALIDATION;
     while (tempDirs.length) {
       const dir = tempDirs.pop();
       if (dir && fs.existsSync(dir)) {
@@ -55,5 +56,13 @@ describe("workspaceService health", () => {
       expect(resolved.status).toBe(422);
       expect(resolved.payload.action).toBe("select_or_fix_workspace");
     }
+  });
+
+  it("skips assertWorkspaceHealthy when WORKSPACE_SKIP_LOCAL_FS_VALIDATION is true", () => {
+    process.env.WORKSPACE_SKIP_LOCAL_FS_VALIDATION = "true";
+    const dir = path.join(os.tmpdir(), "workspace-health-missing-dir-skip");
+    const ws = makeWorkspace(dir);
+    expect(() => assertWorkspaceHealthy(ws)).not.toThrow();
+    expect(assertWorkspaceHealthy(ws).rootPath).toBe(dir);
   });
 });

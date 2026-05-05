@@ -44,6 +44,16 @@ const STATE_COLLECTION = "workspace_state";
 const FALLBACK_WORKSPACE_ID = "000000000000000000000001";
 const FALLBACK_WORKSPACE_OBJECT_ID = new ObjectId(FALLBACK_WORKSPACE_ID);
 
+/**
+ * When true, the API resolves workspaces whose rootPath is absent on this host (e.g. Cloud Run
+ * storing macOS paths from dev). File/MCP tools will not work until the path exists here or you
+ * use a repo path inside the container.
+ */
+export function workspaceSkipLocalFsValidation(): boolean {
+  const v = process.env.WORKSPACE_SKIP_LOCAL_FS_VALIDATION;
+  return v === "true" || v === "1";
+}
+
 type WorkspaceStateDoc = {
   _id: string;
   activeWorkspaceId?: ObjectId;
@@ -144,6 +154,9 @@ export function validateWorkspaceRoot(workspace: Workspace): WorkspaceHealth {
 }
 
 export function assertWorkspaceHealthy(workspace: Workspace): Workspace {
+  if (workspaceSkipLocalFsValidation()) {
+    return workspace;
+  }
   const health = validateWorkspaceRoot(workspace);
   if (health.status === "healthy") return workspace;
   const workspaceId = workspace._id?.toString() ?? null;
