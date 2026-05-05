@@ -1,11 +1,9 @@
 # Cloud Build only (pas de déclencheur GitHub). Images Artifact Registry + déploiement Cloud Run.
 # URL web typique après création: https://kletron-web-XXXXX.europe-west6.run.app (suffixe attribué par Google).
 #
-#   ./infra/gcp/deploy.sh
-# ou:
-#   gcloud builds submit --config=infra/gcp/cloudbuild.yaml \
-#     --substitutions=_NEXT_PUBLIC_APP_URL=https://kletron-web-….europe-west6.run.app \
-#     --project=kletron
+# Déploiement: ./infra/gcp/deploy.sh (avec NEXT_PUBLIC_APP_URL=…).
+# Ne pas passer _NEXT_PUBLIC_APP_URL via `gcloud --substitutions=…` avec une URL https:// : le CLI
+# casse sur les « : ». deploy.sh réécrit les clés `substitutions:` dans un YAML temporaire.
 
 substitutions:
   _REGION: europe-west6
@@ -26,6 +24,7 @@ steps:
     args:
       - -ceu
       - |
+        # Bash locals must not look like $_foo: Cloud Build treats that as a substitution key "_" (INVALID_ARGUMENT).
         pid_lc="$(printf '%s' "$PROJECT_ID" | tr '[:upper:]' '[:lower:]')"
         if [[ "$pid_lc" == *numezis* ]]; then
           echo "Refusing Cloud Build: PROJECT_ID '$PROJECT_ID' matches Kletron-only policy (numezis forbidden)."
