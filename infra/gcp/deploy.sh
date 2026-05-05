@@ -57,10 +57,34 @@ fi
 echo "Project=${PROJECT_ID}  REGION=${REGION}  AR_REPO=${AR_REPO}  WEB_SERVICE=${WEB_SERVICE}  MCP_SERVICE=${MCP_SERVICE}"
 echo "NEXT_PUBLIC_APP_URL=${APP_URL}"
 
-# Cloud Build default comma-separated substitutions break on ':' in https:// URLs — use ^:^ delimiter.
+# Do not pass URL via `gcloud --substitutions=...`: keys/values with ':' (https://) break the CLI parser.
+CLOUD_BUILD_TMP="$(mktemp "${TMPDIR:-/tmp}/kletron-cloudbuild.XXXXXX.yaml")"
+cleanup_cloudbuild_tmp() {
+  rm -f "${CLOUD_BUILD_TMP}"
+}
+trap cleanup_cloudbuild_tmp EXIT
+
+cp "${SCRIPT_DIR}/cloudbuild.yaml" "${CLOUD_BUILD_TMP}"
+
+replace_yaml_subst() {
+  local key="$1"
+  local val="$2"
+  local esc tmp_out
+  esc="$(printf '%s\n' "${val}" | sed -e 's/[\/&]/\\&/g')"
+  tmp_out="$(mktemp)"
+  sed "s|^${key}:.*|${key}: ${esc}|" "${CLOUD_BUILD_TMP}" > "${tmp_out}"
+  mv "${tmp_out}" "${CLOUD_BUILD_TMP}"
+}
+
+replace_yaml_subst "_NEXT_PUBLIC_APP_URL" "${APP_URL}"
+replace_yaml_subst "_AR_REPO" "${AR_REPO}"
+replace_yaml_subst "_WEB_SERVICE" "${WEB_SERVICE}"
+replace_yaml_subst "_MCP_SERVICE" "${MCP_SERVICE}"
+replace_yaml_subst "_EXPECTED_PROJECT" "${EXPECTED_PROJECT}"
+replace_yaml_subst "_ALLOW_NON_KLETRON_PROJECT" "\"${ALLOW_NON_KLETRON_PROJECT}\""
+
 gcloud builds submit \
-  --config=infra/gcp/cloudbuild.yaml \
-  --substitutions="^:_NEXT_PUBLIC_APP_URL=${APP_URL}^:_AR_REPO=${AR_REPO}^:_WEB_SERVICE=${WEB_SERVICE}^:_MCP_SERVICE=${MCP_SERVICE}^:_EXPECTED_PROJECT=${EXPECTED_PROJECT}^:_ALLOW_NON_KLETRON_PROJECT=${ALLOW_NON_KLETRON_PROJECT}" \
+  --config="${CLOUD_BUILD_TMP}" \
   --project="${PROJECT_ID}" \
   .
 
