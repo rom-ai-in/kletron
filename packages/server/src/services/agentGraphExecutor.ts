@@ -50,6 +50,7 @@ import type { ToolApprovalConfig } from "./toolApprovalPolicy";
 import { applyThreadApprovalOverride, getToolApprovalPolicy } from "./toolApprovalPolicy";
 import { resolveEffectiveToolApprovalConfigForRun } from "./effectiveToolApprovalService";
 import { syncWorkspaceExternalMcpServers } from "./mcpWorkspaceSync";
+import { parseToolInputWithRepair } from "./toolInputRepair";
 import { simpleReactPhaseId, simpleReactWorkSystemPrompt } from "./agentGraphPresets";
 import { config } from "../config";
 import { RESEARCH_DEPTH_FAST_SYSTEM_SUFFIX } from "@kletron/shared/researchDepth";
@@ -121,6 +122,18 @@ const cloneValue = <T>(value: T): T => {
 };
 
 const safeEditGate = SafeEditGate.getInstance();
+
+class ToolApprovalPauseError extends Error {
+    toolName: string;
+    approvalId: string;
+
+    constructor(toolName: string, approvalId: string) {
+        super(`Tool ${toolName} is awaiting approval (${approvalId}).`);
+        this.name = "ToolApprovalPauseError";
+        this.toolName = toolName;
+        this.approvalId = approvalId;
+    }
+}
 
 const TOOL_RESULT_EVICT_CHARS = Number.isFinite(Number.parseInt(process.env.TOOL_RESULT_EVICT_CHARS ?? "", 10))
     ? Number.parseInt(process.env.TOOL_RESULT_EVICT_CHARS ?? "", 10)
@@ -204,6 +217,43 @@ const maybeEvictToolResult = async (opts: {
         preview,
     ].join("\n");
 };
+
+function currentThreadTimeZone(): string {
+    const resolved = Intl.DateTimeFormat().resolvedOptions().timeZone?.trim();
+    if (resolved) return resolved;
+    const envTz = process.env.TZ?.trim();
+    return envTz || "UTC";
+}
+
+function buildWorkDateGroundingBlock(now: Date, timeZone: string): string {
+    const localDate = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).format(now);
+    const localTime = new Intl.DateTimeFormat("en-GB", {
+        timeZone,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+    }).format(now);
+    const weekday = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        weekday: "long",
+    }).format(now);
+    return [
+        "## DATE AND TIME GROUNDING",
+        `- Current local date: ${localDate} (${weekday})`,
+        `- Current local time: ${localTime}`,
+        `- Reference timezone: ${timeZone}`,
+        `- Current UTC timestamp: ${now.toISOString()}`,
+        "- Resolve relative references like today, tomorrow, and yesterday strictly from that timezone.",
+        "- When answering about schedules or creating calendar events, restate the absolute date explicitly before acting.",
+        "- Do not trust stale workspace notes for the current date when they conflict with the grounded date above.",
+    ].join("\n");
+}
 
 const describeMessageContent = (message: BaseMessage): string => {
     if (typeof message.content === "string") {
@@ -974,6 +1024,12 @@ export class AgentGraphExecutor {
             onLlmStreamKpi?: (kpi: AgentStreamKpiV1) => void;
             clientSentAtMs?: number;
             serverRequestReceivedAtMs?: number;
+            /** Synthetic events appended to conversation history without inventing a user turn. */
+            historyEvents?: AgentEvent[];
+            /** Preserve the current mission/userInput instead of deriving one from `message`. */
+            preserveMission?: boolean;
+            /** Skip conversation turn accounting for synthetic continuations. */
+            countAsConversationTurn?: boolean;
         }
     ): Promise<AgentWorkflowResult> {
         console.log(`[AgentGraphExecutor] continueRun: runId=${runId}, message="${message.slice(0, 40)}"`);
@@ -1082,13 +1138,25 @@ export class AgentGraphExecutor {
 
             // ── Standard multi-turn continuation ─────────────────────────────
 
-            const { mission: preflightMission, loadedSkillIdsToAppend } = await applySkillSlashPreflight(
-                message,
-                workspace._id!.toString()
-            );
-            const mergedLoaded = mergeLoadedSkillIds(run.state.loadedSkillIds, loadedSkillIdsToAppend);
+            const syntheticHistory = Array.isArray(opts?.historyEvents) ? opts.historyEvents : [];
+            const preserveMission = opts?.preserveMission === true || syntheticHistory.length > 0;
+            const skipTurnIncrement = opts?.countAsConversationTurn === false || syntheticHistory.length > 0;
+
+            const preflight = preserveMission
+                ? {
+                    mission:
+                        (typeof run.state.mission === "string" && run.state.mission) ||
+                        (typeof run.state.userInput === "string" && run.state.userInput) ||
+                        message,
+                    loadedSkillIdsToAppend: [] as string[],
+                }
+                : await applySkillSlashPreflight(
+                    message,
+                    workspace._id!.toString()
+                );
+            const mergedLoaded = mergeLoadedSkillIds(run.state.loadedSkillIds, preflight.loadedSkillIdsToAppend);
             const prevLoaded = new Set(run.state.loadedSkillIds ?? []);
-            const newSlashSlugs = loadedSkillIdsToAppend.filter((id) => !prevLoaded.has(id));
+            const newSlashSlugs = preflight.loadedSkillIdsToAppend.filter((id) => !prevLoaded.has(id));
             const slashSkillLoads =
                 newSlashSlugs.length > 0
                     ? newSlashSlugs.map((slug) => ({
@@ -1100,21 +1168,39 @@ export class AgentGraphExecutor {
 
             // Append user message to conversation history
             const history = run.state.conversationHistory ?? [];
-            history.push({
-                id: `event-continue-${Date.now()}`,
-                phaseId: "user",
-                phaseLabel: "User input",
-                kind: "user",
-                role: "user",
-                content: message,
-                timestamp: new Date().toISOString(),
-            });
+            if (syntheticHistory.length > 0) {
+                history.push(...syntheticHistory);
+            } else {
+                history.push({
+                    id: `event-continue-${Date.now()}`,
+                    phaseId: "user",
+                    phaseLabel: "User input",
+                    kind: "user",
+                    role: "user",
+                    content: message,
+                    timestamp: new Date().toISOString(),
+                });
+            }
 
             // Update state with new mission and conversation history
             const updatedState = {
                 ...run.state,
-                mission: preflightMission,
-                userInput: preflightMission,
+                mission:
+                    preserveMission
+                        ? (
+                            (typeof run.state.mission === "string" && run.state.mission) ||
+                            (typeof run.state.userInput === "string" && run.state.userInput) ||
+                            preflight.mission
+                        )
+                        : preflight.mission,
+                userInput:
+                    preserveMission
+                        ? (
+                            (typeof run.state.userInput === "string" && run.state.userInput) ||
+                            (typeof run.state.mission === "string" && run.state.mission) ||
+                            preflight.mission
+                        )
+                        : preflight.mission,
                 conversationHistory: history,
                 loadedSkillIds: mergedLoaded,
                 skillLoads: [...(run.state.skillLoads ?? []), ...slashSkillLoads],
@@ -1133,7 +1219,9 @@ export class AgentGraphExecutor {
                 error: undefined,
             } as any);
 
-            await agentGraphRunService.incrementConversationTurns(runId);
+            if (!skipTurnIncrement) {
+                await agentGraphRunService.incrementConversationTurns(runId);
+            }
 
             return this.executeRunStreaming(runId, opts);
             },
@@ -2040,6 +2128,10 @@ export class AgentGraphExecutor {
                     const sentryHintBlock = mergedToolNames.includes("sentry_api")
                         ? "\n\n## SENTRY\nWhen the user asks about Sentry, incidents, or open issues **without naming an organization**, call **`sentry_api`** once with **`resource`: `\"digest\"`** (or `\"status\"`). **Do not** ask which org/project first unless that tool call fails.\n"
                         : "";
+                    const workDateGroundingBlock =
+                        runWorkMode === "work"
+                            ? buildWorkDateGroundingBlock(new Date(), currentThreadTimeZone())
+                            : "";
                     const fastSuffix =
                         researchDepth === "fast" ? RESEARCH_DEPTH_FAST_SYSTEM_SUFFIX : "";
                     const reactRecursionLimit =
@@ -2156,8 +2248,8 @@ export class AgentGraphExecutor {
                         // Avoid z.any() — strict OpenAI/LM Studio validators require parameters.properties
                         const schema = baseTool?.schema ?? z.object({}).catchall(z.any());
                         const returnDirect = (baseTool as any)?.returnDirect;
-                        const wrapped = createTool(
-                            async (input: Record<string, unknown>) => {
+                        const toolImpl = async (rawInput: Record<string, unknown>) => {
+                                const input = parseToolInputWithRepair<Record<string, unknown>>(schema, rawInput, name);
                                 await ensureNotAborted();
                                 // ── Dedup: return cached result for identical read-only calls ──
                                 if (READ_ONLY_DEDUP_TOOLS.has(name) && name !== "write_todos") {
@@ -2238,7 +2330,7 @@ export class AgentGraphExecutor {
 
                                     const existingPending = findApprovalByKey(pending, approvalKey);
                                     if (existingPending) {
-                                        return `Approval already pending (ID: ${existingPending.id}).`;
+                                        throw new ToolApprovalPauseError(name, String(existingPending.id));
                                     }
                                     const existingGranted = findApprovalByKey(granted, approvalKey);
                                     if (existingGranted) {
@@ -2271,7 +2363,7 @@ export class AgentGraphExecutor {
                                     console.info(
                                         `[ToolApprovalPolicy] runId=${runId} source=${policy.normalizedSource} tool=${name} action=queued_for_approval approvalId=${edit.id}`
                                     );
-                                    return `Approval required. Proposed ${name} with ID ${edit.id}.`;
+                                    throw new ToolApprovalPauseError(name, edit.id);
                                 }
 
                                 console.info(
@@ -2309,11 +2401,14 @@ export class AgentGraphExecutor {
                                 }
 
                                 return finalResult;
-                            },
-                            { name, description, schema, returnDirect }
-                        );
+                            };
+                        const wrapped = createTool(toolImpl, { name, description, schema, returnDirect });
+                        (wrapped as any).invoke = async (input: unknown) => {
+                            return await toolImpl((input ?? {}) as Record<string, unknown>);
+                        };
+                        (wrapped as any).func = toolImpl;
                         toolInvokerMap.set(name, async (input: Record<string, unknown>) => {
-                            return await wrapped.invoke(input);
+                            return await (wrapped as any).invoke(input);
                         });
                         return wrapped;
                     };
@@ -2546,6 +2641,7 @@ export class AgentGraphExecutor {
                     const enhancedSystemPrompt = [
                         baseSystemPrompt,
                         runContextPrompt,
+                        workDateGroundingBlock,
                         workspaceAccessBlock,
                         persistentContextPrompt,
                         dynamicContextPrompt,
@@ -2977,6 +3073,47 @@ export class AgentGraphExecutor {
                         }
                     }
                 } catch (err: any) {
+                    if (err instanceof ToolApprovalPauseError || err?.name === "ToolApprovalPauseError") {
+                        const { summary: runTokenUsage } = tokenUsageService.finalizeRunTracking(runId);
+                        await agentGraphRunService.updateRunTokenUsage(runId, runTokenUsage);
+                        await agentGraphRunService.updateRunNodeStatus(runId, nodeId, "RUNNING");
+                        await agentGraphRunService.updateRunStatus(runId, "PAUSED", {
+                            endedAt: new Date(),
+                            error: `Awaiting approval for ${err.toolName} (${err.approvalId}).`,
+                        } as any);
+
+                        timeline[0].status = "running";
+                        timeline[0].summary = `Paused — awaiting approval for ${err.toolName}`;
+                        timeline[0].endedAt = new Date().toISOString();
+                        await flushUpdate();
+
+                        if (timelineEntry) {
+                            timelineEntry.status = "running";
+                            timelineEntry.summary = `Paused — awaiting approval for ${err.toolName}`;
+                            timelineEntry.endedAt = new Date().toISOString();
+                        }
+                        await emitUpdate();
+
+                        return {
+                            sessionId: runId,
+                            timeline: globalTimeline,
+                            conclusion: "Run paused (tool approval required).",
+                            outputs: createPlaceholderOutputs({
+                                mission: typeof state.mission === "string" ? state.mission : "",
+                                report: `Awaiting approval for tool ${err.toolName}.`,
+                                meta: {
+                                    runId,
+                                    graphId: run.graphId.toString(),
+                                    state: cloneValue(state),
+                                    interrupted: true,
+                                    approvalPending: true,
+                                    toolName: err.toolName,
+                                    approvalId: err.approvalId,
+                                },
+                            }),
+                            eventStream: globalEventStream,
+                        };
+                    }
                     if (err instanceof AgentWorkflowAbortError || err?.name === "AgentWorkflowAbortError") {
                         const reason: AgentWorkflowAbortReason = err.reason ?? "PAUSED";
                         const status = reason === "CANCELLED" ? "CANCELLED" : "PAUSED";

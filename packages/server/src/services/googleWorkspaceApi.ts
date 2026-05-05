@@ -220,13 +220,19 @@ export async function probeGoogleWorkspaceConnection(
 ): Promise<{ ok: boolean; message: string }> {
     try {
         if (providerId === "gmail") {
-            const data = await googleJson<{ labels?: Array<{ id?: string; name?: string }> }>(
+            const labels = await googleJson<{ labels?: Array<{ id?: string; name?: string }> }>(
                 auth,
                 `${GMAIL_API_BASE}/gmail/v1/users/me/labels?maxResults=1`
             );
+            const messages = await googleJson<{
+                messages?: Array<{ id?: string; threadId?: string }>;
+            }>(
+                auth,
+                `${GMAIL_API_BASE}/gmail/v1/users/me/messages?maxResults=1&q=in%3Ainbox&includeSpamTrash=false`
+            );
             return {
                 ok: true,
-                message: `Gmail connection ok (${Array.isArray(data.labels) ? data.labels.length : 0} label(s) fetched).`,
+                message: `Gmail connection ok (${Array.isArray(labels.labels) ? labels.labels.length : 0} label(s) and ${Array.isArray(messages.messages) ? messages.messages.length : 0} message(s) fetched).`,
             };
         }
         if (providerId === "google-calendar") {
@@ -234,6 +240,19 @@ export async function probeGoogleWorkspaceConnection(
                 auth,
                 `${GOOGLE_API_BASE}/calendar/v3/users/me/calendarList?maxResults=1`
             );
+            const now = new Date();
+            const later = new Date(now.getTime() + 15 * 60 * 1000);
+            await googleJson<Record<string, unknown>>(auth, `${GOOGLE_API_BASE}/calendar/v3/freeBusy`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    timeMin: now.toISOString(),
+                    timeMax: later.toISOString(),
+                    items: [{ id: "primary" }],
+                }),
+            });
             return {
                 ok: true,
                 message: `Google Calendar connection ok (${Array.isArray(data.items) ? data.items.length : 0} calendar(s) fetched).`,

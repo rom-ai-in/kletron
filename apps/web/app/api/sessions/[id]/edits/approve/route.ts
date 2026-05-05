@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import type { AgentEvent } from "@kletron/shared/types";
 import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { SafeEditGate } from "@kletron/server/services/agent/SafeEditGate";
@@ -72,12 +73,12 @@ async function maybeEvictResult(rootDir: string, runId: string, toolName: string
 
 /**
  * Fire-and-forget: resume the agent loop after a successful tool approval.
- * The LLM receives a synthetic user message describing what was executed and
- * the result, then continues its reasoning.
+ * We append synthetic tool-call/tool-result events so the agent sees the real
+ * execution outcome without inventing a new user message.
  */
 async function resumeAgentAfterApproval(
   runId: string,
-  executionSummaries: Array<{ toolName: string; result?: string; evictedPath?: string }>,
+  executionSummaries: Array<{ id: string; toolName: string; args?: Record<string, unknown>; result?: string; evictedPath?: string }>,
   userId?: string,
 ) {
   try {
@@ -88,17 +89,45 @@ async function resumeAgentAfterApproval(
       return;
     }
 
-    const parts = executionSummaries.map((s) => {
+    const historyEvents: AgentEvent[] = executionSummaries.flatMap((s) => {
+      const now = new Date().toISOString();
       const resultSnippet = s.evictedPath
         ? `Result evicted to file ${s.evictedPath}`
         : (s.result ?? "OK").slice(0, 2000);
-      return `Tool \`${s.toolName}\` was approved and executed successfully.\nResult:\n${resultSnippet}`;
+      return [
+        {
+          id: `event-approval-tool-call-${s.id}`,
+          phaseId: "approval",
+          phaseLabel: "Approved tool call",
+          kind: "assistant",
+          role: "assistant",
+          toolName: s.toolName,
+          name: s.toolName,
+          toolCallId: s.id,
+          toolArgs: JSON.stringify(s.args ?? {}),
+          content: "",
+          timestamp: now,
+        },
+        {
+          id: `event-approval-tool-result-${s.id}`,
+          phaseId: "approval",
+          phaseLabel: "Approved tool result",
+          kind: "tool",
+          role: "tool",
+          toolName: s.toolName,
+          toolCallId: s.id,
+          content: resultSnippet,
+          timestamp: now,
+        },
+      ];
     });
-    const message = parts.join("\n\n---\n\n") + "\n\nPlease continue with the task.";
 
     const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
     console.log(`[edits/approve] Resuming agent after approval for run ${runId}`);
-    await agentGraphExecutor.continueRun(runId, message, {
+    await agentGraphExecutor.continueRun(runId, "", {
+      historyEvents,
+      preserveMission: true,
+      countAsConversationTurn: false,
       ...(userId ? { workspaceContextUserId: userId } : {}),
     });
     console.log(`[edits/approve] ✓ Agent resumed successfully for run ${runId}`);
@@ -199,7 +228,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
       const pending = Array.isArray(run.state?.approvals?.pending) ? [...run.state.approvals.pending as any[]] : [];
       const granted = Array.isArray(run.state?.approvals?.granted) ? [...run.state.approvals.granted as any[]] : [];
-      const executionSummaries: Array<{ toolName: string; result?: string; evictedPath?: string }> = [];
+      const executionSummaries: Array<{ id: string; toolName: string; args?: Record<string, unknown>; result?: string; evictedPath?: string }> = [];
 
       for (const edit of edits) {
         let executionResult: any;
@@ -216,7 +245,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
             evictedPath: executionResult.evictedPath ?? undefined,
           });
           executionSummaries.push({
+            id: String(edit.id),
             toolName: edit.toolName,
+            args: (edit.args ?? {}) as Record<string, unknown>,
             result: executionResult.result,
             evictedPath: executionResult.evictedPath,
           });
@@ -280,7 +311,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // Fire-and-forget: resume the agent loop
     if (executionResult?.executed) {
       void resumeAgentAfterApproval(params.id, [{
+        id: String(edit.id),
         toolName: edit.toolName,
+        args: (edit.args ?? {}) as Record<string, unknown>,
         result: executionResult.result,
         evictedPath: executionResult.evictedPath,
       }], auth.userId);

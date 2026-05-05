@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import type { AgentEvent } from "@kletron/shared/types";
 import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { SafeEditGate } from "@kletron/server/services/agent/SafeEditGate";
@@ -20,7 +21,7 @@ import { syncWorkspaceExternalMcpServers } from "@kletron/server/services/mcpWor
  */
 async function resumeAgentAfterApproval(
     runId: string,
-    executionSummaries: Array<{ toolName: string; result?: string; evictedPath?: string }>
+    executionSummaries: Array<{ id: string; toolName: string; args?: Record<string, unknown>; result?: string; evictedPath?: string }>
 ) {
     try {
         const run = await agentGraphRunService.getRun(runId);
@@ -29,19 +30,102 @@ async function resumeAgentAfterApproval(
             console.log(`[approvals] Run ${runId} still RUNNING, skipping resume`);
             return;
         }
-        const parts = executionSummaries.map((s) => {
+        const historyEvents: AgentEvent[] = executionSummaries.flatMap((s) => {
+            const now = new Date().toISOString();
             const resultSnippet = s.evictedPath
                 ? `Result evicted to file ${s.evictedPath}`
                 : (s.result ?? "OK").slice(0, 2000);
-            return `Tool \`${s.toolName}\` was approved and executed successfully.\nResult:\n${resultSnippet}`;
+            return [
+                {
+                    id: `event-approval-tool-call-${s.id}`,
+                    phaseId: "approval",
+                    phaseLabel: "Approved tool call",
+                    kind: "assistant",
+                    role: "assistant",
+                    toolName: s.toolName,
+                    name: s.toolName,
+                    toolCallId: s.id,
+                    toolArgs: JSON.stringify(s.args ?? {}),
+                    content: "",
+                    timestamp: now,
+                },
+                {
+                    id: `event-approval-tool-result-${s.id}`,
+                    phaseId: "approval",
+                    phaseLabel: "Approved tool result",
+                    kind: "tool",
+                    role: "tool",
+                    toolName: s.toolName,
+                    toolCallId: s.id,
+                    content: resultSnippet,
+                    timestamp: now,
+                },
+            ];
         });
-        const message = parts.join("\n\n---\n\n") + "\n\nPlease continue with the task.";
         const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
         console.log(`[approvals] Resuming agent after approval for run ${runId}`);
-        await agentGraphExecutor.continueRun(runId, message, {});
+        await agentGraphExecutor.continueRun(runId, "", {
+            historyEvents,
+            preserveMission: true,
+            countAsConversationTurn: false,
+        });
         console.log(`[approvals] ✓ Agent resumed successfully for run ${runId}`);
     } catch (err) {
         console.error(`[approvals] ✗ Failed to resume agent after approval for ${runId}:`, (err as Error)?.message);
+    }
+}
+
+async function resumeAgentAfterRejection(
+    runId: string,
+    rejectionSummaries: Array<{ id: string; toolName: string; args?: Record<string, unknown> }>
+) {
+    try {
+        const run = await agentGraphRunService.getRun(runId);
+        if (!run) return;
+        if (run.status === "RUNNING") {
+            console.log(`[approvals] Run ${runId} still RUNNING, skipping rejection resume`);
+            return;
+        }
+        const historyEvents: AgentEvent[] = rejectionSummaries.flatMap((s) => {
+            const now = new Date().toISOString();
+            return [
+                {
+                    id: `event-reject-tool-call-${s.id}`,
+                    phaseId: "approval",
+                    phaseLabel: "Rejected tool call",
+                    kind: "assistant",
+                    role: "assistant",
+                    toolName: s.toolName,
+                    name: s.toolName,
+                    toolCallId: s.id,
+                    toolArgs: JSON.stringify(s.args ?? {}),
+                    content: "",
+                    timestamp: now,
+                },
+                {
+                    id: `event-reject-tool-result-${s.id}`,
+                    phaseId: "approval",
+                    phaseLabel: "Rejected tool result",
+                    kind: "tool",
+                    role: "tool",
+                    toolName: s.toolName,
+                    toolCallId: s.id,
+                    content: "REJECTED_BY_USER: Do not repeat this exact tool call without changing the approach or asking for clarification.",
+                    isError: true,
+                    timestamp: now,
+                },
+            ];
+        });
+        const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
+        console.log(`[approvals] Resuming agent after rejection for run ${runId}`);
+        await agentGraphExecutor.continueRun(runId, "", {
+            historyEvents,
+            preserveMission: true,
+            countAsConversationTurn: false,
+        });
+        console.log(`[approvals] ✓ Agent resumed successfully after rejection for ${runId}`);
+    } catch (err) {
+        console.error(`[approvals] ✗ Failed to resume agent after rejection for ${runId}:`, (err as Error)?.message);
     }
 }
 
@@ -276,7 +360,9 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
             // Fire-and-forget: resume the agent loop
             if (executionResult?.executed) {
                 void resumeAgentAfterApproval(params.runId, [{
+                    id: String(edit.id),
                     toolName: edit.toolName,
+                    args: (edit.args ?? {}) as Record<string, unknown>,
                     result: executionResult.result,
                     evictedPath: executionResult.evictedPath,
                 }]);
@@ -309,6 +395,11 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
                 rejectedAt: new Date().toISOString(),
             });
             const approvals = await updateRunApprovals({ pending, rejected });
+            void resumeAgentAfterRejection(params.runId, [{
+                id: String(edit.id),
+                toolName: edit.toolName,
+                args: (edit.args ?? {}) as Record<string, unknown>,
+            }]);
             return NextResponse.json({ rejected: edit, approvals }, { status: 200 });
         }
         if (action === "approve_all") {
@@ -356,7 +447,13 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
             if (executedEdits.length > 0) {
                 void resumeAgentAfterApproval(params.runId, executedEdits.map((e: any) => {
                     const g = granted.find((g: any) => g.id === e.id) as any;
-                    return { toolName: String(e.toolName), result: String(g?.result ?? ""), evictedPath: g?.evictedPath as string | undefined };
+                    return {
+                        id: String(e.id),
+                        toolName: String(e.toolName),
+                        args: (e.args ?? {}) as Record<string, unknown>,
+                        result: String(g?.result ?? ""),
+                        evictedPath: g?.evictedPath as string | undefined,
+                    };
                 }));
             }
 
@@ -384,6 +481,16 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
                 });
             }
             const approvals = await updateRunApprovals({ pending, rejected });
+            if (edits.length > 0) {
+                void resumeAgentAfterRejection(
+                    params.runId,
+                    edits.map((edit: any) => ({
+                        id: String(edit.id),
+                        toolName: String(edit.toolName),
+                        args: (edit.args ?? {}) as Record<string, unknown>,
+                    }))
+                );
+            }
             return NextResponse.json({ rejected: edits, approvals }, { status: 200 });
         }
         return NextResponse.json({ error: "Invalid action" }, { status: 400 });

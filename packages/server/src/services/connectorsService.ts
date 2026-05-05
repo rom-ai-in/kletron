@@ -409,7 +409,10 @@ export async function findActiveIntegration(
         }
     }
     const collection = await integrationsCollection();
-    const doc = await collection.findOne({ workspaceId, providerId, status: "active" });
+    const doc = await collection.findOne(
+        { workspaceId, providerId, status: "active" },
+        { sort: { updatedAt: -1, createdAt: -1, _id: -1 } }
+    );
     return doc ? toIntegrationSummary(doc) : null;
 }
 

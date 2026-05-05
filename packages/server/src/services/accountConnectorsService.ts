@@ -296,6 +296,10 @@ export async function createAccountIntegration(
     }
     const c = await integrationsColl();
     const now = new Date();
+    await c.updateMany(
+        { ownerId, providerId: validated.providerId, status: "active" },
+        { $set: { status: "revoked", updatedAt: now } }
+    );
     const doc: AccountIntegrationDoc = {
         ownerId,
         providerId: validated.providerId,
@@ -367,6 +371,9 @@ export async function findActiveAccountIntegration(
 ): Promise<AccountIntegrationSummary | null> {
     await ensureAccountIndexes();
     const c = await integrationsColl();
-    const doc = await c.findOne({ ownerId, providerId, status: "active" });
+    const doc = await c.findOne(
+        { ownerId, providerId, status: "active" },
+        { sort: { updatedAt: -1, createdAt: -1, _id: -1 } }
+    );
     return doc ? toAccountIntegrationSummary(doc) : null;
 }

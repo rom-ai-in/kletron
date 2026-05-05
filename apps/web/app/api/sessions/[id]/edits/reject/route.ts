@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import type { AgentEvent } from "@kletron/shared/types";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { SafeEditGate } from "@kletron/server/services/agent/SafeEditGate";
 
@@ -7,12 +8,12 @@ const safeEditGate = SafeEditGate.getInstance();
 
 /**
  * Fire-and-forget: resume the agent loop after a rejected tool call.
- * The LLM receives a synthetic user message describing what was rejected,
- * then continues its reasoning.
+ * We append synthetic tool-call/tool-result events so the agent sees the
+ * rejection as tool feedback rather than as a fake user message.
  */
 async function resumeAgentAfterRejection(
   runId: string,
-  rejectionSummaries: Array<{ toolName: string; }>,
+  rejectionSummaries: Array<{ id: string; toolName: string; args?: Record<string, unknown> }>,
   userId?: string,
 ) {
   try {
@@ -23,14 +24,43 @@ async function resumeAgentAfterRejection(
       return;
     }
 
-    const parts = rejectionSummaries.map((s) => {
-      return `Tool \`${s.toolName}\` was REJECTED by the user. Do not attempt this exact tool call again without modifying your approach.`;
+    const historyEvents: AgentEvent[] = rejectionSummaries.flatMap((s) => {
+      const now = new Date().toISOString();
+      return [
+        {
+          id: `event-reject-tool-call-${s.id}`,
+          phaseId: "approval",
+          phaseLabel: "Rejected tool call",
+          kind: "assistant",
+          role: "assistant",
+          toolName: s.toolName,
+          name: s.toolName,
+          toolCallId: s.id,
+          toolArgs: JSON.stringify(s.args ?? {}),
+          content: "",
+          timestamp: now,
+        },
+        {
+          id: `event-reject-tool-result-${s.id}`,
+          phaseId: "approval",
+          phaseLabel: "Rejected tool result",
+          kind: "tool",
+          role: "tool",
+          toolName: s.toolName,
+          toolCallId: s.id,
+          content: "REJECTED_BY_USER: Do not repeat this exact tool call without changing the approach or asking for clarification.",
+          isError: true,
+          timestamp: now,
+        },
+      ];
     });
-    const message = parts.join("\n\n---\n\n") + "\n\nPlease continue with the task or ask the user for clarification.";
 
     const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
     console.log(`[edits/reject] Resuming agent after rejection for run ${runId}`);
-    await agentGraphExecutor.continueRun(runId, message, {
+    await agentGraphExecutor.continueRun(runId, "", {
+      historyEvents,
+      preserveMission: true,
+      countAsConversationTurn: false,
       ...(userId ? { workspaceContextUserId: userId } : {}),
     });
     console.log(`[edits/reject] ✓ Agent resumed successfully for run ${runId}`);
@@ -88,13 +118,17 @@ export async function POST(request: Request, { params }: { params: { id: string 
       });
 
       const rejected = Array.isArray(run.state?.approvals?.rejected) ? [...run.state.approvals.rejected as any[]] : [];
-      const rejectionSummaries: Array<{ toolName: string }> = [];
+      const rejectionSummaries: Array<{ id: string; toolName: string; args?: Record<string, unknown> }> = [];
       for (const edit of edits) {
         rejected.push({
           id: edit.id, toolName: edit.toolName, args: edit.args,
           status: "rejected", rejectedAt: new Date().toISOString(),
         });
-        rejectionSummaries.push({ toolName: edit.toolName });
+        rejectionSummaries.push({
+          id: String(edit.id),
+          toolName: edit.toolName,
+          args: (edit.args ?? {}) as Record<string, unknown>,
+        });
       }
       const approvals = await updateRunApprovals({ pending: [], rejected });
       
@@ -126,7 +160,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
     });
     const approvals = await updateRunApprovals({ pending, rejected });
 
-      void resumeAgentAfterRejection(params.id, [{ toolName: edit.toolName }], auth.userId);
+      void resumeAgentAfterRejection(params.id, [{
+        id: String(edit.id),
+        toolName: edit.toolName,
+        args: (edit.args ?? {}) as Record<string, unknown>,
+      }], auth.userId);
 
     return NextResponse.json({ rejected: edit, approvals });
   } catch (error) {
