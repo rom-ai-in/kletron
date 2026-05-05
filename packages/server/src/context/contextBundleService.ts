@@ -63,6 +63,7 @@ function truncateSnippet(value: string | undefined, maxChars = PROMPT_CONTEXT_MA
   if (typeof value !== "string") return undefined;
   const cleaned = value.replace(/\s+/g, " ").trim();
   if (!cleaned) return undefined;
+  if (maxChars <= 1) return undefined;
   return cleaned.length > maxChars ? `${cleaned.slice(0, maxChars - 1).trimEnd()}…` : cleaned;
 }
 
@@ -85,7 +86,6 @@ async function hydrateSnippetFromFile(
 }
 
 async function buildPromptItems(opts: {
-  rootPath: string;
   graphItems: RankedContextItem[];
   vectorItems: SemanticContextHit[];
 }): Promise<PromptContextItem[]> {
@@ -252,7 +252,6 @@ export async function buildContextBundle(opts: {
   );
 
   const promptItems = await buildPromptItems({
-    rootPath,
     graphItems,
     vectorItems,
   });

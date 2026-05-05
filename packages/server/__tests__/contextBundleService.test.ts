@@ -78,8 +78,9 @@ describe("contextBundleService", () => {
     expect(bundle.debug.vectorCount).toBe(1);
 
     const prompt = formatContextBundleForPrompt(bundle, { currentFile: "/w/foo.ts" });
-    expect(prompt).toContain("ACTIVE CONTEXT");
+    expect(prompt).toContain("DYNAMIC CONTEXT");
     expect(prompt).toContain("/w/other.ts");
+    expect(prompt).toContain("Snippet: // x");
   });
 
   it("skips semantic branch when disabled", async () => {

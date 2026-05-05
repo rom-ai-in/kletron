@@ -225,7 +225,7 @@ export class AgentGraphService {
     }
 
     /**
-     * Upsert the four canonical agent graphs at fixed ObjectIds (aligned with
+     * Upsert the canonical agent graphs at fixed ObjectIds (aligned with
      * @kletron/shared/canonicalStageGraphs). Removes duplicate rows that share
      * the same graph name but a different _id.
      */

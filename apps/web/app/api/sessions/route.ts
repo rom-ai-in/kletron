@@ -19,13 +19,13 @@ import { getWorkspaceContextConfig } from "@kletron/server/services/auditContext
 import { resolveWorkspaceCapabilities } from "@kletron/server/services/workspaceCapabilityResolver";
 import { workspaceChannelSettingsService } from "@kletron/server/services/workspaceChannelSettingsService";
 import { resolveGraphSelectionForNewSession } from "@kletron/server/services/graphRoutingService";
-import type { AgentStreamKpiV1, GraphSelectionMode } from "@kletron/shared/chatTypes";
+import type { AgentStreamKpiV1, GraphRouteInfo, GraphSelectionMode } from "@kletron/shared/chatTypes";
 import { CHANNEL_IDS, type ChannelId } from "@kletron/shared/channelTypes";
 
 const textEncoder = new TextEncoder();
 
 type StreamChunk =
-  | { type: "init"; payload: { runId: string; graphId: string; route?: any } }
+  | { type: "init"; payload: { runId: string; graphId: string; route?: GraphRouteInfo } }
   | { type: "update"; payload: AgentWorkflowUpdate }
   | { type: "text_delta"; payload: { content: string } }
   | { type: "reasoning_delta"; payload: { content: string } }
@@ -79,9 +79,9 @@ export async function POST(request: Request) {
     });
   }
 
-  let graph: Awaited<ReturnType<typeof agentGraphService.resolveGraphForStage>>;
-  let workspace: Awaited<ReturnType<typeof resolveWorkspaceFromRequestStrict>>;
-  let effectiveApproval: Awaited<ReturnType<typeof resolveEffectiveToolApprovalConfigForUser>>;
+  let graph: Awaited<ReturnType<typeof agentGraphService.resolveGraphForStage>> | null = null;
+  let workspace: Awaited<ReturnType<typeof resolveWorkspaceFromRequestStrict>> | null = null;
+  let effectiveApproval: Awaited<ReturnType<typeof resolveEffectiveToolApprovalConfigForUser>> | null = null;
   try {
     [workspace, effectiveApproval] = await Promise.all([
       resolveWorkspaceFromRequestStrict(request, auth.userId, payload as any),
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
   const resolvedThreadMode = parseThreadApprovalMode(
     payload.threadApprovalMode !== undefined && payload.threadApprovalMode !== null
       ? payload.threadApprovalMode
-      : effectiveApproval.defaultThreadApprovalMode
+      : effectiveApproval?.defaultThreadApprovalMode
   );
 
   let workMode = normalizeToWorkModeId(
@@ -137,8 +137,21 @@ export async function POST(request: Request) {
 
   const workspaceId = workspace._id.toString();
   const [contextConfig, workspaceCaps, channelSettings] = await Promise.all([
-    getWorkspaceContextConfig(workspaceId),
-    resolveWorkspaceCapabilities(workspaceId),
+    getWorkspaceContextConfig(workspaceId).catch((error) => {
+      console.warn("[sessions/create] Context config unavailable:", (error as Error)?.message ?? error);
+      return null;
+    }),
+    resolveWorkspaceCapabilities(workspaceId).catch((error) => {
+      console.warn("[sessions/create] Workspace capabilities unavailable:", (error as Error)?.message ?? error);
+      return {
+        workspaceId,
+        enabledSkills: [],
+        enabledTools: [],
+        enabledToolSet: new Set<string>(),
+        enabledIntegrationProviderIds: [],
+        externalMcpServers: [],
+      };
+    }),
     channel ? workspaceChannelSettingsService.get(workspaceId, channel) : Promise.resolve(null),
   ]);
 

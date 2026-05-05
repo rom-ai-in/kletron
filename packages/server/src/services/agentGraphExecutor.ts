@@ -36,7 +36,7 @@ import { kletronAdminTools } from "@kletron/agent-core/tools/kletronAdminTools";
 import { tokenUsageService } from "./tokenUsageService";
 import { ObjectId } from "mongodb";
 import { getWorkspaceContextConfig, type WorkspaceContextConfig } from "@kletron/server/services/auditContextService";
-import { formatAuditContextPrompt, type AuditContext } from "@kletron/shared/documentContext";
+import { formatAuditContextPrompt } from "@kletron/shared/documentContext";
 import { DEFAULT_WORKSPACE_CONTEXT_INJECTION } from "@kletron/shared/workspaceContextInjection";
 import { agentMemoryService } from "./agentMemoryService";
 import { ensureConversationSummary, formatConversationSummaryPrompt } from "./conversationSummaryService";
