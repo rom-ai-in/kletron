@@ -27,11 +27,15 @@ function isPlaceholderOrigin(origin: string): boolean {
  * ignore it so production keeps using the real public origin.
  */
 export function getPublicAppOrigin(request?: Request): string {
-    const envOrigin =
-        normalizeOriginCandidate(process.env.NEXT_PUBLIC_APP_URL) ||
-        normalizeOriginCandidate(process.env.NEXTAUTH_URL);
-    if (envOrigin && !isPlaceholderOrigin(envOrigin)) {
-        return envOrigin;
+    const envCandidates = [
+        process.env.NEXT_PUBLIC_APP_URL,
+        process.env.NEXTAUTH_URL,
+    ];
+    for (const candidate of envCandidates) {
+        const envOrigin = normalizeOriginCandidate(candidate);
+        if (envOrigin && !isPlaceholderOrigin(envOrigin)) {
+            return envOrigin;
+        }
     }
 
     if (request) {
