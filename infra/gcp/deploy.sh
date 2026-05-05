@@ -19,7 +19,7 @@ PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
 EXPECTED_PROJECT="${EXPECTED_PROJECT:-kletron}"
 ALLOW_NON_KLETRON_PROJECT="${ALLOW_NON_KLETRON_PROJECT:-false}"
 REGION="${REGION:-europe-west6}"
-AR_REPO="${AR_REPO:-kletron-repo}"
+AR_REPO="${AR_REPO:-kletron}"
 WEB_SERVICE="${WEB_SERVICE:-kletron-web}"
 MCP_SERVICE="${MCP_SERVICE:-kletron-mcp}"
 

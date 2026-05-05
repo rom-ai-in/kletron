@@ -9,7 +9,7 @@
 
 substitutions:
   _REGION: europe-west6
-  _AR_REPO: kletron-repo
+  _AR_REPO: kletron
   _WEB_SERVICE: kletron-web
   _MCP_SERVICE: kletron-mcp
   _EXPECTED_PROJECT: kletron
