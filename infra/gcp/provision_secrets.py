@@ -30,6 +30,8 @@ REGION = os.environ.get("GCP_REGION", "europe-west6")
 SERVICE = os.environ.get("GCP_WEB_SERVICE", "kletron-web")
 ALLOW_NON_KLETRON_PROJECT = os.environ.get("GCP_ALLOW_NON_KLETRON_PROJECT", "").strip().lower() in ("1", "true", "yes")
 
+_FORBIDDEN_PROJECT_SUBSTRINGS = ("numezis",)
+
 
 def load_env(path: Path) -> dict[str, str]:
     out: dict[str, str] = {}
@@ -55,7 +57,20 @@ def run_stdin(cmd: list[str], data: bytes) -> None:
     subprocess.run(cmd, input=data, check=True)
 
 
+def refuse_forbidden_project_id(project_id: str) -> None:
+    low = project_id.lower()
+    for needle in _FORBIDDEN_PROJECT_SUBSTRINGS:
+        if needle in low:
+            print(
+                f"Refus sécurité: projet GCP '{project_id}' interdit (contient '{needle}'). "
+                "Kletron uniquement — GCP_PROJECT_ID=kletron.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+
+
 def ensure_expected_project() -> None:
+    refuse_forbidden_project_id(PROJECT_ID)
     if PROJECT_ID == EXPECTED_PROJECT or ALLOW_NON_KLETRON_PROJECT:
         return
     print(
@@ -172,9 +187,6 @@ def resolve_public_web_url(env: dict[str, str]) -> str:
     override = os.environ.get("KLETRON_WEB_URL", "").strip().rstrip("/")
     if override.startswith("https://"):
         return override
-    override = os.environ.get("NUMEZIS_WEB_URL", "").strip().rstrip("/")
-    if override.startswith("https://"):
-        return override
     for key in ("NEXT_PUBLIC_APP_URL", "NEXTAUTH_URL"):
         raw = env.get(key, "").strip().rstrip("/")
         if raw.startswith("https://"):
@@ -183,13 +195,7 @@ def resolve_public_web_url(env: dict[str, str]) -> str:
     if live_url:
         return live_url
     # Last resort: default Cloud Run hostname (update after first deploy if needed).
-    return os.environ.get(
-        "NUMEZIS_WEB_FALLBACK_URL",
-        os.environ.get(
-            "KLETRON_WEB_FALLBACK_URL",
-            "https://www.kletron.com",
-        ),
-    ).strip().rstrip("/")
+    return os.environ.get("KLETRON_WEB_FALLBACK_URL", "https://www.kletron.com").strip().rstrip("/")
 
 
 def build_mongodb_uri(env: dict[str, str]) -> str | None:

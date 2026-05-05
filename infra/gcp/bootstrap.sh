@@ -3,10 +3,9 @@
 #
 # Prérequis locaux:
 #   gcloud auth login hello@kletron.com
-#   gcloud config set project YOUR_PROJECT_ID
 #
-# Usage:
-#   PROJECT_ID=your-project REGION=europe-west9 ./infra/gcp/bootstrap.sh
+# Usage (projet implicite kletron):
+#   ./infra/gcp/bootstrap.sh
 #
 # Ensuite: créer les secrets dans Secret Manager (exemples de noms ci‑dessous),
 # puis adapter infra/gcp/cloudbuild.yaml (--set-secrets sur deploy) ou
@@ -15,14 +14,25 @@
 
 set -euo pipefail
 
-PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/kletron-project-guard.sh
+source "${SCRIPT_DIR}/lib/kletron-project-guard.sh"
+
+# Toujours kletron par défaut — ne pas dériver du projet gcloud actif (numezis-new, etc.).
+PROJECT_ID="${PROJECT_ID:-kletron}"
 EXPECTED_PROJECT="${EXPECTED_PROJECT:-kletron}"
 ALLOW_NON_KLETRON_PROJECT="${ALLOW_NON_KLETRON_PROJECT:-false}"
 REGION="${REGION:-europe-west6}"
-AR_REPO="${AR_REPO:-kletron-repo}"
+AR_REPO="${AR_REPO:-kletron}"
+
+if ! kletron_refuse_non_kletron_project "${PROJECT_ID}"; then
+  exit $?
+fi
+
+kletron_warn_if_gcloud_project_mismatch "${EXPECTED_PROJECT}"
 
 if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
-  echo "Set PROJECT_ID or run: gcloud config set project YOUR_PROJECT_ID"
+  echo "PROJECT_ID vide. Bootstrap Kletron: PROJECT_ID=kletron"
   exit 1
 fi
 

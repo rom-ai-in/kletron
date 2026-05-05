@@ -3,7 +3,7 @@
 #
 # Prérequis:
 #   gcloud auth login …   # compte avec accès au projet kletron
-#   gcloud config set project kletron
+# Le script cible toujours PROJECT_ID=kletron par défaut (pas la config gcloud active).
 #   ./infra/gcp/bootstrap.sh   # une fois (APIs, Artifact Registry, IAM Cloud Build)
 #
 # Usage:
@@ -12,10 +12,15 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/kletron-project-guard.sh
+source "${SCRIPT_DIR}/lib/kletron-project-guard.sh"
+
+ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "$ROOT"
 
-PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
+# Toujours kletron par défaut — ne jamais prendre `gcloud config get-value project` (risque numezis-*).
+PROJECT_ID="${PROJECT_ID:-kletron}"
 EXPECTED_PROJECT="${EXPECTED_PROJECT:-kletron}"
 ALLOW_NON_KLETRON_PROJECT="${ALLOW_NON_KLETRON_PROJECT:-false}"
 REGION="${REGION:-europe-west6}"
@@ -23,8 +28,14 @@ AR_REPO="${AR_REPO:-kletron}"
 WEB_SERVICE="${WEB_SERVICE:-kletron-web}"
 MCP_SERVICE="${MCP_SERVICE:-kletron-mcp}"
 
+if ! kletron_refuse_non_kletron_project "${PROJECT_ID}"; then
+  exit $?
+fi
+
+kletron_warn_if_gcloud_project_mismatch "${EXPECTED_PROJECT}"
+
 if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
-  echo "Définis le projet: gcloud config set project kletron"
+  echo "PROJECT_ID vide. Déploiement Kletron: PROJECT_ID=kletron (défaut)."
   exit 1
 fi
 

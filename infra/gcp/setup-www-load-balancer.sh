@@ -13,8 +13,12 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/kletron-project-guard.sh
+source "${SCRIPT_DIR}/lib/kletron-project-guard.sh"
+
+ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PROJECT_ID="${PROJECT_ID:-kletron}"
 EXPECTED_PROJECT="${EXPECTED_PROJECT:-kletron}"
 ALLOW_NON_KLETRON_PROJECT="${ALLOW_NON_KLETRON_PROJECT:-false}"
 REGION="${REGION:-europe-west6}"
@@ -33,8 +37,14 @@ HTTP_RULE="${HTTP_RULE:-kletron-http-forwarding-rule}"
 
 DOMAINS="${DOMAINS:-www.kletron.com,kletron.com}"
 
+if ! kletron_refuse_non_kletron_project "${PROJECT_ID}"; then
+  exit $?
+fi
+
+kletron_warn_if_gcloud_project_mismatch "${EXPECTED_PROJECT}"
+
 if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
-  echo "Configure le projet: gcloud config set project kletron"
+  echo "PROJECT_ID vide. Utiliser PROJECT_ID=kletron"
   exit 1
 fi
 

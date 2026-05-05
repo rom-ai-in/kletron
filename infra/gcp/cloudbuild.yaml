@@ -26,6 +26,11 @@ steps:
     args:
       - -ceu
       - |
+        _pid_lc="$(printf '%s' "$PROJECT_ID" | tr '[:upper:]' '[:lower:]')"
+        if [[ "$_pid_lc" == *numezis* ]]; then
+          echo "Refusing Cloud Build: PROJECT_ID '$PROJECT_ID' matches Kletron-only policy (numezis forbidden)."
+          exit 2
+        fi
         if [[ "$PROJECT_ID" != "${_EXPECTED_PROJECT}" && "${_ALLOW_NON_KLETRON_PROJECT}" != "true" ]]; then
           echo "Refusing Cloud Build rollout to project '$PROJECT_ID'. Expected '${_EXPECTED_PROJECT}'."
           echo "Override explicitly only if intentional with _ALLOW_NON_KLETRON_PROJECT=true."
