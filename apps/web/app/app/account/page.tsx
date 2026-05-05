@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@kletron/ui/context/AuthContext';
 import { Input, PasswordInput, Button, Panel } from '@kletron/ui/components/design-system';
@@ -184,12 +184,12 @@ export default function AccountPage() {
         }
     };
 
-    const handleCopyToken = async () => {
+    const handleCopyToken = useCallback(async () => {
         if (!newToken) return;
         await navigator.clipboard.writeText(newToken);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-    };
+    }, [newToken]);
 
     const handleSignOut = async () => {
         await signOut();
@@ -219,7 +219,7 @@ export default function AccountPage() {
                 </p>
             </div>
         );
-    }, [newToken, copied]);
+    }, [newToken, copied, handleCopyToken]);
 
     return (
         <div className="flex w-full flex-col gap-6">

@@ -27,7 +27,7 @@ const StatusIcon = ({ blocked }: { blocked: boolean }) => {
 export function AutomationListSidebar() {
     const router = useRouter();
     const params = useParams();
-    const pathname = usePathname();
+    const _pathname = usePathname();
     const activeId = params?.id as string;
     const { activeWorkspaceId, activeWorkspace } = useWorkspace() ?? {};
 

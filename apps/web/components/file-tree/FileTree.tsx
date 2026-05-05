@@ -15,7 +15,7 @@ interface FileTreeProps {
     workspace: string;
 }
 
-export function FileTree({ workspace }: FileTreeProps) {
+export function FileTree({ workspace: _workspace }: FileTreeProps) {
     const [treeData, setTreeData] = useState<TreeNode[]>([]);
     const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 

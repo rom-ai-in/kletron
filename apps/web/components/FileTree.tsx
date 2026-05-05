@@ -16,7 +16,7 @@ interface FileTreeProps {
   workspace: string;
 }
 
-export function FileTree({ workspace }: FileTreeProps) {
+export function FileTree({ workspace: _workspace }: FileTreeProps) {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   
   // Mock file tree data

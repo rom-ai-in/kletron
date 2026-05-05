@@ -54,7 +54,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ filePath }) => {
                     if (!cancelled) {
                         setContent(result.value);
                         if (result.messages.length > 0) {
-                            console.log('Mammoth messages:', result.messages);
+                            console.info('Mammoth messages:', result.messages);
                         }
                     }
                 } else {

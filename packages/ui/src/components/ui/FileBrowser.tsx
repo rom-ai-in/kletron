@@ -188,7 +188,7 @@ export function FileBrowser({
         : tree;
 
     // Use onDirectoryExpand if provided, falling back to onDirectoryToggle
-    const handleDirectoryAction = onDirectoryExpand || onDirectoryToggle;
+    const _handleDirectoryAction = onDirectoryExpand || onDirectoryToggle;
 
     return (
         <div className={`flex flex-col h-full ${className}`}>

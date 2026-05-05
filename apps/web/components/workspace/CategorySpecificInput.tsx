@@ -36,7 +36,7 @@ interface InputProps {
   onSubmit: (e: React.FormEvent) => void;
 }
 
-const CodeModeInput = ({ value, onChange, onSubmit }: InputProps) => {
+const CodeModeInput = ({ value, onChange, onSubmit: _onSubmit }: InputProps) => {
   return (
     <div className="space-y-2">
       <textarea
@@ -60,7 +60,7 @@ const CodeModeInput = ({ value, onChange, onSubmit }: InputProps) => {
   );
 };
 
-const WorkModeInput = ({ value, onChange, onSubmit }: InputProps) => {
+const WorkModeInput = ({ value, onChange, onSubmit: _onSubmit }: InputProps) => {
   return (
     <div className="space-y-2">
       <textarea

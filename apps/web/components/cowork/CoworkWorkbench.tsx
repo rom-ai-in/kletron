@@ -26,7 +26,7 @@ export function CoworkWorkbench({ workspaceId, initialCategory = 'code' }: Cowor
     const [currentCategory, setCurrentCategory] = useState(initialCategory);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isConnected, setIsConnected] = useState(false);
+    const [isConnected, _setIsConnected] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // Load saved category from localStorage

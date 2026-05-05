@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Search, Command, ChevronRight, FileCode, Settings, Terminal, GitBranch, Folder } from 'lucide-react';
 
 export interface CommandItem {
@@ -73,6 +73,12 @@ export function CommandPalette({
         }
     }, [open]);
 
+    const handleSelect = useCallback((command: CommandItem) => {
+        command.action?.();
+        onSelect?.(command);
+        onClose();
+    }, [onClose, onSelect]);
+
     // Keyboard navigation
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -102,19 +108,13 @@ export function CommandPalette({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [open, filteredCommands, selectedIndex, onClose]);
+    }, [open, filteredCommands, selectedIndex, onClose, handleSelect]);
 
     // Scroll selected item into view
     useEffect(() => {
         const selectedEl = listRef.current?.querySelector(`[data-index="${selectedIndex}"]`);
         selectedEl?.scrollIntoView({ block: 'nearest' });
     }, [selectedIndex]);
-
-    const handleSelect = (command: CommandItem) => {
-        command.action?.();
-        onSelect?.(command);
-        onClose();
-    };
 
     if (!open) return null;
 

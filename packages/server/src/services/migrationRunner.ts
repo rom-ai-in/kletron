@@ -107,7 +107,7 @@ export class MigrationRunner {
     /**
      * Mark a migration as applied
      */
-    private async markAsApplied(filename: string): Promise<void> {
+    private async markAsApplied(_filename: string): Promise<void> {
         try {
             // In production, insert into applied migrations table
             // await db.query('INSERT INTO migrations_applied (migration) VALUES (?)', [filename]);

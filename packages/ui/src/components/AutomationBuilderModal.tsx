@@ -95,7 +95,10 @@ export function AutomationBuilderModal({
     apiFetch,
     connectorsHref = "/app/connectors",
 }: AutomationBuilderModalProps) {
-    const request = apiFetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
+    const request = useMemo(
+        () => apiFetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init)),
+        [apiFetch],
+    );
     const { activeWorkspaceId, activeWorkspace } = useWorkspace() ?? {};
     const [step, setStep] = useState<WizardStep>(1);
     const [loading, setLoading] = useState(false);
@@ -204,7 +207,7 @@ export function AutomationBuilderModal({
         void loadGraphs();
         void loadProviders();
         return () => { cancelled = true; };
-    }, []);
+    }, [request]);
 
     const stagesGraphSignature = useMemo(
         () => (automationData.stages ?? []).map((s) => s.graphId).join("|"),

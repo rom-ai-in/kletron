@@ -250,12 +250,12 @@ function StatusBadge({ type }: { type: 'modified' | 'created' | 'deleted' | 'ren
 
 export function GitPanel({
     status,
-    branches = [],
+    branches: _branches = [],
     loading,
     commitMessage = '',
     onCommitMessageChange,
     onCommit,
-    onBranchSwitch,
+    onBranchSwitch: _onBranchSwitch,
     onBranchCreate,
     onFileClick,
     onRefresh,

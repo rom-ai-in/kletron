@@ -2,7 +2,7 @@
 // Export authentication options for use in other routes
 import type { AuthOptions } from "next-auth";
 
-const { initializeTestUser, findTestUser, verifyPassword } = require('../lib/auth');
+const { initializeTestUser, findTestUser: _findTestUser, verifyPassword: _verifyPassword } = require('../lib/auth');
 
 export const getAuthOptions = async (): Promise<AuthOptions> => {
   // Initialize test user for development

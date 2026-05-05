@@ -105,12 +105,12 @@ async function generateProjectSoul(
     let packageJson = "";
     try {
         packageJson = await fs.readFile(path.join(rootDir, "package.json"), "utf-8");
-    } catch (e) { }
+    } catch { }
 
     let readme = "";
     try {
         readme = (await fs.readFile(path.join(rootDir, "README.md"), "utf-8")).slice(0, 2000); // Truncate
-    } catch (e) { }
+    } catch { }
 
     const prompt = `You are an expert software architect. Analyze the following project structure and metadata to define its "Soul".
 
@@ -143,7 +143,7 @@ async function generateProjectSoul(
         // Clean markdown code blocks if present
         const cleanJson = content.replace(/```json/g, "").replace(/```/g, "").trim();
         return JSON.parse(cleanJson);
-    } catch (e) {
+    } catch {
         console.error("Failed to parse LLM response for Soul", content);
         return {
             mission: "Analysis failed to generate mission.",

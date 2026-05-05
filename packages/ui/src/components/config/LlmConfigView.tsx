@@ -1162,7 +1162,7 @@ function LMStudioConfigForm({
   // Fetch models on mount and when baseUrl changes
   useEffect(() => {
     void fetchModels();
-  }, [formData.baseUrl]);
+  }, [formData.baseUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTest = async () => {
     setTesting(true);
@@ -1775,7 +1775,7 @@ function VLLMConfigForm({
   saving,
   isDirty,
   lastUpdatedAt,
-  onSave,
+  onSave: _onSave,
 }: {
   formData: Partial<VLLMConfig>;
   setFormData: React.Dispatch<React.SetStateAction<Partial<VLLMConfig>>>;
@@ -1853,7 +1853,7 @@ function VLLMConfigForm({
   const detectedContext = selectedModelInfo?.maxContextLength;
   const contextMax = detectedContext ?? undefined;
   const contextStep = contextMax && contextMax > 200000 ? 1024 : contextMax && contextMax > 50000 ? 512 : 128;
-  const formatBytes = (value?: number) => {
+  const _formatBytes = (value?: number) => {
     if (!value || value <= 0) return undefined;
     const units = ["B", "KB", "MB", "GB", "TB"];
     let size = value;
@@ -1979,7 +1979,7 @@ function VLLMConfigForm({
   // Fetch models on mount and when baseUrl changes
   useEffect(() => {
     void fetchModels();
-  }, [formData.baseUrl]);
+  }, [formData.baseUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTest = async () => {
     setTesting(true);

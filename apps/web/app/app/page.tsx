@@ -171,7 +171,7 @@ export default function AppDashboardPage() {
   const launchpadItems = useMemo(() => buildLaunchpadItems("/app/skills"), []);
   const [sessions, setSessions] = useState<ConversationHistoryItem[]>([]);
   const [runs, setRuns] = useState<AgentGraphRunSummary[]>([]);
-  const [graphs, setGraphs] = useState<AgentGraphSummary[]>([]);
+  const [_graphs, setGraphs] = useState<AgentGraphSummary[]>([]);
   const [vectorStatus, setVectorStatus] = useState<VectorStatus | null>(null);
   const [llmConfig, setLlmConfig] = useState<LlmConfig | null>(null);
   const [embeddingConfig, setEmbeddingConfig] = useState<EmbeddingConfig | null>(null);

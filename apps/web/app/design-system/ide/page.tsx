@@ -266,7 +266,7 @@ export default function FullIDELayout() {
     const [rightPanel, setRightPanel] = useState<"chat" | "runs" | "plan">("chat");
     const [input, setInput] = useState("");
     const [pendingEdits, setPendingEdits] = useState(mockPendingEdits);
-    const [isThinking, setIsThinking] = useState(false);
+    const [isThinking, _setIsThinking] = useState(false);
 
     const handleApprove = (id: string) => {
         setPendingEdits(prev => prev.filter(e => e.id !== id));

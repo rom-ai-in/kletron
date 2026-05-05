@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
     try {
         const payload = await request.json();
-        const { prefix, suffix, language, file, cursorLine } = payload as {
+        const { prefix, suffix, language, file, cursorLine: _cursorLine } = payload as {
             prefix: string;
             suffix: string;
             language: string;

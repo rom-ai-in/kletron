@@ -207,7 +207,7 @@ export function LLMSelector({
                     onClick={async () => {
                         setTesting(true);
                         try {
-                            const ok = await onTest();
+                            const _ok = await onTest();
                             // Result is visual — handled by caller
                         } finally {
                             setTesting(false);

@@ -37,7 +37,7 @@ function buildTree(currentPath: string, depth: number = 0, maxDepth: number = 5)
       let stats;
       try {
         stats = fs.statSync(fullPath);
-      } catch (e) {
+      } catch {
         continue;
       }
 
@@ -94,7 +94,7 @@ export async function GET(request: Request) {
     const response = NextResponse.json(tree);
     response.headers.set("Cache-Control", "no-store, max-age=0");
     return response;
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to build file tree" }, { status: 500 });
   }
 }

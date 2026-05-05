@@ -126,7 +126,7 @@ export default function DesignSystemAgentPage() {
                             createModelChip("gpt-4o"),
                             createTagChip("security"),
                         ]}
-                        onDismiss={(id) => console.log("dismiss", id)}
+                        onDismiss={(id) => console.info("dismiss", id)}
                     />
                 </DocCard>
                 <DocRules

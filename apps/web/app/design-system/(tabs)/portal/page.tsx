@@ -493,7 +493,7 @@ export default function DesignSystemPortalPage() {
                                 title="Feed"
                                 items={sampleThreads}
                                 activeId="thread-1"
-                                onSelect={(id) => console.log("select", id)}
+                                onSelect={(id) => console.info("select", id)}
                                 headerAction={<Button size="xs">New</Button>}
                                 footer={<span>7 total</span>}
                             />

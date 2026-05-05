@@ -118,7 +118,7 @@ export function generateExecutiveSummary(result: AgentWorkflowResult): string {
 export function createMarkdownReport(result: AgentWorkflowResult): string {
     const outputs = result.outputs || {};
     const timeline = result.timeline || [];
-    const events = result.eventStream || [];
+    const _events = result.eventStream || [];
 
     // Calculate metrics
     const metrics = calculateExecutionMetrics(timeline);
@@ -275,7 +275,7 @@ export function createSummary(result: AgentWorkflowResult): {
 export function createJsonReport(result: AgentWorkflowResult): any {
     const outputs = result.outputs || {};
     const timeline = result.timeline || [];
-    const events = result.eventStream || [];
+    const _events = result.eventStream || [];
 
     // Calculate metrics
     const metrics = calculateExecutionMetrics(timeline);

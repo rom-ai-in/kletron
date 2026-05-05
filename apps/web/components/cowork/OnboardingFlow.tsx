@@ -291,4 +291,4 @@ async function flushEvents() {
 }
 
 // Add timestamp to AnalyticsEvent
-type AnalyticsEventWithTimestamp = AnalyticsEvent & { timestamp: number };
+type _AnalyticsEventWithTimestamp = AnalyticsEvent & { timestamp: number };

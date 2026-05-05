@@ -22,7 +22,7 @@ export function CategorySelectorTest() {
           categories={categories}
           activeCategoryId={activeCategory}
           onCategorySelect={(categoryId) => {
-            console.log('Selected category:', categoryId);
+            console.info('Selected category:', categoryId);
             setActiveCategory(categoryId);
           }}
         />

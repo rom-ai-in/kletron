@@ -189,7 +189,7 @@ export class CategoryAwareErrorHandler {
     /**
      * Monitor for recurring errors
      */
-    private monitorRecurringErrors(classification: ErrorClassification): void {
+    private monitorRecurringErrors(_classification: ErrorClassification): void {
         // In production, this would track error frequency and trigger alerts
         // if errors occur too frequently
     }
@@ -264,14 +264,14 @@ export class CategoryAwareErrorHandler {
         return {
             code: {
                 file_access_error: {
-                    recover: async (error: ExecutionError) => ({
+                    recover: async (_error: ExecutionError) => ({
                         success: true,
                         message: 'Retrying file access with fallback path...',
                         suggestedAction: 'Check file permissions and path'
                     })
                 },
                 git_error: {
-                    recover: async (error: ExecutionError) => ({
+                    recover: async (_error: ExecutionError) => ({
                         success: false,
                         message: 'Git operation failed. Please check your repository status.',
                         suggestedAction: 'Verify git configuration and network connection'
@@ -280,21 +280,21 @@ export class CategoryAwareErrorHandler {
             },
             work: {
                 template_error: {
-                    recover: async (error: ExecutionError) => ({
+                    recover: async (_error: ExecutionError) => ({
                         success: true,
                         message: 'Using default template as fallback.',
                         suggestedAction: 'Check template files in workspace'
                     })
                 },
                 schedule_error: {
-                    recover: async (error: ExecutionError) => ({
+                    recover: async (_error: ExecutionError) => ({
                         success: false,
                         message: 'Scheduling failed. Automation will not run until fixed.',
                         suggestedAction: 'Check cron expression and system time'
                     })
                 },
                 connector_error: {
-                    recover: async (error: ExecutionError) => ({
+                    recover: async (_error: ExecutionError) => ({
                         success: false,
                         message: 'Connector authentication failed. Please re-authenticate.',
                         suggestedAction: 'Re-authenticate the affected connector'
@@ -303,14 +303,14 @@ export class CategoryAwareErrorHandler {
             },
             shared: {
                 llm_error: {
-                    recover: async (error: ExecutionError) => ({
+                    recover: async (_error: ExecutionError) => ({
                         success: false,
                         message: 'AI service temporarily unavailable. Retrying...',
                         suggestedAction: 'Check API status or try again later'
                     })
                 },
                 context_error: {
-                    recover: async (error: ExecutionError) => ({
+                    recover: async (_error: ExecutionError) => ({
                         success: true,
                         message: 'Context compressed to fit available space.',
                         suggestedAction: 'Consider breaking down complex tasks'
@@ -330,7 +330,7 @@ export class CategoryAwareErrorHandler {
     /**
      * Get default recovery strategy
      */
-    private getDefaultRecoveryStrategy(classification: ErrorClassification): RecoveryStrategy {
+    private getDefaultRecoveryStrategy(_classification: ErrorClassification): RecoveryStrategy {
         return {
             recover: async (error: ExecutionError) => ({
                 success: false,

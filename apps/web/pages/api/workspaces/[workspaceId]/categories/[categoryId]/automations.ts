@@ -35,7 +35,7 @@ async function handleGetCategoryAutomations(
     res: NextApiResponse
 ) {
     try {
-        const { workspaceId, categoryId } = req.query;
+        const { workspaceId: _workspaceId, categoryId } = req.query;
         
         // In production, get automations from database for this workspace and category
         const automations = [

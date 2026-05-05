@@ -10,7 +10,7 @@ interface ConversationMetadata {
     lastRole?: 'user' | 'assistant' | 'system' | 'tool';
 }
 
-interface PendingEdit {
+interface _PendingEdit {
     conversationId: string;
 }
 
@@ -20,7 +20,7 @@ export interface ConversationListProps {
     onNew: () => void;
 }
 
-export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, currentId, onNew }) => {
+export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, currentId, onNew: _onNew }) => {
     const [conversations, setConversations] = useState<ConversationMetadata[]>([]);
     const [pendingEditCounts, setPendingEditCounts] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(false);

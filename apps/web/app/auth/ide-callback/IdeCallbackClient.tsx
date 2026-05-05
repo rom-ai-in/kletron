@@ -32,12 +32,12 @@ export default function IdeCallbackClient() {
     useEffect(() => {
         async function handleCallback() {
             try {
-                console.log('[IDE Callback] Starting callback handling...');
+                console.info('[IDE Callback] Starting callback handling...');
 
                 // Get device session ID from URL (passed from IDE when opening login page)
                 const deviceSessionId = searchParams?.get('deviceSessionId');
                 const redirectUri = searchParams?.get('redirectUri');
-                console.log('[IDE Callback] Device session ID:', deviceSessionId);
+                console.info('[IDE Callback] Device session ID:', deviceSessionId);
 
                 // Exchange session for IDE tokens
                 const response = await fetch('/api/auth/ide-auth', {
@@ -46,7 +46,7 @@ export default function IdeCallbackClient() {
                 });
 
                 const data: TokenResponse = await response.json();
-                console.log('[IDE Callback] Token response:', {
+                console.info('[IDE Callback] Token response:', {
                     success: data.success,
                     hasAccessToken: !!data.accessToken,
                     hasRefreshToken: !!data.refreshToken,
@@ -62,7 +62,7 @@ export default function IdeCallbackClient() {
                 // If we have a device session ID, store the session for polling
                 // This is the fallback for when deep links don't work
                 if (deviceSessionId) {
-                    console.log('[IDE Callback] Storing session for device polling...');
+                    console.info('[IDE Callback] Storing session for device polling...');
                     try {
                         await fetch('/api/auth/ide-session', {
                             method: 'POST',
@@ -74,7 +74,7 @@ export default function IdeCallbackClient() {
                                 fullName: data.user?.fullName,
                             }),
                         });
-                        console.log('[IDE Callback] Session stored, IDE can poll for tokens');
+                        console.info('[IDE Callback] Session stored, IDE can poll for tokens');
                     } catch (err) {
                         console.warn('[IDE Callback] Failed to store session for polling:', err);
                     }
@@ -98,8 +98,8 @@ export default function IdeCallbackClient() {
                 }
 
                 const ideUrl = `kletron://kletron.auth/callback?${params.toString()}`;
-                console.log('[IDE Callback] Deep link URL generated:', ideUrl.substring(0, 100) + '...');
-                console.log('[IDE Callback] Full URL length:', ideUrl.length);
+                console.info('[IDE Callback] Deep link URL generated:', ideUrl.substring(0, 100) + '...');
+                console.info('[IDE Callback] Full URL length:', ideUrl.length);
 
                 setRedirectUrl(ideUrl);
 
@@ -125,9 +125,9 @@ export default function IdeCallbackClient() {
                 setState('success');
 
                 // Auto-redirect to IDE after a short delay
-                console.log('[IDE Callback] Will redirect in 1 second...');
+                console.info('[IDE Callback] Will redirect in 1 second...');
                 setTimeout(() => {
-                    console.log('[IDE Callback] Redirecting now via window.location.href');
+                    console.info('[IDE Callback] Redirecting now via window.location.href');
                     if (resolvedLoopbackUrl) {
                         window.location.href = resolvedLoopbackUrl;
                     } else {

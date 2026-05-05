@@ -71,7 +71,7 @@ export class ContextScanner {
     console.log(`[ContextScanner] Scan complete: ${nodes.size} nodes`);
 
     store.clear();
-    for (const [id, node] of nodes) {
+    for (const [_id, node] of nodes) {
       store.addNode(node);
     }
 

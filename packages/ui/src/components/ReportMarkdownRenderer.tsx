@@ -58,7 +58,7 @@ export function ReportMarkdownRenderer({ content, className = "" }: { content: s
                         <blockquote className="my-2 border-l-2 border-border-strong pl-3 text-xs italic text-text-muted">{children}</blockquote>
                     ),
                     hr: () => <hr className="my-4 border-border-subtle" />,
-                    code: ({ inline, className, children, ...props }: any) => {
+                    code: ({ inline, className: _className, children, ...props }: any) => {
                         if (inline) {
                             return <code className="rounded bg-bg-elevated px-1 py-0.5 text-[10px] font-mono text-text-primary" {...props}>{children}</code>;
                         }

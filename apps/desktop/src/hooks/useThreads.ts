@@ -313,7 +313,6 @@ export function useThreads(
       console.warn("[useThreads] Thread status poll failed", err);
     }
   }, [
-    backendUrlTrimmed,
     backendReady,
     getAccessToken,
     threads.length,

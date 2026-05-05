@@ -119,8 +119,8 @@ export function ProjectUtilitySidebar({
   const [diffsCollapsed, setDiffsCollapsed] = useState(false);
   const [filesCollapsed, setFilesCollapsed] = useState(true);
 
-  const stagedFiles = gitData?.staged ?? [];
-  const unstagedFiles = gitData?.unstaged ?? [];
+  const stagedFiles = useMemo(() => gitData?.staged ?? [], [gitData?.staged]);
+  const unstagedFiles = useMemo(() => gitData?.unstaged ?? [], [gitData?.unstaged]);
   const totalStaged = stagedFiles.length;
   const totalUnstaged = unstagedFiles.length;
 

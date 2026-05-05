@@ -16,7 +16,7 @@ export interface IdeDeviceSession {
 }
 
 const COLLECTION_NAME = 'ide_device_sessions';
-const DEVICE_SESSION_TTL_MS = 10 * 60 * 1000;
+const _DEVICE_SESSION_TTL_MS = 10 * 60 * 1000;
 
 const memorySessions = new Map<string, IdeDeviceSession>();
 let warnedNoDb = false;

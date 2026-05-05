@@ -46,7 +46,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
     if (token) h.Authorization = `Bearer ${token}`;
     if (activeWorkspaceId) h["x-workspace-id"] = activeWorkspaceId;
     return h;
-  }, [auth.getAccessToken, activeWorkspaceId]);
+  }, [auth, activeWorkspaceId]);
 
   const openPortalPath = useCallback((path: string) => {
     try {

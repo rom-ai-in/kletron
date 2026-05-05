@@ -15,7 +15,7 @@ export async function acquireLock(name: string, ttlMs = 5 * 60 * 1000): Promise<
 
     // Using findOneAndUpdate with $setOnInsert acts as an atomic "insert if not exists"
     // We also check if the existing lock is expired (expiresAt < now)
-    const result = await coll.findOneAndUpdate(
+    const _result = await coll.findOneAndUpdate(
         {
             _id: name as any,
             $or: [

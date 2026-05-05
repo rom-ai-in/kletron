@@ -32,7 +32,7 @@ export function FolderTreePicker({ value, onChange, placeholder, workspaceId }: 
         if (isOpen && tree.length === 0) {
             void fetchNode("");
         }
-    }, [isOpen]);
+    }, [isOpen, tree.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Reset tree when workspace changes
     useEffect(() => {

@@ -310,7 +310,7 @@ export async function gitPush(workspacePath: string, remote = "origin", branch?:
   const git = getGit(workspacePath);
   const status = await git.status();
   const targetBranch = branch || status.current || "main";
-  const result = await git.push(remote, targetBranch, ["--set-upstream"]);
+  const _result = await git.push(remote, targetBranch, ["--set-upstream"]);
   // result.pushed is an array of push details
   return `Pushed to ${remote}/${targetBranch}`;
 }

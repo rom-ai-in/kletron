@@ -61,7 +61,7 @@ export function useProjects(workspacePath?: string | null, workspaceName?: strin
 
         if (dirty) persistProjects(parsed);
         setProjects(parsed);
-        if (parsed.length > 0 && !activeProjectId) {
+        if (parsed.length > 0) {
           setActiveProjectId(parsed[0].id);
         }
       }

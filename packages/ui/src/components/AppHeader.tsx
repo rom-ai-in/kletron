@@ -13,7 +13,7 @@ export function AppHeader() {
     workspaces,
     activeWorkspaceId,
     loading: workspaceLoading,
-    hasWorkspaceHealthIssues,
+    hasWorkspaceHealthIssues: _hasWorkspaceHealthIssues,
     switchWorkspace,
   } = useWorkspace();
 

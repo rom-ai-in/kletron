@@ -77,7 +77,6 @@ export class CategoryWorkflowRunner {
     const {
       userInput,
       category,
-      workspaceId,
       workspacePath,
       activeFiles,
       recentEdits,
@@ -144,7 +143,7 @@ export class CategoryWorkflowRunner {
    * Run a workflow with automatic category detection.
    */
   async runAutoCategory(options: Omit<RunWithCategoryOptions, 'category'>): Promise<WorkflowRunResult> {
-    const { userInput, workspacePath, activeFiles, recentEdits, customSystemPrompt, onProgress } = options;
+    const { userInput, onProgress } = options;
 
     // Determine category automatically
     const inference = categoryRouter.determineCategory(userInput);
@@ -159,7 +158,7 @@ export class CategoryWorkflowRunner {
   /**
    * Determine the appropriate category for a user input.
    */
-  determineCategory(input: string, availableCategories?: WorkCategory[]): WorkCategoryId {
+  determineCategory(input: string, _availableCategories?: WorkCategory[]): WorkCategoryId {
     const inference = categoryRouter.determineCategory(input);
     return normalizeToWorkModeId(String(inference.category));
   }
@@ -177,7 +176,6 @@ export class CategoryWorkflowRunner {
       return 'You are a helpful AI assistant.';
     }
 
-    const basePrompt = categoryConfig.promptTemplate || `You are working in "${categoryConfig.name}" mode.`;
     const rolePrompt = categoryPromptEngine.getCategoryRole(category);
 
     let prompt = `You are${rolePrompt}\n\n`;

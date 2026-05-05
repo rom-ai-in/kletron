@@ -47,7 +47,7 @@ export async function saveTenantToolApprovalConfig(
     const existing = await collection.findOne({ tenantId: tid });
     const base = existing
         ? (() => {
-              const { _id, tenantId: _t, updatedAt, createdAt, ...rest } = existing as TenantToolApprovalDoc &
+              const { _id, tenantId: _t, updatedAt: _updatedAt, createdAt: _createdAt, ...rest } = existing as TenantToolApprovalDoc &
                   Record<string, unknown>;
               return rest as ToolApprovalConfig;
           })()

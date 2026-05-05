@@ -324,7 +324,7 @@ export function VectorIndexPanel({
                 setSearchError(data.error || "Search failed");
                 setSearchResults([]);
             }
-        } catch (error) {
+        } catch {
             setSearchError("Failed to connect to search API.");
             setSearchResults([]);
         } finally {
@@ -332,7 +332,7 @@ export function VectorIndexPanel({
         }
     };
 
-    const getHealthColor = () => {
+    const _getHealthColor = () => {
         if (healthStatus === 'success') return 'emerald';
         if (healthStatus === 'error') return 'rose';
         if (healthStatus === 'loading') return 'amber';

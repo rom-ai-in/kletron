@@ -142,7 +142,7 @@ export default function PricingPage() {
     const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
     const [openFaq, setOpenFaq] = useState<number | null>(null);
     const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-    const [checkoutError, setCheckoutError] = useState<string | null>(null);
+    const [_checkoutError, setCheckoutError] = useState<string | null>(null);
 
     const getPrice = (basePrice: string) => {
         if (basePrice === '0') return '0';

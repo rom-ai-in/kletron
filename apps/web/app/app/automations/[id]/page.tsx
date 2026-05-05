@@ -177,7 +177,7 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
         setExecutionContextError("");
         setError("");
         void fetchAutomation();
-    }, [params.id, activeWorkspaceId]);
+    }, [params.id, activeWorkspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const fetchAutomation = async () => {
         setLoadingAutomation(true);
@@ -613,7 +613,7 @@ function AutomationThreadsList({ automationId }: { automationId: string }) {
 
     useEffect(() => {
         void fetchThreads();
-    }, [automationId, activeWorkspaceId]);
+    }, [automationId, activeWorkspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (loading) {
         return (

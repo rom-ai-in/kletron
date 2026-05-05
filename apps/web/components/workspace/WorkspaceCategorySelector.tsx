@@ -12,7 +12,7 @@ interface WorkspaceCategorySelectorProps {
 export const WorkspaceCategorySelector = ({
     currentCategory,
     onSelect,
-    workspaceId
+    workspaceId: _workspaceId
 }: WorkspaceCategorySelectorProps) => {
     const [isOpen, setIsOpen] = useState(false);
     

@@ -89,12 +89,12 @@ export default function SecurityPage() {
 
     const handleRevokeSession = async (sessionId: string) => {
         // TODO: Implement session revocation API
-        console.log('Revoking session:', sessionId);
+        console.info('Revoking session:', sessionId);
     };
 
     const handleRevokeAllSessions = async () => {
         // TODO: Implement revoke all sessions API
-        console.log('Revoking all sessions');
+        console.info('Revoking all sessions');
     };
 
     return (

@@ -24,7 +24,7 @@ export class WorkspaceSkillsManager {
    */
   async getSkillsForCategory(
     category: WorkCategoryConfig,
-    workspaceId?: string
+    _workspaceId?: string
   ): Promise<ResolvedSkill[]> {
     // Start with required tools from category
     const requiredToolNames = category.availableTools || [];

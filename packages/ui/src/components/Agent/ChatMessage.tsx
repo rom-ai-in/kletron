@@ -66,7 +66,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     timestamp,
     actions,
     className,
-    showCopy,
+    showCopy: _showCopy,
     showTimestamp,
 }) => {
     const isUser = role === 'user';

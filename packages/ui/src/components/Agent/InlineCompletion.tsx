@@ -17,8 +17,8 @@ export interface InlineCompletionProps {
 export function InlineCompletion({
     text,
     visible = true,
-    onAccept,
-    onDismiss,
+    onAccept: _onAccept,
+    onDismiss: _onDismiss,
     className = '',
 }: InlineCompletionProps) {
     if (!visible || !text) return null;
@@ -108,8 +108,8 @@ export interface MultiLineCompletionProps {
 export function MultiLineCompletion({
     lines,
     visible = true,
-    onAccept,
-    onDismiss,
+    onAccept: _onAccept,
+    onDismiss: _onDismiss,
     className = '',
 }: MultiLineCompletionProps) {
     if (!visible || lines.length === 0) return null;

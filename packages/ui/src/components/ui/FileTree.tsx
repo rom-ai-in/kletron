@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
     ChevronRight, ChevronDown, File, Folder, FolderOpen,
     FileCode, FileJson, FileText, FileImage, Cog
@@ -177,9 +177,10 @@ export function FileTree({
     const [internalExpanded, setInternalExpanded] = useState<Set<string>>(new Set());
 
     // Use controlled or internal state
-    const expandedSet = controlledExpandedIds
-        ? new Set(controlledExpandedIds)
-        : internalExpanded;
+    const expandedSet = useMemo(
+        () => (controlledExpandedIds ? new Set(controlledExpandedIds) : internalExpanded),
+        [controlledExpandedIds, internalExpanded],
+    );
 
     const handleToggle = useCallback((nodeId: string) => {
         const newExpanded = !expandedSet.has(nodeId);

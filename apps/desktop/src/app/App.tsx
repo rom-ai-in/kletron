@@ -190,7 +190,7 @@ export default function App() {
     if (token) h.Authorization = `Bearer ${token}`;
     if (activeWorkspaceId) h["x-workspace-id"] = activeWorkspaceId;
     return h;
-  }, [auth.getAccessToken, activeWorkspaceId]);
+  }, [auth, activeWorkspaceId]);
 
   const agentSession = useAgentSession({
     apiOrigin: backendUrlTrimmed,
@@ -478,7 +478,7 @@ export default function App() {
   useEffect(() => {
     if (!backendReady || !activeWorkspaceId) return;
     void threads.loadArchivedThreads();
-  }, [backendReady, activeWorkspaceId, threads.loadArchivedThreads]);
+  }, [backendReady, activeWorkspaceId, threads.loadArchivedThreads]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const applyHash = () => {
@@ -491,7 +491,7 @@ export default function App() {
     applyHash();
     window.addEventListener("hashchange", applyHash);
     return () => window.removeEventListener("hashchange", applyHash);
-  }, [settings.setActiveView]);
+  }, [settings.setActiveView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const api = (window as {
@@ -503,7 +503,7 @@ export default function App() {
     return api.onNavigate((view) => {
       settings.setActiveView(view);
     });
-  }, [settings.setActiveView]);
+  }, [settings.setActiveView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Deep link: ?view= & ?automationId= & ?graphId= (once per load). */
   const deepLinkAppliedRef = useRef(false);
@@ -529,7 +529,7 @@ export default function App() {
     } catch {
       /* ignore */
     }
-  }, [backendReady, auth.auth?.accessToken, settings.setActiveView, openPortalPath]);
+  }, [backendReady, auth.auth?.accessToken, settings.setActiveView, openPortalPath]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Deep link: ?sessionId= opens that thread (hash routes like #/automations are separate). */
   const sessionIdFromUrlApplied = useRef<string | null>(null);
@@ -612,6 +612,7 @@ export default function App() {
     threads.archivedThreads,
     threads.conversationId,
     conversation.runActive,
+    conversation.sessionStatus,
     workspace.workspace?.path,
     workspace.workspace?.name,
   ]);
@@ -799,7 +800,7 @@ export default function App() {
       },
     ];
     return [...fromLibrary, ...builtin];
-  }, [slashSkillRows, conversation.setInput, settings]);
+  }, [slashSkillRows, conversation.setInput, settings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ═══════════════════════════════════════════════════════════════════════════
   // HANDLERS
@@ -933,7 +934,7 @@ export default function App() {
       resetComposerForWorkModeChange();
       toast.info("Switched mode", WORK_MODES[mode].name);
     },
-    [categoriesHook.activeCategory, categoriesHook.setActiveCategory, resetComposerForWorkModeChange, toast],
+    [categoriesHook.activeCategory, categoriesHook.setActiveCategory, resetComposerForWorkModeChange, toast], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const toggleWorkMode = useCallback(() => {
@@ -942,7 +943,7 @@ export default function App() {
     void categoriesHook.setActiveCategory(next);
     resetComposerForWorkModeChange();
     toast.info("Switched mode", WORK_MODES[next].name);
-  }, [categoriesHook.activeCategory, categoriesHook.setActiveCategory, toast, resetComposerForWorkModeChange]);
+  }, [categoriesHook.activeCategory, categoriesHook.setActiveCategory, toast, resetComposerForWorkModeChange]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAddProjectRef = useRef(handleAddProject);
   handleAddProjectRef.current = handleAddProject;
@@ -2171,7 +2172,7 @@ export default function App() {
           <ProjectUtilitySidebar
             fileLinks={fileLinks}
             pendingDiffs={pendingDiffItems}
-            onOpenDiff={(editId) => {
+            onOpenDiff={(_editId) => {
               // Scroll to diff in conversation
             }}
             onAcceptDiff={(editId) => diffs.applyAllDiff(editId)}
@@ -2191,7 +2192,7 @@ export default function App() {
             onGitUnstageAll={() => git.unstageAll()}
             onGitRevertFile={(p) => git.revertFile(p)}
             onGitRevertAll={() => git.revertAll()}
-            onViewFileDiff={(file, staged) => {
+            onViewFileDiff={(_file, _staged) => {
               // When clicking a file in the sidebar, open it in the changes panel
               setChangesVisible(true);
               void git.fetchAllDiffs();

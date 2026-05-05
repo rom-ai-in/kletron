@@ -64,7 +64,7 @@ function getFetchAllowlist() {
         return data.fetchAllowlist;
       }
     }
-  } catch (e) {
+  } catch {
     // Fall through to env vars
   }
   // Fallback to env var

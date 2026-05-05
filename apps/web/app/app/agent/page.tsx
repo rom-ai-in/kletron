@@ -350,7 +350,7 @@ const AgentComposer = memo(function AgentComposer({
       },
     ];
     return [...fromLibrary, ...builtin];
-  }, [slashSkillRows, onPlanModeToggle, router, activeWorkspaceId]);
+  }, [slashSkillRows, onPlanModeToggle, router]);
 
   useEffect(() => {
     setDraft("");
@@ -560,7 +560,6 @@ export default function AgentPage() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [messageQueue, setMessageQueue] = useState<QueuedMessageItem[]>([]);
-  const [addWorkspaceOpen, setAddWorkspaceOpen] = useState(false);
   const [composerPrefill, setComposerPrefill] = useState<string | null>(null);
   const [historyPage, setHistoryPage] = useState({
     total: 0,
@@ -589,7 +588,6 @@ export default function AgentPage() {
     error: workspaceError,
     switchWorkspace,
     refreshWorkspaces,
-    deleteWorkspace: deleteWorkspaceCtx,
   } = useWorkspace();
 
   // ── Code vs Work mode (per workspace, persisted server + local mirror) ──
@@ -1136,7 +1134,7 @@ export default function AgentPage() {
       void loadSessionDetail(activeSessionId, { mergeMessages: true });
     }, 2000);
     return () => window.clearInterval(id);
-  }, [activeSessionId, sessionDetail?.id, sessionDetail?.status, sending, loadSessionDetail]);
+  }, [activeSessionId, sessionDetail, sending, loadSessionDetail]);
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -1760,20 +1758,7 @@ export default function AgentPage() {
     />
   );
 
-  const memoSidebar = useMemo(() => sidebar, [
-    sidebarProjects,
-    activeSessionId,
-    activeWorkspaceId,
-    workspaceSwitching,
-    sessionsLoading,
-    workMode,
-    handleWorkModeSelect,
-    handleSelectSession,
-    handleNewSessionInActiveWorkspace,
-    handleRenameSession,
-    handleArchiveSession,
-    handleDeleteSession,
-  ]);
+  const memoSidebar = sidebar;
 
   const mainContent = (
     <div className="flex min-h-0 flex-1 flex-col">

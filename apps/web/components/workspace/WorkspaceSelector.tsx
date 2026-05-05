@@ -8,7 +8,7 @@ interface Workspace {
     name: string;
 }
 
-interface Category {
+interface _Category {
     id: string;
     name: string;
     icon?: string;
@@ -19,7 +19,7 @@ interface WorkspaceSelectorProps {
     showCategories?: boolean;
 }
 
-export function WorkspaceSelector({ showCategories = false }: WorkspaceSelectorProps) {
+export function WorkspaceSelector({ showCategories: _showCategories = false }: WorkspaceSelectorProps) {
     const router = useRouter();
     const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
     const [isOpen, setIsOpen] = useState(false);

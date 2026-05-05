@@ -12,16 +12,6 @@ export function useFileExplorer(workspacePath: string | null) {
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Load root files on workspace change
-  useEffect(() => {
-    if (!workspacePath) {
-      setFiles([]);
-      setExpandedPaths(new Set());
-      return;
-    }
-    void loadDirectory("");
-  }, [workspacePath]);
-
   const loadDirectory = useCallback(async (relativePath: string) => {
     if (!workspacePath) return;
     try {
@@ -44,6 +34,16 @@ export function useFileExplorer(workspacePath: string | null) {
       setLoading(false);
     }
   }, [workspacePath]);
+
+  // Load root files on workspace change
+  useEffect(() => {
+    if (!workspacePath) {
+      setFiles([]);
+      setExpandedPaths(new Set());
+      return;
+    }
+    void loadDirectory("");
+  }, [workspacePath, loadDirectory]);
 
   async function toggleDirectory(dirPath: string) {
     setExpandedPaths((prev) => {
@@ -152,7 +152,7 @@ export function useFileExplorer(workspacePath: string | null) {
   function closeFile(filePath: string) {
     setOpenFiles((prev) => prev.filter((f) => f.path !== filePath));
     if (activeFileId === filePath) {
-      setActiveFileId((prev) => {
+      setActiveFileId((_prev) => {
         const remaining = openFiles.filter((f) => f.path !== filePath);
         return remaining.length > 0 ? remaining[remaining.length - 1].path : null;
       });

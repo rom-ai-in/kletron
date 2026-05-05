@@ -128,7 +128,7 @@ export class CategorySpecificToolSelector {
   /**
    * Check if a tool can be auto-executed (no approval needed).
    */
-  private isAutoExecute(toolName: string, mode: WorkModeId): boolean {
+  private isAutoExecute(toolName: string, _mode: WorkModeId): boolean {
     // Read-only tools are always auto-executable
     const readOnlyTools = ['list_files', 'read_file', 'read_file_range', 'search_code', 'git_log', 'git_diff', 'git_blame', 'git_grep'];
     if (readOnlyTools.includes(toolName)) {

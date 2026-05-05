@@ -71,7 +71,7 @@ async function demonstrateWorkspaceIntegration() {
     
     // Show available tools for this workspace
     console.log("\n🛠️  Available tools for this workspace:");
-    const allTools = await import("./apps/mcp-server/server.js");
+    const _allTools = await import("./apps/mcp-server/server.js");
     const workspaceTools = await workspaceSkillsManager.getActiveToolsForWorkspace(demoWorkspace);
     
     console.log("   Base coding tools:", Object.keys(workspaceTools).filter(t => 

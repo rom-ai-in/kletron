@@ -455,7 +455,7 @@ function ContextConfigViewInner() {
           // Legacy format - wrap it
           setRepoGraphData(parsed);
         }
-      } catch (e) {
+      } catch {
         /* ignore */
       }
     }

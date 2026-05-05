@@ -138,7 +138,7 @@ export const useGhostText = (
         // `editor.addCommand` adds a global command for that editor instance.
         // We can check context inside the callback.
 
-        const disposable = editor.addCommand(9, () => { // 9 is KeyCode.Tab (checking monaco enums)
+        const _disposable = editor.addCommand(9, () => { // 9 is KeyCode.Tab (checking monaco enums)
             // Check if cursor is near a diff
             const position = editor.getPosition();
             if (!position) return;

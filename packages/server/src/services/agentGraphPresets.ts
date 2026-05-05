@@ -2,7 +2,7 @@ import type { AgentGraphDefinition, AgentGraphNode } from "./agentGraphTypes";
 
 export const simpleReactPhaseId = "simple_react";
 export const simpleReactPhaseLabel = "Agent (ReAct)";
-const TOOL_PREFERENCE_GUIDANCE = [
+const _TOOL_PREFERENCE_GUIDANCE = [
   "Tooling guidance:",
   "- Prefer list_files/read_file/search_code/git_grep/semantic_code_search before execute_bash.",
   "- Use execute_bash only when a shell pipeline is truly required.",
@@ -1001,13 +1001,13 @@ const CURSOR_RESEARCH_TOOLS = [
   "fetch_url"
 ];
 
-const CURSOR_CODER_TOOLS = [
+const _CURSOR_CODER_TOOLS = [
   ...CURSOR_CORE_TOOLS,
   "write_file",
   "str_replace_editor"
 ];
 
-const CURSOR_JSON_RULES = [
+const _CURSOR_JSON_RULES = [
   "Return ONLY a JSON object.",
   "No markdown, no backticks, no extra text.",
   "Do not echo instructions or the schema.",

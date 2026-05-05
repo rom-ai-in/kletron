@@ -278,7 +278,7 @@ export class CategoryPromptEngine {
       gitBranch?: string;
       gitStatus?: string;
     },
-    category: WorkCategoryId,
+    _category: WorkCategoryId,
   ): string {
     const parts: string[] = [];
 

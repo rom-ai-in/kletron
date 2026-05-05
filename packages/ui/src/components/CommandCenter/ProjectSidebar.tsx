@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { cn } from '../../lib/utils';
 import {
@@ -163,7 +163,7 @@ export function ProjectSidebar({
   /** Per-project expanded state for the Archived block (default collapsed). */
   const [archivedExpandedProjects, setArchivedExpandedProjects] = useState<Set<string>>(() => new Set());
 
-  const recencyNow = useMemo(() => new Date(), [projects, loading, threadFilter]);
+  const recencyNow = new Date();
 
   /** One workspace / folder — hide redundant project name row (shown in shell search). */
   const singleWorkspaceProject = projects.length === 1;

@@ -122,7 +122,7 @@ export default function NotificationsPage() {
                 </div>
                 <Switch
                     checked={setting.enabled}
-                    onChange={(checked) => {
+                    onChange={(_checked) => {
                         if (!isLocked) {
                             toggleSetting(setting.id);
                         }

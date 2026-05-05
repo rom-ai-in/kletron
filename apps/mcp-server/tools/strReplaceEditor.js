@@ -11,7 +11,7 @@ const MAX_FILE_SIZE_BYTES = 256 * 1024; // 256KB
 const BLOCKED_EXTENSIONS = [".env", ".DS_Store"];
 const BLOCKED_FILENAMES = [".git", ".env", ".npmrc", "package-lock.json", "yarn.lock"];
 
-function enforceWritePolicy(resolvedFilePath, resolvedRoot) {
+function enforceWritePolicy(resolvedFilePath, _resolvedRoot) {
   const basename = path.basename(resolvedFilePath);
   if (BLOCKED_FILENAMES.includes(basename)) {
     throw new Error(`Security: Writing to sensitive file '${basename}' is blocked.`);
@@ -154,7 +154,7 @@ async function cmdStrReplace(root, resolvedFilePath, { old_str, new_str }) {
   let content;
   try {
     content = await fs.readFile(resolvedFilePath, "utf-8");
-  } catch (e) {
+  } catch {
     return { ok: false, error: `File not found: ${path.relative(root, resolvedFilePath)}` };
   }
 
@@ -224,7 +224,7 @@ async function cmdInsert(root, resolvedFilePath, { insert_line, new_str }) {
   let content;
   try {
     content = await fs.readFile(resolvedFilePath, "utf-8");
-  } catch (e) {
+  } catch {
     return { ok: false, error: `File not found: ${path.relative(root, resolvedFilePath)}` };
   }
 

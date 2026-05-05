@@ -591,7 +591,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                         }
                     } else if (chunk.type === "final") {
                         // Final chunk logging (replaces debug-fetch instrumentation)
-                        console.debug('[useSessionStream] Final chunk received', { eventStreamCount: chunk.payload.eventStream?.length ?? 0 });
+                        console.info('[useSessionStream] Final chunk received', { eventStreamCount: chunk.payload.eventStream?.length ?? 0 });
                         cancelStreamFlush();
                         streamFlushRafRef.current = null;
                         setStreamingText(streamingTextRef.current);

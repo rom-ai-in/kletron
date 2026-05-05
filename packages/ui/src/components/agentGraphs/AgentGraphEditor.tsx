@@ -155,7 +155,10 @@ export function AgentGraphEditor({
     /** New nodes use Code-style tools (full repo/git/bash) or Work-mode allowlist (shared `WORK_MODE_TOOL_ALLOWLIST`). */
     defaultToolPalette?: "code" | "work";
 }) {
-    const request = apiFetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
+    const request = useMemo(
+        () => apiFetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init)),
+        [apiFetch],
+    );
     const [nodes, setNodes] = useState<AgentGraphDto["nodes"]>(() => initialGraph.nodes ?? []);
     const [edges, setEdges] = useState<AgentGraphDto["edges"]>(() => normalizeEdges(initialGraph.edges ?? []));
     const [execution, setExecution] = useState<AgentGraphDto["execution"]>(() => ({
@@ -338,7 +341,7 @@ export function AgentGraphEditor({
         return () => {
             if (saveTimer.current) window.clearTimeout(saveTimer.current);
         };
-    }, [nodes, edges, execution, stateDefaults, graphId]);
+    }, [nodes, edges, execution, stateDefaults, graphId, request]);
 
     const handleResetToDefault = async () => {
         if (!confirm("Reset all nodes to default prompts and tools? This cannot be undone.")) return;

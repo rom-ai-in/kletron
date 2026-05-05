@@ -11,7 +11,7 @@ export const hashPassword = async (password: string): Promise<string> => {
   try {
     const bcrypt = require('bcrypt');
     return await bcrypt.hash(password, 10);
-  } catch (err) {
+  } catch {
     // Fallback to simple hash for development/testing
     let hash = '';
     for (let i = 0; i < password.length; i++) {
@@ -26,7 +26,7 @@ export const verifyPassword = async (password: string, hash: string): Promise<bo
   try {
     const bcrypt = require('bcrypt');
     return await bcrypt.compare(password, hash);
-  } catch (err) {
+  } catch {
     // Fallback verification for development hash
     let computedHash = '';
     for (let i = 0; i < password.length; i++) {
@@ -40,7 +40,7 @@ export const verifyPassword = async (password: string, hash: string): Promise<bo
 export const initializeTestUser = async () => {
   if (!testUserPasswordHash) {
     testUserPasswordHash = await hashPassword(TEST_USER_PASSWORD);
-    console.log('✓ Test user initialized in memory');
+    console.info('✓ Test user initialized in memory');
   }
 };
 

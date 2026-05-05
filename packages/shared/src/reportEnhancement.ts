@@ -13,7 +13,7 @@ import type { AgentWorkflowResult, Finding } from "./types";
 export function createHtmlReport(result: AgentWorkflowResult): string {
     const outputs = result.outputs || {};
     const timeline = result.timeline || [];
-    const events = result.eventStream || [];
+    const _events = result.eventStream || [];
 
     // Calculate metrics
     let totalInputTokens = 0;
@@ -608,7 +608,7 @@ export function createReportBundle(result: AgentWorkflowResult): {
 function createMarkdownReport(result: AgentWorkflowResult): string {
     const outputs = result.outputs || {};
     const timeline = result.timeline || [];
-    const events = result.eventStream || [];
+    const _events = result.eventStream || [];
 
     let totalInputTokens = 0;
     let totalOutputTokens = 0;

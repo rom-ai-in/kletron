@@ -181,7 +181,7 @@ export function useConversation(
     if (d.researchDepth != null) {
       setResearchDepth(normalizeResearchDepth(d.researchDepth));
     }
-  }, [conversationId, agentThread.sessionDetail?.id, agentThread.sessionDetail?.researchDepth]);
+  }, [conversationId, agentThread.sessionDetail]);
 
   const prevStreamStatusRef = useRef(stream.streamStatus);
   useEffect(() => {

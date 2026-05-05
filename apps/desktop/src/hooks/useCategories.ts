@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { WORK_MODES, normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode";
 
 // ============================================================================
@@ -78,6 +78,8 @@ export function useCategories(sync?: UseCategoriesSync) {
   const [activeCategory, setActiveCategoryState] = useState<WorkModeId>("code");
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
   const [categoryHistory, setCategoryHistory] = useState<WorkModeId[]>(["code"]);
+  const syncGetAccessTokenRef = useRef(sync?.getAccessToken);
+  syncGetAccessTokenRef.current = sync?.getAccessToken;
 
   useEffect(() => {
     const savedCategory = localStorage.getItem("kletron-active-category");
@@ -127,7 +129,7 @@ export function useCategories(sync?: UseCategoriesSync) {
       };
 
       try {
-        const token = await sync.getAccessToken();
+        const token = await syncGetAccessTokenRef.current?.();
         if (!token || cancelled) return;
         const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
         headers["x-workspace-id"] = wsId;
@@ -175,7 +177,10 @@ export function useCategories(sync?: UseCategoriesSync) {
     };
   }, [sync?.backendReady, sync?.backendUrlTrimmed, sync?.activeWorkspaceId]);
 
-  const allCategories = [...BUILT_IN_CATEGORIES, ...customCategories] as (WorkCategory | CustomCategory)[];
+  const allCategories = useMemo(
+    () => [...BUILT_IN_CATEGORIES, ...customCategories] as (WorkCategory | CustomCategory)[],
+    [customCategories],
+  );
 
   const activeCategoryConfig = allCategories.find((c) => c.id === activeCategory);
 

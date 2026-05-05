@@ -140,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     // Sign in - uses NextAuth credentials provider
-    const signIn = async (email: string, password: string, rememberMe: boolean = true) => {
+    const signIn = async (email: string, password: string, _rememberMe: boolean = true) => {
         try {
             const result = await nextAuthSignIn('credentials', {
                 email,
@@ -269,7 +269,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const resendConfirmation = async (email: string) => {
+    const resendConfirmation = async (_email: string) => {
         // NextAuth credentials provider doesn't have email confirmation
         // In a real implementation with email/password, you might want to add this
         return { success: true };

@@ -89,7 +89,7 @@ export function AutomationsDashboard({
   onRemove,
   onToggle,
   onRunNow,
-  onViewResults,
+  onViewResults: _onViewResults,
   onOpenInBrowser,
   onOpenThread,
   workspaceLabel,
@@ -100,7 +100,7 @@ export function AutomationsDashboard({
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
-  const [newSchedule, setNewSchedule] = useState('0 9 * * *');
+  const [_newSchedule, setNewSchedule] = useState('0 9 * * *');
   const [customSchedule, setCustomSchedule] = useState('');
   const [selectedPreset, setSelectedPreset] = useState('0 9 * * *');
 

@@ -59,14 +59,14 @@ export interface ReportOptions {
 }
 
 export function generateReport(
-    result: AgentWorkflowResult,
-    options: ReportOptions = {}
+    _result: AgentWorkflowResult,
+    _options: ReportOptions = {}
 ) {
     // Simplified version for now
     return { content: "", format: "markdown", summary: "" };
 }
 
-export function generateReportBundle(result: AgentWorkflowResult, options?: ReportOptions) {
+export function generateReportBundle(_result: AgentWorkflowResult, _options?: ReportOptions) {
     return {
         markdown: "",
         html: "",
@@ -76,7 +76,7 @@ export function generateReportBundle(result: AgentWorkflowResult, options?: Repo
     };
 }
 
-export function generateQuickSummary(result: AgentWorkflowResult): string {
+export function generateQuickSummary(_result: AgentWorkflowResult): string {
     return "Summary";
 }
 

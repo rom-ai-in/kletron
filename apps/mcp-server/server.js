@@ -207,7 +207,7 @@ async function buildWorkspaceAwareTools(options = {}) {
   return augmentSkillTools(allTools);
 }
 
-async function wireToolHandlers({ server, allTools, workspaceRoot, categoryId }) {
+async function wireToolHandlers({ server, allTools: _allTools, workspaceRoot, categoryId }) {
   // Use workspace-aware tools if available
   const tools = await buildWorkspaceAwareTools({ workspaceRoot, categoryId });
 
@@ -441,7 +441,7 @@ function runDiagnostic() {
           serverProcess.kill();
           process.exit(1);
         }
-      } catch (err) {
+      } catch {
         // Ignore non-JSON
       }
     }

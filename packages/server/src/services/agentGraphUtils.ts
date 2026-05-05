@@ -74,7 +74,7 @@ export function parseJsonOutput(raw: string): unknown {
     // Try to parse as JSON
     try {
         return JSON.parse(cleaned);
-    } catch (e) {
+    } catch {
         // If it's not valid JSON, try to extract JSON from the text
         // Sometimes the model wraps JSON in extra text or includes multiple objects
         // Try to find a complete JSON object by looking for top-level {}

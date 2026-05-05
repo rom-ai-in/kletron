@@ -54,15 +54,15 @@ const categoryHandlers: Record<string, Record<string, (args?: Record<string, unk
 
     /** Open terminal in workspace */
     openTerminal: async (args?: Record<string, unknown>) => {
-      const cwd = (args?.cwd as string) || process.cwd();
-      await shell.openPath(cwd);
+      const _cwd = (args?.cwd as string) || process.cwd();
+      await shell.openPath(_cwd);
       return { success: true };
     },
 
     /** Run command in workspace */
     runCommand: async (args?: Record<string, unknown>) => {
       const command = (args?.command as string) || '';
-      const cwd = (args?.cwd as string) || process.cwd();
+      const _cwd = (args?.cwd as string) || process.cwd();
       // Would spawn a child process here
       return { success: true, command };
     },

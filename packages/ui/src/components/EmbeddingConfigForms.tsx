@@ -433,7 +433,7 @@ function ModelSelect({ provider, value, onChange, allowCustom }: {
 }) {
     const models = EMBEDDING_MODEL_RECOMMENDATIONS[provider] ?? [];
     const isCustom = value && !models.includes(value);
-    const [custom, setCustom] = useState(isCustom ? value : "");
+    const [_custom, _setCustom] = useState(isCustom ? value : "");
 
     return (
         <div className="relative">

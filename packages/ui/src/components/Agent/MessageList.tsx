@@ -280,7 +280,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
         scrollRef.current.scrollTop = previousScrollTopRef.current + Math.max(delta, 0);
         previousScrollHeightRef.current = null;
         nearTopTriggeredRef.current = false;
-    }, [loadingOlder, items, measureVersion]);
+    }, [loadingOlder, items]);
 
     const offsets = useMemo(() => {
         const starts: number[] = new Array(items.length);
@@ -294,7 +294,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
             y += h;
         }
         return { starts, heights, totalHeight: y };
-    }, [items, rowKeys, measureVersion]);
+    }, [items, rowKeys]);
 
     const findStartIndex = useCallback((targetOffset: number) => {
         let lo = 0;

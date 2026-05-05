@@ -28,7 +28,6 @@ import {
   writeFile
 } from "@kletron/bridge";
 
-const currentFile = __filename;
 const currentDir = __dirname;
 
 const DEV_SERVER_URL = process.env.DESKTOP_DEV_SERVER_URL;

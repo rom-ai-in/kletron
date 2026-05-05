@@ -245,9 +245,9 @@ export default function DesignSystemMacAppPage() {
     const [activeTabId, setActiveTabId] = useState("thread-1");
     const [draft, setDraft] = useState("");
     const [contextChips, setContextChips] = useState<ContextChip[]>(sampleContextChips);
-    const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+    const [_slashMenuOpen, _setSlashMenuOpen] = useState(false);
     const [multimodalOpen, setMultimodalOpen] = useState(false);
-    const [planMode, setPlanMode] = useState(false);
+    const [planMode, _setPlanMode] = useState(false);
     const [selectedGraphId, setSelectedGraphId] = useState("code");
     const [skills, setSkills] = useState<Skill[]>(sampleSkills);
     const [automations, setAutomations] = useState<Automation[]>(sampleAutomations);

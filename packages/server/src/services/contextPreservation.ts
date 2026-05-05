@@ -157,13 +157,12 @@ export class ContextPreserver {
     fromCategory: WorkCategoryId,
     toCategory: WorkCategoryId,
     workspacePath: string,
-    currentContext?: CategoryContext,
+    _currentContext?: CategoryContext,
   ): Promise<ContextTransitionResult> {
     const from = normalizeToWorkModeId(String(fromCategory)) as WorkModeId;
     const to = normalizeToWorkModeId(String(toCategory)) as WorkModeId;
 
     const warnings: string[] = [];
-    const transferredItems: string[] = [];
     const droppedItems: string[] = [];
 
     // Get or create transferable context for this user
@@ -217,8 +216,8 @@ export class ContextPreserver {
    */
   private extractTransferableContext(
     sourceContext: CategoryContext,
-    targetCategory: WorkCategoryId,
-    workspacePath: string,
+    _targetCategory: WorkCategoryId,
+    _workspacePath: string,
   ): Partial<TransferableContext> {
     const items: Partial<TransferableContext> = {};
 
@@ -280,7 +279,7 @@ export class ContextPreserver {
 
     // Transfer active files (filter by target category compatibility)
     if (items.categoryContext?.[toCategory]?.activeFiles) {
-      const compatibleFiles = items.categoryContext[toCategory].activeFiles.filter((f) => {
+      const compatibleFiles = items.categoryContext[toCategory].activeFiles.filter((_f) => {
         if (toCategory === "code") return true;
         if (toCategory === "work") return true;
         return true;

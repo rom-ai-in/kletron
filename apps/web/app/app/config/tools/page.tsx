@@ -84,7 +84,7 @@ export default function ToolsConfigPage() {
             let parsedArgs = {};
             try {
                 parsedArgs = JSON.parse(testArgs);
-            } catch (e) {
+            } catch {
                 throw new Error("Invalid JSON arguments");
             }
 

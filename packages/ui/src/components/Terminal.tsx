@@ -22,6 +22,8 @@ export const Terminal: React.FC<TerminalProps> = ({ workspacePath }) => {
     const fitAddonRef = useRef<FitAddon | null>(null);
     const { theme } = useTheme();
     const [status, setStatus] = useState<ConnectionStatus>('connecting');
+    const statusRef = useRef<ConnectionStatus>('connecting');
+    statusRef.current = status;
 
     // Focus the terminal
     const focusTerminal = useCallback(() => {
@@ -106,7 +108,7 @@ export const Terminal: React.FC<TerminalProps> = ({ workspacePath }) => {
         };
 
         socket.onclose = () => {
-            if (status !== 'error') {
+            if (statusRef.current !== 'error') {
                 setStatus('disconnected');
                 term.writeln('\r\n\x1b[33m⚠ Terminal disconnected\x1b[0m');
             }
@@ -171,4 +173,3 @@ export const Terminal: React.FC<TerminalProps> = ({ workspacePath }) => {
         />
     );
 };
-

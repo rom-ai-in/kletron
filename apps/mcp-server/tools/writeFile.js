@@ -37,7 +37,7 @@ export const writeFile = {
 
     // 1. Enforce Dotfile Policy
     const basename = path.basename(resolvedFilePath);
-    const relativePath = path.relative(resolvedRoot, resolvedFilePath);
+    const _relativePath = path.relative(resolvedRoot, resolvedFilePath);
 
     // Check for sensitive files
     if (BLOCKED_FILENAMES.includes(basename)) {

@@ -25,7 +25,7 @@ export function useGit(
   const [gitError, setGitError] = useState<string | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
   const [committing, setCommitting] = useState(false);
-  const [branches, setBranches] = useState<string[]>([]);
+  const [branches] = useState<string[]>([]);
   const [generatingMessage, setGeneratingMessage] = useState(false);
   const [selectedDiffPath, setSelectedDiffPath] = useState<string | null>(null);
   const [selectedDiffContent, setSelectedDiffContent] = useState<string | null>(null);
@@ -74,7 +74,7 @@ export function useGit(
     } finally {
       if (g === gen()) setGitLoading(false);
     }
-  }, [workspacePath]);
+  }, []);
 
   // ── Workspace-switch effect — reset ALL state, bump generation ────────────
 

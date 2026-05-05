@@ -128,7 +128,7 @@ function NewContentPreview({ content, maxLines = 12 }: { content: string; maxLin
 
 // ─── File Diff Card ──────────────────────────────────────────────────────────
 
-function FileDiffCard({ fc, index }: { fc: FileChange; index: number }) {
+function FileDiffCard({ fc, index: _index }: { fc: FileChange; index: number }) {
   const [expanded, setExpanded] = useState(false);
 
   const filename = fc.path.split('/').pop() ?? fc.path;

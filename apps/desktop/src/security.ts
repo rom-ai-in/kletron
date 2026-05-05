@@ -148,9 +148,9 @@ export class CategorySecurityManager {
      */
     private applyWebPreferencesSecurity(prefs: SecurityPolicy['webPreferences']): void {
         const allWindows = BrowserWindow.getAllWindows();
-        allWindows.forEach(win => {
+        allWindows.forEach(_win => {
             // In production, apply webPreferences to new windows
-            console.log('[Security] Applying webPreferences:', prefs);
+            console.info('[Security] Applying webPreferences:', prefs);
         });
     }
 
@@ -159,7 +159,7 @@ export class CategorySecurityManager {
      */
     private configureContentSecurity(csp: SecurityPolicy['csp']): void {
         // In production, set CSP headers
-        console.log('[Security] Configuring CSP:', csp);
+        console.info('[Security] Configuring CSP:', csp);
     }
 
     /**
@@ -167,7 +167,7 @@ export class CategorySecurityManager {
      */
     private setFileAccessRules(fileAccess: SecurityPolicy['fileAccess']): void {
         // In production, configure Electron's file access restrictions
-        console.log('[Security] Setting file access rules:', fileAccess);
+        console.info('[Security] Setting file access rules:', fileAccess);
     }
 
     /**
@@ -175,7 +175,7 @@ export class CategorySecurityManager {
      */
     private setupProtocolHandlers(protocols: string[]): void {
         // In production, register allowed protocols
-        console.log('[Security] Setting up protocol handlers:', protocols);
+        console.info('[Security] Setting up protocol handlers:', protocols);
     }
 
     /**

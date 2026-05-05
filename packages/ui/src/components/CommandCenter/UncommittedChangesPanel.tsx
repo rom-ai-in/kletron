@@ -152,7 +152,7 @@ function FileDiffCard({
 
   const hunks = useMemo(() => parseDiffToHunks(file.diff ?? ''), [file.diff]);
   const { additions, deletions } = useMemo(() => countChanges(hunks), [hunks]);
-  const filename = file.path.split('/').pop() ?? file.path;
+  const _filename = file.path.split('/').pop() ?? file.path;
 
   // Group consecutive context lines to make them collapsible
   function renderHunkLines(hunkLines: ParsedLine[], hunkIdx: number) {
@@ -325,7 +325,7 @@ export function UncommittedChangesPanel({
   onClose,
   onOpenInIDE,
   onStageFile,
-  onUnstageFile,
+  onUnstageFile: _onUnstageFile,
   onRevertFile,
   onRevertAll,
   onStageAll,

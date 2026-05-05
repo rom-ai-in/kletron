@@ -9,7 +9,7 @@ interface CategorySwitcherProps {
   workspaceId: string;
 }
 
-export function CategorySwitcher({ workspaceId }: CategorySwitcherProps) {
+export function CategorySwitcher({ workspaceId: _workspaceId }: CategorySwitcherProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

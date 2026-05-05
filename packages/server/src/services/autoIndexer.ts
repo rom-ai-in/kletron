@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import chokidar, { type FSWatcher } from "chokidar";
 
-const formatterEmitter = new EventEmitter();
+const _formatterEmitter = new EventEmitter();
 
 type WorkspaceWatcher = {
     watcher: FSWatcher | null;

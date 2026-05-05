@@ -53,7 +53,7 @@ export const WorkspaceSidebar = ({ workspaceId, currentCategory, onCategorySelec
   );
 };
 
-const CodeModeSidebarContent = ({ workspaceId }: { workspaceId: string }) => {
+const CodeModeSidebarContent = ({ workspaceId: _workspaceId }: { workspaceId: string }) => {
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-medium text-subtle uppercase tracking-wider">Code</h3>
@@ -75,7 +75,7 @@ const CodeModeSidebarContent = ({ workspaceId }: { workspaceId: string }) => {
   );
 };
 
-const WorkModeSidebarContent = ({ workspaceId }: { workspaceId: string }) => {
+const WorkModeSidebarContent = ({ workspaceId: _workspaceId }: { workspaceId: string }) => {
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-medium text-subtle uppercase tracking-wider">Work</h3>

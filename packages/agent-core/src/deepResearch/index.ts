@@ -438,7 +438,7 @@ async function runResearcherSubgraph(
   researchTopic: string,
   config?: RunnableConfig
 ) {
-  const settings = getConfig();
+  const _settings = getConfig();
   let localState: typeof ResearcherAnnotation.State = {
     researcherMessages: [new HumanMessage(researchTopic)],
     toolCallIterations: 0,

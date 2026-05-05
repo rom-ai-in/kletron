@@ -176,7 +176,7 @@ export function workspaceErrorToHttp(
   return { status: resolved.status, body: resolved.payload };
 }
 
-async function getFallbackWorkspace(ownerId?: string): Promise<Workspace | null> {
+async function _getFallbackWorkspace(ownerId?: string): Promise<Workspace | null> {
   const config = await getConfigSafe();
   if (!config?.workingFolder) return null;
   const now = new Date();

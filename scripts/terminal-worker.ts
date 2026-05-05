@@ -78,7 +78,7 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
                     return;
                 }
             }
-        } catch (e) {
+        } catch {
             // Not JSON, ignore
         }
 

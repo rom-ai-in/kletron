@@ -388,7 +388,7 @@ export function LMStudioConfigForm({ initialConfig, onSave, onCancel }: LMStudio
 
     useEffect(() => {
         void fetchModels();
-    }, [baseUrl]);
+    }, [baseUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const saveConfig = async () => {
         setError(null);

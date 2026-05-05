@@ -615,15 +615,13 @@ function createPlaceholderOutputs(opts: { mission: string; report: string; meta?
 /**
  * Create a comprehensive formatted report from workflow results
  */
-function createFormattedReport(result: AgentWorkflowResult): {
+function _createFormattedReport(result: AgentWorkflowResult): {
     markdown?: string;
     json?: string;
     summary?: string;
 } {
     const outputs = result.outputs || {};
     const timeline = result.timeline || [];
-    const events = result.eventStream || [];
-
     // Calculate execution metrics
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
@@ -2083,7 +2081,6 @@ export class AgentGraphExecutor {
                         "list_all_skills", "list_skills",
                     ]);
                     const toolCallCache = new Map<string, string>();
-                    let toolCallCount = 0;
                     // Per-tool telemetry for the run timeline.
                     const toolCallSummary = new Map<
                         string,
@@ -2162,8 +2159,6 @@ export class AgentGraphExecutor {
                         const wrapped = createTool(
                             async (input: Record<string, unknown>) => {
                                 await ensureNotAborted();
-                                toolCallCount++;
-
                                 // ── Dedup: return cached result for identical read-only calls ──
                                 if (READ_ONLY_DEDUP_TOOLS.has(name) && name !== "write_todos") {
                                     const cacheKey = `${name}:${stableStringify(input)}`;
@@ -2949,18 +2944,6 @@ export class AgentGraphExecutor {
                     }
                     await emitUpdate();
 
-                    const finalResult: AgentWorkflowResult = {
-                        sessionId: runId,
-                        timeline,
-                        conclusion: "Node completed.",
-                        outputs: createPlaceholderOutputs({
-                            mission: typeof state.mission === "string" ? state.mission : "",
-                            report: JSON.stringify(validated, null, 2),
-                            meta: { runId, nodeId: node.id },
-                        }),
-                        eventStream,
-                    };
-
                     if (executionMode === "state_machine") {
                         const nextNodes = selectNextNodes(nodeId);
                         if (nextNodes.length) {
@@ -3024,17 +3007,6 @@ export class AgentGraphExecutor {
                     state.conversationHistory?.push(errorEvent);
                     await emitUpdate();
 
-                    const finalResult: AgentWorkflowResult = {
-                        sessionId: runId,
-                        timeline,
-                        conclusion: "Node failed.",
-                        outputs: createPlaceholderOutputs({
-                            mission: typeof state.mission === "string" ? state.mission : "",
-                            report: `ERROR: ${errorMessage}`,
-                            meta: { runId, nodeId: node.id },
-                        }),
-                        eventStream,
-                    };
                     cleanupCheckpoints();
                     return {
                         sessionId: runId,

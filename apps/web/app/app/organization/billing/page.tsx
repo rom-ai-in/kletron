@@ -60,7 +60,7 @@ const planConfigs = {
 
 export default function BillingPage() {
     const searchParams = useSearchParams();
-    const { subscription, planId, planLimits, loading, error, redirectToPortal, refresh, isFree, isPro } = useSubscription();
+    const { subscription, planId, planLimits, loading, error, redirectToPortal, refresh, isFree, isPro: _isPro } = useSubscription();
     const [portalLoading, setPortalLoading] = useState(false);
     const [portalError, setPortalError] = useState<string | null>(null);
     const [showSuccess, setShowSuccess] = useState(false);

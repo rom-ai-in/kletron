@@ -179,7 +179,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
             tr: ({ children }: any) => <tr>{children}</tr>,
             th: ({ children }: any) => <th className={thCell}>{children}</th>,
             td: ({ children }: any) => <td className={tdCell}>{children}</td>,
-            code: ({ node, inline, className: codeClass, children, ...props }: any) => (
+            code: ({ node: _node, inline, className: codeClass, children, ...props }: any) => (
                 <CodeBlock inline={inline} className={codeClass} {...props}>
                     {children}
                 </CodeBlock>

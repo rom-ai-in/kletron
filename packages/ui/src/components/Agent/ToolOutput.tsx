@@ -8,7 +8,7 @@ interface ToolOutputProps {
 }
 
 export const ToolOutput: React.FC<ToolOutputProps> = ({ output, isError }) => {
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [_isExpanded, _setIsExpanded] = useState(false);
     const [copied, setCopied] = useState(false);
 
     const handleCopy = () => {

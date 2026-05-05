@@ -38,7 +38,7 @@ export async function GET(
 
     const capabilities = await resolveWorkspaceCapabilities(workspaceId);
     // Strip the runtime Set; only the array form serializes.
-    const { enabledToolSet, ...payload } = capabilities;
+    const { enabledToolSet: _enabledToolSet, ...payload } = capabilities;
     return NextResponse.json({
         ...payload,
         bundledProfileVersion: AGENT_BUNDLED_PROFILE_VERSION,

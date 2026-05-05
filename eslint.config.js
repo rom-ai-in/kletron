@@ -4,7 +4,7 @@ import tsPlugin from "@typescript-eslint/eslint-plugin";
 import reactHooks from "eslint-plugin-react-hooks";
 import unusedImports from "eslint-plugin-unused-imports";
 
-const rootPath = path.resolve(".");
+const _rootPath = path.resolve(".");
 
 export default [
   {
@@ -113,6 +113,25 @@ export default [
   },
   {
     files: ["scripts/**", "apps/mcp-server/**"],
+    rules: {
+      "no-console": "off",
+    },
+  },
+  {
+    files: [
+      "apps/cli/src/**/*.{ts,tsx,js,jsx}",
+      "apps/desktop/scripts/**/*.{ts,tsx,js,jsx}",
+      "apps/web/scripts/**/*.{ts,tsx,js,jsx}",
+      "apps/web/app/api/**/*.{ts,tsx}",
+      "apps/web/pages/api/**/*.{ts,tsx}",
+      "packages/agent-core/src/**/*.{ts,tsx}",
+      "packages/mcp-client/src/**/*.{ts,tsx}",
+      "packages/server/src/**/*.{ts,tsx}",
+      "packages/ui/scripts/**/*.{ts,tsx,js,jsx}",
+      "demo-workspace-integration.js",
+      "test_workspace_listing.js",
+      "check_db.js",
+    ],
     rules: {
       "no-console": "off",
     },

@@ -59,7 +59,7 @@ function getStatusIndicator(status: GitChangeStatus): string {
   }
 }
 
-function getStatusDotColor(status: GitChangeStatus): string {
+function _getStatusDotColor(status: GitChangeStatus): string {
   switch (status) {
     case 'modified': return 'bg-yellow-400';
     case 'created': return 'bg-green-400';

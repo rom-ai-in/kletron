@@ -39,7 +39,7 @@ export default async function handler(
 async function handleGetCategories(
     req: NextApiRequest,
     res: NextApiResponse,
-    workspaceId: string
+    _workspaceId: string
 ) {
     try {
         // In production, get category configs from database
