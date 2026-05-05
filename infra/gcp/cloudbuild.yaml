@@ -1,23 +1,37 @@
 # Cloud Build only (pas de déclencheur GitHub). Images Artifact Registry + déploiement Cloud Run.
-# URL web typique après création: https://numezis-web-XXXXX.europe-west6.run.app (suffixe attribué par Google).
+# URL web typique après création: https://kletron-web-XXXXX.europe-west6.run.app (suffixe attribué par Google).
 #
 #   ./infra/gcp/deploy.sh
 # ou:
 #   gcloud builds submit --config=infra/gcp/cloudbuild.yaml \
-#     --substitutions=_NEXT_PUBLIC_APP_URL=https://numezis-web-….europe-west6.run.app \
+#     --substitutions=_NEXT_PUBLIC_APP_URL=https://kletron-web-….europe-west6.run.app \
 #     --project=kletron
 
 substitutions:
   _REGION: europe-west6
-  _AR_REPO: numezis-repo
+  _AR_REPO: kletron-repo
   _WEB_SERVICE: kletron-web
   _MCP_SERVICE: kletron-mcp
+  _EXPECTED_PROJECT: kletron
+  _ALLOW_NON_KLETRON_PROJECT: "false"
   _NEXT_PUBLIC_APP_URL: https://change-me-after-first-deploy.run.app
 
 options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
+  - id: validate-target
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        if [[ "$PROJECT_ID" != "${_EXPECTED_PROJECT}" && "${_ALLOW_NON_KLETRON_PROJECT}" != "true" ]]; then
+          echo "Refusing Cloud Build rollout to project '$PROJECT_ID'. Expected '${_EXPECTED_PROJECT}'."
+          echo "Override explicitly only if intentional with _ALLOW_NON_KLETRON_PROJECT=true."
+          exit 1
+        fi
+
   - id: build-web
     name: gcr.io/cloud-builders/docker
     args:
@@ -91,7 +105,7 @@ steps:
           printf 'MCP_URL: "%s"\n' "$${MCP_SSE}"
           printf 'NEXT_PUBLIC_APP_URL: "%s"\n' "${_NEXT_PUBLIC_APP_URL}"
           printf 'NEXTAUTH_URL: "%s"\n' "${_NEXT_PUBLIC_APP_URL}"
-        } > /tmp/numezis-web-env.yaml
+        } > /tmp/kletron-web-env.yaml
         RUN_SECRETS="NEXTAUTH_SECRET=kletron-nextauth-secret:latest,MONGODB_URI=kletron-mongodb-uri:latest,GOOGLE_OAUTH_CLIENT_ID=kletron-google-oauth-client-id:latest,AZURE_OPENAI_API_KEY=kletron-azure-openai-api-key:latest,TAVILY_API_KEY=kletron-tavily-api-key:latest,LANGSMITH_API_KEY=kletron-langsmith-api-key:latest"
         if gcloud secrets describe kletron-google-oauth-client-secret --project="$PROJECT_ID" &>/dev/null; then
           RUN_SECRETS="$${RUN_SECRETS},GOOGLE_OAUTH_CLIENT_SECRET=kletron-google-oauth-client-secret:latest"
@@ -107,7 +121,7 @@ steps:
           --cpu=2 \
           --min-instances=0 \
           --max-instances=10 \
-          --env-vars-file=/tmp/numezis-web-env.yaml \
+          --env-vars-file=/tmp/kletron-web-env.yaml \
           --set-secrets="$${RUN_SECRETS}"
 
 images:

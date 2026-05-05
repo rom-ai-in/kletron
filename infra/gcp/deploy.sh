@@ -8,7 +8,7 @@
 #
 # Usage:
 #   ./infra/gcp/deploy.sh
-#   NEXT_PUBLIC_APP_URL=https://numezis-web-xxxxx.europe-west6.run.app ./infra/gcp/deploy.sh
+#   NEXT_PUBLIC_APP_URL=https://kletron-web-xxxxx.europe-west6.run.app ./infra/gcp/deploy.sh
 
 set -euo pipefail
 
@@ -16,7 +16,10 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
+EXPECTED_PROJECT="${EXPECTED_PROJECT:-kletron}"
+ALLOW_NON_KLETRON_PROJECT="${ALLOW_NON_KLETRON_PROJECT:-false}"
 REGION="${REGION:-europe-west6}"
+AR_REPO="${AR_REPO:-kletron-repo}"
 WEB_SERVICE="${WEB_SERVICE:-kletron-web}"
 MCP_SERVICE="${MCP_SERVICE:-kletron-mcp}"
 
@@ -25,20 +28,27 @@ if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
   exit 1
 fi
 
+if [[ "${PROJECT_ID}" != "${EXPECTED_PROJECT}" && "${ALLOW_NON_KLETRON_PROJECT}" != "true" ]]; then
+  echo "Refus de déployer vers le projet '${PROJECT_ID}'. Projet attendu: '${EXPECTED_PROJECT}'."
+  echo "Override explicite uniquement si intentionnel: ALLOW_NON_KLETRON_PROJECT=true"
+  exit 1
+fi
+
 APP_URL="${NEXT_PUBLIC_APP_URL:-}"
 if [[ -z "${APP_URL}" ]]; then
   echo "Pass NEXT_PUBLIC_APP_URL (origine HTTPS publique du site), ex.:"
   echo "  NEXT_PUBLIC_APP_URL=https://www.kletron.com ./infra/gcp/deploy.sh"
   echo "ou l’URL Cloud Run directe tant que le certificat managé du LB est en PROVISIONING:"
-  echo "  NEXT_PUBLIC_APP_URL=https://numezis-web-xxxx.europe-west6.run.app ./infra/gcp/deploy.sh"
+  echo "  NEXT_PUBLIC_APP_URL=https://kletron-web-xxxx.europe-west6.run.app ./infra/gcp/deploy.sh"
   APP_URL="https://placeholder.invalid"
 fi
 
-echo "Project=${PROJECT_ID}  REGION=${REGION}  WEB_SERVICE=${WEB_SERVICE}  MCP_SERVICE=${MCP_SERVICE}  NEXT_PUBLIC_APP_URL=${APP_URL}"
+echo "Project=${PROJECT_ID}  REGION=${REGION}  AR_REPO=${AR_REPO}  WEB_SERVICE=${WEB_SERVICE}  MCP_SERVICE=${MCP_SERVICE}"
+echo "NEXT_PUBLIC_APP_URL=${APP_URL}"
 
 gcloud builds submit \
   --config=infra/gcp/cloudbuild.yaml \
-  --substitutions="_NEXT_PUBLIC_APP_URL=${APP_URL},_WEB_SERVICE=${WEB_SERVICE},_MCP_SERVICE=${MCP_SERVICE}" \
+  --substitutions="_NEXT_PUBLIC_APP_URL=${APP_URL},_AR_REPO=${AR_REPO},_WEB_SERVICE=${WEB_SERVICE},_MCP_SERVICE=${MCP_SERVICE},_EXPECTED_PROJECT=${EXPECTED_PROJECT},_ALLOW_NON_KLETRON_PROJECT=${ALLOW_NON_KLETRON_PROJECT}" \
   --project="${PROJECT_ID}" \
   .
 

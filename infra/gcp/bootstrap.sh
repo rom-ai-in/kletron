@@ -11,16 +11,24 @@
 # Ensuite: créer les secrets dans Secret Manager (exemples de noms ci‑dessous),
 # puis adapter infra/gcp/cloudbuild.yaml (--set-secrets sur deploy) ou
 # définir les variables à la main:
-#   gcloud run services update numezis-web --set-secrets=...
+#   gcloud run services update kletron-web --set-secrets=...
 
 set -euo pipefail
 
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
+EXPECTED_PROJECT="${EXPECTED_PROJECT:-kletron}"
+ALLOW_NON_KLETRON_PROJECT="${ALLOW_NON_KLETRON_PROJECT:-false}"
 REGION="${REGION:-europe-west6}"
-AR_REPO="${AR_REPO:-numezis-repo}"
+AR_REPO="${AR_REPO:-kletron-repo}"
 
 if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
   echo "Set PROJECT_ID or run: gcloud config set project YOUR_PROJECT_ID"
+  exit 1
+fi
+
+if [[ "${PROJECT_ID}" != "${EXPECTED_PROJECT}" && "${ALLOW_NON_KLETRON_PROJECT}" != "true" ]]; then
+  echo "Refusing bootstrap on project '${PROJECT_ID}'. Expected '${EXPECTED_PROJECT}'."
+  echo "Override explicitly only if intentional: ALLOW_NON_KLETRON_PROJECT=true"
   exit 1
 fi
 
@@ -79,6 +87,6 @@ echo "       openssl rand -base64 32 | gcloud secrets create kletron-nextauth-se
 echo "       openssl rand -base64 32 | gcloud secrets create kletron-mcp-internal-token --data-file=- --project=${PROJECT_ID}"
 echo "  2. Grant Cloud Run runtime SA access to secrets (console or roles/secretmanager.secretAccessor)."
 echo "  3. Déployer (GCP uniquement, pas de GitHub Actions):"
-echo "       NEXT_PUBLIC_APP_URL=https://numezis-web-xxxxx.${REGION}.run.app ./infra/gcp/deploy.sh"
+echo "       NEXT_PUBLIC_APP_URL=https://kletron-web-xxxxx.${REGION}.run.app ./infra/gcp/deploy.sh"
 echo ""
 echo "Note: fix local npm build if packages/ui fails (required for Docker web image)."

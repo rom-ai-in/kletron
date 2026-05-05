@@ -25,8 +25,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ENV_PATH = ROOT / ".env"
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "kletron")
+EXPECTED_PROJECT = os.environ.get("GCP_EXPECTED_PROJECT", "kletron")
 REGION = os.environ.get("GCP_REGION", "europe-west6")
-SERVICE = os.environ.get("GCP_WEB_SERVICE", "numezis-web")
+SERVICE = os.environ.get("GCP_WEB_SERVICE", "kletron-web")
+ALLOW_NON_KLETRON_PROJECT = os.environ.get("GCP_ALLOW_NON_KLETRON_PROJECT", "").strip().lower() in ("1", "true", "yes")
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -51,6 +53,17 @@ def run(cmd: list[str]) -> None:
 
 def run_stdin(cmd: list[str], data: bytes) -> None:
     subprocess.run(cmd, input=data, check=True)
+
+
+def ensure_expected_project() -> None:
+    if PROJECT_ID == EXPECTED_PROJECT or ALLOW_NON_KLETRON_PROJECT:
+        return
+    print(
+        f"Refusing to update project '{PROJECT_ID}'. Expected '{EXPECTED_PROJECT}'. "
+        "Override explicitly with GCP_ALLOW_NON_KLETRON_PROJECT=true.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def cloud_run_service_url(service: str) -> str | None:
@@ -156,10 +169,10 @@ def patch_nextauth_in_env(text: str, new_secret: str) -> str:
 
 def resolve_public_web_url(env: dict[str, str]) -> str:
     """HTTPS origin for Next.js public URL + NextAuth (no trailing slash)."""
-    override = os.environ.get("NUMEZIS_WEB_URL", "").strip().rstrip("/")
+    override = os.environ.get("KLETRON_WEB_URL", "").strip().rstrip("/")
     if override.startswith("https://"):
         return override
-    override = os.environ.get("KLETRON_WEB_URL", "").strip().rstrip("/")
+    override = os.environ.get("NUMEZIS_WEB_URL", "").strip().rstrip("/")
     if override.startswith("https://"):
         return override
     for key in ("NEXT_PUBLIC_APP_URL", "NEXTAUTH_URL"):
@@ -174,7 +187,7 @@ def resolve_public_web_url(env: dict[str, str]) -> str:
         "NUMEZIS_WEB_FALLBACK_URL",
         os.environ.get(
             "KLETRON_WEB_FALLBACK_URL",
-            "https://numezis-web-hyacsa6rva-oa.a.run.app",
+            "https://www.kletron.com",
         ),
     ).strip().rstrip("/")
 
@@ -201,6 +214,7 @@ def build_mongodb_uri(env: dict[str, str]) -> str | None:
 
 
 def main() -> None:
+    ensure_expected_project()
     env = load_env(ENV_PATH)
     google_secret_early = (
         os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
