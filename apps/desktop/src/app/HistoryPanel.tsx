@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@kletron/ui/components/design-system";
+import { DesktopListRowsSkeleton } from "../components/DesktopLoadingSkeletons";
 
 export type HistoryRunRow = {
   id: string;
@@ -95,31 +96,36 @@ export function HistoryPanel({
             {error}
           </div>
         )}
-        {loading && <p className="text-xs text-text-muted">Loading…</p>}
-        {!loading && activeWorkspaceId && runs.length === 0 && !error && (
-          <p className="text-sm text-text-muted">No history entries yet.</p>
+        {loading && activeWorkspaceId ? (
+          <DesktopListRowsSkeleton rows={8} />
+        ) : (
+          <>
+            {activeWorkspaceId && runs.length === 0 && !error && (
+              <p className="text-sm text-text-muted">No history entries yet.</p>
+            )}
+            <ul className="space-y-2 max-w-3xl">
+              {runs.map((r) => (
+                <li
+                  key={`${r.type}-${r.id}`}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border-subtle bg-bg-surface/50 px-3 py-2 text-xs"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-text-primary truncate">{r.title || r.id}</div>
+                    <div className="text-[10px] text-text-muted">
+                      {r.type} · {r.status}
+                      {r.startedAt ? ` · ${new Date(r.startedAt).toLocaleString()}` : ""}
+                    </div>
+                  </div>
+                  {r.type === "agent" && (
+                    <Button size="xs" variant="secondary" onClick={() => onOpenThread(r.id)}>
+                      Open in agent
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
         )}
-        <ul className="space-y-2 max-w-3xl">
-          {runs.map((r) => (
-            <li
-              key={`${r.type}-${r.id}`}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border-subtle bg-bg-surface/50 px-3 py-2 text-xs"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="font-medium text-text-primary truncate">{r.title || r.id}</div>
-                <div className="text-[10px] text-text-muted">
-                  {r.type} · {r.status}
-                  {r.startedAt ? ` · ${new Date(r.startedAt).toLocaleString()}` : ""}
-                </div>
-              </div>
-              {r.type === "agent" && (
-                <Button size="xs" variant="secondary" onClick={() => onOpenThread(r.id)}>
-                  Open in agent
-                </Button>
-              )}
-            </li>
-          ))}
-        </ul>
       </div>
     </div>
   );

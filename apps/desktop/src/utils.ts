@@ -1,12 +1,14 @@
 // Shared utility functions for the Kletron Desktop application
 
 import { structuredPatch } from "diff";
-import type { DiffHunk, DiffRow, PreviewLine } from "./types";
+import type { DiffHunk, DiffRow, PreviewLine, SettingsSectionId } from "./types";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 export const AUTH_STORAGE_KEY = "kletron.desktop.auth";
 export const BACKEND_STORAGE_KEY = "kletron.desktop.backendUrl";
+/** Persisted General / Appearance toggles (compact density, Cmd+Enter, etc.) */
+export const SETTINGS_TOGGLES_STORAGE_KEY = "kletron.desktop.settingsToggles";
 export const WORKSPACE_STORAGE_KEY = "kletron.desktop.workspace";
 export const AUTH_LOGIN_TIMEOUT_MS = 6 * 60 * 1000;
 export const MAX_TOOL_PAYLOAD_CHARS = 8000;
@@ -15,19 +17,23 @@ export const MAX_TOOL_PREVIEW_CHARS = 160;
 export const DEFAULT_BACKEND_URL = "https://app.kletron.com";
 export const DEV_BACKEND_URL = "http://localhost:3000";
 
+/** Desktop Settings sidebar — classic layout (distinct from the web /app/config grid). */
 export const SETTINGS_SECTIONS = [
   { id: "configuration", label: "Configuration" },
   { id: "portal", label: "Web portal" },
   { id: "general", label: "General" },
   { id: "personalization", label: "Personalization" },
-  { id: "mcp", label: "MCP servers" },
+  { id: "connectors", label: "Connectors" },
+  { id: "account", label: "Account" },
   { id: "skills", label: "Skills" },
   { id: "automations", label: "Automations" },
   { id: "graphs", label: "Agent Graphs" },
   { id: "environments", label: "Environments" },
-  { id: "worktrees", label: "Worktrees" },
-  { id: "archived", label: "Archived threads" },
 ] as const;
+
+export function isSettingsSectionId(value: string): value is SettingsSectionId {
+  return (SETTINGS_SECTIONS as readonly { id: string }[]).some((s) => s.id === value);
+}
 
 // ─── Path Helpers ────────────────────────────────────────────────────────────
 

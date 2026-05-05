@@ -68,7 +68,14 @@ export type StreamingState = 'idle' | 'streaming' | 'stopped' | 'error';
 export type StreamStatus = StreamingState;
 
 /** Live status for a thread in the sidebar. */
-export type ThreadLiveStatus = 'running' | 'completed' | 'idle' | 'waiting' | 'error';
+export type ThreadLiveStatus =
+    | 'running'
+    | 'completed'
+    /** Terminal success with new activity since the user last viewed this thread */
+    | 'completed_unread'
+    | 'idle'
+    | 'waiting'
+    | 'error';
 
 /**
  * Map GET /api/sessions row `status` plus local streaming to {@link ThreadLiveStatus}.
@@ -98,12 +105,55 @@ export function sessionStatusToSidebarLiveStatus(
 }
 
 /**
+ * After {@link sessionStatusToSidebarLiveStatus}, refine `completed` into `completed_unread` when
+ * the session row has newer activity than the last time the user acknowledged this thread.
+ */
+export function finalizeSidebarLiveStatus(
+    base: ThreadLiveStatus,
+    opts: {
+        isActiveThread: boolean;
+        updatedAt?: string | null | undefined;
+        lastReadAt?: string | null | undefined;
+    },
+): ThreadLiveStatus {
+    if (base !== 'completed') return base;
+    if (opts.isActiveThread) return 'completed';
+    const ua = opts.updatedAt;
+    const lr = opts.lastReadAt;
+    if (!ua || !lr) return 'completed';
+    return new Date(ua) > new Date(lr) ? 'completed_unread' : 'completed';
+}
+
+/**
+ * When GET /api/sessions omits `status` (legacy documents or partial payloads), infer from timestamps
+ * so the sidebar can still show running / completed / error-style indicators.
+ */
+export function inferSessionListStatus(row: {
+    status?: string | null;
+    endedAt?: string | null;
+    startedAt?: string | null;
+}): string | undefined {
+    const raw = row.status;
+    if (raw != null && String(raw).trim() !== '') {
+        return String(raw);
+    }
+    if (row.endedAt) {
+        return 'COMPLETED';
+    }
+    if (row.startedAt) {
+        return 'RUNNING';
+    }
+    return undefined;
+}
+
+/**
  * NDJSON stream chunk types — shared between server routes and client parsers.
  */
 import type { AgentWorkflowResult, AgentWorkflowUpdate } from './types';
 import type { ThreadApprovalMode } from './threadApprovalTypes';
 import type { WorkModeId } from './workMode';
 import type { ResearchDepthId } from './researchDepth';
+import type { ThreadSkillState } from './skills/types';
 
 export type GraphSelectionMode = 'manual' | 'auto';
 
@@ -192,7 +242,7 @@ export type AgentStreamKpiV1 = {
 };
 
 export type StreamChunk =
-    | { type: 'init'; payload: { runId: string; graphId: string; route?: GraphRouteInfo } }
+    | { type: 'init'; payload: { runId: string; graphId: string; route?: GraphRouteInfo; skills?: ThreadSkillState } }
     | { type: 'update'; payload: AgentWorkflowUpdate }
     | { type: 'text_delta'; payload: { content: string } }
     | { type: 'reasoning_delta'; payload: { content: string } }
@@ -225,6 +275,8 @@ export interface ConversationDetail extends ConversationHistoryItem {
     conversationHistory?: Array<ServerAgentEvent & { kind?: string; role?: string; content?: string }>;
     threadApprovalMode?: ThreadApprovalMode;
     source?: string | null;
+    workspaceId?: string | null;
+    skills?: ThreadSkillState;
 }
 
 /** Message type for the web-app simple chat view. */

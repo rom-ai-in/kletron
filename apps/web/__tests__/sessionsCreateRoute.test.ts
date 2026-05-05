@@ -73,6 +73,11 @@ vi.mock("@kletron/server/services/agentGraphExecutor", () => ({
     },
 }));
 
+const buildThreadSkillState = vi.hoisted(() => vi.fn());
+vi.mock("@kletron/server/services/workspaceSkillStateService", () => ({
+    buildThreadSkillState: (...args: unknown[]) => buildThreadSkillState(...args),
+}));
+
 import { POST } from "../app/api/sessions/route";
 
 const now = new Date("2026-05-05T08:00:00.000Z");
@@ -166,6 +171,11 @@ describe("POST /api/sessions", () => {
             loadedSkillIds: [],
             skillLoads: [],
         }));
+        buildThreadSkillState.mockResolvedValue({
+            availableSkills: [],
+            loadedSkills: [],
+            pinnedSkills: [],
+        });
         executeRunStreaming.mockResolvedValue({
             sessionId: "run-1",
             timeline: [],
@@ -194,6 +204,11 @@ describe("POST /api/sessions", () => {
         expect(chunks[0]?.type).toBe("init");
         expect(chunks[0]?.payload.graphId).toBe(coderGraph._id);
         expect(chunks[0]?.payload.route?.source).toBe("explicit_graph");
+        expect(chunks[0]?.payload.skills).toEqual({
+            availableSkills: [],
+            loadedSkills: [],
+            pinnedSkills: [],
+        });
         expect(updateRunStatus.mock.calls[0]?.[2]?.state?.route?.source).toBe("explicit_graph");
         expect(executeRunStreaming.mock.calls[0]?.[1]?.workspaceContextUserId).toBe("user-1");
     });

@@ -14,6 +14,13 @@ type ToolMeta = {
     categories: string[];
 };
 
+type SkillMeta = {
+    slug: string;
+    name: string;
+    description: string;
+    source: "builtin" | "user";
+};
+
 export type AgentNodeEditorValue = {
     id: string;
     label: string;
@@ -22,6 +29,7 @@ export type AgentNodeEditorValue = {
         systemPrompt: string;
         userPromptTemplate: string;
         toolNames: string[];
+        skillIds?: string[];
     };
     delegate?: {
         mode?: "react" | "graph";
@@ -44,6 +52,8 @@ export function NodeInspector({
 }) {
     const [tools, setTools] = useState<ToolMeta[]>([]);
     const [toolSearch, setToolSearch] = useState("");
+    const [skills, setSkills] = useState<SkillMeta[]>([]);
+    const [skillSearch, setSkillSearch] = useState("");
 
     useEffect(() => {
         const load = async () => {
@@ -59,6 +69,22 @@ export function NodeInspector({
         void load();
     }, []);
 
+    useEffect(() => {
+        const loadSkills = async () => {
+            try {
+                const res = await fetch("/api/skills?source=builtin&limit=500");
+                if (!res.ok) return;
+                const data = await res.json();
+                if (Array.isArray(data?.skills)) {
+                    setSkills(data.skills);
+                }
+            } catch {
+                // ignore
+            }
+        };
+        void loadSkills();
+    }, []);
+
     const filteredTools = useMemo(() => {
         const q = toolSearch.trim().toLowerCase();
         if (!q) return tools;
@@ -71,6 +97,18 @@ export function NodeInspector({
             );
         });
     }, [tools, toolSearch]);
+
+    const filteredSkills = useMemo(() => {
+        const q = skillSearch.trim().toLowerCase();
+        if (!q) return skills;
+        return skills.filter((skill) => {
+            return (
+                skill.slug.toLowerCase().includes(q) ||
+                skill.name.toLowerCase().includes(q) ||
+                (skill.description ?? "").toLowerCase().includes(q)
+            );
+        });
+    }, [skills, skillSearch]);
 
     if (!node) {
         return (
@@ -90,6 +128,16 @@ export function NodeInspector({
         onChange({
             ...node,
             react: { ...node.react, toolNames: Array.from(current).sort() },
+        });
+    };
+
+    const toggleSkill = (slug: string) => {
+        const current = new Set(node.react.skillIds ?? []);
+        if (current.has(slug)) current.delete(slug);
+        else current.add(slug);
+        onChange({
+            ...node,
+            react: { ...node.react, skillIds: Array.from(current).sort() },
         });
     };
 
@@ -305,6 +353,55 @@ export function NodeInspector({
                     </div>
                 </Panel>
             )}
+
+            <Panel className="space-y-3 p-4">
+                <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-semibold text-text-primary">Pinned skills</div>
+                    <div className="text-xs text-text-muted">{node.react.skillIds?.length ?? 0} pinned</div>
+                </div>
+                <div className="text-xs text-text-muted">
+                    Pinned skills are always injected by this graph. V1 only allows built-in/global skills here.
+                </div>
+
+                <input
+                    value={skillSearch}
+                    onChange={(e) => setSkillSearch(e.target.value)}
+                    className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
+                    placeholder="Search built-in skills..."
+                />
+
+                <div className="max-h-[min(20rem,45vh)] overflow-y-auto scrollbar-elegant rounded-md border border-border-subtle bg-bg-surface">
+                    <div className="divide-y divide-border-subtle">
+                        {filteredSkills.map((skill) => {
+                            const checked = (node.react.skillIds ?? []).includes(skill.slug);
+                            return (
+                                <label
+                                    key={skill.slug}
+                                    className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-state-hover"
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => toggleSkill(skill.slug)}
+                                    />
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-mono text-text-primary">{skill.slug}</span>
+                                            <span className="text-xs text-text-muted">{skill.name}</span>
+                                        </div>
+                                        <div className="mt-0.5 text-[11px] text-text-muted line-clamp-2">
+                                            {skill.description}
+                                        </div>
+                                    </div>
+                                </label>
+                            );
+                        })}
+                        {filteredSkills.length === 0 && (
+                            <div className="p-3 text-sm text-text-muted">No built-in skills match this search.</div>
+                        )}
+                    </div>
+                </div>
+            </Panel>
 
             <Panel className="space-y-3 p-4">
                 <div className="flex items-center justify-between gap-2">

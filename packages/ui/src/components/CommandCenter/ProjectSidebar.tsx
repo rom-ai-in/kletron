@@ -29,8 +29,9 @@ import {
 } from '@kletron/shared/threadRecency';
 import { WorkModeSegmented } from './WorkModeSegmented';
 import { Button } from '../ui/Button';
+import type { ThreadLiveStatus } from '@kletron/shared/chatTypes';
 
-export type ThreadLiveStatus = 'running' | 'completed' | 'idle' | 'waiting' | 'error';
+export type { ThreadLiveStatus };
 
 export type SidebarThreadCategory = 'chat' | 'automation';
 
@@ -104,14 +105,54 @@ export interface ProjectSidebarProps {
 
 function StatusDot({ status }: { status: ThreadLiveStatus }) {
   if (status === 'idle') return null;
-  const styles: Record<ThreadLiveStatus, string> = {
-    running: 'bg-status-success animate-pulse',
-    completed: 'bg-status-success',
+
+  const label: Record<ThreadLiveStatus, string> = {
+    running: 'Run in progress',
+    completed: 'Finished',
+    completed_unread: 'Finished — open to review',
+    waiting: 'Waiting',
+    error: 'Failed',
     idle: '',
-    waiting: 'bg-status-warning',
-    error: 'bg-status-error',
   };
-  return <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${styles[status]}`} />;
+
+  const title = label[status];
+  const wrap =
+    'relative inline-flex h-4 w-4 flex-shrink-0 items-center justify-center';
+
+  switch (status) {
+    case 'running':
+      return (
+        <span className={wrap} title={title} aria-hidden>
+          <span className="h-2.5 w-2.5 rounded-full bg-status-success shadow-[0_0_0_2px_var(--status-success-bg)] animate-pulse" />
+        </span>
+      );
+    case 'completed_unread':
+      return (
+        <span className={wrap} title={title} aria-hidden>
+          <span className="h-2.5 w-2.5 rounded-full bg-status-info shadow-[0_0_0_2px_var(--status-info-bg)] ring-2 ring-status-info/55" />
+        </span>
+      );
+    case 'completed':
+      return (
+        <span className={wrap} title={title} aria-hidden>
+          <span className="h-2 w-2 rounded-full bg-status-success/85 ring-1 ring-status-success/35" />
+        </span>
+      );
+    case 'waiting':
+      return (
+        <span className={wrap} title={title} aria-hidden>
+          <span className="h-2 w-2 rounded-full bg-status-warning ring-1 ring-status-warning/50" />
+        </span>
+      );
+    case 'error':
+      return (
+        <span className={wrap} title={title} aria-hidden>
+          <span className="h-2.5 w-2.5 rounded-full bg-status-error shadow-[0_0_0_2px_var(--status-error-bg)] ring-2 ring-status-error/50" />
+        </span>
+      );
+    default:
+      return null;
+  }
 }
 
 function formatRelativeTime(iso?: string | null): string {

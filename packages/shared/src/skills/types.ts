@@ -50,7 +50,51 @@ export interface WorkspaceSkillRecord {
     skillSlug: string;
     enabled: boolean;
     addedAt: string;
+    autoLoadInNewThreads?: boolean;
     configOverride?: Record<string, unknown>;
+}
+
+export type WorkspaceSkillAvailabilitySource =
+    | "activation"
+    | "repo_native"
+    | "both"
+    | "none";
+
+export interface WorkspaceSkillView extends SkillRecord {
+    enabled: boolean;
+    explicitlyEnabled: boolean;
+    repoNativePresent: boolean;
+    availabilitySource: WorkspaceSkillAvailabilitySource;
+    availableInWorkspace: boolean;
+    autoLoadInNewThreads: boolean;
+}
+
+export interface ThreadAvailableSkillSummary {
+    slug: string;
+    name: string;
+    description: string;
+    availabilitySource: WorkspaceSkillAvailabilitySource;
+    autoLoadInNewThreads: boolean;
+}
+
+export interface ThreadLoadedSkillSummary {
+    slug: string;
+    name: string;
+    loadedAt?: string;
+    reason?: string;
+}
+
+export interface ThreadPinnedSkillSummary {
+    slug: string;
+    name: string;
+    nodeIds: string[];
+    nodeLabels: string[];
+}
+
+export interface ThreadSkillState {
+    availableSkills: ThreadAvailableSkillSummary[];
+    loadedSkills: ThreadLoadedSkillSummary[];
+    pinnedSkills: ThreadPinnedSkillSummary[];
 }
 
 /** Resolved skill (after extends-chain flattening). */

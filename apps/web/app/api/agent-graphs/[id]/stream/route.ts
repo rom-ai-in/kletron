@@ -7,11 +7,12 @@ import { getGraphNodeOrder, buildInitialState } from "@kletron/server/services/a
 import { preflightMissionForNewRun } from "@kletron/server/services/skillSlashPreflight";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequest } from "@kletron/server/services/workspaceService";
+import { buildThreadSkillState } from "@kletron/server/services/workspaceSkillStateService";
 
 const textEncoder = new TextEncoder();
 
 type StreamChunk =
-  | { type: "init"; payload: { runId: string; graphId: string } }
+  | { type: "init"; payload: { runId: string; graphId: string; skills?: Awaited<ReturnType<typeof buildThreadSkillState>> } }
   | { type: "update"; payload: AgentWorkflowUpdate }
   | { type: "final"; payload: AgentWorkflowResult }
   | { type: "error"; payload: { message: string } };
@@ -72,6 +73,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
     loadedSkillIds: pre.loadedSkillIds.length ? pre.loadedSkillIds : undefined,
     skillLoads: pre.skillLoads.length ? pre.skillLoads : undefined,
   };
+  const threadSkills = await buildThreadSkillState({
+    workspaceId: workspace._id.toString(),
+    graph,
+    state: {
+      loadedSkillIds: initialState.loadedSkillIds,
+      skillLoads: initialState.skillLoads,
+    },
+  }).catch(() => ({
+    availableSkills: [],
+    loadedSkills: [],
+    pinnedSkills: [],
+  }));
   await agentGraphRunService.updateRunStatus(runId, "RUNNING", {
     nodeOrder,
     nodeStatuses: initialNodeStatuses,
@@ -85,7 +98,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       };
 
       // Send runId immediately so frontend can persist session
-      sendChunk({ type: "init", payload: { runId, graphId: params.id } });
+      sendChunk({ type: "init", payload: { runId, graphId: params.id, skills: threadSkills } });
 
       try {
         const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");

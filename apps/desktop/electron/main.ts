@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage, Menu } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage, Menu, powerSaveBlocker } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import { spawn } from "node:child_process";
@@ -58,6 +58,9 @@ type UpdateStatus = {
 };
 
 let updateStatus: UpdateStatus = { state: "idle" };
+
+/** Renderer asks to block system sleep while agent work is active (see Settings → General). */
+let preventSleepBlockerId: number | null = null;
 
 async function getAutoUpdater(): Promise<AutoUpdater | null> {
   if (autoUpdaterRef) return autoUpdaterRef;
@@ -261,7 +264,7 @@ function installAppMenu() {
         {
           label: "Account",
           click: () => {
-            mainWindow?.webContents.send("app:navigate", "account");
+            mainWindow?.webContents.send("app:openSettings", "account");
           },
         },
       ],
@@ -448,6 +451,13 @@ app.on("open-url", (event, url) => {
   dispatchAuthUrl(url);
 });
 
+app.on("before-quit", () => {
+  if (preventSleepBlockerId !== null) {
+    powerSaveBlocker.stop(preventSleepBlockerId);
+    preventSleepBlockerId = null;
+  }
+});
+
 ipcMain.handle("app:selectWorkspace", async () => {
   const result = await dialog.showOpenDialog({
     properties: ["openDirectory"]
@@ -476,6 +486,18 @@ ipcMain.handle("app:getWorkspace", async () => {
 ipcMain.handle("app:openExternal", async (_event, url: string) => {
   if (!url) return false;
   await shell.openExternal(url);
+  return true;
+});
+
+ipcMain.handle("app:setPreventSleep", async (_event, enabled: boolean) => {
+  if (enabled) {
+    if (preventSleepBlockerId === null) {
+      preventSleepBlockerId = powerSaveBlocker.start("prevent-app-suspension");
+    }
+  } else if (preventSleepBlockerId !== null) {
+    powerSaveBlocker.stop(preventSleepBlockerId);
+    preventSleepBlockerId = null;
+  }
   return true;
 });
 

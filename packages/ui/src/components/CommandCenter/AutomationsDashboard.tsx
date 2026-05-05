@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { Skeleton } from '@kletron/ui/components/design-system';
 import {
   Plus,
   Play,
@@ -150,7 +151,41 @@ export function AutomationsDashboard({
       </div>
 
       {/* Automation List */}
-      {automations.map((automation) => (
+      {loading ? (
+        <div
+          role="status"
+          aria-busy="true"
+          aria-label="Loading automations"
+          className="space-y-3"
+        >
+          {[0, 1, 2].map((k) => (
+            <div
+              key={k}
+              className="rounded-md border border-border-subtle bg-bg-surface/50 overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-3 py-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <Skeleton className="h-4 w-4 shrink-0 rounded-full" height="h-4" />
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <Skeleton className="h-3.5 max-w-[200px] w-[55%]" height="h-3.5" radius="rounded-md" />
+                    <Skeleton className="h-2.5 max-w-md w-4/5" height="h-2.5" radius="rounded" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                  <Skeleton className="h-7 w-7 rounded" height="h-7" />
+                  <Skeleton className="h-7 w-7 rounded" height="h-7" />
+                  <Skeleton className="h-7 w-7 rounded" height="h-7" />
+                </div>
+              </div>
+              <div className="flex items-center gap-4 px-3 py-1.5 border-t border-border-subtle bg-bg-elevated/30">
+                <Skeleton className="h-2.5 w-28" height="h-2.5" radius="rounded" />
+                <Skeleton className="h-2.5 w-20" height="h-2.5" radius="rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+      automations.map((automation) => (
         <div
           key={automation.id}
           className="rounded-md border border-border-subtle bg-bg-surface/50 overflow-hidden"
@@ -240,17 +275,11 @@ export function AutomationsDashboard({
             {automation.nextRunAt && <span>Next: {formatRelativeTime(automation.nextRunAt)}</span>}
           </div>
         </div>
-      ))}
+      )))}
 
       {automations.length === 0 && !showAdd && !loading && (
         <div className="rounded-md border border-border-subtle px-3 py-6 text-xs text-text-muted text-center">
           No automations configured. Create one to run tasks on a schedule.
-        </div>
-      )}
-
-      {loading && (
-        <div className="rounded-md border border-border-subtle px-3 py-4 text-xs text-text-muted text-center">
-          Loading automations...
         </div>
       )}
 

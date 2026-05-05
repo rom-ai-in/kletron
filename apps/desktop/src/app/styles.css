@@ -205,6 +205,21 @@
   }
 }
 
+/* Settings → Appearance: compact density */
+html.kletron-compact {
+  font-size: 13px;
+}
+html.kletron-compact .glass-sidebar {
+  padding-left: 0.375rem;
+  padding-right: 0.375rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+html.kletron-compact .glass-titlebar {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
 /* ── Electron window drag regions ────────────────────────────── */
 .app-region-drag {
   -webkit-app-region: drag;

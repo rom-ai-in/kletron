@@ -1,6 +1,7 @@
 import { ExternalLink, Play, MessageSquare } from "lucide-react";
 import { Button } from "@kletron/ui/components/design-system";
 import type { Automation } from "@kletron/ui/components/CommandCenter/AutomationsDashboard";
+import { DesktopAutomationDetailSkeleton } from "../components/DesktopLoadingSkeletons";
 
 function formatRelative(iso?: string | null): string {
   if (!iso) return "Never";
@@ -21,6 +22,8 @@ type Props = {
   loading?: boolean;
   /** True when list loaded but nothing selected */
   emptySelection?: boolean;
+  /** True when API returned zero automations */
+  listEmpty?: boolean;
   onRunNow: () => void | Promise<void>;
   onOpenInBrowser: () => void;
   onOpenThread?: () => void;
@@ -31,6 +34,7 @@ export function DesktopAutomationDetailShell({
   automation,
   loading = false,
   emptySelection = false,
+  listEmpty = false,
   onRunNow,
   onOpenInBrowser,
   onOpenThread,
@@ -38,8 +42,19 @@ export function DesktopAutomationDetailShell({
 }: Props) {
   if (loading) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-text-muted">
-        <span className="text-sm">Loading automations…</span>
+      <div className="flex flex-1 min-h-0 flex-col">
+        <DesktopAutomationDetailSkeleton />
+      </div>
+    );
+  }
+
+  if (listEmpty && !loading) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+        <p className="text-sm font-medium text-text-primary">No automations yet</p>
+        <p className="text-xs text-text-muted max-w-sm">
+          Create one from the sidebar (+) or open the web app for advanced setup.
+        </p>
       </div>
     );
   }

@@ -2,8 +2,9 @@
 
 import React from 'react';
 import { X, Pin } from 'lucide-react';
+import type { ThreadLiveStatus } from '@kletron/shared/chatTypes';
 
-export type TabLiveStatus = 'running' | 'completed' | 'idle' | 'waiting' | 'error';
+export type TabLiveStatus = ThreadLiveStatus;
 
 export interface ConversationTabItem {
   id: string;
@@ -24,12 +25,13 @@ export interface ConversationTabsProps {
 function TabStatusDot({ status }: { status?: TabLiveStatus }) {
   if (!status || status === 'idle') return null;
   const styles: Record<string, string> = {
-    running: 'bg-status-success animate-pulse',
-    completed: 'bg-status-success',
-    waiting: 'bg-status-warning',
-    error: 'bg-status-error',
+    running: 'h-2.5 w-2.5 bg-status-success shadow-[0_0_0_2px_var(--status-success-bg)] animate-pulse',
+    completed: 'h-2 w-2 bg-status-success/60',
+    completed_unread: 'h-2.5 w-2.5 bg-status-info ring-2 ring-status-info/55 shadow-[0_0_0_2px_var(--status-info-bg)]',
+    waiting: 'h-2 w-2 bg-status-warning ring-1 ring-status-warning/50',
+    error: 'h-2.5 w-2.5 bg-status-error shadow-[0_0_0_2px_var(--status-error-bg)] ring-2 ring-status-error/50',
   };
-  return <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${styles[status] ?? ''}`} />;
+  return <span className={`rounded-full flex-shrink-0 ${styles[status] ?? ''}`} />;
 }
 
 export function ConversationTabs({

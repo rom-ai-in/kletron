@@ -5,10 +5,9 @@
 import { NextResponse } from "next/server";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import {
-    listSkills,
-    listWorkspaceSkills,
     setWorkspaceSkill,
 } from "@kletron/server/services/skillsService";
+import { listWorkspaceSkillViews } from "@kletron/server/services/workspaceSkillStateService";
 import { getWorkspaceByIdUnsafe, getWorkspaceById } from "@kletron/server/services/workspaceService";
 
 export const dynamic = "force-dynamic";
@@ -30,22 +29,13 @@ export async function GET(
     const workspace = await assertWorkspaceAccess(workspaceId, auth);
     if (!workspace) return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
 
-    const viewerUserId =
-        auth.authType === "internal" ? null : auth.userId;
-
-    const [activations, library] = await Promise.all([
-        listWorkspaceSkills(workspaceId),
-        listSkills({ viewerUserId }),
-    ]);
-    const enabledMap = new Map(activations.map((a) => [a.skillSlug, a]));
+    const viewerUserId = auth.authType === "internal" ? null : auth.userId;
+    const { activations, skills } = await listWorkspaceSkillViews(workspaceId, viewerUserId);
 
     return NextResponse.json({
         workspaceId,
         activations,
-        skills: library.map((skill) => ({
-            ...skill,
-            enabled: enabledMap.get(skill.slug)?.enabled ?? false,
-        })),
+        skills,
     });
 }
 
@@ -69,14 +59,25 @@ export async function POST(
     if (!skillSlug) {
         return NextResponse.json({ error: "skillSlug is required" }, { status: 400 });
     }
-    const enabled = body.enabled !== false;
+    const enabled =
+        body.enabled === undefined
+            ? undefined
+            : body.enabled !== false;
+    const autoLoadInNewThreads =
+        body.autoLoadInNewThreads === undefined ? undefined : body.autoLoadInNewThreads === true;
     const configOverride =
         body.configOverride && typeof body.configOverride === "object"
             ? body.configOverride
             : undefined;
 
     try {
-        const activation = await setWorkspaceSkill(workspaceId, skillSlug, enabled, configOverride);
+        const activation = await setWorkspaceSkill(
+            workspaceId,
+            skillSlug,
+            enabled,
+            autoLoadInNewThreads,
+            configOverride,
+        );
         return NextResponse.json({ activation });
     } catch (error) {
         return NextResponse.json(

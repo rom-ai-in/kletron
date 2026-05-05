@@ -16,6 +16,7 @@ import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { normalizeToWorkModeId } from "@kletron/shared/workMode";
 import { normalizeResearchDepth } from "@kletron/shared/researchDepth";
 import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
+import { buildThreadSkillState } from "@kletron/server/services/workspaceSkillStateService";
 
 /**
  * GET /api/sessions/[id] - Get session details with conversation history and graph info.
@@ -39,6 +40,21 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
     // Fetch graph info for node count (to determine adaptive UI)
     const graph = await agentGraphService.getGraph(run.graphId.toString());
+    const workspaceId = run.workspaceId?.toString() ?? null;
+    const skills = workspaceId
+      ? await buildThreadSkillState({
+          workspaceId,
+          graph,
+          state: {
+            loadedSkillIds: run.state?.loadedSkillIds,
+            skillLoads: run.state?.skillLoads,
+          },
+        }).catch(() => ({
+          availableSkills: [],
+          loadedSkills: [],
+          pinnedSkills: [],
+        }))
+      : { availableSkills: [], loadedSkills: [], pinnedSkills: [] };
 
     // Strip injected [System: ...] personality prefix from title
     const rawTitle = run.title ?? run.state?.mission?.slice(0, 80) ?? "";
@@ -97,6 +113,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     return NextResponse.json({
       id: run._id?.toString(),
       graphId: run.graphId?.toString(),
+      workspaceId,
       workMode,
       researchDepth,
       title,
@@ -114,6 +131,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       state: run.state,
       conversationHistory: paginatedConversationHistory,
       conversationPagination: pagination,
+      skills,
       graph: graph ? {
         name: graph.name,
         description: graph.description,

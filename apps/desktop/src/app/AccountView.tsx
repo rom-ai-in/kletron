@@ -7,10 +7,86 @@ export type AccountViewProps = {
   openPortalPath: (path: string) => void;
   onSignOut: () => void;
   hasSession: boolean;
+  /** Nested inside desktop Settings — compact chrome */
+  embedded?: boolean;
 };
 
-export function AccountView({ email, fullName, openPortalPath, onSignOut, hasSession }: AccountViewProps) {
+export function AccountView({
+  email,
+  fullName,
+  openPortalPath,
+  onSignOut,
+  hasSession,
+  embedded = false,
+}: AccountViewProps) {
   const display = fullName?.trim() || email?.split("@")[0] || "Account";
+
+  const linksBlock = (
+    <div className="space-y-2 max-w-md">
+      <Button
+        variant="secondary"
+        className="w-full justify-between"
+        onClick={() => openPortalPath("/app/account")}
+        type="button"
+      >
+        <span className="flex items-center gap-2">
+          <UserCircle className="h-4 w-4" />
+          Account settings
+        </span>
+        <ExternalLink className="h-4 w-4 opacity-70" />
+      </Button>
+      <Button
+        variant="secondary"
+        className="w-full justify-between"
+        onClick={() => openPortalPath("/app/organization")}
+        type="button"
+      >
+        <span className="flex items-center gap-2">
+          <Building2 className="h-4 w-4" />
+          Organization
+        </span>
+        <ExternalLink className="h-4 w-4 opacity-70" />
+      </Button>
+      <Button
+        variant="secondary"
+        className="w-full justify-between"
+        onClick={() => openPortalPath("/app/account/billing")}
+        type="button"
+      >
+        <span className="flex items-center gap-2">
+          <CreditCard className="h-4 w-4" />
+          Billing
+        </span>
+        <ExternalLink className="h-4 w-4 opacity-70" />
+      </Button>
+    </div>
+  );
+
+  const sessionBlock =
+    hasSession ? (
+      <div className="pt-4 border-t border-border-subtle">
+        <Button variant="secondary" onClick={onSignOut} type="button">
+          Sign out
+        </Button>
+      </div>
+    ) : null;
+
+  if (embedded) {
+    return (
+      <div className="w-full max-w-md space-y-6">
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-text-primary">{display}</p>
+          <p className="text-xs text-text-muted truncate">{email || "Not signed in"}</p>
+        </div>
+        <p className="text-xs text-text-secondary">
+          Profile, security, API tokens, and privacy controls live in the web app. Use the links below to manage your account in
+          the browser.
+        </p>
+        {linksBlock}
+        {sessionBlock}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col bg-bg-app overflow-hidden">
@@ -31,53 +107,8 @@ export function AccountView({ email, fullName, openPortalPath, onSignOut, hasSes
           Profile, security, API tokens, and privacy controls live in the web app. Use the links below to manage your account in
           the browser.
         </p>
-
-        <div className="space-y-2 max-w-md">
-          <Button
-            variant="secondary"
-            className="w-full justify-between"
-            onClick={() => openPortalPath("/app/account")}
-            type="button"
-          >
-            <span className="flex items-center gap-2">
-              <UserCircle className="h-4 w-4" />
-              Account settings
-            </span>
-            <ExternalLink className="h-4 w-4 opacity-70" />
-          </Button>
-          <Button
-            variant="secondary"
-            className="w-full justify-between"
-            onClick={() => openPortalPath("/app/organization")}
-            type="button"
-          >
-            <span className="flex items-center gap-2">
-              <Building2 className="h-4 w-4" />
-              Organization
-            </span>
-            <ExternalLink className="h-4 w-4 opacity-70" />
-          </Button>
-          <Button
-            variant="secondary"
-            className="w-full justify-between"
-            onClick={() => openPortalPath("/app/account/billing")}
-            type="button"
-          >
-            <span className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4" />
-              Billing
-            </span>
-            <ExternalLink className="h-4 w-4 opacity-70" />
-          </Button>
-        </div>
-
-        {hasSession ? (
-          <div className="pt-4 border-t border-border-subtle">
-            <Button variant="ghost" onClick={onSignOut} type="button">
-              Sign out
-            </Button>
-          </div>
-        ) : null}
+        {linksBlock}
+        {sessionBlock}
       </div>
     </div>
   );

@@ -56,7 +56,13 @@ import type { WorkModeId } from "@kletron/shared/workMode";
 import { normalizeToWorkModeId } from "@kletron/shared/workMode";
 import type { ResearchDepthId } from "@kletron/shared/researchDepth";
 import { normalizeResearchDepth } from "@kletron/shared/researchDepth";
-import { sessionStatusToSidebarLiveStatus } from "@kletron/shared/chatTypes";
+import {
+  finalizeSidebarLiveStatus,
+  inferSessionListStatus,
+  sessionStatusToSidebarLiveStatus,
+} from "@kletron/shared/chatTypes";
+import { useThreadReadCursors } from "@kletron/ui/hooks/useThreadReadCursors";
+import type { ThreadSkillState } from "@kletron/shared/skills/types";
 import {
   CAPABILITY_DROPPED_BANNER_TAIL,
   CAPABILITY_DROPPED_SLIM_CTA_LABEL,
@@ -96,6 +102,7 @@ type SessionSummary = {
 type SessionDetail = {
   id: string;
   graphId: string;
+  workspaceId?: string | null;
   title: string;
   status: string;
   threadApprovalMode?: ThreadApprovalMode;
@@ -112,6 +119,7 @@ type SessionDetail = {
   nodeOrder: string[];
   nodeStatuses: Record<string, string>;
   tokenUsage: any;
+  skills?: ThreadSkillState;
   conversationPagination?: {
     total: number;
     start: number;
@@ -125,6 +133,72 @@ type SessionDetail = {
 
 function formatPerfMs(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? `${Math.round(value)}ms` : "—";
+}
+
+function ThreadSkillsSummary({ skills }: { skills: ThreadSkillState | null | undefined }) {
+  const available = skills?.availableSkills ?? [];
+  const loaded = skills?.loadedSkills ?? [];
+  const pinned = skills?.pinnedSkills ?? [];
+  const renderItems = (items: string[]) =>
+    items.length > 0 ? (
+      <div className="mt-2 flex flex-wrap gap-2">
+        {items.map((item) => (
+          <span
+            key={item}
+            className="rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-secondary"
+          >
+            {item}
+          </span>
+        ))}
+      </div>
+    ) : (
+      <div className="mt-2 text-[10px] text-text-muted">None</div>
+    );
+
+  return (
+    <div className="mx-4 mt-2 rounded-lg border border-border-subtle bg-bg-surface/90 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-[12px] font-semibold text-text-primary">Skills</div>
+          <div className="text-[11px] text-text-muted">
+            Runtime skill state for this thread.
+          </div>
+        </div>
+        <Link
+          href="/app/skills"
+          className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+        >
+          Open Skills
+        </Link>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <div className="rounded-md border border-border-subtle bg-bg-app/40 p-3">
+          <div className="text-[11px] font-medium text-text-primary">
+            Available in workspace ({available.length})
+          </div>
+          {renderItems(
+            available.map((skill) =>
+              skill.autoLoadInNewThreads ? `${skill.name} · auto-load` : skill.name,
+            ),
+          )}
+        </div>
+        <div className="rounded-md border border-border-subtle bg-bg-app/40 p-3">
+          <div className="text-[11px] font-medium text-text-primary">
+            Loaded in this thread ({loaded.length})
+          </div>
+          {renderItems(
+            loaded.map((skill) => (skill.reason ? `${skill.name} · ${skill.reason}` : skill.name)),
+          )}
+        </div>
+        <div className="rounded-md border border-border-subtle bg-bg-app/40 p-3">
+          <div className="text-[11px] font-medium text-text-primary">
+            Pinned by this graph ({pinned.length})
+          </div>
+          {renderItems(pinned.map((skill) => skill.name))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const SESSION_STORAGE_KEY = "agent-active-session";
@@ -590,6 +664,8 @@ export default function AgentPage() {
     refreshWorkspaces,
   } = useWorkspace();
 
+  const threadRead = useThreadReadCursors(activeWorkspaceId);
+
   // ── Code vs Work mode (per workspace, persisted server + local mirror) ──
   const [workMode, setWorkMode] = useState<WorkModeId>("code");
   /** New-session agent depth (stored on run at creation). */
@@ -711,7 +787,12 @@ export default function AgentPage() {
         return;
       }
       const data = await res.json();
-      const list = Array.isArray(data) ? (data as SessionSummary[]) : [];
+      const list = Array.isArray(data)
+        ? (data as SessionSummary[]).map((row) => ({
+            ...row,
+            status: inferSessionListStatus(row) ?? row.status,
+          }))
+        : [];
       if (gen !== sessionsFetchGenRef.current) return;
       setSessions(list);
       sessionsHydratedRef.current = true;
@@ -1408,6 +1489,35 @@ export default function AgentPage() {
     return st === "RUNNING" || st === "PENDING";
   }, [activeSessionId, sessionDetail]);
 
+  useEffect(() => {
+    if (!activeWorkspaceId || sessions.length === 0) return;
+    threadRead.syncBaseline(
+      sessions.map((s) => ({
+        id: s.id,
+        updatedAt: s.endedAt ?? s.startedAt,
+      })),
+    );
+  }, [activeWorkspaceId, sessions, threadRead]);
+
+  useEffect(() => {
+    if (!activeSessionId || !activeWorkspaceId) return;
+    if (sending || isServerSideRunActive) return;
+    const st = (sessionDetail?.status ?? "").toUpperCase();
+    if (!["COMPLETED", "FAILED", "CANCELLED"].includes(st)) return;
+    const row = sessions.find((s) => s.id === activeSessionId);
+    const ua = row?.endedAt ?? row?.startedAt;
+    if (!ua) return;
+    threadRead.markRead(activeSessionId, ua);
+  }, [
+    activeSessionId,
+    activeWorkspaceId,
+    sending,
+    isServerSideRunActive,
+    sessionDetail?.status,
+    sessions,
+    threadRead,
+  ]);
+
   const agentBusy = sending || isServerSideRunActive;
 
   /** React-side thread model (compact) — emitted inside each `[kletron:thread-dom]` log for diff vs `dom.*`. */
@@ -1480,17 +1590,25 @@ export default function AgentPage() {
     if (!activeWorkspace) return [];
     const threadsForWorkspace = sessions
       .filter((s) => s.workspaceId === activeWorkspace.id)
-      .map((s): SidebarThread => ({
-        id: s.id,
-        title: s.title || "Untitled",
-        updatedAt: s.endedAt ?? s.startedAt,
-        liveStatus: sessionStatusToSidebarLiveStatus(
+      .map((s): SidebarThread => {
+        const recency = s.endedAt ?? s.startedAt;
+        const base = sessionStatusToSidebarLiveStatus(
           s.status,
           activeSessionId === s.id && (sending || isServerSideRunActive),
-        ),
-        category: s.source === "automation" || s.automationId ? "automation" : "chat",
-        archived: s.archived,
-      }));
+        );
+        return {
+          id: s.id,
+          title: s.title || "Untitled",
+          updatedAt: recency,
+          liveStatus: finalizeSidebarLiveStatus(base, {
+            isActiveThread: activeSessionId === s.id,
+            updatedAt: recency,
+            lastReadAt: threadRead.lastReadAt(s.id),
+          }),
+          category: s.source === "automation" || s.automationId ? "automation" : "chat",
+          archived: s.archived,
+        };
+      });
     return [
       {
         id: activeWorkspace.id,
@@ -1501,7 +1619,7 @@ export default function AgentPage() {
         threads: threadsForWorkspace,
       },
     ];
-  }, [activeWorkspace, sessions, sending, activeSessionId, isServerSideRunActive]);
+  }, [activeWorkspace, sessions, sending, activeSessionId, isServerSideRunActive, threadRead]);
 
   const threadSearchPaletteItems = useMemo(
     () =>
@@ -1856,6 +1974,7 @@ export default function AgentPage() {
           </>
         }
       />
+      {sessionDetail?.id ? <ThreadSkillsSummary skills={sessionDetail?.skills} /> : null}
 
       {/* Error snackbar - always visible at top when there's an error */}
       {errorMessage && !sending && (

@@ -21,11 +21,12 @@ import { workspaceChannelSettingsService } from "@kletron/server/services/worksp
 import { resolveGraphSelectionForNewSession } from "@kletron/server/services/graphRoutingService";
 import type { AgentStreamKpiV1, GraphRouteInfo, GraphSelectionMode } from "@kletron/shared/chatTypes";
 import { CHANNEL_IDS, type ChannelId } from "@kletron/shared/channelTypes";
+import { buildThreadSkillState } from "@kletron/server/services/workspaceSkillStateService";
 
 const textEncoder = new TextEncoder();
 
 type StreamChunk =
-  | { type: "init"; payload: { runId: string; graphId: string; route?: GraphRouteInfo } }
+  | { type: "init"; payload: { runId: string; graphId: string; route?: GraphRouteInfo; skills?: Awaited<ReturnType<typeof buildThreadSkillState>> } }
   | { type: "update"; payload: AgentWorkflowUpdate }
   | { type: "text_delta"; payload: { content: string } }
   | { type: "reasoning_delta"; payload: { content: string } }
@@ -224,6 +225,18 @@ export async function POST(request: Request) {
     pre.mission.startsWith("[System:") && pre.mission.indexOf("]\n\n") !== -1
       ? pre.mission.slice(pre.mission.indexOf("]\n\n") + 3)
       : pre.mission;
+  const threadSkills = await buildThreadSkillState({
+    workspaceId,
+    graph,
+    state: {
+      loadedSkillIds: initialState.loadedSkillIds,
+      skillLoads: initialState.skillLoads,
+    },
+  }).catch(() => ({
+    availableSkills: [],
+    loadedSkills: [],
+    pinnedSkills: [],
+  }));
   await agentGraphRunService.updateRunStatus(runId, "RUNNING", {
     nodeOrder,
     nodeStatuses: initialNodeStatuses,
@@ -250,7 +263,7 @@ export async function POST(request: Request) {
           clientDisconnected = true;
         }
       };
-      sendChunk({ type: "init", payload: { runId, graphId: resolvedGraphId, route: resolvedRoute } });
+      sendChunk({ type: "init", payload: { runId, graphId: resolvedGraphId, route: resolvedRoute, skills: threadSkills } });
       console.log(`[sessions/create] Stream started for run ${runId}`);
 
       try {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FolderOpen, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import {
     Button,
@@ -9,6 +9,7 @@ import {
     Modal,
     Panel,
     Skeleton,
+    Switch,
     Textarea,
 } from "@kletron/ui/components/design-system";
 import {
@@ -17,9 +18,12 @@ import {
     SLUG_REGEX,
     type SkillCreateInput,
     type SkillRecord,
+    type ThreadSkillState,
+    type WorkspaceSkillView,
 } from "@kletron/shared";
 import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 import { useSkillsLibrary } from "../../hooks/useSkillsLibrary";
+import { useWorkspaceSkills } from "../../hooks/useWorkspaceSkills";
 
 const EMPTY_BODY = `## When to use this skill
 
@@ -99,63 +103,124 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
     );
     const [search, setSearch] = useState("");
     const {
-        skills,
-        executableSlugsForWorkspace,
         isLoading,
         error,
-        refresh,
+        refresh: refreshSkillsLibrary,
         createSkill,
         updateSkill,
         deleteSkill,
-    } = useSkillsLibrary({ search, workspaceId });
+    } = useSkillsLibrary({ workspaceId });
+    const {
+        skills: workspaceSkills,
+        setEnabled,
+        setAutoLoadInNewThreads,
+        isLoading: workspaceSkillsLoading,
+        error: workspaceSkillsError,
+        refresh: refreshWorkspaceSkills,
+    } = useWorkspaceSkills(workspaceId);
 
     const [workspaceLinkBusy, setWorkspaceLinkBusy] = useState(false);
     const [workspaceLinkError, setWorkspaceLinkError] = useState<string | null>(null);
+    const [currentThreadSkills, setCurrentThreadSkills] = useState<ThreadSkillState | null>(null);
+    const [currentThreadWorkspaceId, setCurrentThreadWorkspaceId] = useState<string | null>(null);
+    const [currentThreadGraphName, setCurrentThreadGraphName] = useState<string | null>(null);
+
+    const refreshCurrentThreadSkills = useCallback(async () => {
+        const runId = typeof window !== "undefined" ? window.sessionStorage.getItem("agent-active-session") : null;
+        if (!runId) {
+            setCurrentThreadSkills(null);
+            setCurrentThreadWorkspaceId(null);
+            setCurrentThreadGraphName(null);
+            return;
+        }
+        try {
+            const res = await fetch(`/api/sessions/${runId}?limit=1`, { cache: "no-store" });
+            if (!res.ok) return;
+            const data = await res.json();
+            setCurrentThreadSkills((data?.skills as ThreadSkillState | null) ?? null);
+            setCurrentThreadWorkspaceId(typeof data?.workspaceId === "string" ? data.workspaceId : null);
+            setCurrentThreadGraphName(typeof data?.graph?.name === "string" ? data.graph.name : null);
+        } catch {
+            setCurrentThreadSkills(null);
+            setCurrentThreadWorkspaceId(null);
+            setCurrentThreadGraphName(null);
+        }
+    }, []);
 
     const setSkillEnabledForWorkspace = useCallback(
         async (slug: string, enabled: boolean) => {
             setWorkspaceLinkBusy(true);
             setWorkspaceLinkError(null);
             try {
-                const res = await fetch(`/api/workspaces/${workspaceId}/skills`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ skillSlug: slug, enabled }),
-                });
-                if (!res.ok) {
-                    const j = (await res.json().catch(() => ({}))) as { error?: string };
-                    throw new Error(j.error ?? `Request failed (${res.status})`);
-                }
-                await refresh();
+                await setEnabled(slug, enabled);
+                await Promise.all([refreshSkillsLibrary(), refreshCurrentThreadSkills()]);
             } catch (err) {
                 setWorkspaceLinkError((err as Error).message);
             } finally {
                 setWorkspaceLinkBusy(false);
             }
         },
-        [workspaceId, refresh],
+        [refreshCurrentThreadSkills, refreshSkillsLibrary, setEnabled],
     );
 
-    const execSlugSet = useMemo(
-        () => new Set(executableSlugsForWorkspace),
-        [executableSlugsForWorkspace],
+    const setSkillAutoLoad = useCallback(
+        async (slug: string, autoLoadInNewThreads: boolean) => {
+            setWorkspaceLinkBusy(true);
+            setWorkspaceLinkError(null);
+            try {
+                await setAutoLoadInNewThreads(slug, autoLoadInNewThreads);
+                await Promise.all([refreshSkillsLibrary(), refreshCurrentThreadSkills()]);
+            } catch (err) {
+                setWorkspaceLinkError((err as Error).message);
+            } finally {
+                setWorkspaceLinkBusy(false);
+            }
+        },
+        [refreshCurrentThreadSkills, refreshSkillsLibrary, setAutoLoadInNewThreads],
     );
 
     const { activeForWorkspace, libraryOnlyForWorkspace } = useMemo(() => {
-        const active: SkillRecord[] = [];
-        const rest: SkillRecord[] = [];
-        for (const s of skills) {
-            if (execSlugSet.has(s.slug)) active.push(s);
+        const active: WorkspaceSkillView[] = [];
+        const rest: WorkspaceSkillView[] = [];
+        const q = search.trim().toLowerCase();
+        const filtered = workspaceSkills.filter((skill) => {
+            if (!q) return true;
+            return (
+                skill.name.toLowerCase().includes(q) ||
+                skill.slug.toLowerCase().includes(q) ||
+                skill.tags.some((tag) => tag.toLowerCase().includes(q))
+            );
+        });
+        for (const s of filtered) {
+            if (s.availableInWorkspace) active.push(s);
             else rest.push(s);
         }
-        const byName = (a: SkillRecord, b: SkillRecord) => a.name.localeCompare(b.name);
+        const byName = (a: WorkspaceSkillView, b: WorkspaceSkillView) => a.name.localeCompare(b.name);
         active.sort(byName);
         rest.sort(byName);
         return { activeForWorkspace: active, libraryOnlyForWorkspace: rest };
-    }, [skills, execSlugSet]);
+    }, [workspaceSkills, search]);
     const [editor, setEditor] = useState<EditorState>(blankEditor);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+
+    const workspaceSkillBySlug = useMemo(
+        () => new Map(workspaceSkills.map((skill) => [skill.slug, skill])),
+        [workspaceSkills],
+    );
+    const activeLoadedSlugSet = useMemo(
+        () => new Set((currentThreadSkills?.loadedSkills ?? []).map((skill) => skill.slug)),
+        [currentThreadSkills],
+    );
+    const activePinnedSlugSet = useMemo(
+        () => new Set((currentThreadSkills?.pinnedSkills ?? []).map((skill) => skill.slug)),
+        [currentThreadSkills],
+    );
+    const currentThreadMatchesWorkspace = currentThreadWorkspaceId === workspaceId;
+
+    useEffect(() => {
+        void refreshCurrentThreadSkills();
+    }, [refreshCurrentThreadSkills, workspaceId]);
 
     const openCreate = () => {
         setSaveError(null);
@@ -188,6 +253,11 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                     body: input.body,
                 });
             }
+            await Promise.all([
+                refreshSkillsLibrary(),
+                refreshWorkspaceSkills(),
+                refreshCurrentThreadSkills(),
+            ]);
             closeEditor();
         } catch (err) {
             setSaveError((err as Error).message);
@@ -201,6 +271,11 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
         if (!confirm(`Delete skill "${skill.name}"?`)) return;
         try {
             await deleteSkill(skill.slug);
+            await Promise.all([
+                refreshSkillsLibrary(),
+                refreshWorkspaceSkills(),
+                refreshCurrentThreadSkills(),
+            ]);
         } catch (err) {
             alert((err as Error).message);
         }
@@ -233,7 +308,7 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                     >
                         Connectors
                     </Link>
-                    <span>{isLoading ? "Loading…" : `${skills.length} skills`}</span>
+                    <span>{workspaceSkillsLoading ? "Loading…" : `${workspaceSkills.length} skills`}</span>
                 </div>
             </div>
 
@@ -307,11 +382,11 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                     </Button>
                 </div>
 
-                {error && (
-                    <p className="text-xs text-status-error-text">Error: {error}</p>
+                {(error || workspaceSkillsError) && (
+                    <p className="text-xs text-status-error-text">Error: {error ?? workspaceSkillsError}</p>
                 )}
 
-                {isLoading && (
+                {(isLoading || workspaceSkillsLoading) && (
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                         {[1, 2, 3, 4].map((i) => (
                             <Panel key={i} className="p-4">
@@ -328,27 +403,67 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                     </div>
                 )}
 
-                {!isLoading && (
+                {!workspaceSkillsLoading && (
                     <p className="text-xs text-text-muted">
-                        <span className="font-medium text-text-secondary">In workspace</span> means the
-                        agent can use this skill here (file under{" "}
+                        <span className="font-medium text-text-secondary">Available in this workspace</span> means the
+                        agent can load or slash-call this skill here. Availability comes from an explicit workspace
+                        activation and/or a repo-native file under{" "}
                         <code className="rounded bg-bg-elevated px-1 py-0.5 font-mono text-[10px]">
                             .kletron/skills/
                         </code>{" "}
-                        and/or enabled for this workspace).{" "}
-                        <span className="font-medium text-text-secondary">Library only</span> means it
-                        still appears in your library but is not active here yet.
+                        . <span className="font-medium text-text-secondary">Auto-load</span> injects the skill at the
+                        start of each new thread. <span className="font-medium text-text-secondary">Pinned</span> means
+                        the current graph injects it independently of the thread.
                     </p>
                 )}
 
-                {!isLoading ? (
+                {!workspaceSkillsLoading && currentThreadMatchesWorkspace && currentThreadSkills ? (
+                    <Panel className="border border-border-subtle bg-bg-elevated/60 p-4">
+                        <div className="space-y-3">
+                            <div>
+                                <h2 className="text-sm font-semibold text-text-primary">Current thread</h2>
+                                <p className="text-xs text-text-muted">
+                                    {currentThreadGraphName
+                                        ? `Runtime state for the active thread on ${currentThreadGraphName}.`
+                                        : "Runtime state for the active thread."}
+                                </p>
+                            </div>
+                            <div className="grid gap-3 md:grid-cols-3">
+                                <StatusList
+                                    title={`Available in workspace (${currentThreadSkills.availableSkills.length})`}
+                                    items={currentThreadSkills.availableSkills.map((skill) =>
+                                        skill.autoLoadInNewThreads
+                                            ? `${skill.name} · auto-load`
+                                            : skill.name,
+                                    )}
+                                    empty="None"
+                                />
+                                <StatusList
+                                    title={`Loaded in this thread (${currentThreadSkills.loadedSkills.length})`}
+                                    items={currentThreadSkills.loadedSkills.map((skill) =>
+                                        skill.reason ? `${skill.name} · ${skill.reason}` : skill.name,
+                                    )}
+                                    empty="None"
+                                />
+                                <StatusList
+                                    title={`Pinned by this graph (${currentThreadSkills.pinnedSkills.length})`}
+                                    items={currentThreadSkills.pinnedSkills.map((skill) => skill.name)}
+                                    empty="None"
+                                />
+                            </div>
+                        </div>
+                    </Panel>
+                ) : null}
+
+                {!workspaceSkillsLoading ? (
                     <>
                         <section className="space-y-3">
                             <h2 className="text-sm font-semibold text-text-primary">
-                                Active for this workspace ({activeForWorkspace.length})
+                                Available in this workspace ({activeForWorkspace.length})
                             </h2>
                             <p className="text-xs text-text-muted">
-                                Used by the agent and / commands for this workspace.
+                                These skills are available to the agent here. Some may be repo-native, some explicitly
+                                activated, and some may also auto-load at the start of new threads.
                             </p>
                             {activeForWorkspace.length === 0 ? (
                                 <p className="text-xs text-text-muted">
@@ -365,17 +480,23 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                                             key={skill.slug}
                                             skill={skill}
                                             readOnly={skill.source === "builtin"}
-                                            workspaceRole="active"
-                                            onDisableForWorkspace={() => {
-                                                if (
-                                                    !confirm(
-                                                        `Stop using "${skill.slug}" for this workspace? If the skill still exists as a file under .kletron/skills/, it may remain active until that file is removed.`,
-                                                    )
-                                                ) {
-                                                    return;
-                                                }
-                                                void setSkillEnabledForWorkspace(skill.slug, false);
-                                            }}
+                                            loadedInCurrentThread={currentThreadMatchesWorkspace && activeLoadedSlugSet.has(skill.slug)}
+                                            pinnedByCurrentGraph={currentThreadMatchesWorkspace && activePinnedSlugSet.has(skill.slug)}
+                                            onDisableForWorkspace={
+                                                skill.repoNativePresent
+                                                    ? undefined
+                                                    : () => {
+                                                          if (
+                                                              !confirm(
+                                                                  `Stop explicitly enabling "${skill.slug}" for this workspace?`,
+                                                              )
+                                                          ) {
+                                                              return;
+                                                          }
+                                                          void setSkillEnabledForWorkspace(skill.slug, false);
+                                                      }
+                                            }
+                                            onAutoLoadChange={(next) => void setSkillAutoLoad(skill.slug, next)}
                                             enableForWorkspaceBusy={workspaceLinkBusy}
                                             onEdit={openEdit}
                                             onDelete={handleDelete}
@@ -391,8 +512,7 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                             </h2>
                             <p className="text-xs text-text-muted">
                                 Use <span className="font-medium text-text-secondary">Add to workspace</span>{" "}
-                                on a card or in the editor to activate a skill for the agent without
-                                leaving this page. Repo files under{" "}
+                                to make a library skill available here. Repo files under{" "}
                                 <code className="rounded bg-bg-elevated px-1 py-0.5 font-mono text-[10px]">
                                     .kletron/skills/
                                 </code>{" "}
@@ -409,10 +529,12 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                                             key={skill.slug}
                                             skill={skill}
                                             readOnly={skill.source === "builtin"}
-                                            workspaceRole="inactive"
+                                            loadedInCurrentThread={currentThreadMatchesWorkspace && activeLoadedSlugSet.has(skill.slug)}
+                                            pinnedByCurrentGraph={currentThreadMatchesWorkspace && activePinnedSlugSet.has(skill.slug)}
                                             onEnableForWorkspace={() =>
                                                 void setSkillEnabledForWorkspace(skill.slug, true)
                                             }
+                                            onAutoLoadChange={(next) => void setSkillAutoLoad(skill.slug, next)}
                                             enableForWorkspaceBusy={workspaceLinkBusy}
                                             onEdit={openEdit}
                                             onDelete={handleDelete}
@@ -435,7 +557,11 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                         <div className="flex min-h-[32px] flex-wrap items-center gap-2">
                             {editor.mode === "edit" && editor.slug ? (
                                 <>
-                                    {!execSlugSet.has(editor.slug) ? (
+                                    {(() => {
+                                        const skillState = workspaceSkillBySlug.get(editor.slug);
+                                        if (!skillState) return null;
+                                        if (!skillState.availableInWorkspace) {
+                                            return (
                                         <Button
                                             size="sm"
                                             variant="primary"
@@ -446,7 +572,20 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                                         >
                                             {workspaceLinkBusy ? "Updating…" : "Add to this workspace"}
                                         </Button>
-                                    ) : (
+                                            );
+                                        }
+                                        if (skillState.repoNativePresent) {
+                                            return (
+                                                <span className="max-w-[min(100%,28rem)] text-[11px] text-text-muted">
+                                                    Availability is controlled by the repo file under{" "}
+                                                    <code className="rounded bg-bg-surface px-1 py-0.5 text-[10px]">
+                                                        .kletron/skills/{editor.slug}/SKILL.md
+                                                    </code>
+                                                    .
+                                                </span>
+                                            );
+                                        }
+                                        return (
                                         <Button
                                             size="sm"
                                             variant="secondary"
@@ -464,10 +603,8 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                                         >
                                             {workspaceLinkBusy ? "Updating…" : "Remove from workspace"}
                                         </Button>
-                                    )}
-                                    <span className="max-w-[min(100%,28rem)] text-[11px] text-text-muted">
-                                        Turns the skill on or off for this workspace.
-                                    </span>
+                                        );
+                                    })()}
                                 </>
                             ) : editor.mode === "create" && pageWorkspace?.rootPath ? (
                                 <span className="text-[11px] text-text-muted">
@@ -643,25 +780,50 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     );
 }
 
+function StatusList({ title, items, empty }: { title: string; items: string[]; empty: string }) {
+    return (
+        <div className="rounded-lg border border-border-subtle bg-bg-surface p-3">
+            <div className="text-[11px] font-medium text-text-primary">{title}</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+                {items.length > 0 ? (
+                    items.map((item) => (
+                        <span
+                            key={item}
+                            className="rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-[10px] text-text-secondary"
+                        >
+                            {item}
+                        </span>
+                    ))
+                ) : (
+                    <span className="text-[10px] text-text-muted">{empty}</span>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function SkillPanel({
     skill,
     onEdit,
     onDelete,
     readOnly,
-    workspaceRole,
     onEnableForWorkspace,
     onDisableForWorkspace,
+    onAutoLoadChange,
     enableForWorkspaceBusy,
+    loadedInCurrentThread,
+    pinnedByCurrentGraph,
 }: {
-    skill: SkillRecord;
+    skill: WorkspaceSkillView;
     onEdit: (skill: SkillRecord) => void;
     onDelete: (skill: SkillRecord) => void;
     readOnly?: boolean;
-    /** When set, shows whether this skill is in the executable set for the selected workspace. */
-    workspaceRole?: "active" | "inactive";
     onEnableForWorkspace?: () => void;
     onDisableForWorkspace?: () => void;
+    onAutoLoadChange?: (next: boolean) => void;
     enableForWorkspaceBusy?: boolean;
+    loadedInCurrentThread?: boolean;
+    pinnedByCurrentGraph?: boolean;
 }) {
     return (
         <Panel className="p-4">
@@ -675,20 +837,50 @@ function SkillPanel({
                         <span className="shrink-0 rounded-md border border-border-subtle bg-bg-elevated px-2 py-0.5 font-mono text-[10px] text-text-muted">
                             {skill.slug}
                         </span>
-                        {workspaceRole === "active" ? (
+                        {skill.availableInWorkspace ? (
                             <span className="shrink-0 rounded-md border border-status-success-border bg-status-success-bg px-2 py-0.5 text-[10px] font-medium text-status-success-text">
-                                In workspace
+                                Available in workspace
                             </span>
                         ) : null}
-                        {workspaceRole === "inactive" ? (
+                        {!skill.availableInWorkspace ? (
                             <span className="shrink-0 rounded-md border border-border-subtle bg-bg-app px-2 py-0.5 text-[10px] text-text-muted">
                                 Library only
+                            </span>
+                        ) : null}
+                        {skill.repoNativePresent ? (
+                            <span className="shrink-0 rounded-md border border-border-subtle bg-bg-app px-2 py-0.5 text-[10px] text-text-muted">
+                                Repo-native
+                            </span>
+                        ) : null}
+                        {loadedInCurrentThread ? (
+                            <span className="shrink-0 rounded-md border border-status-info-border bg-status-info-bg px-2 py-0.5 text-[10px] font-medium text-status-info-text">
+                                Loaded in current thread
+                            </span>
+                        ) : null}
+                        {pinnedByCurrentGraph ? (
+                            <span className="shrink-0 rounded-md border border-status-warning-border bg-status-warning-bg px-2 py-0.5 text-[10px] font-medium text-status-warning-text">
+                                Pinned by current graph
                             </span>
                         ) : null}
                     </div>
                     {skill.description ? (
                         <p className="mt-1 text-xs text-text-secondary">{skill.description}</p>
                     ) : null}
+                    <div className="mt-2 text-[11px] text-text-muted">
+                        {skill.availableInWorkspace
+                            ? `Availability source: ${skill.availabilitySource}.`
+                            : "Not available in this workspace yet."}
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                        <Switch
+                            checked={skill.autoLoadInNewThreads}
+                            onChange={(checked) => onAutoLoadChange?.(checked)}
+                            disabled={enableForWorkspaceBusy || !skill.availableInWorkspace}
+                        />
+                        <span className="text-[11px] text-text-muted">
+                            Auto-load in new threads
+                        </span>
+                    </div>
                     <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-text-muted">
                         <span className="rounded-md border border-border-subtle bg-bg-elevated/50 px-2 py-1">
                             v{skill.version}
@@ -709,7 +901,7 @@ function SkillPanel({
                     </div>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-start">
-                    {workspaceRole === "inactive" && onEnableForWorkspace ? (
+                    {!skill.availableInWorkspace && onEnableForWorkspace ? (
                         <Button
                             size="sm"
                             variant="primary"
@@ -719,7 +911,7 @@ function SkillPanel({
                             Add to workspace
                         </Button>
                     ) : null}
-                    {workspaceRole === "active" && onDisableForWorkspace ? (
+                    {skill.availableInWorkspace && onDisableForWorkspace ? (
                         <Button
                             size="sm"
                             variant="secondary"

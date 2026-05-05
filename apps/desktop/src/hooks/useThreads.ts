@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import type { WorkModeId } from "@kletron/shared/workMode";
+import { inferSessionListStatus } from "@kletron/shared/chatTypes";
 import type { ConversationHistoryItem, ThreadLiveStatus } from "../types";
 import {
   mergePreferredIntoSessionList,
@@ -18,7 +19,8 @@ function normalizeSessionListRow(raw: SessionListRow): ConversationHistoryItem &
     raw.updatedAt ??
     (typeof raw.endedAt === "string" && raw.endedAt ? raw.endedAt : undefined) ??
     raw.startedAt;
-  return { ...raw, updatedAt };
+  const status = inferSessionListStatus(raw) ?? raw.status;
+  return { ...raw, updatedAt, status };
 }
 
 export function useThreads(

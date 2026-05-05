@@ -1,17 +1,20 @@
 export const dynamic = "force-dynamic";
 import { resolveLlmSelection } from "@kletron/server/llm";
 import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@kletron/shared/types";
+import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { normalizeToWorkModeId } from "@kletron/shared/workMode";
 import { categoryService } from "@kletron/server/services/categoryService";
 import { agentGraphExecutor } from "@kletron/server/services/agentGraphExecutor";
 import type { AgentStreamKpiV1 } from "@kletron/shared/chatTypes";
+import { buildThreadSkillState } from "@kletron/server/services/workspaceSkillStateService";
+import { applySkillSlashPreflight, mergeLoadedSkillIds } from "@kletron/server/services/skillSlashPreflight";
 
 const textEncoder = new TextEncoder();
 
 type StreamChunk =
-  | { type: "init"; payload: { runId: string; graphId: string } }
+  | { type: "init"; payload: { runId: string; graphId: string; skills?: Awaited<ReturnType<typeof buildThreadSkillState>> } }
   | { type: "update"; payload: AgentWorkflowUpdate }
   | { type: "text_delta"; payload: { content: string } }
   | { type: "reasoning_delta"; payload: { content: string } }
@@ -105,7 +108,36 @@ export async function POST(request: Request, { params }: { params: { id: string 
     console.log(`[sessions/chat] ✓ Status "${run.status}" is allowed, proceeding with continuation`);
   }
 
-  const graphId = run.graphId?.toString();
+  const graphId = run.graphId?.toString() ?? "";
+  const workspaceId = run.workspaceId?.toString() ?? "";
+  const graph = graphId ? await agentGraphService.getGraph(graphId) : null;
+  const slashPreflight = workspaceId
+    ? await applySkillSlashPreflight(message, workspaceId)
+    : { mission: message, loadedSkillIdsToAppend: [] };
+  const predictedSlashLoads = slashPreflight.loadedSkillIdsToAppend.filter(
+    (skillId) => !(((run.state?.loadedSkillIds as string[] | undefined) ?? []).includes(skillId)),
+  );
+  const threadSkills = workspaceId
+    ? await buildThreadSkillState({
+        workspaceId,
+        graph,
+        state: {
+          loadedSkillIds: mergeLoadedSkillIds(run.state?.loadedSkillIds, predictedSlashLoads),
+          skillLoads: [
+            ...((run.state?.skillLoads as Array<{ slug: string; at: string; reason?: string }> | undefined) ?? []),
+            ...predictedSlashLoads.map((slug) => ({
+              slug,
+              at: new Date().toISOString(),
+              reason: "slash_preflight",
+            })),
+          ],
+        },
+      }).catch(() => ({
+        availableSkills: [],
+        loadedSkills: [],
+        pinnedSkills: [],
+      }))
+    : { availableSkills: [], loadedSkills: [], pinnedSkills: [] };
 
   /**
    * Do not retag an existing run's work mode from every chat continuation — that blurred Code vs Work.
@@ -143,7 +175,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
           clientDisconnected = true;
         }
       };
-      sendChunk({ type: "init", payload: { runId: params.id, graphId } });
+      sendChunk({ type: "init", payload: { runId: params.id, graphId, skills: threadSkills } });
       console.log(`[sessions/chat] Stream started for run ${params.id}`);
 
       try {

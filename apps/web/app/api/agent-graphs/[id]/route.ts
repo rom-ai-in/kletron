@@ -38,6 +38,7 @@ const GraphSchema = z.object({
                 systemPrompt: z.string(),
                 userPromptTemplate: z.string(),
                 toolNames: z.array(z.string()).default([]),
+                skillIds: z.array(z.string()).optional(),
                 maxToolCalls: z.number().int().positive().optional(),
                 recursionLimit: z.number().int().positive().optional(),
             }),

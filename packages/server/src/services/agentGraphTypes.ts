@@ -199,7 +199,7 @@ export type AgentGraphState = {
      * Merged into the system prompt **after** pinned graph `react.skillIds` (pinned first, then loaded).
      */
     loadedSkillIds?: string[];
-    /** Optional audit trail for UI/debug when skills are loaded at runtime. */
+    /** Optional audit trail for UI/debug when skills are loaded at runtime (e.g. workspace_autoload, slash_preflight, load_skill). */
     skillLoads?: Array<{ slug: string; at: string; reason?: string }>;
     /**
      * LangGraph checkpoint metadata — present when a run was interrupted

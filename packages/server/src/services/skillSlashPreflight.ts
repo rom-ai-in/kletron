@@ -1,5 +1,6 @@
 import { parseSlashCommand } from "./channelSlashParse";
 import { resolveWorkspaceSkills } from "./skillsService";
+import { resolveWorkspaceAutoLoadSkillSlugs } from "./workspaceSkillStateService";
 
 /**
  * Slash commands that are UI/product reserved — never treated as skill slugs.
@@ -70,13 +71,27 @@ export async function preflightMissionForNewRun(
     rawMission: string,
     workspaceId: string
 ): Promise<SkillPreflightStatePatch> {
-    const { mission, loadedSkillIdsToAppend } = await applySkillSlashPreflight(rawMission, workspaceId);
-    const loadedSkillIds = mergeLoadedSkillIds(undefined, loadedSkillIdsToAppend);
-    const skillLoads = loadedSkillIdsToAppend.map((slug) => ({
+    const [autoLoadSkillIds, { mission, loadedSkillIdsToAppend }] = await Promise.all([
+        resolveWorkspaceAutoLoadSkillSlugs(workspaceId),
+        applySkillSlashPreflight(rawMission, workspaceId),
+    ]);
+    const slashSkillIds = loadedSkillIdsToAppend.filter((slug) => !autoLoadSkillIds.includes(slug));
+    const loadedSkillIds = mergeLoadedSkillIds(
+        mergeLoadedSkillIds(undefined, autoLoadSkillIds),
+        slashSkillIds,
+    );
+    const skillLoads = [
+        ...autoLoadSkillIds.map((slug) => ({
+            slug,
+            at: new Date().toISOString(),
+            reason: "workspace_autoload" as const,
+        })),
+        ...slashSkillIds.map((slug) => ({
         slug,
         at: new Date().toISOString(),
         reason: "slash_preflight" as const,
-    }));
+        })),
+    ];
     return {
         mission,
         loadedSkillIds,

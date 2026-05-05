@@ -4,7 +4,10 @@ import { AgentGraphCard } from "@kletron/ui/components/agentGraphs/AgentGraphCar
 import { AgentGraphEditor } from "@kletron/ui/components/agentGraphs/AgentGraphEditor";
 import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
 import { Button } from "@kletron/ui/components/design-system";
-import { AgentStatusShimmerLabel } from "@kletron/ui/components/Agent/AgentStatusShimmerLabel";
+import {
+  DesktopAgentGraphCardsSkeleton,
+  DesktopListRowsSkeleton,
+} from "../components/DesktopLoadingSkeletons";
 import type { AgentGraphSummary, AgentGraphRunSummary } from "../types";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 
@@ -157,12 +160,11 @@ export function AgentGraphsPanel({
           </Button>
         )}
       </div>
-      {graphsLoading && (
-        <div className="text-xs text-text-muted">
-          <AgentStatusShimmerLabel className="text-xs">Loading graphs…</AgentStatusShimmerLabel>
-        </div>
-      )}
-      {!graphsLoading && graphs.length === 0 && (
+      {graphsLoading ? (
+        <DesktopAgentGraphCardsSkeleton count={3} />
+      ) : (
+        <>
+      {graphs.length === 0 && (
         <div className="text-sm text-text-muted rounded-md border border-border-subtle px-4 py-6 text-center">
           No agent graphs found for this workspace.
         </div>
@@ -193,12 +195,17 @@ export function AgentGraphsPanel({
           </div>
         ))}
       </div>
+        </>
+      )}
 
       {selectedGraphId && (
         <section className="mt-8 max-w-3xl space-y-2">
           <h2 className="text-sm font-semibold text-text-primary">Recent runs</h2>
-          {graphRunsLoading && <div className="text-xs text-text-muted">Loading runs…</div>}
-          {!graphRunsLoading && graphRuns.length === 0 && (
+          {graphRunsLoading ? (
+            <DesktopListRowsSkeleton rows={4} />
+          ) : (
+            <>
+          {graphRuns.length === 0 && (
             <p className="text-xs text-text-muted">No runs for this graph yet.</p>
           )}
           <ul className="space-y-1">
@@ -237,6 +244,8 @@ export function AgentGraphsPanel({
               </li>
             ))}
           </ul>
+            </>
+          )}
           {approvalRunId && (
             <div className="mt-3 rounded-md border border-border-subtle bg-bg-elevated p-3">
               <div className="text-[11px] text-text-muted mb-2">Thread approval for run {approvalRunId.slice(0, 8)}…</div>

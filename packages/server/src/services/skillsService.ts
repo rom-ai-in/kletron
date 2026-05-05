@@ -64,6 +64,7 @@ interface WorkspaceSkillDoc {
     skillSlug: string;
     enabled: boolean;
     addedAt: Date;
+    autoLoadInNewThreads?: boolean;
     configOverride?: Record<string, unknown>;
 }
 
@@ -123,6 +124,7 @@ function toWorkspaceRecord(doc: WorkspaceSkillDoc): WorkspaceSkillRecord {
         skillSlug: doc.skillSlug,
         enabled: doc.enabled,
         addedAt: doc.addedAt.toISOString(),
+        autoLoadInNewThreads: Boolean(doc.autoLoadInNewThreads),
         configOverride: doc.configOverride,
     };
 }
@@ -443,16 +445,26 @@ export async function listWorkspaceSkills(workspaceId: string): Promise<Workspac
 export async function setWorkspaceSkill(
     workspaceId: string,
     skillSlug: string,
-    enabled: boolean,
+    enabled?: boolean,
+    autoLoadInNewThreads?: boolean,
     configOverride?: Record<string, unknown>
 ): Promise<WorkspaceSkillRecord> {
     await ensureIndexes();
     const collection = await workspaceSkillsCollection();
     const now = new Date();
+    const existing = await collection.findOne({ workspaceId, skillSlug });
     await collection.updateOne(
         { workspaceId, skillSlug },
         {
-            $set: { enabled, configOverride },
+            $set: {
+                enabled: enabled === undefined ? Boolean(existing?.enabled) : enabled,
+                configOverride:
+                    configOverride === undefined ? existing?.configOverride : configOverride,
+                autoLoadInNewThreads:
+                    autoLoadInNewThreads === undefined
+                        ? Boolean(existing?.autoLoadInNewThreads)
+                        : Boolean(autoLoadInNewThreads),
+            },
             $setOnInsert: { workspaceId, skillSlug, addedAt: now },
         },
         { upsert: true }
@@ -523,10 +535,11 @@ export async function resolveWorkspaceSkills(workspaceId: string): Promise<Resol
 
     const workspace = await getWorkspaceByIdUnsafe(workspaceId);
     const workspaceRootPath = workspace?.rootPath?.trim();
+    const ownerId = workspace?.ownerId ?? null;
 
     const library = new Map<string, SkillRecord>();
     for (const record of await listSkills({
-        viewerUserId: null,
+        viewerUserId: ownerId,
         ...(workspaceRootPath ? { workspaceRootPath } : {}),
     })) {
         library.set(record.slug, record);

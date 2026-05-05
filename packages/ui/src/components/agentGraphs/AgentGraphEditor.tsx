@@ -27,6 +27,7 @@ type AgentGraphDto = {
             systemPrompt: string;
             userPromptTemplate: string;
             toolNames: string[];
+            skillIds?: string[];
         };
         delegate?: {
             mode?: "react" | "graph";
@@ -105,6 +106,7 @@ function makeDefaultNode(idx: number, palette: "code" | "work" = "code") {
             systemPrompt,
             userPromptTemplate: "Analyze this state and produce the next output.\n\n{{state}}",
             toolNames,
+            skillIds: [],
         },
         output: { schemaId: "generic_json" },
     };

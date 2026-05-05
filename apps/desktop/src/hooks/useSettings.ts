@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ActiveView, SettingsToggles } from "../types";
+import type { ActiveView, SettingsSectionId, SettingsToggles } from "../types";
 import {
   BACKEND_STORAGE_KEY,
   DEFAULT_BACKEND_URL,
@@ -7,10 +7,33 @@ import {
   getDefaultBackendUrl,
   isValidHttpUrl,
   normalizeBackendUrl,
+  SETTINGS_TOGGLES_STORAGE_KEY,
 } from "../utils";
+
+const DEFAULT_SETTINGS_TOGGLES: SettingsToggles = {
+  preventSleep: true,
+  requireCmdEnter: true,
+  compactDensity: false,
+  opaqueBackground: false,
+  pointerCursor: true,
+  completionNotifications: true,
+  permissionNotifications: false,
+};
+
+function loadStoredSettingsToggles(): SettingsToggles {
+  try {
+    const raw = localStorage.getItem(SETTINGS_TOGGLES_STORAGE_KEY);
+    if (!raw) return DEFAULT_SETTINGS_TOGGLES;
+    const parsed = JSON.parse(raw) as Partial<SettingsToggles>;
+    return { ...DEFAULT_SETTINGS_TOGGLES, ...parsed };
+  } catch {
+    return DEFAULT_SETTINGS_TOGGLES;
+  }
+}
 
 export function useSettings() {
   const [activeView, setActiveView] = useState<ActiveView>("app");
+  const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("configuration");
   const [backendUrl, setBackendUrl] = useState<string>(() => {
     const stored = localStorage.getItem(BACKEND_STORAGE_KEY);
     if (stored) {
@@ -27,15 +50,7 @@ export function useSettings() {
     return getDefaultBackendUrl();
   });
   const [backendConnected, setBackendConnected] = useState(false);
-  const [settingsToggles, setSettingsToggles] = useState<SettingsToggles>({
-    preventSleep: true,
-    requireCmdEnter: true,
-    compactDensity: false,
-    opaqueBackground: false,
-    pointerCursor: true,
-    completionNotifications: true,
-    permissionNotifications: false,
-  });
+  const [settingsToggles, setSettingsToggles] = useState<SettingsToggles>(loadStoredSettingsToggles);
 
   const backendUrlTrimmed = normalizeBackendUrl(backendUrl);
   const backendUrlValid = isValidHttpUrl(backendUrlTrimmed);
@@ -44,9 +59,19 @@ export function useSettings() {
     localStorage.setItem(BACKEND_STORAGE_KEY, backendUrlTrimmed);
   }, [backendUrlTrimmed]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(SETTINGS_TOGGLES_STORAGE_KEY, JSON.stringify(settingsToggles));
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, [settingsToggles]);
+
   return {
     activeView,
     setActiveView,
+    activeSettingsSection,
+    setActiveSettingsSection,
     backendUrl,
     setBackendUrl,
     backendUrlTrimmed,

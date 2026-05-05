@@ -35,6 +35,34 @@ vi.mock("@kletron/server/services/agentGraphExecutor", () => ({
     },
 }));
 
+const getGraph = vi.hoisted(() => vi.fn());
+vi.mock("@kletron/server/services/agentGraphService", () => ({
+    agentGraphService: {
+        getGraph: (...args: unknown[]) => getGraph(...args),
+    },
+}));
+
+const buildThreadSkillState = vi.hoisted(() => vi.fn());
+vi.mock("@kletron/server/services/workspaceSkillStateService", () => ({
+    buildThreadSkillState: (...args: unknown[]) => buildThreadSkillState(...args),
+}));
+
+const applySkillSlashPreflight = vi.hoisted(() => vi.fn());
+vi.mock("@kletron/server/services/skillSlashPreflight", () => ({
+    applySkillSlashPreflight: (...args: unknown[]) => applySkillSlashPreflight(...args),
+    mergeLoadedSkillIds: (existing: string[] | undefined, toAppend: string[]) => {
+        const out = [...(existing ?? [])];
+        const seen = new Set(out);
+        for (const id of toAppend) {
+            if (!seen.has(id)) {
+                seen.add(id);
+                out.push(id);
+            }
+        }
+        return out;
+    },
+}));
+
 import { POST } from "../app/api/sessions/[id]/chat/route";
 
 async function readNdjson(response: Response) {
@@ -60,6 +88,21 @@ describe("POST /api/sessions/[id]/chat", () => {
         });
         patchRun.mockResolvedValue(undefined);
         updateRunStatus.mockResolvedValue(undefined);
+        getGraph.mockResolvedValue({
+            _id: "graph-1",
+            name: "Coder Agent (agent graph)",
+            nodes: [],
+            edges: [],
+        });
+        buildThreadSkillState.mockResolvedValue({
+            availableSkills: [],
+            loadedSkills: [],
+            pinnedSkills: [],
+        });
+        applySkillSlashPreflight.mockResolvedValue({
+            mission: "je m'appelle comment ?",
+            loadedSkillIdsToAppend: [],
+        });
         continueRun.mockResolvedValue({
             sessionId: "run-1",
             timeline: [],
@@ -84,6 +127,11 @@ describe("POST /api/sessions/[id]/chat", () => {
         const chunks = await readNdjson(res);
         expect(chunks[0]?.type).toBe("init");
         expect(chunks[0]?.payload.graphId).toBe("graph-1");
+        expect(chunks[0]?.payload.skills).toEqual({
+            availableSkills: [],
+            loadedSkills: [],
+            pinnedSkills: [],
+        });
         expect(continueRun.mock.calls[0]?.[2]?.workspaceContextUserId).toBe("user-1");
     });
 });

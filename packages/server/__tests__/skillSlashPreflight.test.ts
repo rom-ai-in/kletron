@@ -6,9 +6,14 @@ import {
     preflightMissionForNewRun,
 } from "../src/services/skillSlashPreflight";
 import * as skillsService from "../src/services/skillsService";
+import * as workspaceSkillStateService from "../src/services/workspaceSkillStateService";
 
 vi.mock("../src/services/skillsService", () => ({
     resolveWorkspaceSkills: vi.fn(),
+}));
+
+vi.mock("../src/services/workspaceSkillStateService", () => ({
+    resolveWorkspaceAutoLoadSkillSlugs: vi.fn(),
 }));
 
 describe("mergeLoadedSkillIds", () => {
@@ -20,6 +25,8 @@ describe("mergeLoadedSkillIds", () => {
 describe("applySkillSlashPreflight", () => {
     beforeEach(() => {
         vi.mocked(skillsService.resolveWorkspaceSkills).mockReset();
+        vi.mocked(workspaceSkillStateService.resolveWorkspaceAutoLoadSkillSlugs).mockReset();
+        vi.mocked(workspaceSkillStateService.resolveWorkspaceAutoLoadSkillSlugs).mockResolvedValue([]);
     });
 
     it("returns no-op for non-slash messages", async () => {
@@ -94,6 +101,8 @@ describe("applySkillSlashPreflight", () => {
 describe("preflightMissionForNewRun", () => {
     beforeEach(() => {
         vi.mocked(skillsService.resolveWorkspaceSkills).mockReset();
+        vi.mocked(workspaceSkillStateService.resolveWorkspaceAutoLoadSkillSlugs).mockReset();
+        vi.mocked(workspaceSkillStateService.resolveWorkspaceAutoLoadSkillSlugs).mockResolvedValue([]);
     });
 
     it("returns loadedSkillIds and skillLoads for slash match", async () => {
@@ -121,5 +130,34 @@ describe("preflightMissionForNewRun", () => {
         expect(r.skillLoads).toHaveLength(1);
         expect(r.skillLoads[0]?.slug).toBe("analyze");
         expect(r.skillLoads[0]?.reason).toBe("slash_preflight");
+    });
+
+    it("prepends workspace autoload skills before slash skills", async () => {
+        const analyze: ResolvedSkillRecord = {
+            slug: "analyze",
+            name: "Analyze",
+            version: "1.0.0",
+            description: "d",
+            tags: [],
+            requiredTools: [],
+            suggestedTools: [],
+            extends: [],
+            body: "",
+            source: "user",
+            createdAt: "",
+            updatedAt: "",
+            resolvedSystemPrompt: "",
+            resolvedTools: [],
+            extendsChain: ["analyze"],
+        };
+        vi.mocked(workspaceSkillStateService.resolveWorkspaceAutoLoadSkillSlugs).mockResolvedValue(["memory-management"]);
+        vi.mocked(skillsService.resolveWorkspaceSkills).mockResolvedValue([analyze]);
+        const r = await preflightMissionForNewRun("/analyze go", "ws");
+        expect(r.mission).toBe("go");
+        expect(r.loadedSkillIds).toEqual(["memory-management", "analyze"]);
+        expect(r.skillLoads.map((load) => load.reason)).toEqual([
+            "workspace_autoload",
+            "slash_preflight",
+        ]);
     });
 });
