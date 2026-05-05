@@ -1,7 +1,7 @@
 // packages/agent-core/src/workspaceSkills.ts
 import type { SkillDefinition, ResolvedSkill } from "./skills/types";
 import { skillRegistry } from "./skills";
-import type { WorkCategoryConfig } from "@kletron/shared/types";
+import type { WorkCategoryConfig } from "@kletron/shared";
 
 /**
  * Workspace-specific skills manager

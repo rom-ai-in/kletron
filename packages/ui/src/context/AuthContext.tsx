@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
         };
 
-        initAuth();
+        void initAuth();
     }, [session, refreshProfile]);
 
     // Sign up - calls our custom API route which will handle NextAuth registration

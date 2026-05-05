@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@kletron/ui/context/AuthContext';
 import { Input, PasswordInput, Button, Panel } from '@kletron/ui/components/design-system';
-import { Copy, Key, Shield, User, LogOut, Plus, X } from 'lucide-react';
 interface ApiTokenInfo {
     id: string;
     label: string | null;

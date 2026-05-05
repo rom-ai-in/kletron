@@ -267,24 +267,24 @@ const [, , command, arg] = process.argv;
 
 switch (command) {
     case "list":
-        listSkills();
+        void listSkills();
         break;
     case "get":
         if (!arg) {
             console.error("Usage: skills-cli get <skillId>");
             process.exit(1);
         }
-        getSkill(arg);
+        void getSkill(arg);
         break;
     case "validate":
-        validateSkills();
+        void validateSkills();
         break;
     case "init":
         if (!arg) {
             console.error("Usage: skills-cli init <skillId>");
             process.exit(1);
         }
-        initSkill(arg);
+        void initSkill(arg);
         break;
     default:
         console.log(`

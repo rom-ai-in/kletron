@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
-import CodeBlock from './CodeBlock'; // We will create this next
+// We will create this next
 
 interface ToolOutputProps {
     output: string;
@@ -12,7 +12,7 @@ export const ToolOutput: React.FC<ToolOutputProps> = ({ output, isError }) => {
     const [copied, setCopied] = useState(false);
 
     const handleCopy = () => {
-        navigator.clipboard.writeText(output);
+        void navigator.clipboard.writeText(output);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
@@ -29,11 +29,7 @@ export const ToolOutput: React.FC<ToolOutputProps> = ({ output, isError }) => {
                 </pre>
             </div>
             <button
-                onClick={() => {
-                    navigator.clipboard.writeText(output);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                }}
+                onClick={handleCopy}
                 className="absolute top-2 right-2 p-1.5 bg-bg-surface/80 hover:bg-state-hover rounded opacity-0 group-hover:opacity-100 transition-opacity text-text-muted hover:text-text-primary border border-border-subtle"
                 title="Copy output"
             >

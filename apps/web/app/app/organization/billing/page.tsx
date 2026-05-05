@@ -15,7 +15,7 @@ import {
     AlertCircle
 } from 'lucide-react';
 import { useSubscription } from '@kletron/ui/hooks/useSubscription';
-import { Button, Badge, ProgressBar } from '@kletron/ui/components/design-system';
+import { Button } from '@kletron/ui/components/design-system';
 
 // Plan display configurations
 const planConfigs = {
@@ -70,7 +70,7 @@ export default function BillingPage() {
         if (searchParams?.get('success') === 'true') {
             setShowSuccess(true);
             // Refresh subscription data
-            refresh();
+            void refresh();
             // Clear success message after 5 seconds
             setTimeout(() => setShowSuccess(false), 5000);
         }

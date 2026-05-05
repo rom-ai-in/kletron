@@ -21,7 +21,7 @@ export default function WorkspaceHubPage() {
     useEffect(() => {
         if (!activeWorkspaceId) return;
         const ac = new AbortController();
-        (async () => {
+        void (async () => {
             try {
                 const res = await fetch(`/api/workspaces/${activeWorkspaceId}`, {
                     signal: ac.signal,

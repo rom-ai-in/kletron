@@ -2,11 +2,8 @@
 
 import React, { useState } from "react";
 import {
-    Files, Search, GitBranch, Bug, Brain, Settings, MessageSquare, List,
-    Play, Pause, CheckCircle2, XCircle, Clock, Loader2, Send, StopCircle,
-    ChevronRight, ChevronDown, FileCode, Folder, FolderOpen, Plus, ArrowUp,
-    MoreHorizontal, Wrench, Terminal, Eye, Code2, Check, X, RefreshCw, User, Cpu, BarChart3,
-    SplitSquareVertical, Maximize2, Minimize2, AlertCircle, PlayCircle, Archive
+    Files, Search, GitBranch, Bug, Brain, Settings, MessageSquare, List, CheckCircle2, XCircle, Clock, Loader2,
+    ChevronRight, ChevronDown, FileCode, Folder, FolderOpen, Plus, ArrowUp, Wrench, Check, X, Cpu, BarChart3, AlertCircle, PlayCircle
 } from "lucide-react";
 
 // ============================================================================

@@ -2,7 +2,6 @@
 
 // Test script for category system
 import { CategoryService } from "@kletron/server/services/categoryService";
-import { BUILT_IN_CATEGORIES } from "@kletron/shared/categoryTypes";
 
 async function testCategorySystem() {
   console.log("🧪 Testing Category System...\n");

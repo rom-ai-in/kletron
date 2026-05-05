@@ -1,17 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import {
-    Archive, Check, Pencil, Trash2, Plus,
-    Settings, X, Brain, Eye, Zap,
-    Wrench, GitBranch, Paperclip, Monitor,
-    FileUp, Camera, MessageSquare, Clock,
-    ClipboardCheck, Play, Pause, RefreshCw,
+import { useState } from "react";
+import { Eye, Zap,
+    Wrench, GitBranch,
 } from "lucide-react";
 
 import {
-    Button,
-    ChatInput,
     Switch,
     ContextChips,
     createFileChip,

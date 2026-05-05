@@ -142,7 +142,7 @@ export default function IdeCallbackClient() {
             }
         }
 
-        handleCallback();
+        void handleCallback();
     }, [searchParams]);
 
     return (

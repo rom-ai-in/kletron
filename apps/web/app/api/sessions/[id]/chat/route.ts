@@ -26,6 +26,7 @@ type StreamChunk =
  */
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   console.log(`[sessions/chat] ▶ POST /api/sessions/${params.id}/chat`);
+  const serverRequestReceivedAtMs = Date.now();
 
   const auth = await requireAppRouteAuth(request);
   if (!auth) {
@@ -40,6 +41,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const message = typeof payload?.message === "string" ? payload.message.trim() : "";
   const provider = typeof payload?.provider === "string" ? payload.provider.trim() : undefined;
   const model = typeof payload?.model === "string" ? payload.model.trim() : undefined;
+  const clientSentAtMs =
+    typeof payload?.clientSentAtMs === "number" && Number.isFinite(payload.clientSentAtMs)
+      ? payload.clientSentAtMs
+      : undefined;
   const llmSelection = provider ? resolveLlmSelection({ provider, model }) : undefined;
 
   console.log(`[sessions/chat] message="${message.slice(0, 40)}", provider=${provider}, model=${model}`);
@@ -156,6 +161,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
           onLlmStreamKpi: (kpi) => {
             sendChunk({ type: "stream_metrics", payload: kpi });
           },
+          clientSentAtMs,
+          serverRequestReceivedAtMs,
           ...(llmSelection ? { llmSelectionOverride: llmSelection } : {}),
         });
         console.log(`[sessions/chat] ✓ continueRun completed for ${params.id}`);

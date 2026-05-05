@@ -6,7 +6,6 @@
  */
 
 import { shell, Notification } from 'electron';
-import * as path from 'path';
 
 // ============================================================================
 // TYPES
@@ -322,7 +321,7 @@ export class CategoryAwareNotificationCenter {
     if (options.action) {
       notification.on('click', () => {
         if (options.action?.type === 'openFile' && options.action.path) {
-          shell.openPath(options.action.path);
+          void shell.openPath(options.action.path);
         }
       });
     }

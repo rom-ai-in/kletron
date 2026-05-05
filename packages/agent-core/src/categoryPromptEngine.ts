@@ -1,7 +1,7 @@
 // packages/agent-core/src/categoryPromptEngine.ts
 
 import type { WorkCategoryId, WorkModeId } from '@kletron/shared';
-import { DEFAULT_WORK_CATEGORIES, getCategoryById, normalizeToWorkModeId, WORK_MODES } from '@kletron/shared';
+import { normalizeToWorkModeId, WORK_MODES } from '@kletron/shared';
 
 // ============================================================================
 // TYPES

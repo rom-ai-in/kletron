@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, Folder, FileText, Code2 } from "lucide-react";
+import { ChevronRight, Folder, FileText } from "lucide-react";
 
 interface TreeNode {
   id: string;

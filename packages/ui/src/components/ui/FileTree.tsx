@@ -3,7 +3,7 @@
 import React, { useState, useCallback } from 'react';
 import {
     ChevronRight, ChevronDown, File, Folder, FolderOpen,
-    FileCode, FileJson, FileText, FileImage, Cog, Package
+    FileCode, FileJson, FileText, FileImage, Cog
 } from 'lucide-react';
 
 export interface FileTreeNode {

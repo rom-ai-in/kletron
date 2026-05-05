@@ -5,10 +5,9 @@
  * user-friendly automation reports in multiple formats.
  */
 
-import type { AgentWorkflowResult, Finding } from "./types";
-import {
-    createSummaryCard
-} from "./reportFormatting";
+import type { AgentWorkflowResult } from "./types";
+
+
 import {
     createHtmlReport,
     createJsonReport,

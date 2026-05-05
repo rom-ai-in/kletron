@@ -1,12 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type { AgentEvent, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent } from '@kletron/shared/types';
-import type { Message, StreamStatus, StreamChunk, GraphSelectionMode } from '@kletron/shared/chatTypes';
+import type { AgentEvent, AgentWorkflowResult, TimelineEvent } from '@kletron/shared/types';
+import type { Message, StreamStatus, StreamChunk, GraphSelectionMode, AgentStreamKpiV1 } from '@kletron/shared/chatTypes';
 import type { ThreadApprovalMode } from '@kletron/shared/threadApprovalTypes';
 import { joinApiOrigin } from '@kletron/shared';
 import { normalizeToWorkModeId } from '@kletron/shared/workMode';
 import { normalizeResearchDepth, type ResearchDepthId } from '@kletron/shared/researchDepth';
 import { lastPlainAssistantAfterLatestUser } from '@kletron/shared/agentEventTurn';
-import { extractThoughtsFromContent, sanitizeVisibleAssistantContent, normalizeMessage } from '@kletron/shared/contentSanitizer';
+import { sanitizeVisibleAssistantContent, normalizeMessage } from '@kletron/shared/contentSanitizer';
 
 // Re-export for backward compatibility
 export type { Message, StreamStatus };
@@ -115,6 +115,12 @@ export interface UseSessionStreamReturn {
     isStreaming: boolean;
     /** Graph-requested tools omitted from workspace capabilities (latest streaming update). */
     capabilityDroppedTools: string[];
+    /** First LLM stream KPI observed for the current send cycle. */
+    firstStreamKpi: AgentStreamKpiV1 | null;
+    /** Latest LLM stream KPI observed for the current send cycle. */
+    latestStreamKpi: AgentStreamKpiV1 | null;
+    /** Client-perceived POST start -> first text delta. */
+    clientRequestToFirstTextMs: number | null;
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
@@ -156,6 +162,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const [streamingReasoning, setStreamingReasoning] = useState('');
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [capabilityDroppedTools, setCapabilityDroppedTools] = useState<string[]>([]);
+    const [firstStreamKpi, setFirstStreamKpi] = useState<AgentStreamKpiV1 | null>(null);
+    const [latestStreamKpi, setLatestStreamKpi] = useState<AgentStreamKpiV1 | null>(null);
+    const [clientRequestToFirstTextMs, setClientRequestToFirstTextMs] = useState<number | null>(null);
     /** Client-side timing: POST start → first `text_delta` (end-to-end perceived latency). */
     const clientStreamMarkRef = useRef<{ sendAt: number; loggedFirstText: boolean } | null>(null);
 
@@ -236,6 +245,10 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         setRunEndedAt(null);
         setLastResult(null);
         setCapabilityDroppedTools([]);
+        setFirstStreamKpi(null);
+        setLatestStreamKpi(null);
+        setClientRequestToFirstTextMs(null);
+        clientStreamMarkRef.current = null;
         clearStreamBuffers();
         // Reset first-message flag so title generation works for each new session
         isFirstMessageRef.current = true;
@@ -508,6 +521,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                         if (mark && !mark.loggedFirstText) {
                             mark.loggedFirstText = true;
                             const ms = performance.now() - mark.sendAt;
+                            setClientRequestToFirstTextMs(ms);
                             console.info("[AgentStreamKPI Client]", {
                                 time_request_to_first_text_delta_ms: Math.round(ms),
                             });
@@ -521,6 +535,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                         streamingReasoningRef.current += chunk.payload.content;
                         scheduleStreamFlush();
                     } else if (chunk.type === "stream_metrics") {
+                        setLatestStreamKpi(chunk.payload);
+                        setFirstStreamKpi(prev => prev ?? chunk.payload);
                         console.info("[AgentStreamKPI]", chunk.payload);
                     } else if (chunk.type === "activity") {
                         // Reserved for server-driven activity line
@@ -643,6 +659,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         setRunEndedAt(null);
         clearStreamBuffers();
         setCapabilityDroppedTools([]);
+        setFirstStreamKpi(null);
+        setLatestStreamKpi(null);
+        setClientRequestToFirstTextMs(null);
         isAtBottomRef.current = true;
 
         const controller = new AbortController();
@@ -682,6 +701,10 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 model: llmModel,
                 ...(effectivePlanMode ? { planMode: true } : {}),
             };
+        const requestBody = {
+            ...body,
+            clientSentAtMs: Date.now(),
+        };
 
         // Optimistic user message (temp ID will be replaced by the real event)
         const tempId = `temp-${Date.now()}`;
@@ -705,7 +728,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             const res = await fetch(url, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify(body),
+                body: JSON.stringify(requestBody),
                 signal: controller.signal,
             });
 
@@ -773,5 +796,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         lastResult,
         isStreaming: sending,
         capabilityDroppedTools,
+        firstStreamKpi,
+        latestStreamKpi,
+        clientRequestToFirstTextMs,
     };
 }

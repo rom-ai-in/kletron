@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@kletron/ui/components/ui/Button";
 import { Input } from "@kletron/ui/components/ui/Input";
 import { Card } from "@kletron/ui/components/ui/Card";
-import { Plus, Folder, Settings, Trash2 } from "lucide-react";
+import { Plus, Folder, Settings } from "lucide-react";
 
 interface Workspace {
     id: string;
@@ -21,7 +21,7 @@ export default function WorkspacesPage() {
     const [newWorkspace, setNewWorkspace] = useState({ name: '', rootPath: '' });
 
     useEffect(() => {
-        fetchWorkspaces();
+        void fetchWorkspaces();
     }, []);
 
     const fetchWorkspaces = async () => {
@@ -46,7 +46,7 @@ export default function WorkspacesPage() {
             
             if (res.ok) {
                 setShowAddForm(false);
-                fetchWorkspaces();
+                void fetchWorkspaces();
             }
         } catch (err) {
             console.error('Error adding workspace:', err);
@@ -62,7 +62,7 @@ export default function WorkspacesPage() {
             });
             
             // Refresh workspaces
-            fetchWorkspaces();
+            void fetchWorkspaces();
         } catch (err) {
             console.error('Error setting active workspace:', err);
         }

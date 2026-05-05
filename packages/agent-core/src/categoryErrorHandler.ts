@@ -104,7 +104,6 @@ export class CategoryAwareErrorHandler {
         // Unknown error
         return {
             type: 'unknown',
-            message: error.message,
             severity: 'medium'
         };
     }

@@ -61,4 +61,4 @@ async function runTest() {
   }
 }
 
-runTest();
+void runTest();

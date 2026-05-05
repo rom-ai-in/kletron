@@ -331,7 +331,9 @@ export function useThreads(
       }
       return;
     }
-    pollRef.current = setInterval(pollThreadStatus, 5000);
+    pollRef.current = setInterval(() => {
+      void pollThreadStatus();
+    }, 5000);
     return () => {
       if (pollRef.current) {
         clearInterval(pollRef.current);

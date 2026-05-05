@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { useRouter } from "next/router";
 
 interface Workspace {
@@ -40,7 +39,7 @@ export function WorkspaceSelector({ showCategories = false }: WorkspaceSelectorP
 
     const handleSelectWorkspace = (workspaceId: string) => {
         // Update URL with workspace ID
-        router.push("/app/agent");
+        void router.push("/app/agent");
         setCurrentWorkspace(workspaceId);
         setIsOpen(false);
     };

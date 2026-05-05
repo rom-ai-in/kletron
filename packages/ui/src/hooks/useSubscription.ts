@@ -76,7 +76,7 @@ export function useSubscription(): UseSubscriptionReturn {
     }, []);
 
     useEffect(() => {
-        fetchSubscription();
+        void fetchSubscription();
     }, [fetchSubscription]);
 
     const canUseFeature = useCallback((feature: keyof PlanLimits): boolean => {

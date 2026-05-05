@@ -14,7 +14,6 @@ import {
     type CodeVector
 } from "./vectorService";
 import { recordVectorIndexRun } from "./vectorHistoryService";
-import { config } from "../config";
 import { getDatabase } from "../lib/db";
 
 interface IndexStatus {

@@ -5,7 +5,6 @@ import { getSubscriptionByUserId, getEffectivePlan } from '@kletron/server/servi
 import type { SubscriptionResponse } from "@kletron/shared/subscriptionTypes";
 import type { Subscription as ServerSubscription } from "@kletron/server/services/subscriptionService";
 import type { Subscription as SharedSubscription } from "@kletron/shared/subscriptionTypes";
-import { requireAppRouteAuth } from '@kletron/server/lib/auth/apiAuth';
 
 export const dynamic = 'force-dynamic';
 

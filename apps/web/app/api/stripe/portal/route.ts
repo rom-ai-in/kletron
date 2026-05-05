@@ -1,7 +1,7 @@
 // app/api/stripe/portal/route.ts
 // Create Stripe Billing Portal Session
 import { NextRequest, NextResponse } from 'next/server';
-import { createBillingPortalSession, getCustomerByEmail } from '@kletron/server/services/stripeService';
+import { createBillingPortalSession } from '@kletron/server/services/stripeService';
 import { getSubscriptionByUserId } from '@kletron/server/services/subscriptionService';
 import { requireAppRouteAuth } from '@kletron/server/lib/auth/apiAuth';
 

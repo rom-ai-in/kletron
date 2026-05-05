@@ -9,7 +9,6 @@ import {
   AlertCircle,
   Scan,
   Terminal,
-  Brain,
   Target,
   Activity,
   Layers,

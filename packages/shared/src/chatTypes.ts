@@ -21,7 +21,7 @@ export interface ChatEvent {
     /** Whether this tool result is an error (explicit server signal). */
     isError?: boolean;
     timestamp?: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     metadata?: Record<string, any>;
     /** Array of internal reasoning steps (extracted from <think> blocks). */
     thoughts?: string[];
@@ -56,7 +56,7 @@ export interface ServerAgentEvent {
     toolOutput?: string;
     isError?: boolean;
     timestamp?: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     metadata?: Record<string, any>;
     thoughts?: string[];
 }
@@ -168,6 +168,23 @@ export type AgentStreamKpiV1 = {
     generationTpm: number | null;
     /** Executor prep before this call (executeRunStreaming wall clock) */
     upstreamPrepMs?: number;
+    /** Approximate wall ms from client click/send to model handoff for this stream invocation. */
+    clientSendToLlmDispatchMs?: number;
+    /** Wall ms from server request receipt to model handoff for this stream invocation. */
+    serverRequestToLlmDispatchMs?: number;
+    /** Breakdown of expensive executor prep stages before the model call. */
+    contextGraphReadyMs?: number;
+    workspaceContextConfigMs?: number;
+    workspaceCapabilitiesMs?: number;
+    graphLoadMs?: number;
+    runtimeProfileMs?: number;
+    derivedMemorySyncMs?: number;
+    externalToolingMs?: number;
+    diskSkillsMs?: number;
+    conversationSummaryMs?: number;
+    contextBundleMs?: number;
+    contextBundleGraphMs?: number;
+    contextBundleVectorMs?: number;
     /** Executor wall ms from run start to this stream finishing */
     wallMsExecutorToStreamEnd?: number;
     /** Count of tool messages in the final LangGraph transcript (successful stream). */
@@ -192,6 +209,10 @@ export interface ConversationHistoryItem {
     /** Legacy `active`/`archived` or agent graph run status (`RUNNING`, `COMPLETED`, …). */
     status?: string;
     lastRole?: 'user' | 'assistant' | 'system' | 'tool';
+    /** Origin of the run: interactive chat (`agent`) or automation (`automation`). */
+    source?: string | null;
+    /** When set, identifies the automation config this thread belongs to. */
+    automationId?: string | null;
     /** Run creation mode; omitted on older clients until API returns it. */
     workMode?: WorkModeId;
     /** Exhaustive (default) vs fast agent depth; omitted on older runs. */
@@ -219,6 +240,6 @@ export interface Message {
     isError?: boolean;
     thoughts?: string[];
     thinking?: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     metadata?: Record<string, any>;
 }

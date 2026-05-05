@@ -2,7 +2,7 @@
  * Shim for "next/navigation" in the Electron/Vite desktop app.
  * Provides lightweight browser-based equivalents.
  */
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 // ─── usePathname ─────────────────────────────────────────────────────────────
 export function usePathname(): string {

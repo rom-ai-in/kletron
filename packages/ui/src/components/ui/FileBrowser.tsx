@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
     RefreshCw, FolderPlus, FilePlus, ChevronsDownUp, Search,
     ChevronRight, ChevronDown, File, Folder, FolderOpen,

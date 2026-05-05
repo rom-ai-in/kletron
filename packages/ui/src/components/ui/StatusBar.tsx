@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { GitBranch, AlertCircle, AlertTriangle, Bell, Check, Loader2 } from 'lucide-react';
+import { GitBranch, AlertCircle, AlertTriangle, Check, Loader2 } from 'lucide-react';
 
 export interface StatusBarItem {
     id: string;

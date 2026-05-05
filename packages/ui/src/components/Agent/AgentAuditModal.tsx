@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { X, Copy, Check, Terminal } from 'lucide-react';
+import { Copy } from 'lucide-react';
 import { Modal } from '@kletron/ui/components/design-system';
 
 export interface AgentAuditModalProps {
@@ -33,7 +33,7 @@ export const AgentAuditModal: React.FC<AgentAuditModalProps> = ({ open, onClose,
 
     const handleCopy = () => {
         if (data) {
-            navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+            void navigator.clipboard.writeText(JSON.stringify(data, null, 2));
         }
     };
 

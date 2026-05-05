@@ -43,7 +43,7 @@ export default function ExtensionSuccessPage() {
             }
         };
 
-        generateToken();
+        void generateToken();
     }, [user, authLoading, router]);
 
     const handleCopy = async () => {

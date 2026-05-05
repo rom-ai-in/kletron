@@ -300,4 +300,4 @@ async function main() {
     process.exit(allGood ? 0 : 1);
 }
 
-main();
+void main();

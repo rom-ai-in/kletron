@@ -2,8 +2,7 @@
 
 import React from 'react';
 import {
-    X, FileCode, Folder, Brain, Cpu, Hash, AtSign,
-    Code2, Terminal, Database, Globe, Link
+    X, FileCode, Folder, Brain, Cpu, Hash, AtSign, Link
 } from 'lucide-react';
 
 export type ChipVariant = 'default' | 'file' | 'folder' | 'agent' | 'model' | 'tag' | 'mention' | 'link';

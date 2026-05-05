@@ -172,7 +172,7 @@ export class McpClient {
   async callTool(name: string, args: Record<string, unknown> = {}, callOpts?: McpCallToolOptions) {
     if (name === "semantic_code_search") {
       const { semanticSearch } = await import("@kletron/server/services/vectorService");
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       const { query, ...vectorOpts } = args;
       if (typeof query !== "string") {
         throw new Error("Missing query parameter for semantic_code_search");

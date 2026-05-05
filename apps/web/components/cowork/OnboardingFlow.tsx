@@ -3,7 +3,6 @@
 
 import { useState, useEffect } from "react";
 import { DEFAULT_WORK_CATEGORIES } from "@kletron/shared";
-import type { WorkCategory } from "@kletron/shared";
 
 interface OnboardingState {
     step: number;
@@ -268,7 +267,7 @@ function trackEvent(eventType: string, metadata?: Record<string, unknown>) {
 
     // Flush events periodically
     if (eventQueue.length >= 5) {
-        flushEvents();
+        void flushEvents();
     }
 }
 

@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Plus, MessageSquare, Archive, Loader2, ChevronRight, ChevronDown, Clock, AlertCircle, PlayCircle, StopCircle, CheckCircle2, Trash2, Pencil } from 'lucide-react';
+import { Archive, Loader2, ChevronRight, ChevronDown, Clock, AlertCircle, PlayCircle, CheckCircle2, Trash2, Pencil } from 'lucide-react';
 
 interface ConversationMetadata {
     id: string;

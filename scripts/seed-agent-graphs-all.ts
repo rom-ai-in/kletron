@@ -32,7 +32,7 @@ const LEGACY_NAMES = [
 
 async function main() {
   const allGraphs = await agentGraphService.listGraphs();
-  // eslint-disable-next-line no-console
+   
   console.log(`Found ${allGraphs.length} total graphs in database.`);
 
   let deletedLegacy = 0;
@@ -40,7 +40,7 @@ async function main() {
     for (const g of allGraphs) {
       if (g.name === legacyName) {
         const id = String(g._id);
-        // eslint-disable-next-line no-console
+         
         console.log(`  Deleting legacy graph "${g.name}" (${id})`);
         await agentGraphService.deleteGraph(id);
         deletedLegacy++;
@@ -48,10 +48,10 @@ async function main() {
     }
   }
 
-  // eslint-disable-next-line no-console
+   
   console.log("Upserting canonical graphs at fixed ObjectIds…");
   const upsert = await agentGraphService.upsertCanonicalPresetGraphs();
-  // eslint-disable-next-line no-console
+   
   console.log(JSON.stringify({ deletedLegacy, ...upsert }, null, 2));
 
   const after = await agentGraphService.listGraphs();
@@ -59,20 +59,20 @@ async function main() {
   for (const g of after) {
     if (!CANONICAL_GRAPH_NAMES.has(g.name)) {
       const id = String(g._id);
-      // eslint-disable-next-line no-console
+       
       console.log(`  Deleting non-canonical graph "${g.name}" (${id})`);
       await agentGraphService.deleteGraph(id);
       deletedNonCanonical.push({ _id: id, name: g.name });
     }
   }
 
-  // eslint-disable-next-line no-console
+   
   console.log(JSON.stringify({ deletedNonCanonical }, null, 2));
 }
 
 main()
   .catch((err) => {
-    // eslint-disable-next-line no-console
+     
     console.error("Failed to seed all agent graphs:", err);
     process.exitCode = 1;
   })

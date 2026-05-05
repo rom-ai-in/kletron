@@ -77,7 +77,7 @@ function BillingPageContent() {
         if (searchParams?.get('success') === 'true') {
             setShowSuccess(true);
             // Refresh subscription data
-            refresh();
+            void refresh();
             // Clear success message after 5 seconds
             setTimeout(() => setShowSuccess(false), 5000);
         }

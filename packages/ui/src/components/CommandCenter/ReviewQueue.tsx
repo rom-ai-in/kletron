@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ClipboardCheck, FileText, Clock, ArrowRight } from 'lucide-react';
+import { ClipboardCheck, FileText, ArrowRight } from 'lucide-react';
 
 export interface ReviewQueueItem {
   threadId: string;

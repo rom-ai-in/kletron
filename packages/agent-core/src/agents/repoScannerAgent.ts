@@ -1,13 +1,10 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
-import { z } from "zod";
-import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 import { RepoAnalysisResult, RepoGraphEdge, RepoGraphNode } from "@kletron/shared/types";
 import { getChatModel } from "@kletron/server/llm";
-import { DocumentContext } from "@kletron/shared/documentContext";
 
 // Max depth for directory scanning to prevent overload
 const MAX_SCAN_DEPTH = 3;

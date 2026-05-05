@@ -81,7 +81,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ filePath }) => {
             }
         };
 
-        loadDocument();
+        void loadDocument();
 
         return () => {
             cancelled = true;

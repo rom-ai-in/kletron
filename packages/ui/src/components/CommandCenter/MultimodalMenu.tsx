@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { FileUp, Camera, Image, Monitor } from 'lucide-react';
+import React, { useRef, useEffect } from 'react';
+import { FileUp, Camera, Monitor } from 'lucide-react';
 
 export interface MultimodalMenuProps {
   open: boolean;

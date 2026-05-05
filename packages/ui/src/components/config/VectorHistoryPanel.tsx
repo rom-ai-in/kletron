@@ -9,11 +9,6 @@ import {
     XCircle,
     AlertCircle,
     Clock,
-    FileCode,
-    Layers,
-    Play,
-    Zap,
-    Download,
     Terminal,
     Calendar
 } from "lucide-react";

@@ -1,7 +1,6 @@
 // apps/web/hooks/useCurrentCategory.ts
 "use client";
 
-import { useState, useEffect } from "react";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 
 export function useCurrentCategory() {

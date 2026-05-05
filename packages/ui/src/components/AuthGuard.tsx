@@ -15,18 +15,18 @@ interface AuthGuardProps {
 
 export function AuthGuard({ children, redirectTo = '/auth/login' }: AuthGuardProps) {
     const { user, loading } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (!SKIP_AUTH && !loading && !user) {
+            router.push(redirectTo);
+        }
+    }, [user, loading, router, redirectTo]);
 
     // Dev mode: skip auth when NEXT_PUBLIC_SKIP_AUTH is true
     if (SKIP_AUTH) {
         return <>{children}</>;
     }
-    const router = useRouter();
-
-    useEffect(() => {
-        if (!loading && !user) {
-            router.push(redirectTo);
-        }
-    }, [user, loading, router, redirectTo]);
 
     // Show loading state
     if (loading) {

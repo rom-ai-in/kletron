@@ -5,7 +5,7 @@
  * into professional, user-friendly reports with improved readability and insights.
  */
 
-import type { AgentWorkflowResult, Finding, TimelineEvent } from "./types";
+import type { AgentWorkflowResult, Finding } from "./types";
 
 /**
  * Create a comprehensive HTML report for web display

@@ -1,4 +1,3 @@
-import { BaseMessage } from "@langchain/core/messages";
 import type { LlmProviderType } from "./schemas/llmConfig.schema";
 import type { DocumentContext } from "./documentContext";
 

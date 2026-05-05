@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentSession } from "@kletron/ui/hooks/useAgentSession";
 import { useSlashSkills } from "@kletron/ui/hooks/useSlashSkills";
 import {
   Brain, Eye,
-  Wrench, GitBranch, Paperclip, ChevronUp, ChevronDown, TerminalSquare,
+  Wrench, GitBranch, ChevronDown, TerminalSquare,
   Settings2,
   GraduationCap,
   X,
@@ -19,7 +19,6 @@ import {
   MCPServerConfig,
   EnvironmentConfig,
   WorktreeManager,
-  ContextChips,
   createFileChip,
   useToast,
 } from "@kletron/ui/components/design-system";
@@ -57,7 +56,6 @@ import { SkillsManager } from "@kletron/ui/components/CommandCenter/SkillsManage
 import { AutomationsDashboard } from "@kletron/ui/components/CommandCenter/AutomationsDashboard";
 import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
 import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
-import type { ReplayImpact } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
 
 // Hooks
 import { useAuth } from "../hooks/useAuth";
@@ -134,7 +132,7 @@ export default function App() {
   useEffect(() => {
     if (!backendUrlValid) { setBackendConnected(false); backendProbeRef.current = null; return; }
     if (backendProbeRef.current === backendUrlTrimmed && backendConnected) return;
-    (async () => {
+    void (async () => {
       try {
         const res = await fetch(`${backendUrlTrimmed}/api/auth/me`, {
           headers: auth.auth?.accessToken ? { Authorization: `Bearer ${auth.auth.accessToken}` } : undefined,
@@ -341,7 +339,7 @@ export default function App() {
   const editControl = useMessageEdit({
     sessionId: threads.conversationId,
     events: conversation.conversationEvents,
-    streaming: conversation.streaming,
+    streaming: conversation.runActive,
     onTruncateAndResend: conversation.truncateAndResend,
   });
   const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
@@ -571,23 +569,37 @@ export default function App() {
       workspace.workspace?.name ||
       workspace.workspace?.path?.split("/").pop() ||
       "Workspace";
-    const activeRows = threads.threads.map((t) => ({
-      id: t.id,
-      title: t.title || "Untitled",
-      updatedAt: t.updatedAt,
-      archived: false as const,
-      liveStatus: sessionStatusToSidebarLiveStatus(
-        t.status,
-        threads.conversationId === t.id && conversation.streaming,
-      ),
-    }));
-    const archivedRows = threads.archivedThreads.map((t) => ({
-      id: t.id,
-      title: t.title || "Untitled",
-      updatedAt: t.updatedAt,
-      archived: true as const,
-      liveStatus: "idle" as const,
-    }));
+    const activeRows = threads.threads.map((t) => {
+      const category: "automation" | "chat" =
+        t.source === "automation" || t.automationId ? "automation" : "chat";
+      const effectiveStatus =
+        threads.conversationId === t.id && conversation.sessionStatus
+          ? conversation.sessionStatus
+          : t.status;
+      return {
+        id: t.id,
+        title: t.title || "Untitled",
+        updatedAt: t.updatedAt,
+        archived: false as const,
+        liveStatus: sessionStatusToSidebarLiveStatus(
+          effectiveStatus,
+          threads.conversationId === t.id && conversation.runActive,
+        ),
+        category,
+      };
+    });
+    const archivedRows = threads.archivedThreads.map((t) => {
+      const category: "automation" | "chat" =
+        t.source === "automation" || t.automationId ? "automation" : "chat";
+      return {
+        id: t.id,
+        title: t.title || "Untitled",
+        updatedAt: t.updatedAt,
+        archived: true as const,
+        liveStatus: "idle" as const,
+        category,
+      };
+    });
     return [
       {
         id: workspace.workspace?.path ?? "default",
@@ -599,7 +611,7 @@ export default function App() {
     threads.threads,
     threads.archivedThreads,
     threads.conversationId,
-    conversation.streaming,
+    conversation.runActive,
     workspace.workspace?.path,
     workspace.workspace?.name,
   ]);
@@ -993,7 +1005,7 @@ export default function App() {
     if (!text) return;
 
     // If agent is streaming, queue the message instead of blocking
-    if (conversation.streaming) {
+    if (conversation.runActive) {
       setMessageQueue((prev) => [
         ...prev,
         { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() },
@@ -1051,14 +1063,14 @@ export default function App() {
   const prevStreamingRef = useRef(false);
   useEffect(() => {
     const wasStreaming = prevStreamingRef.current;
-    prevStreamingRef.current = conversation.streaming;
+    prevStreamingRef.current = conversation.runActive;
 
     // Only trigger on streaming → idle transition
-    if (wasStreaming && !conversation.streaming && messageQueue.length > 0) {
+    if (wasStreaming && !conversation.runActive && messageQueue.length > 0) {
       // Small delay lets React fully settle before we start a new send
       setTimeout(() => dequeueAndSend(), 50);
     }
-  }, [conversation.streaming, messageQueue.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [conversation.runActive, messageQueue.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleInputKeyDown(e: React.KeyboardEvent) {
     // Detect slash command
@@ -1186,9 +1198,12 @@ export default function App() {
               onRunNow={async (id) => {
                 const tid = await automationsHook.runNow(id);
                 if (tid) {
+                  const automation = automationsHook.automations.find((item) => item.id === id);
                   settings.setActiveView("app");
                   threads.setConversationId(tid);
-                  void threads.loadThreads(tid);
+                  void threads.loadThreads(tid, {
+                    provisionalTitle: automation?.name,
+                  });
                 }
               }}
               onOpenInBrowser={(id) => openPortalPath(`/app/automations/${encodeURIComponent(id)}`)}
@@ -1718,7 +1733,7 @@ export default function App() {
                   git.createPR(title).then((result) => {
                     if (result?.url) {
                       try {
-                        (window as { kletron?: { openExternal?: (u: string) => Promise<boolean> } }).kletron?.openExternal?.(
+                        void (window as { kletron?: { openExternal?: (u: string) => Promise<boolean> } }).kletron?.openExternal?.(
                           result.url,
                         );
                       } catch {
@@ -1896,10 +1911,11 @@ export default function App() {
               ) : (
                 <MessageList
                   events={conversation.renderItems.flatMap(i => i.type === 'event' ? [i.event] : i.events)}
-                  streaming={conversation.streaming}
+                  streaming={conversation.runActive}
                   streamingText={conversation.streamingText}
                   streamingReasoning={conversation.streamingReasoning}
                   activityEvents={conversation.conversationEvents}
+                  runStartedAt={conversation.runStartedAt}
                   pendingApprovalCount={conversation.sessionEdits.pendingEdits.length}
                   hasOlder={conversation.historyPage.hasOlder}
                   loadingOlder={conversation.loadingOlder}
@@ -2008,7 +2024,7 @@ export default function App() {
               onMoveUp={handleQueueMoveUp}
               onDelete={handleQueueDelete}
               onForceSend={handleQueueForceSend}
-              streaming={conversation.streaming}
+              streaming={conversation.runActive}
               className="mx-auto w-full max-w-3xl"
             />
             <InputBar
@@ -2017,10 +2033,10 @@ export default function App() {
               onChange={conversation.setInput}
               onSend={handleSendMessage}
               onStop={conversation.stopStreaming}
-              sending={conversation.streaming}
+              sending={conversation.runActive}
               disabled={composerConnection.composerDisabled}
               placeholder={
-                conversation.streaming
+                conversation.runActive
                   ? "Add a follow-up (queued until agent finishes). Press / for slash commands (skills, plan, workspace)."
                   : planMode
                     ? "Describe what you want to plan… Press / for slash commands (skills, plan, workspace)."

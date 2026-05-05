@@ -1,4 +1,5 @@
 import type { WorkspaceAwareSkill, WorkCategory } from "./workspaceTypes";
+import { normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode";
 import { skillRegistry } from "./registry";
 
 /**
@@ -6,7 +7,7 @@ import { skillRegistry } from "./registry";
  */
 export class WorkspaceSkillRegistry {
     private workspaceSkills = new Map<string, Map<string, Partial<WorkspaceAwareSkill>>>();
-    private categorySkills = new Map<string, Set<string>>();
+    private categorySkills = new Map<WorkModeId, Set<string>>();
     
     constructor() {
         // Initialize default categories
@@ -44,7 +45,7 @@ export class WorkspaceSkillRegistry {
         // Filter by category if specified
         let skillIds: string[] = baseSkills.map(s => s.id);
         if (categoryId) {
-            const categorySkillIds = this.categorySkills.get(categoryId);
+            const categorySkillIds = this.categorySkills.get(normalizeToWorkModeId(categoryId));
             if (categorySkillIds) {
                 skillIds = Array.from(categorySkillIds);
             }
@@ -85,10 +86,11 @@ export class WorkspaceSkillRegistry {
         categoryIds: string[]
     ): void {
         for (const categoryId of categoryIds) {
-            if (!this.categorySkills.has(categoryId)) {
-                this.categorySkills.set(categoryId, new Set());
+            const mode = normalizeToWorkModeId(categoryId);
+            if (!this.categorySkills.has(mode)) {
+                this.categorySkills.set(mode, new Set());
             }
-            this.categorySkills.get(categoryId)!.add(skillId);
+            this.categorySkills.get(mode)!.add(skillId);
         }
     }
     
@@ -98,7 +100,7 @@ export class WorkspaceSkillRegistry {
     getCategories(): WorkCategory[] {
         // In a real implementation, this would load from config
         // For now return defaults with any dynamically registered skills
-        const defaultCategories = new Map<string, WorkCategory>();
+        const defaultCategories = new Map<WorkModeId, WorkCategory>();
         
         DEFAULT_WORK_CATEGORIES.forEach(cat => {
             defaultCategories.set(cat.id, cat);
@@ -113,7 +115,9 @@ export class WorkspaceSkillRegistry {
                     name: categoryId.charAt(0).toUpperCase() + categoryId.slice(1),
                     description: `Custom category with skills: ${skillExamples.join(', ')}`,
                     icon: "📁",
-                    color: "#8B5CF6"
+                    color: "#8B5CF6",
+                    defaultSkills: skillExamples,
+                    commonTools: [],
                 });
             }
         });

@@ -8,7 +8,7 @@ import { ThinkingBubble } from '../Agent/ThinkingBubble';
 import { ThoughtsPanel } from '../Agent/ThoughtsPanel';
 import { Textarea } from '../design-system';
 import type { ChatEvent, RenderItem } from '@kletron/shared/chatTypes';
-import { isToolCallEvent, pairToolEvents } from '../../lib/toolPairing';
+import { pairToolEvents } from '../../lib/toolPairing';
 
 // Re-export for backward compatibility
 export type { ChatEvent, RenderItem };

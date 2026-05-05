@@ -111,7 +111,7 @@ async function main() {
     await agentGraphService.ensureDefaultGraphs();
     await seedSimpleReactGraph();
 
-    // eslint-disable-next-line no-console
+     
     console.log(
         JSON.stringify(
             {
@@ -133,7 +133,7 @@ async function main() {
 
 main()
     .catch((err) => {
-        // eslint-disable-next-line no-console
+         
         console.error("seed:demo failed:", err);
         process.exitCode = 1;
     })

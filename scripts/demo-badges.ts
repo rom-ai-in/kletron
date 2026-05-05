@@ -45,4 +45,4 @@ async function demo() {
     console.log('  - Green dot on currently selected file');
 }
 
-demo();
+void demo();

@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Panel } from "@kletron/ui/components/design-system";
 import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
-import { unwrapRouteParams } from "../../lib/unwrapRouteParams";
+import { useUnwrapRouteParams } from "../../lib/unwrapRouteParams";
 
 const TARGETS = {
     skills: "/app/skills",
@@ -26,7 +26,7 @@ export function LegacyWorkspaceScopedRedirect({
     params: Promise<{ workspaceId: string }> | { workspaceId: string };
     segment: LegacyWorkspaceScopedSegment;
 }) {
-    const { workspaceId } = unwrapRouteParams(params);
+    const { workspaceId } = useUnwrapRouteParams(params);
     const { switchWorkspace, loading, activeWorkspaceId } = useWorkspace();
     const router = useRouter();
     const [error, setError] = useState<string | null>(null);
@@ -39,7 +39,7 @@ export function LegacyWorkspaceScopedRedirect({
         if (loading) return;
 
         let cancelled = false;
-        (async () => {
+        void (async () => {
             try {
                 if (workspaceId !== activeWorkspaceId) {
                     await switchWorkspace(workspaceId);

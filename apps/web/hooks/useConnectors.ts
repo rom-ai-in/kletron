@@ -54,7 +54,7 @@ export function useConnectorCatalog() {
 
     useEffect(() => {
         const ac = new AbortController();
-        (async () => {
+        void (async () => {
             try {
                 const res = await fetch("/api/connectors/types", { signal: ac.signal });
                 if (!res.ok) throw new Error(`Failed (${res.status})`);

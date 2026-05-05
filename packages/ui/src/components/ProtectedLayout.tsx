@@ -12,6 +12,13 @@ interface ProtectedLayoutProps {
 export function ProtectedLayout({ children }: ProtectedLayoutProps) {
     const { user, loading } = useAuth();
     const router = useRouter();
+    const shouldRedirect = !loading && !user;
+
+    React.useEffect(() => {
+        if (shouldRedirect) {
+            router.push('/auth/login');
+        }
+    }, [router, shouldRedirect]);
 
     // Show loading spinner while checking auth state
     if (loading) {
@@ -26,12 +33,7 @@ export function ProtectedLayout({ children }: ProtectedLayoutProps) {
     }
 
     // Not authenticated - redirect to login
-    if (!user) {
-        // Use effect to avoid hydration issues
-        React.useEffect(() => {
-            router.push('/auth/login');
-        }, [router]);
-
+    if (shouldRedirect) {
         return (
             <div className="flex items-center justify-center h-full bg-bg-app">
                 <div className="flex flex-col items-center gap-4">

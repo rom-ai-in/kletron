@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Search, Filter, ChevronDown, ChevronRight, FileCode, AlertTriangle, Info, XCircle } from "lucide-react";
+import { Search, ChevronDown, ChevronRight, FileCode, AlertTriangle, Info, XCircle } from "lucide-react";
 import type { Finding } from "@kletron/shared/automationTypes";
 
 interface FindingsExplorerProps {

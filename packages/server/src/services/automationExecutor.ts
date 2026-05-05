@@ -436,8 +436,26 @@ export class AutomationExecutor {
         }
         const nodeOrder = getGraphNodeOrder(firstGraph);
         const initialState = buildInitialState(firstGraph, firstPrompt);
-        // Tag the initial state for the UI to recognise stage 0.
-        initialState.conversationHistory = [];
+        // Seed stage 0 immediately so the thread is not blank while the
+        // server-side automation run is still warming up.
+        initialState.conversationHistory = [
+            {
+                id: `automation-stage-0-user-${Date.now()}`,
+                phaseId: "automation_stage_0",
+                phaseLabel: `Stage 1: ${firstStage.name}`,
+                kind: "user",
+                role: "user",
+                content: firstPrompt,
+                timestamp: new Date().toISOString(),
+                metadata: {
+                    source: "automation",
+                    stageIndex: 0,
+                    stageId: firstStage.id,
+                    stageName: firstStage.name,
+                    stageTotal: automation.stages.length,
+                },
+            },
+        ];
 
         await agentGraphRunService.updateRunStatus(mainRunId, "RUNNING", {
             nodeOrder,

@@ -4,14 +4,10 @@ import React, { useState, useCallback } from 'react';
 import {
     Shield,
     ShieldCheck,
-    ShieldX,
     Check,
     X,
     ChevronDown,
     Loader2,
-    Terminal as TerminalIcon,
-    FileText,
-    Pencil,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ToolInvocationIcon } from './ToolInvocation';

@@ -26,7 +26,7 @@ export function useWorkCategories() {
       }
     }
 
-    fetchCategories();
+    void fetchCategories();
   }, []);
 
   return { categories, loading, error };

@@ -34,7 +34,7 @@ export type SessionDetailPayload = {
   conversationHistory?: unknown[];
   nodeOrder?: string[];
   nodeStatuses?: Record<string, string>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   tokenUsage?: any;
   conversationPagination?: ConversationPagination;
 };

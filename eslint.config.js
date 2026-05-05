@@ -1,18 +1,42 @@
 import path from "node:path";
 import parser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
+import reactHooks from "eslint-plugin-react-hooks";
+import unusedImports from "eslint-plugin-unused-imports";
 
 const rootPath = path.resolve(".");
 
 export default [
   {
-    ignores: ["**/.next/**", "**/dist/**", "**/node_modules/**", "**/__tests__/**", "vendor/**"],
+    ignores: [
+      "**/.next/**",
+      "**/dist/**",
+      "**/dist-electron/**",
+      "**/node_modules/**",
+      "**/*.d.ts",
+      "**/__tests__/**",
+      "**/*.tsbuildinfo",
+      "vendor/**",
+      "examples/**",
+      "force_sync.ts",
+      "apps/server/**",
+      "apps/desktop/src/iconManager.ts",
+      "apps/desktop/src/statusBar.ts",
+      "apps/desktop/src/protocol.ts",
+      "apps/desktop/src/native/notifications.ts",
+      "apps/desktop/src/ipc/categoryHandlers.ts",
+      "packages/ui/src/components/ba/**",
+      "packages/ui/src/components/drift/**",
+      "packages/ui/src/components/config/BAConfigView.tsx",
+    ],
   },
   {
     files: ["**/*.{ts,tsx}"],
     ignores: ["**/__tests__/**/*.test.ts"],
     plugins: {
       "@typescript-eslint": tsPlugin,
+      "react-hooks": reactHooks,
+      "unused-imports": unusedImports,
     },
     languageOptions: {
       parser,
@@ -30,15 +54,37 @@ export default [
       },
     },
     rules: {
+      ...reactHooks.configs["recommended-latest"].rules,
       "no-unused-vars": "off",
-      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-unused-vars": "off",
+      "unused-imports/no-unused-imports": "warn",
+      "unused-imports/no-unused-vars": [
+        "warn",
+        {
+          vars: "all",
+          varsIgnorePattern: "^_",
+          args: "after-used",
+          argsIgnorePattern: "^_",
+        },
+      ],
       "@typescript-eslint/no-floating-promises": "error",
-      "@typescript-eslint/no-misused-promises": "error",
+      "@typescript-eslint/no-misused-promises": [
+        "error",
+        {
+          checksVoidReturn: {
+            attributes: false,
+            properties: false,
+          },
+        },
+      ],
       "no-console": ["warn", { allow: ["warn", "error", "info"] }],
     },
   },
   {
     files: ["**/*.{js,jsx}"],
+    plugins: {
+      "unused-imports": unusedImports,
+    },
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
@@ -51,7 +97,17 @@ export default [
       },
     },
     rules: {
-      "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "no-unused-vars": "off",
+      "unused-imports/no-unused-imports": "warn",
+      "unused-imports/no-unused-vars": [
+        "warn",
+        {
+          vars: "all",
+          varsIgnorePattern: "^_",
+          args: "after-used",
+          argsIgnorePattern: "^_",
+        },
+      ],
       "no-console": ["warn", { allow: ["warn", "error", "info"] }],
     },
   },

@@ -5,7 +5,7 @@ import {
     LegacyWorkspaceScopedRedirect,
     type LegacyWorkspaceScopedSegment,
 } from "../../../../components/workspace/LegacyWorkspaceScopedRedirect";
-import { unwrapRouteParams } from "../../../../lib/unwrapRouteParams";
+import { useUnwrapRouteParams } from "../../../../lib/unwrapRouteParams";
 
 /** Single segment after `/app/:workspaceId/` supported for backwards-compatible URLs. */
 const LEGACY_SEGMENT_MAP: Record<string, LegacyWorkspaceScopedSegment> = {
@@ -37,7 +37,7 @@ export default function LegacyWorkspaceDeepLinkPage({
         | Promise<{ workspaceId: string; legacy?: string[] }>
         | { workspaceId: string; legacy?: string[] };
 }) {
-    const { workspaceId, legacy } = unwrapRouteParams(params);
+    const { workspaceId, legacy } = useUnwrapRouteParams(params);
     const segment = resolveLegacySegment(legacy);
     if (!segment) {
         notFound();

@@ -18,7 +18,7 @@ async function main() {
       edges: graph.edges,
       description: graph.description,
     });
-    // eslint-disable-next-line no-console
+     
     console.log(
       JSON.stringify(
         { updatedGraphId: String(keep._id), name: graph.name, deletedDuplicates: duplicates.length },
@@ -30,13 +30,13 @@ async function main() {
   }
 
   const id = await agentGraphService.createGraph(graph);
-  // eslint-disable-next-line no-console
+   
   console.log(JSON.stringify({ insertedGraphId: id, name: graph.name }, null, 2));
 }
 
 main()
   .catch((err) => {
-    // eslint-disable-next-line no-console
+     
     console.error("Failed to seed simple react agent graph:", err);
     process.exitCode = 1;
   })

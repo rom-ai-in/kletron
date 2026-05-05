@@ -7,7 +7,7 @@
 
 import { automationExecutor } from "./automationExecutor";
 import { acquireLock, releaseLock } from "./lockService";
-import { getWorkspaceByIdUnsafe, listAllWorkspaces } from "./workspaceService";
+import { getWorkspaceByIdUnsafe } from "./workspaceService";
 import { runWithWorkspaceContext } from "../workspace/workspaceContext";
 
 const LOCK_PREFIX = "automation-scheduler";

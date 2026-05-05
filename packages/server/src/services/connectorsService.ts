@@ -18,10 +18,8 @@ import { probeSentryCredentials } from "../lib/sentryApi";
 import {
     connectorBindingsBulkSchema,
     connectorWorkspaceBindingsBulkSchema,
-    getConnectorType,
     type ConnectorBindingKind,
     type ConnectorWorkspaceBindingRow,
-    integrationCreateSchema,
     integrationUpdateSchema,
     mcpServerCreateSchema,
     mcpServerUpdateSchema,

@@ -5,7 +5,6 @@ import {
   Plus,
   Trash2,
   Power,
-  Pencil,
   ExternalLink,
   Wrench,
   Palette,

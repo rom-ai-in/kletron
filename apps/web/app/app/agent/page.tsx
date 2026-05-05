@@ -17,7 +17,6 @@ import type { SidebarProject, SidebarThread } from "@kletron/ui/components/Comma
 import { ThreadSearchPalette } from "@kletron/ui/components/CommandCenter/ThreadSearchPalette";
 import { ThreadSearchHeaderTrigger } from "@kletron/ui/components/CommandCenter/ThreadSearchHeaderTrigger";
 import { useAppHeaderCenter } from "@kletron/ui/components/AppHeaderCenterSlot";
-import { AddWorkspaceModal } from "@kletron/ui/components/CommandCenter/AddWorkspaceModal";
 import { TimelinePanel } from "@kletron/ui/components/Agent/TimelinePanel";
 import { EventCard } from "@kletron/ui/components/Agent/EventCard";
 import {
@@ -54,7 +53,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { WorkModeId } from "@kletron/shared/workMode";
-import { WORK_MODES, normalizeToWorkModeId } from "@kletron/shared/workMode";
+import { normalizeToWorkModeId } from "@kletron/shared/workMode";
 import type { ResearchDepthId } from "@kletron/shared/researchDepth";
 import { normalizeResearchDepth } from "@kletron/shared/researchDepth";
 import { sessionStatusToSidebarLiveStatus } from "@kletron/shared/chatTypes";
@@ -123,6 +122,10 @@ type SessionDetail = {
     nextBeforeIndex: number | null;
   };
 };
+
+function formatPerfMs(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? `${Math.round(value)}ms` : "—";
+}
 
 const SESSION_STORAGE_KEY = "agent-active-session";
 
@@ -824,6 +827,9 @@ export default function AgentPage() {
     isStreaming,
     lastResult,
     capabilityDroppedTools,
+    firstStreamKpi,
+    latestStreamKpi,
+    clientRequestToFirstTextMs,
   } = useSessionStream({
     sessionId: activeSessionId,
     selectedGraphId,
@@ -1836,7 +1842,20 @@ export default function AgentPage() {
             </button>
             {perfDebugEnabled && (
               <div className="rounded border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] text-text-muted">
-                FPS: {fps ?? "…"} | input p95: {inputLatencyStats.p95.toFixed(1)}ms | avg: {inputLatencyStats.avg.toFixed(1)}ms
+                <div>
+                  FPS: {fps ?? "…"} | input p95: {inputLatencyStats.p95.toFixed(1)}ms | avg: {inputLatencyStats.avg.toFixed(1)}ms
+                </div>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px]">
+                  <span>click-&gt;LM: {formatPerfMs(firstStreamKpi?.clientSendToLlmDispatchMs)}</span>
+                  <span>server-&gt;LM: {formatPerfMs(firstStreamKpi?.serverRequestToLlmDispatchMs)}</span>
+                  <span>prep: {formatPerfMs(firstStreamKpi?.upstreamPrepMs)}</span>
+                  <span>ctxGraph: {formatPerfMs(firstStreamKpi?.contextGraphReadyMs)}</span>
+                  <span>bundle: {formatPerfMs(firstStreamKpi?.contextBundleMs)}</span>
+                  <span>graph: {formatPerfMs(firstStreamKpi?.contextBundleGraphMs)}</span>
+                  <span>vector: {formatPerfMs(firstStreamKpi?.contextBundleVectorMs)}</span>
+                  <span>1st text: {formatPerfMs(clientRequestToFirstTextMs)}</span>
+                  <span>last prep: {formatPerfMs(latestStreamKpi?.upstreamPrepMs)}</span>
+                </div>
               </div>
             )}
             <button

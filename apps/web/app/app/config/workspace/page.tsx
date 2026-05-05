@@ -72,7 +72,7 @@ export default function WorkspaceConfigPage() {
 
     useEffect(() => {
         let cancelled = false;
-        (async () => {
+        void (async () => {
             setToolApprovalError(null);
             try {
                 const res = await fetch("/api/config/tool-approval");

@@ -47,6 +47,10 @@ export type StreamReactAgentOptions = {
   resumeFromCheckpoint?: boolean;
   /** Wall ms already spent in executor before this LLM call (KPI / diagnostics only). */
   upstreamPrepMs?: number;
+  /** Client wall clock when the send action was initiated. */
+  clientSentAtMs?: number;
+  /** Server wall clock when the HTTP request was received. */
+  serverRequestReceivedAtMs?: number;
   /** Run id for KPI correlation (optional). */
   runId?: string;
   /** LangGraph recursion limit (tool/model steps). Defaults to server `config.graphRecursionLimit`. */
@@ -221,6 +225,13 @@ export async function streamReactAgentMessages(
     console.log(`[ReactAgentRunner] Input is ${input === null ? 'null (resume)' : 'empty'} (name=${opts.name})`);
   }
 
+  const llmDispatchWallClockMs = Date.now();
+  const clientSendToLlmDispatchMs =
+    typeof opts.clientSentAtMs === "number" ? Math.max(0, llmDispatchWallClockMs - opts.clientSentAtMs) : undefined;
+  const serverRequestToLlmDispatchMs =
+    typeof opts.serverRequestReceivedAtMs === "number"
+      ? Math.max(0, llmDispatchWallClockMs - opts.serverRequestReceivedAtMs)
+      : undefined;
   const stream = await agent.stream(
     input as any,
     streamConfig,
@@ -500,6 +511,8 @@ export async function streamReactAgentMessages(
     generationTps,
     generationTpm,
     upstreamPrepMs: opts.upstreamPrepMs,
+    clientSendToLlmDispatchMs,
+    serverRequestToLlmDispatchMs,
     toolCallCount,
   };
 

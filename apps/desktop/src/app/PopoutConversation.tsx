@@ -125,7 +125,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
       setBackendConnected(false);
       return;
     }
-    (async () => {
+    void (async () => {
       try {
         const res = await fetch(`${backendUrlTrimmed}/api/auth/me`, {
           headers: auth.auth?.accessToken ? { Authorization: `Bearer ${auth.auth.accessToken}` } : undefined,

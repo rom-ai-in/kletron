@@ -18,7 +18,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ inline, className, childre
     const codeString = String(children).replace(/\n$/, '');
 
     const handleCopy = () => {
-        navigator.clipboard.writeText(codeString);
+        void navigator.clipboard.writeText(codeString);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };

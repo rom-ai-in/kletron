@@ -4,7 +4,7 @@ import { getWorkspaceByIdUnsafe, listAllWorkspaces } from '@kletron/server/servi
 import { getContextGraphStore } from './contextGraphRegistry';
 
 // Self-executing async function
-(async () => {
+void (async () => {
     try {
         const targetWorkspaceId = process.env.KLETRON_WORKSPACE_ID;
         const workspace = targetWorkspaceId

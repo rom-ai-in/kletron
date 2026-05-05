@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { FileText, Bot, GitCommit, Globe, RefreshCw as RefreshIcon, Hash, Code, Eye, Edit2 } from "lucide-react";
+import { FileText, Bot, GitCommit, Globe, RefreshCw as RefreshIcon, Hash, Eye, Edit2 } from "lucide-react";
 import type { ContextNode } from "@kletron/shared/context/graph/ContextGraphTypes";
 
 // --- Types ---
@@ -57,7 +57,7 @@ export function ContextVisualizer({ className }: ContextHUDProps) {
         }
     }, []);
 
-    useEffect(() => { refreshData(); }, [refreshData]);
+    useEffect(() => { void refreshData(); }, [refreshData]);
 
     const filteredNodes = nodes.filter(n => {
         if (filter === 'all') return true;

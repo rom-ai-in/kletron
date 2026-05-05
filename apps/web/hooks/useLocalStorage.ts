@@ -1,7 +1,7 @@
 // apps/web/hooks/useLocalStorage.ts
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T) => void] {
   // State to store our value

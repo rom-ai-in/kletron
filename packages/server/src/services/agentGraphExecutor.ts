@@ -67,10 +67,9 @@ async function getCachedRunApprovalConfig(runId: string): Promise<ToolApprovalCo
 import { sanitizeAssistantVisibleContent, stripThoughtTagsForTranscript } from "./titleSanitizer";
 
 // --- Checkpoint Imports ---
-import { getCheckpointSaver, hasCheckpoint, computeGraphHash, ensureCheckpointIndexes, deleteThreadCheckpoints } from "./checkpointService";
+import { getCheckpointSaver, hasCheckpoint, computeGraphHash, deleteThreadCheckpoints } from "./checkpointService";
 
 // --- Context Management Imports ---
-import type { ContextGraphStore } from "@kletron/server/context/graph/ContextGraphStore";
 import { contextScanner } from "@kletron/server/context/graph/ContextScanner";
 import { getEditorStateManager } from "@kletron/server/context/graph/EditorStateManager";
 import { getContextGraphStore } from "@kletron/server/context/graph/contextGraphRegistry";
@@ -819,7 +818,7 @@ async function maybeExecuteJsonActionTool(opts: {
 
 /** One background scan per workspace — avoids duplicate scans when multiple runs start together. */
 const contextGraphBackgroundScan = new Map<string, Promise<void>>();
-const CONTEXT_GRAPH_SYNC_SCAN_BUDGET_MS = 1500;
+const CONTEXT_GRAPH_SYNC_SCAN_BUDGET_MS = 250;
 
 /**
  * Returns the context graph store quickly for the first LLM call.
@@ -975,6 +974,8 @@ export class AgentGraphExecutor {
             /** Override audit/tool identity (e.g. channel-linked user). Defaults to workspace.ownerId. */
             workspaceContextUserId?: string;
             onLlmStreamKpi?: (kpi: AgentStreamKpiV1) => void;
+            clientSentAtMs?: number;
+            serverRequestReceivedAtMs?: number;
         }
     ): Promise<AgentWorkflowResult> {
         console.log(`[AgentGraphExecutor] continueRun: runId=${runId}, message="${message.slice(0, 40)}"`);
@@ -1166,6 +1167,8 @@ export class AgentGraphExecutor {
             workspaceContextUserId?: string;
             /** Fires once per `streamReactAgentMessages` completion (NDJSON / logs). */
             onLlmStreamKpi?: (kpi: AgentStreamKpiV1) => void;
+            clientSentAtMs?: number;
+            serverRequestReceivedAtMs?: number;
         }
     ): Promise<AgentWorkflowResult> {
         console.log(`[AgentGraphExecutor] executeRunStreaming: runId=${runId}`);
@@ -1188,10 +1191,33 @@ export class AgentGraphExecutor {
             let diskSkillRegistryOverlay = false;
             try {
             const runWallClockT0 = performance.now();
+            type PrepMetricKey =
+                | "contextGraphReadyMs"
+                | "workspaceContextConfigMs"
+                | "workspaceCapabilitiesMs"
+                | "graphLoadMs"
+                | "runtimeProfileMs"
+                | "derivedMemorySyncMs"
+                | "externalToolingMs"
+                | "diskSkillsMs"
+                | "conversationSummaryMs"
+                | "contextBundleMs"
+                | "contextBundleGraphMs"
+                | "contextBundleVectorMs";
+            const prepTimings: Partial<Record<PrepMetricKey, number>> = {};
+            const timedStage = async <T>(key: PrepMetricKey, work: () => Promise<T>): Promise<T> => {
+                const t0 = performance.now();
+                try {
+                    return await work();
+                } finally {
+                    prepTimings[key] = performance.now() - t0;
+                }
+            };
             const emitLlmKpi = (kpi: AgentStreamKpiV1 | undefined) => {
                 if (!kpi) return;
                 opts?.onLlmStreamKpi?.({
                     ...kpi,
+                    ...prepTimings,
                     wallMsExecutorToStreamEnd: performance.now() - runWallClockT0,
                 });
             };
@@ -1210,24 +1236,26 @@ export class AgentGraphExecutor {
             };
 
             const [
-                workspaceGraphStore,
                 workspaceFullCtxResult,
                 workspaceCapsResult,
                 graph,
             ] = await Promise.all([
-                ensureContextGraphReady(workspaceIdStr, rootPathForCtx),
-                getWorkspaceContextConfig(workspaceIdStr).catch((err) => {
-                    console.warn("[AgentGraph] Failed to load workspace context config:", err);
-                    return null as WorkspaceContextConfig | null;
-                }),
-                resolveWorkspaceCapabilities(workspaceIdStr).catch((capsErr) => {
-                    console.warn(
-                        "[AgentGraph] Failed to resolve workspace capabilities, falling back to permissive mode:",
-                        (capsErr as Error)?.message ?? capsErr
-                    );
-                    return null as WorkspaceCapabilities | null;
-                }),
-                loadGraphForRun(),
+                timedStage("workspaceContextConfigMs", () =>
+                    getWorkspaceContextConfig(workspaceIdStr).catch((err) => {
+                        console.warn("[AgentGraph] Failed to load workspace context config:", err);
+                        return null as WorkspaceContextConfig | null;
+                    })
+                ),
+                timedStage("workspaceCapabilitiesMs", () =>
+                    resolveWorkspaceCapabilities(workspaceIdStr).catch((capsErr) => {
+                        console.warn(
+                            "[AgentGraph] Failed to resolve workspace capabilities, falling back to permissive mode:",
+                            (capsErr as Error)?.message ?? capsErr
+                        );
+                        return null as WorkspaceCapabilities | null;
+                    })
+                ),
+                timedStage("graphLoadMs", loadGraphForRun),
             ]);
 
             const workspaceFullCtx = workspaceFullCtxResult;
@@ -1291,6 +1319,9 @@ export class AgentGraphExecutor {
             const auditContext = documentContextEnabled ? workspaceFullCtx?.context ?? null : null;
             const wantAutoContext =
                 injectionSettings.structuralInjectionEnabled || injectionSettings.semanticInjectionEnabled;
+            const workspaceGraphStore = wantAutoContext
+                ? await timedStage("contextGraphReadyMs", () => ensureContextGraphReady(workspaceIdStr, rootPathForCtx))
+                : null;
             const runWorkMode = await agentGraphRunService.getRunWorkMode(runId);
 
             const executionMode = resolveExecutionMode(graph);
@@ -1308,20 +1339,24 @@ export class AgentGraphExecutor {
                 run.createdByUserId ??
                 workspace.ownerId ??
                 undefined;
-            const runtimeProfile = await resolveRuntimeProfileContext({
-                workspaceId: workspaceIdStr,
-                workspaceName: workspace.name,
-                userId: runtimeProfileUserId,
-                graph,
-                workMode: runWorkMode,
-                documentContext: auditContext,
-                enabledIntegrationProviderIds: workspaceCaps?.enabledIntegrationProviderIds ?? [],
-            });
-            try {
-                const memorySync = await syncDerivedMemories({
+            const runtimeProfile = await timedStage("runtimeProfileMs", () =>
+                resolveRuntimeProfileContext({
                     workspaceId: workspaceIdStr,
-                    runtimeProfile,
-                });
+                    workspaceName: workspace.name,
+                    userId: runtimeProfileUserId,
+                    graph,
+                    workMode: runWorkMode,
+                    documentContext: auditContext,
+                    enabledIntegrationProviderIds: workspaceCaps?.enabledIntegrationProviderIds ?? [],
+                })
+            );
+            try {
+                const memorySync = await timedStage("derivedMemorySyncMs", () =>
+                    syncDerivedMemories({
+                        workspaceId: workspaceIdStr,
+                        runtimeProfile,
+                    })
+                );
                 state.contextAssembly.derivedMemorySync = memorySync;
             } catch (err) {
                 console.warn("[AgentGraph] Failed to sync derived memories:", (err as Error)?.message ?? err);
@@ -1335,7 +1370,7 @@ export class AgentGraphExecutor {
             let dynamicExternalTools: any[] = [];
             let externalNamespacedToolNames: string[] = [];
             const [mcpPack, diskRecs] = await Promise.all([
-                (async (): Promise<{ dynamicExternalTools: any[]; externalNamespacedToolNames: string[] }> => {
+                timedStage("externalToolingMs", async (): Promise<{ dynamicExternalTools: any[]; externalNamespacedToolNames: string[] }> => {
                     let tools: any[] = [];
                     let names: string[] = [];
                     if (workspaceCaps?.externalMcpServers?.length) {
@@ -1357,16 +1392,20 @@ export class AgentGraphExecutor {
                         }
                     }
                     return { dynamicExternalTools: tools, externalNamespacedToolNames: names };
-                })(),
-                rootDir
-                    ? listWorkspaceSkillRecords(rootDir).catch((diskErr) => {
-                          console.warn(
-                              "[AgentGraph] Failed to load .kletron/skills overlay:",
-                              (diskErr as Error)?.message ?? diskErr
-                          );
-                          return [] as Awaited<ReturnType<typeof listWorkspaceSkillRecords>>;
-                      })
-                    : Promise.resolve([] as Awaited<ReturnType<typeof listWorkspaceSkillRecords>>),
+                }),
+                timedStage(
+                    "diskSkillsMs",
+                    () =>
+                        rootDir
+                            ? listWorkspaceSkillRecords(rootDir).catch((diskErr) => {
+                                  console.warn(
+                                      "[AgentGraph] Failed to load .kletron/skills overlay:",
+                                      (diskErr as Error)?.message ?? diskErr
+                                  );
+                                  return [] as Awaited<ReturnType<typeof listWorkspaceSkillRecords>>;
+                              })
+                            : Promise.resolve([] as Awaited<ReturnType<typeof listWorkspaceSkillRecords>>)
+                ),
             ]);
             dynamicExternalTools = mcpPack.dynamicExternalTools;
             externalNamespacedToolNames = mcpPack.externalNamespacedToolNames;
@@ -1659,6 +1698,9 @@ export class AgentGraphExecutor {
                 return await this.executeRunStreaming(subRunId, {
                     llmSelectionOverride: opts?.llmSelectionOverride,
                     workspaceContextUserId: opts?.workspaceContextUserId,
+                    onLlmStreamKpi: opts?.onLlmStreamKpi,
+                    clientSentAtMs: opts?.clientSentAtMs,
+                    serverRequestReceivedAtMs: opts?.serverRequestReceivedAtMs,
                 });
             };
             if (auditContext) {
@@ -2413,6 +2455,7 @@ export class AgentGraphExecutor {
 
                     let recentHistoryForReplay = state.conversationHistory ?? [];
                     let conversationSummaryPrompt: string | null = null;
+                    const conversationSummaryT0 = performance.now();
                     try {
                         const summaryContext = ensureConversationSummary(state);
                         recentHistoryForReplay = summaryContext.recentHistory;
@@ -2424,11 +2467,14 @@ export class AgentGraphExecutor {
                     } catch (err) {
                         console.warn("[AgentGraph] Failed to build conversation summary:", (err as Error)?.message ?? err);
                         recentHistoryForReplay = (state.conversationHistory ?? []).slice(-30);
+                    } finally {
+                        prepTimings.conversationSummaryMs = performance.now() - conversationSummaryT0;
                     }
 
                     let contextBlock = "";
-                    if (wantAutoContext) {
+                    if (wantAutoContext && workspaceGraphStore) {
                         const editorState = getEditorStateManager(workspace._id!.toString()).getCurrentState();
+                        const bundleT0 = performance.now();
                         const bundle = await buildContextBundle({
                             rootPath: rootDir,
                             userPrompt,
@@ -2436,6 +2482,9 @@ export class AgentGraphExecutor {
                             store: workspaceGraphStore,
                             settings: injectionSettings,
                         });
+                        prepTimings.contextBundleMs = performance.now() - bundleT0;
+                        prepTimings.contextBundleGraphMs = bundle.debug.graphMs;
+                        prepTimings.contextBundleVectorMs = bundle.debug.vectorMs;
                         contextBlock = formatContextBundleForPrompt(bundle, {
                             currentFile: editorState.activeFile,
                         });
@@ -2544,6 +2593,8 @@ export class AgentGraphExecutor {
                                 recursionLimit: reactRecursionLimit,
                                 llmSelection: opts?.llmSelectionOverride,
                                 upstreamPrepMs: performance.now() - runWallClockT0,
+                                clientSentAtMs: opts?.clientSentAtMs,
+                                serverRequestReceivedAtMs: opts?.serverRequestReceivedAtMs,
                                 runId,
                                 abortSignal: abortController.signal,
                                 getAbortReason: () => abortReason,
@@ -2604,6 +2655,8 @@ export class AgentGraphExecutor {
                                 recursionLimit: reactRecursionLimit,
                                 llmSelection: opts?.llmSelectionOverride,
                                 upstreamPrepMs: performance.now() - runWallClockT0,
+                                clientSentAtMs: opts?.clientSentAtMs,
+                                serverRequestReceivedAtMs: opts?.serverRequestReceivedAtMs,
                                 runId,
                                 abortSignal: abortController.signal,
                                 getAbortReason: () => abortReason,
@@ -2729,6 +2782,8 @@ export class AgentGraphExecutor {
                             recursionLimit: reactRecursionLimit,
                             llmSelection: opts?.llmSelectionOverride,
                             upstreamPrepMs: performance.now() - runWallClockT0,
+                            clientSentAtMs: opts?.clientSentAtMs,
+                            serverRequestReceivedAtMs: opts?.serverRequestReceivedAtMs,
                             runId,
                             extraMessages: shouldResume ? undefined : extraMessages,
                             onMessage: handleStreamingMessage,

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Command, ChevronRight, FileCode, Settings, Terminal, GitBranch, Folder, X } from 'lucide-react';
+import { Search, Command, ChevronRight, FileCode, Settings, Terminal, GitBranch, Folder } from 'lucide-react';
 
 export interface CommandItem {
     id: string;

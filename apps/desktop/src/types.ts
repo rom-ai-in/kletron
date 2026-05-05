@@ -21,6 +21,13 @@ export type WorkspaceSummary = {
   repoUrl?: string;
   provider?: string;
   defaultBranch?: string;
+  status?: string;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+  lastUsed?: string | Date;
+  health?: "healthy" | "missing" | "inaccessible";
+  healthMessage?: string | null;
+  selectable?: boolean;
 };
 
 export type UserInfo = { id: string; email: string; fullName: string | null };

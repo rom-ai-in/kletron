@@ -239,7 +239,7 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
         if (nextGraphId) {
             setSelectedGraphId((prev) => (prev && prev !== "" ? prev : nextGraphId));
         }
-    }, [graphOptionsLoaded, llmPrefsLoaded, agentGraphs, savedGraphId]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [graphOptionsLoaded, llmPrefsLoaded, agentGraphs, savedGraphId]);  
 
     // ── Fetch enabled LLM providers ──────────────────────────────────────
     useEffect(() => {

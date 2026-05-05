@@ -17,8 +17,6 @@ import {
   Sparkles,
   Loader2,
   Undo2,
-  MoreHorizontal,
-  Copy,
 } from 'lucide-react';
 import { Button } from '../design-system';
 import { GitChangeTree } from './GitChangeTree';

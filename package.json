@@ -24,7 +24,7 @@
     "start:web": "npm --workspace apps/web run start",
     "start:desktop": "npm --workspace apps/desktop run start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test:unit": "vitest run",
     "test:watch": "vitest",
     "test": "npm run typecheck && npm run test:unit",
@@ -94,10 +94,12 @@
     "@typescript-eslint/parser": "^8.53.1",
     "@vitest/coverage-v8": "2.1.9",
     "eslint": "^9.3.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-unused-imports": "^4.4.1",
     "tsx": "^4.19.3",
     "typescript": "^5.6.0",
-    "vitest": "2.1.9",
-    "vite": "6.4.2"
+    "vite": "6.4.2",
+    "vitest": "2.1.9"
   },
   "overrides": {
     "vitest": "2.1.9",

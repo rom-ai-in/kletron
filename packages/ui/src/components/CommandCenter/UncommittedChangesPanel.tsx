@@ -3,14 +3,11 @@
 import React, { useState, useMemo } from 'react';
 import {
   ChevronDown,
-  ChevronUp,
   ChevronRight,
   X,
   ExternalLink,
   Plus,
-  Minus,
   Undo2,
-  FileCode,
   Loader2,
 } from 'lucide-react';
 import { Button } from '../design-system';

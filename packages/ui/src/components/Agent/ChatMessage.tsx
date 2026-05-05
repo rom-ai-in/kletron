@@ -18,7 +18,7 @@ export const CopyButton: React.FC<CopyButtonProps> = ({ content, className }) =>
     const [copied, setCopied] = useState(false);
 
     const handleCopy = () => {
-        navigator.clipboard.writeText(content);
+        void navigator.clipboard.writeText(content);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };

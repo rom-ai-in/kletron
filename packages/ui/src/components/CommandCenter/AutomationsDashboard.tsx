@@ -13,7 +13,6 @@ import {
   Calendar,
   RefreshCw,
 } from 'lucide-react';
-import { Button } from '../design-system';
 
 export type AutomationStatus = 'active' | 'paused' | 'completed' | 'failed';
 

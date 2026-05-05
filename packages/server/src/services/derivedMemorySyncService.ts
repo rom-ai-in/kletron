@@ -77,28 +77,33 @@ export async function syncDerivedMemories(input: {
     if (!ObjectId.isValid(workspaceId)) return result;
 
     const workspaceObjectId = new ObjectId(workspaceId);
-    await writeIfChanged(
-        workspaceObjectId,
-        "/memories/profile.md",
-        renderProfileMemory(runtimeProfile),
-        result,
-    );
-    await writeIfChanged(
-        workspaceObjectId,
-        "/memories/company.md",
-        renderCompanyMemory(runtimeProfile),
-        result,
-    );
+    const writes: Promise<void>[] = [
+        writeIfChanged(
+            workspaceObjectId,
+            "/memories/profile.md",
+            renderProfileMemory(runtimeProfile),
+            result,
+        ),
+        writeIfChanged(
+            workspaceObjectId,
+            "/memories/company.md",
+            renderCompanyMemory(runtimeProfile),
+            result,
+        ),
+    ];
 
     const sentryMemory = renderSentryMemory(runtimeProfile);
     if (sentryMemory) {
-        await writeIfChanged(
-            workspaceObjectId,
-            "/memories/integrations/sentry.md",
-            sentryMemory,
-            result,
+        writes.push(
+            writeIfChanged(
+                workspaceObjectId,
+                "/memories/integrations/sentry.md",
+                sentryMemory,
+                result,
+            )
         );
     }
 
+    await Promise.all(writes);
     return result;
 }

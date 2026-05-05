@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Database, Save, RotateCcw, Monitor, Cloud, Check, Sparkles, Ship, Gem, Bot } from "lucide-react";
+import { Database, RotateCcw, Monitor, Cloud, Check, Sparkles, Ship, Gem, Bot } from "lucide-react";
 import { Panel, Button } from "@kletron/ui/components/design-system";
 import type { EmbeddingConfig } from "@kletron/shared/schemas/embeddingConfig.schema";
-import { EMBEDDING_PROVIDERS, EmbeddingProviderType } from "@kletron/shared/schemas/embeddingConfig.schema";
+import { EmbeddingProviderType } from "@kletron/shared/schemas/embeddingConfig.schema";
 import {
     AzureEmbeddingConfigForm,
     OpenAIEmbeddingConfigForm,

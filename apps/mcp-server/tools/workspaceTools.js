@@ -1,5 +1,3 @@
-import path from "path";
-import fs from "fs";
 import { workspaceSkillsManager } from "./workspaceSkills.js";
 
 /**

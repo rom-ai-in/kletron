@@ -6,12 +6,10 @@ import {
     ConfigExplorerModal,
     Button,
     Skeleton,
-    Panel,
     SelectableRow,
     Selector,
     ConfigExplorerSection,
 } from "@kletron/ui/components/design-system";
-import type { SelectorOption } from "@kletron/ui/components/design-system";
 import { AutomationConfigBuilder } from "@kletron/shared/automationConfigBuilder";
 import {
     alignAutomationStagesToWorkspaceGraphs,

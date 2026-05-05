@@ -40,6 +40,9 @@ export interface CategoryContext {
   
   /** Recent search queries */
   recentSearches: string[];
+
+  /** Recent activity history for this category */
+  recentActivities?: ActivityEntry[];
   
   /** Last conversation state */
   lastConversationState?: {
@@ -203,7 +206,7 @@ export class ContextPreserver {
       warnings,
       transferredItems: Object.keys(transformed).filter((k) => {
         const key = k as keyof typeof transformed;
-        return transformed[key] !== undefined && transformed[key] !== null && transformed[key] !== '';
+        return this.hasTransferredValue(transformed[key]);
       }),
       droppedItems,
     };
@@ -233,7 +236,7 @@ export class ContextPreserver {
         }
       : undefined;
 
-    items.recentActivities = sourceContext.recentActivities?.slice(-this.maxRecentActivities);
+    items.recentActivities = sourceContext.recentActivities?.slice(-this.maxRecentActivities) || [];
     items.savedSearches = sourceContext.recentSearches?.map((q) => ({
       query: q,
       category: sourceContext.workspaceContext ? "code" : "work",
@@ -314,12 +317,15 @@ export class ContextPreserver {
     sourceContext: Partial<CategoryContext>,
     warnings: string[],
   ): CategoryContext {
+    const targetActiveFiles = targetContext.activeFiles ?? [];
+    const sourceActiveFiles = sourceContext.activeFiles ?? [];
+
     const merged: CategoryContext = {
       ...targetContext,
       ...sourceContext,
-      activeFiles: this.mergeArrays(targetContext.activeFiles, sourceContext.activeFiles),
+      activeFiles: this.mergeArrays(targetActiveFiles, sourceActiveFiles),
       recentEdits: this.mergeArrays(targetContext.recentEdits, sourceContext.recentEdits),
-      recentSearches: this.mergeArrays(targetContext.recentSearches, sourceContext.recentSearches),
+      recentSearches: this.mergeStringArrays(targetContext.recentSearches, sourceContext.recentSearches),
       workspaceContext: {
         ...targetContext.workspaceContext,
         ...sourceContext.workspaceContext,
@@ -327,7 +333,7 @@ export class ContextPreserver {
     };
 
     // Check for potential conflicts
-    if (targetContext.activeFiles?.length > 0 && sourceContext.activeFiles?.length > 0) {
+    if (targetActiveFiles.length > 0 && sourceActiveFiles.length > 0) {
       warnings.push('Merging active files from previous context');
     }
 
@@ -352,6 +358,19 @@ export class ContextPreserver {
       seen.add(key);
       return true;
     });
+  }
+
+  private mergeStringArrays(target: string[], source: string[] | undefined): string[] {
+    if (!source || source.length === 0) return target;
+    if (target.length === 0) return Array.from(new Set(source));
+    return Array.from(new Set([...source, ...target]));
+  }
+
+  private hasTransferredValue(value: CategoryContext[keyof CategoryContext] | undefined): boolean {
+    if (value == null) return false;
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === "string") return value !== "";
+    return true;
   }
 
   /**
@@ -409,6 +428,7 @@ export class ContextPreserver {
       activeFiles: [],
       recentEdits: [],
       recentSearches: [],
+      recentActivities: [],
       workspaceContext: {
         workspacePath: '',
         openFiles: [],

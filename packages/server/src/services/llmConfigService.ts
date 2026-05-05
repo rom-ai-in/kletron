@@ -29,6 +29,14 @@ const {
 const COLLECTION_NAME = "llm_configs";
 const CONFIG_JSON_PATH = path.resolve(process.cwd(), "config", "config.json");
 const LLM_CONFIG_KEY = "llmConfig";
+const LLM_CONFIG_CACHE_TTL_MS = 5_000;
+
+let llmConfigCache:
+    | {
+          value: LlmConfig;
+          expiresAt: number;
+      }
+    | null = null;
 
 const DEFAULT_ENABLED_PROVIDERS: LlmProviderType[] = [
     "azure",
@@ -90,21 +98,35 @@ async function getCollection(): Promise<Collection<LlmConfig>> {
  * Falls back to config.json if MongoDB is unavailable
  */
 export async function getLlmConfig(): Promise<LlmConfig> {
+    if (llmConfigCache && llmConfigCache.expiresAt > Date.now()) {
+        return llmConfigCache.value;
+    }
+
     try {
         const collection = await getCollection();
         const storedConfig = await collection.findOne({});
 
         if (storedConfig) {
-            return {
+            const normalized = {
                 ...storedConfig,
                 _id: storedConfig._id.toString(),
             };
+            llmConfigCache = {
+                value: normalized,
+                expiresAt: Date.now() + LLM_CONFIG_CACHE_TTL_MS,
+            };
+            return normalized;
         }
     } catch (error) {
         console.warn("Failed to fetch LLM config from MongoDB, using config.json fallback:", error);
     }
 
-    return readConfigFile() ?? getDefaultConfig();
+    const fallback = readConfigFile() ?? getDefaultConfig();
+    llmConfigCache = {
+        value: fallback,
+        expiresAt: Date.now() + LLM_CONFIG_CACHE_TTL_MS,
+    };
+    return fallback;
 }
 
 /**
@@ -153,7 +175,7 @@ async function updateProviderConfig<T>(
 
     if (collection) {
         if (currentConfig._id) {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+             
             const { _id, ...configWithoutId } = updatedConfig;
 
             await collection.updateOne(
@@ -170,6 +192,10 @@ async function updateProviderConfig<T>(
     }
 
     writeConfigFile(updatedConfig);
+    llmConfigCache = {
+        value: updatedConfig,
+        expiresAt: Date.now() + LLM_CONFIG_CACHE_TTL_MS,
+    };
     return updatedConfig;
 }
 

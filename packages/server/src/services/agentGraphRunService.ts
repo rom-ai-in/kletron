@@ -471,6 +471,8 @@ export class AgentGraphRunService {
         }
     ): Promise<AgentGraphRun[]> {
         const limit = opts?.limit ?? 50;
+        const isAutomationThread = (run: AgentGraphRun): boolean =>
+            run.source === "automation" || Boolean(run.automationId);
         const collection = await getCollectionSafe();
         if (!collection) {
             const wsObj = workspaceId && ObjectId.isValid(workspaceId) ? new ObjectId(workspaceId) : undefined;
@@ -481,6 +483,7 @@ export class AgentGraphRunService {
                 if (opts?.excludeSource && run.source === opts.excludeSource) return false;
                 if (
                     opts?.workMode &&
+                    !isAutomationThread(run) &&
                     normalizeToWorkModeId(run.workMode as string | undefined) !== opts.workMode
                 ) {
                     return false;
@@ -509,10 +512,28 @@ export class AgentGraphRunService {
             filter.source = { $ne: opts.excludeSource };
         }
         if (opts?.workMode === "work") {
-            filter.workMode = { $in: workModeStorageValuesMatching("work") };
+            filter.$and = [
+                ...(Array.isArray(filter.$and) ? (filter.$and as Record<string, unknown>[]) : []),
+                {
+                    $or: [
+                        { source: "automation" },
+                        { automationId: { $exists: true } },
+                        { workMode: { $in: workModeStorageValuesMatching("work") } },
+                    ],
+                },
+            ];
         } else if (opts?.workMode === "code") {
             // Anything that is not explicitly a "work" bucket value (see LEGACY_CATEGORY_TO_WORK_MODE).
-            filter.$nor = [{ workMode: { $in: workModeStorageValuesMatching("work") } }];
+            filter.$and = [
+                ...(Array.isArray(filter.$and) ? (filter.$and as Record<string, unknown>[]) : []),
+                {
+                    $or: [
+                        { source: "automation" },
+                        { automationId: { $exists: true } },
+                        { workMode: { $nin: workModeStorageValuesMatching("work") } },
+                    ],
+                },
+            ];
         }
         const runs = await collection
             .find(filter)

@@ -82,8 +82,10 @@ export function CoworkProvider({ children, workspaceId }: CoworkProviderProps) {
             }
         };
 
-        checkConnection();
-        const interval = setInterval(checkConnection, 30000);
+        void checkConnection();
+        const interval = setInterval(() => {
+            void checkConnection();
+        }, 30000);
         return () => clearInterval(interval);
     }, [workspaceId]);
 

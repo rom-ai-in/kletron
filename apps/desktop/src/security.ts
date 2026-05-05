@@ -193,7 +193,7 @@ export class CategorySecurityManager {
 
         // Check connectSrc for API calls
         if (parser.protocol === 'https:' && this.isApiRequest(url)) {
-            return policy.connectSrc.some(src =>
+            return policy.csp.connectSrc.some((src: string) =>
                 url.match(new RegExp(src.replace(/\*/g, '[^.]+')))
             );
         }

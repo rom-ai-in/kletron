@@ -290,11 +290,11 @@ function createWindow() {
   });
 
   if (DEV_SERVER_URL) {
-    mainWindow.loadURL(DEV_SERVER_URL);
+    void mainWindow.loadURL(DEV_SERVER_URL);
     mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
     const indexPath = path.join(currentDir, "..", "dist", "index.html");
-    mainWindow.loadFile(indexPath);
+    void mainWindow.loadFile(indexPath);
   }
 
   if (pendingAuthUrl) {
@@ -418,7 +418,7 @@ app.on("ready", () => {
   if (process.platform === "darwin") {
     const dockIcon = loadAppIcon();
     if (dockIcon) {
-      app.dock.setIcon(dockIcon);
+      app.dock?.setIcon(dockIcon);
     }
   }
   createWindow();

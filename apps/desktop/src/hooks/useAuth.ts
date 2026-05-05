@@ -5,7 +5,6 @@ import {
   AUTH_LOGIN_TIMEOUT_MS,
   generateCodeVerifier,
   createCodeChallenge,
-  isValidHttpUrl,
 } from "../utils";
 
 function loadAuth(): AuthState | null {
@@ -99,7 +98,7 @@ export function useAuth(backendUrlTrimmed: string, backendUrlValid: boolean) {
 
     let cancelled = false;
 
-    (async () => {
+    void (async () => {
       try {
         const res = await fetch(`${backendUrlTrimmed}/api/auth/me`, {
           headers: { Authorization: `Bearer ${auth.accessToken}` },
@@ -170,39 +169,41 @@ export function useAuth(backendUrlTrimmed: string, backendUrlValid: boolean) {
   // Login polling
   useEffect(() => {
     if (!loginSession) return;
-    const interval = setInterval(async () => {
-      if (Date.now() - loginSession.startedAt > AUTH_LOGIN_TIMEOUT_MS) {
-        setLoginError("Sign-in expired. Please try again.");
-        setLoginPending(false);
-        setLoginSession(null);
-        return;
-      }
-      try {
-        const url = new URL(`${backendUrlTrimmed}/api/auth/ide-session`);
-        url.searchParams.set("deviceSessionId", loginSession.deviceSessionId);
-        url.searchParams.set("code_verifier", loginSession.codeVerifier);
-        const res = await fetch(url.toString());
-        const data = await res.json();
-        if (data?.success && data.accessToken) {
-          const newAuth: AuthState = {
-            accessToken: data.accessToken,
-            refreshToken: data.refreshToken,
-            expiresAt: data.expiresAt,
-            user: data.user || null,
-          };
-          setAuth(newAuth);
-          saveAuth(newAuth);
+    const interval = setInterval(() => {
+      void (async () => {
+        if (Date.now() - loginSession.startedAt > AUTH_LOGIN_TIMEOUT_MS) {
+          setLoginError("Sign-in expired. Please try again.");
           setLoginPending(false);
           setLoginSession(null);
-          setLoginError(null);
-        } else if (data?.error && !data?.pending) {
-          setLoginError(data.error);
-          setLoginPending(false);
-          setLoginSession(null);
+          return;
         }
-      } catch {
-        // ignore polling failures
-      }
+        try {
+          const url = new URL(`${backendUrlTrimmed}/api/auth/ide-session`);
+          url.searchParams.set("deviceSessionId", loginSession.deviceSessionId);
+          url.searchParams.set("code_verifier", loginSession.codeVerifier);
+          const res = await fetch(url.toString());
+          const data = await res.json();
+          if (data?.success && data.accessToken) {
+            const newAuth: AuthState = {
+              accessToken: data.accessToken,
+              refreshToken: data.refreshToken,
+              expiresAt: data.expiresAt,
+              user: data.user || null,
+            };
+            setAuth(newAuth);
+            saveAuth(newAuth);
+            setLoginPending(false);
+            setLoginSession(null);
+            setLoginError(null);
+          } else if (data?.error && !data?.pending) {
+            setLoginError(data.error);
+            setLoginPending(false);
+            setLoginSession(null);
+          }
+        } catch {
+          // ignore polling failures
+        }
+      })();
     }, 3000);
     return () => clearInterval(interval);
   }, [loginSession, backendUrlTrimmed]);

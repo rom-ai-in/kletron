@@ -6,7 +6,7 @@ import { joinApiOrigin } from '@kletron/shared';
 export interface SessionPendingEdit {
     id: string;
     toolName: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     args: Record<string, any>;
     status: string;
     createdAt?: string;

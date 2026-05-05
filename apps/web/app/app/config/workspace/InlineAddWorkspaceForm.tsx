@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Folder, AlertCircle, Check, Loader2, FolderOpen, ChevronUp, ChevronRight, Plus } from 'lucide-react';
 import { Button, Panel } from '@kletron/ui/components/design-system';
 

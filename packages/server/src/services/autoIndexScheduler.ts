@@ -73,8 +73,8 @@ export function stopAutoIndexScheduler(workspaceId?: string) {
 
 function scheduleNextRun(workspaceId: string, repoPath: string) {
     const entry = schedulerMap.get(workspaceId) || { interval: null, initTimeout: null };
-    entry.interval = setInterval(async () => {
-        await runAutoIndex(workspaceId, repoPath);
+    entry.interval = setInterval(() => {
+        void runAutoIndex(workspaceId, repoPath);
     }, INTERVAL_MS);
     schedulerMap.set(workspaceId, entry);
 }

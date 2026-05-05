@@ -193,6 +193,25 @@ export function useConversation(
     }
   }, [stream.streamStatus, conversationId, loadSessionDetail, loadThreads]);
 
+  useEffect(() => {
+    const detailId = agentThread.sessionDetail?.id;
+    const detailStatus = agentThread.sessionDetail?.status;
+    if (!conversationId || !detailId || detailId !== conversationId) return;
+    if (stream.sending) return;
+    if (detailStatus !== "RUNNING" && detailStatus !== "PENDING") return;
+
+    const id = window.setInterval(() => {
+      void loadSessionDetail(conversationId, { mergeMessages: true });
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [
+    conversationId,
+    agentThread.sessionDetail?.id,
+    agentThread.sessionDetail?.status,
+    stream.sending,
+    loadSessionDetail,
+  ]);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevSendingRef = useRef(false);
 
@@ -415,10 +434,27 @@ export function useConversation(
     return normalizeToWorkModeId(activeCategory ?? "code");
   }, [agentThread.sessionDetail, conversationId, activeCategory]);
 
+  const sessionStatus = useMemo(() => {
+    const d = agentThread.sessionDetail;
+    if (!conversationId || d?.id !== conversationId) return null;
+    return d.status ?? null;
+  }, [agentThread.sessionDetail, conversationId]);
+
+  const serverRunActive = sessionStatus === "RUNNING" || sessionStatus === "PENDING";
+  const runActive = stream.sending || serverRunActive;
+  const runStartedAt = stream.runStartedAt ?? (
+    agentThread.sessionDetail?.id === conversationId
+      ? agentThread.sessionDetail.startedAt ?? null
+      : null
+  );
+
   return {
     conversationEvents,
     conversationLoading: conversationLoading || agentThread.sessionDetailLoading,
     streaming: stream.sending,
+    runActive,
+    sessionStatus,
+    runStartedAt,
     streamingState: stream.streamStatus as import("../types").StreamingState,
     streamingMessage: null,
     streamHasEvents,

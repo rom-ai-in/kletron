@@ -7,7 +7,6 @@ import {
   Code2,
   GitCommitHorizontal,
   TerminalSquare,
-  Share2,
   ChevronDown,
   GitCompareArrows,
   PanelRight,

@@ -34,6 +34,36 @@ export interface WorkspaceCapabilities {
     externalMcpServers: ExternalMcpRuntimeConfig[];
 }
 
+const WORKSPACE_CAPABILITIES_CACHE_TTL_MS = 5_000;
+
+type CachedWorkspaceCapabilities = Omit<WorkspaceCapabilities, "enabledToolSet"> & {
+    expiresAt: number;
+};
+
+const workspaceCapabilitiesCache = new Map<string, CachedWorkspaceCapabilities>();
+const workspaceCapabilitiesInflight = new Map<string, Promise<WorkspaceCapabilities>>();
+
+function cloneWorkspaceCapabilities(cached: CachedWorkspaceCapabilities): WorkspaceCapabilities {
+    return {
+        workspaceId: cached.workspaceId,
+        enabledSkills: [...cached.enabledSkills],
+        enabledTools: [...cached.enabledTools],
+        enabledToolSet: new Set(cached.enabledTools),
+        enabledIntegrationProviderIds: [...cached.enabledIntegrationProviderIds],
+        externalMcpServers: [...cached.externalMcpServers],
+    };
+}
+
+export function invalidateWorkspaceCapabilitiesCache(workspaceId?: string): void {
+    if (workspaceId) {
+        workspaceCapabilitiesCache.delete(workspaceId);
+        workspaceCapabilitiesInflight.delete(workspaceId);
+        return;
+    }
+    workspaceCapabilitiesCache.clear();
+    workspaceCapabilitiesInflight.clear();
+}
+
 /**
  * Always-on baseline tools (read-only repo browsing). Without these, even an
  * "empty" workspace wouldn't be useful for the agent.
@@ -74,41 +104,70 @@ const TOOLS_REQUIRING_INTEGRATION: Record<string, string[]> = {
 export async function resolveWorkspaceCapabilities(
     workspaceId: string
 ): Promise<WorkspaceCapabilities> {
-    const [skills, integrationIds, externalServers] = await Promise.all([
-        resolveWorkspaceSkills(workspaceId),
-        listEnabledIntegrationProviderIds(workspaceId),
-        getExternalMcpRuntimeConfig(workspaceId),
-    ]);
-
-    const tools = new Set<string>(BASELINE_TOOLS);
-    for (const t of STANDARD_WORKSPACE_BUNDLED_TOOLS) {
-        tools.add(t);
+    const cached = workspaceCapabilitiesCache.get(workspaceId);
+    if (cached && cached.expiresAt > Date.now()) {
+        return cloneWorkspaceCapabilities(cached);
     }
 
-    // Tools requested by enabled skills.
-    for (const skill of skills) {
-        for (const t of skill.requiredTools) tools.add(t);
-        for (const t of skill.suggestedTools) tools.add(t);
-        for (const t of skill.resolvedTools) tools.add(t);
+    const inflight = workspaceCapabilitiesInflight.get(workspaceId);
+    if (inflight) {
+        return inflight;
     }
 
-    // Tools unlocked by integrations.
-    const integrationTools = toolsUnlockedByConnectors(integrationIds);
-    for (const t of integrationTools) tools.add(t);
+    const promise = (async (): Promise<WorkspaceCapabilities> => {
+        const [skills, integrationIds, externalServers] = await Promise.all([
+            resolveWorkspaceSkills(workspaceId),
+            listEnabledIntegrationProviderIds(workspaceId),
+            getExternalMcpRuntimeConfig(workspaceId),
+        ]);
 
-    // Drop tools that need an integration the user does not have.
-    for (const [toolName, providers] of Object.entries(TOOLS_REQUIRING_INTEGRATION)) {
-        if (!tools.has(toolName)) continue;
-        const hasAny = providers.some((p) => integrationIds.includes(p));
-        if (!hasAny) tools.delete(toolName);
+        const tools = new Set<string>(BASELINE_TOOLS);
+        for (const t of STANDARD_WORKSPACE_BUNDLED_TOOLS) {
+            tools.add(t);
+        }
+
+        // Tools requested by enabled skills.
+        for (const skill of skills) {
+            for (const t of skill.requiredTools) tools.add(t);
+            for (const t of skill.suggestedTools) tools.add(t);
+            for (const t of skill.resolvedTools) tools.add(t);
+        }
+
+        // Tools unlocked by integrations.
+        const integrationTools = toolsUnlockedByConnectors(integrationIds);
+        for (const t of integrationTools) tools.add(t);
+
+        // Drop tools that need an integration the user does not have.
+        for (const [toolName, providers] of Object.entries(TOOLS_REQUIRING_INTEGRATION)) {
+            if (!tools.has(toolName)) continue;
+            const hasAny = providers.some((p) => integrationIds.includes(p));
+            if (!hasAny) tools.delete(toolName);
+        }
+
+        const enabledTools = Array.from(tools).sort();
+        const resolved: WorkspaceCapabilities = {
+            workspaceId,
+            enabledSkills: skills,
+            enabledTools,
+            enabledToolSet: new Set(enabledTools),
+            enabledIntegrationProviderIds: integrationIds,
+            externalMcpServers: externalServers,
+        };
+        workspaceCapabilitiesCache.set(workspaceId, {
+            workspaceId,
+            enabledSkills: [...skills],
+            enabledTools: [...enabledTools],
+            enabledIntegrationProviderIds: [...integrationIds],
+            externalMcpServers: [...externalServers],
+            expiresAt: Date.now() + WORKSPACE_CAPABILITIES_CACHE_TTL_MS,
+        });
+        return resolved;
+    })();
+
+    workspaceCapabilitiesInflight.set(workspaceId, promise);
+    try {
+        return await promise;
+    } finally {
+        workspaceCapabilitiesInflight.delete(workspaceId);
     }
-
-    return {
-        workspaceId,
-        enabledSkills: skills,
-        enabledTools: Array.from(tools).sort(),
-        enabledToolSet: tools,
-        enabledIntegrationProviderIds: integrationIds,
-        externalMcpServers: externalServers,
-    };
 }

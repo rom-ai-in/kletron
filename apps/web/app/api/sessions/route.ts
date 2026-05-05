@@ -39,6 +39,7 @@ type StreamChunk =
  */
 export async function POST(request: Request) {
   console.log(`[sessions/create] ▶ POST /api/sessions`);
+  const serverRequestReceivedAtMs = Date.now();
 
   const auth = await requireAppRouteAuth(request);
   if (!auth) {
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
 
   const payload = await request.json().catch(() => ({} as Record<string, unknown>));
   const graphId = typeof payload?.graphId === "string" ? payload.graphId.trim() : "";
+  const overrideGraphId = typeof payload?.overrideGraphId === "string" ? payload.overrideGraphId.trim() : "";
   const graphSelectionMode: GraphSelectionMode =
     payload?.graphSelectionMode === "auto" ? "auto" : "manual";
   const message = typeof payload?.message === "string" ? payload.message.trim() : "";
@@ -60,6 +62,10 @@ export async function POST(request: Request) {
     typeof payload?.channel === "string" && CHANNEL_IDS.includes(payload.channel as ChannelId)
       ? (payload.channel as ChannelId)
       : null;
+  const clientSentAtMs =
+    typeof payload?.clientSentAtMs === "number" && Number.isFinite(payload.clientSentAtMs)
+      ? payload.clientSentAtMs
+      : undefined;
   const llmSelection = provider ? resolveLlmSelection({ provider, model }) : undefined;
 
   console.log(`[sessions/create] graphId="${graphId}", mode=${graphSelectionMode}, message="${message.slice(0, 40)}", provider=${provider}, model=${model}`);
@@ -160,7 +166,11 @@ export async function POST(request: Request) {
     message,
     workMode,
     requestedGraphId: graphId || undefined,
-    channelDefaultGraphId: channelSettings?.defaultGraphId || undefined,
+    overrideGraphId: overrideGraphId || undefined,
+    channelDefaultGraphId:
+      channelSettings && channelSettings.enabled !== false
+        ? channelSettings.defaultGraphId || undefined
+        : undefined,
     documentContext: contextConfig?.enabled ? contextConfig.context : null,
     activeConnectorProviderIds: workspaceCaps.enabledIntegrationProviderIds,
     listGraphs: () => agentGraphService.listGraphs(),
@@ -258,6 +268,8 @@ export async function POST(request: Request) {
           onLlmStreamKpi: (kpi) => {
             sendChunk({ type: "stream_metrics", payload: kpi });
           },
+          clientSentAtMs,
+          serverRequestReceivedAtMs,
           ...(llmSelection ? { llmSelectionOverride: llmSelection } : {}),
         });
         console.log(`[sessions/create] ✓ executeRunStreaming completed for ${runId}`);

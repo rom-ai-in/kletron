@@ -25,4 +25,4 @@ async function checkServer() {
   }
 }
 
-checkServer();
+void checkServer();

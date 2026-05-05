@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Settings, Folder, Plus } from "lucide-react";
+import { Folder } from "lucide-react";
 
 interface LayoutProps {
     children: React.ReactNode;

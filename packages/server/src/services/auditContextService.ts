@@ -11,6 +11,15 @@ import {
 } from "@kletron/shared/workspaceContextInjection";
 
 const COLLECTION = "audit_context_config";
+const WORKSPACE_CONTEXT_CONFIG_CACHE_TTL_MS = 5_000;
+
+const workspaceContextConfigCache = new Map<
+  string,
+  {
+    value: WorkspaceContextConfig;
+    expiresAt: number;
+  }
+>();
 
 export type AuditContextConfig = {
   enabled: boolean;
@@ -34,21 +43,35 @@ export async function getAuditContextConfig(workspaceId?: string | null): Promis
 
 export async function getWorkspaceContextConfig(workspaceId?: string | null): Promise<WorkspaceContextConfig | null> {
   if (!workspaceId) return null;
+  const cached = workspaceContextConfigCache.get(workspaceId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
   const db = await getDb();
   const doc = await db.collection(COLLECTION).findOne({ workspaceId }, { projection: { _id: 0 } });
   if (!doc) {
-    return {
+    const fallback = {
       enabled: true,
       context: null,
       injection: { ...DEFAULT_WORKSPACE_CONTEXT_INJECTION },
     };
+    workspaceContextConfigCache.set(workspaceId, {
+      value: fallback,
+      expiresAt: Date.now() + WORKSPACE_CONTEXT_CONFIG_CACHE_TTL_MS,
+    });
+    return fallback;
   }
-  return {
+  const normalized = {
     enabled: Boolean((doc as any).enabled),
     context: normalizeAuditContext((doc as any).context) ?? null,
     updatedAt: (doc as any).updatedAt,
     injection: normalizeWorkspaceContextInjection((doc as any).injection),
   };
+  workspaceContextConfigCache.set(workspaceId, {
+    value: normalized,
+    expiresAt: Date.now() + WORKSPACE_CONTEXT_CONFIG_CACHE_TTL_MS,
+  });
+  return normalized;
 }
 
 export async function buildAuditContextPrompt(workspaceId?: string | null): Promise<string | null> {
@@ -90,10 +113,15 @@ export async function saveWorkspaceContextConfig(
     } as any,
     { upsert: true }
   );
-  return {
+  const saved = {
     enabled,
     context: normalized,
     injection,
     updatedAt: now,
   };
+  workspaceContextConfigCache.set(workspaceId, {
+    value: saved,
+    expiresAt: Date.now() + WORKSPACE_CONTEXT_CONFIG_CACHE_TTL_MS,
+  });
+  return saved;
 }

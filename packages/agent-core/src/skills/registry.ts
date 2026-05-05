@@ -1,5 +1,5 @@
 import type { SkillDefinition, ResolvedSkill, SkillRegistryOptions } from "./types";
-import { loadSkill, loadAllSkills, resolveSkill, listSkillIds } from "./loader";
+import { loadAllSkills, resolveSkill } from "./loader";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SKILL REGISTRY

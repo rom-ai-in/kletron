@@ -52,25 +52,24 @@ export function useCurrentWorkspace() {
         
         if (!workspaceId) return;
         
-        // Fetch active workspace
-        fetch('/api/workspaces/active')
-            .then(res => res.json())
-            .then(data => {
+        void (async () => {
+            try {
+                const workspaceRes = await fetch('/api/workspaces/active');
+                const data = await workspaceRes.json();
                 setCurrentWorkspace(data);
-                
-                // Set default category from workspace or URL param
+
                 const urlCategory = router.query.category as string;
                 const activeCatId = urlCategory || data.defaultCategoryId || 'coding';
-                
-                fetch(`/api/workspaces/${data.id}/categories`)
-                    .then(res => res.json())
-                    .then(cats => {
-                        setCategories(cats);
-                        const activeCat = cats.find((c: any) => c.id === activeCatId) || cats[0];
-                        setActiveCategory(activeCat || null);
-                    });
-            })
-            .catch(err => console.error('Error fetching active workspace:', err));
+
+                const categoriesRes = await fetch(`/api/workspaces/${data.id}/categories`);
+                const cats = await categoriesRes.json();
+                setCategories(cats);
+                const activeCat = cats.find((c: any) => c.id === activeCatId) || cats[0];
+                setActiveCategory(activeCat || null);
+            } catch (err) {
+                console.error('Error fetching active workspace:', err);
+            }
+        })();
     }, [router.query.workspaceId, router.query.category]);
 
     return { currentWorkspace, categories, activeCategory };
