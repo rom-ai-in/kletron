@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+    buildGoogleWorkspaceTools,
     filterGmailMessagesLocally,
     isGmailMetadataQueryScopeError,
     parseGmailLocalQuery,
@@ -66,5 +67,19 @@ describe("googleWorkspaceTools Gmail fallback helpers", () => {
 
         expect(filtered.filtered.map((message) => message.id)).toEqual(["msg-1"]);
         expect(filtered.warnings).toEqual([]);
+    });
+});
+
+describe("googleWorkspaceTools schemas", () => {
+    it("accepts pageToken on calendar_list_events", () => {
+        const tools = buildGoogleWorkspaceTools();
+        const tool = tools.find((entry: any) => entry.name === "calendar_list_events");
+        expect(tool).toBeTruthy();
+        expect(tool.schema.safeParse({
+            calendarId: "primary",
+            timeMin: "2026-05-06T00:00:00+02:00",
+            timeMax: "2026-05-13T23:59:59+02:00",
+            pageToken: "next-token",
+        }).success).toBe(true);
     });
 });

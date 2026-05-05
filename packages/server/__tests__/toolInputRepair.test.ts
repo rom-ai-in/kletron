@@ -47,6 +47,104 @@ describe("toolInputRepair", () => {
         });
     });
 
+    it("unwraps nested argument payloads and maps common file/tool aliases", () => {
+        const schema = z.object({
+            filePath: z.string().min(1),
+            content: z.string().min(1),
+            repoPath: z.string().optional(),
+        });
+
+        const parsed = parseToolInputWithRepair(
+            schema,
+            {
+                repo_path: "/tmp/repo",
+                arguments: {
+                    path: "notes/output.md",
+                    text: "hello",
+                },
+            },
+            "write_file"
+        );
+
+        expect(parsed).toEqual({
+            repoPath: "/tmp/repo",
+            filePath: "notes/output.md",
+            content: "hello",
+        });
+    });
+
+    it("maps execute_bash aliases like cmd and workdir", () => {
+        const schema = z.object({
+            command: z.string().min(1),
+            path: z.string().optional(),
+            timeoutMs: z.number().int().positive().optional(),
+        });
+
+        const parsed = parseToolInputWithRepair(
+            schema,
+            {
+                cmd: "pwd",
+                workdir: "/tmp/repo",
+                timeoutMs: "5000",
+            },
+            "execute_bash"
+        );
+
+        expect(parsed).toEqual({
+            command: "pwd",
+            path: "/tmp/repo",
+            timeoutMs: 5000,
+        });
+    });
+
+    it("maps glob_files path/query aliases into pattern and cwd", () => {
+        const schema = z.object({
+            pattern: z.string().min(1),
+            cwd: z.string().optional(),
+        });
+
+        expect(
+            parseToolInputWithRepair(
+                schema,
+                { path: "src/**/*.ts" },
+                "glob_files"
+            )
+        ).toEqual({
+            pattern: "src/**/*.ts",
+        });
+
+        expect(
+            parseToolInputWithRepair(
+                schema,
+                { directory: "src", query: "**/*.ts" },
+                "glob_files"
+            )
+        ).toEqual({
+            pattern: "**/*.ts",
+            cwd: "src",
+        });
+    });
+
+    it("maps range aliases for read_file_range", () => {
+        const schema = z.object({
+            filePath: z.string().min(1),
+            startLine: z.number().int().positive(),
+            endLine: z.number().int().positive(),
+        });
+
+        const parsed = parseToolInputWithRepair(
+            schema,
+            { path: "README.md", start: "5", end: "12" },
+            "read_file_range"
+        );
+
+        expect(parsed).toEqual({
+            filePath: "README.md",
+            startLine: 5,
+            endLine: 12,
+        });
+    });
+
     it("repairs nested objects and booleans inside arrays", () => {
         const schema = z.object({
             reminders: z.object({

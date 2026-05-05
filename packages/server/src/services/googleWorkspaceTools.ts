@@ -740,6 +740,7 @@ async function calendarListEvents(auth: GoogleWorkspaceAuth, input: {
     timeMin?: string;
     timeMax?: string;
     maxResults?: number;
+    pageToken?: string;
     query?: string;
     showDeleted?: boolean;
     singleEvents?: boolean;
@@ -754,6 +755,7 @@ async function calendarListEvents(auth: GoogleWorkspaceAuth, input: {
             timeMax: input.timeMax,
             q: input.query,
             maxResults: input.maxResults ?? 20,
+            pageToken: input.pageToken,
             showDeleted: input.showDeleted ?? false,
             singleEvents: input.singleEvents ?? true,
             orderBy: input.orderBy ?? "startTime",
@@ -1112,6 +1114,7 @@ export function buildGoogleWorkspaceTools(workspaceId?: string): any[] {
             timeMin?: string;
             timeMax?: string;
             maxResults?: number;
+            pageToken?: string;
             query?: string;
             showDeleted?: boolean;
             singleEvents?: boolean;
@@ -1129,6 +1132,7 @@ export function buildGoogleWorkspaceTools(workspaceId?: string): any[] {
                 timeMin: z.string().optional(),
                 timeMax: z.string().optional(),
                 maxResults: z.number().int().positive().max(100).optional(),
+                pageToken: z.string().optional(),
                 query: z.string().optional(),
                 showDeleted: z.boolean().optional(),
                 singleEvents: z.boolean().optional(),

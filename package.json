@@ -21,6 +21,7 @@
     "build": "npm run build:ui && npm run check:context && npm --workspace apps/web run build",
     "build:web": "npm run build:ui && npm run check:context && npm --workspace apps/web run build",
     "build:desktop": "npm run build:ui && npm --workspace apps/desktop run build",
+    "dist:desktop": "npm run build:desktop && npm --workspace apps/desktop run dist:mac",
     "start:web": "npm --workspace apps/web run start",
     "start:desktop": "npm --workspace apps/desktop run start",
     "lint": "eslint .",

@@ -41,3 +41,6 @@ numezis_results.json
 
 node_modules/
 github-mcp/node_modules/
+
+# Electron installer output (can exceed GitHub 100MB limit — never commit)
+apps/desktop/dist-desktop/
