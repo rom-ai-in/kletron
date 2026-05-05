@@ -20,6 +20,7 @@ import {
     invokeStrReplaceEditorApprovalFallback,
     isMcpBundledToolNotFoundError,
 } from "@kletron/server/services/bundledToolApprovalFallback";
+import { resolveApprovedToolArgs } from "@kletron/server/services/approvedToolArgs";
 
 const safeEditGate = SafeEditGate.getInstance();
 
@@ -34,24 +35,6 @@ const stringifyResult = (raw: unknown) => {
   if (typeof raw === "string") return raw;
   if (raw === undefined || raw === null) return "";
   try { return JSON.stringify(raw, null, 2); } catch { return String(raw); }
-};
-
-const resolveArgs = (toolName: string, args: Record<string, any>, rootDir: string) => {
-  const resolved = { ...(args ?? {}) };
-  const resolveIfRelative = (key: string) => {
-    const val = resolved[key];
-    if (typeof val === "string" && !path.isAbsolute(val)) {
-      resolved[key] = path.resolve(rootDir, val);
-    } else if ((val === undefined || val === null) && key === "path") {
-      resolved[key] = rootDir;
-    }
-  };
-  resolveIfRelative("path");
-  resolveIfRelative("filePath");
-  resolveIfRelative("repoPath");
-  if (toolName === "write_file" && !resolved.repoPath) resolved.repoPath = rootDir;
-  if (toolName === "execute_bash" && !resolved.path) resolved.path = rootDir;
-  return resolved;
 };
 
 async function maybeEvictResult(rootDir: string, runId: string, toolName: string, raw: unknown) {
@@ -177,7 +160,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // All other tools (read-only MCP, edits, bash, etc.) replay through the same MCP client as the agent.
     const client = await McpClient.getInstance();
     await syncWorkspaceExternalMcpServers(workspaceIdStr);
-    const resolvedArgs = resolveArgs(toolName, edit.args ?? {}, workspace.rootPath);
+    const resolvedArgs = resolveApprovedToolArgs(toolName, edit.args ?? {}, workspace.rootPath);
     let raw: string;
     try {
       raw = await client.callTool(toolName, resolvedArgs as any, {

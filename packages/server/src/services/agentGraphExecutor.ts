@@ -55,6 +55,7 @@ import { simpleReactPhaseId, simpleReactWorkSystemPrompt } from "./agentGraphPre
 import { config } from "../config";
 import { RESEARCH_DEPTH_FAST_SYSTEM_SUFFIX } from "@kletron/shared/researchDepth";
 import { toolsUnlockedByConnectors } from "@kletron/shared";
+import { convertConversationHistoryToMessages } from "./conversationHistoryToMessages";
 
 const runApprovalConfigCache = new Map<string, ToolApprovalConfig>();
 
@@ -911,90 +912,6 @@ async function ensureContextGraphReady(workspaceId: string, rootPath: string) {
         );
     }
     return store;
-}
-
-/**
- * Determine whether an event represents an AI message issuing tool calls
- * (as opposed to a tool result).  Handles both:
- *  - NEW data: kind="assistant" with name/toolArgs set
- *  - LEGACY data: kind="tool" but with toolArgs and empty content
- *    (backend previously assigned kind="tool" to both AI tool-call
- *     and tool-result messages — fixed now, but old data may exist).
- */
-function isAiToolCallEvent(event: AgentEvent): boolean {
-    // New format: assistant events with tool info
-    if (event.kind === "assistant" && (event.name || event.toolName) && event.toolArgs) return true;
-    // Legacy format: kind="tool" but has toolArgs and no meaningful content
-    if (event.kind === "tool" && event.toolArgs && !event.content?.trim()) return true;
-    return false;
-}
-
-/**
- * Convert AgentEvent[] conversation history to BaseMessage[] for multi-turn.
- * Mirrors the pattern used by ReActEngine for explore conversations.
- */
-function convertConversationHistoryToMessages(events: AgentEvent[]): BaseMessage[] {
-    const messages: BaseMessage[] = [];
-    const sanitizeEventContent = (value?: string) => {
-        const cleaned = sanitizeAssistantVisibleContent(stripThoughtTagsForTranscript(value ?? "")).trim();
-        if (!cleaned) return "";
-        // Prevent old policy/prompt leakage from re-entering model context
-        if (
-            /\brespond with only the title\b/i.test(cleaned) ||
-            /\bwe need to produce a short chat title\b/i.test(cleaned)
-        ) {
-            return "";
-        }
-        return cleaned;
-    };
-    for (const event of events) {
-        if (event.kind === "user") {
-            const content = sanitizeEventContent(event.content);
-            if (!content) continue;
-            messages.push(new HumanMessage({ content, id: event.id }));
-        } else if (event.kind === "system") {
-            const content = sanitizeEventContent(event.content);
-            if (!content) continue;
-            messages.push(new SystemMessage({ content, id: event.id }));
-        } else if (isAiToolCallEvent(event)) {
-            // AI message that issues tool calls (new kind="assistant" or legacy kind="tool")
-            const toolName = event.toolName || event.name;
-            const content = sanitizeEventContent(event.content);
-            const msg = new AIMessage({ content: content || "", id: event.id });
-            if (toolName && event.toolArgs) {
-                try {
-                    // toolArgs may be a string (normal) or an object (after MongoDB round-trip)
-                    const parsedArgs = typeof event.toolArgs === "string"
-                        ? JSON.parse(event.toolArgs || "{}")
-                        : (typeof event.toolArgs === "object" ? event.toolArgs : {});
-                    (msg as any).tool_calls = [{
-                        id: event.toolCallId || `call_${Date.now()}`,
-                        name: toolName,
-                        args: parsedArgs,
-                    }];
-                } catch {
-                    // If parse fails, still create a tool_call with empty args
-                    // so the message structure remains valid for the LLM
-                    (msg as any).tool_calls = [{
-                        id: event.toolCallId || `call_${Date.now()}`,
-                        name: toolName,
-                        args: {},
-                    }];
-                }
-            }
-            messages.push(msg);
-        } else if (event.kind === "assistant") {
-            // Pure text assistant message (no tool calls)
-            const content = sanitizeEventContent(event.content);
-            if (!content) continue;
-            messages.push(new AIMessage({ content, id: event.id }));
-        } else if (event.kind === "tool") {
-            // Tool result
-            const content = sanitizeEventContent(event.content);
-            messages.push(new ToolMessage({ content: content || "", tool_call_id: event.toolCallId || "", id: event.id }));
-        }
-    }
-    return messages;
 }
 
 export class AgentGraphExecutor {

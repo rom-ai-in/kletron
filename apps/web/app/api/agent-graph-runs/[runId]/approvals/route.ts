@@ -15,6 +15,7 @@ import {
     isKletronAdminToolName,
 } from "@kletron/server/services/kletronAdminToolApprovalRunner";
 import { syncWorkspaceExternalMcpServers } from "@kletron/server/services/mcpWorkspaceSync";
+import { resolveApprovedToolArgs } from "@kletron/server/services/approvedToolArgs";
 
 /**
  * Fire-and-forget: resume the agent loop after a successful tool approval.
@@ -152,30 +153,6 @@ const stringifyResult = (raw: unknown) => {
     }
 };
 
-const resolveArgs = (toolName: string, args: Record<string, any>, rootDir: string) => {
-    const resolved = { ...(args ?? {}) };
-    const resolveIfRelative = (key: string) => {
-        const val = resolved[key];
-        if (typeof val === "string") {
-            if (!path.isAbsolute(val)) {
-                resolved[key] = path.resolve(rootDir, val);
-            }
-        } else if ((val === undefined || val === null) && key === "path") {
-            resolved[key] = rootDir;
-        }
-    };
-    resolveIfRelative("path");
-    resolveIfRelative("filePath");
-    resolveIfRelative("repoPath");
-    if (toolName === "write_file" && !resolved.repoPath) {
-        resolved.repoPath = rootDir;
-    }
-    if (toolName === "execute_bash" && !resolved.path) {
-        resolved.path = rootDir;
-    }
-    return resolved;
-};
-
 async function maybeEvictResult(rootDir: string, runId: string, toolName: string, raw: unknown) {
     const content = stringifyResult(raw);
     if (!content || content.length <= EVICT_CHARS) {
@@ -309,7 +286,7 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
         }
         const client = await McpClient.getInstance();
         await syncWorkspaceExternalMcpServers(workspaceIdStr);
-        const resolvedArgs = resolveArgs(toolName, edit.args ?? {}, workspace.rootPath);
+        const resolvedArgs = resolveApprovedToolArgs(toolName, edit.args ?? {}, workspace.rootPath);
         const raw = await client.callTool(toolName, resolvedArgs as any, {
             workspaceId: workspaceIdStr,
         });
