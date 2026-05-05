@@ -72,7 +72,7 @@ replace_yaml_subst() {
   local esc tmp_out
   esc="$(printf '%s\n' "${val}" | sed -e 's/[\/&]/\\&/g')"
   tmp_out="$(mktemp)"
-  sed "s|^${key}:.*|${key}: ${esc}|" "${CLOUD_BUILD_TMP}" > "${tmp_out}"
+  sed -E "s|^([[:space:]]*)${key}:.*|\\1${key}: ${esc}|" "${CLOUD_BUILD_TMP}" > "${tmp_out}"
   mv "${tmp_out}" "${CLOUD_BUILD_TMP}"
 }
 

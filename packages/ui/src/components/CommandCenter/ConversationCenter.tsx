@@ -274,16 +274,15 @@ export function ConversationCenter({
         {/* Inline diff review */}
         {diffReview}
 
-        {/* Progressive text streaming — show accumulated tokens with cursor */}
+        {/* Progressive text streaming — accumulated tokens */}
         {streaming && streamingText && (
           <div className="rounded-xl px-4 py-3 text-[14px] bg-transparent text-text-secondary">
             <MarkdownRenderer content={streamingText} />
-            <span className="inline-block w-[2px] h-[14px] bg-text-muted align-text-bottom ml-0.5 animate-pulse" />
           </div>
         )}
         {/* Thinking indicator (shown when streaming but no progressive text yet) */}
-        {streaming && !streamingText && !streamHasEvents && <ThinkingBubble isActive summary="Working on it..." />}
-        {streaming && !streamingText && streamHasEvents && <ThinkingBubble isActive summary="Agent is running..." />}
+        {streaming && !streamingText && !streamHasEvents && <ThinkingBubble isActive summary="Working on it" />}
+        {streaming && !streamingText && streamHasEvents && <ThinkingBubble isActive summary="Agent is running" />}
 
         {/* Error */}
         {sendError && (

@@ -12,7 +12,8 @@ const safeEditGate = SafeEditGate.getInstance();
  */
 async function resumeAgentAfterRejection(
   runId: string,
-  rejectionSummaries: Array<{ toolName: string; }>
+  rejectionSummaries: Array<{ toolName: string; }>,
+  userId?: string,
 ) {
   try {
     const run = await agentGraphRunService.getRun(runId);
@@ -29,7 +30,9 @@ async function resumeAgentAfterRejection(
 
     const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
     console.log(`[edits/reject] Resuming agent after rejection for run ${runId}`);
-    await agentGraphExecutor.continueRun(runId, message, {});
+    await agentGraphExecutor.continueRun(runId, message, {
+      ...(userId ? { workspaceContextUserId: userId } : {}),
+    });
     console.log(`[edits/reject] ✓ Agent resumed successfully for run ${runId}`);
   } catch (err) {
     console.error(`[edits/reject] ✗ Failed to resume agent after rejection for ${runId}:`, (err as Error)?.message);
@@ -96,7 +99,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       const approvals = await updateRunApprovals({ pending: [], rejected });
       
       if (rejectionSummaries.length > 0) {
-        void resumeAgentAfterRejection(params.id, rejectionSummaries);
+        void resumeAgentAfterRejection(params.id, rejectionSummaries, auth.userId);
       }
       
       return NextResponse.json({ rejected: edits, approvals });
@@ -123,7 +126,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     });
     const approvals = await updateRunApprovals({ pending, rejected });
 
-    void resumeAgentAfterRejection(params.id, [{ toolName: edit.toolName }]);
+      void resumeAgentAfterRejection(params.id, [{ toolName: edit.toolName }], auth.userId);
 
     return NextResponse.json({ rejected: edit, approvals });
   } catch (error) {

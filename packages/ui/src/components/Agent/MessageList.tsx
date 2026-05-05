@@ -282,6 +282,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
         nearTopTriggeredRef.current = false;
     }, [loadingOlder, items]);
 
+    /** Cumulative row offsets for absolute virtualization — must rerun when measured heights change (ref). */
     const offsets = useMemo(() => {
         const starts: number[] = new Array(items.length);
         const heights: number[] = new Array(items.length);
@@ -294,7 +295,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
             y += h;
         }
         return { starts, heights, totalHeight: y };
-    }, [items, rowKeys]);
+    }, [items, rowKeys, measureVersion]);
 
     const findStartIndex = useCallback((targetOffset: number) => {
         let lo = 0;
@@ -588,9 +589,10 @@ const MessageListInner: React.FC<MessageListProps> = ({
                             {streamingMarkdownSafe ? (
                                 <MarkdownRenderer content={streamingMarkdownSafe} variant="chat" />
                             ) : (
-                                <span className="text-text-muted/50 text-[11px]"> … </span>
+                                <AgentStatusShimmerLabel className="text-[11px]" tone="secondary">
+                                    Formatting reply
+                                </AgentStatusShimmerLabel>
                             )}
-                            <span className="inline-block w-[2px] h-[14px] bg-text-primary/50 align-text-bottom ml-0.5 animate-pulse" />
                         </div>
                     ) : null}
                 </div>
@@ -604,8 +606,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
                         textClassName="font-medium"
                     >
                         {pendingApprovalCount === 1
-                            ? 'Awaiting your approval…'
-                            : `Awaiting your approval (${pendingApprovalCount} actions)…`}
+                            ? 'Awaiting your approval'
+                            : `Awaiting your approval (${pendingApprovalCount} actions)`}
                     </AgentStatusShimmerLabel>
                     <p className="text-[11px] text-text-muted">
                         Use Approve or Reject in the approvals area below.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import type { GetRequestHeaders } from "@kletron/shared";
 import type {
     ConnectorBindingUpsertInput,
     ConnectorWorkspaceBindingRow,
@@ -13,6 +14,16 @@ import type {
     WorkspaceIntegrationSummary,
     WorkspaceMcpServerSummary,
 } from "@kletron/shared";
+import {
+    fetchWorkspaceConnectorsSnapshot,
+    invalidateWorkspaceConnectorsCache,
+    peekWorkspaceConnectorsCache,
+} from "@kletron/ui/hooks/workspaceConnectorsShared";
+
+const WEB_CONNECTORS_API_ORIGIN = "";
+
+/** Stable — same pattern as agent WorkspaceConnectorsHint (avoids churn in dependency arrays). */
+const webConnectorFetchHeaders: GetRequestHeaders = async () => ({});
 
 export async function fetchAccountConnectorWorkspaceBindings(
     kind: "mcp_server" | "integration",
@@ -78,7 +89,7 @@ export function useWorkspaceConnectors(workspaceId: string) {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const refresh = useCallback(async () => {
+    const refresh = useCallback(async (opts?: { force?: boolean }) => {
         if (!workspaceId) {
             setIntegrations([]);
             setMcpServers([]);
@@ -86,19 +97,29 @@ export function useWorkspaceConnectors(workspaceId: string) {
             setIsLoading(false);
             return;
         }
+        if (opts?.force) {
+            invalidateWorkspaceConnectorsCache(WEB_CONNECTORS_API_ORIGIN, workspaceId);
+        }
+        if (!opts?.force) {
+            const cached = peekWorkspaceConnectorsCache(WEB_CONNECTORS_API_ORIGIN, workspaceId);
+            if (cached) {
+                setIntegrations(cached.integrations);
+                setMcpServers(cached.mcpServers);
+                setError(null);
+                setIsLoading(false);
+                return;
+            }
+        }
         setIsLoading(true);
         setError(null);
         try {
-            const [intRes, mcpRes] = await Promise.all([
-                fetch(`/api/workspaces/${workspaceId}/connectors/integrations`),
-                fetch(`/api/workspaces/${workspaceId}/connectors/mcp-servers`),
-            ]);
-            if (!intRes.ok) throw new Error(`integrations: ${intRes.status}`);
-            if (!mcpRes.ok) throw new Error(`mcp-servers: ${mcpRes.status}`);
-            const intJson = await intRes.json();
-            const mcpJson = await mcpRes.json();
-            setIntegrations(intJson.integrations ?? []);
-            setMcpServers(mcpJson.servers ?? []);
+            const snap = await fetchWorkspaceConnectorsSnapshot({
+                apiOrigin: WEB_CONNECTORS_API_ORIGIN,
+                workspaceId,
+                getRequestHeaders: webConnectorFetchHeaders,
+            });
+            setIntegrations(snap.integrations);
+            setMcpServers(snap.mcpServers);
         } catch (err) {
             setError((err as Error).message);
         } finally {
@@ -121,7 +142,7 @@ export function useWorkspaceConnectors(workspaceId: string) {
                 const json = await res.json().catch(() => ({}));
                 throw new Error(json.error ?? `Failed (${res.status})`);
             }
-            await refresh();
+            await refresh({ force: true });
             return (await res.json()).integration as WorkspaceIntegrationSummary;
         },
         [workspaceId, refresh]
@@ -141,7 +162,7 @@ export function useWorkspaceConnectors(workspaceId: string) {
                 const json = await res.json().catch(() => ({}));
                 throw new Error(json.error ?? `Failed (${res.status})`);
             }
-            await refresh();
+            await refresh({ force: true });
         },
         [workspaceId, refresh]
     );
@@ -156,7 +177,7 @@ export function useWorkspaceConnectors(workspaceId: string) {
                 const json = await res.json().catch(() => ({}));
                 throw new Error(json.error ?? `Failed (${res.status})`);
             }
-            await refresh();
+            await refresh({ force: true });
         },
         [workspaceId, refresh]
     );
@@ -184,7 +205,7 @@ export function useWorkspaceConnectors(workspaceId: string) {
                 const json = await res.json().catch(() => ({}));
                 throw new Error(json.error ?? `Failed (${res.status})`);
             }
-            await refresh();
+            await refresh({ force: true });
             return (await res.json()).server as WorkspaceMcpServerSummary;
         },
         [workspaceId, refresh]
@@ -204,7 +225,7 @@ export function useWorkspaceConnectors(workspaceId: string) {
                 const json = await res.json().catch(() => ({}));
                 throw new Error(json.error ?? `Failed (${res.status})`);
             }
-            await refresh();
+            await refresh({ force: true });
         },
         [workspaceId, refresh]
     );
@@ -219,7 +240,7 @@ export function useWorkspaceConnectors(workspaceId: string) {
                 const json = await res.json().catch(() => ({}));
                 throw new Error(json.error ?? `Failed (${res.status})`);
             }
-            await refresh();
+            await refresh({ force: true });
         },
         [workspaceId, refresh]
     );
@@ -231,7 +252,7 @@ export function useWorkspaceConnectors(workspaceId: string) {
                 { method: "POST" }
             );
             const json = await res.json().catch(() => ({}));
-            await refresh();
+            await refresh({ force: true });
             return { ok: res.ok, ...json } as {
                 ok: boolean;
                 tools?: Array<{ name: string; description?: string }>;
@@ -278,7 +299,7 @@ export function useWorkspaceConnectors(workspaceId: string) {
                 const json = await res.json().catch(() => ({}));
                 throw new Error(json.error ?? `Failed (${res.status})`);
             }
-            await refresh();
+            await refresh({ force: true });
         },
         [workspaceId, refresh]
     );

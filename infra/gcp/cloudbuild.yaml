@@ -24,7 +24,7 @@ steps:
     args:
       - -ceu
       - |
-        # Bash locals must not look like $_foo: Cloud Build treats that as a substitution key "_" (INVALID_ARGUMENT).
+        # Bash locals must not mimic Cloud Build substitution syntax like _foo.
         pid_lc="$(printf '%s' "$PROJECT_ID" | tr '[:upper:]' '[:lower:]')"
         if [[ "$pid_lc" == *numezis* ]]; then
           echo "Refusing Cloud Build: PROJECT_ID '$PROJECT_ID' matches Kletron-only policy (numezis forbidden)."

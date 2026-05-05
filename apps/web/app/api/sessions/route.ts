@@ -256,6 +256,7 @@ export async function POST(request: Request) {
       try {
         console.log(`[sessions/create] Calling executeRunStreaming for ${runId}...`);
         const result = await agentGraphExecutor.executeRunStreaming(runId, {
+          workspaceContextUserId: auth.userId,
           onUpdate: async (update) => {
             sendChunk({ type: "update", payload: update });
           },

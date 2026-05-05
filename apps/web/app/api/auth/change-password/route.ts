@@ -12,7 +12,11 @@ export async function POST(request: Request) {
 
     if (!ObjectId.isValid(auth.userId)) {
         return NextResponse.json(
-            { success: false, error: "Password change is not available for this account type" },
+            {
+                success: false,
+                error:
+                    "Password can only be changed for a registered account. Sign out and sign in with the email you used at registration.",
+            },
             { status: 400 }
         );
     }

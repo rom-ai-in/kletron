@@ -17,7 +17,7 @@ import {
     Terminal as TerminalIcon,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { normalizeToolName } from '../../lib/toolCategories';
+import { formatMcpToolPartDisplayName, formatToolDisplayName, normalizeToolName } from '../../lib/toolCategories';
 
 /** `hunter__Domain-Search` → { provider: 'hunter', tool: 'Domain-Search' } */
 export function splitMcpToolName(full: string): { provider: string | null; tool: string } {
@@ -351,7 +351,9 @@ export const ToolInvocation: React.FC<ToolInvocationProps> = ({
                         {provider}
                     </span>
                 ) : null}
-                <span className="min-w-0 truncate font-mono text-[10px] text-text-primary">{tool}</span>
+                <span className="min-w-0 truncate text-[10px] font-medium text-text-primary" title={tool}>
+                    {provider ? formatMcpToolPartDisplayName(tool) : formatToolDisplayName(name)}
+                </span>
                 {summary ? (
                     <span className="min-w-0 truncate font-mono text-[9px] text-text-muted/85 max-w-[min(12rem,42vw)]">
                         {summary}
@@ -387,7 +389,9 @@ export const ToolInvocation: React.FC<ToolInvocationProps> = ({
                             {provider}
                         </span>
                     ) : null}
-                    <span className="font-mono text-[11px] font-medium text-text-secondary">{tool}</span>
+                    <span className="text-[11px] font-medium text-text-secondary" title={tool}>
+                        {provider ? formatMcpToolPartDisplayName(tool) : formatToolDisplayName(name)}
+                    </span>
                     {summary ? (
                         <span className="min-w-0 truncate font-mono text-[10px] text-text-muted max-w-[min(14rem,50vw)]">
                             {summary}

@@ -9,16 +9,19 @@ export async function authorizeCredentials(
         return null;
     }
 
-    await initializeTestUser();
-    const testUser = findTestUser(credentials.email);
-    if (testUser) {
-        const isValid = await verifyPassword(credentials.password, testUser.passwordHash);
-        if (isValid) {
-            return {
-                id: 'test-user-1',
-                email: testUser.email,
-                name: 'Romain Client',
-            };
+    // Demo credentials only in non-production — avoids JWT ids like `test-user-1` that cannot use Mongo-backed profile APIs.
+    if (process.env.NODE_ENV !== 'production') {
+        await initializeTestUser();
+        const testUser = findTestUser(credentials.email);
+        if (testUser) {
+            const isValid = await verifyPassword(credentials.password, testUser.passwordHash);
+            if (isValid) {
+                return {
+                    id: 'test-user-1',
+                    email: testUser.email,
+                    name: 'Romain Client',
+                };
+            }
         }
     }
 

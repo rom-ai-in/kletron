@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   WorkspaceIntegrationSummary,
   WorkspaceMcpServerSummary,
 } from "@kletron/shared/connectors/types";
 import type { GetRequestHeaders } from "@kletron/shared";
+import {
+  fetchWorkspaceConnectorsSnapshot,
+  invalidateWorkspaceConnectorsCache,
+  peekWorkspaceConnectorsCache,
+} from "./workspaceConnectorsShared";
 
 const defaultHeaders: GetRequestHeaders = async () => ({});
 
@@ -24,46 +29,86 @@ export function useWorkspaceConnectors(options: {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  /** Inline `getRequestHeaders` from parents must not invalidate effects every render. */
+  const getRequestHeadersRef = useRef(getRequestHeaders);
+  getRequestHeadersRef.current = getRequestHeaders;
+
+  const skipPeekOnceRef = useRef(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  useEffect(() => {
     if (!workspaceId || !enabled) {
       setIntegrations([]);
       setMcpServers([]);
       setIsLoading(false);
+      setError(null);
       return;
     }
+
+    let cancelled = false;
+    const origin = apiOrigin;
+    const ws = workspaceId;
+
+    const apply = (snap: { integrations: WorkspaceIntegrationSummary[]; mcpServers: WorkspaceMcpServerSummary[] }) => {
+      if (cancelled) return;
+      setIntegrations(snap.integrations);
+      setMcpServers(snap.mcpServers);
+      setError(null);
+      setIsLoading(false);
+    };
+
+    const skipPeek = skipPeekOnceRef.current;
+    skipPeekOnceRef.current = false;
+
+    if (!skipPeek) {
+      const cached = peekWorkspaceConnectorsCache(origin, ws);
+      if (cached) {
+        apply(cached);
+        return () => {
+          cancelled = true;
+        };
+      }
+    }
+
     setIsLoading(true);
     setError(null);
-    try {
-      const base = apiOrigin.replace(/\/$/, "");
-      const headers = await getRequestHeaders();
-      const h: Record<string, string> = { ...headers };
-      if (workspaceId && !h["x-workspace-id"]) h["x-workspace-id"] = workspaceId;
-      const [intRes, mcpRes] = await Promise.all([
-        fetch(`${base}/api/workspaces/${encodeURIComponent(workspaceId)}/connectors/integrations`, {
-          headers: h,
-        }),
-        fetch(`${base}/api/workspaces/${encodeURIComponent(workspaceId)}/connectors/mcp-servers`, {
-          headers: h,
-        }),
-      ]);
-      if (!intRes.ok) throw new Error(`integrations: ${intRes.status}`);
-      if (!mcpRes.ok) throw new Error(`mcp-servers: ${mcpRes.status}`);
-      const intJson = (await intRes.json()) as { integrations?: WorkspaceIntegrationSummary[] };
-      const mcpJson = (await mcpRes.json()) as { servers?: WorkspaceMcpServerSummary[] };
-      setIntegrations(intJson.integrations ?? []);
-      setMcpServers(mcpJson.servers ?? []);
-    } catch (e) {
-      setError((e as Error).message);
-      setIntegrations([]);
-      setMcpServers([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [apiOrigin, workspaceId, getRequestHeaders, enabled]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void fetchWorkspaceConnectorsSnapshot({
+      apiOrigin: origin,
+      workspaceId: ws,
+      getRequestHeaders: () => getRequestHeadersRef.current(),
+    })
+      .then((snap) => apply(snap))
+      .catch((e) => {
+        if (cancelled) return;
+        setError((e as Error).message);
+        setIntegrations([]);
+        setMcpServers([]);
+        setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiOrigin, workspaceId, enabled, refreshNonce]);
+
+  const refresh = useCallback(
+    async (opts?: { force?: boolean }) => {
+      if (!workspaceId || !enabled) {
+        setIntegrations([]);
+        setMcpServers([]);
+        setIsLoading(false);
+        setError(null);
+        return;
+      }
+      if (opts?.force) {
+        invalidateWorkspaceConnectorsCache(apiOrigin, workspaceId);
+      }
+      skipPeekOnceRef.current = true;
+      setRefreshNonce((n) => n + 1);
+    },
+    [apiOrigin, workspaceId, enabled]
+  );
 
   return { integrations, mcpServers, isLoading, error, refresh };
 }

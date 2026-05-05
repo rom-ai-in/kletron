@@ -53,7 +53,7 @@ export const ThoughtsPanel: React.FC<ThoughtsPanelProps> = ({
                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </div>
                 <span className="text-[11px] font-normal text-text-muted/45 transition-colors group-hover:text-text-muted/65">
-                    {isProse ? 'Thought' : 'Reasoning'} — {headerSummary}
+                    Reasoning — {headerSummary}
                 </span>
             </button>
 

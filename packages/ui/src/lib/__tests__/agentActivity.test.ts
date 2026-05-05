@@ -7,7 +7,7 @@ describe('deriveActivityState', () => {
     });
 
     it('prefers answering when text is present', () => {
-        expect(deriveActivityState({ streaming: true, streamingText: 'hello', events: [] })?.label).toBe('Answering…');
+        expect(deriveActivityState({ streaming: true, streamingText: 'hello', events: [] })?.label).toBe('Answering');
     });
 
     it('shows tool detail from last tool-like event', () => {
@@ -19,12 +19,12 @@ describe('deriveActivityState', () => {
                 { kind: 'assistant', toolName: 'read_file' },
             ],
         });
-        expect(s?.label).toBe('Using tools…');
+        expect(s?.label).toBe('Using tools');
         expect(s?.detail).toContain('read_file');
     });
 
     it('shows working on it when streaming but no events yet', () => {
-        expect(deriveActivityState({ streaming: true, streamingText: '', events: [] })?.label).toBe('Working on it…');
+        expect(deriveActivityState({ streaming: true, streamingText: '', events: [] })?.label).toBe('Working on it');
     });
 
     it('shows thinking when reasoning stream is present but no answer text', () => {
@@ -35,7 +35,7 @@ describe('deriveActivityState', () => {
                 streamingReasoning: 'step one',
                 events: [],
             })?.label,
-        ).toBe('Thinking…');
+        ).toBe('Thinking');
     });
 
     it('shows continuing when last event is a non-tool assistant reply (server-side poll)', () => {
@@ -48,7 +48,7 @@ describe('deriveActivityState', () => {
                     { kind: 'assistant', content: 'Here is a longer partial answer from the model.' },
                 ],
             })?.label,
-        ).toBe('Continuing…');
+        ).toBe('Continuing');
     });
 
     it('ignores tools from a prior turn once a newer user message exists (current-turn slice)', () => {
@@ -64,7 +64,7 @@ describe('deriveActivityState', () => {
                     { kind: 'user', content: 'second question' },
                 ],
             })?.label,
-        ).toBe('Working on it…');
+        ).toBe('Working on it');
     });
 });
 

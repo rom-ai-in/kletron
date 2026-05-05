@@ -50,7 +50,7 @@ export const AgentActivityStrip: React.FC<AgentActivityStripProps> = ({
             {state.detail ? (
                 <>
                     <span className="select-none text-text-muted/45" aria-hidden>
-                        ·
+                        {' — '}
                     </span>
                     <span
                         className="max-w-[min(100%,14rem)] truncate rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10.5px] font-medium text-text-muted/90"

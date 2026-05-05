@@ -77,7 +77,8 @@ async function maybeEvictResult(rootDir: string, runId: string, toolName: string
  */
 async function resumeAgentAfterApproval(
   runId: string,
-  executionSummaries: Array<{ toolName: string; result?: string; evictedPath?: string }>
+  executionSummaries: Array<{ toolName: string; result?: string; evictedPath?: string }>,
+  userId?: string,
 ) {
   try {
     const run = await agentGraphRunService.getRun(runId);
@@ -97,7 +98,9 @@ async function resumeAgentAfterApproval(
 
     const { agentGraphExecutor } = await import("@kletron/server/services/agentGraphExecutor");
     console.log(`[edits/approve] Resuming agent after approval for run ${runId}`);
-    await agentGraphExecutor.continueRun(runId, message, {});
+    await agentGraphExecutor.continueRun(runId, message, {
+      ...(userId ? { workspaceContextUserId: userId } : {}),
+    });
     console.log(`[edits/approve] ✓ Agent resumed successfully for run ${runId}`);
   } catch (err) {
     console.error(`[edits/approve] ✗ Failed to resume agent after approval for ${runId}:`, (err as Error)?.message);
@@ -230,7 +233,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
       // Fire-and-forget: resume the agent loop
       if (executionSummaries.length > 0) {
-        void resumeAgentAfterApproval(params.id, executionSummaries);
+        void resumeAgentAfterApproval(params.id, executionSummaries, auth.userId);
       }
 
       return NextResponse.json({ approved: edits, approvals });
@@ -280,7 +283,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         toolName: edit.toolName,
         result: executionResult.result,
         evictedPath: executionResult.evictedPath,
-      }]);
+      }], auth.userId);
     }
 
     return NextResponse.json({ approved: executionResult?.executed ? edit : null, executionResult, approvals }, {

@@ -307,7 +307,7 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
             );
             showToast("success", "Workspace availability saved");
             closeBindingsModal();
-            await refresh();
+            await refresh({ force: true });
         } catch (err) {
             setBindingsError((err as Error).message);
         } finally {

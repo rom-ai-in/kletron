@@ -2498,8 +2498,32 @@ export class AgentGraphExecutor {
                     const baseSystemPrompt = skillPromptPrefix
                         ? `${skillPromptPrefix}\n\n---\n\n${renderedSystemPrompt}`
                         : renderedSystemPrompt;
-                    const runContextPrompt = formatRunContextPrompt(runtimeProfile);
-                    const persistentContextPrompt = auditContext ? formatAuditContextPrompt(auditContext) : null;
+                    const computedRunContextPrompt = formatRunContextPrompt(runtimeProfile);
+                    const computedPersistentContextPrompt = auditContext ? formatAuditContextPrompt(auditContext) : null;
+                    const computedDynamicContextPrompt = contextBlock ? contextBlock.trim() : null;
+                    const existingThreadBootstrap = state.contextAssembly?.threadBootstrap;
+                    if (!existingThreadBootstrap) {
+                        state.contextAssembly = {
+                            ...(state.contextAssembly ?? {}),
+                            threadBootstrap: {
+                                runContextPrompt: computedRunContextPrompt,
+                                persistentContextPrompt: computedPersistentContextPrompt ?? undefined,
+                                dynamicContextPrompt: computedDynamicContextPrompt ?? undefined,
+                                createdAt: new Date().toISOString(),
+                            },
+                        };
+                    }
+                    const threadBootstrap = state.contextAssembly?.threadBootstrap;
+                    const runContextPrompt =
+                        computedRunContextPrompt || threadBootstrap?.runContextPrompt || "";
+                    const persistentContextPrompt =
+                        computedPersistentContextPrompt ??
+                        threadBootstrap?.persistentContextPrompt ??
+                        null;
+                    const dynamicContextPrompt =
+                        computedDynamicContextPrompt ??
+                        threadBootstrap?.dynamicContextPrompt ??
+                        null;
                     const taskQueue = Array.isArray((state as any).taskQueue) ? (state as any).taskQueue : [];
                     const currentTaskId = typeof (state as any).currentTaskId === "string" ? (state as any).currentTaskId : "";
                     const taskContextBlock = [
@@ -2513,6 +2537,8 @@ export class AgentGraphExecutor {
                     const workspaceAccessBlock = [
                         "## WORKSPACE ACCESS",
                         `- Working folder: ${rootDir}`,
+                        `- Agent graph id for this thread: ${run.graphId.toString()}`,
+                        "- For kletron_get_graph / kletron_update_graph targeting **this** conversation's configuration, use that exact 24-character hex id (copy verbatim). Do not invent UUIDs or shorten the string.",
                         "- Use available tools to read and write inside this workspace.",
                         "- Do not ask for generic workspace access when the tools already provide it.",
                     ].join("\n");
@@ -2522,7 +2548,7 @@ export class AgentGraphExecutor {
                         runContextPrompt,
                         workspaceAccessBlock,
                         persistentContextPrompt,
-                        contextBlock ? contextBlock.trim() : null,
+                        dynamicContextPrompt,
                         conversationSummaryPrompt,
                         taskContextBlock,
                         webHintBlock ? webHintBlock.trim() : null,

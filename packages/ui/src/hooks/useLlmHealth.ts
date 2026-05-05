@@ -10,7 +10,9 @@ export type UseLlmHealthContext = {
 };
 
 const healthCache = new Map<string, { status: HealthStatus; message: string | null; ts: number }>();
-const CACHE_TTL_MS = 2 * 60 * 1000;
+/** Short TTL so the status bar reflects real connectivity; periodic refresh also runs while mounted. */
+const CACHE_TTL_MS = 25 * 1000;
+const REFRESH_INTERVAL_MS = 35 * 1000;
 
 function originCacheKey(apiOrigin?: string): string {
     const b = (apiOrigin ?? "").replace(/\/$/, "");
@@ -21,12 +23,15 @@ function cacheKey(originKey: string, provider: string): string {
     return `${originKey}:${provider}`;
 }
 
+type LiveHealthJson = {
+    status?: 'success' | 'error' | 'none';
+    message?: string | null;
+    error?: string;
+};
+
 /**
- * Lightweight LLM health check hook.
- *
- * Instead of making a real LLM inference call on every page load,
- * it fetches the stored config and verifies that the provider is
- * configured (has required fields). Results are cached for 2 minutes.
+ * Live LLM reachability (server-side probe: lists/models endpoints, no chat completion).
+ * Cached briefly; refetches on an interval and when the tab becomes visible again.
  *
  * Call `recheck()` to force a fresh check (bypasses cache).
  */
@@ -88,52 +93,30 @@ export function useLlmHealth(provider: string, context?: UseLlmHealthContext) {
         };
 
         try {
-            const configRes = await apiFetch({
+            const liveRes = await apiFetch({
                 apiOrigin,
-                path: "/api/llm-config",
+                path: "/api/llm-config/live-health",
                 getRequestHeaders: () => getRequestHeadersRef.current?.() ?? Promise.resolve({}),
-                method: "GET",
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ provider }),
             });
 
-            if (!configRes.ok) {
-                persistAndMaybeSetState(provider, 'error', 'Failed to fetch LLM configuration');
+            if (liveRes.status === 401) {
+                persistAndMaybeSetState(provider, 'error', 'Sign in required');
                 return;
             }
 
-            const dbData = await configRes.json();
-            const configToTest: Record<string, unknown> | undefined = dbData?.[provider];
+            const live = (await liveRes.json()) as LiveHealthJson;
+            const msg = live.message ?? live.error ?? null;
 
-            if (!configToTest) {
-                persistAndMaybeSetState(provider, 'none', 'No configuration found');
-                return;
+            if (live.status === 'success') {
+                persistAndMaybeSetState(provider, 'success', msg || 'Reachable');
+            } else if (live.status === 'none') {
+                persistAndMaybeSetState(provider, 'none', msg || 'Not configured');
+            } else {
+                persistAndMaybeSetState(provider, 'error', msg || 'Unreachable');
             }
-
-            const hasConfiguredFlag = typeof (configToTest as { configured?: boolean }).configured === 'boolean';
-            if (hasConfiguredFlag && !(configToTest as { configured?: boolean }).configured) {
-                persistAndMaybeSetState(provider, 'none', 'Not configured');
-                return;
-            }
-
-            const hasApiKey = !!(configToTest as any).apiKey;
-            const hasBaseUrl = !!(configToTest as any).baseUrl;
-            const hasEndpoint = !!(configToTest as any).endpoint;
-
-            const needsKey = ['azure', 'openai', 'claude', 'gemini'].includes(provider);
-            const needsUrl = ['lmstudio', 'ollama', 'vllm'].includes(provider);
-
-            if (needsKey && !hasApiKey) {
-                persistAndMaybeSetState(provider, 'error', 'API key not configured');
-                return;
-            }
-
-            if (needsUrl && !hasBaseUrl && !hasEndpoint) {
-                persistAndMaybeSetState(provider, 'error', 'Base URL not configured');
-                return;
-            }
-
-            const model = (configToTest as any).model || (configToTest as any).deployment || '';
-            persistAndMaybeSetState(provider, 'success', model ? `Ready (${model})` : 'Configured');
-
         } catch (error) {
             persistAndMaybeSetState(
                 provider,
@@ -145,6 +128,23 @@ export function useLlmHealth(provider: string, context?: UseLlmHealthContext) {
 
     useEffect(() => {
         void checkHealth();
+    }, [checkHealth]);
+
+    useEffect(() => {
+        const id = window.setInterval(() => {
+            void checkHealth(true);
+        }, REFRESH_INTERVAL_MS);
+        return () => window.clearInterval(id);
+    }, [checkHealth]);
+
+    useEffect(() => {
+        const onVis = () => {
+            if (document.visibilityState === 'visible') {
+                void checkHealth(true);
+            }
+        };
+        document.addEventListener('visibilitychange', onVis);
+        return () => document.removeEventListener('visibilitychange', onVis);
     }, [checkHealth]);
 
     const recheck = useCallback(() => {

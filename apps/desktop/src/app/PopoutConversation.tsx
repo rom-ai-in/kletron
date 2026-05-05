@@ -20,6 +20,7 @@ import {
 } from "@kletron/shared/capabilityDroppedToolsUx";
 
 import { useAuth } from "../hooks/useAuth";
+import { useStableAgentRequestHeaders } from "../hooks/useStableAgentRequestHeaders";
 import { useSettings } from "../hooks/useSettings";
 import { useWorkspace } from "../hooks/useWorkspace";
 import { useConversation } from "../hooks/useConversation";
@@ -40,13 +41,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
   const workspace = useWorkspace(backendUrlTrimmed, auth.getAccessToken);
   const activeWorkspaceId = workspace.workspaceSummary?.id ?? null;
 
-  const getAgentRequestHeaders = useCallback(async () => {
-    const token = await auth.getAccessToken();
-    const h: Record<string, string> = {};
-    if (token) h.Authorization = `Bearer ${token}`;
-    if (activeWorkspaceId) h["x-workspace-id"] = activeWorkspaceId;
-    return h;
-  }, [auth, activeWorkspaceId]);
+  const getAgentRequestHeaders = useStableAgentRequestHeaders(auth.getAccessToken, activeWorkspaceId);
 
   const openPortalPath = useCallback((path: string) => {
     try {

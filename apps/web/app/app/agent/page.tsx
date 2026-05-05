@@ -831,6 +831,7 @@ export default function AgentPage() {
   } = useSessionStream({
     sessionId: activeSessionId,
     selectedGraphId,
+    graphSelectionMode: "manual",
     llmProvider,
     workspaceId: activeWorkspaceId,
     threadApprovalMode,
@@ -1982,7 +1983,7 @@ export default function AgentPage() {
                       tone="secondary"
                       textClassName="font-medium"
                     >
-                      {sending ? "Executing…" : "Run in progress…"}
+                      {sending ? "Executing" : "Run in progress"}
                     </AgentStatusShimmerLabel>
                   </div>
                 )}

@@ -23,7 +23,6 @@ export class SafeEditGate {
     static getInstance(): SafeEditGate {
         if (!globalForGate.safeEditGate) {
             globalForGate.safeEditGate = new SafeEditGate();
-            console.log("[SafeEditGate] Created new singleton instance");
         }
         return globalForGate.safeEditGate;
     }
@@ -45,7 +44,6 @@ export class SafeEditGate {
             description
         };
         this.pendingEdits.set(id, edit);
-        console.log(`[SafeEditGate] Proposed edit ${id} for ${conversationId}, total pending: ${this.pendingEdits.size}`);
         return edit;
     }
 

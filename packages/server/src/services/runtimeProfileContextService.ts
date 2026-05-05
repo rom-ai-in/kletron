@@ -21,6 +21,8 @@ export type RuntimeProfileContext = {
 };
 
 const PROFILE_LANGUAGE_RE = /^- Preferred language:\s*(.+)$/im;
+const PROFILE_DISPLAY_NAME_RE = /^- Display name:\s*(.+)$/im;
+const COMPANY_ORG_RE = /^- Organization:\s*(.+)$/im;
 
 function cleanValue(value?: string | null): string | undefined {
     if (typeof value !== "string") return undefined;
@@ -28,11 +30,29 @@ function cleanValue(value?: string | null): string | undefined {
     return trimmed ? trimmed : undefined;
 }
 
-async function readPreferredLanguageFromMemory(workspaceId: string): Promise<string | undefined> {
-    if (!ObjectId.isValid(workspaceId)) return undefined;
+async function readProfileMemory(workspaceId: string): Promise<{
+    userDisplayName?: string;
+    preferredLanguage?: string;
+}> {
+    if (!ObjectId.isValid(workspaceId)) return {};
     try {
         const content = await agentMemoryService.read("/memories/profile.md", new ObjectId(workspaceId));
-        const match = content.match(PROFILE_LANGUAGE_RE);
+        const languageMatch = content.match(PROFILE_LANGUAGE_RE);
+        const displayNameMatch = content.match(PROFILE_DISPLAY_NAME_RE);
+        return {
+            userDisplayName: cleanValue(displayNameMatch?.[1]),
+            preferredLanguage: cleanValue(languageMatch?.[1]),
+        };
+    } catch {
+        return {};
+    }
+}
+
+async function readCompanyFromMemory(workspaceId: string): Promise<string | undefined> {
+    if (!ObjectId.isValid(workspaceId)) return undefined;
+    try {
+        const content = await agentMemoryService.read("/memories/company.md", new ObjectId(workspaceId));
+        const match = content.match(COMPANY_ORG_RE);
         return cleanValue(match?.[1]);
     } catch {
         return undefined;
@@ -45,6 +65,15 @@ function pickCompanyOrOrg(payload: Awaited<ReturnType<typeof getOrganizationPayl
         (company) => company.name.trim().toLowerCase() !== "default",
     );
     return cleanValue(firstNonDefaultCompany?.name) ?? cleanValue(payload.tenant.name);
+}
+
+async function resolveSafely<T>(label: string, loader: () => Promise<T>, fallback: T): Promise<T> {
+    try {
+        return await loader();
+    } catch (error) {
+        console.warn(`[RuntimeProfile] Failed to resolve ${label}:`, (error as Error)?.message ?? error);
+        return fallback;
+    }
 }
 
 export async function resolveRuntimeProfileContext(input: {
@@ -66,21 +95,34 @@ export async function resolveRuntimeProfileContext(input: {
         enabledIntegrationProviderIds = [],
     } = input;
 
-    const [profile, organization, memoryLanguage, connectorDefaults] = await Promise.all([
-        userId ? getProfileByUserId(userId) : Promise.resolve(null),
-        userId ? getOrganizationPayloadForUser(userId) : Promise.resolve(null),
-        readPreferredLanguageFromMemory(workspaceId),
-        resolveSafeConnectorPromptDefaults(workspaceId, enabledIntegrationProviderIds),
+    const [profile, organization, profileMemory, memoryCompany, connectorDefaults] = await Promise.all([
+        userId
+            ? resolveSafely("user profile", () => getProfileByUserId(userId), null)
+            : Promise.resolve(null),
+        userId
+            ? resolveSafely("organization", () => getOrganizationPayloadForUser(userId), null)
+            : Promise.resolve(null),
+        resolveSafely("profile memory", () => readProfileMemory(workspaceId), {}),
+        resolveSafely("company memory", () => readCompanyFromMemory(workspaceId), undefined),
+        resolveSafely(
+            "connector defaults",
+            () => resolveSafeConnectorPromptDefaults(workspaceId, enabledIntegrationProviderIds),
+            [],
+        ),
     ]);
 
     const preferredLanguage =
         cleanValue(documentContext?.languages?.[0]) ??
-        cleanValue(memoryLanguage);
+        cleanValue(profileMemory.preferredLanguage);
 
     return {
-        userDisplayName: cleanValue(profile?.fullName),
+        userDisplayName:
+            cleanValue(profile?.fullName) ??
+            cleanValue(profileMemory.userDisplayName),
         workspaceName,
-        companyOrOrg: pickCompanyOrOrg(organization),
+        companyOrOrg:
+            pickCompanyOrOrg(organization) ??
+            cleanValue(memoryCompany),
         preferredLanguage,
         graphName: graph.name,
         graphCategory: cleanValue(graph.category),

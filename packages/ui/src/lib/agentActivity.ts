@@ -37,31 +37,31 @@ export function deriveActivityState(input: {
     if (!input.streaming) return null;
     const t = input.streamingText.trim();
     if (t.length > 0) {
-        return { label: 'Answering…' };
+        return { label: 'Answering' };
     }
     if (input.streamingReasoning?.trim()) {
-        return { label: 'Thinking…' };
+        return { label: 'Thinking' };
     }
     const ev = tailEventsSinceLastUser(input.events);
     if (ev.length === 0) {
-        return { label: 'Working on it…' };
+        return { label: 'Working on it' };
     }
     for (let i = ev.length - 1; i >= 0; i--) {
         const e = ev[i];
         const tool = e.toolName ?? e.name;
         if (e.kind === 'tool' || (e.kind === 'assistant' && tool)) {
             const raw = String(tool ?? 'tool');
-            const short = raw.length > 36 ? `${raw.slice(0, 33)}…` : raw;
-            return { label: 'Using tools…', detail: short };
+            const short = raw.length > 36 ? raw.slice(0, 36) : raw;
+            return { label: 'Using tools', detail: short };
         }
     }
     const last = ev[ev.length - 1];
     const tail =
         typeof last?.content === 'string' ? last.content.trim() : '';
     if (last?.kind === 'assistant' && !last.toolName && !last.name && tail.length > 20) {
-        return { label: 'Continuing…' };
+        return { label: 'Continuing' };
     }
-    return { label: 'Working on it…' };
+    return { label: 'Working on it' };
 }
 
 export function formatActivityElapsed(iso: string | null | undefined): string | undefined {

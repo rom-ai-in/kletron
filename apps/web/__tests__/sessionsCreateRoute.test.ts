@@ -195,6 +195,7 @@ describe("POST /api/sessions", () => {
         expect(chunks[0]?.payload.graphId).toBe(coderGraph._id);
         expect(chunks[0]?.payload.route?.source).toBe("explicit_graph");
         expect(updateRunStatus.mock.calls[0]?.[2]?.state?.route?.source).toBe("explicit_graph");
+        expect(executeRunStreaming.mock.calls[0]?.[1]?.workspaceContextUserId).toBe("user-1");
     });
 
     it("auto-routes to the ops graph for a vague Sentry request when Sentry is active", async () => {

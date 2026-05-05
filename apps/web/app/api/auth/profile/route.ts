@@ -7,12 +7,15 @@ import { getDb } from "@kletron/server/lib/db";
 import * as userProfileService from "@kletron/server/services/userProfileService";
 import * as organizationService from "@kletron/server/services/organizationService";
 
+const EMAIL_CHANGE_REQUIRES_DB_USER =
+    "Email can only be changed for a registered account. Sign out and sign in with the email you used at registration (not the built-in demo login).";
+
 async function verifyUserPassword(
     userId: string,
     plainPassword: string
 ): Promise<{ ok: true } | { ok: false; status: number; message: string }> {
     if (!ObjectId.isValid(userId)) {
-        return { ok: false, status: 400, message: "Email change is not available for this account type" };
+        return { ok: false, status: 400, message: EMAIL_CHANGE_REQUIRES_DB_USER };
     }
     const db = await getDb();
     const user = await db.collection("users").findOne<{ passwordHash?: string; password?: string }>({
@@ -70,13 +73,6 @@ export async function PATCH(request: Request) {
             const v = await verifyUserPassword(auth.userId, currentPassword);
             if (!v.ok) {
                 return NextResponse.json({ success: false, message: v.message }, { status: v.status });
-            }
-
-            if (!ObjectId.isValid(auth.userId)) {
-                return NextResponse.json(
-                    { success: false, message: "Email change is not available for this account type" },
-                    { status: 400 }
-                );
             }
 
             const db = await getDb();

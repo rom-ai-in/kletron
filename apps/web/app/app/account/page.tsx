@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@kletron/ui/context/AuthContext';
 import { Input, PasswordInput, Button, Panel } from '@kletron/ui/components/design-system';
+import { DEMO_ACCOUNT_PROFILE_HELP, isMongoBackedUserId } from '../../../lib/accountEligibility';
 interface ApiTokenInfo {
     id: string;
     label: string | null;
@@ -196,6 +197,8 @@ export default function AccountPage() {
         router.push('/auth/login');
     };
 
+    const mongoBacked = useMemo(() => isMongoBackedUserId((user as { id?: string } | null)?.id), [user]);
+
     const tokenHint = useMemo(() => {
         if (!newToken) return null;
         return (
@@ -226,6 +229,11 @@ export default function AccountPage() {
                 <Panel className="p-6">
                     <h2 className="text-sm font-semibold text-text-primary">Profile</h2>
                     <p className="mt-1 text-xs text-text-muted">Update your main information.</p>
+                    {!mongoBacked && (
+                        <div className="mt-3 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2">
+                            <p className="text-xs text-status-warning-text">{DEMO_ACCOUNT_PROFILE_HELP}</p>
+                        </div>
+                    )}
                     <form onSubmit={handleProfileSubmit} className="mt-4 space-y-4">
                         {profileStatus === 'error' && (
                             <div className="rounded border border-status-error-border bg-status-error-bg px-3 py-2">
@@ -261,6 +269,7 @@ export default function AccountPage() {
                                 onChange={(e) => setEmailField(e.target.value)}
                                 fullWidth
                                 autoComplete="email"
+                                disabled={!mongoBacked}
                             />
                         </div>
                         <div>
@@ -274,9 +283,11 @@ export default function AccountPage() {
                                 onChange={(e) => setEmailConfirm(e.target.value)}
                                 fullWidth
                                 autoComplete="email"
+                                disabled={!mongoBacked}
                             />
                         </div>
-                        {emailField.trim().toLowerCase() !== (user?.email || '').trim().toLowerCase() && (
+                        {mongoBacked &&
+                            emailField.trim().toLowerCase() !== (user?.email || '').trim().toLowerCase() && (
                             <div>
                                 <label
                                     htmlFor="emailChangePassword"
@@ -306,6 +317,11 @@ export default function AccountPage() {
                 <Panel className="p-6">
                     <h2 className="text-sm font-semibold text-text-primary">Security</h2>
                     <p className="mt-1 text-xs text-text-muted">Change your password.</p>
+                    {!mongoBacked && (
+                        <div className="mt-3 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2">
+                            <p className="text-xs text-status-warning-text">{DEMO_ACCOUNT_PROFILE_HELP}</p>
+                        </div>
+                    )}
                     <form onSubmit={handlePasswordSubmit} className="mt-4 space-y-4">
                         {passwordStatus === 'error' && (
                             <div className="rounded border border-status-error-border bg-status-error-bg px-3 py-2">
@@ -328,6 +344,7 @@ export default function AccountPage() {
                                 fullWidth
                                 placeholder="••••••••"
                                 autoComplete="current-password"
+                                disabled={!mongoBacked}
                             />
                         </div>
                         <div>
@@ -341,6 +358,7 @@ export default function AccountPage() {
                                 fullWidth
                                 placeholder="••••••••"
                                 autoComplete="new-password"
+                                disabled={!mongoBacked}
                             />
                         </div>
                         <div>
@@ -353,12 +371,14 @@ export default function AccountPage() {
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 fullWidth
                                 placeholder="••••••••"
+                                disabled={!mongoBacked}
                             />
                         </div>
                         <Button
                             type="submit"
                             className="w-full"
                             loading={passwordStatus === 'saving'}
+                            disabled={!mongoBacked}
                         >
                             {passwordStatus === 'saving' ? 'Updating…' : 'Update Password'}
                         </Button>

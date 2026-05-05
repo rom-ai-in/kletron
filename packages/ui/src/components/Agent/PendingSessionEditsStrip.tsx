@@ -1,6 +1,7 @@
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 import type { SessionEditFlushNotice, SessionPendingEdit } from "../../hooks/useSessionEdits";
+import { formatToolDisplayName } from "../../lib/toolCategories";
 
 export type PendingSessionEditsStripProps = {
     pendingEdits: SessionPendingEdit[];
@@ -59,13 +60,21 @@ export function PendingSessionEditsStrip({
                         <p className="min-w-0 flex-1 leading-snug">
                             {flushNotice.kind === "approved" && (
                                 <>
-                                    Approved <span className="font-mono">{flushNotice.toolName}</span>. The run continues in
+                                    Approved{' '}
+                                    <span className="font-medium" title={flushNotice.toolName}>
+                                        {formatToolDisplayName(flushNotice.toolName)}
+                                    </span>
+                                    . The run continues in
                                     the thread above.
                                 </>
                             )}
                             {flushNotice.kind === "rejected" && (
                                 <>
-                                    Rejected <span className="font-mono">{flushNotice.toolName}</span>.
+                                    Rejected{' '}
+                                    <span className="font-medium" title={flushNotice.toolName}>
+                                        {formatToolDisplayName(flushNotice.toolName)}
+                                    </span>
+                                    .
                                 </>
                             )}
                             {flushNotice.kind === "approved_all" && (
@@ -121,14 +130,23 @@ export function PendingSessionEditsStrip({
                                 const approvingThis = busy && processingOp?.op === "approve";
                                 const rejectingThis = busy && processingOp?.op === "reject";
                                 const desc = edit.description?.trim();
-                                const title = [edit.toolName, desc, edit.lastError].filter(Boolean).join(" · ");
+                                const title = [
+                                    edit.toolName,
+                                    formatToolDisplayName(edit.toolName),
+                                    desc,
+                                    edit.lastError,
+                                ]
+                                    .filter(Boolean)
+                                    .join(" · ");
                                 return (
                                     <div
                                         key={edit.id}
                                         className="flex items-center justify-between gap-2 rounded-md border border-white/[0.08] bg-bg-elevated px-2 py-1 text-[10px] leading-none"
                                     >
                                         <p className="min-w-0 flex-1 truncate text-text-primary" title={title}>
-                                            <span className="font-mono text-text-primary">{edit.toolName}</span>
+                                            <span className="font-medium text-text-primary" title={edit.toolName}>
+                                                {formatToolDisplayName(edit.toolName)}
+                                            </span>
                                             {desc ? <span className="text-text-muted"> · {desc}</span> : null}
                                             {edit.lastError ? (
                                                 <span className="text-status-error-text"> · {edit.lastError}</span>

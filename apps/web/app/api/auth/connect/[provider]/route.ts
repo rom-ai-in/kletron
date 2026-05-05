@@ -16,6 +16,7 @@ import {
 import {
     getWorkspaceById,
 } from "@kletron/server/services/workspaceService";
+import { getPublicAppOrigin } from "../../../../../lib/publicAppUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -57,10 +58,8 @@ export async function GET(
         );
     }
 
-    const callbackUrl = new URL(
-        `/api/auth/connect/${provider}/callback`,
-        url.origin
-    );
+    const publicOrigin = getPublicAppOrigin(request);
+    const callbackUrl = new URL(`/api/auth/connect/${provider}/callback`, publicOrigin);
 
     const state = encodeState({
         workspaceId,

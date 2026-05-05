@@ -10,6 +10,7 @@ import {
     Loader2,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { formatToolDisplayName } from '../../lib/toolCategories';
 import { ToolInvocationIcon } from './ToolInvocation';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -222,7 +223,7 @@ export function ToolApprovalCard({
                     </div>
                     <div className="min-w-0">
                         <div className="text-[11px] font-semibold text-text-primary truncate">
-                            {description || `Run ${toolName}`}
+                            {description || `Run ${formatToolDisplayName(toolName)}`}
                         </div>
                         {fileName && (
                             <div className="text-[10px] font-mono text-text-muted truncate max-w-[250px]">
@@ -283,7 +284,7 @@ export function ToolApprovalCard({
             {onPolicyChange && (
                 <div className="flex items-center justify-between px-3 py-1.5 bg-bg-app/40">
                     <span className="text-[9px] text-text-muted uppercase tracking-wider font-semibold">
-                        Policy for {toolName}
+                        Policy for {formatToolDisplayName(toolName)}
                     </span>
                     <PolicyDropdown
                         toolName={toolName}

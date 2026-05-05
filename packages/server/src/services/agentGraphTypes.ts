@@ -177,6 +177,12 @@ export type AgentGraphState = {
             updatedPaths: string[];
             unchangedPaths: string[];
         };
+        threadBootstrap?: {
+            runContextPrompt?: string;
+            persistentContextPrompt?: string;
+            dynamicContextPrompt?: string;
+            createdAt?: string;
+        };
     };
     execution?: {
         mode?: AgentGraphExecutionMode;

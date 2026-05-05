@@ -9,6 +9,7 @@ import {
     getOauthProvider,
 } from "@kletron/server/services/oauthProviders";
 import { createIntegration } from "@kletron/server/services/connectorsService";
+import { getPublicAppOrigin } from "../../../../../../lib/publicAppUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +27,12 @@ export async function GET(
     }
 
     const url = new URL(request.url);
+    const publicOrigin = getPublicAppOrigin(request);
     const code = url.searchParams.get("code");
     const stateRaw = url.searchParams.get("state");
     const errorParam = url.searchParams.get("error");
     if (errorParam) {
-        return redirectWithError(url, "/app", `OAuth provider returned: ${errorParam}`);
+        return redirectWithError(publicOrigin, "/app", `OAuth provider returned: ${errorParam}`);
     }
     if (!code || !stateRaw) {
         return NextResponse.json({ error: "Missing code or state" }, { status: 400 });
@@ -52,7 +54,7 @@ export async function GET(
     }
 
     try {
-        const callbackUrl = new URL(`/api/auth/connect/${provider}/callback`, url.origin);
+        const callbackUrl = new URL(`/api/auth/connect/${provider}/callback`, publicOrigin);
         const tokenResponse = await fetch(def.tokenUrl, {
             method: "POST",
             headers: {
@@ -71,7 +73,7 @@ export async function GET(
         if (!tokenResponse.ok) {
             const text = await tokenResponse.text().catch(() => "");
             return redirectWithError(
-                url,
+                publicOrigin,
                 state.redirect ?? "/app",
                 `Token exchange failed (${tokenResponse.status}): ${text.slice(0, 200)}`
             );
@@ -79,7 +81,7 @@ export async function GET(
         const json = (await tokenResponse.json()) as Record<string, unknown>;
         if (typeof json.error === "string") {
             return redirectWithError(
-                url,
+                publicOrigin,
                 state.redirect ?? "/app",
                 `OAuth error: ${json.error_description ?? json.error}`
             );
@@ -94,20 +96,20 @@ export async function GET(
             scopes,
         });
 
-        const dest = new URL(state.redirect ?? "/app", url.origin);
+        const dest = new URL(state.redirect ?? "/app", publicOrigin);
         dest.searchParams.set("connected", provider);
         return NextResponse.redirect(dest.toString());
     } catch (error) {
         return redirectWithError(
-            url,
+            publicOrigin,
             state.redirect ?? "/app",
             `OAuth failed: ${(error as Error).message}`
         );
     }
 }
 
-function redirectWithError(reqUrl: URL, target: string, message: string) {
-    const dest = new URL(target, reqUrl.origin);
+function redirectWithError(origin: string, target: string, message: string) {
+    const dest = new URL(target, origin);
     dest.searchParams.set("connect_error", message);
     return NextResponse.redirect(dest.toString());
 }

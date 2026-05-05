@@ -70,6 +70,7 @@ import { useProjects } from "../hooks/useProjects";
 
 import { useSkills } from "../hooks/useSkills";
 import { useCategories } from "../hooks/useCategories";
+import { useStableAgentRequestHeaders } from "../hooks/useStableAgentRequestHeaders";
 import { WORK_MODES, normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode";
 import type { ResearchDepthId } from "@kletron/shared/researchDepth";
 import { sessionStatusToSidebarLiveStatus } from "@kletron/shared/chatTypes";
@@ -184,13 +185,7 @@ export default function App() {
   const desktopWorkMode = normalizeToWorkModeId(categoriesHook.activeCategory);
   const isCodeMode = desktopWorkMode === "code";
 
-  const getAgentRequestHeaders = useCallback(async () => {
-    const token = await auth.getAccessToken();
-    const h: Record<string, string> = {};
-    if (token) h.Authorization = `Bearer ${token}`;
-    if (activeWorkspaceId) h["x-workspace-id"] = activeWorkspaceId;
-    return h;
-  }, [auth, activeWorkspaceId]);
+  const getAgentRequestHeaders = useStableAgentRequestHeaders(auth.getAccessToken, activeWorkspaceId);
 
   const agentSession = useAgentSession({
     apiOrigin: backendUrlTrimmed,

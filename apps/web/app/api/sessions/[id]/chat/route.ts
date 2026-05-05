@@ -149,6 +149,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       try {
         console.log(`[sessions/chat] Calling continueRun for ${params.id}...`);
         const result = await agentGraphExecutor.continueRun(params.id, message, {
+          workspaceContextUserId: auth.userId,
           onUpdate: async (update) => {
             sendChunk({ type: "update", payload: update });
           },

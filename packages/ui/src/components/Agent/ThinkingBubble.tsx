@@ -20,7 +20,7 @@ export interface ThinkingBubbleProps {
 
 export function ThinkingBubble({
     isActive = false,
-    summary = 'Thinking...',
+    summary = 'Thinking',
     content,
     defaultExpanded = false,
     onExpandChange,
@@ -41,14 +41,6 @@ export function ThinkingBubble({
                 onClick={content ? handleToggle : undefined}
                 className={`flex items-center gap-2 text-left ${content ? 'cursor-pointer' : 'cursor-default'}`}
             >
-                {/* Animated dot */}
-                {isActive && (
-                    <span className="relative flex h-2 w-2 flex-shrink-0">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-text-muted/40" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-text-muted/60" />
-                    </span>
-                )}
-
                 {/* Summary — same glyph shimmer as MessageList / AgentActivityStrip when active */}
                 {isActive ? (
                     <AgentStatusShimmerLabel className="text-[15px]">{summary}</AgentStatusShimmerLabel>

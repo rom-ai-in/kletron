@@ -63,6 +63,44 @@ export function normalizeToolName(raw: string): string {
     return s;
 }
 
+/** Maps internal MCP / bundled tool ids to short UI labels (API and policies keep the raw id). */
+const TOOL_DISPLAY_LABEL: Readonly<Record<string, string>> = {
+    str_replace_editor: 'Edit file',
+    write_file: 'Write file',
+    execute_bash: 'Terminal',
+    read_file: 'Read file',
+    read_file_range: 'Read file',
+    list_files: 'List files',
+    glob_files: 'Glob files',
+    web_search: 'Web search',
+    fetch_url: 'Fetch URL',
+    write_todos: 'Todos',
+};
+
+/**
+ * Human-readable label for a tool id (e.g. approvals, transcript chips).
+ * For `connector__tool`, pass the segment after `__` when the connector is shown separately — use {@link formatMcpToolPartDisplayName}.
+ */
+export function formatToolDisplayName(raw: string): string {
+    const s = String(raw ?? '').trim();
+    if (!s) return '';
+    const idx = s.indexOf('__');
+    if (idx > 0) {
+        const prov = s.slice(0, idx);
+        const toolPart = s.slice(idx + 2);
+        const friendly = formatMcpToolPartDisplayName(toolPart);
+        return `${prov} · ${friendly}`;
+    }
+    const base = normalizeToolName(s);
+    return TOOL_DISPLAY_LABEL[base] ?? s;
+}
+
+/** Display label for the tool segment of `provider__toolName` when the provider is shown in its own chip. */
+export function formatMcpToolPartDisplayName(toolPart: string): string {
+    const base = normalizeToolName(toolPart);
+    return TOOL_DISPLAY_LABEL[base] ?? toolPart;
+}
+
 export function categorizeToolName(toolName: string | undefined | null): ToolCategory {
     const name = normalizeToolName(toolName ?? '');
     if (!name) return 'other';

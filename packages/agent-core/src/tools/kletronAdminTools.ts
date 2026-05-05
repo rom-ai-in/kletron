@@ -51,6 +51,17 @@ const MAX_BODY_CHARS = 50_000;
 const MAX_DESC_CHARS = 5_000;
 const MAX_NAME_CHARS = 200;
 
+/** MongoDB ObjectId string — 24 hex chars. Rejects truncated ids and UUIDs early with a clear tool error. */
+const zGraphObjectId = z
+    .string()
+    .transform((s) => s.trim())
+    .pipe(
+        z.string().regex(/^[0-9a-fA-F]{24}$/, {
+            message:
+                'graphId must be exactly 24 hexadecimal characters (Mongo ObjectId). Copy the "id" field verbatim from kletron_list_graphs — never shorten it, add dashes, or use a UUID.',
+        }),
+    );
+
 // ─── Graph schemas (kept loose; the service layer enforces the full shape) ──
 
 const llmSelectionSchema = z
@@ -129,14 +140,19 @@ export const kletronGetGraph = tool(
     async (input: { graphId: string }) => {
         return await withAudit("kletron_get_graph", input, async () => {
             const graph = await agentGraphService.getGraph(input.graphId);
-            if (!graph) throw new Error(`Graph ${input.graphId} not found`);
+            if (!graph) {
+                throw new Error(
+                    `No graph document for id ${input.graphId}. Call kletron_list_graphs and pass an "id" from the JSON exactly as returned (24 hex characters).`
+                );
+            }
             return asJson(graph);
         });
     },
     {
         name: "kletron_get_graph",
-        description: "Fetch the full definition of one agent graph by id.",
-        schema: z.object({ graphId: z.string().min(1) }),
+        description:
+            "Fetch the full definition of one agent graph. graphId is the 24-char hex \"id\" from kletron_list_graphs (also repeated under WORKSPACE ACCESS in your system prompt for this thread).",
+        schema: z.object({ graphId: zGraphObjectId }),
     }
 );
 
@@ -193,7 +209,7 @@ export const kletronUpdateGraph = tool(
         description:
             "Update an existing graph. Pass only the fields to change. Nodes/edges replace the whole array.",
         schema: z.object({
-            graphId: z.string().min(1),
+            graphId: zGraphObjectId,
             name: z.string().min(1).max(MAX_NAME_CHARS).optional(),
             description: z.string().max(MAX_DESC_CHARS).optional(),
             nodes: z.array(nodeSchema).optional(),
@@ -220,7 +236,7 @@ export const kletronDeleteGraph = tool(
         description:
             "Permanently delete a graph. Requires `confirm: true`. Existing runs are not affected.",
         schema: z.object({
-            graphId: z.string().min(1),
+            graphId: zGraphObjectId,
             confirm: z.literal(true),
         }),
     }
@@ -247,7 +263,7 @@ export const kletronCloneGraph = tool(
         name: "kletron_clone_graph",
         description: "Clone an existing graph under a new name.",
         schema: z.object({
-            graphId: z.string().min(1),
+            graphId: zGraphObjectId,
             newName: z.string().min(1).max(MAX_NAME_CHARS),
         }),
     }
