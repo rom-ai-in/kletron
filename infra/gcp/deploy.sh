@@ -17,8 +17,8 @@ cd "$ROOT"
 
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
 REGION="${REGION:-europe-west6}"
-WEB_SERVICE="${WEB_SERVICE:-numezis-web}"
-MCP_SERVICE="${MCP_SERVICE:-numezis-mcp}"
+WEB_SERVICE="${WEB_SERVICE:-kletron-web}"
+MCP_SERVICE="${MCP_SERVICE:-kletron-mcp}"
 
 if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
   echo "Définis le projet: gcloud config set project kletron"
@@ -34,11 +34,11 @@ if [[ -z "${APP_URL}" ]]; then
   APP_URL="https://placeholder.invalid"
 fi
 
-echo "Project=${PROJECT_ID}  REGION=${REGION}  NEXT_PUBLIC_APP_URL=${APP_URL}"
+echo "Project=${PROJECT_ID}  REGION=${REGION}  WEB_SERVICE=${WEB_SERVICE}  MCP_SERVICE=${MCP_SERVICE}  NEXT_PUBLIC_APP_URL=${APP_URL}"
 
 gcloud builds submit \
   --config=infra/gcp/cloudbuild.yaml \
-  --substitutions="_NEXT_PUBLIC_APP_URL=${APP_URL}" \
+  --substitutions="_NEXT_PUBLIC_APP_URL=${APP_URL},_WEB_SERVICE=${WEB_SERVICE},_MCP_SERVICE=${MCP_SERVICE}" \
   --project="${PROJECT_ID}" \
   .
 

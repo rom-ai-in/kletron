@@ -10,8 +10,8 @@
 substitutions:
   _REGION: europe-west6
   _AR_REPO: numezis-repo
-  _WEB_SERVICE: numezis-web
-  _MCP_SERVICE: numezis-mcp
+  _WEB_SERVICE: kletron-web
+  _MCP_SERVICE: kletron-mcp
   _NEXT_PUBLIC_APP_URL: https://change-me-after-first-deploy.run.app
 
 options:
