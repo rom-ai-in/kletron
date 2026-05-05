@@ -16,21 +16,42 @@ import {
 } from "lucide-react";
 import { Panel } from "@kletron/ui/components/design-system";
 import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
+import { CONFIG_HUB_CARDS, type ConfigHubIconKey } from "@kletron/shared/configHubCards";
 
 type LlmConfigSummary = { provider?: string } | null;
 
+function ConfigHubIcon({ name }: { name: ConfigHubIconKey }) {
+  const cls = "h-4 w-4 text-text-muted";
+  switch (name) {
+    case "folder":
+      return <Folder className={cls} />;
+    case "brain":
+      return <Brain className="h-4 w-4 text-status-success-text" />;
+    case "layers":
+      return <Layers className={cls} />;
+    case "messagesSquare":
+      return <MessagesSquare className="h-4 w-4 text-primary-main" />;
+    case "listTree":
+      return <ListTree className={cls} />;
+    case "wrench":
+      return <Wrench className={cls} />;
+    case "link":
+      return <LinkIcon className={cls} />;
+    case "puzzle":
+      return <Puzzle className={cls} />;
+    default:
+      return <Settings className={cls} />;
+  }
+}
+
 export default function ConfigOverviewPage() {
   const { activeWorkspaceId } = useWorkspace();
-  const skillsHref = "/app/skills";
-  const connectorsHref = "/app/config/connectors";
-  const pluginsHref = "/app/plugins";
   const [graphsCount, setGraphsCount] = useState<number>(0);
   const [toolsCount, setToolsCount] = useState<number>(0);
   const [llmProvider, setLlmProvider] = useState<LlmConfigSummary>(null);
   const [embeddingProvider, setEmbeddingProvider] = useState<string | null>(null);
 
   useEffect(() => {
-    // LLM provider (server)
     const fetchProvider = async () => {
       try {
         const res = await fetch("/api/llm-config");
@@ -42,7 +63,6 @@ export default function ConfigOverviewPage() {
       }
     };
 
-    // Embedding provider (server)
     const fetchEmbedding = async () => {
       try {
         const res = await fetch("/api/embedding-config");
@@ -86,9 +106,6 @@ export default function ConfigOverviewPage() {
     void fetchTools();
   }, []);
 
-
-
-  // Format provider names for display
   const formatProvider = (provider: string | null | undefined) => {
     if (!provider) return null;
     const providerNames: Record<string, string> = {
@@ -103,7 +120,6 @@ export default function ConfigOverviewPage() {
     return providerNames[provider] || provider;
   };
 
-  // Build AI Models meta string
   const getAiModelsMeta = () => {
     const llm = formatProvider(llmProvider?.provider);
     const embedding = formatProvider(embeddingProvider);
@@ -117,6 +133,37 @@ export default function ConfigOverviewPage() {
     }
     return "Not configured";
   };
+
+  const metaForCard = (id: string): string => {
+    const ws = activeWorkspaceId;
+    switch (id) {
+      case "workspace":
+        return "Repository Settings";
+      case "aiModels":
+        return getAiModelsMeta();
+      case "context":
+        return "Includes vector index & history";
+      case "channels":
+        return "Dedicated setup · env vars on server";
+      case "graphs":
+        return `${graphsCount} graphs`;
+      case "tools":
+        return `${toolsCount} tools available`;
+      case "categories":
+        return "Two modes";
+      case "skills":
+        return ws ? "This workspace" : "Pick a workspace";
+      case "connectors":
+        return ws ? "OAuth & MCP" : "Pick a workspace";
+      case "plugins":
+        return ws ? "This workspace" : "Pick a workspace";
+      default:
+        return "";
+    }
+  };
+
+  const aiModelsHighlight =
+    getAiModelsMeta().trim().toLowerCase() !== "" && getAiModelsMeta().trim().toLowerCase() !== "not configured";
 
   return (
     <div className="flex h-full flex-col bg-bg-app overflow-hidden">
@@ -134,77 +181,21 @@ export default function ConfigOverviewPage() {
 
       <div className="flex-1 overflow-y-auto p-6 scrollbar-elegant">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <ConfigCard
-            title="Workspace"
-            description="Manage MCP repository root."
-            icon={<Folder className="h-4 w-4 text-text-muted" />}
-            href="/app/config/workspace"
-            meta="Repository Settings"
-          />
-          <ConfigCard
-            title="AI Models"
-            description="LLM providers & embedding models."
-            icon={<Brain className="h-4 w-4 text-status-success-text" />}
-            href="/app/config/llm"
-            meta={getAiModelsMeta()}
-            highlight
-          />
-          <ConfigCard
-            title="Context & retrieval"
-            description="Overview, structural map, semantic index, injection, and trace — single home for repo context."
-            icon={<Layers className="h-4 w-4 text-text-muted" />}
-            href="/app/config/context"
-            meta="Includes vector index & history"
-          />
-          <ConfigCard
-            title="Messenger channels"
-            description="Telegram, Slack, WhatsApp webhooks and identity linking."
-            icon={<MessagesSquare className="h-4 w-4 text-primary-main" />}
-            href="/app/config/channels"
-            meta="Dedicated setup · env vars on server"
-          />
-          <ConfigCard
-            title="Graphs"
-            description="Edit DAGs, inspect structure, run live executions."
-            icon={<ListTree className="h-4 w-4 text-text-muted" />}
-            href="/app/agent-graphs"
-            meta={`${graphsCount} graphs`}
-          />
-          <ConfigCard
-            title="Tools"
-            description="Available tools for agents."
-            icon={<Wrench className="h-4 w-4 text-text-muted" />}
-            href="/app/config/tools"
-            meta={`${toolsCount} tools available`}
-          />
-          <ConfigCard
-            title="Code vs Work"
-            description="How Code and Work modes differ (tools and behavior)."
-            icon={<Layers className="h-4 w-4 text-text-muted" />}
-            href="/app/config/categories"
-            meta="Two modes"
-          />
-           <ConfigCard
-             title="Skills"
-             description="AI capabilities as .md files."
-             icon={<Wrench className="h-4 w-4 text-text-muted" />}
-             href={skillsHref}
-             meta={activeWorkspaceId ? "This workspace" : "Pick a workspace"}
-           />
-           <ConfigCard
-             title="Connectors"
-             description="External service integrations."
-             icon={<LinkIcon className="h-4 w-4 text-text-muted" />}
-             href={connectorsHref}
-             meta={activeWorkspaceId ? "OAuth & MCP" : "Pick a workspace"}
-           />
-          <ConfigCard
-            title="Plugins"
-            description="Cowork-style bundles of skills and connectors."
-            icon={<Puzzle className="h-4 w-4 text-text-muted" />}
-            href={pluginsHref}
-            meta={activeWorkspaceId ? "This workspace" : "Pick a workspace"}
-          />
+          {CONFIG_HUB_CARDS.map((card) => {
+            const meta = metaForCard(card.id);
+            const highlight = card.highlightEligible && card.id === "aiModels" ? aiModelsHighlight : false;
+            return (
+              <ConfigCard
+                key={card.id}
+                title={card.title}
+                description={card.description}
+                icon={<ConfigHubIcon name={card.icon} />}
+                href={card.href}
+                meta={meta}
+                highlight={highlight}
+              />
+            );
+          })}
         </div>
 
         <div className="mt-6">

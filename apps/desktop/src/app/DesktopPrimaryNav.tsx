@@ -1,16 +1,21 @@
-import { LayoutGrid, Zap } from "lucide-react";
+import { LayoutGrid, Zap, Settings, UserCircle } from "lucide-react";
 import type { ActiveView } from "../types";
 
-type Item = { id: ActiveView; label: string; icon: typeof LayoutGrid };
+/** Primary tabs shown in the desktop shell (Agent through Account). */
+export type DesktopPrimaryNavId = "app" | "automations" | "settings" | "account";
+
+type Item = { id: DesktopPrimaryNavId; label: string; icon: typeof LayoutGrid };
 
 const ITEMS: Item[] = [
   { id: "app", label: "Agent", icon: LayoutGrid },
   { id: "automations", label: "Automations", icon: Zap },
+  { id: "settings", label: "Configuration", icon: Settings },
+  { id: "account", label: "Account", icon: UserCircle },
 ];
 
 type Props = {
   activeView: ActiveView;
-  onSelect: (view: ActiveView) => void;
+  onSelect: (view: DesktopPrimaryNavId) => void;
 };
 
 export function DesktopPrimaryNav({ activeView, onSelect }: Props) {

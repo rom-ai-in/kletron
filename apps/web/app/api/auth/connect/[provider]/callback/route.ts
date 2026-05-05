@@ -12,6 +12,7 @@ import { createIntegration } from "@kletron/server/services/connectorsService";
 import { getWorkspaceById } from "@kletron/server/services/workspaceService";
 import { isMongoBackedUserId } from "../../../../../../lib/accountEligibility";
 import { getPublicAppOrigin } from "../../../../../../lib/publicAppUrl";
+import { normalizeInternalRedirect } from "../../../../../../lib/safeRedirect";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ export async function GET(
     if (!isMongoBackedUserId(state.userId)) {
         return redirectWithError(
             publicOrigin,
-            state.redirect ?? "/app",
+            normalizeInternalRedirect(state.redirect, "/app"),
             "Your session is not eligible for account connectors. Sign out and sign back in with your registered Kletron account."
         );
     }
@@ -55,7 +56,7 @@ export async function GET(
     if (!workspace) {
         return redirectWithError(
             publicOrigin,
-            state.redirect ?? "/app",
+            normalizeInternalRedirect(state.redirect, "/app"),
             "Workspace not found for the signed-in account."
         );
     }
@@ -92,7 +93,7 @@ export async function GET(
             const text = await tokenResponse.text().catch(() => "");
             return redirectWithError(
                 publicOrigin,
-                state.redirect ?? "/app",
+                normalizeInternalRedirect(state.redirect, "/app"),
                 `Token exchange failed (${tokenResponse.status}): ${text.slice(0, 200)}`
             );
         }
@@ -100,7 +101,7 @@ export async function GET(
         if (typeof json.error === "string") {
             return redirectWithError(
                 publicOrigin,
-                state.redirect ?? "/app",
+                normalizeInternalRedirect(state.redirect, "/app"),
                 `OAuth error: ${json.error_description ?? json.error}`
             );
         }
@@ -114,20 +115,20 @@ export async function GET(
             scopes,
         });
 
-        const dest = new URL(state.redirect ?? "/app", publicOrigin);
+        const dest = new URL(normalizeInternalRedirect(state.redirect, "/app"), publicOrigin);
         dest.searchParams.set("connected", provider);
         return NextResponse.redirect(dest.toString());
     } catch (error) {
         return redirectWithError(
             publicOrigin,
-            state.redirect ?? "/app",
+            normalizeInternalRedirect(state.redirect, "/app"),
             `OAuth failed: ${(error as Error).message}`
         );
     }
 }
 
 function redirectWithError(origin: string, target: string, message: string) {
-    const dest = new URL(target, origin);
+    const dest = new URL(normalizeInternalRedirect(target, "/app"), origin);
     dest.searchParams.set("connect_error", message);
     return NextResponse.redirect(dest.toString());
 }

@@ -1,18 +1,12 @@
 // Shared types for the Kletron Desktop application
 
-export type ActiveView = "app" | "history" | "settings" | "automations" | "agent-graphs";
-export type SettingsSectionId =
-  | "general"
-  | "configuration"
-  | "portal"
-  | "personalization"
-  | "mcp"
-  | "skills"
+export type ActiveView =
+  | "app"
+  | "history"
+  | "settings"
   | "automations"
-  | "graphs"
-  | "environments"
-  | "worktrees"
-  | "archived";
+  | "agent-graphs"
+  | "account";
 
 export type WorkspaceSummary = {
   id: string;

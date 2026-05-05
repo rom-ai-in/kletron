@@ -167,7 +167,7 @@ function installAppMenu() {
                 click: () => mainWindow?.webContents.send("app:addWorkspace"),
               },
               {
-                label: "Settings…",
+                label: "Configuration…",
                 accelerator: "CommandOrControl+,",
                 click: () => mainWindow?.webContents.send("app:openSettings"),
               },
@@ -186,7 +186,7 @@ function installAppMenu() {
                 click: () => mainWindow?.webContents.send("app:addWorkspace"),
               },
               {
-                label: "Settings…",
+                label: "Configuration…",
                 accelerator: "CommandOrControl+,",
                 click: () => mainWindow?.webContents.send("app:openSettings"),
               },
@@ -253,9 +253,15 @@ function installAppMenu() {
           },
         },
         {
-          label: "Settings",
+          label: "Configuration",
           click: () => {
             mainWindow?.webContents.send("app:navigate", "settings");
+          },
+        },
+        {
+          label: "Account",
+          click: () => {
+            mainWindow?.webContents.send("app:navigate", "account");
           },
         },
       ],

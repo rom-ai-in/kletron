@@ -18,6 +18,7 @@ import {
 } from "@kletron/server/services/workspaceService";
 import { isMongoBackedUserId } from "../../../../../lib/accountEligibility";
 import { getPublicAppOrigin } from "../../../../../lib/publicAppUrl";
+import { normalizeInternalRedirect } from "../../../../../lib/safeRedirect";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,10 @@ export async function GET(
 ) {
     const url = new URL(request.url);
     const publicOrigin = getPublicAppOrigin(request);
-    const redirectTarget = url.searchParams.get("redirect") ?? "/app/config/connectors";
+    const redirectTarget = normalizeInternalRedirect(
+        url.searchParams.get("redirect"),
+        "/app/config/connectors"
+    );
     const auth = await requireAppRouteAuth(request);
     if (!auth) {
         return redirectToLogin(publicOrigin, redirectTarget);
@@ -104,7 +108,7 @@ function redirectToLogin(origin: string, target: string) {
 }
 
 function redirectWithError(origin: string, target: string, message: string) {
-    const dest = new URL(target, origin);
+    const dest = new URL(normalizeInternalRedirect(target, "/app"), origin);
     dest.searchParams.set("connect_error", message);
     return NextResponse.redirect(dest.toString());
 }
