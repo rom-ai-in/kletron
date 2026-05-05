@@ -57,9 +57,10 @@ fi
 echo "Project=${PROJECT_ID}  REGION=${REGION}  AR_REPO=${AR_REPO}  WEB_SERVICE=${WEB_SERVICE}  MCP_SERVICE=${MCP_SERVICE}"
 echo "NEXT_PUBLIC_APP_URL=${APP_URL}"
 
+# Cloud Build default comma-separated substitutions break on ':' in https:// URLs — use ^:^ delimiter.
 gcloud builds submit \
   --config=infra/gcp/cloudbuild.yaml \
-  --substitutions="_NEXT_PUBLIC_APP_URL=${APP_URL},_AR_REPO=${AR_REPO},_WEB_SERVICE=${WEB_SERVICE},_MCP_SERVICE=${MCP_SERVICE},_EXPECTED_PROJECT=${EXPECTED_PROJECT},_ALLOW_NON_KLETRON_PROJECT=${ALLOW_NON_KLETRON_PROJECT}" \
+  --substitutions="^:_NEXT_PUBLIC_APP_URL=${APP_URL}^:_AR_REPO=${AR_REPO}^:_WEB_SERVICE=${WEB_SERVICE}^:_MCP_SERVICE=${MCP_SERVICE}^:_EXPECTED_PROJECT=${EXPECTED_PROJECT}^:_ALLOW_NON_KLETRON_PROJECT=${ALLOW_NON_KLETRON_PROJECT}" \
   --project="${PROJECT_ID}" \
   .
 
