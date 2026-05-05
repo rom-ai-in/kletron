@@ -138,10 +138,10 @@ export default function DesignSystemAgentPage() {
             </DocSection>
 
             <DocSection
-                title="Diff Approval"
+                title="Diff review"
                 description="High-trust review surface for edits with approve and reject flows."
             >
-                <DocCard title="Diff Approval" actions={<InspectButton doc={componentDocs.diffApproval} />}>
+                <DocCard title="Diff review" actions={<InspectButton doc={componentDocs.diffApproval} />}>
                     <DiffApproval
                         files={sampleDiffFiles}
                         states={diffStates}

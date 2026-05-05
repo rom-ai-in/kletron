@@ -82,7 +82,7 @@ export function DiffApproval({
             {showBulkActions && (
                 <div className="flex items-center gap-2 p-3 rounded-lg border border-border-subtle bg-bg-app">
                     <span className="text-xs text-text-muted mr-2">
-                        {pendingCount} pending • {approvedCount} approved • {rejectedCount} rejected
+                        {pendingCount} waiting • {approvedCount} approved • {rejectedCount} rejected
                     </span>
 
                     <button

@@ -15,18 +15,13 @@ import { normalizeToWorkModeId } from "@kletron/shared/workMode";
 import { normalizeResearchDepth } from "@kletron/shared/researchDepth";
 import { categoryService } from "@kletron/server/services/categoryService";
 import { agentGraphExecutor } from "@kletron/server/services/agentGraphExecutor";
-import { getWorkspaceContextConfig } from "@kletron/server/services/auditContextService";
-import { resolveWorkspaceCapabilities } from "@kletron/server/services/workspaceCapabilityResolver";
-import { workspaceChannelSettingsService } from "@kletron/server/services/workspaceChannelSettingsService";
-import { resolveGraphSelectionForNewSession } from "@kletron/server/services/graphRoutingService";
-import type { AgentStreamKpiV1, GraphRouteInfo, GraphSelectionMode } from "@kletron/shared/chatTypes";
-import { CHANNEL_IDS, type ChannelId } from "@kletron/shared/channelTypes";
+import type { AgentStreamKpiV1 } from "@kletron/shared/chatTypes";
 import { buildThreadSkillState } from "@kletron/server/services/workspaceSkillStateService";
 
 const textEncoder = new TextEncoder();
 
 type StreamChunk =
-  | { type: "init"; payload: { runId: string; graphId: string; route?: GraphRouteInfo; skills?: Awaited<ReturnType<typeof buildThreadSkillState>> } }
+  | { type: "init"; payload: { runId: string; graphId: string; skills?: Awaited<ReturnType<typeof buildThreadSkillState>> } }
   | { type: "update"; payload: AgentWorkflowUpdate }
   | { type: "text_delta"; payload: { content: string } }
   | { type: "reasoning_delta"; payload: { content: string } }
@@ -53,23 +48,16 @@ export async function POST(request: Request) {
 
   const payload = await request.json().catch(() => ({} as Record<string, unknown>));
   const graphId = typeof payload?.graphId === "string" ? payload.graphId.trim() : "";
-  const overrideGraphId = typeof payload?.overrideGraphId === "string" ? payload.overrideGraphId.trim() : "";
-  const graphSelectionMode: GraphSelectionMode =
-    payload?.graphSelectionMode === "auto" ? "auto" : "manual";
   const message = typeof payload?.message === "string" ? payload.message.trim() : "";
   const provider = typeof payload?.provider === "string" ? payload.provider.trim() : undefined;
   const model = typeof payload?.model === "string" ? payload.model.trim() : undefined;
-  const channel =
-    typeof payload?.channel === "string" && CHANNEL_IDS.includes(payload.channel as ChannelId)
-      ? (payload.channel as ChannelId)
-      : null;
   const clientSentAtMs =
     typeof payload?.clientSentAtMs === "number" && Number.isFinite(payload.clientSentAtMs)
       ? payload.clientSentAtMs
       : undefined;
   const llmSelection = provider ? resolveLlmSelection({ provider, model }) : undefined;
 
-  console.log(`[sessions/create] graphId="${graphId}", mode=${graphSelectionMode}, message="${message.slice(0, 40)}", provider=${provider}, model=${model}`);
+  console.log(`[sessions/create] graphId="${graphId}", message="${message.slice(0, 40)}", provider=${provider}, model=${model}`);
 
   if (!message) {
     console.log(`[sessions/create] ✗ Missing message`);
@@ -78,7 +66,7 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "application/json" },
     });
   }
-  if (graphSelectionMode === "manual" && !graphId) {
+  if (!graphId) {
     console.log(`[sessions/create] ✗ Missing graphId`);
     return new Response(JSON.stringify({ error: "Please provide a graphId." }), {
       status: 400,
@@ -143,59 +131,19 @@ export async function POST(request: Request) {
   }
 
   const workspaceId = workspace._id.toString();
-  const [contextConfig, workspaceCaps, channelSettings] = await Promise.all([
-    getWorkspaceContextConfig(workspaceId).catch((error) => {
-      console.warn("[sessions/create] Context config unavailable:", (error as Error)?.message ?? error);
-      return null;
-    }),
-    resolveWorkspaceCapabilities(workspaceId).catch((error) => {
-      console.warn("[sessions/create] Workspace capabilities unavailable:", (error as Error)?.message ?? error);
-      return {
-        workspaceId,
-        enabledSkills: [],
-        enabledTools: [],
-        enabledToolSet: new Set<string>(),
-        enabledIntegrationProviderIds: [],
-        externalMcpServers: [],
-      };
-    }),
-    channel ? workspaceChannelSettingsService.get(workspaceId, channel) : Promise.resolve(null),
-  ]);
-
-  const selection = await resolveGraphSelectionForNewSession({
-    graphSelectionMode,
-    message,
-    workMode,
-    requestedGraphId: graphId || undefined,
-    overrideGraphId: overrideGraphId || undefined,
-    channelDefaultGraphId:
-      channelSettings && channelSettings.enabled !== false
-        ? channelSettings.defaultGraphId || undefined
-        : undefined,
-    documentContext: contextConfig?.enabled ? contextConfig.context : null,
-    activeConnectorProviderIds: workspaceCaps.enabledIntegrationProviderIds,
-    listGraphs: () => agentGraphService.listGraphs(),
-    resolveGraphById: (nextGraphId) => agentGraphService.resolveGraphForStage(nextGraphId),
-  });
-  graph = selection.graph;
-
+  graph = await agentGraphService.getGraph(graphId);
   if (!graph?._id) {
-    return new Response(JSON.stringify({ error: "No agent graphs available. Please seed graphs first." }), {
+    return new Response(JSON.stringify({ error: `Graph ${graphId} not found.` }), {
       status: 404,
       headers: { "Content-Type": "application/json" },
     });
   }
   const resolvedGraphId = String(graph._id);
-  const resolvedRoute = {
-    ...selection.route,
-    resolvedGraphId,
-    resolvedGraphName: graph.name,
-  };
 
   // Create run record (always persist Mongo graph id — client may send legacy slug, not ObjectId)
   const nodeOrder = getGraphNodeOrder(graph as any);
   console.log(
-    `[sessions/create] Creating run for graph "${graph.name}" (requested=${graphId}, resolved=${resolvedGraphId}, route=${resolvedRoute.source}), workspace=${workspace._id}`,
+    `[sessions/create] Creating run for graph "${graph.name}" (requested=${graphId}, resolved=${resolvedGraphId}), workspace=${workspace._id}`,
   );
   const researchDepth = normalizeResearchDepth(payload?.researchDepth);
 
@@ -217,7 +165,6 @@ export async function POST(request: Request) {
     ...buildInitialState(graph as any, pre.mission),
     mission: pre.mission,
     userInput: pre.mission,
-    route: resolvedRoute,
     loadedSkillIds: pre.loadedSkillIds.length ? pre.loadedSkillIds : undefined,
     skillLoads: pre.skillLoads.length ? pre.skillLoads : undefined,
   };
@@ -263,7 +210,7 @@ export async function POST(request: Request) {
           clientDisconnected = true;
         }
       };
-      sendChunk({ type: "init", payload: { runId, graphId: resolvedGraphId, route: resolvedRoute, skills: threadSkills } });
+      sendChunk({ type: "init", payload: { runId, graphId: resolvedGraphId, skills: threadSkills } });
       console.log(`[sessions/create] Stream started for run ${runId}`);
 
       try {

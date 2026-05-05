@@ -10,6 +10,12 @@ Usage (from repo root):
 
 Optional: pass Google OAuth client secret without storing in .env first:
   GOOGLE_OAUTH_CLIENT_SECRET='…' python3 infra/gcp/provision_secrets.py
+
+Telegram (optional): set in .env then re-run — pushes to Secret Manager and binds Cloud Run on project GCP_PROJECT_ID (default kletron):
+  CHANNEL_TELEGRAM_BOT_TOKEN, CHANNEL_TELEGRAM_WEBHOOK_SECRET, KLETRON_CHANNEL_SECRETS_KEY
+  Optional env passthrough: CHANNEL_TELEGRAM_THREAD_APPROVAL_MODE, CHANNEL_TELEGRAM_QUEUE_BACKEND
+
+Before running: gcloud config set project kletron (scripts refuse project ids containing "numezis").
 """
 
 from __future__ import annotations
@@ -79,6 +85,34 @@ def ensure_expected_project() -> None:
         file=sys.stderr,
     )
     sys.exit(1)
+
+
+def warn_or_refuse_gcloud_active_project() -> None:
+    """Refuse if the CLI active project looks like a forbidden org; warn if it differs from PROJECT_ID."""
+    proc = subprocess.run(
+        ["gcloud", "config", "get-value", "project", "--quiet"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    active = (proc.stdout or "").strip()
+    if not active:
+        return
+    low = active.lower()
+    for needle in _FORBIDDEN_PROJECT_SUBSTRINGS:
+        if needle in low:
+            print(
+                f"Refus sécurité: gcloud est sur le projet '{active}' (interdit). "
+                "Kletron uniquement — exécutez: gcloud config set project kletron",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+    if active != PROJECT_ID:
+        print(
+            f"WARN: gcloud active project is '{active}' but GCP_PROJECT_ID targets '{PROJECT_ID}'. "
+            "This script uses --project on every call; confirm you intend to write secrets to the target project.",
+            file=sys.stderr,
+        )
 
 
 def cloud_run_service_url(service: str) -> str | None:
@@ -221,6 +255,7 @@ def build_mongodb_uri(env: dict[str, str]) -> str | None:
 
 def main() -> None:
     ensure_expected_project()
+    warn_or_refuse_gcloud_active_project()
     env = load_env(ENV_PATH)
     google_secret_early = (
         os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
@@ -312,6 +347,22 @@ def main() -> None:
     if langsmith:
         pairs.append(("kletron-langsmith-api-key", langsmith))
 
+    tg_token = env.get("CHANNEL_TELEGRAM_BOT_TOKEN", "").strip()
+    tg_webhook_secret = env.get("CHANNEL_TELEGRAM_WEBHOOK_SECRET", "").strip()
+    channel_secrets_key = env.get("KLETRON_CHANNEL_SECRETS_KEY", "").strip()
+    if tg_token:
+        pairs.append(("kletron-channel-telegram-bot-token", tg_token))
+    if tg_webhook_secret:
+        pairs.append(("kletron-channel-telegram-webhook-secret", tg_webhook_secret))
+    if channel_secrets_key:
+        pairs.append(("kletron-channel-secrets-key", channel_secrets_key))
+    if tg_webhook_secret and not tg_token:
+        print(
+            "WARN: CHANNEL_TELEGRAM_WEBHOOK_SECRET set without CHANNEL_TELEGRAM_BOT_TOKEN in .env — "
+            "Cloud Run will verify webhook headers but resolveTelegramBotCredentials needs a token (DB or env).",
+            file=sys.stderr,
+        )
+
     for sid, val in pairs:
         upsert_secret(sid, val)
         grant_accessor(sid, member)
@@ -345,6 +396,13 @@ def main() -> None:
     if remote_file_slug:
         env_pairs.append(f"KLETRON_REMOTE_FILE_MCP_SLUG={remote_file_slug}")
 
+    tg_thread_mode = env.get("CHANNEL_TELEGRAM_THREAD_APPROVAL_MODE", "").strip()
+    if tg_thread_mode:
+        env_pairs.append(f"CHANNEL_TELEGRAM_THREAD_APPROVAL_MODE={tg_thread_mode}")
+    tg_queue = env.get("CHANNEL_TELEGRAM_QUEUE_BACKEND", "").strip()
+    if tg_queue:
+        env_pairs.append(f"CHANNEL_TELEGRAM_QUEUE_BACKEND={tg_queue}")
+
     # gcloud dict flags: see `gcloud topic escaping`. Use ^DELIM^ then DELIM between KEY=VALUE items.
     # Values include "https://" and commas (CORS). DELIM must not appear inside any value (avoid "--" in URLs/models).
     delim = "--"
@@ -362,6 +420,12 @@ def main() -> None:
         secret_refs.append("TAVILY_API_KEY=kletron-tavily-api-key:latest")
     if langsmith:
         secret_refs.append("LANGSMITH_API_KEY=kletron-langsmith-api-key:latest")
+    if tg_token:
+        secret_refs.append("CHANNEL_TELEGRAM_BOT_TOKEN=kletron-channel-telegram-bot-token:latest")
+    if tg_webhook_secret:
+        secret_refs.append("CHANNEL_TELEGRAM_WEBHOOK_SECRET=kletron-channel-telegram-webhook-secret:latest")
+    if channel_secrets_key:
+        secret_refs.append("KLETRON_CHANNEL_SECRETS_KEY=kletron-channel-secrets-key:latest")
 
     update_cmd = [
         "gcloud",
@@ -380,6 +444,17 @@ def main() -> None:
     ]
     run(update_cmd)
     print(f"Updated Cloud Run service {SERVICE} ({REGION}) with secrets + env.")
+    if tg_token and tg_webhook_secret:
+        print(
+            "Telegram: register the webhook (same secret as CHANNEL_TELEGRAM_WEBHOOK_SECRET), e.g.\n"
+            f"  KLETRON_WEBHOOK_PUBLIC_BASE={web_url} ./infra/gcp/set-telegram-webhook.sh"
+        )
+    elif tg_token:
+        print(
+            "Telegram: bot token pushed — add CHANNEL_TELEGRAM_WEBHOOK_SECRET and re-run, "
+            "then ./infra/gcp/set-telegram-webhook.sh for production.",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":

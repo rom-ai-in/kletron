@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { Message } from "@kletron/shared/chatTypes";
+import type { AgentEvent } from "@kletron/shared/types";
 import type { SessionContextAssemblySlice } from "@kletron/shared";
 import type { ThreadSkillState } from "@kletron/shared/skills/types";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
@@ -9,6 +10,7 @@ import { normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode
 import { normalizeResearchDepth, type ResearchDepthId } from "@kletron/shared/researchDepth";
 import { useAgentThread } from "@kletron/ui/hooks/useAgentThread";
 import { useSessionEdits } from "@kletron/ui/hooks/useSessionEdits";
+import { deriveThreadContextFootprint } from "@kletron/ui/lib/threadContextFootprint";
 import type {
   ChatEvent,
   DiffRequest,
@@ -18,6 +20,35 @@ import type {
 } from "../types";
 import { buildHunks, normalizeContent } from "../utils";
 import { provisionalTitleFromUserMessage } from "../utils/threadListMerge";
+
+/** Live NDJSON stream can surface tool rows before they land in `messages`; merge for Context rail parity. */
+function toolFootprintRowsFromAgentStream(events: readonly AgentEvent[]) {
+  const out: Array<{
+    id: string;
+    kind?: string;
+    role?: string;
+    toolName?: string | null;
+    toolArgs?: string | Record<string, unknown> | null;
+    toolCallId?: string;
+  }> = [];
+  for (let i = 0; i < events.length; i++) {
+    const ev = events[i]!;
+    const toolResult = ev.kind === "tool";
+    const assistantCall = ev.kind === "assistant" && Boolean(ev.toolName ?? ev.name);
+    if (!toolResult && !assistantCall) continue;
+    const toolName = ev.toolName ?? ev.name ?? null;
+    if (!toolName) continue;
+    out.push({
+      id: ev.id,
+      kind: ev.kind,
+      role: ev.role,
+      toolName,
+      toolArgs: ev.toolArgs as string | Record<string, unknown> | null | undefined,
+      toolCallId: ev.toolCallId,
+    });
+  }
+  return out;
+}
 
 function messageToChatEvent(m: Message, messageIndex: number): ChatEvent {
   const role = m.role;
@@ -409,7 +440,7 @@ export function useConversation(
       const key = `kletron-full-auto-thread-ok-${activeWorkspaceId ?? "default"}`;
       if (typeof sessionStorage !== "undefined" && !sessionStorage.getItem(key)) {
         const ok = window.confirm(
-          "Full auto: tools run without prompts, including writes and shell. Kletron admin tools and your workspace blocklist still require approval. Continue?"
+          "Full auto: tools run without prompts (writes and shell included). Your blocklist and per-tool “Always require” still prompt. Continue?"
         );
         if (!ok) return;
         sessionStorage.setItem(key, "1");
@@ -456,10 +487,95 @@ export function useConversation(
     if (!conversationId || d?.id !== conversationId) return null;
     return d.state?.contextAssembly ?? null;
   }, [agentThread.sessionDetail, conversationId]);
+
+  const threadContextFootprint = useMemo(
+    () =>
+      deriveThreadContextFootprint(
+        [
+          ...conversationEvents.map((e) => ({
+            id: e.id,
+            kind: e.kind,
+            role: e.role,
+            toolName: e.toolName,
+            toolArgs: e.toolArgs,
+            toolCallId: e.toolCallId,
+          })),
+          ...toolFootprintRowsFromAgentStream(stream.eventStream),
+        ],
+        sessionContextAssembly,
+      ),
+    [conversationEvents, stream.eventStream, sessionContextAssembly],
+  );
+
   const runStartedAt = stream.runStartedAt ?? (
     agentThread.sessionDetail?.id === conversationId
       ? agentThread.sessionDetail.startedAt ?? null
       : null
+  );
+
+  const buildThreadExport = useCallback(
+    (overlay: {
+      planMode: boolean;
+      workMode: WorkModeId;
+      activeGraphIsSimple: boolean;
+      messageQueue: Array<{ id: string; text: string; createdAt: string }>;
+    }) => ({
+      schema: "kletron.agent.thread_export.v1" as const,
+      exportedAt: new Date().toISOString(),
+      context: {
+        activeSessionId: conversationId,
+        activeWorkspaceId: activeWorkspaceId ?? null,
+        selectedGraphId: selectedGraph,
+        llmProvider: modelConfig?.provider ?? null,
+        threadApprovalMode,
+        workMode: overlay.workMode,
+        planMode: overlay.planMode,
+        activeGraphIsSimple: overlay.activeGraphIsSimple,
+      },
+      serverSessionSnapshot: agentThread.sessionDetail,
+      client: {
+        streamStatus: stream.streamStatus,
+        sending: stream.sending,
+        isStreaming: stream.streamStatus === "streaming",
+        errorMessage: stream.errorMessage,
+        messages: stream.messages,
+        eventStream: stream.eventStream,
+        timeline: stream.timeline,
+        lastResult: stream.lastResult,
+        streamingText: stream.streamingText,
+        streamingReasoning: stream.streamingReasoning,
+        tokenUsage: stream.tokenUsage,
+        runStartedAt: stream.runStartedAt,
+        runEndedAt: stream.runEndedAt,
+      },
+      messageQueue: overlay.messageQueue,
+      historyPagination: historyPage,
+      pendingEdits: sessionEdits.pendingEdits,
+      flushNotice: sessionEdits.flushNotice,
+    }),
+    [
+      conversationId,
+      activeWorkspaceId,
+      selectedGraph,
+      modelConfig?.provider,
+      threadApprovalMode,
+      agentThread.sessionDetail,
+      stream.streamStatus,
+      stream.sending,
+      stream.errorMessage,
+      stream.messages,
+      stream.eventStream,
+      stream.timeline,
+      stream.lastResult,
+      stream.streamingText,
+      stream.streamingReasoning,
+      stream.tokenUsage,
+      stream.runStartedAt,
+      stream.runEndedAt,
+      historyPage,
+      sessionEdits.pendingEdits,
+      sessionEdits.flushNotice,
+    ]
   );
 
   return {
@@ -501,5 +617,8 @@ export function useConversation(
     setResearchDepth,
     threadSkills,
     sessionContextAssembly,
+    threadContextFootprint,
+    sessionDetail: agentThread.sessionDetail,
+    buildThreadExport,
   };
 }

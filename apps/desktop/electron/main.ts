@@ -267,6 +267,12 @@ function installAppMenu() {
             mainWindow?.webContents.send("app:openSettings", "account");
           },
         },
+        {
+          label: "Messenger channels",
+          click: () => {
+            mainWindow?.webContents.send("app:openSettings", "channels");
+          },
+        },
       ],
     },
     {

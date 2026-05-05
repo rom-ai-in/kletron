@@ -18,6 +18,7 @@ import {
   SquarePen,
   ClipboardCheck,
   Bot,
+  Loader2,
 } from 'lucide-react';
 import { WORK_MODES, type WorkModeId } from '@kletron/shared/workMode';
 import {
@@ -78,7 +79,8 @@ export interface ProjectSidebarProps {
   onSettings?: () => void;
   /** When false, hide the settings control at the bottom of the sidebar. Default true. */
   showThreadsSettingsButton?: boolean;
-  onRenameThread?: (threadId: string, newTitle: string) => void;
+  /** Return a rejected promise on failure so the inline editor stays open. */
+  onRenameThread?: (threadId: string, newTitle: string) => void | Promise<void>;
   onArchiveThread?: (threadId: string) => void;
   onDeleteThread?: (threadId: string) => void;
   /** Remove a project from the sidebar */
@@ -198,6 +200,8 @@ export function ProjectSidebar({
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
+  const [renameCommitting, setRenameCommitting] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
   const [contextMenuProjectId, setContextMenuProjectId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [threadFilter, setThreadFilter] = useState<SidebarFilter>('all');
@@ -242,23 +246,40 @@ export function ProjectSidebar({
     });
   }
 
-  function startEdit(thread: SidebarThread) {
+  const startEdit = useCallback((thread: SidebarThread) => {
+    setRenameError(null);
     setEditingThreadId(thread.id);
     setEditingTitle(thread.title || '');
-  }
+  }, []);
 
-  function saveEdit() {
-    if (editingThreadId && editingTitle.trim()) {
-      onRenameThread?.(editingThreadId, editingTitle.trim());
+  const cancelEdit = useCallback(() => {
+    if (renameCommitting) return;
+    setEditingThreadId(null);
+    setEditingTitle('');
+    setRenameError(null);
+  }, [renameCommitting]);
+
+  const saveEdit = useCallback(async () => {
+    if (!editingThreadId || !editingTitle.trim() || renameCommitting) return;
+    const id = editingThreadId;
+    const next = editingTitle.trim();
+    if (!onRenameThread) {
+      setEditingThreadId(null);
+      setEditingTitle('');
+      return;
     }
-    setEditingThreadId(null);
-    setEditingTitle('');
-  }
-
-  function cancelEdit() {
-    setEditingThreadId(null);
-    setEditingTitle('');
-  }
+    setRenameCommitting(true);
+    setRenameError(null);
+    try {
+      await onRenameThread(id, next);
+      setEditingThreadId(null);
+      setEditingTitle('');
+    } catch (e) {
+      setRenameError(e instanceof Error ? e.message : 'Could not rename thread');
+    } finally {
+      setRenameCommitting(false);
+    }
+  }, [editingThreadId, editingTitle, onRenameThread, renameCommitting]);
 
   const showTopSection = reviewQueueCount > 0 || Boolean(onAddProject && showAddProjectButton);
 
@@ -553,20 +574,60 @@ export function ProjectSidebar({
                           <StatusDot status={thread.liveStatus} />
 
                           {isEditing ? (
-                            <div className="flex items-center gap-1 flex-1 min-w-0">
-                              <input
-                                value={editingTitle}
-                                onChange={(e) => setEditingTitle(e.target.value)}
-                                onClick={(e) => e.stopPropagation()}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') saveEdit();
-                                  if (e.key === 'Escape') cancelEdit();
-                                }}
-                                className="flex-1 min-w-0 rounded-md border border-border-subtle bg-bg-app px-1.5 py-0.5 text-xs text-text-primary"
-                                autoFocus
-                              />
-                              <button type="button" onClick={(e) => { e.stopPropagation(); saveEdit(); }} className="p-0.5 text-status-success-text"><Check className="h-3 w-3" /></button>
-                              <button type="button" onClick={(e) => { e.stopPropagation(); cancelEdit(); }} className="p-0.5 text-text-muted"><X className="h-3 w-3" /></button>
+                            <div className="flex flex-1 flex-col gap-1 min-w-0">
+                              <div className="flex min-w-0 items-center gap-1">
+                                <input
+                                  value={editingTitle}
+                                  onChange={(e) => {
+                                    setRenameError(null);
+                                    setEditingTitle(e.target.value);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      void saveEdit();
+                                    }
+                                    if (e.key === 'Escape') cancelEdit();
+                                  }}
+                                  disabled={renameCommitting}
+                                  className="min-w-0 flex-1 rounded-md border border-border-subtle bg-bg-app px-1.5 py-0.5 text-xs text-text-primary disabled:opacity-60"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  title="Save"
+                                  aria-label="Save thread name"
+                                  disabled={renameCommitting || !editingTitle.trim()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void saveEdit();
+                                  }}
+                                  className="p-0.5 text-status-success-text disabled:opacity-40"
+                                >
+                                  {renameCommitting ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                                  ) : (
+                                    <Check className="h-3 w-3" aria-hidden />
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Cancel"
+                                  aria-label="Cancel rename"
+                                  disabled={renameCommitting}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    cancelEdit();
+                                  }}
+                                  className="p-0.5 text-text-muted disabled:opacity-40"
+                                >
+                                  <X className="h-3 w-3" aria-hidden />
+                                </button>
+                              </div>
+                              {renameError ? (
+                                <p className="text-[10px] leading-snug text-status-error-text">{renameError}</p>
+                              ) : null}
                             </div>
                           ) : (
                             <>

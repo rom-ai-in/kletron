@@ -8,6 +8,7 @@ import {
   GraduationCap,
   X,
   AlertTriangle,
+  ClipboardCopy,
 } from "lucide-react";
 
 // Design system components
@@ -31,7 +32,6 @@ import { ThreadSearchHeaderTrigger } from "@kletron/ui/components/CommandCenter/
 import { MessageList } from "@kletron/ui/components/Agent/MessageList";
 import { ThreadContextRail } from "@kletron/ui/components/Agent/ThreadContextRail";
 import { ThreadSkillsRail } from "@kletron/ui/components/Agent/ThreadSkillsRail";
-import { deriveThreadContextFootprint } from "@kletron/ui/lib/threadContextFootprint";
 import { ConversationThreadSkeleton } from "@kletron/ui/components/Agent/ConversationThreadSkeleton";
 import { PendingSessionEditsStrip } from "@kletron/ui/components/design-system";
 import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
@@ -383,6 +383,66 @@ export default function App() {
     onTruncateAndResend: conversation.truncateAndResend,
   });
   const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
+
+  const activeGraphIsSimple = useMemo(() => {
+    const d = conversation.sessionDetail;
+    if (d?.graph) {
+      const nc = d.graph.nodeCount;
+      return nc == null || nc <= 1;
+    }
+    const sel = agentSession.selectedGraphId;
+    const agentGraph = agentSession.agentGraphs.find((g) => String(g._id) === sel);
+    if (agentGraph) {
+      const nodeCount = (agentGraph as { nodes?: unknown[] }).nodes?.length;
+      return !nodeCount || nodeCount <= 1;
+    }
+    return true;
+  }, [conversation.sessionDetail, agentSession.selectedGraphId, agentSession.agentGraphs]);
+
+  const handleCopyThreadLogs = useCallback(() => {
+    const threadExport = conversation.buildThreadExport({
+      planMode,
+      workMode: desktopWorkMode,
+      activeGraphIsSimple,
+      messageQueue,
+    });
+    const text = JSON.stringify(threadExport, null, 2);
+    if (!navigator.clipboard?.writeText) {
+      toast.error("Copy failed", "Clipboard API not available.");
+      return;
+    }
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        toast.success("Copied", "Thread logs are in the clipboard.");
+      })
+      .catch((err: unknown) => {
+        console.error("Failed to copy logs:", err);
+        toast.error("Copy failed", err instanceof Error ? err.message : "Could not write to clipboard.");
+      });
+  }, [
+    conversation.buildThreadExport,
+    planMode,
+    desktopWorkMode,
+    activeGraphIsSimple,
+    messageQueue,
+    toast,
+  ]);
+
+  const desktopPrimaryNavTrailing = useMemo(
+    () => (
+      <button
+        type="button"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-state-hover hover:text-text-primary"
+        title="Copy full thread JSON to clipboard (server history, stream, tools)"
+        aria-label="Copy thread logs"
+        onClick={handleCopyThreadLogs}
+      >
+        <ClipboardCopy className="h-3.5 w-3.5" aria-hidden />
+      </button>
+    ),
+    [handleCopyThreadLogs],
+  );
 
   // ═══════════════════════════════════════════════════════════════════════════
   // KEYBOARD SHORTCUTS
@@ -884,22 +944,6 @@ export default function App() {
     () => stripLeadingSlashSkillSlugs(conversation.input).slugs,
     [conversation.input],
   );
-  const threadContextFootprint = useMemo(
-    () =>
-      deriveThreadContextFootprint(
-        conversation.conversationEvents.map((e) => ({
-          id: e.id,
-          kind: e.kind,
-          role: e.role,
-          toolName: e.toolName,
-          toolArgs: e.toolArgs,
-          toolCallId: e.toolCallId,
-        })),
-        conversation.sessionContextAssembly,
-      ),
-    [conversation.conversationEvents, conversation.sessionContextAssembly],
-  );
-
   const draftSkillMirrorChips = useMemo(() => {
     const ids = new Set(slashSkillChips.map((c) => c.id));
     const seen = new Set<string>();
@@ -1209,18 +1253,9 @@ export default function App() {
       e.preventDefault();
       return;
     }
-    if (e.key === "Enter") {
-      if (settings.settingsToggles.requireCmdEnter) {
-        if (e.metaKey || e.ctrlKey) {
-          e.preventDefault();
-          handleSendMessage();
-        }
-        return;
-      }
-      if (!e.shiftKey) {
-        e.preventDefault();
-        handleSendMessage();
-      }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
   }
 
@@ -1277,7 +1312,11 @@ export default function App() {
           <header className="flex h-10 shrink-0 items-center glass-titlebar px-4 pl-[76px] app-region-drag">
             <span className="text-xs font-medium text-text-secondary">History</span>
           </header>
-          <DesktopPrimaryNav activeView={settings.activeView} onSelect={(v) => settings.setActiveView(v)} />
+          <DesktopPrimaryNav
+            activeView={settings.activeView}
+            onSelect={(v) => settings.setActiveView(v)}
+            trailing={desktopPrimaryNavTrailing}
+          />
           <HistoryPanel
             backendUrlTrimmed={backendUrlTrimmed}
             backendReady={backendReady}
@@ -1316,7 +1355,11 @@ export default function App() {
           <header className="flex h-10 shrink-0 items-center glass-titlebar px-4 pl-[76px] app-region-drag">
             <span className="text-xs font-medium text-text-secondary">Automations</span>
           </header>
-          <DesktopPrimaryNav activeView={settings.activeView} onSelect={(v) => settings.setActiveView(v)} />
+          <DesktopPrimaryNav
+            activeView={settings.activeView}
+            onSelect={(v) => settings.setActiveView(v)}
+            trailing={desktopPrimaryNavTrailing}
+          />
           <div className="flex flex-1 min-h-0 overflow-hidden">
             <AutomationListPanel
               automations={automationsHook.automations}
@@ -1398,7 +1441,11 @@ export default function App() {
           <header className="flex h-10 shrink-0 items-center glass-titlebar px-4 pl-[76px] app-region-drag">
             <span className="text-xs font-medium text-text-secondary">Agent graphs</span>
           </header>
-          <DesktopPrimaryNav activeView={settings.activeView} onSelect={(v) => settings.setActiveView(v)} />
+          <DesktopPrimaryNav
+            activeView={settings.activeView}
+            onSelect={(v) => settings.setActiveView(v)}
+            trailing={desktopPrimaryNavTrailing}
+          />
           <AgentGraphsPanel
             backendUrlTrimmed={backendUrlTrimmed}
             getAccessToken={auth.getAccessToken}
@@ -1501,6 +1548,7 @@ export default function App() {
           }}
           envVariables={envVariables}
           setEnvVariables={setEnvVariables}
+          apiFetch={apiFetch}
         />
       </DesktopWorkspaceProvider>
     );
@@ -1634,7 +1682,11 @@ export default function App() {
         }
       />
 
-      <DesktopPrimaryNav activeView={settings.activeView} onSelect={(v) => settings.setActiveView(v)} />
+      <DesktopPrimaryNav
+        activeView={settings.activeView}
+        onSelect={(v) => settings.setActiveView(v)}
+        trailing={desktopPrimaryNavTrailing}
+      />
 
       {/* ── Three-Pane Body ── */}
       <div className="app-region-no-drag flex flex-1 min-h-0 relative">
@@ -1655,11 +1707,7 @@ export default function App() {
             showAddProjectButton={false}
             className="border-r-0"
             onSettings={() => settings.setActiveView("settings")}
-            onRenameThread={(threadId, newTitle) => {
-              threads.startEditThread({ id: threadId, title: newTitle });
-              threads.setEditingThreadTitle(newTitle);
-              void threads.saveEditedThreadTitle();
-            }}
+            onRenameThread={(threadId, newTitle) => threads.renameThread(threadId, newTitle)}
             onArchiveThread={(threadId) => void threads.archiveThread(threadId)}
             onDeleteThread={(threadId) => void threads.deleteThread(threadId)}
             onRemoveProject={(projectId) => {
@@ -1795,7 +1843,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Work mode: same compact approvals as web agent (Code mode uses InlineDiffReview above). */}
+          {/* Work mode: same pending-tool strip as web agent (Code mode uses InlineDiffReview above). */}
           {!isCodeMode && (
             <PendingSessionEditsStrip
               pendingEdits={conversation.sessionEdits.pendingEdits}
@@ -1917,7 +1965,7 @@ export default function App() {
                   value={conversation.threadApprovalMode}
                   onSelect={conversation.onThreadApprovalSelect}
                   disabled={conversation.conversationRunSource === "automation"}
-                  disabledReason="Approval mode is fixed for automation threads."
+                  disabledReason="Tool policy mode is fixed for automation threads."
                 />
               }
               depthSelector={
@@ -1991,7 +2039,7 @@ export default function App() {
                 </button>
               }
             />
-            <ThreadContextRail footprint={threadContextFootprint} layout="inline" />
+            <ThreadContextRail footprint={conversation.threadContextFootprint} layout="inline" />
           </div>
         ) : null}
 

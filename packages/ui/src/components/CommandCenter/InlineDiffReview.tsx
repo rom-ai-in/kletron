@@ -126,7 +126,7 @@ function DiffCard({
         <div className="flex items-center gap-1.5">
           <Button size="xs" onClick={() => onAccept?.(diff.editId)}>
             <Check className="h-3 w-3 mr-1" />
-            Accept
+            Approve
           </Button>
           <Button size="xs" variant="ghost" onClick={() => onReject?.(diff.editId)}>
             <X className="h-3 w-3 mr-1" />
@@ -197,7 +197,7 @@ export function InlineDiffReview({
   return (
     <div className={`space-y-3 ${className}`}>
       <div className="flex items-center gap-2 text-xs font-medium text-text-secondary">
-        <span>Proposed Changes</span>
+        <span>Proposed changes</span>
         <span className="rounded-full bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-muted">{diffs.length} file(s)</span>
       </div>
       {diffs.map((diff) => (

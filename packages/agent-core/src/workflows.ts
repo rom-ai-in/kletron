@@ -47,13 +47,17 @@ export async function runWorkflow(
 ): Promise<AgentWorkflowResult> {
   let graphRecord;
 
-  if (graphId && OBJECTID_RE.test(graphId)) {
+  if (graphId) {
+    if (!OBJECTID_RE.test(graphId)) {
+      throw new Error(`Invalid graph id: ${graphId}`);
+    }
     graphRecord = await agentGraphService.getGraph(graphId);
+    if (!graphRecord) {
+      throw new Error(`Graph ${graphId} not found.`);
+    }
   }
 
-  // Legacy string-based graphId (e.g. "audit", "simple_react") or no graphId:
-  // always resolve to the simplest single-node ReAct graph so that automation
-  // stages execute their prompt directly without heavy state-machine overhead.
+  // Only callers that omit graphId entirely get the simple fallback graph.
   if (!graphRecord) {
     const graphs = await agentGraphService.listGraphs();
     graphRecord = findSimpleReactGraph(graphs) ?? graphs[0];

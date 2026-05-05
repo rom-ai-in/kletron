@@ -17,7 +17,7 @@ describe("probeGoogleWorkspaceConnection", () => {
                 });
             }
 
-            if (url.includes("/gmail/v1/users/me/messages?maxResults=1&q=in%3Ainbox")) {
+            if (url.includes("/gmail/v1/users/me/messages?maxResults=1&includeSpamTrash=false")) {
                 return new Response(JSON.stringify({ messages: [] }), {
                     status: 200,
                     headers: { "content-type": "application/json" },
@@ -61,7 +61,7 @@ describe("probeGoogleWorkspaceConnection", () => {
         });
     });
 
-    it("verifies Gmail search capability, not just label listing", async () => {
+    it("verifies Gmail listing capability without using unsupported q filters", async () => {
         const result = await probeGoogleWorkspaceConnection("gmail", {
             accessToken: "token",
         });
@@ -69,7 +69,8 @@ describe("probeGoogleWorkspaceConnection", () => {
         expect(result.ok).toBe(true);
         expect(result.message).toContain("label(s)");
         expect(result.message).toContain("message(s)");
-        expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/messages?maxResults=1&q=in%3Ainbox"))).toBe(true);
+        expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/messages?maxResults=1&includeSpamTrash=false"))).toBe(true);
+        expect(fetchMock.mock.calls.some(([input]) => String(input).includes("q="))).toBe(false);
     });
 
     it("verifies Calendar freeBusy in addition to calendar list", async () => {

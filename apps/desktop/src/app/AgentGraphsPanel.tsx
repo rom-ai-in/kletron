@@ -239,7 +239,7 @@ export function AgentGraphsPanel({
                   className="text-text-muted hover:text-text-primary"
                   onClick={() => void loadApprovalForRun(r.id)}
                 >
-                  Approval…
+                  Policy…
                 </button>
               </li>
             ))}
@@ -248,7 +248,7 @@ export function AgentGraphsPanel({
           )}
           {approvalRunId && (
             <div className="mt-3 rounded-md border border-border-subtle bg-bg-elevated p-3">
-              <div className="text-[11px] text-text-muted mb-2">Thread approval for run {approvalRunId.slice(0, 8)}…</div>
+              <div className="text-[11px] text-text-muted mb-2">Tool policy · run {approvalRunId.slice(0, 8)}…</div>
               <ThreadApprovalModeSelector value={approvalMode} onSelect={(m) => void saveApprovalMode(m)} />
             </div>
           )}

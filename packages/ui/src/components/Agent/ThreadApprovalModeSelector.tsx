@@ -6,9 +6,9 @@ import { ChevronDown, Check, Settings2, Shield, Zap } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 const OPTIONS: { id: ThreadApprovalMode; label: string; sub?: string }[] = [
-  { id: "inherit", label: "Workspace defaults", sub: "Use org tool policy" },
-  { id: "confirm_everything", label: "Confirm each tool", sub: "Ask before running tools" },
-  { id: "full_auto_thread", label: "Full auto (this chat)", sub: "Runs tools without prompts" },
+  { id: "inherit", label: "Workspace policy", sub: "Rules from Configuration → Workspace" },
+  { id: "confirm_everything", label: "Confirm each tool", sub: "Prompt before every tool call" },
+  { id: "full_auto_thread", label: "Full auto (this chat)", sub: "Auto-run tools; blocklist still prompts" },
 ];
 
 const MODE_ICON: Record<ThreadApprovalMode, typeof Settings2> = {
@@ -18,7 +18,7 @@ const MODE_ICON: Record<ThreadApprovalMode, typeof Settings2> = {
 };
 
 const MODE_SHORT: Record<ThreadApprovalMode, string> = {
-  inherit: "Default",
+  inherit: "Policy",
   confirm_everything: "Confirm",
   full_auto_thread: "Auto",
 };
@@ -88,7 +88,7 @@ export function ThreadApprovalModeSelector({
       {isOpen && !disabled && (
         <div
           role="listbox"
-          aria-label="Approval mode"
+          aria-label="Tool policy mode"
           className={cn(
             "absolute bottom-full z-[120] mb-1 flex max-h-60 min-w-[240px] max-w-[min(100vw-1.5rem,22rem)] flex-col overflow-y-auto rounded-lg border border-border-strong bg-bg-surface p-1 shadow-2xl",
             menuAlign === "end" ? "right-0 left-auto" : "left-0"

@@ -4,6 +4,26 @@ import { z } from "zod";
 import { parseToolInputWithRepair, repairToolInputValue } from "../src/services/toolInputRepair";
 
 describe("toolInputRepair", () => {
+    it("parses a full JSON-string payload before repairing nested values", () => {
+        const schema = z.object({
+            query: z.string().min(1),
+            maxResults: z.number().int().positive().optional(),
+            showHidden: z.boolean().optional(),
+        });
+
+        const parsed = parseToolInputWithRepair(
+            schema,
+            '{"query":"meeting tomorrow","maxResults":"10","showHidden":"False"}',
+            "calendar_list_events"
+        );
+
+        expect(parsed).toEqual({
+            query: "meeting tomorrow",
+            maxResults: 10,
+            showHidden: false,
+        });
+    });
+
     it("coerces booleans, numbers, enums, and singleton arrays", () => {
         const schema = z.object({
             includeSpamTrash: z.boolean().optional(),

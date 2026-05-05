@@ -155,24 +155,6 @@ import type { WorkModeId } from './workMode';
 import type { ResearchDepthId } from './researchDepth';
 import type { ThreadSkillState } from './skills/types';
 
-export type GraphSelectionMode = 'manual' | 'auto';
-
-export type GraphRouteSource =
-    | 'explicit_graph'
-    | 'channel_override'
-    | 'auto_router'
-    | 'workspace_channel_default'
-    | 'fallback_default';
-
-export type GraphRouteInfo = {
-    source: GraphRouteSource;
-    reason: string;
-    confidence?: number;
-    resolvedGraphId?: string;
-    resolvedGraphName?: string;
-    graphSelectionMode?: GraphSelectionMode;
-};
-
 /**
  * Per-`streamReactAgentMessages` KPIs (one NDJSON `stream_metrics` chunk per invocation).
  * Use for diagnosing slow send → first token vs LM generation throughput.
@@ -242,7 +224,7 @@ export type AgentStreamKpiV1 = {
 };
 
 export type StreamChunk =
-    | { type: 'init'; payload: { runId: string; graphId: string; route?: GraphRouteInfo; skills?: ThreadSkillState } }
+    | { type: 'init'; payload: { runId: string; graphId: string; skills?: ThreadSkillState } }
     | { type: 'update'; payload: AgentWorkflowUpdate }
     | { type: 'text_delta'; payload: { content: string } }
     | { type: 'reasoning_delta'; payload: { content: string } }

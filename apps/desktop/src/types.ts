@@ -9,6 +9,7 @@ export type SettingsSectionId =
   | "general"
   | "personalization"
   | "connectors"
+  | "channels"
   | "account"
   | "skills"
   | "automations"
@@ -145,7 +146,6 @@ export type LlmConfig = {
 
 export type SettingsToggles = {
   preventSleep: boolean;
-  requireCmdEnter: boolean;
   compactDensity: boolean;
   opaqueBackground: boolean;
   pointerCursor: boolean;

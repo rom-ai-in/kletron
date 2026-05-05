@@ -25,7 +25,7 @@ export interface InputBarProps {
   graphSelector?: React.ReactNode;
   /** Model selector rendered in footer */
   modelSelector?: React.ReactNode;
-  /** Thread approval mode (agent sessions) */
+  /** Per-chat tool policy mode (ThreadApprovalModeSelector) */
   approvalSelector?: React.ReactNode;
   /** Research depth (agent sessions) — same row as graph / LLM on web */
   depthSelector?: React.ReactNode;

@@ -27,3 +27,28 @@ export function DeviceOnlyPortalBanner({
     </div>
   );
 }
+
+/** Server-side settings edited in the browser; desktop may only show status (e.g. Messenger channels). */
+export function PortalBrowserBanner({
+  portalPath,
+  onOpenPortal,
+  title,
+  description,
+}: {
+  portalPath: string;
+  onOpenPortal: (path: string) => void;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-md border border-border-strong/25 bg-bg-elevated/80 px-3 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      <div className="min-w-0 space-y-0.5">
+        <p className="text-xs font-medium text-text-primary">{title}</p>
+        <p className="text-[11px] leading-relaxed text-text-secondary">{description}</p>
+      </div>
+      <Button size="xs" variant="secondary" className="shrink-0 self-start sm:self-auto" onClick={() => onOpenPortal(portalPath)}>
+        Open in browser
+      </Button>
+    </div>
+  );
+}

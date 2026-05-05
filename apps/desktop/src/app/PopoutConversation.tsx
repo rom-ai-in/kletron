@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { MessageList } from "@kletron/ui/components/Agent/MessageList";
 import { ThreadContextRail } from "@kletron/ui/components/Agent/ThreadContextRail";
 import { ThreadSkillsRail } from "@kletron/ui/components/Agent/ThreadSkillsRail";
-import { deriveThreadContextFootprint } from "@kletron/ui/lib/threadContextFootprint";
 import { MessageActions } from "@kletron/ui/components/Agent/MessageActions";
 import { useMessageEdit } from "@kletron/ui/hooks/useMessageEdit";
 import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
@@ -142,22 +141,6 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
   }));
 
   const isCodeMode = conversation.threadWorkMode === "code";
-
-  const threadContextFootprint = useMemo(
-    () =>
-      deriveThreadContextFootprint(
-        conversation.conversationEvents.map((e) => ({
-          id: e.id,
-          kind: e.kind,
-          role: e.role,
-          toolName: e.toolName,
-          toolArgs: e.toolArgs,
-          toolCallId: e.toolCallId,
-        })),
-        conversation.sessionContextAssembly,
-      ),
-    [conversation.conversationEvents, conversation.sessionContextAssembly],
-  );
 
   return (
     <div className="flex h-screen flex-col text-text-primary">
@@ -362,7 +345,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
                 value={conversation.threadApprovalMode}
                 onSelect={conversation.onThreadApprovalSelect}
                 disabled={conversation.conversationRunSource === "automation"}
-                disabledReason="Approval mode is fixed for automation threads."
+                disabledReason="Tool policy mode is fixed for automation threads."
               />
             }
             depthSelector={
@@ -411,7 +394,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
                 </button>
               }
             />
-            <ThreadContextRail footprint={threadContextFootprint} layout="inline" />
+            <ThreadContextRail footprint={conversation.threadContextFootprint} layout="inline" />
           </div>
         ) : null}
       </div>

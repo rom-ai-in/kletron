@@ -114,6 +114,15 @@ steps:
         if gcloud secrets describe kletron-google-oauth-client-secret --project="$PROJECT_ID" &>/dev/null; then
           RUN_SECRETS="$${RUN_SECRETS},GOOGLE_OAUTH_CLIENT_SECRET=kletron-google-oauth-client-secret:latest"
         fi
+        if gcloud secrets describe kletron-channel-telegram-bot-token --project="$PROJECT_ID" &>/dev/null; then
+          RUN_SECRETS="$${RUN_SECRETS},CHANNEL_TELEGRAM_BOT_TOKEN=kletron-channel-telegram-bot-token:latest"
+        fi
+        if gcloud secrets describe kletron-channel-telegram-webhook-secret --project="$PROJECT_ID" &>/dev/null; then
+          RUN_SECRETS="$${RUN_SECRETS},CHANNEL_TELEGRAM_WEBHOOK_SECRET=kletron-channel-telegram-webhook-secret:latest"
+        fi
+        if gcloud secrets describe kletron-channel-secrets-key --project="$PROJECT_ID" &>/dev/null; then
+          RUN_SECRETS="$${RUN_SECRETS},KLETRON_CHANNEL_SECRETS_KEY=kletron-channel-secrets-key:latest"
+        fi
         gcloud run deploy ${_WEB_SERVICE} \
           --project="$PROJECT_ID" \
           --region="${_REGION}" \

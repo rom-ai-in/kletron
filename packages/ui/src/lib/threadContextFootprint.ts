@@ -32,24 +32,55 @@ function parseArgs(raw: unknown): Record<string, unknown> {
   return {};
 }
 
-function pathFromArgs(args: Record<string, unknown>): string {
+/** OpenAI / LangChain sometimes nest payload under `input` or `arguments`. */
+function widenArgs(raw: Record<string, unknown>): Record<string, unknown> {
+  const nested = raw.input ?? raw.arguments;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return { ...raw, ...(nested as Record<string, unknown>) };
+  }
+  return raw;
+}
+
+/** Collect path-like strings from common tool arg shapes (union for dedupe). */
+function primaryPathFromArgs(args: Record<string, unknown>): string {
+  const a = widenArgs(args);
   const p =
-    args.path ??
-    args.file_path ??
-    args.filePath ??
-    args.AbsolutePath ??
-    args.TargetFile ??
-    args.directory ??
-    args.DirectoryPath ??
-    args.glob_pattern ??
-    args.pattern ??
-    args.root ??
+    a.filePath ??
+    a.path ??
+    a.file_path ??
+    a.AbsolutePath ??
+    a.TargetFile ??
+    a.target_file ??
+    a.file ??
+    a.directory ??
+    a.DirectoryPath ??
+    a.glob_pattern ??
+    a.pattern ??
+    a.root ??
+    a.target_directory ??
     "";
   return typeof p === "string" ? p.trim() : "";
 }
 
+function extraPathsFromArgs(args: Record<string, unknown>): string[] {
+  const a = widenArgs(args);
+  const out: string[] = [];
+  const pushStr = (v: unknown) => {
+    if (typeof v === "string" && v.trim()) out.push(v.trim());
+  };
+  pushStr(a.filePath);
+  pushStr(a.path);
+  pushStr(a.file);
+  const files = a.files ?? a.paths;
+  if (Array.isArray(files)) {
+    for (const x of files) pushStr(x);
+  }
+  return out;
+}
+
 function queryFromArgs(args: Record<string, unknown>): string {
-  const q = args.query ?? args.pattern ?? args.Query ?? args.url ?? args.endpoint ?? "";
+  const w = widenArgs(args);
+  const q = w.query ?? w.pattern ?? w.Query ?? w.url ?? w.endpoint ?? "";
   return typeof q === "string" ? q.trim().slice(0, 120) : "";
 }
 
@@ -80,18 +111,21 @@ export function deriveThreadContextFootprint(
 
   for (let i = 0; i < events.length; i++) {
     const e = events[i]!;
-    const isTool = e.kind === "tool" || e.role === "tool";
-    if (!isTool || !e.toolName) continue;
+    const toolResult = e.kind === "tool" || e.role === "tool";
+    /** Modern transcripts store the invocation on assistant rows; results are often separate `tool` rows. */
+    const assistantCall = e.kind === "assistant" && Boolean(e.toolName);
+    if ((!toolResult && !assistantCall) || !e.toolName) continue;
     const id = (e as { toolCallId?: string }).toolCallId || e.id || `idx-${i}`;
     const args = parseArgs(e.toolArgs);
     const prev = byCallId.get(id);
     if (!prev) {
       byCallId.set(id, { name: e.toolName, args });
     } else {
-      if (Object.keys(args).length > Object.keys(prev.args).length) {
-        prev.args = args;
-        prev.name = e.toolName;
-      }
+      const merged = { ...prev.args, ...args };
+      byCallId.set(id, {
+        name: e.toolName || prev.name,
+        args: merged,
+      });
     }
   }
 
@@ -114,18 +148,39 @@ export function deriveThreadContextFootprint(
 
   for (const { name, args } of byCallId.values()) {
     const base = normalizeToolName(name);
-    const path = pathFromArgs(args);
+    const path = primaryPathFromArgs(args);
+    const allPaths = extraPathsFromArgs(args);
     const q = queryFromArgs(args);
+    const cat = categorizeToolName(name);
 
-    if (["read_file", "read_file_range", "view_file", "drive_read_file"].includes(base)) {
-      if (path) addOrdered(filesRead, seenFile, path);
-    } else if (["write_file", "write_to_file", "str_replace_editor", "edit_file", "replace_file_content"].includes(base)) {
+    const pushReadFiles = () => {
+      for (const p of allPaths.length ? allPaths : path ? [path] : []) {
+        addOrdered(filesRead, seenFile, p);
+      }
+    };
+    const pushDirs = () => {
+      for (const p of allPaths.length ? allPaths : path ? [path] : []) {
+        addOrdered(dirsListed, seenDir, p);
+      }
+    };
+
+    if (["write_file", "write_to_file", "str_replace_editor", "edit_file", "replace_file_content"].includes(base)) {
       if (path) addOrdered(filesWritten, seenWrite, path);
+      for (const p of allPaths) addOrdered(filesWritten, seenWrite, p);
     } else if (["list_files", "list_dir", "glob_files", "glob_file_search"].includes(base)) {
-      if (path) addOrdered(dirsListed, seenDir, path);
-    } else if (categorizeToolName(name) === "search") {
+      pushDirs();
+    } else if (["read_file", "read_file_range", "view_file", "drive_read_file"].includes(base)) {
+      pushReadFiles();
+    } else if (["git_log", "git_diff", "git_blame"].includes(base)) {
+      pushReadFiles();
+    } else if (["describe_structure", "bootstrap_context", "repo_metrics", "dependency_info"].includes(base)) {
+      pushDirs();
+    } else if (cat === "search") {
       if (q) addOrdered(searchQueries, seenSearch, q);
-    } else if (categorizeToolName(name) === "network") {
+      pushReadFiles();
+    } else if (cat === "read") {
+      pushReadFiles();
+    } else if (cat === "network") {
       if (q) addOrdered(networkQueries, seenNet, q);
     }
   }

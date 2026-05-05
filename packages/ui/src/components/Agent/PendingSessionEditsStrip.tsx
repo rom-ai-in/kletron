@@ -21,8 +21,7 @@ export type PendingSessionEditsStripProps = {
 };
 
 /**
- * Lists pending tool approvals for the active session with approve / reject actions.
- * Matches the web Agent “Pending actions” strip so desktop and browser stay consistent.
+ * Pending tool confirmations for the session (approve / reject). Shared by web Agent and desktop.
  */
 export function PendingSessionEditsStrip({
     pendingEdits,
@@ -64,8 +63,7 @@ export function PendingSessionEditsStrip({
                                     <span className="font-medium" title={flushNotice.toolName}>
                                         {formatToolDisplayName(flushNotice.toolName)}
                                     </span>
-                                    . The run continues in
-                                    the thread above.
+                                    . Conversation continues above.
                                 </>
                             )}
                             {flushNotice.kind === "rejected" && (
@@ -79,13 +77,13 @@ export function PendingSessionEditsStrip({
                             )}
                             {flushNotice.kind === "approved_all" && (
                                 <>
-                                    Approved {flushNotice.count} pending action{flushNotice.count === 1 ? "" : "s"}. The
-                                    run continues in the thread above.
+                                    Approved {flushNotice.count} tool{flushNotice.count === 1 ? "" : "s"}. Conversation
+                                    continues above.
                                 </>
                             )}
                             {flushNotice.kind === "rejected_all" && (
                                 <>
-                                    Rejected {flushNotice.count} pending action{flushNotice.count === 1 ? "" : "s"}.
+                                    Rejected {flushNotice.count} tool{flushNotice.count === 1 ? "" : "s"}.
                                 </>
                             )}
                         </p>
@@ -103,7 +101,7 @@ export function PendingSessionEditsStrip({
                     <>
                         <div className="mb-1.5 flex min-w-0 flex-wrap items-center justify-between gap-2">
                             <h3 className="min-w-0 text-[11px] font-bold uppercase tracking-wider text-text-muted">
-                                Pending actions ({pendingEdits.length})
+                                Pending tools ({pendingEdits.length})
                             </h3>
                             <div className="flex flex-shrink-0 gap-1.5">
                                 <button

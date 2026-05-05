@@ -4,6 +4,7 @@ import {
     filterGmailMessagesLocally,
     isGmailMetadataQueryScopeError,
     parseGmailLocalQuery,
+    resolveGoogleWorkspaceUrl,
     type GmailMessageSummary,
 } from "../src/services/googleWorkspaceTools";
 
@@ -21,6 +22,15 @@ const baseMessage: GmailMessageSummary = {
 };
 
 describe("googleWorkspaceTools Gmail fallback helpers", () => {
+    it("preserves absolute Google Workspace URLs and prefixes relative ones exactly once", () => {
+        expect(resolveGoogleWorkspaceUrl("/calendar/v3/users/me/calendarList?maxResults=1")).toBe(
+            "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1"
+        );
+        expect(
+            resolveGoogleWorkspaceUrl("https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1")
+        ).toBe("https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1");
+    });
+
     it("detects the Gmail metadata q-parameter scope error", () => {
         expect(
             isGmailMetadataQueryScopeError(

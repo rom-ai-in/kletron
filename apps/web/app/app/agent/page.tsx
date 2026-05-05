@@ -874,7 +874,6 @@ export default function AgentPage() {
   } = useSessionStream({
     sessionId: activeSessionId,
     selectedGraphId,
-    graphSelectionMode: "manual",
     llmProvider,
     workspaceId: activeWorkspaceId,
     threadApprovalMode,
@@ -1387,16 +1386,18 @@ export default function AgentPage() {
   }, [activeSessionId, handleNewSession, fetchSessions]);
 
   const handleRenameSession = useCallback(async (id: string, title: string) => {
-    try {
-      await fetch(`/api/sessions/${id}/title`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
-      await fetchSessions();
-    } catch (e) {
-      console.error("Failed to rename:", e);
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/title`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: trimmed }),
+    });
+    const raw = await res.json().catch(() => ({})) as { error?: string };
+    if (!res.ok) {
+      throw new Error(raw.error || `Could not rename thread (${res.status})`);
     }
+    await fetchSessions();
   }, [fetchSessions]);
 
   // ── Workspace actions ─────────────────────────────────────────────────
@@ -2143,7 +2144,7 @@ export default function AgentPage() {
           threadApprovalMode={threadApprovalMode}
           onThreadApprovalModeChange={onThreadApprovalSelect}
           threadApprovalLocked={sessionDetail?.source === "automation"}
-          threadApprovalLockedReason="Approval mode is fixed for automation threads."
+          threadApprovalLockedReason="Tool policy mode is fixed for automation threads."
           activeWorkspaceId={activeWorkspaceId}
           planMode={planMode}
           onPlanModeToggle={() => setPlanMode((p) => !p)}
@@ -2221,7 +2222,7 @@ export default function AgentPage() {
         open={fullAutoConfirmOpen}
         onClose={() => setFullAutoConfirmOpen(false)}
         title="Full auto in this chat"
-        subtitle="Tools will run without asking, including file writes and shell commands. Kletron admin actions and your workspace blocklist still require approval."
+        subtitle="Tools run without prompts—including writes, shell, and workspace tools. Your blocklist and per-tool “Always require” still prompt."
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setFullAutoConfirmOpen(false)}>
@@ -2242,7 +2243,7 @@ export default function AgentPage() {
         }
       >
         <p className="text-sm text-text-secondary">
-          You can tighten defaults anytime under{" "}
+          Edit blocklist, defaults, and overrides under{" "}
           <Link href="/app/config/workspace" className="text-accent underline">
             Configuration → Workspace
           </Link>

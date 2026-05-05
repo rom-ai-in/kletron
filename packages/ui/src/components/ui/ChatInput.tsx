@@ -17,7 +17,7 @@ export interface ChatInputProps
   footerLeft?: React.ReactNode;
   footerRight?: React.ReactNode;
   /**
-   * Session controls (graph, model, approvals, etc.) in a condensed row below the card.
+   * Session controls (graph, model, tool policy mode, etc.) in a condensed row below the card.
    * When set, footerLeft/footerRight are ignored and only the textarea + send live in the card.
    */
   sessionStrip?: React.ReactNode;

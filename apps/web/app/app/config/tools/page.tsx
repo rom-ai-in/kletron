@@ -142,11 +142,16 @@ export default function ToolsConfigPage() {
                 <Panel className="mb-4 border-border-subtle p-4">
                     <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                         <div>
-                            <h2 className="text-sm font-semibold text-text-primary">Approval Policy</h2>
+                            <h2 className="text-sm font-semibold text-text-primary">Tool policy</h2>
                             <p className="mt-1 text-xs text-text-secondary">
-                                Read-only tools auto-run for <span className="font-mono">agent</span> and <span className="font-mono">automation</span>.
-                                Repo writes (<span className="font-mono">write_file</span>) require approval.
-                                In automations, approval-required tools are blocked with a fail-fast error.
+                                Defaults live under{" "}
+                                <Link href="/app/config/workspace" className="text-accent underline-offset-2 hover:underline">
+                                    Configuration → Workspace
+                                </Link>
+                                : read-only tools auto-run for allowed sources (default{" "}
+                                <span className="font-mono">agent</span>, <span className="font-mono">automation</span>
+                                ), repo writes queue unless the chat is in full auto, and your blocklist always prompts.
+                                Automations cannot show approval UI—tools that need approval fail fast.
                             </p>
                         </div>
                         <div className="flex gap-2">
@@ -157,10 +162,16 @@ export default function ToolsConfigPage() {
                                 Configure per-graph tools
                             </Link>
                             <Link
+                                href="/app/config/workspace"
+                                className="rounded-md border border-border-subtle bg-bg-elevated px-2.5 py-1.5 text-xs text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
+                            >
+                                Workspace policy
+                            </Link>
+                            <Link
                                 href="/app/agent"
                                 className="rounded-md border border-border-subtle bg-bg-elevated px-2.5 py-1.5 text-xs text-text-secondary transition hover:bg-state-hover hover:text-text-primary"
                             >
-                                Open agent approvals
+                                Open Agent
                             </Link>
                         </div>
                     </div>

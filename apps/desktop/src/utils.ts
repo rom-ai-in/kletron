@@ -24,6 +24,7 @@ export const SETTINGS_SECTIONS = [
   { id: "general", label: "General" },
   { id: "personalization", label: "Personalization" },
   { id: "connectors", label: "Connectors" },
+  { id: "channels", label: "Channels" },
   { id: "account", label: "Account" },
   { id: "skills", label: "Skills" },
   { id: "automations", label: "Automations" },

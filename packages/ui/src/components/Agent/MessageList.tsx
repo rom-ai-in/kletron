@@ -110,7 +110,7 @@ export interface MessageListProps {
     activityEvents?: ActivitySourceEvent[];
     /** ISO time when the current run started (elapsed label on activity strip). */
     runStartedAt?: string | null;
-    /** Tool approvals waiting on the user — shown in-thread with wave emphasis (not in the strip). */
+    /** Pending tool confirmations — in-thread hint (details in the strip below). */
     pendingApprovalCount?: number;
     /** Show tool calls in compact (single-line) mode */
     compactTools?: boolean;
@@ -606,11 +606,11 @@ const MessageListInner: React.FC<MessageListProps> = ({
                         textClassName="font-medium"
                     >
                         {pendingApprovalCount === 1
-                            ? 'Awaiting your approval'
-                            : `Awaiting your approval (${pendingApprovalCount} actions)`}
+                            ? 'Tools need your OK'
+                            : `Tools need your OK (${pendingApprovalCount})`}
                     </AgentStatusShimmerLabel>
                     <p className="text-[11px] text-text-muted">
-                        Use Approve or Reject in the approvals area below.
+                        Approve or reject in the pending strip below. Defaults: Configuration → Workspace.
                     </p>
                 </div>
             )}

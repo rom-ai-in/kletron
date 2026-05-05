@@ -112,11 +112,11 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
         setApprovalsError("");
         try {
             const res = await fetch(`/api/agent-graph-runs/${params.runId}/approvals`);
-            if (!res.ok) throw new Error("Failed to load approvals");
+            if (!res.ok) throw new Error("Failed to load tool confirmations");
             const data = await res.json();
             setPendingApprovals(Array.isArray(data.pending) ? data.pending : []);
         } catch (err: any) {
-            setApprovalsError(err.message || "Failed to load approvals");
+            setApprovalsError(err.message || "Failed to load tool confirmations");
         } finally {
             setApprovalsLoading(false);
         }
@@ -131,11 +131,11 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                throw new Error(data?.error ?? "Failed to update approval");
+                throw new Error(data?.error ?? "Failed to update confirmation");
             }
             await Promise.all([fetchRun(), fetchApprovals()]);
         } catch (err: any) {
-            setApprovalsError(err.message || "Approval failed");
+            setApprovalsError(err.message || "Confirmation failed");
         }
     };
 
@@ -300,7 +300,7 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
 
                 <Panel className="mt-4 p-4">
                     <div className="flex items-center justify-between">
-                        <div className="text-sm font-semibold text-text-primary">Approvals</div>
+                        <div className="text-sm font-semibold text-text-primary">Tool confirmations</div>
                         <div className="flex items-center gap-2">
                             <Button
                                 size="sm"
@@ -332,7 +332,7 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
                             </div>
                             <div className="mt-2 space-y-2">
                                 {pendingApprovals.length === 0 && (
-                                    <div className="text-xs text-text-muted">No pending approvals.</div>
+                                    <div className="text-xs text-text-muted">No tools waiting on you.</div>
                                 )}
                                 {pendingApprovals.map((item) => (
                                     <div key={item.id} className="rounded-md border border-border-subtle bg-bg-surface p-3">
@@ -401,7 +401,7 @@ export default function AgentGraphRunClient({ params }: { params: { id: string; 
                                     </div>
                                 ))}
                                 {grantedApprovals.length === 0 && rejectedApprovals.length === 0 && (
-                                    <div className="text-xs text-text-muted">No executed approvals yet.</div>
+                                    <div className="text-xs text-text-muted">No completed confirmations yet.</div>
                                 )}
                             </div>
                         </div>

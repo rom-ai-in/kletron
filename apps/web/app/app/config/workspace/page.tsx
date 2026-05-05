@@ -87,7 +87,7 @@ export default function WorkspaceConfigPage() {
                 };
                 if (!res.ok) {
                     if (!cancelled) {
-                        setToolApprovalError(raw.error || `Could not load tool approval policy (HTTP ${res.status}).`);
+                        setToolApprovalError(raw.error || `Could not load tool policy (HTTP ${res.status}).`);
                         setPolicyMeta(null);
                         setNeverToolsInput(FALLBACK_TOOL_APPROVAL_DEFAULTS.neverTools);
                         setReadonlySourcesInput(FALLBACK_TOOL_APPROVAL_DEFAULTS.readonlySources);
@@ -118,7 +118,7 @@ export default function WorkspaceConfigPage() {
                 }
             } catch {
                 if (!cancelled) {
-                    setToolApprovalError("Network error — could not load tool approval policy.");
+                    setToolApprovalError("Network error — could not load tool policy.");
                     setPolicyMeta(null);
                     setNeverToolsInput(FALLBACK_TOOL_APPROVAL_DEFAULTS.neverTools);
                     setReadonlySourcesInput(FALLBACK_TOOL_APPROVAL_DEFAULTS.readonlySources);
@@ -169,9 +169,9 @@ export default function WorkspaceConfigPage() {
                 throw new Error(saved.error || `Save failed (${res.status})`);
             }
             if (saved.policyMeta) setPolicyMeta(saved.policyMeta);
-            setMessage({ text: "Tool approval settings saved.", type: "success" });
+            setMessage({ text: "Tool policy saved.", type: "success" });
         } catch (e: any) {
-            setMessage({ text: e?.message || "Failed to save tool approval settings", type: "error" });
+            setMessage({ text: e?.message || "Failed to save tool policy", type: "error" });
         } finally {
             setToolApprovalSaving(false);
         }
@@ -179,13 +179,11 @@ export default function WorkspaceConfigPage() {
 
     const defaultModeHint: Record<ThreadApprovalMode, string> = {
         inherit:
-            policyMeta?.scope === "organization"
-                ? "New threads follow your organization’s rules below. You can still pick a different mode for each chat in Agent."
-                : "New threads follow the deployment-wide rules below. You can still pick a different mode for each chat in Agent.",
+            "New chats use the policy below. Override per chat in Agent anytime.",
         confirm_everything:
-            "New threads will ask before running any tool. Change anytime in Agent or here.",
+            "New chats prompt before every tool. Override per chat in Agent anytime.",
         full_auto_thread:
-            "New threads start in full auto for that conversation. Admin tools and your blocklist below still need approval.",
+            "New chats auto-run tools. Only your blocklist and per-tool “Always require” still prompt.",
     };
 
     const handleWorkspaceCreated = useCallback(
@@ -242,8 +240,8 @@ export default function WorkspaceConfigPage() {
             <Modal
                 open={fullAutoDefaultConfirmOpen}
                 onClose={() => setFullAutoDefaultConfirmOpen(false)}
-                title="Default full auto for new threads"
-                subtitle="New chats will start with tools running automatically for that thread (except your blocklist and Kletron admin tools). You can still change mode per chat in Agent."
+                title="Default full auto for new chats"
+                subtitle="New chats auto-run tools—including writes and shell. Your blocklist and per-tool “Always require” still prompt. You can change mode per chat in Agent."
                 footer={
                     <div className="flex justify-end gap-2">
                         <Button variant="ghost" onClick={() => setFullAutoDefaultConfirmOpen(false)}>
@@ -265,7 +263,7 @@ export default function WorkspaceConfigPage() {
                 }
             >
                 <p className="text-sm text-text-secondary">
-                    Applies to new sessions only — same guardrail pattern as choosing full auto on the Agent page.
+                    Applies only to new Agent sessions. Same guardrails as enabling full auto from Agent.
                 </p>
             </Modal>
 
@@ -308,7 +306,7 @@ export default function WorkspaceConfigPage() {
                         <div className="min-w-0">
                             <h1 className="truncate text-lg font-semibold text-text-primary">Workspace</h1>
                             <p className="text-sm text-text-muted">
-                                Working folders; tool approval follows your organization policy (or deployment-wide when no org context).
+                                Working folders and tool policy (organization when applicable, otherwise deployment-wide).
                             </p>
                         </div>
                     </div>
@@ -431,7 +429,7 @@ export default function WorkspaceConfigPage() {
                             <InlineAddWorkspaceForm onCreated={handleWorkspaceCreated} />
                         </div>
 
-                        {/* Tool approvals */}
+                        {/* Tool policy */}
                         <div className="xl:col-span-7">
                             <Panel className="overflow-hidden p-0">
                                 <div className="border-b border-border-subtle bg-bg-surface px-5 py-4">
@@ -439,7 +437,7 @@ export default function WorkspaceConfigPage() {
                                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bg-elevated text-text-secondary">
                                             <ShieldCheck className="h-4 w-4" aria-hidden />
                                         </div>
-                                        <h2 className="text-sm font-semibold text-text-primary">Tool approvals</h2>
+                                        <h2 className="text-sm font-semibold text-text-primary">Tool policy</h2>
                                         <Badge variant="outline" size="sm" uppercase={false}>
                                             {policyMeta?.scope === "organization" ? "Organization" : "Deployment"}
                                         </Badge>
@@ -451,21 +449,21 @@ export default function WorkspaceConfigPage() {
                                     </div>
                                     <p className="mt-2 text-xs text-text-secondary">
                                         {policyMeta?.scope === "organization"
-                                            ? "Your organization’s policy; changes do not affect other tenants. Per-chat overrides stay in Agent."
-                                            : "Deployment-level policy (no organization context). Per-chat overrides stay in Agent."}
+                                            ? "Organization scope—other tenants are unchanged. Per-chat mode is set in Agent."
+                                            : "Deployment-wide when no org context. Per-chat mode is set in Agent."}
                                     </p>
                                     <Link
                                         href="/app/agent"
                                         className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-text-secondary hover:text-text-primary"
                                     >
-                                        Open Agent for this conversation only
+                                        Open Agent for per-chat overrides
                                         <ArrowRight className="h-3 w-3" aria-hidden />
                                     </Link>
                                 </div>
 
                                 <div className="space-y-6 bg-bg-app p-5">
                                     {toolApprovalLoading ? (
-                                        <p className="text-sm text-text-muted">Loading approval settings…</p>
+                                        <p className="text-sm text-text-muted">Loading tool policy…</p>
                                     ) : (
                                         <>
                                             {toolApprovalError ? (
@@ -494,7 +492,7 @@ export default function WorkspaceConfigPage() {
                                                                     if (!res.ok) {
                                                                         setToolApprovalError(
                                                                             raw.error ||
-                                                                                `Could not load tool approval policy (HTTP ${res.status}).`,
+                                                                                `Could not load tool policy (HTTP ${res.status}).`,
                                                                         );
                                                                         return;
                                                                     }
@@ -526,7 +524,7 @@ export default function WorkspaceConfigPage() {
                                                                 })
                                                                 .catch(() => {
                                                                     setToolApprovalError(
-                                                                        "Network error — could not load tool approval policy.",
+                                                                        "Network error — could not load tool policy.",
                                                                     );
                                                                 })
                                                                 .finally(() => setToolApprovalLoading(false));
@@ -543,7 +541,7 @@ export default function WorkspaceConfigPage() {
                                                 </div>
                                                 <p className="text-xs text-text-muted">{defaultModeHint[defaultThreadMode]}</p>
                                                 <label className="block space-y-2">
-                                                    <span className="sr-only">Default approval mode</span>
+                                                    <span className="sr-only">Default tool policy for new chats</span>
                                                     <select
                                                         className={selectClass}
                                                         value={defaultThreadMode}
@@ -565,10 +563,10 @@ export default function WorkspaceConfigPage() {
                                                         {THREAD_APPROVAL_MODES.map((m) => (
                                                             <option key={m} value={m}>
                                                                 {m === "inherit"
-                                                                    ? "Server rules only (recommended)"
+                                                                    ? "Workspace policy (recommended)"
                                                                     : m === "confirm_everything"
                                                                       ? "Ask before every tool"
-                                                                      : "Full auto for that new thread"}
+                                                                      : "Full auto for new chats"}
                                                             </option>
                                                         ))}
                                                     </select>
@@ -604,10 +602,10 @@ export default function WorkspaceConfigPage() {
 
                                             <section className="space-y-2 border-t border-border-subtle pt-6">
                                                 <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                                                    Always require approval
+                                                    Blocklist
                                                 </p>
                                                 <p className="text-xs text-text-muted">
-                                                    Tool names that never run without a prompt (comma-separated, case-insensitive).
+                                                    Tool names that always wait for you (comma-separated). Still enforced in full auto.
                                                 </p>
                                                 <input
                                                     type="text"
@@ -677,7 +675,7 @@ export default function WorkspaceConfigPage() {
                                                             </button>
                                                         </div>
                                                         <p className="text-xs text-text-muted">
-                                                            Force always require or always auto-approve for a tool name. “Default” uses normal policy.
+                                                            Per tool: Always prompt, Always auto-run, or Default (follow sections above). “Always require” wins over full auto.
                                                         </p>
                                                         <div className="space-y-2">
                                                             {overrideRows.map((row) => (
@@ -762,7 +760,7 @@ export default function WorkspaceConfigPage() {
 
                                             <div className="flex flex-col-reverse gap-3 border-t border-border-subtle pt-6 sm:flex-row sm:items-center sm:justify-between">
                                                 <p className="text-[11px] text-text-muted">
-                                                    Saves to server config; agents pick this up on the next tool call.
+                                                    Saved on the server; the next tool call uses this policy.
                                                 </p>
                                                 <Button
                                                     variant="primary"
@@ -771,7 +769,7 @@ export default function WorkspaceConfigPage() {
                                                     onClick={() => void saveToolApproval()}
                                                     disabled={toolApprovalSaving || Boolean(toolApprovalError)}
                                                 >
-                                                    {toolApprovalSaving ? "Saving…" : "Save tool approvals"}
+                                                    {toolApprovalSaving ? "Saving…" : "Save policy"}
                                                 </Button>
                                             </div>
                                         </>

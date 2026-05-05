@@ -175,11 +175,18 @@ export const normalizeRunSource = (source?: string): NormalizedRunSource => {
     return "unknown";
 };
 
+/** Kletron admin tools whose names indicate read-only workspace queries (`list_*`, `get_*`). */
+export function isKletronReadonlyAdminToolName(toolName: string): boolean {
+    const t = String(toolName ?? "").trim().toLowerCase();
+    return /^kletron_(list|get)_/.test(t);
+}
+
 export const classifyTool = (toolName: string): ToolClass => {
     const normalizedToolName = String(toolName).trim().toLowerCase();
     if (READONLY_TOOLS.has(normalizedToolName)) return "readonly";
     if (EXECUTION_TOOLS.has(normalizedToolName)) return "execution";
     if (WRITE_REPO_TOOLS.has(normalizedToolName)) return "write_repo";
+    if (isKletronReadonlyAdminToolName(normalizedToolName)) return "readonly";
     return "unknown";
 };
 
@@ -349,6 +356,9 @@ export function isKletronAdminToolName(toolName: string): boolean {
 /**
  * Applies per-thread (AgentGraphRun) approval mode on top of workspace policy.
  * Automation runs ignore thread modes (caller should pass mode only for interactive agent).
+ *
+ * `full_auto_thread`: promotes `requires_approval` → `auto_approve` except workspace
+ * never-auto list and per-tool `always_require`. No separate carve-out for Kletron tools.
  */
 export function applyThreadApprovalOverride(
     base: ToolApprovalPolicyResult,
@@ -379,7 +389,6 @@ export function applyThreadApprovalOverride(
         if (base.decision !== "requires_approval") return base;
         if (never.has(tool)) return base;
         if (override === "always_require") return base;
-        if (isKletronAdminToolName(tool)) return base;
         return {
             ...base,
             decision: "auto_approve",

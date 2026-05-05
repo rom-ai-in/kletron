@@ -148,44 +148,65 @@ export function useThreads(
     setEditingThreadTitle("");
   }
 
+  /** Rename via API using explicit id (ProjectSidebar commits here — never rely on async React state). */
+  const renameThread = useCallback(
+    async (threadId: string, rawTitle: string): Promise<void> => {
+      const nextTitle = rawTitle.trim();
+      if (!threadId || !nextTitle) return;
+      setEditingThreadSaving(true);
+      try {
+        const token = await getAccessToken();
+        if (!token) throw new Error("Authentication expired.");
+        const res = await fetch(
+          `${backendUrlTrimmed}/api/sessions/${encodeURIComponent(threadId)}/title`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+              ...(activeWorkspaceId ? { "x-workspace-id": activeWorkspaceId } : {}),
+            },
+            body: JSON.stringify({ title: nextTitle }),
+          },
+        );
+        if (!res.ok) {
+          const text = await res.text();
+          let msg = text || `Failed to update title (${res.status})`;
+          try {
+            const j = JSON.parse(text) as { error?: string };
+            if (j?.error) msg = j.error;
+          } catch {
+            /* plain text body */
+          }
+          throw new Error(msg);
+        }
+        setThreads((prev) =>
+          prev.map((thread) => (thread.id === threadId ? { ...thread, title: nextTitle } : thread)),
+        );
+      } catch (err) {
+        console.warn("[useThreads] renameThread failed", err);
+        throw err;
+      } finally {
+        setEditingThreadSaving(false);
+      }
+    },
+    [backendUrlTrimmed, getAccessToken, activeWorkspaceId],
+  );
+
   async function saveEditedThreadTitle() {
     if (!editingThreadId) return;
     const nextTitle = editingThreadTitle.trim();
     if (!nextTitle) return;
-    setEditingThreadSaving(true);
     try {
-      const token = await getAccessToken();
-      if (!token) throw new Error("Authentication expired.");
-      const res = await fetch(`${backendUrlTrimmed}/api/sessions/${editingThreadId}/title`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          ...(activeWorkspaceId ? { "x-workspace-id": activeWorkspaceId } : {}),
-        },
-        body: JSON.stringify({ title: nextTitle }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Failed to update title (${res.status})`);
-      }
-      setThreads((prev) =>
-        prev.map((thread) =>
-          thread.id === editingThreadId ? { ...thread, title: nextTitle } : thread,
-        ),
-      );
+      await renameThread(editingThreadId, nextTitle);
       cancelEditThread();
-    } catch (err) {
-      console.warn("[useThreads] Failed to save thread title", err);
-    } finally {
-      setEditingThreadSaving(false);
+    } catch {
+      /* renameThread already logged */
     }
   }
 
   async function archiveThread(threadId: string) {
     if (!threadId) return;
-    const confirmed = window.confirm("Archive this thread?");
-    if (!confirmed) return;
     setThreadActionId(threadId);
     try {
       const token = await getAccessToken();
@@ -215,8 +236,6 @@ export function useThreads(
 
   async function deleteThread(threadId: string) {
     if (!threadId) return;
-    const confirmed = window.confirm("Delete this thread permanently? This cannot be undone.");
-    if (!confirmed) return;
     setThreadActionId(threadId);
     try {
       const token = await getAccessToken();
@@ -367,6 +386,7 @@ export function useThreads(
     startEditThread,
     cancelEditThread,
     saveEditedThreadTitle,
+    renameThread,
     archiveThread,
     deleteThread,
     resetThreads,

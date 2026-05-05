@@ -12,7 +12,6 @@ import {
 
 const DEFAULT_SETTINGS_TOGGLES: SettingsToggles = {
   preventSleep: true,
-  requireCmdEnter: true,
   compactDensity: false,
   opaqueBackground: false,
   pointerCursor: true,
@@ -24,8 +23,9 @@ function loadStoredSettingsToggles(): SettingsToggles {
   try {
     const raw = localStorage.getItem(SETTINGS_TOGGLES_STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS_TOGGLES;
-    const parsed = JSON.parse(raw) as Partial<SettingsToggles>;
-    return { ...DEFAULT_SETTINGS_TOGGLES, ...parsed };
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const { requireCmdEnter: _legacyRequireCmdEnter, ...rest } = parsed;
+    return { ...DEFAULT_SETTINGS_TOGGLES, ...(rest as Partial<SettingsToggles>) };
   } catch {
     return DEFAULT_SETTINGS_TOGGLES;
   }

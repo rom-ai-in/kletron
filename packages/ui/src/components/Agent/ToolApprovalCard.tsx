@@ -45,7 +45,7 @@ export interface ToolApprovalCardProps {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * PolicyDropdown — inline "Always approve" / "Always ask" / "Default"
+ * PolicyDropdown — aligns with Workspace tool policy overrides.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 function PolicyDropdown({
@@ -63,9 +63,9 @@ function PolicyDropdown({
     const [saving, setSaving] = useState(false);
 
     const options: { value: ApprovalPolicyValue; label: string; icon: React.ElementType; color: string }[] = [
-        { value: 'always_approve', label: 'Always approve', icon: ShieldCheck, color: 'text-status-success-text' },
-        { value: 'always_require', label: 'Always ask', icon: Shield, color: 'text-status-warning-text' },
-        { value: 'default', label: 'Default policy', icon: Shield, color: 'text-text-muted' },
+        { value: 'always_approve', label: 'Always auto-approve', icon: ShieldCheck, color: 'text-status-success-text' },
+        { value: 'always_require', label: 'Always require', icon: Shield, color: 'text-status-warning-text' },
+        { value: 'default', label: 'Workspace policy', icon: Shield, color: 'text-text-muted' },
     ];
 
     const current = options.find((o) => o.value === currentPolicy) ?? options[2];
@@ -284,7 +284,7 @@ export function ToolApprovalCard({
             {onPolicyChange && (
                 <div className="flex items-center justify-between px-3 py-1.5 bg-bg-app/40">
                     <span className="text-[9px] text-text-muted uppercase tracking-wider font-semibold">
-                        Policy for {formatToolDisplayName(toolName)}
+                        Tool policy · {formatToolDisplayName(toolName)}
                     </span>
                     <PolicyDropdown
                         toolName={toolName}

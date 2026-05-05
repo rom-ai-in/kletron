@@ -228,7 +228,7 @@ export async function probeGoogleWorkspaceConnection(
                 messages?: Array<{ id?: string; threadId?: string }>;
             }>(
                 auth,
-                `${GMAIL_API_BASE}/gmail/v1/users/me/messages?maxResults=1&q=in%3Ainbox&includeSpamTrash=false`
+                `${GMAIL_API_BASE}/gmail/v1/users/me/messages?maxResults=1&includeSpamTrash=false`
             );
             return {
                 ok: true,

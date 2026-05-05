@@ -9,6 +9,7 @@ const resolveGraphForStage = vi.hoisted(() => vi.fn());
 const listGraphs = vi.hoisted(() => vi.fn());
 vi.mock("@kletron/server/services/agentGraphService", () => ({
     agentGraphService: {
+        getGraph: (...args: unknown[]) => resolveGraphForStage(...args),
         resolveGraphForStage: (...args: unknown[]) => resolveGraphForStage(...args),
         listGraphs: (...args: unknown[]) => listGraphs(...args),
     },
@@ -185,13 +186,12 @@ describe("POST /api/sessions", () => {
         });
     });
 
-    it("keeps the explicit graph in manual mode even for a Sentry-like message", async () => {
+    it("uses the requested graph directly even for a Sentry-like message", async () => {
         const req = new Request("http://localhost/api/sessions", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
                 graphId: coderGraph._id,
-                graphSelectionMode: "manual",
                 message: "utilise sentry et dis moi ou on en est",
                 workMode: "work",
                 workspaceId: "workspace-1",
@@ -203,89 +203,20 @@ describe("POST /api/sessions", () => {
         const chunks = await readNdjson(res);
         expect(chunks[0]?.type).toBe("init");
         expect(chunks[0]?.payload.graphId).toBe(coderGraph._id);
-        expect(chunks[0]?.payload.route?.source).toBe("explicit_graph");
         expect(chunks[0]?.payload.skills).toEqual({
             availableSkills: [],
             loadedSkills: [],
             pinnedSkills: [],
         });
-        expect(updateRunStatus.mock.calls[0]?.[2]?.state?.route?.source).toBe("explicit_graph");
+        expect(updateRunStatus.mock.calls[0]?.[2]?.state?.route).toBeUndefined();
         expect(executeRunStreaming.mock.calls[0]?.[1]?.workspaceContextUserId).toBe("user-1");
     });
 
-    it("auto-routes to the ops graph for a vague Sentry request when Sentry is active", async () => {
-        resolveWorkspaceCapabilities.mockResolvedValueOnce({
-            workspaceId: "workspace-1",
-            enabledSkills: [],
-            enabledTools: [],
-            enabledToolSet: new Set<string>(),
-            enabledIntegrationProviderIds: ["sentry"],
-            externalMcpServers: [],
-        });
-
+    it("rejects session creation when graphId is missing", async () => {
         const req = new Request("http://localhost/api/sessions", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
-                graphSelectionMode: "auto",
-                message: "utilise sentry et dis moi ou on en est avec les erreurs",
-                workMode: "work",
-                workspaceId: "workspace-1",
-            }),
-        });
-
-        const res = await POST(req);
-        const chunks = await readNdjson(res);
-        expect(chunks[0]?.payload.graphId).toBe(opsGraph._id);
-        expect(chunks[0]?.payload.route?.source).toBe("auto_router");
-        expect(chunks[0]?.payload.route?.resolvedGraphName).toBe(opsGraph.name);
-    });
-
-    it("prefers overrideGraphId over auto-routing and workspace channel default", async () => {
-        resolveWorkspaceCapabilities.mockResolvedValueOnce({
-            workspaceId: "workspace-1",
-            enabledSkills: [],
-            enabledTools: [],
-            enabledToolSet: new Set<string>(),
-            enabledIntegrationProviderIds: ["sentry"],
-            externalMcpServers: [],
-        });
-        workspaceChannelSettingsGet.mockResolvedValueOnce({
-            enabled: true,
-            defaultGraphId: gtmGraph._id,
-        });
-
-        const req = new Request("http://localhost/api/sessions", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-                graphSelectionMode: "auto",
-                overrideGraphId: coderGraph._id,
-                channel: "slack",
-                message: "incident sentry en prod",
-                workMode: "work",
-                workspaceId: "workspace-1",
-            }),
-        });
-
-        const res = await POST(req);
-        const chunks = await readNdjson(res);
-        expect(chunks[0]?.payload.graphId).toBe(coderGraph._id);
-        expect(chunks[0]?.payload.route?.source).toBe("channel_override");
-    });
-
-    it("falls back to the workspace channel default when auto-routing is not confident", async () => {
-        workspaceChannelSettingsGet.mockResolvedValueOnce({
-            enabled: true,
-            defaultGraphId: gtmGraph._id,
-        });
-
-        const req = new Request("http://localhost/api/sessions", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-                graphSelectionMode: "auto",
-                channel: "slack",
                 message: "bonjour",
                 workMode: "work",
                 workspaceId: "workspace-1",
@@ -293,8 +224,24 @@ describe("POST /api/sessions", () => {
         });
 
         const res = await POST(req);
-        const chunks = await readNdjson(res);
-        expect(chunks[0]?.payload.graphId).toBe(gtmGraph._id);
-        expect(chunks[0]?.payload.route?.source).toBe("workspace_channel_default");
+        expect(res.status).toBe(400);
+    });
+
+    it("returns 404 when the requested graph does not exist", async () => {
+        resolveGraphForStage.mockResolvedValueOnce(null);
+
+        const req = new Request("http://localhost/api/sessions", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+                graphId: "000000000000000000000099",
+                message: "incident sentry en prod",
+                workMode: "work",
+                workspaceId: "workspace-1",
+            }),
+        });
+
+        const res = await POST(req);
+        expect(res.status).toBe(404);
     });
 });

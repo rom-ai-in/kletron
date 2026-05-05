@@ -151,23 +151,24 @@ export class AgentGraphService {
     }
 
     /**
-     * Resolve a stage `graphId`: valid Mongo ObjectId loads that graph; legacy
-     * preset strings (e.g. `simple_react`, `audit`) or missing graphs fall back
-     * to a canonical single-node graph (Coder → Explorer → Planner → Company Growth) — same behaviour as `runWorkflow`.
+     * Resolve a stage `graphId`.
+     *
+     * - When a concrete graph id is provided, resolve that graph strictly.
+     *   Missing or invalid ids return null.
+     * - Only when no graph id is provided do we fall back to a canonical
+     *   single-node graph.
      */
     async resolveGraphForStage(graphId?: string): Promise<AgentGraphDefinition | null> {
         let graph: AgentGraphDefinition | null = null;
-        if (graphId && OBJECTID_HEX24_RE.test(graphId)) {
-            graph = await this.getGraph(graphId);
+        if (graphId) {
+            if (!OBJECTID_HEX24_RE.test(graphId)) {
+                return null;
+            }
+            return await this.getGraph(graphId);
         }
         if (!graph) {
             const graphs = await this.listGraphs();
             graph = pickDefaultStageGraph(graphs) ?? null;
-            if (graph && graphId && !OBJECTID_HEX24_RE.test(graphId)) {
-                console.info(
-                    `[AgentGraph] Resolved legacy graphId="${graphId}" → "${graph.name}" (${graph._id})`
-                );
-            }
         }
         return graph;
     }

@@ -97,12 +97,20 @@ export async function resolveChannelRouting(params: {
         graphId = ctx.graphOverrideId.trim();
     }
 
-    const graph = await agentGraphService.resolveGraphForStage(graphId || undefined);
+    if (!graphId) {
+        return {
+            ok: false,
+            reason: "no_graph",
+            message: `No default graph is configured for workspace "${chosen.name ?? chosen._id}". Configure one before using this messenger channel.`,
+        };
+    }
+
+    const graph = await agentGraphService.getGraph(graphId);
     if (!graph?._id) {
         return {
             ok: false,
             reason: "no_graph",
-            message: "No agent graph is available. Seed or create a graph in Kletron first.",
+            message: `Configured graph ${graphId} was not found. Update the messenger channel configuration.`,
         };
     }
     graphId = graph._id.toString();

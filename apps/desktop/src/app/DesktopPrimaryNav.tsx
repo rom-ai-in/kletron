@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { LayoutGrid, Zap } from "lucide-react";
 import type { ActiveView } from "../types";
 
@@ -14,33 +15,40 @@ const ITEMS: Item[] = [
 type Props = {
   activeView: ActiveView;
   onSelect: (view: DesktopPrimaryNavId) => void;
+  /** Right-aligned controls (e.g. thread log export). */
+  trailing?: ReactNode;
 };
 
-export function DesktopPrimaryNav({ activeView, onSelect }: Props) {
+export function DesktopPrimaryNav({ activeView, onSelect, trailing }: Props) {
   return (
     <nav
       className="flex shrink-0 items-center gap-1 border-b border-border-subtle bg-bg-surface/80 px-3 py-1.5"
       aria-label="Primary navigation"
     >
-      {ITEMS.map(({ id, label, icon: Icon }) => {
-        const current = activeView === id;
-        return (
-          <button
-            key={id}
-            type="button"
-            onClick={() => onSelect(id)}
-            aria-current={current ? "page" : undefined}
-            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-              current
-                ? "bg-state-selected text-text-primary"
-                : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
-            }`}
-          >
-            <Icon className="h-3.5 w-3.5" aria-hidden />
-            {label}
-          </button>
-        );
-      })}
+      <div className="flex min-w-0 flex-1 items-center gap-1">
+        {ITEMS.map(({ id, label, icon: Icon }) => {
+          const current = activeView === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onSelect(id)}
+              aria-current={current ? "page" : undefined}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                current
+                  ? "bg-state-selected text-text-primary"
+                  : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" aria-hidden />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      {trailing ? (
+        <div className="flex shrink-0 items-center app-region-no-drag">{trailing}</div>
+      ) : null}
     </nav>
   );
 }

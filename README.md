@@ -96,7 +96,8 @@ For **hosted Kletron + real files on your laptop**, see **[docs/workspace-local-
 
 1. **HTTPS URL** — Telegram requires a public `https://` endpoint. Local dev: use a tunnel (ngrok, Cloudflare Tunnel, etc.) toward your Next.js port (default `3000`).
 2. **Secrets** — In the app: **Configuration → Messenger channels**. Save the bot token there (requires `KLETRON_CHANNEL_SECRETS_KEY` on the server) or set `CHANNEL_TELEGRAM_BOT_TOKEN` in `.env`. Optionally set `CHANNEL_TELEGRAM_WEBHOOK_SECRET` and the same value as `secret_token` when registering the webhook.
-3. **Register the webhook** — Call Telegram Bot API `setWebhook` with `url={NEXT_PUBLIC_APP_URL}/api/webhooks/channels/telegram` and optional `secret_token`. Example:
+3. **GCP prod (`kletron` project)** — Put Telegram vars in repo-root `.env`, then run `gcloud config set project kletron` and `python3 infra/gcp/provision_secrets.py`. That creates Secret Manager entries (`kletron-channel-telegram-*`) and binds **Cloud Run `kletron-web`**. Cloud Build deploys attach the same secrets if they already exist. Scripts refuse GCP project IDs containing `numezis`.
+4. **Register the webhook** — After Cloud Run has the token + webhook secret, run `./infra/gcp/set-telegram-webhook.sh` (reads `.env`, defaults to `https://www.kletron.com`) or call Telegram manually:
 
    ```bash
    curl -sS "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
@@ -104,10 +105,10 @@ For **hosted Kletron + real files on your laptop**, see **[docs/workspace-local-
      -d "secret_token=<same as CHANNEL_TELEGRAM_WEBHOOK_SECRET>"
    ```
 
-4. **Link your account** — Same screen: enter your Telegram user id and link so routing can find your Kletron user.
-5. **Workspace & graph** — Set the workspace default graph in channel settings; in Telegram use `/switch`, `/graphs`, `/graph clear` for per-chat overrides.
-6. **Queue** — By default, webhook updates are stored in MongoDB (`channel_inbound_jobs`) and drained FIFO so multiple server instances do not drop work. For single-process in-process handling only, set `CHANNEL_TELEGRAM_QUEUE_BACKEND=memory`.
-7. **Tool approvals** — New Telegram runs default to `CHANNEL_TELEGRAM_THREAD_APPROVAL_MODE=full_auto_thread` so read-only tools run without the web UI; set `confirm_everything` if you want every tool to queue for approval (you would approve in the Kletron web app, not in Telegram).
+5. **Link your account** — In the web app **Messenger channels**: enter your Telegram user id and link so routing can find your Kletron user (required — otherwise « not linked »).
+6. **Workspace & graph** — In **Messenger channels**, pick the workspace and set **default agent graph** + **Telegram enabled**. In Telegram use `/switch`, `/graphs`, `/graph clear` for per-chat overrides.
+7. **Queue** — By default, webhook updates are stored in MongoDB (`channel_inbound_jobs`) and drained FIFO so multiple server instances do not drop work. For single-process in-process handling only, set `CHANNEL_TELEGRAM_QUEUE_BACKEND=memory`.
+8. **Tool approvals** — New Telegram runs default to `CHANNEL_TELEGRAM_THREAD_APPROVAL_MODE=full_auto_thread` so read-only tools run without the web UI; set `confirm_everything` if you want every tool to queue for approval (you would approve in the Kletron web app, not in Telegram).
 
 See **`env.example`** for all related variables.
 

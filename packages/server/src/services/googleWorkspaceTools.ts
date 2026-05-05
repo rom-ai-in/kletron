@@ -56,6 +56,12 @@ function buildGoogleUrl(base: string, path: string, params?: Record<string, stri
     return url.toString();
 }
 
+export function resolveGoogleWorkspaceUrl(pathOrUrl: string): string {
+    const trimmed = pathOrUrl.trim();
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `${GOOGLE_API_BASE}${trimmed}`;
+}
+
 function resolveGoogleWorkspaceId(workspaceId?: string): string {
     const trimmed = workspaceId?.trim() ?? "";
     if (trimmed) return trimmed;
@@ -463,7 +469,7 @@ async function gmailModifyLabels(auth: GoogleWorkspaceAuth, input: {
 }
 
 async function calendarJson<T>(auth: GoogleWorkspaceAuth, path: string, init: RequestInit = {}): Promise<T> {
-    return await googleJson<T>(auth, `${GOOGLE_API_BASE}${path}`, init);
+    return await googleJson<T>(auth, resolveGoogleWorkspaceUrl(path), init);
 }
 
 function normalizeCalendarTimeBlock(input: string | Record<string, unknown>, fallbackTimeZone?: string) {
@@ -597,7 +603,9 @@ async function driveReadFile(auth: GoogleWorkspaceAuth, input: {
         }
         const exported = await googleText(
             auth,
-            `/drive/v3/files/${encodeURIComponent(input.fileId)}/export?mimeType=${encodeURIComponent(exportMimeType)}`,
+            resolveGoogleWorkspaceUrl(
+                `/drive/v3/files/${encodeURIComponent(input.fileId)}/export?mimeType=${encodeURIComponent(exportMimeType)}`
+            ),
             {
                 headers: {
                     Accept: exportMimeType,
@@ -617,7 +625,9 @@ async function driveReadFile(auth: GoogleWorkspaceAuth, input: {
     ) {
         const downloaded = await googleText(
             auth,
-            `/drive/v3/files/${encodeURIComponent(input.fileId)}?alt=media&supportsAllDrives=true`,
+            resolveGoogleWorkspaceUrl(
+                `/drive/v3/files/${encodeURIComponent(input.fileId)}?alt=media&supportsAllDrives=true`
+            ),
             {}
         );
         content = downloaded.text;

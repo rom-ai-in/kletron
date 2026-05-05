@@ -57,7 +57,7 @@ export default function McpMarketingPage() {
                         <code className="rounded bg-bg-elevated px-1.5 py-0.5 font-mono text-[0.85em] text-text-secondary">
                             serverSlug__toolName
                         </code>{' '}
-                        so logs and approvals stay readable.
+                        so logs and tool traces stay easy to read.
                     </MarketingLead>
                     <EarlyAccessBadge />
                 </div>

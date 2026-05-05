@@ -1,7 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import type { ResearchDepthId } from "@kletron/shared/researchDepth";
-import type { GraphRouteInfo } from "@kletron/shared/chatTypes";
 import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
 import type { AgentEvent } from "@kletron/shared/types";
 
@@ -165,9 +164,6 @@ export type AgentGraphState = {
     confidence?: unknown;
     finalSummary?: string;
     nextSteps?: string[];
-    route?: GraphRouteInfo & {
-        next?: string;
-    };
     conversationSummary?: AgentConversationSummary;
     contextAssembly?: {
         dynamicItemCount?: number;

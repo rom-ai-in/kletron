@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Brain } from "lucide-react";
 import {
   Button,
@@ -19,7 +20,7 @@ import { DesktopPrimaryNav } from "./DesktopPrimaryNav";
 import { AccountView } from "./AccountView";
 import { PORTAL_LINK_GROUPS } from "../portalLinks";
 import { SETTINGS_SECTIONS, formatRelativeTime } from "../utils";
-import { SettingsCard, DeviceOnlyPortalBanner } from "../components/SettingsCard";
+import { SettingsCard, DeviceOnlyPortalBanner, PortalBrowserBanner } from "../components/SettingsCard";
 import type { ActiveView, SettingsSectionId, SettingsToggles, EnvVariable, AgentGraphSummary } from "../types";
 
 type SkillsHookBindings = {
@@ -35,6 +36,17 @@ type AutomationsHookLike = {
   error: string | null;
   remove: (id: string) => Promise<void>;
   runNow: (id: string) => Promise<string | undefined>;
+};
+
+type ChannelsAppCredentialsJson = {
+  encryptionConfigured?: boolean;
+  telegram?: { telegramBotConfigured: boolean; telegramWebhookSecretConfigured: boolean };
+  error?: string;
+};
+
+type ChannelsWorkspaceTelegramJson = {
+  enabled?: boolean;
+  defaultGraphId?: string;
 };
 
 type Props = {
@@ -82,6 +94,8 @@ type Props = {
   };
   envVariables: EnvVariable[];
   setEnvVariables: Dispatch<SetStateAction<EnvVariable[]>>;
+  /** Authenticated fetch (Bearer + workspace header). Used for Channels status. */
+  apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
 };
 
 export function DesktopSettingsView({
@@ -120,7 +134,56 @@ export function DesktopSettingsView({
   agentSession,
   envVariables,
   setEnvVariables,
+  apiFetch,
 }: Props) {
+  const [channelsSnap, setChannelsSnap] = useState<{
+    loading: boolean;
+    error: string | null;
+    app: {
+      encryptionConfigured?: boolean;
+      telegram?: { telegramBotConfigured: boolean; telegramWebhookSecretConfigured: boolean };
+    } | null;
+    ws: { enabled?: boolean; defaultGraphId?: string } | null;
+  }>({ loading: false, error: null, app: null, ws: null });
+
+  const refreshChannelsSnap = useCallback(async () => {
+    if (!hasAccessToken) {
+      setChannelsSnap({ loading: false, error: null, app: null, ws: null });
+      return;
+    }
+    setChannelsSnap((p) => ({ ...p, loading: true, error: null }));
+    try {
+      const appRes = await apiFetch("/api/channels/app-credentials");
+      const rawApp = (await appRes.json().catch(() => ({}))) as ChannelsAppCredentialsJson;
+      if (!appRes.ok) {
+        throw new Error(typeof rawApp.error === "string" ? rawApp.error : "Failed to load channel credentials");
+      }
+      const appJson: ChannelsAppCredentialsJson = rawApp;
+      let ws: ChannelsWorkspaceTelegramJson | null = null;
+      if (activeWorkspaceId) {
+        const wsRes = await apiFetch(
+          `/api/workspaces/${encodeURIComponent(activeWorkspaceId)}/channel-settings?channel=telegram`
+        );
+        if (wsRes.ok) {
+          ws = (await wsRes.json().catch(() => null)) as ChannelsWorkspaceTelegramJson | null;
+        }
+      }
+      setChannelsSnap({ loading: false, error: null, app: appJson, ws });
+    } catch (e) {
+      setChannelsSnap({
+        loading: false,
+        error: (e as Error)?.message ?? "Could not load channels status",
+        app: null,
+        ws: null,
+      });
+    }
+  }, [apiFetch, activeWorkspaceId, hasAccessToken]);
+
+  useEffect(() => {
+    if (activeSettingsSection !== "channels") return;
+    void refreshChannelsSnap();
+  }, [activeSettingsSection, refreshChannelsSnap]);
+
   return (
     <div className="flex h-screen flex-col text-text-primary min-h-0">
       <header className="flex h-10 shrink-0 items-center glass-titlebar px-4 pl-[76px] app-region-drag">
@@ -306,17 +369,6 @@ export function DesktopSettingsView({
                       onChange={(c) => setSettingsToggles((p) => ({ ...p, preventSleep: c }))}
                     />
                   </div>
-                  <div className="flex items-center justify-between gap-4 px-3 py-2">
-                    <div>
-                      <div className="text-sm font-medium text-text-primary">Require Cmd+Enter to send</div>
-                      <div className="text-xs text-text-muted">Multiline prompts require Cmd+Enter to send.</div>
-                    </div>
-                    <Toggle
-                      size="sm"
-                      checked={settingsToggles.requireCmdEnter}
-                      onChange={(c) => setSettingsToggles((p) => ({ ...p, requireCmdEnter: c }))}
-                    />
-                  </div>
                 </SettingsCard>
               </section>
             )}
@@ -345,6 +397,103 @@ export function DesktopSettingsView({
                 <p className="text-xs text-text-muted">
                   OAuth and MCP integrations for your workspace are managed in the web app.
                 </p>
+              </section>
+            )}
+            {activeSettingsSection === "channels" && (
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold text-text-primary">Messenger channels</h2>
+                <p className="text-xs text-text-muted">
+                  Telegram lets you talk to the same Kletron agent as in the app, using your workspace&apos;s default graph (or
+                  overrides via chat commands). Credentials and workspace options are stored on the Kletron server — use the web app
+                  to add the bot token, link your Telegram account, and choose the graph. This screen only shows a quick status.
+                </p>
+                <PortalBrowserBanner
+                  portalPath="/app/config/channels"
+                  onOpenPortal={openPortalPath}
+                  title="Set up and edit in the web app"
+                  description="Open Messenger channels in your browser (same account as this desktop). You need a bot from BotFather, a public HTTPS webhook URL, and your Telegram user id to link."
+                />
+                {!hasAccessToken ? (
+                  <p className="text-xs text-text-muted">Sign in under Configuration to load channel status from the server.</p>
+                ) : channelsSnap.loading ? (
+                  <SettingsCard>
+                    <div className="px-3 py-4">
+                      <DesktopPortalStatusLinesSkeleton />
+                    </div>
+                  </SettingsCard>
+                ) : channelsSnap.error ? (
+                  <div className="text-xs text-status-error-text">{channelsSnap.error}</div>
+                ) : (
+                  <SettingsCard>
+                    <div className="flex items-center justify-between gap-4 px-3 py-2">
+                      <div>
+                        <div className="text-sm font-medium text-text-primary">Secrets encryption (portal saves)</div>
+                        <div className="text-xs text-text-muted">KLETRON_CHANNEL_SECRETS_KEY on the server</div>
+                      </div>
+                      <span
+                        className={`text-xs ${channelsSnap.app?.encryptionConfigured ? "text-status-success-text" : "text-status-warning-text"}`}
+                      >
+                        {channelsSnap.app?.encryptionConfigured ? "Configured" : "Not configured"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 px-3 py-2">
+                      <div>
+                        <div className="text-sm font-medium text-text-primary">Telegram bot token (stored in app DB)</div>
+                        <div className="text-xs text-text-muted">Not shown; env-only tokens are invisible here</div>
+                      </div>
+                      <span
+                        className={`text-xs ${channelsSnap.app?.telegram?.telegramBotConfigured ? "text-status-success-text" : "text-text-muted"}`}
+                      >
+                        {channelsSnap.app?.telegram?.telegramBotConfigured ? "Saved" : "Not saved"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 px-3 py-2">
+                      <div>
+                        <div className="text-sm font-medium text-text-primary">Webhook secret (stored in app DB)</div>
+                      </div>
+                      <span
+                        className={`text-xs ${channelsSnap.app?.telegram?.telegramWebhookSecretConfigured ? "text-status-success-text" : "text-text-muted"}`}
+                      >
+                        {channelsSnap.app?.telegram?.telegramWebhookSecretConfigured ? "Saved" : "None"}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1 px-3 py-2">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="text-sm font-medium text-text-primary">Workspace Telegram</div>
+                        {!activeWorkspaceId ? (
+                          <span className="text-xs text-text-muted">No workspace selected</span>
+                        ) : (
+                          <span
+                            className={`text-xs ${channelsSnap.ws && channelsSnap.ws.enabled !== false ? "text-status-success-text" : "text-status-warning-text"}`}
+                          >
+                            {channelsSnap.ws && channelsSnap.ws.enabled !== false ? "Enabled" : "Disabled"}
+                          </span>
+                        )}
+                      </div>
+                      {activeWorkspaceId && channelsSnap.ws ? (
+                        <div className="text-xs text-text-muted pl-0">
+                          Default graph id:{" "}
+                          <span className="font-mono text-[10px] text-text-secondary">
+                            {channelsSnap.ws.defaultGraphId?.trim() || "(first available)"}
+                          </span>
+                        </div>
+                      ) : activeWorkspaceId ? (
+                        <div className="text-xs text-text-muted">Could not load workspace channel settings.</div>
+                      ) : (
+                        <div className="text-xs text-text-muted">Select a workspace from the title bar to load defaults.</div>
+                      )}
+                    </div>
+                  </SettingsCard>
+                )}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  type="button"
+                  onClick={() => void refreshChannelsSnap()}
+                  disabled={!hasAccessToken || channelsSnap.loading}
+                >
+                  Refresh status
+                </Button>
               </section>
             )}
             {activeSettingsSection === "account" && (

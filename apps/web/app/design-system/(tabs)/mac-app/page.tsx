@@ -253,7 +253,6 @@ export default function DesignSystemMacAppPage() {
     const [automations, setAutomations] = useState<Automation[]>(sampleAutomations);
     const [settingsState, setSettingsState] = useState({
         preventSleep: true,
-        requireCmdEnter: false,
         compactDensity: false,
     });
 
@@ -263,12 +262,6 @@ export default function DesignSystemMacAppPage() {
             label: "Prevent sleep while running",
             description: "Keep your computer awake while the agent runs.",
             control: <Switch size="sm" checked={settingsState.preventSleep} onChange={(c) => setSettingsState((p) => ({ ...p, preventSleep: c }))} />,
-        },
-        {
-            id: "require-cmd-enter",
-            label: "Require Cmd+Enter to send",
-            description: "Multiline prompts require Cmd+Enter to send.",
-            control: <Switch size="sm" checked={settingsState.requireCmdEnter} onChange={(c) => setSettingsState((p) => ({ ...p, requireCmdEnter: c }))} />,
         },
         {
             id: "compact-density",

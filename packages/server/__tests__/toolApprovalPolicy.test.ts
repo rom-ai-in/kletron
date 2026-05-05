@@ -116,6 +116,12 @@ describe("toolApprovalPolicy tool classification", () => {
         expect(WRITE_REPO_TOOLS.has("write_file")).toBe(true);
         expect(classifyTool("write_file")).toBe("write_repo");
     });
+
+    it("classifies Kletron list/get admin tools as readonly", () => {
+        expect(classifyTool("kletron_list_graphs")).toBe("readonly");
+        expect(classifyTool("kletron_get_graph")).toBe("readonly");
+        expect(classifyTool("kletron_create_graph")).toBe("unknown");
+    });
 });
 
 describe("isSafeCommand", () => {
@@ -213,6 +219,12 @@ describe("toolApprovalPolicy decision matrix (config-driven)", () => {
         expect(repoWrite.decision).toBe("requires_approval");
     });
 
+    it("auto-approves Kletron list/get tools for agent like other readonly tools", () => {
+        const p = getToolApprovalPolicy({ source: "agent", toolName: "kletron_list_skills" });
+        expect(p.toolClass).toBe("readonly");
+        expect(p.decision).toBe("auto_approve");
+    });
+
     it("uses conservative fallback for unknown source", () => {
         const readonlyPolicy = getToolApprovalPolicy({ source: "legacy", toolName: "read_file" });
         const unknownToolPolicy = getToolApprovalPolicy({ source: "legacy", toolName: "mystery_tool" });
@@ -281,15 +293,16 @@ describe("applyThreadApprovalOverride", () => {
         expect(out.decision).toBe("auto_approve");
     });
 
-    it("full_auto_thread does not relax Kletron admin tools", () => {
-        expect(isKletronAdminToolName("kletron_list_graphs")).toBe(true);
+    it("full_auto_thread relaxes mutating Kletron admin tools when not blocked", () => {
+        expect(isKletronAdminToolName("kletron_create_graph")).toBe(true);
         const b = baseResult({
             decision: "requires_approval",
-            toolName: "kletron_list_graphs",
+            toolName: "kletron_create_graph",
             toolClass: "unknown",
+            reason: "unknown tool",
         });
-        const out = applyThreadApprovalOverride(b, { mode: "full_auto_thread", toolName: "kletron_list_graphs" });
-        expect(out.decision).toBe("requires_approval");
+        const out = applyThreadApprovalOverride(b, { mode: "full_auto_thread", toolName: "kletron_create_graph" });
+        expect(out.decision).toBe("auto_approve");
     });
 
     it("full_auto_thread does not relax neverAutoApproveTools", () => {
