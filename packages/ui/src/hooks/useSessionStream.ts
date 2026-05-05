@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { AgentEvent, AgentWorkflowResult, AgentWorkflowUpdate, TimelineEvent } from '@kletron/shared/types';
-import type { Message, StreamStatus, StreamChunk } from '@kletron/shared/chatTypes';
+import type { Message, StreamStatus, StreamChunk, GraphSelectionMode } from '@kletron/shared/chatTypes';
 import type { ThreadApprovalMode } from '@kletron/shared/threadApprovalTypes';
 import { joinApiOrigin } from '@kletron/shared';
 import { normalizeToWorkModeId } from '@kletron/shared/workMode';
@@ -56,6 +56,10 @@ export interface UseSessionStreamOptions {
     planMode?: boolean;
     /** Research depth for new sessions only (default exhaustive). */
     researchDepth?: ResearchDepthId | null;
+    /** Manual keeps the selected graph authoritative; auto lets the server route when no graph is explicit. */
+    graphSelectionMode?: GraphSelectionMode;
+    /** Optional channel hint for server-side default graph selection. */
+    channel?: string | null;
     /** Callback when a new session is created (receives runId, graphId, first user message body). */
     onSessionCreated?: (runId: string, graphId: string, firstUserMessage?: string) => void;
     /** Callback when a title should be generated. */
@@ -129,6 +133,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         workMode,
         planMode,
         researchDepth,
+        graphSelectionMode = 'manual',
+        channel,
         onSessionCreated,
         onTitleGenerate,
     } = options;
@@ -623,7 +629,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const handleSend = useCallback(async (options?: { text?: string; planMode?: boolean }) => {
         const msg = (options?.text ?? input).trim();
         if (!msg || sending) return;
-        if (!sessionId && !selectedGraphId) {
+        if (!sessionId && !selectedGraphId && graphSelectionMode !== 'auto') {
             setErrorMessage("No agent graph selected. Please select a graph before sending.");
             return;
         }
@@ -658,11 +664,13 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
         const body = isNewSession
             ? {
-                graphId: selectedGraphId,
+                ...(selectedGraphId ? { graphId: selectedGraphId } : {}),
+                graphSelectionMode,
                 message: msg,
                 provider: llmProvider,
                 model: llmModel,
                 ...(workspaceId ? { workspaceId } : {}),
+                ...(channel ? { channel } : {}),
                 ...(threadApprovalMode && threadApprovalMode !== 'inherit' ? { threadApprovalMode } : {}),
                 ...modeBodyForCreate,
                 ...(effectivePlanMode ? { planMode: true } : {}),
@@ -728,7 +736,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, workspaceId, threadApprovalMode, apiOrigin, category, workMode, planMode, researchDepth, processNdjsonStream]);
+    }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, workspaceId, threadApprovalMode, apiOrigin, category, workMode, planMode, researchDepth, graphSelectionMode, channel, processNdjsonStream]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {

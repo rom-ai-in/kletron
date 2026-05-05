@@ -488,39 +488,34 @@ export function AutomationBuilderModal({
                                                           ]
                                                 }
                                             />
-                                            <div>
-                                                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                                                    LLM Provider
-                                                </div>
-                                                <Selector
-                                                    label="Provider"
-                                                    value={stage.llmProvider}
-                                                    fullWidth
-                                                    onSelect={(id) =>
-                                                        handleUpdateStage(idx, { llmProvider: id as LlmProviderType })
-                                                    }
-                                                    options={
-                                                        llmProviderOptions.length === 0
-                                                            ? [{ id: stage.llmProvider || "", label: "Loading providers..." }]
-                                                            : [
-                                                                  ...llmProviderOptions.map((p) => ({
-                                                                      id: p.id,
-                                                                      label: p.label,
-                                                                      sub: p.model ? p.model : undefined,
-                                                                  })),
-                                                                  ...(stage.llmProvider &&
-                                                                  !llmProviderOptions.some((p) => p.id === stage.llmProvider)
-                                                                      ? [
-                                                                            {
-                                                                                id: stage.llmProvider,
-                                                                                label: `${PROVIDER_LABELS[stage.llmProvider] ?? stage.llmProvider} (disabled)`,
-                                                                            },
-                                                                        ]
-                                                                      : []),
-                                                              ]
-                                                    }
-                                                />
-                                            </div>
+                                            <Selector
+                                                label="LLM Provider"
+                                                value={stage.llmProvider}
+                                                fullWidth
+                                                onSelect={(id) =>
+                                                    handleUpdateStage(idx, { llmProvider: id as LlmProviderType })
+                                                }
+                                                options={
+                                                    llmProviderOptions.length === 0
+                                                        ? [{ id: stage.llmProvider || "", label: "Loading providers..." }]
+                                                        : [
+                                                              ...llmProviderOptions.map((p) => ({
+                                                                  id: p.id,
+                                                                  label: p.label,
+                                                                  sub: p.model ? p.model : undefined,
+                                                              })),
+                                                              ...(stage.llmProvider &&
+                                                              !llmProviderOptions.some((p) => p.id === stage.llmProvider)
+                                                                  ? [
+                                                                        {
+                                                                            id: stage.llmProvider,
+                                                                            label: `${PROVIDER_LABELS[stage.llmProvider] ?? stage.llmProvider} (disabled)`,
+                                                                        },
+                                                                    ]
+                                                                  : []),
+                                                          ]
+                                                }
+                                            />
                                         </div>
                                         <div className="space-y-1 pt-1">
                                             <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">

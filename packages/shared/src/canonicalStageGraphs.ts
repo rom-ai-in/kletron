@@ -9,6 +9,7 @@ export const CANONICAL_AGENT_GRAPH_IDS = {
     EXPLORER: "000000000000000000000009",
     PLANNER: "00000000000000000000000a",
     COMPANY_GROWTH_GTM: "00000000000000000000000e",
+    OPERATIONS_INCIDENT: "00000000000000000000000f",
 } as const;
 
 export type CanonicalStageGraphRole = "coder" | "explorer" | "planner" | "company_growth";

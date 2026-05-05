@@ -30,8 +30,6 @@ export interface InputBarProps {
   approvalSelector?: React.ReactNode;
   /** Research depth (agent sessions) — same row as graph / LLM on web */
   depthSelector?: React.ReactNode;
-  /** Token usage display */
-  tokenUsage?: { input: string; output: string } | null;
   /** Plan mode badge */
   planMode?: boolean;
   /** @deprecated LLM health is shown on the LLM `Selector` (web parity); ignored by this component. */
@@ -58,7 +56,6 @@ export function InputBar({
   modelSelector,
   approvalSelector,
   depthSelector,
-  tokenUsage,
   planMode = false,
   connected: _connected = true,
   connectionLabel: _connectionLabel,
@@ -132,11 +129,6 @@ export function InputBar({
           leadingFooter={leadingFooter ?? undefined}
           sessionStrip={sessionStrip ?? undefined}
         />
-        {tokenUsage && (
-          <div className="mt-1.5 font-mono text-[11px] text-text-muted">
-            Tokens: {tokenUsage.input ?? '—'} in · {tokenUsage.output ?? '—'} out
-          </div>
-        )}
       </div>
     </div>
   );

@@ -2031,7 +2031,6 @@ export default function App() {
               onDismissChip={(id) => setContextChips((p) => p.filter((c) => c.id !== id))}
               onPaperclipClick={() => setMultimodalOpen((p) => !p)}
               planMode={planMode}
-              tokenUsage={conversation.tokenUsage}
               graphSelector={
                 <Selector
                   label="GRAPH"

@@ -26,30 +26,49 @@ export function AuditContextForm({ initialContext, onSave, onCancel }: AuditCont
         <div className="space-y-4 bg-bg-surface p-4 rounded-lg border border-border-subtle">
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="text-xs font-semibold text-text-secondary uppercase">Startup Phase</label>
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Target Audience</label>
+                    <input
+                        type="text"
+                        className="w-full mt-1 p-2 rounded bg-bg-elevated border border-border-subtle text-sm text-text-primary"
+                        value={context.targetAudience || ""}
+                        onChange={(e) => handleChange("targetAudience", e.target.value)}
+                        placeholder="E.g. founders, platform engineers, finance ops"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Time Horizon</label>
+                    <input
+                        type="text"
+                        className="w-full mt-1 p-2 rounded bg-bg-elevated border border-border-subtle text-sm text-text-primary"
+                        value={context.timeHorizon || ""}
+                        onChange={(e) => handleChange("timeHorizon", e.target.value)}
+                        placeholder="E.g. this week, Q3 launch, next 30 days"
+                    />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Quality Level</label>
                     <select
                         className="w-full mt-1 p-2 rounded bg-bg-elevated border border-border-subtle text-sm text-text-primary"
-                        value={context.startupPhase || ""}
-                        onChange={(e) => handleChange("startupPhase", e.target.value)}
+                        value={context.qualityLevel || "standard"}
+                        onChange={(e) => handleChange("qualityLevel", e.target.value)}
                     >
-                        <option value="">Select Phase...</option>
-                        <option value="Discovery">Discovery / Prototype</option>
-                        <option value="MVP Build">MVP Build</option>
-                        <option value="MVP Launch">MVP Launch</option>
-                        <option value="Scale-up">Scale-up</option>
+                        <option value="draft">Draft</option>
+                        <option value="standard">Standard</option>
+                        <option value="polished">Polished</option>
                     </select>
                 </div>
                 <div>
-                    <label className="text-xs font-semibold text-text-secondary uppercase">Risk Tolerance</label>
-                    <select
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Tone</label>
+                    <input
+                        type="text"
                         className="w-full mt-1 p-2 rounded bg-bg-elevated border border-border-subtle text-sm text-text-primary"
-                        value={context.riskTolerance || "medium"}
-                        onChange={(e) => handleChange("riskTolerance", e.target.value)}
-                    >
-                        <option value="low">Low (Conservative)</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High (Move Fast)</option>
-                    </select>
+                        value={context.tone || ""}
+                        onChange={(e) => handleChange("tone", e.target.value)}
+                        placeholder="E.g. direct, executive, analytical, calm"
+                    />
                 </div>
             </div>
 
@@ -81,9 +100,21 @@ export function AuditContextForm({ initialContext, onSave, onCancel }: AuditCont
                         className="w-full mt-1 p-2 rounded bg-bg-elevated border border-border-subtle text-sm text-text-primary min-h-[100px]"
                         value={context.keyObjectives?.join('\n') || ""}
                         onChange={(e) => handleListChange("keyObjectives", e.target.value)}
-                        placeholder="- Implement Auth&#10;- Setup DB"
+                        placeholder="- Implement auth&#10;- Setup DB"
                     />
                 </div>
+                <div>
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Non-goals (one per line)</label>
+                    <textarea
+                        className="w-full mt-1 p-2 rounded bg-bg-elevated border border-border-subtle text-sm text-text-primary min-h-[100px]"
+                        value={context.nonGoals?.join('\n') || ""}
+                        onChange={(e) => handleListChange("nonGoals", e.target.value)}
+                        placeholder="- Native mobile app&#10;- Full rebrand"
+                    />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
                 <div>
                     <label className="text-xs font-semibold text-text-secondary uppercase">Constraints (one per line)</label>
                     <textarea
@@ -92,6 +123,65 @@ export function AuditContextForm({ initialContext, onSave, onCancel }: AuditCont
                         onChange={(e) => handleListChange("constraints", e.target.value)}
                         placeholder="- No external APIs&#10;- TypeScript only"
                     />
+                </div>
+                <div>
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Languages (one per line)</label>
+                    <textarea
+                        className="w-full mt-1 p-2 rounded bg-bg-elevated border border-border-subtle text-sm text-text-primary min-h-[100px]"
+                        value={context.languages?.join('\n') || ""}
+                        onChange={(e) => handleListChange("languages", e.target.value)}
+                        placeholder="French&#10;English"
+                    />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Frameworks / Stacks (one per line)</label>
+                    <textarea
+                        className="w-full mt-1 p-2 rounded bg-bg-elevated border border-border-subtle text-sm text-text-primary min-h-[100px]"
+                        value={context.frameworks?.join('\n') || ""}
+                        onChange={(e) => handleListChange("frameworks", e.target.value)}
+                        placeholder="Next.js&#10;Stripe&#10;MongoDB"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Hotspots (one per line)</label>
+                    <textarea
+                        className="w-full mt-1 p-2 rounded bg-bg-elevated border border-border-subtle text-sm text-text-primary min-h-[100px]"
+                        value={context.hotspots?.join('\n') || ""}
+                        onChange={(e) => handleListChange("hotspots", e.target.value)}
+                        placeholder="Billing flow&#10;Sentry triage&#10;Auth"
+                    />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Startup Phase (Legacy)</label>
+                    <select
+                        className="w-full mt-1 p-2 rounded bg-bg-elevated border border-border-subtle text-sm text-text-primary"
+                        value={context.startupPhase || ""}
+                        onChange={(e) => handleChange("startupPhase", e.target.value)}
+                    >
+                        <option value="">Select Phase...</option>
+                        <option value="Discovery">Discovery / Prototype</option>
+                        <option value="MVP Build">MVP Build</option>
+                        <option value="MVP Launch">MVP Launch</option>
+                        <option value="Scale-up">Scale-up</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Risk Tolerance (Legacy)</label>
+                    <select
+                        className="w-full mt-1 p-2 rounded bg-bg-elevated border border-border-subtle text-sm text-text-primary"
+                        value={context.riskTolerance || "medium"}
+                        onChange={(e) => handleChange("riskTolerance", e.target.value)}
+                    >
+                        <option value="low">Low (Conservative)</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High (Move Fast)</option>
+                    </select>
                 </div>
             </div>
 

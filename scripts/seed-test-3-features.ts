@@ -11,15 +11,10 @@ import { getDb, closeDb } from "@kletron/server/lib/db";
 async function main() {
     const db = await getDb();
 
-    // Clean all A43 automations
-    const del = await db.collection("audit_chains").deleteMany({ name: /^A43/ });
-    console.log("Cleaned:", del.deletedCount);
+    const del = await db.collection("audit_chains").deleteMany({ name: /^A43 Test/ });
+    console.log("Cleaned A43 Test rows:", del.deletedCount);
 
-    // Re-seed full 127
-    const fullResult = await automationExecutor.ensureDefaultAutomations();
-    console.log("Full audit:", fullResult.created.length ? "Created" : "Skipped");
-
-    // Create 3-feature test
+    // Create 3-feature test (full preset catalog: scripts/seed-canonical-db.ts + WORKSPACE_ID)
     const testFeatures = ["foundation/contacts", "sales/invoices", "accounting/banking"];
     const config = AutomationConfigBuilder.buildFeatureAuditBatch(testFeatures, {
         name: "A43 Test — 3 Feature Audit"
@@ -34,7 +29,7 @@ async function main() {
     console.log("Test automation created:", id);
 
     // Verify
-    const all = await db.collection("audit_chains").find({ name: /^A43/ }).toArray();
+    const all = await db.collection("audit_chains").find({ name: /^A43 Test/ }).toArray();
     console.log("\nResult:");
     for (const a of all) {
         const stages = (a as any).stages || [];

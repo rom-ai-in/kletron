@@ -89,7 +89,7 @@ export function WorkspaceConnectorsHint({
 
   return (
     <div
-      className={`mx-auto flex max-w-3xl flex-wrap items-center gap-x-2 gap-y-1 px-0.5 ${className}`}
+      className={`mx-auto flex w-full min-w-0 max-w-3xl flex-wrap items-center gap-x-2 gap-y-1 px-1 py-0.5 ${className}`}
       aria-label="Active workspace connectors"
     >
       <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-text-muted">

@@ -39,6 +39,12 @@ import { getWorkspaceContextConfig, type WorkspaceContextConfig } from "@kletron
 import { formatAuditContextPrompt, type AuditContext } from "@kletron/shared/documentContext";
 import { DEFAULT_WORKSPACE_CONTEXT_INJECTION } from "@kletron/shared/workspaceContextInjection";
 import { agentMemoryService } from "./agentMemoryService";
+import { ensureConversationSummary, formatConversationSummaryPrompt } from "./conversationSummaryService";
+import { syncDerivedMemories } from "./derivedMemorySyncService";
+import {
+    formatRunContextPrompt,
+    resolveRuntimeProfileContext,
+} from "./runtimeProfileContextService";
 import { SafeEditGate } from "./agent/SafeEditGate";
 import type { ToolApprovalConfig } from "./toolApprovalPolicy";
 import { applyThreadApprovalOverride, getToolApprovalPolicy } from "./toolApprovalPolicy";
@@ -813,6 +819,7 @@ async function maybeExecuteJsonActionTool(opts: {
 
 /** One background scan per workspace — avoids duplicate scans when multiple runs start together. */
 const contextGraphBackgroundScan = new Map<string, Promise<void>>();
+const CONTEXT_GRAPH_SYNC_SCAN_BUDGET_MS = 1500;
 
 /**
  * Returns the context graph store quickly for the first LLM call.
@@ -829,15 +836,16 @@ async function ensureContextGraphReady(workspaceId: string, rootPath: string) {
     if (store.getAllNodes().length > 0) return store;
 
     const scanKey = workspaceId;
-    if (!contextGraphBackgroundScan.has(scanKey)) {
-        const work = (async () => {
+    let work = contextGraphBackgroundScan.get(scanKey);
+    if (!work) {
+        work = (async () => {
             try {
                 console.log(
-                    "[AgentGraph] Context graph still empty after load; background workspace scan started (send path not blocked)..."
+                    "[AgentGraph] Context graph still empty after load; workspace scan started..."
                 );
                 await contextScanner.scanWorkspace(rootPath, store);
                 await store.save();
-                console.log(`[AgentGraph] Background scan complete. Graph now has ${store.getAllNodes().length} nodes.`);
+                console.log(`[AgentGraph] Workspace scan complete. Graph now has ${store.getAllNodes().length} nodes.`);
             } catch (err) {
                 console.warn("[AgentGraph] Background context scan failed:", (err as Error)?.message ?? err);
             } finally {
@@ -845,6 +853,15 @@ async function ensureContextGraphReady(workspaceId: string, rootPath: string) {
             }
         })();
         contextGraphBackgroundScan.set(scanKey, work);
+    }
+    const syncAttempt = await Promise.race([
+        work.then(() => true).catch(() => false),
+        new Promise<false>((resolve) => setTimeout(() => resolve(false), CONTEXT_GRAPH_SYNC_SCAN_BUDGET_MS)),
+    ]);
+    if (!syncAttempt) {
+        console.log(
+            `[AgentGraph] Context graph scan still running after ${CONTEXT_GRAPH_SYNC_SCAN_BUDGET_MS}ms; continuing with partial context.`,
+        );
     }
     return store;
 }
@@ -1274,6 +1291,7 @@ export class AgentGraphExecutor {
             const auditContext = documentContextEnabled ? workspaceFullCtx?.context ?? null : null;
             const wantAutoContext =
                 injectionSettings.structuralInjectionEnabled || injectionSettings.semanticInjectionEnabled;
+            const runWorkMode = await agentGraphRunService.getRunWorkMode(runId);
 
             const executionMode = resolveExecutionMode(graph);
             const timelineNodeIds = (run.nodeOrder?.length ? run.nodeOrder : getGraphNodeOrder(graph)).slice();
@@ -1283,6 +1301,31 @@ export class AgentGraphExecutor {
 
             const state = cloneValue(run.state ?? { nodes: {} });
             if (!state.nodes) state.nodes = {};
+            if (!state.contextAssembly) state.contextAssembly = {};
+
+            const runtimeProfileUserId =
+                opts?.workspaceContextUserId ??
+                run.createdByUserId ??
+                workspace.ownerId ??
+                undefined;
+            const runtimeProfile = await resolveRuntimeProfileContext({
+                workspaceId: workspaceIdStr,
+                workspaceName: workspace.name,
+                userId: runtimeProfileUserId,
+                graph,
+                workMode: runWorkMode,
+                documentContext: auditContext,
+                enabledIntegrationProviderIds: workspaceCaps?.enabledIntegrationProviderIds ?? [],
+            });
+            try {
+                const memorySync = await syncDerivedMemories({
+                    workspaceId: workspaceIdStr,
+                    runtimeProfile,
+                });
+                state.contextAssembly.derivedMemorySync = memorySync;
+            } catch (err) {
+                console.warn("[AgentGraph] Failed to sync derived memories:", (err as Error)?.message ?? err);
+            }
             const workspaceObjectId =
                 workspace._id && ObjectId.isValid(workspace._id.toString()) ? new ObjectId(workspace._id.toString()) : undefined;
             const rootDir = workspace.rootPath;
@@ -2362,12 +2405,26 @@ export class AgentGraphExecutor {
                     // ---------------------------------------------------------
                     // 3. Smart Context Injection (New Architecture)
                     // ---------------------------------------------------------
-                    const runWorkMode = await agentGraphRunService.getRunWorkMode(runId);
                     const useWorkSimpleReactPrompt =
                         runWorkMode === "work" &&
                         graph.nodes.length === 1 &&
                         (node.kind ?? "react") === "react" &&
                         node.id === simpleReactPhaseId;
+
+                    let recentHistoryForReplay = state.conversationHistory ?? [];
+                    let conversationSummaryPrompt: string | null = null;
+                    try {
+                        const summaryContext = ensureConversationSummary(state);
+                        recentHistoryForReplay = summaryContext.recentHistory;
+                        conversationSummaryPrompt = formatConversationSummaryPrompt(summaryContext.conversationSummary);
+                        state.contextAssembly = {
+                            ...(state.contextAssembly ?? {}),
+                            summaryCoveredEventCount: summaryContext.conversationSummary?.coveredEventCount ?? 0,
+                        };
+                    } catch (err) {
+                        console.warn("[AgentGraph] Failed to build conversation summary:", (err as Error)?.message ?? err);
+                        recentHistoryForReplay = (state.conversationHistory ?? []).slice(-30);
+                    }
 
                     let contextBlock = "";
                     if (wantAutoContext) {
@@ -2382,9 +2439,14 @@ export class AgentGraphExecutor {
                         contextBlock = formatContextBundleForPrompt(bundle, {
                             currentFile: editorState.activeFile,
                         });
+                        state.contextAssembly = {
+                            ...(state.contextAssembly ?? {}),
+                            dynamicItemCount: bundle.promptItems.length,
+                            dynamicSnippetCount: bundle.promptItems.filter((item) => typeof item.snippet === "string" && item.snippet.trim().length > 0).length,
+                        };
                     }
 
-                    // Compose final system prompt: skills prefix + base prompt + context
+                    // Compose final system prompt: skills prefix + base prompt + ordered runtime context
                     const renderedSystemPrompt = renderUserPrompt(
                         useWorkSimpleReactPrompt ? simpleReactWorkSystemPrompt : node.react.systemPrompt,
                         state
@@ -2392,56 +2454,39 @@ export class AgentGraphExecutor {
                     const baseSystemPrompt = skillPromptPrefix
                         ? `${skillPromptPrefix}\n\n---\n\n${renderedSystemPrompt}`
                         : renderedSystemPrompt;
-                    const auditContextPrompt = auditContext ? formatAuditContextPrompt(auditContext) : null;
+                    const runContextPrompt = formatRunContextPrompt(runtimeProfile);
+                    const persistentContextPrompt = auditContext ? formatAuditContextPrompt(auditContext) : null;
                     const taskQueue = Array.isArray((state as any).taskQueue) ? (state as any).taskQueue : [];
                     const currentTaskId = typeof (state as any).currentTaskId === "string" ? (state as any).currentTaskId : "";
                     const taskContextBlock = [
-                        "\n\n## PLAN & TASK QUEUE",
+                        "## PLAN & TASK QUEUE",
                         `Current task id: ${currentTaskId || "(none)"}`,
                         `Task queue: ${JSON.stringify(taskQueue, null, 2)}`,
                         "Use write_todos to create or update the task queue when the mission requires multiple steps.",
                         "IMPORTANT: Do NOT call write_todos repeatedly with the same payload. Call it once, then proceed with actual work.",
                     ].join("\n");
 
-                    // ── Workspace awareness block ────────────────────────────────
-                    const workspaceContextBlock =
-                        runWorkMode === "work"
-                            ? [
-                                  "\n\n## WORKSPACE ENVIRONMENT",
-                                  `Working folder: ${rootDir}`,
-                                  `Workspace ID: ${workspace._id?.toString() ?? "default"}`,
-                                  "You can read and write files in this workspace with the provided tools.",
-                                  "Do NOT ask the user for generic folder access — tools already operate here.",
-                                  "Do NOT re-plan indefinitely — proceed once you have a reasonable plan.",
-                                  "",
-                                  "## INVESTIGATION DISCIPLINE",
-                                  "- Prefer **breadth then depth**: map candidates with list/glob/search, then read the highest-signal files.",
-                                  "- Gather **enough** corroborating evidence before firm conclusions; say when coverage is incomplete.",
-                                  "",
-                                  "## ANTI-LOOPING RULES",
-                                  "- Never call the same tool with identical arguments more than once per turn. Reuse prior results.",
-                                  "- Never call write_todos more than twice without making progress between calls.",
-                                  "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
-                              ].join("\n")
-                            : [
-                                  "\n\n## WORKSPACE ENVIRONMENT",
-                                  `You are running inside the repository at: ${rootDir}`,
-                                  `Workspace ID: ${workspace._id?.toString() ?? "default"}`,
-                                  "You already have full filesystem access via tools (list_files, read_file, search_code, etc.).",
-                                  "Do NOT ask the user for repository access — you already have it.",
-                                  "Do NOT re-plan if you have already created a plan — proceed with execution.",
-                                  "",
-                                  "## INVESTIGATION DISCIPLINE",
-                                  "- Prefer **breadth then depth**: search and map relevant modules before deep edits.",
-                                  "- Trace enough call sites / tests to be confident; incomplete traces should be stated explicitly.",
-                                  "",
-                                  "## ANTI-LOOPING RULES",
-                                  "- Never call the same tool with identical arguments more than once per turn. Reuse prior results.",
-                                  "- Never call write_todos more than twice without making progress on actual tasks between calls.",
-                                  "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
-                              ].join("\n");
+                    const workspaceAccessBlock = [
+                        "## WORKSPACE ACCESS",
+                        `- Working folder: ${rootDir}`,
+                        "- Use available tools to read and write inside this workspace.",
+                        "- Do not ask for generic workspace access when the tools already provide it.",
+                    ].join("\n");
 
-                    const enhancedSystemPrompt = `${baseSystemPrompt}${workspaceContextBlock}${contextBlock}${taskContextBlock}${webHintBlock}${sentryHintBlock}${fastSuffix}${auditContextPrompt ? `\n\n${auditContextPrompt}` : ""}`;
+                    const enhancedSystemPrompt = [
+                        baseSystemPrompt,
+                        runContextPrompt,
+                        workspaceAccessBlock,
+                        persistentContextPrompt,
+                        contextBlock ? contextBlock.trim() : null,
+                        conversationSummaryPrompt,
+                        taskContextBlock,
+                        webHintBlock ? webHintBlock.trim() : null,
+                        sentryHintBlock ? sentryHintBlock.trim() : null,
+                        fastSuffix ? fastSuffix.trim() : null,
+                    ]
+                        .filter((value): value is string => Boolean(value && value.trim().length > 0))
+                        .join("\n\n");
 
                     // Update timeline with the ACTUAL prompt used (including context)
                     if (timeline[0]) {
@@ -2625,8 +2670,7 @@ export class AgentGraphExecutor {
                     } else {
                         // Build extraMessages from prior conversation history for multi-turn
                         const priorHistory = state.conversationHistory ?? [];
-                        // Keep only a recent window to avoid replaying stale/noisy history.
-                        const historyWindow = priorHistory.slice(-60);
+                        const historyWindow = recentHistoryForReplay;
                         
                         // Prevent sending consecutive identical user messages.
                         // reactAgentRunner will append `opts.userPrompt` (which evaluates to state.mission).

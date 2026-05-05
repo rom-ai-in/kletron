@@ -735,40 +735,72 @@ export class AutomationExecutor {
     }
 
     /**
-     * Ensure that default feature audit automations exist in the database.
+     * Seed all automation templates from AutomationConfigBuilder.PRESETS (idempotent by name + workspace).
+     * Pass workspaceId for tenant-scoped automations (recommended for the app API).
      */
     async ensureDefaultAutomations(workspaceId?: string): Promise<{ created: string[]; skipped: string[] }> {
         const { AutomationConfigBuilder } = await import("@kletron/shared/automationConfigBuilder");
         const db = await getDb();
+        const created: string[] = [];
+        const skipped: string[] = [];
+        const wid = workspaceId ? toObjectId(workspaceId) : undefined;
 
-        const config = AutomationConfigBuilder.buildFullFeatureAudit();
-        if (!config.name || !config.stages?.length) {
-            return { created: [], skipped: [] };
+        for (const presetKey of AutomationConfigBuilder.getPresetNames()) {
+            const partial = AutomationConfigBuilder.buildAutomation(presetKey);
+            if (!partial.name?.trim() || !partial.stages?.length) continue;
+
+            const query: Record<string, unknown> = { name: partial.name };
+            if (wid) {
+                query.workspaceId = wid;
+            }
+
+            const existing = await db.collection(COLLECTION_NAME).findOne(query);
+            if (existing) {
+                skipped.push(partial.name);
+                continue;
+            }
+
+            const id = await this.createAutomation({
+                ...partial,
+                name: partial.name,
+                description: partial.description ?? "",
+                stages: partial.stages,
+                triggerType: partial.triggerType ?? "manual",
+                ...(wid ? { workspaceId: wid } : {}),
+            } as any);
+
+            console.info(`[AutomationExecutor] Seeded preset "${presetKey}": ${partial.name} (${id})`);
+            created.push(partial.name);
         }
 
-        const query: Record<string, unknown> = { name: config.name };
-        if (workspaceId) {
-            const wid = toObjectId(workspaceId);
-            if (wid) query.workspaceId = wid;
+        return { created, skipped };
+    }
+
+    /**
+     * Rewrite automation stage graphId / provider for legacy keys and canonical hex alignment
+     * (see @kletron/shared/canonicalStageGraphs).
+     */
+    async reconcileAutomationStageGraphs(): Promise<{ updated: number }> {
+        const { alignAutomationStagesToWorkspaceGraphs } = await import("@kletron/shared/canonicalStageGraphs");
+        const graphs = await agentGraphService.listGraphs();
+        const graphList = graphs.map((g) => ({ id: String(g._id), name: g.name }));
+        const db = await getDb();
+        const docs = await db.collection(COLLECTION_NAME).find({}).toArray();
+        let updated = 0;
+
+        for (const doc of docs) {
+            const stages = doc.stages as AutomationStageConfig[] | undefined;
+            if (!stages?.length) continue;
+            const next = alignAutomationStagesToWorkspaceGraphs(stages, graphList);
+            if (JSON.stringify(next) === JSON.stringify(stages)) continue;
+            await db.collection(COLLECTION_NAME).updateOne({ _id: doc._id }, { $set: { stages: next } });
+            updated++;
         }
-        const existing = await db.collection(COLLECTION_NAME).findOne(query);
 
-        if (existing) {
-            console.info(`[AutomationExecutor] Skipped (already exists): ${config.name} — ${config.stages.length} stages`);
-            return { created: [], skipped: [config.name] };
+        if (updated > 0) {
+            console.info(`[AutomationExecutor] Reconciled stage graphs on ${updated} automation(s)`);
         }
-
-        const id = await this.createAutomation({
-            ...config,
-            name: config.name,
-            description: config.description ?? "",
-            stages: config.stages,
-            triggerType: "manual",
-            ...(workspaceId ? { workspaceId } : {}),
-        } as any);
-
-        console.info(`[AutomationExecutor] Seeded automation: ${config.name} — ${config.stages.length} stages (${id})`);
-        return { created: [config.name], skipped: [] };
+        return { updated };
     }
 }
 

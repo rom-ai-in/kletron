@@ -17,6 +17,7 @@ import {
     buildExplorerAgentGraph,
     buildPlannerAgentGraph,
     buildCompanyGrowthWorkGraph,
+    buildOperationsIncidentWorkGraph,
 } from "./agentGraphPresets";
 
 const COLLECTION_NAME = "agent_graphs";
@@ -43,6 +44,7 @@ const DEFAULT_STAGE_GRAPH_NAMES = [
     "Explorer Agent (agent graph)",
     "Planner Agent (agent graph)",
     "Company Growth & GTM (work graph)",
+    "Operations & Incident Response (work graph)",
 ] as const;
 
 function pickDefaultStageGraph(graphs: AgentGraphDefinition[]): AgentGraphDefinition | undefined {
@@ -81,6 +83,7 @@ function ensureFallbackGraphs() {
         { id: CANONICAL_AGENT_GRAPH_IDS.EXPLORER, graph: buildExplorerAgentGraph() },
         { id: CANONICAL_AGENT_GRAPH_IDS.PLANNER, graph: buildPlannerAgentGraph() },
         { id: CANONICAL_AGENT_GRAPH_IDS.COMPANY_GROWTH_GTM, graph: buildCompanyGrowthWorkGraph() },
+        { id: CANONICAL_AGENT_GRAPH_IDS.OPERATIONS_INCIDENT, graph: buildOperationsIncidentWorkGraph() },
     ];
 
     for (const entry of entries) {
@@ -230,11 +233,12 @@ export class AgentGraphService {
         const collection = await getCollectionSafe();
         if (!collection) {
             ensureFallbackGraphs();
-            return { upserted: 4, deletedDuplicateNames: 0 };
+            return { upserted: 5, deletedDuplicateNames: 0 };
         }
 
         const entries = [
             { id: CANONICAL_AGENT_GRAPH_IDS.COMPANY_GROWTH_GTM, build: buildCompanyGrowthWorkGraph },
+            { id: CANONICAL_AGENT_GRAPH_IDS.OPERATIONS_INCIDENT, build: buildOperationsIncidentWorkGraph },
             { id: CANONICAL_AGENT_GRAPH_IDS.CODER, build: buildCoderAgentGraph },
             { id: CANONICAL_AGENT_GRAPH_IDS.PLANNER, build: buildPlannerAgentGraph },
             { id: CANONICAL_AGENT_GRAPH_IDS.EXPLORER, build: buildExplorerAgentGraph },
@@ -280,4 +284,3 @@ export class AgentGraphService {
 }
 
 export const agentGraphService = new AgentGraphService();
-

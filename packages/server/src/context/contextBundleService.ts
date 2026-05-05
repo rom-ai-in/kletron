@@ -3,6 +3,7 @@
  */
 
 import path from "node:path";
+import fs from "node:fs/promises";
 
 import type { RankedContextItem, EditorState } from "@kletron/shared/context/graph";
 import type { WorkspaceContextInjectionSettings } from "@kletron/shared/workspaceContextInjection";
@@ -24,6 +25,7 @@ export type ContextBundleResult = {
   graphItems: RankedContextItem[];
   vectorItems: SemanticContextHit[];
   mergedFilePaths: string[];
+  promptItems: PromptContextItem[];
   debug: {
     graphMs: number;
     vectorMs: number;
@@ -33,11 +35,135 @@ export type ContextBundleResult = {
   };
 };
 
+export type PromptContextItem = {
+  path: string;
+  source: "structural" | "semantic" | "hybrid";
+  score: number;
+  reason: string;
+  lineSpan?: {
+    startLine?: number;
+    endLine?: number;
+  };
+  snippet?: string;
+};
+
+export const PROMPT_CONTEXT_MAX_FILES = 6;
+export const PROMPT_CONTEXT_MAX_SNIPPETS = 4;
+export const PROMPT_CONTEXT_MAX_SNIPPET_CHARS = 320;
+export const PROMPT_CONTEXT_TOTAL_SNIPPET_BUDGET = 2500;
+
 function toAbsolutePath(repoPath: string, filePath: string): string {
   if (path.isAbsolute(filePath)) {
     return filePath;
   }
   return path.join(repoPath, filePath);
+}
+
+function truncateSnippet(value: string | undefined, maxChars = PROMPT_CONTEXT_MAX_SNIPPET_CHARS): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  if (!cleaned) return undefined;
+  return cleaned.length > maxChars ? `${cleaned.slice(0, maxChars - 1).trimEnd()}…` : cleaned;
+}
+
+async function hydrateSnippetFromFile(
+  filePathAbs: string,
+  lineSpan?: { startLine?: number; endLine?: number },
+): Promise<string | undefined> {
+  try {
+    const content = await fs.readFile(filePathAbs, "utf-8");
+    const lines = content.split("\n");
+    if (lineSpan?.startLine && lineSpan.startLine > 0) {
+      const start = Math.max(0, lineSpan.startLine - 1);
+      const end = Math.max(start + 1, Math.min(lines.length, (lineSpan.endLine ?? lineSpan.startLine) + 3));
+      return truncateSnippet(lines.slice(start, end).join(" "));
+    }
+    return truncateSnippet(lines.slice(0, 12).join(" "));
+  } catch {
+    return undefined;
+  }
+}
+
+async function buildPromptItems(opts: {
+  rootPath: string;
+  graphItems: RankedContextItem[];
+  vectorItems: SemanticContextHit[];
+}): Promise<PromptContextItem[]> {
+  const merged = new Map<string, PromptContextItem>();
+
+  for (const item of opts.graphItems) {
+    const existing = merged.get(item.id);
+    const reason = Array.isArray(item.reasons) && item.reasons.length > 0
+      ? item.reasons.join(", ")
+      : "structural relevance";
+    if (!existing) {
+      merged.set(item.id, {
+        path: item.id,
+        source: "structural",
+        score: item.score,
+        reason,
+      });
+      continue;
+    }
+    existing.source = existing.source === "semantic" ? "hybrid" : existing.source;
+    existing.score = Math.max(existing.score, item.score);
+    existing.reason = existing.reason.includes(reason) ? existing.reason : `${existing.reason}; ${reason}`;
+  }
+
+  for (const item of opts.vectorItems) {
+    const existing = merged.get(item.filePathAbs);
+    const semanticReason = "semantic match";
+    if (!existing) {
+      merged.set(item.filePathAbs, {
+        path: item.filePathAbs,
+        source: "semantic",
+        score: item.score,
+        reason: semanticReason,
+        lineSpan: {
+          startLine: item.startLine,
+          endLine: item.endLine,
+        },
+        snippet: truncateSnippet(item.snippet),
+      });
+      continue;
+    }
+    existing.source = existing.source === "structural" ? "hybrid" : existing.source;
+    existing.score = Math.max(existing.score, item.score);
+    existing.reason = existing.reason.includes(semanticReason)
+      ? existing.reason
+      : `${existing.reason}; ${semanticReason}`;
+    existing.lineSpan = existing.lineSpan ?? {
+      startLine: item.startLine,
+      endLine: item.endLine,
+    };
+    existing.snippet = existing.snippet ?? truncateSnippet(item.snippet);
+  }
+
+  const ranked = Array.from(merged.values())
+    .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
+    .slice(0, PROMPT_CONTEXT_MAX_FILES);
+
+  let snippetCount = 0;
+  let snippetBudgetRemaining = PROMPT_CONTEXT_TOTAL_SNIPPET_BUDGET;
+  for (const item of ranked) {
+    if (!item.snippet && snippetCount < PROMPT_CONTEXT_MAX_SNIPPETS) {
+      item.snippet = await hydrateSnippetFromFile(item.path, item.lineSpan);
+    }
+    if (!item.snippet) continue;
+    const next = truncateSnippet(item.snippet, Math.min(PROMPT_CONTEXT_MAX_SNIPPET_CHARS, snippetBudgetRemaining));
+    if (!next) {
+      item.snippet = undefined;
+      continue;
+    }
+    item.snippet = next;
+    snippetCount += 1;
+    snippetBudgetRemaining -= next.length;
+    if (snippetBudgetRemaining <= 0 || snippetCount >= PROMPT_CONTEXT_MAX_SNIPPETS) {
+      snippetBudgetRemaining = 0;
+    }
+  }
+
+  return ranked;
 }
 
 export async function buildContextBundle(opts: {
@@ -125,10 +251,17 @@ export async function buildContextBundle(opts: {
       `graphMs=${graphMs} vectorMs=${vectorMs} skip=${vectorSkippedReason ?? "none"}`
   );
 
+  const promptItems = await buildPromptItems({
+    rootPath,
+    graphItems,
+    vectorItems,
+  });
+
   return {
     graphItems,
     vectorItems,
     mergedFilePaths,
+    promptItems,
     debug: {
       graphMs,
       vectorMs,
@@ -143,31 +276,25 @@ export function formatContextBundleForPrompt(
   bundle: ContextBundleResult,
   opts?: { currentFile?: string | null }
 ): string {
-  let block = "\n\n## ACTIVE CONTEXT (Auto-Detected)\n";
+  let block = "\n\n## DYNAMIC CONTEXT\n";
   if (opts?.currentFile) {
     block += `- Current File: ${opts.currentFile}\n`;
   }
 
-  if (bundle.graphItems.length > 0) {
-    block += "\nStructural relevance (code map):\n";
-    for (const item of bundle.graphItems) {
-      const rel = (item.score * 100).toFixed(0);
-      const reasonText = Array.isArray(item.reasons) ? item.reasons.join(", ") : "";
-      block += `- ${item.id} (Relevance: ${rel}% - ${reasonText})\n`;
-    }
-  }
-
-  if (bundle.vectorItems.length > 0) {
-    block += "\nSemantic matches (vector index):\n";
-    for (const v of bundle.vectorItems) {
-      const sc = (v.score * 100).toFixed(0);
+  if (bundle.promptItems.length > 0) {
+    block += "\nTop relevant files:\n";
+    for (const item of bundle.promptItems) {
+      const rel = `${Math.round(item.score * 100)}%`;
       const loc =
-        v.startLine != null && v.endLine != null ? ` L${v.startLine}-${v.endLine}` : "";
-      block += `- ${v.filePathAbs}${loc} (score ${sc}%)\n`;
+        item.lineSpan?.startLine != null
+          ? ` lines ${item.lineSpan.startLine}-${item.lineSpan.endLine ?? item.lineSpan.startLine}`
+          : "";
+      block += `- ${item.path}${loc} [${item.source}, ${rel}] — ${item.reason}\n`;
+      if (item.snippet) {
+        block += `  Snippet: ${item.snippet}\n`;
+      }
     }
-  }
-
-  if (bundle.graphItems.length === 0 && bundle.vectorItems.length === 0) {
+  } else {
     block += "No specific relevant files detected from structural or semantic context.\n";
   }
 

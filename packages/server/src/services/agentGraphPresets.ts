@@ -426,6 +426,7 @@ export function buildSimpleReactAgentGraph(): Omit<AgentGraphDefinition, "_id" |
 
 /** Node id must differ from `simple_react` so Work mode uses this graph’s prompt (not the generic work swap). */
 export const companyGrowthWorkPhaseId = "company_growth_react";
+export const operationsIncidentPhaseId = "operations_incident_react";
 
 const COMPANY_GROWTH_WORK_SYSTEM_PROMPT = `## CRITICAL RULES
 
@@ -509,6 +510,85 @@ export function buildCompanyGrowthWorkGraph(): Omit<AgentGraphDefinition, "_id" 
     category: "graph",
     nodes,
     edges: [],
+    routing: {
+      intents: ["go to market", "fundraising", "sales", "pipeline", "partnerships", "growth"],
+      domains: ["gtm", "sales", "fundraise", "marketing", "partnerships"],
+      keywords: ["gtm", "go-to-market", "investor", "fundraise", "pipeline", "prospect", "sales", "growth"],
+      preferredWorkModes: ["work"],
+    },
+  };
+}
+
+const OPERATIONS_INCIDENT_SYSTEM_PROMPT = `## CRITICAL RULES
+
+1. **Ground every operational claim** in tool output, workspace files, or connector data. Do not invent incidents, error counts, or project names.
+2. **When Sentry is available**, use it early for incident / production-error requests instead of asking clarifying questions that the connector can answer.
+3. **Prefer triage before fixes**: determine scope, severity, blast radius, likely owner, and next action.
+4. **State uncertainty clearly** when the workspace or connector data is partial.
+
+---
+
+## Identity
+
+You are **Kletron — Operations & Incident Response**.
+
+You help with:
+- production incident triage
+- Sentry issue review and error digestion
+- operational status summaries
+- likely ownership / next-step recommendations grounded in evidence
+
+---
+
+## Operating model
+
+1. Identify whether the request is about incidents, open errors, degraded systems, or connector health.
+2. Use **write_todos once** only when the incident work spans multiple tracks.
+3. Prefer **sentry_api**, workspace search, read_file, and semantic_code_search before broad shell usage.
+4. When Sentry is available and the user does not specify an org, start with **resource: "digest"** or **resource: "status"**.
+5. End with a concrete status summary: what is happening, what is affected, what evidence supports it, and what should happen next.
+
+---
+
+## Anti-looping
+
+- Never repeat the same connector call with identical arguments in one turn.
+- Never keep asking for the org/project if the connector default already provides it.
+
+---
+
+## Termination
+
+Deliver a concise incident summary first. Then include evidence, risks, and next actions.`;
+
+export function buildOperationsIncidentWorkGraph(): Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> {
+  const nodes: AgentGraphNode[] = [
+    {
+      id: operationsIncidentPhaseId,
+      label: "Operations & Incident Response",
+      react: {
+        systemPrompt: OPERATIONS_INCIDENT_SYSTEM_PROMPT,
+        userPromptTemplate: "{{mission}}",
+        toolNames: [...simpleReactToolNames, "sentry_api", "github_api"],
+      },
+      output: { schemaId: "conversational" },
+    },
+  ];
+
+  return {
+    name: "Operations & Incident Response (work graph)",
+    description:
+      "Single-node ReAct graph for production incidents, Sentry triage, operational status checks, and evidence-backed next actions.",
+    category: "graph",
+    nodes,
+    edges: [],
+    routing: {
+      intents: ["incident", "sentry", "production", "outage", "error", "errors", "alert"],
+      domains: ["incident", "production", "ops", "observability"],
+      keywords: ["sentry", "incident", "prod", "production", "error", "errors", "outage", "alert", "exception", "crash"],
+      preferredWorkModes: ["work", "code"],
+      requiredConnectors: ["sentry"],
+    },
   };
 }
 
@@ -1772,6 +1852,12 @@ export function buildCoderAgentGraph(): Omit<AgentGraphDefinition, "_id" | "crea
     category: "graph",
     nodes,
     edges: [],
+    routing: {
+      intents: ["fix", "implement", "refactor", "test", "build"],
+      domains: ["code", "repo", "implementation"],
+      keywords: ["fix", "bug", "implement", "refactor", "compile", "failing test", "build", "stack trace"],
+      preferredWorkModes: ["code"],
+    },
   };
 }
 
@@ -1796,6 +1882,12 @@ export function buildExplorerAgentGraph(): Omit<AgentGraphDefinition, "_id" | "c
     category: "graph",
     nodes,
     edges: [],
+    routing: {
+      intents: ["explore", "understand", "explain", "where is", "trace"],
+      domains: ["architecture", "codebase", "repository"],
+      keywords: ["architecture", "codebase", "where is", "understand", "explain", "trace", "find in repo"],
+      preferredWorkModes: ["code"],
+    },
   };
 }
 
@@ -1820,6 +1912,12 @@ export function buildPlannerAgentGraph(): Omit<AgentGraphDefinition, "_id" | "cr
     category: "graph",
     nodes,
     edges: [],
+    routing: {
+      intents: ["plan", "roadmap", "steps", "approach"],
+      domains: ["planning", "execution"],
+      keywords: ["plan", "roadmap", "strategy", "implementation plan", "steps", "migration"],
+      preferredWorkModes: ["code", "work"],
+    },
   };
 }
 // ---------------------------------------------------------------------------

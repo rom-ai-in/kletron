@@ -1,13 +1,14 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
+import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { automationExecutor } from "@kletron/server/services/automationExecutor";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 /**
  * POST /api/automations/seed
- * Seed default feature audit automations (one per domain) into the workspace.
- * Safe to call multiple times — skips automations that already exist by name.
+ * Upserts canonical agent graphs (stable ObjectIds), seeds all automation presets
+ * for the workspace, then reconciles legacy stage graph ids. Idempotent.
  */
 export async function POST(req: NextRequest) {
     const auth = await requireAppRouteAuth(req);
@@ -24,11 +25,15 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Workspace not configured" }, { status: 400 });
         }
 
+        const graphs = await agentGraphService.upsertCanonicalPresetGraphs();
         const result = await automationExecutor.ensureDefaultAutomations(workspace._id.toString());
+        const reconciled = await automationExecutor.reconcileAutomationStageGraphs();
 
         return NextResponse.json({
-            message: `Seeded ${result.created.length} automation(s), skipped ${result.skipped.length}`,
+            message: `Graphs upserted: ${graphs.upserted}, duplicates removed: ${graphs.deletedDuplicateNames}. Seeded ${result.created.length} automation(s), skipped ${result.skipped.length}. Stage graph reconciliations: ${reconciled.updated}.`,
+            graphs,
             ...result,
+            reconciled,
         }, { status: 200 });
     } catch (error) {
         const workspaceError = workspaceErrorToHttp(error);
