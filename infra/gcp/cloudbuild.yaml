@@ -26,8 +26,8 @@ steps:
     args:
       - -ceu
       - |
-        _pid_lc="$(printf '%s' "$PROJECT_ID" | tr '[:upper:]' '[:lower:]')"
-        if [[ "$_pid_lc" == *numezis* ]]; then
+        pid_lc="$(printf '%s' "$PROJECT_ID" | tr '[:upper:]' '[:lower:]')"
+        if [[ "$pid_lc" == *numezis* ]]; then
           echo "Refusing Cloud Build: PROJECT_ID '$PROJECT_ID' matches Kletron-only policy (numezis forbidden)."
           exit 2
         fi
