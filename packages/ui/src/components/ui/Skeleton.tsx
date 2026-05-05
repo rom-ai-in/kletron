@@ -22,7 +22,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
 }) => {
     return (
         <div
-            className={`bg-bg-elevated animate-pulse ${width} ${height} ${radius} ${className}`}
+            className={`box-border border-0 bg-bg-elevated animate-pulse ${width} ${height} ${radius} ${className}`}
             {...props}
         />
     );

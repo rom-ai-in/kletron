@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import { CANONICAL_AGENT_GRAPH_IDS } from "@kletron/shared/canonicalStageGraphs";
 import { getDb } from "../lib/db";
 import type { AgentGraphDefinition } from "./agentGraphTypes";
 
@@ -76,10 +77,10 @@ function ensureFallbackGraphs() {
     if (fallbackGraphs.size > 0) return;
     const now = new Date();
     const entries: Array<{ id: string; graph: Omit<AgentGraphDefinition, "_id" | "createdAt" | "updatedAt"> }> = [
-        { id: "000000000000000000000008", graph: buildCoderAgentGraph() },
-        { id: "000000000000000000000009", graph: buildExplorerAgentGraph() },
-        { id: "00000000000000000000000a", graph: buildPlannerAgentGraph() },
-        { id: "00000000000000000000000e", graph: buildCompanyGrowthWorkGraph() },
+        { id: CANONICAL_AGENT_GRAPH_IDS.CODER, graph: buildCoderAgentGraph() },
+        { id: CANONICAL_AGENT_GRAPH_IDS.EXPLORER, graph: buildExplorerAgentGraph() },
+        { id: CANONICAL_AGENT_GRAPH_IDS.PLANNER, graph: buildPlannerAgentGraph() },
+        { id: CANONICAL_AGENT_GRAPH_IDS.COMPANY_GROWTH_GTM, graph: buildCompanyGrowthWorkGraph() },
     ];
 
     for (const entry of entries) {
@@ -221,26 +222,60 @@ export class AgentGraphService {
     }
 
     /**
-     * Ensure that all default preset graphs exist in the database.
-     * Safe to call multiple times — skips graphs that already exist by name.
-     * Called during user registration to guarantee every new user has default graphs.
+     * Upsert the four canonical agent graphs at fixed ObjectIds (aligned with
+     * @kletron/shared/canonicalStageGraphs). Removes duplicate rows that share
+     * the same graph name but a different _id.
+     */
+    async upsertCanonicalPresetGraphs(): Promise<{ upserted: number; deletedDuplicateNames: number }> {
+        const collection = await getCollectionSafe();
+        if (!collection) {
+            ensureFallbackGraphs();
+            return { upserted: 4, deletedDuplicateNames: 0 };
+        }
+
+        const entries = [
+            { id: CANONICAL_AGENT_GRAPH_IDS.COMPANY_GROWTH_GTM, build: buildCompanyGrowthWorkGraph },
+            { id: CANONICAL_AGENT_GRAPH_IDS.CODER, build: buildCoderAgentGraph },
+            { id: CANONICAL_AGENT_GRAPH_IDS.PLANNER, build: buildPlannerAgentGraph },
+            { id: CANONICAL_AGENT_GRAPH_IDS.EXPLORER, build: buildExplorerAgentGraph },
+        ] as const;
+
+        const canonicalNames = new Set<string>();
+        const canonicalOids = entries.map((e) => new ObjectId(e.id));
+        let upserted = 0;
+
+        for (const { id, build } of entries) {
+            const preset = build();
+            canonicalNames.add(preset.name);
+            normalizeGraphToolAliases(preset.nodes);
+            const _id = new ObjectId(id);
+            const existing = await collection.findOne<{ createdAt?: Date }>({ _id });
+            const now = new Date();
+            const createdAt = existing?.createdAt ?? now;
+            const doc = {
+                ...preset,
+                _id,
+                createdAt,
+                updatedAt: now,
+            };
+            await collection.replaceOne({ _id }, doc as any, { upsert: true });
+            upserted++;
+        }
+
+        const delRes = await collection.deleteMany({
+            name: { $in: [...canonicalNames] },
+            _id: { $nin: canonicalOids },
+        });
+
+        return { upserted, deletedDuplicateNames: delRes.deletedCount ?? 0 };
+    }
+
+    /**
+     * Ensure canonical graphs exist in the database at stable ids.
+     * Called on user registration and by seed scripts.
      */
     async ensureDefaultGraphs(): Promise<void> {
-        const builders = [
-            buildCompanyGrowthWorkGraph,
-            buildCoderAgentGraph,
-            buildPlannerAgentGraph,
-            buildExplorerAgentGraph,
-        ];
-
-        for (const builder of builders) {
-            const preset = builder();
-            const existing = await this.listGraphs({ search: preset.name });
-            const match = existing.find((g) => g.name === preset.name);
-            if (!match) {
-                await this.createGraph(preset);
-            }
-        }
+        await this.upsertCanonicalPresetGraphs();
     }
 }
 

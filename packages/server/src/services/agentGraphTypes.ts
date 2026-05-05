@@ -1,6 +1,7 @@
 import type { ObjectId } from "mongodb";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import type { ResearchDepthId } from "@kletron/shared/researchDepth";
+import type { GraphRouteInfo } from "@kletron/shared/chatTypes";
 import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
 import type { AgentEvent } from "@kletron/shared/types";
 
@@ -97,6 +98,14 @@ export type AgentGraphExecutionConfig = {
     maxReactSteps?: number;
 };
 
+export type AgentGraphRoutingConfig = {
+    intents?: string[];
+    domains?: string[];
+    keywords?: string[];
+    preferredWorkModes?: Array<"code" | "work">;
+    requiredConnectors?: string[];
+};
+
 export interface AgentGraphDefinition {
     _id?: ObjectId;
     name: string;
@@ -109,7 +118,15 @@ export interface AgentGraphDefinition {
     execution?: AgentGraphExecutionConfig;
     /** Optional default state merged into initial run state. */
     stateDefaults?: Record<string, unknown>;
+    /** Declarative routing hints for auto-selection. */
+    routing?: AgentGraphRoutingConfig;
 }
+
+export type AgentConversationSummary = {
+    summary: string;
+    coveredEventCount: number;
+    updatedAt: string;
+};
 
 export type AgentGraphState = {
     mission?: string;
@@ -148,9 +165,18 @@ export type AgentGraphState = {
     confidence?: unknown;
     finalSummary?: string;
     nextSteps?: string[];
-    route?: {
+    route?: GraphRouteInfo & {
         next?: string;
-        reason?: string;
+    };
+    conversationSummary?: AgentConversationSummary;
+    contextAssembly?: {
+        dynamicItemCount?: number;
+        dynamicSnippetCount?: number;
+        summaryCoveredEventCount?: number;
+        derivedMemorySync?: {
+            updatedPaths: string[];
+            unchangedPaths: string[];
+        };
     };
     execution?: {
         mode?: AgentGraphExecutionMode;

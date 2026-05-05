@@ -67,7 +67,7 @@ function getPromptIssues(automation: AutomationDefinition): PromptIssue[] {
 function AutomationDetailPageSkeleton() {
     return (
         <div className="flex flex-col h-full bg-bg-surface">
-            <div className="flex flex-col border-b border-border-subtle bg-bg-surface px-6 pt-5 pb-0 gap-4">
+            <div className="flex flex-col border-b border-border-subtle/40 bg-bg-surface px-6 pt-5 pb-0 gap-4">
                 <div className="flex items-start justify-between gap-4">
                     <div className="space-y-2 flex-1 min-w-0 max-w-2xl">
                         <Skeleton className="h-8 w-[min(100%,20rem)]" height="h-8" />
@@ -90,13 +90,13 @@ function AutomationDetailPageSkeleton() {
                 <div className="space-y-6 max-w-4xl mx-auto">
                     <div className="grid grid-cols-3 gap-4">
                         {[1, 2, 3].map((i) => (
-                            <div key={i} className="rounded-lg border border-border-subtle bg-bg-surface p-4 space-y-2">
+                            <div key={i} className="rounded-lg bg-bg-elevated/30 p-4 space-y-2 border-0">
                                 <Skeleton className="w-20" height="h-3" radius="rounded" />
                                 <Skeleton className="w-12" height="h-6" radius="rounded-md" />
                             </div>
                         ))}
                     </div>
-                    <div className="rounded-lg border border-border-subtle bg-bg-surface p-4 space-y-3">
+                    <div className="rounded-lg bg-bg-elevated/25 p-4 space-y-3 border-0">
                         <Skeleton className="w-40" height="h-4" radius="rounded-md" />
                         <Skeleton className="w-full" height="h-3" radius="rounded" />
                         <Skeleton className="w-full" height="h-3" radius="rounded" />
@@ -111,7 +111,7 @@ function AutomationDetailPageSkeleton() {
                         {[1, 2, 3, 4].map((i) => (
                             <div
                                 key={i}
-                                className="flex items-center gap-4 p-3 rounded-md border border-border-subtle bg-bg-surface"
+                                className="flex items-center gap-4 p-3 rounded-md bg-bg-elevated/30 border-0"
                             >
                                 <Skeleton className="w-6 shrink-0" height="h-6" radius="rounded-full" />
                                 <div className="flex-1 space-y-2 min-w-0">
@@ -129,7 +129,7 @@ function AutomationDetailPageSkeleton() {
 
 function ExecutionContextPanelSkeleton() {
     return (
-        <div className="rounded-lg border border-border-subtle bg-bg-surface p-4 space-y-3">
+        <div className="rounded-lg bg-bg-elevated/25 p-4 space-y-3 border-0">
             <div className="flex items-start gap-2">
                 <Skeleton className="w-4 shrink-0" height="h-4" radius="rounded" />
                 <div className="flex-1 space-y-2">

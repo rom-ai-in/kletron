@@ -7,6 +7,7 @@ export type DocumentContext = {
     timeHorizon?: string;
     targetAudience?: string;
     qualityLevel?: "draft" | "standard" | "polished";
+    tone?: string;
     constraints?: string[];
     languages?: string[];
     frameworks?: string[];
@@ -49,7 +50,14 @@ export const normalizeDocumentContext = (
         timeHorizon: cleanText(context.timeHorizon),
         targetAudience: cleanText(context.targetAudience),
         qualityLevel: cleanText(context.qualityLevel) as DocumentContext["qualityLevel"],
+        tone: cleanText(context.tone),
         constraints: cleanList(context.constraints),
+        languages: cleanList(context.languages),
+        frameworks: cleanList(context.frameworks),
+        hotspots: cleanList(context.hotspots),
+        startupPhase: cleanText(context.startupPhase),
+        targetUsers: cleanText(context.targetUsers),
+        riskTolerance: cleanText(context.riskTolerance) as DocumentContext["riskTolerance"],
     };
 
     const hasAny = Object.values(normalized).some((value) => {
@@ -86,11 +94,20 @@ export const formatDocumentContextSummary = (
     if (normalized.timeHorizon) {
         parts.push(`Horizon: ${normalized.timeHorizon}`);
     }
+    if (normalized.tone) {
+        parts.push(`Tone: ${normalized.tone}`);
+    }
     if (normalized.keyObjectives?.length) {
         parts.push(`Objectives: ${limitList(normalized.keyObjectives).join("; ")}`);
     }
     if (normalized.nonGoals?.length) {
         parts.push(`De-prioritize: ${limitList(normalized.nonGoals).join("; ")}`);
+    }
+    if (normalized.languages?.length) {
+        parts.push(`Languages: ${limitList(normalized.languages).join("; ")}`);
+    }
+    if (normalized.frameworks?.length) {
+        parts.push(`Frameworks: ${limitList(normalized.frameworks).join("; ")}`);
     }
     return parts.join(" · ");
 };
@@ -126,6 +143,18 @@ export const formatDocumentContextPrompt = (
     if (normalized.qualityLevel) {
         lines.push(`- Quality level: ${normalized.qualityLevel}`);
     }
+    if (normalized.tone) {
+        lines.push(`- Tone: ${normalized.tone}`);
+    }
+    if (normalized.languages?.length) {
+        lines.push(`- Languages: ${normalized.languages.join(", ")}`);
+    }
+    if (normalized.frameworks?.length) {
+        lines.push(`- Frameworks / stacks: ${normalized.frameworks.join(", ")}`);
+    }
+    if (normalized.hotspots?.length) {
+        lines.push(`- Hotspots: ${normalized.hotspots.join(", ")}`);
+    }
     if (normalized.keyObjectives?.length) {
         lines.push("- Key objectives:");
         for (const item of normalized.keyObjectives) {
@@ -151,6 +180,12 @@ export const formatDocumentContextPrompt = (
         "- Match the quality level and target audience expectations."
     );
     lines.push("- Align scope with the time horizon and constraints.");
+    if (normalized.nonGoals?.length) {
+        lines.push("- Keep non-goals explicitly out of scope unless they block the primary goal.");
+    }
+    if (normalized.hotspots?.length) {
+        lines.push("- Pay extra attention to the listed hotspots before broadening scope.");
+    }
 
     return lines.join("\n");
 };

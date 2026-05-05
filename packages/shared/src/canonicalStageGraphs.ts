@@ -62,6 +62,45 @@ export function normalizeLegacyAutomationStages(
     });
 }
 
+const HEX_TO_ROLE = new Map<string, CanonicalStageGraphRole>([
+    [CANONICAL_AGENT_GRAPH_IDS.CODER, "coder"],
+    [CANONICAL_AGENT_GRAPH_IDS.EXPLORER, "explorer"],
+    [CANONICAL_AGENT_GRAPH_IDS.PLANNER, "planner"],
+    [CANONICAL_AGENT_GRAPH_IDS.COMPANY_GROWTH_GTM, "company_growth"],
+]);
+
+/** If preset used a canonical fallback ObjectId but this workspace's graph has another id, swap to the live id. */
+export function remapCanonicalGraphIdToWorkspaceGraph(
+    graphId: string,
+    graphs: { id: string; name: string }[]
+): string {
+    const role = HEX_TO_ROLE.get(graphId);
+    if (!role) return graphId;
+    if (graphs.some((g) => g.id === graphId)) return graphId;
+    return resolveStageGraphId(graphs, role);
+}
+
+/** Normalize audit/simple_react and align canonical hex ids to workspace graph documents. */
+export function alignAutomationStagesToWorkspaceGraphs(
+    stages: AutomationStageConfig[] | undefined,
+    graphs: { id: string; name: string }[]
+): AutomationStageConfig[] {
+    const base = normalizeLegacyAutomationStages(stages, graphs);
+    return base.map((s) => ({
+        ...s,
+        graphId: remapCanonicalGraphIdToWorkspaceGraph(s.graphId, graphs),
+    }));
+}
+
+export function automationStagesNeedGraphAlignment(
+    stages: AutomationStageConfig[] | undefined,
+    graphs: { id: string; name: string }[]
+): boolean {
+    if (!stages?.length || graphs.length === 0) return false;
+    if (automationStagesNeedLegacyGraphMigration(stages)) return true;
+    return stages.some((s) => remapCanonicalGraphIdToWorkspaceGraph(s.graphId, graphs) !== s.graphId);
+}
+
 export function automationStagesNeedLegacyGraphMigration(stages: AutomationStageConfig[] | undefined): boolean {
     if (!stages?.length) return false;
     return stages.some((s) => LEGACY_STAGE_GRAPH_IDS.has(s.graphId || ""));

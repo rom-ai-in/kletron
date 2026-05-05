@@ -207,7 +207,7 @@ export function AutomationListSidebar() {
                         {Array.from({ length: 8 }).map((_, i) => (
                             <div
                                 key={i}
-                                className="rounded-md border border-border-subtle/60 bg-bg-surface/40 px-3 py-2.5 space-y-2"
+                                className="rounded-md bg-bg-elevated/25 px-3 py-2.5 space-y-2 border-0"
                             >
                                 <div className="flex items-center justify-between gap-2">
                                     <Skeleton className="flex-1 max-w-[200px]" height="h-3.5" radius="rounded-md" />

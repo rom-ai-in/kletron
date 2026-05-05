@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Check } from 'lucide-react';
 
 export type SelectorOption = {
@@ -25,17 +26,63 @@ export type SelectorProps = {
     menuAlign?: 'start' | 'end';
     /** Shown as native tooltip on the trigger (e.g. LLM health error reason). */
     statusTooltip?: string | null;
+    /**
+     * When true (default), the options list is rendered in a portal with fixed positioning so it is not
+     * clipped by modal / overflow scroll containers (e.g. AutomationBuilderModal step 2).
+     */
+    portalMenu?: boolean;
 };
 
-export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSelect, direction = 'up', size = 'md', status = 'none', loading = false, fullWidth = false, menuAlign = 'start', statusTooltip }) => {
+/** Above Modal overlay (z-50) and typical nested UI */
+const SELECTOR_MENU_Z = 200;
+
+export const Selector: React.FC<SelectorProps> = ({
+    label,
+    value,
+    options,
+    onSelect,
+    direction = 'up',
+    size = 'md',
+    status = 'none',
+    loading = false,
+    fullWidth = false,
+    menuAlign = 'start',
+    statusTooltip,
+    portalMenu = true,
+}) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [menuRect, setMenuRect] = useState<DOMRect | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    const updateMenuPosition = () => {
+        const el = containerRef.current;
+        if (!el) return;
+        setMenuRect(el.getBoundingClientRect());
+    };
+
+    useLayoutEffect(() => {
+        if (!isOpen || !portalMenu) return;
+        updateMenuPosition();
+    }, [isOpen, portalMenu, direction, fullWidth, menuAlign, options.length]);
+
+    useEffect(() => {
+        if (!isOpen || !portalMenu) return;
+        const onScrollOrResize = () => updateMenuPosition();
+        window.addEventListener('resize', onScrollOrResize);
+        window.addEventListener('scroll', onScrollOrResize, true);
+        return () => {
+            window.removeEventListener('resize', onScrollOrResize);
+            window.removeEventListener('scroll', onScrollOrResize, true);
+        };
+    }, [isOpen, portalMenu]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
+            const t = event.target as Node;
+            if (containerRef.current?.contains(t)) return;
+            if (menuRef.current?.contains(t)) return;
+            setIsOpen(false);
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -65,7 +112,12 @@ export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSel
                 </div>
             ) : (
                 <button
-                    onClick={() => setIsOpen(!isOpen)}
+                    onClick={() => {
+                        if (!isOpen) {
+                            setMenuRect(containerRef.current?.getBoundingClientRect() ?? null);
+                        }
+                        setIsOpen((open) => !open);
+                    }}
                     className={`flex items-center gap-1.5 bg-bg-surface/50 hover:bg-state-hover border border-border-subtle hover:border-border-strong rounded transition-colors group ${isSmall ? 'px-2 py-1' : 'px-3 py-1.5'} ${fullWidth ? 'w-full justify-between' : ''}`}
                     type="button"
                     role="combobox"
@@ -88,7 +140,72 @@ export const Selector: React.FC<SelectorProps> = ({ label, value, options, onSel
                 </button>
             )}
 
-            {isOpen && !loading && (
+            {isOpen &&
+                !loading &&
+                portalMenu &&
+                menuRect &&
+                typeof document !== 'undefined' &&
+                createPortal(
+                    <div
+                        ref={menuRef}
+                        role="listbox"
+                        aria-label={label}
+                        style={{
+                            position: 'fixed',
+                            zIndex: SELECTOR_MENU_Z,
+                            ...(direction === 'up'
+                                ? {
+                                      bottom: window.innerHeight - menuRect.top + 4,
+                                      ...(menuAlign === 'end'
+                                          ? { right: window.innerWidth - menuRect.right }
+                                          : { left: menuRect.left }),
+                                  }
+                                : {
+                                      top: menuRect.bottom + 4,
+                                      ...(menuAlign === 'end'
+                                          ? { right: window.innerWidth - menuRect.right }
+                                          : { left: menuRect.left }),
+                                  }),
+                            width: fullWidth ? menuRect.width : undefined,
+                            minWidth: fullWidth ? undefined : 220,
+                            maxWidth: 'min(calc(100vw - 1.5rem), 22rem)',
+                            maxHeight: direction === 'up' ? Math.max(120, menuRect.top - 12) : Math.max(120, window.innerHeight - menuRect.bottom - 12),
+                        }}
+                        className="bg-bg-surface border border-border-subtle rounded-lg shadow-xl overflow-y-auto flex flex-col p-1"
+                    >
+                        {options.map((option) => (
+                            <button
+                                key={option.id}
+                                role="option"
+                                aria-selected={option.id === value}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onSelect(option.id);
+                                    setIsOpen(false);
+                                }}
+                                className={`flex items-center justify-between w-full px-2 py-1.5 text-left rounded-md transition-colors ${option.id === value ? 'bg-state-active text-text-primary' : 'text-text-secondary hover:bg-state-hover hover:text-text-primary'
+                                    }`}
+                                type="button"
+                            >
+                                <div className="min-w-0 flex flex-col gap-0.5">
+                                    <div className="text-[11px] font-medium leading-tight flex items-center gap-1.5 break-words">
+                                        {option.label}
+                                        {option.hasWarning && (
+                                            <span className="rounded-[4px] border border-status-warning-border bg-status-warning-bg px-1.5 py-0.5 text-[8.5px] font-bold text-status-warning-text whitespace-nowrap">
+                                                Attention Needed
+                                            </span>
+                                        )}
+                                    </div>
+                                    {option.sub && <div className="text-[9px] text-text-muted leading-snug break-words">{option.sub}</div>}
+                                </div>
+                                {option.id === value && <Check className="w-3 h-3 text-status-success-text" aria-hidden="true" />}
+                            </button>
+                        ))}
+                    </div>,
+                    document.body
+                )}
+
+            {isOpen && !loading && !portalMenu && (
                 <div
                     role="listbox"
                     aria-label={label}

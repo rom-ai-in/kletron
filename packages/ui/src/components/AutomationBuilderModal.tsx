@@ -14,9 +14,9 @@ import {
 import type { SelectorOption } from "@kletron/ui/components/design-system";
 import { AutomationConfigBuilder } from "@kletron/shared/automationConfigBuilder";
 import {
-    automationStagesNeedLegacyGraphMigration,
+    alignAutomationStagesToWorkspaceGraphs,
+    automationStagesNeedGraphAlignment,
     CANONICAL_AGENT_GRAPH_IDS,
-    normalizeLegacyAutomationStages,
     resolveStageGraphId,
 } from "@kletron/shared/canonicalStageGraphs";
 import type { AutomationDefinition, AutomationStageConfig, AutomationTriggerType, GitEventType } from "@kletron/shared/automationTypes";
@@ -213,14 +213,14 @@ export function AutomationBuilderModal({
         [automationData.stages]
     );
 
-    /** Remap legacy stage graph ids (audit / simple_react) when graphs load or stages change. */
+    /** Legacy graph keys + canonical fallback ObjectIds → live workspace graph ids from /api/agent-graphs. */
     useEffect(() => {
         if (!open || graphOptions.length === 0) return;
         setAutomationData((prev) => {
-            if (!automationStagesNeedLegacyGraphMigration(prev.stages)) return prev;
+            if (!automationStagesNeedGraphAlignment(prev.stages, graphOptions)) return prev;
             return {
                 ...prev,
-                stages: normalizeLegacyAutomationStages(prev.stages, graphOptions),
+                stages: alignAutomationStagesToWorkspaceGraphs(prev.stages, graphOptions),
             };
         });
     }, [open, graphOptions, stagesGraphSignature]);
