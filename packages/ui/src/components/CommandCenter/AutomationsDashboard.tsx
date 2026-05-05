@@ -39,6 +39,10 @@ export interface AutomationsDashboardProps {
   onOpenInBrowser?: (id: string) => void;
   /** Jump to agent view with this session/thread id. */
   onOpenThread?: (sessionId: string) => void;
+  /** Current backend workspace display name (desktop / embedded list). */
+  workspaceLabel?: string;
+  /** Optional root path hint for the active workspace. */
+  workspaceRootHint?: string;
   loading?: boolean;
   className?: string;
 }
@@ -89,6 +93,8 @@ export function AutomationsDashboard({
   onViewResults,
   onOpenInBrowser,
   onOpenThread,
+  workspaceLabel,
+  workspaceRootHint,
   loading = false,
   className = '',
 }: AutomationsDashboardProps) {
@@ -113,6 +119,28 @@ export function AutomationsDashboard({
 
   return (
     <div className={`space-y-3 ${className}`}>
+      {(workspaceLabel || workspaceRootHint) && (
+        <div className="rounded-md border border-border-subtle bg-bg-elevated/40 px-3 py-2 text-[11px] text-text-secondary space-y-0.5">
+          <div>
+            Automations below belong to the active workspace
+            {workspaceLabel ? (
+              <>
+                : <span className="font-semibold text-text-primary">{workspaceLabel}</span>
+              </>
+            ) : (
+              "."
+            )}
+          </div>
+          <div className="text-text-muted">
+            Connectors, MCP servers, and skills are resolved from this workspace when you run or schedule an automation.
+            {workspaceRootHint ? (
+              <span className="block font-mono truncate mt-0.5" title={workspaceRootHint}>
+                {workspaceRootHint.length > 96 ? `…${workspaceRootHint.slice(-92)}` : workspaceRootHint}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">

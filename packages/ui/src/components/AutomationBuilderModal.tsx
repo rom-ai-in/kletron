@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { ListTree, ScrollText } from "lucide-react";
 import {
     ConfigExplorerModal,
@@ -13,6 +13,12 @@ import {
 } from "@kletron/ui/components/design-system";
 import type { SelectorOption } from "@kletron/ui/components/design-system";
 import { AutomationConfigBuilder } from "@kletron/shared/automationConfigBuilder";
+import {
+    automationStagesNeedLegacyGraphMigration,
+    CANONICAL_AGENT_GRAPH_IDS,
+    normalizeLegacyAutomationStages,
+    resolveStageGraphId,
+} from "@kletron/shared/canonicalStageGraphs";
 import type { AutomationDefinition, AutomationStageConfig, AutomationTriggerType, GitEventType } from "@kletron/shared/automationTypes";
 import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 import { describeCron } from "@kletron/shared/cronUtils";
@@ -77,13 +83,22 @@ interface AutomationBuilderModalProps {
     editAutomationId?: string;
     /** When set (e.g. Electron), used instead of global `fetch` for all API calls. */
     apiFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+    /** Link shown in the workspace banner (default `/app/connectors`). */
+    connectorsHref?: string;
 }
 
 type WizardStep = 1 | 2 | 3 | 4;
 
-export function AutomationBuilderModal({ open, onClose, onCreated, editAutomationId, apiFetch }: AutomationBuilderModalProps) {
+export function AutomationBuilderModal({
+    open,
+    onClose,
+    onCreated,
+    editAutomationId,
+    apiFetch,
+    connectorsHref = "/app/connectors",
+}: AutomationBuilderModalProps) {
     const request = apiFetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
-    const { activeWorkspaceId } = useWorkspace() ?? {};
+    const { activeWorkspaceId, activeWorkspace } = useWorkspace() ?? {};
     const [step, setStep] = useState<WizardStep>(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -182,8 +197,8 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                 // Fallback — show at least azure/lmstudio so the UI isn't empty
                 if (!cancelled) {
                     setLlmProviderOptions([
-                        { id: "azure", label: "Azure OpenAI" },
                         { id: "lmstudio", label: "LM Studio" },
+                        { id: "azure", label: "Azure OpenAI" },
                     ]);
                 }
             }
@@ -192,6 +207,23 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
         void loadProviders();
         return () => { cancelled = true; };
     }, []);
+
+    const stagesGraphSignature = useMemo(
+        () => (automationData.stages ?? []).map((s) => s.graphId).join("|"),
+        [automationData.stages]
+    );
+
+    /** Remap legacy stage graph ids (audit / simple_react) when graphs load or stages change. */
+    useEffect(() => {
+        if (!open || graphOptions.length === 0) return;
+        setAutomationData((prev) => {
+            if (!automationStagesNeedLegacyGraphMigration(prev.stages)) return prev;
+            return {
+                ...prev,
+                stages: normalizeLegacyAutomationStages(prev.stages, graphOptions),
+            };
+        });
+    }, [open, graphOptions, stagesGraphSignature]);
 
     useEffect(() => {
         const fetchExistingAutomation = async () => {
@@ -235,17 +267,24 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
     const handleSelectPreset = (presetName: string) => {
         const preset = AutomationConfigBuilder.buildAutomation(presetName);
         setAutomationData({
-            ...automationData,
-            name: preset.name,
-            description: preset.description,
+            name: preset.name ?? "",
+            description: preset.description ?? "",
             stages: preset.stages ? [...preset.stages] : [],
+            triggerType: preset.triggerType ?? "manual",
+            schedule: preset.schedule,
+            webhookConfig: preset.webhookConfig,
+            gitEventConfig: preset.gitEventConfig,
         });
         setStep(2);
     };
 
     const handleAddStage = () => {
-        const defaultGraphId = graphOptions.length > 0 ? graphOptions[0].id : "";
-        const defaultProvider: LlmProviderType = llmProviderOptions.length > 0 ? llmProviderOptions[0].id : "azure";
+        const defaultGraphId =
+            graphOptions.length > 0 ? resolveStageGraphId(graphOptions, "explorer") : CANONICAL_AGENT_GRAPH_IDS.EXPLORER;
+        const defaultProvider: LlmProviderType =
+            (llmProviderOptions.find((p) => p.id === "lmstudio")?.id as LlmProviderType | undefined) ??
+            (llmProviderOptions[0]?.id as LlmProviderType | undefined) ??
+            "lmstudio";
         const newStage: AutomationStageConfig = {
             id: `stage-${(automationData.stages?.length || 0) + 1}`,
             name: "New Stage",
@@ -307,7 +346,7 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                 throw new Error(errorMessage);
             }
             const data = await res.json();
-            const automationId = data.automationId ?? data.chainId;
+            const automationId = data.automationId;
             onCreated(editAutomationId || automationId);
         } catch (err: any) {
             setError(err.message || "Unknown error");
@@ -376,7 +415,7 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                             })}
                             <SelectableRow
                                 label="Custom Automation"
-                                subLabel="Manually configure every audit stage and setting"
+                                subLabel="Manually configure every stage, graph, and provider"
                                 onClick={() => {
                                     setAutomationData({ name: "Custom Automation", description: "", stages: [] });
                                     setStep(2);
@@ -860,7 +899,40 @@ export function AutomationBuilderModal({ open, onClose, onCreated, editAutomatio
                 </div>
             }
         >
-            {renderStep()}
+            <div className="space-y-3">
+                {activeWorkspace ? (
+                    <div className="rounded-md border border-border-subtle bg-bg-elevated/40 px-3 py-2 text-[11px] text-text-secondary flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span>
+                            Runs in{" "}
+                            <span className="font-semibold text-text-primary">{activeWorkspace.name}</span>
+                            {activeWorkspace.rootPath ? (
+                                <span
+                                    className="text-text-muted font-mono ml-1"
+                                    title={activeWorkspace.rootPath}
+                                >
+                                    ·{" "}
+                                    {activeWorkspace.rootPath.length > 72
+                                        ? `…${activeWorkspace.rootPath.slice(-68)}`
+                                        : activeWorkspace.rootPath}
+                                </span>
+                            ) : null}
+                        </span>
+                        <a
+                            href={connectorsHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-status-info-text hover:underline shrink-0"
+                        >
+                            Connectors & skills
+                        </a>
+                    </div>
+                ) : (
+                    <div className="rounded-md border border-status-warning-border bg-status-warning-bg/40 px-3 py-2 text-[11px] text-status-warning-text">
+                        Select a workspace so this automation is tied to the correct repo, connectors, and skills.
+                    </div>
+                )}
+                {renderStep()}
+            </div>
         </ConfigExplorerModal>
     );
 }

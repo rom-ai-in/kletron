@@ -227,14 +227,28 @@ function stripCompletedThinkingTagBlocks(text: string): string {
  * Progressive assistant stream (token deltas): strip thinking tags and meta text
  * before rendering markdown, so users don't see chain-of-thought or echoed context.
  *
- * We intentionally do **not** truncate on an unclosed thinking opener: models often
- * stream the opening tag before the body and close tag, which would blank the whole
- * answer until the close arrives (severe flicker). A brief partial tag may show until
- * the block completes; closed blocks are stripped immediately.
+ * Unclosed thinking tags are hidden from preview to prevent chain-of-thought leakage.
+ * Closed blocks are stripped while keeping any visible reply that follows.
  */
 export function sanitizeAssistantStreamPreview(raw: string): string {
     if (!raw?.trim()) return "";
     let t = raw.replace(/\r\n/g, "\n");
+    // Drop any still-open thinking block tail to avoid showing chain-of-thought
+    // while the model streams an unclosed tag.
+    const dropUnclosedTail = (
+        input: string,
+        openTag: string,
+        closeTag: string,
+    ): string => {
+        const low = input.toLowerCase();
+        const lastOpen = low.lastIndexOf(openTag);
+        if (lastOpen < 0) return input;
+        const lastClose = low.lastIndexOf(closeTag);
+        if (lastClose > lastOpen) return input;
+        return input.slice(0, lastOpen);
+    };
+    t = dropUnclosedTail(t, "<redacted_thinking>", "</redacted_thinking>");
+    t = dropUnclosedTail(t, "<think>", "</think>");
     t = stripCompletedThinkingTagBlocks(t);
     // Stray half-tags common while streaming
     t = t.replace(/<\/?redacted_thinking>/gi, " ");

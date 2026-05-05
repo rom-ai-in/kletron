@@ -17,39 +17,39 @@ import {
 
 const presets = [
     {
-        key: 'FULL_STACK_LOGIC_AUDIT',
-        name: 'Full Stack Logic Audit (Default)',
-        description: 'API, backend, frontend, design system, security, performance, delivery.',
+        key: 'CODE_FULL_REVIEW',
+        name: 'Code — full repository review',
+        description: 'Map → backend/API → client/UX → security synthesis. Manual snapshot.',
     },
     {
-        key: 'FULL_AUDIT',
-        name: 'Complete Monorepo Audit',
-        description: 'Sixteen sequential suites for full-repo coverage.',
+        key: 'CODE_PR_GATE',
+        name: 'Code — pull request gate',
+        description: 'Change review + ship checklist. Git event on PR.',
     },
     {
-        key: 'SECURITY_DEEP_DIVE',
-        name: 'Security Deep Dive',
-        description: 'Multi-pass security with consolidated high-signal findings.',
+        key: 'CODE_SECURITY_WEBHOOK',
+        name: 'Code — security review (webhook)',
+        description: 'CI-friendly security pass via signed HTTP webhook.',
     },
     {
-        key: 'I18N_QUALITY',
-        name: 'I18n Quality Assurance',
-        description: 'Structure, completeness, and usage for localization.',
+        key: 'CODE_WEEKLY_HEALTH',
+        name: 'Code — weekly health scan',
+        description: 'Scheduled hygiene: deps/complexity signals, test/doc drift, summary.',
     },
     {
-        key: 'API_QUALITY_GATE',
-        name: 'API Quality Gate',
-        description: 'Fast pre-merge API checks—security and tests.',
+        key: 'BUSINESS_STRATEGY_PIPELINE',
+        name: 'Business — strategy & market',
+        description: 'Context → market → competition → priorities → exec brief.',
     },
     {
-        key: 'FULL_BACKEND_AUDIT',
-        name: 'Full Backend Audit',
-        description: 'API, workers, infra, errors, security—backend-tuned.',
+        key: 'BUSINESS_FUNDRAISING',
+        name: 'Business — fundraising prep',
+        description: 'Story, market framing, investor Q&A, diligence checklist.',
     },
     {
-        key: 'CONTINUOUS_IMPROVEMENT',
-        name: 'Continuous Improvement (Daily)',
-        description: 'Scheduled discovery and hygiene—cron-friendly ops graph.',
+        key: 'DAILY_FOCUS_PRIORITIES',
+        name: 'Daily focus — prioritize today',
+        description: 'Memory + Gmail + calendar + todos → urgent vs important → a concrete plan.',
     },
 ];
 

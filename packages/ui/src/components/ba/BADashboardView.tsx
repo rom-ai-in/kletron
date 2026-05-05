@@ -291,15 +291,15 @@ export function BADashboardView() {
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-medium text-text-primary">Full Analysis</p>
                                                 <p className="text-[11px] text-text-muted mt-0.5">
-                                                    Complete BA pipeline: market, competitive, features, requirements, scoring
+                                                    Strategy pipeline: context, market, competition, opportunities, executive brief
                                                 </p>
                                                 <Button
                                                     size="sm"
                                                     className="mt-2"
-                                                    onClick={() => handleAnalyze("BUSINESS_ANALYSIS_FULL")}
+                                                    onClick={() => handleAnalyze("BUSINESS_STRATEGY_PIPELINE")}
                                                     disabled={analyzing !== null}
                                                 >
-                                                    {analyzing === "BUSINESS_ANALYSIS_FULL" ? "Starting..." : "Run Full Analysis"}
+                                                    {analyzing === "BUSINESS_STRATEGY_PIPELINE" ? "Starting..." : "Run Full Analysis"}
                                                 </Button>
                                             </div>
                                         </div>
@@ -319,10 +319,10 @@ export function BADashboardView() {
                                                     size="sm"
                                                     variant="secondary"
                                                     className="mt-2"
-                                                    onClick={() => handleAnalyze("QUICK_FEATURE_BRAINSTORM")}
+                                                    onClick={() => handleAnalyze("BUSINESS_IDEATION")}
                                                     disabled={analyzing !== null}
                                                 >
-                                                    {analyzing === "QUICK_FEATURE_BRAINSTORM" ? "Starting..." : "Quick Brainstorm"}
+                                                    {analyzing === "BUSINESS_IDEATION" ? "Starting..." : "Quick Brainstorm"}
                                                 </Button>
                                             </div>
                                         </div>
@@ -342,10 +342,10 @@ export function BADashboardView() {
                                                     size="sm"
                                                     variant="secondary"
                                                     className="mt-2"
-                                                    onClick={() => handleAnalyze("COMPETITIVE_DEEP_DIVE")}
+                                                    onClick={() => handleAnalyze("BUSINESS_COMPETITIVE_SCAN")}
                                                     disabled={analyzing !== null}
                                                 >
-                                                    {analyzing === "COMPETITIVE_DEEP_DIVE" ? "Starting..." : "Deep Dive"}
+                                                    {analyzing === "BUSINESS_COMPETITIVE_SCAN" ? "Starting..." : "Deep Dive"}
                                                 </Button>
                                             </div>
                                         </div>

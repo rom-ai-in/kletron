@@ -2,7 +2,7 @@
 # Global external HTTPS Application Load Balancer → Cloud Run (serverless NEG).
 # Use when Cloud Run domain mapping is not suitable (e.g. europe-west6).
 #
-# Prérequis: gcloud auth, projet kletron, service Cloud Run kletron-web déployé.
+# Prérequis: gcloud auth, projet kletron, service Cloud Run numezis-web déployé.
 #
 # Après DNS + certificat ACTIVE:
 #   KLETRON_WEB_URL=https://www.kletron.com python3 infra/gcp/provision_secrets.py
@@ -16,7 +16,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
 REGION="${REGION:-europe-west6}"
-RUN_SERVICE="${RUN_SERVICE:-kletron-web}"
+RUN_SERVICE="${RUN_SERVICE:-numezis-web}"
 
 ADDRESS_NAME="${ADDRESS_NAME:-kletron-www-lb-ip}"
 NEG_NAME="${NEG_NAME:-kletron-www-neg}"

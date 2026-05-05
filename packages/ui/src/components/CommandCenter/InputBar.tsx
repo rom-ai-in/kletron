@@ -28,13 +28,15 @@ export interface InputBarProps {
   modelSelector?: React.ReactNode;
   /** Thread approval mode (agent sessions) */
   approvalSelector?: React.ReactNode;
+  /** Research depth (agent sessions) — same row as graph / LLM on web */
+  depthSelector?: React.ReactNode;
   /** Token usage display */
   tokenUsage?: { input: string; output: string } | null;
   /** Plan mode badge */
   planMode?: boolean;
-  /** Connection status dot: true = healthy, false = unhealthy, 'checking' = testing */
+  /** @deprecated LLM health is shown on the LLM `Selector` (web parity); ignored by this component. */
   connected?: boolean | 'checking';
-  /** Custom tooltip for the status dot */
+  /** @deprecated Ignored (see `connected`). */
   connectionLabel?: string;
   className?: string;
 }
@@ -55,10 +57,11 @@ export function InputBar({
   graphSelector,
   modelSelector,
   approvalSelector,
+  depthSelector,
   tokenUsage,
   planMode = false,
-  connected = true,
-  connectionLabel,
+  connected: _connected = true,
+  connectionLabel: _connectionLabel,
   className = '',
 }: InputBarProps) {
   const leadingFooter = useMemo(() => {
@@ -90,28 +93,16 @@ export function InputBar({
   }, [onPaperclipClick, onDictationClick]);
 
   const sessionStrip = useMemo(() => {
-    if (!graphSelector && !modelSelector && !approvalSelector) return null;
+    if (!graphSelector && !modelSelector && !approvalSelector && !depthSelector) return null;
     return (
-      <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         {graphSelector}
         {modelSelector}
         {approvalSelector}
-        <span
-          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-            connected === 'checking'
-              ? 'animate-pulse bg-yellow-500'
-              : connected
-                ? 'bg-status-success'
-                : 'bg-status-error'
-          }`}
-          title={
-            connectionLabel ||
-            (connected === 'checking' ? 'Checking LLM…' : connected ? 'LLM Connected' : 'LLM Disconnected')
-          }
-        />
+        {depthSelector}
       </div>
     );
-  }, [graphSelector, modelSelector, approvalSelector, connected, connectionLabel]);
+  }, [graphSelector, modelSelector, approvalSelector, depthSelector]);
 
   return (
     <div className={`px-4 pb-3 pt-1 ${className}`}>

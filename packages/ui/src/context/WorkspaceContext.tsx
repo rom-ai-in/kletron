@@ -38,7 +38,7 @@ export interface WorkspaceContextValue {
   /** Switch the active workspace (calls API, updates local state) */
   switchWorkspace: (id: string) => Promise<void>;
   /** Refresh the workspace list from the server */
-  refreshWorkspaces: () => Promise<void>;
+  refreshWorkspaces: (opts?: { silent?: boolean }) => Promise<void>;
   /** Create a new workspace */
   createWorkspace: (input: { rootPath: string; name?: string; repoUrl?: string }) => Promise<WorkspaceSummary | null>;
   /** Delete (archive) a workspace */
@@ -64,8 +64,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     return () => { mountedRef.current = false; };
   }, []);
 
-  const refreshWorkspaces = useCallback(async () => {
-    setLoading(true);
+  const refreshWorkspaces = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
+    // Background refresh (window focus, interval) must not flip loading — otherwise pages
+    // that gate on `loading` unmount children (e.g. modals on /app/config/connectors).
+    if (!silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const res = await fetch(`/api/workspaces?t=${Date.now()}`);
@@ -79,7 +84,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       console.error('[WorkspaceContext] Failed to fetch workspaces:', e);
       if (mountedRef.current) setError((e as Error).message ?? 'Failed to load workspaces');
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && !silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -91,13 +98,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   // Periodic health revalidation for stale/moved workspace paths.
   useEffect(() => {
     const interval = setInterval(() => {
-      void refreshWorkspaces();
+      void refreshWorkspaces({ silent: true });
     }, 60_000);
     return () => clearInterval(interval);
   }, [refreshWorkspaces]);
 
   useEffect(() => {
-    const onFocus = () => void refreshWorkspaces();
+    const onFocus = () => void refreshWorkspaces({ silent: true });
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [refreshWorkspaces]);

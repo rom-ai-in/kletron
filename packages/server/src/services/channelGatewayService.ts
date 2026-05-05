@@ -29,8 +29,15 @@ export function getTelegramChannelEnvConfig(): TelegramChannelEnvConfig | null {
     return { botToken, workspaceId, graphId, ...(webhookSecret ? { webhookSecret } : {}) };
 }
 
+/**
+ * Telegram/channel runs default to full_auto_thread so read-only tools actually execute
+ * (source `channel` is not in default autoApproveReadonlySources; confirm_everything would queue fake approvals).
+ * Override with CHANNEL_TELEGRAM_THREAD_APPROVAL_MODE=confirm_everything|full_auto_thread|inherit
+ */
 function defaultChannelThreadApprovalMode() {
-    return parseThreadApprovalMode("confirm_everything");
+    const raw = process.env.CHANNEL_TELEGRAM_THREAD_APPROVAL_MODE?.trim();
+    if (!raw) return parseThreadApprovalMode("full_auto_thread");
+    return parseThreadApprovalMode(raw);
 }
 
 export function formatWorkflowReply(result: AgentWorkflowResult): string {

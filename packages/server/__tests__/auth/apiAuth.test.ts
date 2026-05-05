@@ -90,6 +90,26 @@ describe("apiAuth", () => {
     expect(auth).toEqual({ userId: "user-123", authType: "session" });
   });
 
+  it("prefers a valid browser session cookie over an invalid bearer header", async () => {
+    const token = await encode({
+      token: { id: "user-123" },
+      secret: TEST_SECRET,
+      maxAge: 30 * 24 * 60 * 60,
+    });
+
+    const { getAppRouteAuth } = await loadApiAuth();
+    const auth = await getAppRouteAuth(
+      new Request(`${TEST_URL}/api/sessions?limit=50&workMode=code`, {
+        headers: {
+          cookie: `__Secure-next-auth.session-token=${token}`,
+          authorization: "Bearer definitely-not-a-valid-token",
+        },
+      }),
+    );
+
+    expect(auth).toEqual({ userId: "user-123", authType: "session" });
+  });
+
   it("accepts NextAuth session cookies for pages routes too", async () => {
     const token = await encode({
       token: { id: "user-123" },

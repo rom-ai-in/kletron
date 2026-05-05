@@ -629,13 +629,12 @@ START → clarify_with_user → write_research_brief → plan_research → resea
 | `maxReactToolCalls` | `6` | Max tool calls per researcher sub-agent |
 | `maxConcurrentResearchUnits` | `3` | Max parallel researcher sub-agents |
 
-### Audit Chains
+### Automations
 
-Multi-stage audit workflows that can be configured with:
-- Presets: `FULL_AUDIT`, `SECURITY_DEEP_DIVE`, `I18N_QUALITY_CHAIN`
-- Custom chains with conditional stage skipping
-- Retry logic with fallback LLM providers
-- Cron-based scheduled execution
+Multi-stage workflows (stored in MongoDB collection `audit_chains` for historical reasons):
+- Presets: coding (`CODE_*`, `PRODUCT_AREA_DEEP_DIVE`), business (`BUSINESS_*`), `DAILY_FOCUS_PRIORITIES`. Older preset keys are still accepted via aliases in `AutomationConfigBuilder.buildAutomation`.
+- Custom configs with conditional stage skipping
+- Cron, webhook, and git-event triggers
 
 ### Pipeline Outputs
 
@@ -892,7 +891,7 @@ For macOS notarization issues, ensure you have:
 | Design System | `docs/DESIGN_SYSTEM.md` | UI design system guidelines |
 | VS Code Protocol | `docs/vscode-protocol.md` | VS Code extension backend protocol |
 | VS Code UI | `docs/vscode-ui.md` | VS Code extension UI design |
-| Audit Chains | `.agent/workflows/create-audit-chain.md` | How to create audit chains |
+| Automations | `.agent/workflows/create-automation.md` | Multi-stage automations (presets & API) |
 
 ---
 

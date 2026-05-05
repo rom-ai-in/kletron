@@ -74,6 +74,30 @@ describe("toolApprovalPolicy tool classification", () => {
         expect(classifyTool("read_file")).toBe("readonly");
     });
 
+    it("classifies SaaS connector API tools as readonly", () => {
+        for (const toolName of ["github_api", "sentry_api"]) {
+            expect(READONLY_TOOLS.has(toolName)).toBe(true);
+            expect(classifyTool(toolName)).toBe("readonly");
+        }
+    });
+
+    it("classifies Google read-only tools as readonly", () => {
+        for (const toolName of [
+            "gmail_list_labels",
+            "gmail_search_messages",
+            "gmail_read_message",
+            "calendar_list_calendars",
+            "calendar_freebusy",
+            "calendar_list_events",
+            "calendar_get_event",
+            "drive_list_files",
+            "drive_read_file",
+        ]) {
+            expect(READONLY_TOOLS.has(toolName)).toBe(true);
+            expect(classifyTool(toolName)).toBe("readonly");
+        }
+    });
+
     it("classifies str_replace_editor as write_repo", () => {
         expect(WRITE_REPO_TOOLS.has("str_replace_editor")).toBe(true);
         expect(classifyTool("str_replace_editor")).toBe("write_repo");
@@ -139,6 +163,12 @@ describe("toolApprovalPolicy decision matrix (config-driven)", () => {
         // Default: autoApproveReadonlySources = ["agent", "automation"]
         const agentPolicy = getToolApprovalPolicy({ source: "agent", toolName: "read_file" });
         expect(agentPolicy.decision).toBe("auto_approve");
+    });
+
+    it("auto-approves Google read-only tools for agent (default config)", () => {
+        const policy = getToolApprovalPolicy({ source: "agent", toolName: "drive_read_file" });
+        expect(policy.decision).toBe("auto_approve");
+        expect(policy.toolClass).toBe("readonly");
     });
 
     it("requires approval for execute_bash by default (agent source)", () => {
@@ -328,6 +358,14 @@ describe("applyThreadApprovalOverride", () => {
     it("work mode allows load_skill", () => {
         const p = getToolApprovalPolicy({ source: "agent", toolName: "load_skill", workMode: "work" });
         expect(p.decision).not.toBe("deny");
+    });
+
+    it("work mode allows sentry_api and github_api (readonly SaaS connectors)", () => {
+        for (const toolName of ["sentry_api", "github_api"]) {
+            const p = getToolApprovalPolicy({ source: "agent", toolName, workMode: "work" });
+            expect(p.decision).not.toBe("deny");
+            expect(p.decision).toBe("auto_approve");
+        }
     });
 
     it("work mode allows namespaced external MCP tools (slug__tool)", () => {

@@ -156,9 +156,11 @@ export async function ensureChannelStoreIndexes(): Promise<void> {
         const { ensureWorkspaceChannelSettingsIndexes } = await import("./workspaceChannelSettingsService");
         const { ensureChannelAppSecretsIndexes } = await import("./channelAppSecretsService");
         const { ensureChannelChatContextIndexes } = await import("./channelChatContextService");
+        const { ensureChannelInboundJobIndexes } = await import("./channelInboundJobService");
         await ensureWorkspaceChannelSettingsIndexes();
         await ensureChannelAppSecretsIndexes();
         await ensureChannelChatContextIndexes();
+        await ensureChannelInboundJobIndexes();
     } catch (e) {
         console.warn("[ChannelStore] ensureIndexes:", (e as Error)?.message ?? e);
     }

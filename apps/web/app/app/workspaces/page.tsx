@@ -144,7 +144,7 @@ export default function WorkspacesPage() {
                                     <Button
                                         size="sm"
                                         variant="secondary"
-                                        onClick={() => window.location.href = `/app/${workspace.id}/workbench`}
+                                        onClick={() => window.location.href = "/app/agent"}
                                     >
                                         Open
                                     </Button>

@@ -125,6 +125,9 @@ export {
 export { PendingSessionEditsStrip } from './components/Agent/PendingSessionEditsStrip';
 export type { PendingSessionEditsStripProps } from './components/Agent/PendingSessionEditsStrip';
 
+export { AutomationExecutionContextPanel } from './components/automations/AutomationExecutionContextPanel';
+export type { AutomationExecutionContextPanelProps } from './components/automations/AutomationExecutionContextPanel';
+
 export type {
     TitleBarProps, GitDiffStats,
     ProjectSidebarProps, SidebarProject, SidebarThread, ThreadLiveStatus,

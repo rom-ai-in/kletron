@@ -72,5 +72,56 @@ describe("workspaceCapabilityResolver", () => {
         const caps = await resolveWorkspaceCapabilities("ws-empty");
 
         expect(caps.enabledTools).not.toContain("github_api");
+        expect(caps.enabledTools).not.toContain("sentry_api");
+    });
+
+    it("exposes sentry_api when a sentry integration is enabled", async () => {
+        const connectors = await import("../src/services/connectorsService");
+        vi.mocked(connectors.listEnabledIntegrationProviderIds).mockResolvedValueOnce(["sentry"]);
+
+        const { resolveWorkspaceCapabilities } = await import(
+            "../src/services/workspaceCapabilityResolver"
+        );
+        const caps = await resolveWorkspaceCapabilities("ws-sentry");
+
+        expect(caps.enabledTools).toContain("sentry_api");
+    });
+
+    it("exposes Google tools when Google integrations are enabled", async () => {
+        const connectors = await import("../src/services/connectorsService");
+        vi.mocked(connectors.listEnabledIntegrationProviderIds).mockResolvedValueOnce([
+            "google-drive",
+            "google-calendar",
+            "gmail",
+        ]);
+
+        const { resolveWorkspaceCapabilities } = await import(
+            "../src/services/workspaceCapabilityResolver"
+        );
+        const caps = await resolveWorkspaceCapabilities("ws-google");
+
+        expect(caps.enabledIntegrationProviderIds).toEqual(
+            expect.arrayContaining(["google-drive", "google-calendar", "gmail"]),
+        );
+        expect(caps.enabledTools).toEqual(
+            expect.arrayContaining([
+                "drive_list_files",
+                "drive_read_file",
+                "drive_write_text_file",
+                "calendar_list_calendars",
+                "calendar_freebusy",
+                "calendar_list_events",
+                "calendar_get_event",
+                "calendar_create_event",
+                "calendar_update_event",
+                "calendar_delete_event",
+                "gmail_list_labels",
+                "gmail_search_messages",
+                "gmail_read_message",
+                "gmail_modify_message_labels",
+                "gmail_create_draft",
+                "gmail_send_message",
+            ]),
+        );
     });
 });

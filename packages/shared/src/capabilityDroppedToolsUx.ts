@@ -7,6 +7,7 @@ const KNOWN_LABELS: Record<string, string> = {
   web_search: "Web search",
   fetch_url: "Opening web pages",
   github_api: "GitHub",
+  sentry_api: "Sentry",
   notify: "Slack notifications",
 };
 

@@ -21,15 +21,9 @@ type LlmConfigSummary = { provider?: string } | null;
 
 export default function ConfigOverviewPage() {
   const { activeWorkspaceId } = useWorkspace();
-  const skillsHref = activeWorkspaceId
-    ? `/app/${activeWorkspaceId}/skills`
-    : "/app/config/skills";
-  const connectorsHref = activeWorkspaceId
-    ? `/app/${activeWorkspaceId}/connectors`
-    : "/app/config/connectors";
-  const pluginsHref = activeWorkspaceId
-    ? `/app/${activeWorkspaceId}/plugins`
-    : "/app/config/plugins";
+  const skillsHref = "/app/skills";
+  const connectorsHref = "/app/config/connectors";
+  const pluginsHref = "/app/plugins";
   const [graphsCount, setGraphsCount] = useState<number>(0);
   const [toolsCount, setToolsCount] = useState<number>(0);
   const [llmProvider, setLlmProvider] = useState<LlmConfigSummary>(null);

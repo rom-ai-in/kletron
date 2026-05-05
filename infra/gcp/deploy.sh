@@ -8,7 +8,7 @@
 #
 # Usage:
 #   ./infra/gcp/deploy.sh
-#   NEXT_PUBLIC_APP_URL=https://kletron-web-xxxxx.europe-west6.run.app ./infra/gcp/deploy.sh
+#   NEXT_PUBLIC_APP_URL=https://numezis-web-xxxxx.europe-west6.run.app ./infra/gcp/deploy.sh
 
 set -euo pipefail
 
@@ -17,8 +17,8 @@ cd "$ROOT"
 
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
 REGION="${REGION:-europe-west6}"
-WEB_SERVICE="${WEB_SERVICE:-kletron-web}"
-MCP_SERVICE="${MCP_SERVICE:-kletron-mcp}"
+WEB_SERVICE="${WEB_SERVICE:-numezis-web}"
+MCP_SERVICE="${MCP_SERVICE:-numezis-mcp}"
 
 if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
   echo "Définis le projet: gcloud config set project kletron"
@@ -30,7 +30,7 @@ if [[ -z "${APP_URL}" ]]; then
   echo "Pass NEXT_PUBLIC_APP_URL (origine HTTPS publique du site), ex.:"
   echo "  NEXT_PUBLIC_APP_URL=https://www.kletron.com ./infra/gcp/deploy.sh"
   echo "ou l’URL Cloud Run directe tant que le certificat managé du LB est en PROVISIONING:"
-  echo "  NEXT_PUBLIC_APP_URL=https://kletron-web-xxxx.europe-west6.run.app ./infra/gcp/deploy.sh"
+  echo "  NEXT_PUBLIC_APP_URL=https://numezis-web-xxxx.europe-west6.run.app ./infra/gcp/deploy.sh"
   APP_URL="https://placeholder.invalid"
 fi
 

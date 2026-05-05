@@ -196,6 +196,8 @@ export class CategorySpecificToolSelector {
       // GitHub tools
       { name: 'github_api', group: 'git' },
 
+      { name: 'sentry_api', group: 'observability' },
+
       // Execution tools
       { name: 'execute_bash', group: 'task_execution' },
 

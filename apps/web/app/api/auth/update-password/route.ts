@@ -2,6 +2,7 @@
 // API route for updating password after reset - validates token from DB
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { ObjectId } from 'mongodb';
 import { getDb } from '@kletron/server/lib/db';
 
 export async function POST(request: Request) {
@@ -38,14 +39,31 @@ export async function POST(request: Request) {
             );
         }
 
+        const rawUserId = tokenDoc.userId as string | ObjectId;
+        let userObjectId: ObjectId;
+        try {
+            userObjectId = rawUserId instanceof ObjectId ? rawUserId : new ObjectId(String(rawUserId));
+        } catch {
+            return NextResponse.json(
+                { success: false, message: 'Invalid or expired reset token' },
+                { status: 400 }
+            );
+        }
+
         const bcrypt = (await import('bcrypt')).default;
         const passwordHash = await bcrypt.hash(newPassword, 12);
-        await db.collection('users').updateOne(
-            { _id: tokenDoc.userId },
+        const ur = await db.collection('users').updateOne(
+            { _id: userObjectId },
             { $set: { passwordHash, password: passwordHash, updatedAt: new Date() } }
         );
 
-        // Invalidate the used token
+        if (ur.matchedCount === 0) {
+            return NextResponse.json(
+                { success: false, message: 'Account not found; request a new reset link' },
+                { status: 404 }
+            );
+        }
+
         await db.collection('password_reset_tokens').deleteOne({ _id: tokenDoc._id });
 
         return NextResponse.json({

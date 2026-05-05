@@ -182,7 +182,7 @@ export const CONNECTOR_CATALOG: ConnectorTypeDefinition[] = [
     {
         id: "google-drive",
         name: "Google Drive",
-        description: "Read, inspect metadata, and manage documents, sheets, and slides in Google Drive.",
+        description: "List, read, and create text-based files in Google Drive.",
         category: "storage",
         icon: "google-drive",
         auth: "oauth",
@@ -199,7 +199,7 @@ export const CONNECTOR_CATALOG: ConnectorTypeDefinition[] = [
                 required: true,
             },
         ],
-        unlocksTools: ["fetch_url"],
+        unlocksTools: ["drive_list_files", "drive_read_file", "drive_write_text_file"],
         docsUrl: "https://developers.google.com/drive/api/guides/about-auth",
     },
     {
@@ -283,7 +283,7 @@ export const CONNECTOR_CATALOG: ConnectorTypeDefinition[] = [
     {
         id: "google-calendar",
         name: "Google Calendar",
-        description: "Read and manage calendar events and availability.",
+        description: "Read and manage calendar events, calendars, and availability.",
         category: "productivity",
         auth: "oauth",
         oauthScopes: [
@@ -295,7 +295,15 @@ export const CONNECTOR_CATALOG: ConnectorTypeDefinition[] = [
         credentialFields: [
             { key: "refreshToken", label: "OAuth refresh token", secret: true, required: true },
         ],
-        unlocksTools: ["fetch_url"],
+        unlocksTools: [
+            "calendar_list_calendars",
+            "calendar_freebusy",
+            "calendar_list_events",
+            "calendar_get_event",
+            "calendar_create_event",
+            "calendar_update_event",
+            "calendar_delete_event",
+        ],
         docsUrl: "https://developers.google.com/calendar/api/guides/overview",
     },
     {
@@ -311,7 +319,14 @@ export const CONNECTOR_CATALOG: ConnectorTypeDefinition[] = [
         credentialFields: [
             { key: "refreshToken", label: "OAuth refresh token", secret: true, required: true },
         ],
-        unlocksTools: ["fetch_url"],
+        unlocksTools: [
+            "gmail_list_labels",
+            "gmail_search_messages",
+            "gmail_read_message",
+            "gmail_modify_message_labels",
+            "gmail_create_draft",
+            "gmail_send_message",
+        ],
         docsUrl: "https://developers.google.com/gmail/api/guides",
     },
     {
@@ -505,6 +520,40 @@ export const CONNECTOR_CATALOG: ConnectorTypeDefinition[] = [
         credentialFields: [{ key: "apiKey", label: "API key", secret: true, required: true }],
         unlocksTools: ["fetch_url"],
         docsUrl: "https://www.definite.app/",
+    },
+    {
+        id: "sentry",
+        name: "Sentry",
+        description:
+            "Error monitoring: list organizations and projects, browse issues, and open issue details via the Sentry REST API.",
+        category: "other",
+        auth: "api_key",
+        credentialFields: [
+            {
+                key: "accessToken",
+                label: "User Auth Token",
+                secret: true,
+                required: true,
+                placeholder: "sntryu_…",
+                help: "Sentry → Settings → Auth Tokens. Scopes: org:read, project:read, event:read (and event:write if you need mutating APIs later).",
+            },
+            {
+                key: "organizationSlug",
+                label: "Default organization slug",
+                required: false,
+                placeholder: "my-org",
+                help: "Optional default for projects / list_issues. Override per call with tool args.",
+            },
+            {
+                key: "host",
+                label: "Host (self-hosted)",
+                required: false,
+                placeholder: "sentry.example.com",
+                help: "Leave empty for sentry.io. Otherwise your instance hostname (no https://).",
+            },
+        ],
+        unlocksTools: ["sentry_api"],
+        docsUrl: "https://docs.sentry.io/api/",
     },
 ];
 

@@ -34,7 +34,7 @@ import {
   Terminal,
 } from "lucide-react";
 
-/** Build launchpad items; Skills URL follows the active workspace when set. */
+/** Build launchpad items; Skills targets `/app/skills` (active workspace from shell). */
 function buildLaunchpadItems(skillsHref: string) {
   return [
   {
@@ -167,14 +167,8 @@ function statusBadge(status: string | undefined) {
 
 export default function AppDashboardPage() {
   const router = useRouter();
-  const { activeWorkspace: workspace, activeWorkspaceId } = useWorkspace();
-  const launchpadItems = useMemo(
-    () =>
-      buildLaunchpadItems(
-        activeWorkspaceId ? `/app/${activeWorkspaceId}/skills` : "/app/config/skills",
-      ),
-    [activeWorkspaceId],
-  );
+  const { activeWorkspace: workspace } = useWorkspace();
+  const launchpadItems = useMemo(() => buildLaunchpadItems("/app/skills"), []);
   const [sessions, setSessions] = useState<ConversationHistoryItem[]>([]);
   const [runs, setRuns] = useState<AgentGraphRunSummary[]>([]);
   const [graphs, setGraphs] = useState<AgentGraphSummary[]>([]);

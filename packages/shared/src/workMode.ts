@@ -44,6 +44,18 @@ export function normalizeToWorkModeId(raw: string | null | undefined): WorkModeI
   return LEGACY_CATEGORY_TO_WORK_MODE[raw] ?? "code";
 }
 
+/**
+ * Values that may appear in persisted `workMode` / legacy category fields for a given mode.
+ * Session list queries must match these so older threads stay visible after Code/Work migration.
+ */
+export function workModeStorageValuesMatching(mode: WorkModeId): string[] {
+  const out = new Set<string>([mode]);
+  for (const [raw, mapped] of Object.entries(LEGACY_CATEGORY_TO_WORK_MODE)) {
+    if (mapped === mode) out.add(raw);
+  }
+  return Array.from(out);
+}
+
 /** Strict lookup: unknown ids (except legacy aliases) return null — use for DB category definitions. */
 export function resolveWorkModeOrNull(raw: string | null | undefined): WorkModeId | null {
   if (raw == null || raw === "") return null;
@@ -73,6 +85,25 @@ const WORK_MODE_TOOLS_BEYOND_STANDARD = [
   "list_available_skills",
   "load_skill",
   "write_todos",
+  "gmail_list_labels",
+  "gmail_search_messages",
+  "gmail_read_message",
+  "gmail_modify_message_labels",
+  "gmail_create_draft",
+  "gmail_send_message",
+  "calendar_list_calendars",
+  "calendar_freebusy",
+  "calendar_list_events",
+  "calendar_get_event",
+  "calendar_create_event",
+  "calendar_update_event",
+  "calendar_delete_event",
+  "drive_list_files",
+  "drive_read_file",
+  "drive_write_text_file",
+  /** Workspace-bound SaaS REST tools (same pattern as Google read connectors). */
+  "github_api",
+  "sentry_api",
 ] as const;
 
 function buildWorkModeToolAllowlist(): string[] {

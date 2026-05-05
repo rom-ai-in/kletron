@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ENV_PATH = ROOT / ".env"
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "kletron")
 REGION = os.environ.get("GCP_REGION", "europe-west6")
-SERVICE = os.environ.get("GCP_WEB_SERVICE", "kletron-web")
+SERVICE = os.environ.get("GCP_WEB_SERVICE", "numezis-web")
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -51,6 +51,30 @@ def run(cmd: list[str]) -> None:
 
 def run_stdin(cmd: list[str], data: bytes) -> None:
     subprocess.run(cmd, input=data, check=True)
+
+
+def cloud_run_service_url(service: str) -> str | None:
+    proc = subprocess.run(
+        [
+            "gcloud",
+            "run",
+            "services",
+            "describe",
+            service,
+            "--project",
+            PROJECT_ID,
+            "--region",
+            REGION,
+            "--format=value(status.url)",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return None
+    url = proc.stdout.strip().rstrip("/")
+    return url or None
 
 
 def project_number() -> str:
@@ -132,6 +156,9 @@ def patch_nextauth_in_env(text: str, new_secret: str) -> str:
 
 def resolve_public_web_url(env: dict[str, str]) -> str:
     """HTTPS origin for Next.js public URL + NextAuth (no trailing slash)."""
+    override = os.environ.get("NUMEZIS_WEB_URL", "").strip().rstrip("/")
+    if override.startswith("https://"):
+        return override
     override = os.environ.get("KLETRON_WEB_URL", "").strip().rstrip("/")
     if override.startswith("https://"):
         return override
@@ -139,10 +166,16 @@ def resolve_public_web_url(env: dict[str, str]) -> str:
         raw = env.get(key, "").strip().rstrip("/")
         if raw.startswith("https://"):
             return raw
+    live_url = cloud_run_service_url(SERVICE)
+    if live_url:
+        return live_url
     # Last resort: default Cloud Run hostname (update after first deploy if needed).
     return os.environ.get(
-        "KLETRON_WEB_FALLBACK_URL",
-        "https://kletron-web-jve2iznmea-oa.a.run.app",
+        "NUMEZIS_WEB_FALLBACK_URL",
+        os.environ.get(
+            "KLETRON_WEB_FALLBACK_URL",
+            "https://numezis-web-hyacsa6rva-oa.a.run.app",
+        ),
     ).strip().rstrip("/")
 
 
@@ -269,6 +302,8 @@ def main() -> None:
         cors = ",".join(x for x in (web_url, cors) if x)
 
     env_pairs = [
+        "AUTH_TRUST_HOST=true",
+        "NEXT_TELEMETRY_DISABLED=1",
         f"NEXT_PUBLIC_APP_URL={web_url}",
         f"NEXTAUTH_URL={web_url}",
         f"AZURE_OPENAI_ENDPOINT={env.get('AZURE_OPENAI_ENDPOINT', '').strip()}",

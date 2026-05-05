@@ -8,7 +8,12 @@ export type McpServerStatus = "unknown" | "connected" | "error" | "disabled";
 
 export interface WorkspaceIntegrationSummary {
     id: string;
+    /** Workspace context for this row (always the requesting workspace). */
     workspaceId: string;
+    /** When set, credentials live on account_integrations; `id` is the account integration id. */
+    accountIntegrationId?: string;
+    /** When using account library + bindings: whether this integration is enabled for this workspace. */
+    workspaceBindingEnabled?: boolean;
     providerId: string;
     displayName: string;
     status: ConnectorIntegrationStatus;
@@ -17,11 +22,16 @@ export interface WorkspaceIntegrationSummary {
     createdAt: string;
     /** Never sent: the actual credentials. Only redacted hints. */
     credentialPreview: Record<string, string>;
+    /** When account-backed: count of your workspaces with this integration binding enabled. */
+    enabledWorkspaceCount?: number;
 }
 
 export interface WorkspaceMcpServerSummary {
+    /** Runtime / API id: account server id when using library model, else legacy workspace doc id. */
     id: string;
     workspaceId: string;
+    /** When set, config lives on account_mcp_servers; `id` equals accountServerId. */
+    accountServerId?: string;
     name: string;
     slug: string;
     transport: McpServerTransport;
@@ -39,6 +49,8 @@ export interface WorkspaceMcpServerSummary {
     }>;
     lastConnectedAt: string | null;
     createdAt: string;
+    /** When account-backed: count of your workspaces with this MCP binding enabled. */
+    enabledWorkspaceCount?: number;
 }
 
 // ─── Validators ──────────────────────────────────────────────────────────────
@@ -87,9 +99,42 @@ export const mcpServerCreateSchema = z
         }
     });
 
+/** Ephemeral MCP connection test from the UI (same transport rules as create; nothing is saved). */
+export const mcpServerProbeSchema = z
+    .object({
+        transport: z.enum(["stdio", "sse", "streamable-http"]),
+        command: z.string().optional(),
+        args: z.array(z.string()).optional(),
+        env: z.record(z.string(), z.string()).optional(),
+        url: z.string().url().optional(),
+        headers: z.record(z.string(), z.string()).optional(),
+    })
+    .superRefine((value, ctx) => {
+        if (value.transport === "stdio") {
+            if (!value.command || !value.command.trim()) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ["command"],
+                    message: "command is required for stdio transport",
+                });
+            }
+        } else {
+            if (!value.url || !value.url.trim()) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ["url"],
+                    message: "url is required for SSE / Streamable HTTP transport",
+                });
+            }
+        }
+    });
+
+export type McpServerProbeInput = z.infer<typeof mcpServerProbeSchema>;
+
 export const mcpServerUpdateSchema = z.object({
     name: z.string().min(1).max(64).optional(),
     enabled: z.boolean().optional(),
+    transport: z.enum(["stdio", "sse", "streamable-http"]).optional(),
     command: z.string().optional(),
     args: z.array(z.string()).optional(),
     env: z.record(z.string(), z.string()).optional(),

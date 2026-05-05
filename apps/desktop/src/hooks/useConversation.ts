@@ -4,6 +4,7 @@ import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { parseThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { useSessionStream } from "@kletron/ui/hooks/useSessionStream";
 import { normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode";
+import { normalizeResearchDepth, type ResearchDepthId } from "@kletron/shared/researchDepth";
 import { useAgentThread } from "@kletron/ui/hooks/useAgentThread";
 import { useSessionEdits } from "@kletron/ui/hooks/useSessionEdits";
 import type {
@@ -65,6 +66,7 @@ export function useConversation(
   const [threadApprovalMode, setThreadApprovalMode] = useState<ThreadApprovalMode>("inherit");
   const [conversationRunSource, setConversationRunSource] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [researchDepth, setResearchDepth] = useState<ResearchDepthId>("exhaustive");
 
   const getRequestHeaders = useCallback(async () => {
     const token = await getAccessToken();
@@ -131,6 +133,7 @@ export function useConversation(
       });
     },
     onTitleGenerate,
+    researchDepth,
   });
 
   const sessionEdits = useSessionEdits({
@@ -171,6 +174,14 @@ export function useConversation(
     setThreadApprovalMode(parseThreadApprovalMode(d.threadApprovalMode));
     setConversationRunSource(typeof d.source === "string" ? d.source : null);
   }, [conversationId, agentThread.sessionDetail]);
+
+  useEffect(() => {
+    const d = agentThread.sessionDetail;
+    if (!conversationId || d?.id !== conversationId) return;
+    if (d.researchDepth != null) {
+      setResearchDepth(normalizeResearchDepth(d.researchDepth));
+    }
+  }, [conversationId, agentThread.sessionDetail?.id, agentThread.sessionDetail?.researchDepth]);
 
   const prevStreamStatusRef = useRef(stream.streamStatus);
   useEffect(() => {
@@ -327,6 +338,7 @@ export function useConversation(
     stream.setMessages([]);
     setSessionDetail(null);
     setHistoryPage({ total: 0, start: 0, end: 0, hasOlder: false });
+    setResearchDepth("exhaustive");
   }
 
   const renderItems = useMemo<RenderItem[]>(() => {
@@ -435,5 +447,7 @@ export function useConversation(
     sessionEdits,
     capabilityDroppedTools: stream.capabilityDroppedTools,
     threadWorkMode,
+    researchDepth,
+    setResearchDepth,
   };
 }

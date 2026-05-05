@@ -1,17 +1,17 @@
 # Cloud Build only (pas de déclencheur GitHub). Images Artifact Registry + déploiement Cloud Run.
-# URL web typique après création: https://kletron-web-XXXXX.europe-west6.run.app (suffixe attribué par Google).
+# URL web typique après création: https://numezis-web-XXXXX.europe-west6.run.app (suffixe attribué par Google).
 #
 #   ./infra/gcp/deploy.sh
 # ou:
 #   gcloud builds submit --config=infra/gcp/cloudbuild.yaml \
-#     --substitutions=_NEXT_PUBLIC_APP_URL=https://kletron-web-….europe-west6.run.app \
+#     --substitutions=_NEXT_PUBLIC_APP_URL=https://numezis-web-….europe-west6.run.app \
 #     --project=kletron
 
 substitutions:
   _REGION: europe-west6
-  _AR_REPO: kletron
-  _WEB_SERVICE: kletron-web
-  _MCP_SERVICE: kletron-mcp
+  _AR_REPO: numezis-repo
+  _WEB_SERVICE: numezis-web
+  _MCP_SERVICE: numezis-mcp
   _NEXT_PUBLIC_APP_URL: https://change-me-after-first-deploy.run.app
 
 options:
@@ -91,7 +91,7 @@ steps:
           printf 'MCP_URL: "%s"\n' "$${MCP_SSE}"
           printf 'NEXT_PUBLIC_APP_URL: "%s"\n' "${_NEXT_PUBLIC_APP_URL}"
           printf 'NEXTAUTH_URL: "%s"\n' "${_NEXT_PUBLIC_APP_URL}"
-        } > /tmp/kletron-web-env.yaml
+        } > /tmp/numezis-web-env.yaml
         RUN_SECRETS="NEXTAUTH_SECRET=kletron-nextauth-secret:latest,MONGODB_URI=kletron-mongodb-uri:latest,GOOGLE_OAUTH_CLIENT_ID=kletron-google-oauth-client-id:latest,AZURE_OPENAI_API_KEY=kletron-azure-openai-api-key:latest,TAVILY_API_KEY=kletron-tavily-api-key:latest,LANGSMITH_API_KEY=kletron-langsmith-api-key:latest"
         if gcloud secrets describe kletron-google-oauth-client-secret --project="$PROJECT_ID" &>/dev/null; then
           RUN_SECRETS="$${RUN_SECRETS},GOOGLE_OAUTH_CLIENT_SECRET=kletron-google-oauth-client-secret:latest"
@@ -107,7 +107,7 @@ steps:
           --cpu=2 \
           --min-instances=0 \
           --max-instances=10 \
-          --env-vars-file=/tmp/kletron-web-env.yaml \
+          --env-vars-file=/tmp/numezis-web-env.yaml \
           --set-secrets="$${RUN_SECRETS}"
 
 images:

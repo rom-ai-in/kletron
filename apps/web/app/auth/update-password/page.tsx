@@ -1,24 +1,29 @@
 'use client';
 // app/auth/update-password/page.tsx
-// Update password page - aligned with app branding, using design system components
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+// Token reset: /auth/update-password?token=... (no session required)
+import React, { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@kletron/ui/context/AuthContext';
 import { PasswordInput, Button } from '@kletron/ui/components/design-system';
 
-export default function UpdatePasswordPage() {
+function UpdatePasswordForm() {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
     const [loading, setLoading] = useState(false);
     const router = useRouter();
-    const { updatePassword, session } = useAuth();
+    const searchParams = useSearchParams();
+    const token = searchParams?.get('token')?.trim() ?? '';
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+
+        if (!token) {
+            setError('Missing reset token');
+            return;
+        }
 
         if (password !== confirmPassword) {
             setError('Passwords do not match');
@@ -32,15 +37,30 @@ export default function UpdatePasswordPage() {
 
         setLoading(true);
 
-        const result = await updatePassword(password);
+        try {
+            const res = await fetch('/api/auth/update-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, newPassword: password }),
+            });
+            const data = await res.json().catch(() => ({}));
 
-        if (result.success) {
+            if (!res.ok) {
+                setError(
+                    (typeof data.message === 'string' && data.message) ||
+                        (typeof data.error === 'string' && data.error) ||
+                        'Failed to update password'
+                );
+                setLoading(false);
+                return;
+            }
+
             setSuccess(true);
             setTimeout(() => {
-                router.push('/');
+                router.push('/auth/login');
             }, 2000);
-        } else {
-            setError(result.error || 'Failed to update password');
+        } catch {
+            setError('Network error');
         }
 
         setLoading(false);
@@ -49,7 +69,6 @@ export default function UpdatePasswordPage() {
     return (
         <div className="min-h-screen flex items-center justify-center bg-bg-app px-4">
             <div className="w-full max-w-sm">
-                {/* Logo / Brand */}
                 <div className="text-center mb-8">
                     <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-bg-surface border border-border-subtle mb-4">
                         <span className="text-xl">🧠</span>
@@ -67,9 +86,9 @@ export default function UpdatePasswordPage() {
                                 </svg>
                             </div>
                             <p className="text-sm text-text-primary mb-1">Password updated</p>
-                            <p className="text-xs text-text-muted">Redirecting you to the app...</p>
+                            <p className="text-xs text-text-muted">Redirecting to sign in…</p>
                         </div>
-                    ) : !session ? (
+                    ) : !token ? (
                         <div className="text-center py-4">
                             <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-status-warning-bg border border-status-warning-border mb-4">
                                 <svg className="w-5 h-5 text-status-warning-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -77,7 +96,7 @@ export default function UpdatePasswordPage() {
                                 </svg>
                             </div>
                             <p className="text-sm text-text-primary mb-1">Invalid reset link</p>
-                            <p className="text-xs text-text-muted mb-4">This link has expired or is invalid</p>
+                            <p className="text-xs text-text-muted mb-4">Use the link from your email or request a new one.</p>
                             <Link
                                 href="/auth/reset-password"
                                 className="text-xs text-text-secondary hover:text-text-primary transition-colors"
@@ -121,12 +140,7 @@ export default function UpdatePasswordPage() {
                                 />
                             </div>
 
-                            <Button
-                                type="submit"
-                                disabled={loading}
-                                loading={loading}
-                                fullWidth
-                            >
+                            <Button type="submit" disabled={loading} loading={loading} fullWidth>
                                 {loading ? 'Updating...' : 'Update Password'}
                             </Button>
                         </form>
@@ -134,5 +148,19 @@ export default function UpdatePasswordPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function UpdatePasswordPage() {
+    return (
+        <Suspense
+            fallback={
+                <div className="min-h-screen flex items-center justify-center bg-bg-app px-4 text-sm text-text-muted">
+                    Loading…
+                </div>
+            }
+        >
+            <UpdatePasswordForm />
+        </Suspense>
     );
 }

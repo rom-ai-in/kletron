@@ -116,11 +116,11 @@ export class CategoryWindowManager {
     }
 
     /**
-     * Get category URL
+     * Web surface URL for a category window (single entry: Agent).
      */
-    private getCategoryURL(category: string): string {
+    private getCategoryURL(_category: string): string {
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-        return `${baseUrl}/app/${category}/workbench`;
+        return `${baseUrl}/app/agent`;
     }
 
     /**

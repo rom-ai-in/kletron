@@ -324,6 +324,37 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         });
     }, []);
 
+    const normalizeTurnUserContent = useCallback((raw: string): string => {
+        let content = raw ?? "";
+        if (content.startsWith("[System:")) {
+            const endBracket = content.indexOf("]\n\n");
+            if (endBracket !== -1) {
+                content = content.slice(endBracket + 3);
+            }
+        }
+        return content.trim();
+    }, []);
+
+    const streamSnapshotMatchesCurrentTurn = useCallback((events: AgentEvent[], userMessage: string): boolean => {
+        if (!events.length) return false;
+        const latestUser = [...events].reverse().find((e) => e.kind === "user");
+        if (!latestUser) return false;
+        return normalizeTurnUserContent(latestUser.content ?? "") === normalizeTurnUserContent(userMessage);
+    }, [normalizeTurnUserContent]);
+
+    const extractCurrentTurnEvents = useCallback((events: AgentEvent[], userMessage: string): AgentEvent[] => {
+        if (!events.length) return [];
+        const normalizedUser = normalizeTurnUserContent(userMessage);
+        for (let i = events.length - 1; i >= 0; i--) {
+            const e = events[i];
+            if (e.kind !== "user") continue;
+            if (normalizeTurnUserContent(e.content ?? "") === normalizedUser) {
+                return events.slice(i);
+            }
+        }
+        return [];
+    }, [normalizeTurnUserContent]);
+
     /**
      * Merge streaming event messages into existing messages (append + dedup by ID).
      * This preserves messages from previous turns loaded via session detail,
@@ -494,6 +525,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                         cancelStreamFlush();
                         streamFlushRafRef.current = null;
                         const update = chunk.payload;
+                        let appliedSnapshot = false;
 
                         // Update timeline (full replacement — these are always complete)
                         if (update.timeline?.length) {
@@ -502,13 +534,21 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
                         // Update event stream (full replacement for timeline view)
                         if (update.eventStream?.length) {
-                            setEventStream(update.eventStream);
-                            // Merge into chat messages (append + dedup, preserving previous turns)
-                            mergeStreamMessages(update.eventStream, optimisticTempId);
-                            // Re-anchor progressive deltas to the assistant for *this* turn only (after latest user).
-                            const turnAssistant = lastPlainAssistantAfterLatestUser(update.eventStream);
-                            streamingTextRef.current =
-                                typeof turnAssistant?.content === "string" ? turnAssistant.content : "";
+                            const currentTurnEvents = extractCurrentTurnEvents(update.eventStream, userMessage);
+                            // Guard against stale snapshots from the previous turn.
+                            if (
+                                currentTurnEvents.length > 0 &&
+                                streamSnapshotMatchesCurrentTurn(currentTurnEvents, userMessage)
+                            ) {
+                                setEventStream(currentTurnEvents);
+                                // Merge into chat messages (append + dedup, preserving previous turns)
+                                mergeStreamMessages(currentTurnEvents, optimisticTempId);
+                                // Re-anchor progressive deltas to the assistant for *this* turn only (after latest user).
+                                const turnAssistant = lastPlainAssistantAfterLatestUser(currentTurnEvents);
+                                streamingTextRef.current =
+                                    typeof turnAssistant?.content === "string" ? turnAssistant.content : "";
+                                appliedSnapshot = true;
+                            }
                         }
 
                         // Extract token usage from meta
@@ -522,9 +562,11 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                         if (update.capabilityDroppedTools !== undefined) {
                             setCapabilityDroppedTools(update.capabilityDroppedTools);
                         }
-                        // Hide the live bubble while merged history is authoritative; refs stay aligned for suffix deltas.
-                        setStreamingText("");
-                        setStreamingReasoning("");
+                        // Hide the live bubble only when we actually applied a matching snapshot.
+                        if (appliedSnapshot) {
+                            setStreamingText("");
+                            setStreamingReasoning("");
+                        }
                     } else if (chunk.type === "final") {
                         // Final chunk logging (replaces debug-fetch instrumentation)
                         console.debug('[useSessionStream] Final chunk received', { eventStreamCount: chunk.payload.eventStream?.length ?? 0 });
@@ -540,8 +582,14 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                             setTimeline(chunk.payload.timeline);
                         }
                         if (chunk.payload.eventStream?.length) {
-                            setEventStream(chunk.payload.eventStream);
-                            mergeStreamMessages(chunk.payload.eventStream, optimisticTempId);
+                            const currentTurnEvents = extractCurrentTurnEvents(chunk.payload.eventStream, userMessage);
+                            if (currentTurnEvents.length > 0) {
+                                setEventStream(currentTurnEvents);
+                                mergeStreamMessages(currentTurnEvents, optimisticTempId);
+                            } else {
+                                setEventStream(chunk.payload.eventStream);
+                                mergeStreamMessages(chunk.payload.eventStream, optimisticTempId);
+                            }
                         }
 
                         // Extract final token usage from result outputs
@@ -570,7 +618,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 }
             }
         }
-    }, [onSessionCreated, onTitleGenerate, mergeStreamMessages, clearStreamBuffers, cancelStreamFlush, scheduleStreamFlush]);
+    }, [onSessionCreated, onTitleGenerate, mergeStreamMessages, clearStreamBuffers, cancelStreamFlush, scheduleStreamFlush, streamSnapshotMatchesCurrentTurn, extractCurrentTurnEvents]);
 
     const handleSend = useCallback(async (options?: { text?: string; planMode?: boolean }) => {
         const msg = (options?.text ?? input).trim();

@@ -1,6 +1,6 @@
 // Mongo-backed service for workspace connectors:
-//   - Integrations: SaaS credentials (encrypted) per workspace
-//   - MCP Servers: bring-your-own external MCP servers per workspace
+//   - Primary: account-level integrations + MCP (ownerId) with per-workspace bindings
+//   - Legacy: workspace_integrations / workspace_mcp_servers (read until migrated)
 
 import { ObjectId } from "mongodb";
 import { getDatabase } from "../lib/db";
@@ -11,11 +11,21 @@ import {
     type EncryptedSecret,
 } from "../lib/crypto/secrets";
 import {
+    isGoogleWorkspaceProviderId,
+    probeGoogleWorkspaceConnection,
+} from "./googleWorkspaceApi";
+import { probeSentryCredentials } from "../lib/sentryApi";
+import {
+    connectorBindingsBulkSchema,
+    connectorWorkspaceBindingsBulkSchema,
     getConnectorType,
+    type ConnectorBindingKind,
+    type ConnectorWorkspaceBindingRow,
     integrationCreateSchema,
     integrationUpdateSchema,
     mcpServerCreateSchema,
     mcpServerUpdateSchema,
+    type AccountMcpServerSummary,
     type ConnectorIntegrationStatus,
     type IntegrationCreateInput,
     type IntegrationUpdateInput,
@@ -23,9 +33,13 @@ import {
     type McpServerStatus,
     type McpServerTransport,
     type McpServerUpdateInput,
+    type WorkspaceConnectorBinding,
     type WorkspaceIntegrationSummary,
     type WorkspaceMcpServerSummary,
 } from "@kletron/shared";
+import * as accountConnectors from "./accountConnectorsService";
+import * as bindings from "./connectorBindingsService";
+import { getWorkspaceById, getWorkspaceByIdUnsafe, listWorkspaces } from "./workspaceService";
 
 const INTEGRATIONS_COLLECTION = "workspace_integrations";
 const MCP_SERVERS_COLLECTION = "workspace_mcp_servers";
@@ -162,26 +176,81 @@ function safeDecryptObject(payload: EncryptedSecret): Record<string, string> | u
     }
 }
 
+async function tryWorkspaceOwnerId(workspaceId: string): Promise<string | null> {
+    const w = await getWorkspaceByIdUnsafe(workspaceId);
+    const id = w?.ownerId?.trim();
+    return id && id.length > 0 ? id : null;
+}
+
+function bindingEnabledMap(
+    bList: Awaited<ReturnType<typeof bindings.listBindingsForWorkspace>>,
+    kind: "integration" | "mcp_server"
+): Map<string, boolean> {
+    const m = new Map<string, boolean>();
+    for (const b of bList) {
+        if (b.kind === kind) m.set(b.refId, b.enabled);
+    }
+    return m;
+}
+
 // ─── Integrations ──────────────────────────────────────────────────────────
 
 export async function listIntegrations(workspaceId: string): Promise<WorkspaceIntegrationSummary[]> {
     await ensureIndexes();
+    const out: WorkspaceIntegrationSummary[] = [];
+    const ownerId = await tryWorkspaceOwnerId(workspaceId);
+    if (ownerId) {
+        const accountList = await accountConnectors.listAccountIntegrations(ownerId);
+        const bMap = bindingEnabledMap(await bindings.listBindingsForWorkspace(workspaceId), "integration");
+        const intCounts = await Promise.all(
+            accountList.map((a) => bindings.countEnabledBindingsForRef("integration", a.id))
+        );
+        for (let i = 0; i < accountList.length; i++) {
+            const a = accountList[i];
+            out.push({
+                id: a.id,
+                workspaceId,
+                accountIntegrationId: a.id,
+                providerId: a.providerId,
+                displayName: a.displayName,
+                status: a.status,
+                scopes: a.scopes,
+                lastUsedAt: a.lastUsedAt,
+                createdAt: a.createdAt,
+                credentialPreview: a.credentialPreview,
+                workspaceBindingEnabled: bMap.get(a.id) ?? false,
+                enabledWorkspaceCount: intCounts[i],
+            });
+        }
+    }
     const collection = await integrationsCollection();
     const docs = await collection
         .find({ workspaceId })
         .sort({ providerId: 1, createdAt: 1 })
         .toArray();
-    return docs.map(toIntegrationSummary);
+    out.push(...docs.map(toIntegrationSummary));
+    return out;
 }
 
 export async function listEnabledIntegrationProviderIds(workspaceId: string): Promise<string[]> {
     await ensureIndexes();
+    const ids = new Set<string>();
+    const ownerId = await tryWorkspaceOwnerId(workspaceId);
+    if (ownerId) {
+        const bMap = bindingEnabledMap(await bindings.listBindingsForWorkspace(workspaceId), "integration");
+        const accountList = await accountConnectors.listAccountIntegrations(ownerId);
+        for (const a of accountList) {
+            if (a.status !== "active") continue;
+            if (bMap.get(a.id) === true) ids.add(a.providerId);
+        }
+    }
     const collection = await integrationsCollection();
     const docs = await collection
         .find({ workspaceId, status: "active" })
         .project<{ providerId: string }>({ providerId: 1 })
         .toArray();
-    return Array.from(new Set(docs.map((d) => d.providerId)));
+    for (const d of docs) ids.add(d.providerId);
+    return Array.from(ids);
 }
 
 export async function createIntegration(
@@ -189,38 +258,27 @@ export async function createIntegration(
     input: IntegrationCreateInput
 ): Promise<WorkspaceIntegrationSummary> {
     await ensureIndexes();
-    const validated = integrationCreateSchema.parse(input);
-    const def = getConnectorType(validated.providerId);
-    if (!def) {
-        throw new Error(`Unknown connector type: ${validated.providerId}`);
+    const ownerId = await tryWorkspaceOwnerId(workspaceId);
+    if (!ownerId) {
+        throw new Error("Workspace has no owner; cannot create account integration");
     }
-
-    // Validate that all required fields are present for non-OAuth providers.
-    if (def.auth !== "oauth") {
-        for (const field of def.credentialFields ?? []) {
-            if (field.required && !validated.credentials[field.key]) {
-                throw new Error(`Missing required credential: ${field.label}`);
-            }
-        }
-    }
-
-    const collection = await integrationsCollection();
-    const now = new Date();
-    const doc: IntegrationDoc = {
+    const created = await accountConnectors.createAccountIntegration(ownerId, input);
+    await bindings.upsertBinding(workspaceId, "integration", created.id, true);
+    const enabledWorkspaceCount = await bindings.countEnabledBindingsForRef("integration", created.id);
+    return {
+        id: created.id,
         workspaceId,
-        providerId: validated.providerId,
-        displayName: validated.displayName?.trim() || def.name,
-        credentials: encryptJson(validated.credentials),
-        credentialPreview: buildPreview(validated.credentials),
-        scopes: validated.scopes ?? def.oauthScopes ?? [],
-        status: "active",
-        lastUsedAt: null,
-        createdAt: now,
-        updatedAt: now,
+        accountIntegrationId: created.id,
+        providerId: created.providerId,
+        displayName: created.displayName,
+        status: created.status,
+        scopes: created.scopes,
+        lastUsedAt: created.lastUsedAt,
+        createdAt: created.createdAt,
+        credentialPreview: created.credentialPreview,
+        workspaceBindingEnabled: true,
+        enabledWorkspaceCount,
     };
-    const result = await collection.insertOne(doc);
-    doc._id = result.insertedId;
-    return toIntegrationSummary(doc);
 }
 
 export async function updateIntegration(
@@ -229,6 +287,28 @@ export async function updateIntegration(
     input: IntegrationUpdateInput
 ): Promise<WorkspaceIntegrationSummary | null> {
     await ensureIndexes();
+    const ownerId = await tryWorkspaceOwnerId(workspaceId);
+    if (ownerId && ObjectId.isValid(integrationId)) {
+        const acc = await accountConnectors.updateAccountIntegration(ownerId, integrationId, input);
+        if (acc) {
+            const enabledWorkspaceCount = await bindings.countEnabledBindingsForRef("integration", acc.id);
+            return {
+                id: acc.id,
+                workspaceId,
+                accountIntegrationId: acc.id,
+                providerId: acc.providerId,
+                displayName: acc.displayName,
+                status: acc.status,
+                scopes: acc.scopes,
+                lastUsedAt: acc.lastUsedAt,
+                createdAt: acc.createdAt,
+                credentialPreview: acc.credentialPreview,
+                workspaceBindingEnabled:
+                    (await bindings.getBinding(workspaceId, "integration", integrationId))?.enabled ?? false,
+                enabledWorkspaceCount,
+            };
+        }
+    }
     const validated = integrationUpdateSchema.parse(input);
     if (!ObjectId.isValid(integrationId)) return null;
     const collection = await integrationsCollection();
@@ -247,15 +327,34 @@ export async function updateIntegration(
     return fresh ? toIntegrationSummary(fresh) : null;
 }
 
+/** Workspace UI: detach an account integration from this workspace (library entry remains). */
 export async function deleteIntegration(workspaceId: string, integrationId: string): Promise<boolean> {
     await ensureIndexes();
     if (!ObjectId.isValid(integrationId)) return false;
+    const ownerId = await tryWorkspaceOwnerId(workspaceId);
+    if (ownerId) {
+        const acc = await accountConnectors.listAccountIntegrations(ownerId);
+        if (acc.some((a) => a.id === integrationId)) {
+            await bindings.deleteBinding(workspaceId, "integration", integrationId);
+            return true;
+        }
+    }
     const collection = await integrationsCollection();
     const result = await collection.deleteOne({
         _id: new ObjectId(integrationId),
         workspaceId,
     });
     return (result.deletedCount ?? 0) > 0;
+}
+
+/** Remove an account integration and all workspace bindings (account settings API). */
+export async function deleteAccountIntegrationForUser(ownerId: string, integrationId: string): Promise<boolean> {
+    await ensureIndexes();
+    if (!ObjectId.isValid(integrationId)) return false;
+    const acc = await accountConnectors.listAccountIntegrations(ownerId);
+    if (!acc.some((a) => a.id === integrationId)) return false;
+    await bindings.deleteAllBindingsForIntegrationRef(integrationId);
+    return accountConnectors.deleteAccountIntegration(ownerId, integrationId);
 }
 
 /** Decrypt an integration's credentials. Used by tool runtime; not exposed via HTTP. */
@@ -265,6 +364,14 @@ export async function getIntegrationCredentials(
 ): Promise<Record<string, string> | null> {
     await ensureIndexes();
     if (!ObjectId.isValid(integrationId)) return null;
+    const ownerId = await tryWorkspaceOwnerId(workspaceId);
+    if (ownerId) {
+        const b = await bindings.getBinding(workspaceId, "integration", integrationId);
+        if (b?.enabled) {
+            const creds = await accountConnectors.getAccountIntegrationCredentials(ownerId, integrationId);
+            if (creds) return creds;
+        }
+    }
     const collection = await integrationsCollection();
     const doc = await collection.findOne({ _id: new ObjectId(integrationId), workspaceId });
     if (!doc) return null;
@@ -281,6 +388,28 @@ export async function findActiveIntegration(
     providerId: string
 ): Promise<WorkspaceIntegrationSummary | null> {
     await ensureIndexes();
+    const ownerId = await tryWorkspaceOwnerId(workspaceId);
+    if (ownerId) {
+        const acc = await accountConnectors.findActiveAccountIntegration(ownerId, providerId);
+        if (acc) {
+            const b = await bindings.getBinding(workspaceId, "integration", acc.id);
+            if (b?.enabled) {
+                return {
+                    id: acc.id,
+                    workspaceId,
+                    accountIntegrationId: acc.id,
+                    providerId: acc.providerId,
+                    displayName: acc.displayName,
+                    status: acc.status,
+                    scopes: acc.scopes,
+                    lastUsedAt: acc.lastUsedAt,
+                    createdAt: acc.createdAt,
+                    credentialPreview: acc.credentialPreview,
+                    workspaceBindingEnabled: true,
+                };
+            }
+        }
+    }
     const collection = await integrationsCollection();
     const doc = await collection.findOne({ workspaceId, providerId, status: "active" });
     return doc ? toIntegrationSummary(doc) : null;
@@ -291,33 +420,97 @@ export async function testIntegration(
     workspaceId: string,
     integrationId: string
 ): Promise<{ ok: boolean; message: string }> {
+    await ensureIndexes();
+    if (!ObjectId.isValid(integrationId)) {
+        return { ok: false, message: "Invalid integration id" };
+    }
+    const ownerId = await tryWorkspaceOwnerId(workspaceId);
+    let providerId: string | null = null;
+    if (ownerId) {
+        const accList = await accountConnectors.listAccountIntegrations(ownerId);
+        const hit = accList.find((a) => a.id === integrationId);
+        if (hit) providerId = hit.providerId;
+    }
+    const collection = await integrationsCollection();
+    const doc =
+        providerId !== null
+            ? { providerId }
+            : await collection.findOne(
+                  { _id: new ObjectId(integrationId), workspaceId },
+                  { projection: { providerId: 1 } }
+              );
+    if (!doc) return { ok: false, message: "Integration not found" };
+
     const creds = await getIntegrationCredentials(workspaceId, integrationId);
-    if (!creds) return { ok: false, message: "Integration not found or credentials unreadable" };
-    // The actual probe is provider-specific. For now we just confirm decryption
-    // succeeded; richer probes can be added per-provider later.
+    if (!creds) return { ok: false, message: "Integration credentials are unreadable" };
+
+    if (isGoogleWorkspaceProviderId(doc.providerId)) {
+        return await probeGoogleWorkspaceConnection(doc.providerId, creds);
+    }
+
+    if (doc.providerId === "sentry") {
+        return probeSentryCredentials(creds);
+    }
+
+    // Fallback for non-Google integrations: confirm decryption succeeded.
     return { ok: true, message: "Credentials decrypted successfully" };
 }
 
 // ─── MCP servers ───────────────────────────────────────────────────────────
 
+function accountMcpToWorkspaceSummary(
+    s: AccountMcpServerSummary,
+    workspaceId: string,
+    bindingEnabled: boolean,
+    enabledWorkspaceCount?: number
+): WorkspaceMcpServerSummary {
+    return {
+        id: s.id,
+        workspaceId,
+        accountServerId: s.id,
+        name: s.name,
+        slug: s.slug,
+        transport: s.transport,
+        enabled: bindingEnabled,
+        status: s.status,
+        statusMessage: s.statusMessage,
+        command: s.command,
+        args: s.args,
+        env: s.env,
+        url: s.url,
+        headers: s.headers,
+        discoveredTools: s.discoveredTools,
+        lastConnectedAt: s.lastConnectedAt,
+        createdAt: s.createdAt,
+        enabledWorkspaceCount,
+    };
+}
+
 export async function listMcpServers(workspaceId: string): Promise<WorkspaceMcpServerSummary[]> {
     await ensureIndexes();
+    const out: WorkspaceMcpServerSummary[] = [];
+    const ownerId = await tryWorkspaceOwnerId(workspaceId);
+    if (ownerId) {
+        const accountList = await accountConnectors.listAccountMcpServers(ownerId);
+        const bMap = bindingEnabledMap(await bindings.listBindingsForWorkspace(workspaceId), "mcp_server");
+        const mcpCounts = await Promise.all(
+            accountList.map((s) => bindings.countEnabledBindingsForRef("mcp_server", s.id))
+        );
+        for (let i = 0; i < accountList.length; i++) {
+            const s = accountList[i];
+            const enabled = bMap.get(s.id) ?? false;
+            out.push(accountMcpToWorkspaceSummary(s, workspaceId, enabled, mcpCounts[i]));
+        }
+    }
     const collection = await mcpServersCollection();
-    const docs = await collection
-        .find({ workspaceId })
-        .sort({ createdAt: 1 })
-        .toArray();
-    return docs.map(toMcpServerSummary);
+    const docs = await collection.find({ workspaceId }).sort({ createdAt: 1 }).toArray();
+    out.push(...docs.map(toMcpServerSummary));
+    return out;
 }
 
 export async function listEnabledMcpServers(workspaceId: string): Promise<WorkspaceMcpServerSummary[]> {
-    await ensureIndexes();
-    const collection = await mcpServersCollection();
-    const docs = await collection
-        .find({ workspaceId, enabled: true })
-        .sort({ createdAt: 1 })
-        .toArray();
-    return docs.map(toMcpServerSummary);
+    const all = await listMcpServers(workspaceId);
+    return all.filter((s) => s.enabled);
 }
 
 export async function createMcpServer(
@@ -325,30 +518,16 @@ export async function createMcpServer(
     input: McpServerCreateInput
 ): Promise<WorkspaceMcpServerSummary> {
     await ensureIndexes();
+    const ownerId = await tryWorkspaceOwnerId(workspaceId);
+    if (!ownerId) {
+        throw new Error("Workspace has no owner; cannot create MCP server");
+    }
     const validated = mcpServerCreateSchema.parse(input);
-    const collection = await mcpServersCollection();
-    const slug = await ensureUniqueSlug(workspaceId, slugify(validated.name));
-    const now = new Date();
-    const doc: McpServerDoc = {
-        workspaceId,
-        name: validated.name,
-        slug,
-        transport: validated.transport,
-        enabled: validated.enabled ?? true,
-        status: "unknown",
-        command: validated.command,
-        args: validated.args,
-        envEncrypted: validated.env ? encryptJson(validated.env) : undefined,
-        url: validated.url,
-        headersEncrypted: validated.headers ? encryptJson(validated.headers) : undefined,
-        discoveredTools: [],
-        lastConnectedAt: null,
-        createdAt: now,
-        updatedAt: now,
-    };
-    const result = await collection.insertOne(doc);
-    doc._id = result.insertedId;
-    return toMcpServerSummary(doc);
+    const created = await accountConnectors.createAccountMcpServer(ownerId, validated);
+    const bindingOn = validated.enabled ?? true;
+    await bindings.upsertBinding(workspaceId, "mcp_server", created.id, bindingOn);
+    const enabledWorkspaceCount = await bindings.countEnabledBindingsForRef("mcp_server", created.id);
+    return accountMcpToWorkspaceSummary(created, workspaceId, bindingOn, enabledWorkspaceCount);
 }
 
 export async function updateMcpServer(
@@ -359,6 +538,28 @@ export async function updateMcpServer(
     await ensureIndexes();
     if (!ObjectId.isValid(serverId)) return null;
     const validated = mcpServerUpdateSchema.parse(input);
+    const ownerId = await tryWorkspaceOwnerId(workspaceId);
+    if (ownerId) {
+        const existingAcc = await accountConnectors.getAccountMcpServer(ownerId, serverId);
+        if (existingAcc) {
+            const updated = await accountConnectors.updateAccountMcpServer(ownerId, serverId, {
+                name: validated.name,
+                transport: validated.transport,
+                command: validated.command,
+                args: validated.args,
+                env: validated.env,
+                url: validated.url,
+                headers: validated.headers,
+            });
+            if (validated.enabled !== undefined) {
+                await bindings.upsertBinding(workspaceId, "mcp_server", serverId, validated.enabled);
+            }
+            if (!updated) return null;
+            const b = await bindings.getBinding(workspaceId, "mcp_server", serverId);
+            const enabledWorkspaceCount = await bindings.countEnabledBindingsForRef("mcp_server", serverId);
+            return accountMcpToWorkspaceSummary(updated, workspaceId, b?.enabled ?? false, enabledWorkspaceCount);
+        }
+    }
     const collection = await mcpServersCollection();
     const existing = await collection.findOne({ _id: new ObjectId(serverId), workspaceId });
     if (!existing) return null;
@@ -372,6 +573,7 @@ export async function updateMcpServer(
         }
     }
     if (validated.enabled !== undefined) update.enabled = validated.enabled;
+    if (validated.transport !== undefined) update.transport = validated.transport;
     if (validated.command !== undefined) update.command = validated.command;
     if (validated.args !== undefined) update.args = validated.args;
     if (validated.env !== undefined) {
@@ -390,6 +592,18 @@ export async function updateMcpServer(
 export async function deleteMcpServer(workspaceId: string, serverId: string): Promise<boolean> {
     await ensureIndexes();
     if (!ObjectId.isValid(serverId)) return false;
+    const ownerId = await tryWorkspaceOwnerId(workspaceId);
+    if (ownerId) {
+        const acc = await accountConnectors.getAccountMcpServer(ownerId, serverId);
+        if (acc) {
+            await bindings.deleteBinding(workspaceId, "mcp_server", serverId);
+            const n = await bindings.countBindingsForMcpRef(serverId);
+            if (n === 0) {
+                await accountConnectors.deleteAccountMcpServer(ownerId, serverId);
+            }
+            return true;
+        }
+    }
     const collection = await mcpServersCollection();
     const result = await collection.deleteOne({
         _id: new ObjectId(serverId),
@@ -408,6 +622,14 @@ export async function recordMcpServerStatus(
     }
 ): Promise<void> {
     if (!ObjectId.isValid(serverId)) return;
+    const ownerId = await tryWorkspaceOwnerId(workspaceId);
+    if (ownerId) {
+        const acc = await accountConnectors.getAccountMcpServer(ownerId, serverId);
+        if (acc) {
+            await accountConnectors.recordAccountMcpServerStatus(ownerId, serverId, update);
+            return;
+        }
+    }
     const collection = await mcpServersCollection();
     const set: Partial<McpServerDoc> = {
         status: update.status,
@@ -451,4 +673,90 @@ export async function getExternalMcpRuntimeConfig(workspaceId: string): Promise<
         url: s.url,
         headers: s.headers,
     }));
+}
+
+export async function listConnectorWorkspaceBindingsForOwner(
+    ownerId: string,
+    kind: ConnectorBindingKind,
+    refId: string
+): Promise<ConnectorWorkspaceBindingRow[]> {
+    if (kind === "mcp_server") {
+        const s = await accountConnectors.getAccountMcpServer(ownerId, refId);
+        if (!s) throw new Error("MCP server not found");
+    } else {
+        const list = await accountConnectors.listAccountIntegrations(ownerId);
+        if (!list.some((i) => i.id === refId)) throw new Error("Integration not found");
+    }
+
+    const workspaces = await listWorkspaces(ownerId);
+    const bindingRows = await bindings.listBindingsByRef(kind, refId);
+    const byWs = new Map(bindingRows.map((b) => [b.workspaceId, b.enabled]));
+
+    return workspaces.map((w) => {
+        const wid = w._id?.toString() ?? "";
+        return {
+            workspaceId: wid,
+            workspaceName: w.name,
+            enabled: byWs.get(wid) ?? false,
+        };
+    });
+}
+
+export async function applyConnectorWorkspaceBindingsBulk(
+    ownerId: string,
+    kind: ConnectorBindingKind,
+    refId: string,
+    body: unknown
+): Promise<void> {
+    const parsed = connectorWorkspaceBindingsBulkSchema.parse(body);
+    if (kind === "mcp_server") {
+        const s = await accountConnectors.getAccountMcpServer(ownerId, refId);
+        if (!s) throw new Error("MCP server not found");
+    } else {
+        const list = await accountConnectors.listAccountIntegrations(ownerId);
+        if (!list.some((i) => i.id === refId)) throw new Error("Integration not found");
+    }
+
+    const ownedIds = new Set(
+        (await listWorkspaces(ownerId))
+            .map((w) => w._id?.toString())
+            .filter((id): id is string => Boolean(id))
+    );
+    for (const row of parsed.workspaces) {
+        if (!ownedIds.has(row.workspaceId)) {
+            throw new Error(`Workspace not allowed: ${row.workspaceId}`);
+        }
+        await bindings.upsertBinding(row.workspaceId, kind, refId, row.enabled);
+    }
+}
+
+/** Apply per-workspace enable/disable for account-level connectors (validated). */
+export async function applyConnectorBindings(workspaceId: string, userId: string, body: unknown): Promise<void> {
+    const parsed = connectorBindingsBulkSchema.parse(body);
+    const ws = await getWorkspaceById(workspaceId, userId);
+    if (!ws) throw new Error("Workspace not found");
+    if (ws.ownerId !== userId) throw new Error("Forbidden");
+
+    for (const b of parsed.bindings) {
+        if (b.kind === "mcp_server") {
+            const s = await accountConnectors.getAccountMcpServer(userId, b.refId);
+            if (!s) throw new Error(`Unknown MCP server: ${b.refId}`);
+        } else {
+            const list = await accountConnectors.listAccountIntegrations(userId);
+            if (!list.some((i) => i.id === b.refId)) {
+                throw new Error(`Unknown integration: ${b.refId}`);
+            }
+        }
+        await bindings.upsertBinding(workspaceId, b.kind, b.refId, b.enabled);
+    }
+}
+
+export async function listConnectorBindingsForWorkspace(
+    workspaceId: string,
+    userId: string
+): Promise<WorkspaceConnectorBinding[]> {
+    const ws = await getWorkspaceById(workspaceId, userId);
+    if (!ws) throw new Error("Workspace not found");
+    if (ws.ownerId !== userId) throw new Error("Forbidden");
+    return bindings.listBindingsForWorkspace(workspaceId);
 }

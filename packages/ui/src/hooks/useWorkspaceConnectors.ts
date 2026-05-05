@@ -1,21 +1,33 @@
 import { useCallback, useEffect, useState } from "react";
-import type { WorkspaceIntegrationSummary } from "@kletron/shared/connectors/types";
+import type {
+  WorkspaceIntegrationSummary,
+  WorkspaceMcpServerSummary,
+} from "@kletron/shared/connectors/types";
 import type { GetRequestHeaders } from "@kletron/shared";
+
+const defaultHeaders: GetRequestHeaders = async () => ({});
 
 export function useWorkspaceConnectors(options: {
   apiOrigin: string;
   workspaceId: string | null;
-  getRequestHeaders: GetRequestHeaders;
+  getRequestHeaders?: GetRequestHeaders;
   enabled?: boolean;
 }) {
-  const { apiOrigin, workspaceId, getRequestHeaders, enabled = true } = options;
+  const {
+    apiOrigin,
+    workspaceId,
+    getRequestHeaders = defaultHeaders,
+    enabled = true,
+  } = options;
   const [integrations, setIntegrations] = useState<WorkspaceIntegrationSummary[]>([]);
+  const [mcpServers, setMcpServers] = useState<WorkspaceMcpServerSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!workspaceId || !enabled) {
       setIntegrations([]);
+      setMcpServers([]);
       setIsLoading(false);
       return;
     }
@@ -26,15 +38,24 @@ export function useWorkspaceConnectors(options: {
       const headers = await getRequestHeaders();
       const h: Record<string, string> = { ...headers };
       if (workspaceId && !h["x-workspace-id"]) h["x-workspace-id"] = workspaceId;
-      const res = await fetch(`${base}/api/workspaces/${encodeURIComponent(workspaceId)}/connectors/integrations`, {
-        headers: h,
-      });
-      if (!res.ok) throw new Error(`integrations: ${res.status}`);
-      const intJson = (await res.json()) as { integrations?: WorkspaceIntegrationSummary[] };
+      const [intRes, mcpRes] = await Promise.all([
+        fetch(`${base}/api/workspaces/${encodeURIComponent(workspaceId)}/connectors/integrations`, {
+          headers: h,
+        }),
+        fetch(`${base}/api/workspaces/${encodeURIComponent(workspaceId)}/connectors/mcp-servers`, {
+          headers: h,
+        }),
+      ]);
+      if (!intRes.ok) throw new Error(`integrations: ${intRes.status}`);
+      if (!mcpRes.ok) throw new Error(`mcp-servers: ${mcpRes.status}`);
+      const intJson = (await intRes.json()) as { integrations?: WorkspaceIntegrationSummary[] };
+      const mcpJson = (await mcpRes.json()) as { servers?: WorkspaceMcpServerSummary[] };
       setIntegrations(intJson.integrations ?? []);
+      setMcpServers(mcpJson.servers ?? []);
     } catch (e) {
       setError((e as Error).message);
       setIntegrations([]);
+      setMcpServers([]);
     } finally {
       setIsLoading(false);
     }
@@ -44,5 +65,5 @@ export function useWorkspaceConnectors(options: {
     void refresh();
   }, [refresh]);
 
-  return { integrations, isLoading, error, refresh };
+  return { integrations, mcpServers, isLoading, error, refresh };
 }

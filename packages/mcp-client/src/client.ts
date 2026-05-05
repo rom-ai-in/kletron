@@ -9,6 +9,8 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { EventSource } from "eventsource";
 
 import { getConfig } from "@kletron/server/config";
+import { getWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
+import { createRemoteMcpTransport } from "./remoteMcpTransport";
 import {
     namespacedExternalToolName,
     parseNamespacedToolName,
@@ -177,6 +179,12 @@ export class McpClient {
       }
       const results = await semanticSearch(query, vectorOpts);
       return JSON.stringify(results, null, 2);
+    }
+
+    if (name === "sentry_api") {
+      const { runSentryApiTool } = await import("@kletron/server/services/sentryApiTool");
+      const ctx = getWorkspaceContext();
+      return await runSentryApiTool(ctx?.workspaceId, args);
     }
 
     // External MCP server tools are namespaced as `<slug>__<toolName>`.
@@ -372,8 +380,12 @@ export class McpClient {
         });
       } else {
         if (!config.url) throw new Error(`MCP '${slug}' missing url`);
-        (globalThis as any).EventSource = EventSource as any;
-        transport = new SSEClientTransport(new URL(config.url));
+        const wire = config.transport === "streamable-http" ? "streamable-http" : "sse";
+        transport = createRemoteMcpTransport({
+          transport: wire,
+          url: config.url,
+          headers: config.headers,
+        });
       }
       await Promise.race([
         client.connect(transport),

@@ -1,586 +1,477 @@
 import type { AutomationDefinition, AutomationStageConfig, AutomationTriggerType } from "./automationTypes";
 import { LLM_PROVIDERS } from "./schemas/llmConfig.schema";
+import { CANONICAL_AGENT_GRAPH_IDS as GX } from "./canonicalStageGraphs";
 
 /**
  * AutomationConfigBuilder - Pre-configured automation templates and validation utilities
  */
 export class AutomationConfigBuilder {
     /**
+     * Old preset keys accepted by buildAutomation / API for backward compatibility.
+     * Prefer canonical keys from PRESETS in new code.
+     */
+    private static readonly LEGACY_PRESET_ALIASES: Record<string, string> = {
+        FULL_STACK_LOGIC_AUDIT: "CODE_FULL_REVIEW",
+        FULL_AUDIT: "CODE_FULL_REVIEW",
+        SECURITY_DEEP_DIVE: "CODE_SECURITY_WEBHOOK",
+        I18N_QUALITY: "CODE_FULL_REVIEW",
+        API_QUALITY_GATE: "CODE_PR_GATE",
+        FULL_BACKEND_AUDIT: "CODE_FULL_REVIEW",
+        FULL_FRONTEND_AUDIT: "CODE_FULL_REVIEW",
+        MONGO_INDEX_AUDIT: "CODE_FULL_REVIEW",
+        DOC_QUALITY_AUDIT: "CODE_WEEKLY_HEALTH",
+        CONTINUOUS_IMPROVEMENT: "CODE_WEEKLY_HEALTH",
+        BUSINESS_ANALYSIS_FULL: "BUSINESS_STRATEGY_PIPELINE",
+        QUICK_FEATURE_BRAINSTORM: "BUSINESS_IDEATION",
+        COMPETITIVE_DEEP_DIVE: "BUSINESS_COMPETITIVE_SCAN",
+        FEATURE_AUDIT: "PRODUCT_AREA_DEEP_DIVE",
+    };
+
+    /**
      * Pre-configured automation presets
      */
     static readonly PRESETS: Record<string, Partial<AutomationDefinition>> = {
         /**
-         * Default full-stack logic audit
-         * Duration: ~6 hours
+         * Coding — broad repository review (manual)
          */
-        FULL_STACK_LOGIC_AUDIT: {
-            name: "Full Stack Logic Audit (Default)",
-            description: "End-to-end audit of API, backend logic, frontend, design system, security, performance, and delivery pipelines.",
-            stages: [
-                {
-                    id: "fs-api",
-                    name: "API Contracts & Validation",
-                    prompt:
-                        "Audit the API layer for contract correctness. Check request/response validation, auth guards, error codes, pagination, idempotency, and versioning. Flag mismatches between handlers, schemas, and clients. Output findings with file paths/line numbers and severity (BLOQUANT/WARNING/INFO) plus fixes.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                },
-                {
-                    id: "fs-backend-logic",
-                    name: "Backend Domain Logic",
-                    prompt:
-                        "Audit core business/domain logic. Look for invalid state transitions, missing invariants, unsafe side effects, race conditions, and inconsistent workflows. Identify functions/services that violate domain rules. Provide concrete fixes with file/line references.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                },
-                {
-                    id: "fs-data",
-                    name: "Data Layer & Migrations",
-                    prompt:
-                        "Audit the data layer: schemas/models, migrations, queries, indexes, and transactions. Flag N+1 patterns, missing indexes, unsafe updates, migration risks, and data consistency gaps. Provide file/line evidence and remediation steps.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                },
-                {
-                    id: "fs-security",
-                    name: "Security & Access Control",
-                    prompt:
-                        "Audit authentication/authorization, secret handling, input sanitization, and common vulnerabilities (injection, SSRF, path traversal, deserialization). Verify least-privilege and data exposure. Provide high-confidence security findings with fixes.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                },
-                {
-                    id: "fs-observability",
-                    name: "Observability & Error Handling",
-                    prompt:
-                        "Audit logging, tracing, metrics, and error handling. Find swallowed errors, missing alerts, or low-signal logs. Ensure user-facing errors are actionable and internal errors are captured. Provide fixes with file/line references.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                },
-                {
-                    id: "fs-performance",
-                    name: "Performance & Scalability",
-                    prompt:
-                        "Audit performance hotspots: expensive loops, heavy queries, lack of caching, unbounded concurrency, and slow I/O. Identify bottlenecks and scalability risks with concrete fixes and configuration recommendations.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                },
-                {
-                    id: "fs-frontend-arch",
-                    name: "Frontend Architecture",
-                    prompt:
-                        "Audit frontend architecture: routing, component boundaries, SSR/CSR strategy, data loading, error boundaries, and code-splitting. Flag fragile patterns and opportunities to simplify or harden flows. Provide actionable fixes.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                },
-                {
-                    id: "fs-ux",
-                    name: "UX/UI & Accessibility",
-                    prompt:
-                        "Audit UI/UX and accessibility: focus management, keyboard navigation, ARIA roles, contrast, empty/loading/error states. Identify inconsistent UX flows and missing user feedback. Provide improvements with file references.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                },
-                {
-                    id: "fs-design-system",
-                    name: "Design System Consistency",
-                    prompt:
-                        "Audit design system usage across the app. Find duplicated styles, token misuse, inconsistent component variants, and missing design primitives. Recommend consolidations and fixes with file/line references.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                },
-                {
-                    id: "fs-state",
-                    name: "State Management & Data Fetching",
-                    prompt:
-                        "Audit state management and data fetching: cache invalidation, stale data, over-fetching, and inconsistent local state. Check for misuse of global state or effects. Provide precise fixes with file references.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                },
-                {
-                    id: "fs-testing",
-                    name: "Testing Strategy & Coverage",
-                    prompt:
-                        "Audit test coverage and quality: missing unit/integration/E2E tests, flaky tests, brittle mocks, and untested critical paths. Provide a prioritized list of test gaps with suggested test cases.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                },
-                {
-                    id: "fs-infra",
-                    name: "Infrastructure & CI/CD",
-                    prompt:
-                        "Audit build, deployment, CI/CD, and runtime configuration. Look for unsafe defaults, missing environment validation, brittle pipelines, or drift between environments. Provide fixes and hardening recommendations.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                },
-            ],
-        },
-
-        /**
-         * Full monorepo audit - All 16 audit suites
-         * Duration: ~8 hours
-         */
-        FULL_AUDIT: {
-            name: "Complete Monorepo Audit",
-            description: "Runs all 16 audit suites sequentially for comprehensive codebase analysis",
-            stages: [
-                { id: "a1-api", name: "API Audit", graphId: "audit", llmProvider: "azure" },
-                { id: "a2-general", name: "General Code Quality", graphId: "audit", llmProvider: "azure" },
-                { id: "a3-i18n", name: "I18n Compliance", graphId: "audit", llmProvider: "azure" },
-                { id: "a4-portals", name: "Portal Architecture", graphId: "audit", llmProvider: "azure" },
-                { id: "a5-tests", name: "Test Coverage", graphId: "audit", llmProvider: "azure" },
-                { id: "a6-security", name: "Security Audit", graphId: "audit", llmProvider: "azure" },
-                { id: "a7-ux", name: "UX/UI Audit", graphId: "audit", llmProvider: "azure" },
-                { id: "a8-quality", name: "Scripts & Quality", graphId: "audit", llmProvider: "azure" },
-                { id: "a9-infra", name: "Infrastructure", graphId: "audit", llmProvider: "azure" },
-                { id: "a10-nav", name: "Navigation", graphId: "audit", llmProvider: "azure" },
-                { id: "a11-modules", name: "Modules", graphId: "audit", llmProvider: "azure" },
-                { id: "a12-errors", name: "Error Handling", graphId: "audit", llmProvider: "azure" },
-                { id: "a13-alerts", name: "Alerts & Feedback", graphId: "audit", llmProvider: "azure" },
-                { id: "a14-files", name: "File Organization", graphId: "audit", llmProvider: "azure" },
-                { id: "a15-workers", name: "Workers", graphId: "audit", llmProvider: "azure" },
-                { id: "a16-perf", name: "Performance", graphId: "audit", llmProvider: "azure" },
-            ],
-        },
-
-        /**
-         * Security deep dive - 3-pass security audit with different LLMs
-         * Duration: ~3 hours
-         */
-        SECURITY_DEEP_DIVE: {
-            name: "Security Deep Dive",
+        CODE_FULL_REVIEW: {
+            name: "Code — full repository review",
             description:
-                "Multi-pass security audit with different LLMs for comprehensive vulnerability detection",
+                "Four-stage pass: map the codebase, review backend/APIs, review client/UI, then security and synthesis. Suggested trigger: Manual when you want a periodic health snapshot.",
+            triggerType: "manual" as AutomationTriggerType,
             stages: [
-                { id: "security-azure", name: "Security Audit (Azure)", graphId: "audit", llmProvider: "azure" },
                 {
-                    id: "security-lmstudio",
-                    name: "Security Audit (LM Studio)",
-                    graphId: "audit",
+                    id: "cr-map",
+                    name: "Map architecture & hotspots",
+                    prompt:
+                        "Explore the repository structure. Summarize languages, frameworks, main packages, entry points, and how requests/data flow. Call out ambiguous or overly coupled areas. Output a short map and a list of hotspots to audit next.",
+                    graphId: GX.EXPLORER,
                     llmProvider: "lmstudio",
-                    contextFromPreviousStages: ["security-azure.findings"],
                 },
                 {
-                    id: "security-consolidation",
-                    name: "Security Consolidation",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["security-azure.findings", "security-lmstudio.findings"],
+                    id: "cr-backend",
+                    name: "Backend, APIs & data",
+                    prompt:
+                        "Review server-side code: HTTP/API contracts, validation, auth and authorization, errors, persistence, and background jobs. Flag correctness risks, inconsistent patterns, and missing guards. Use file paths and severities (blocker/warning/info).",
+                    graphId: GX.CODER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["cr-map.findings"],
+                },
+                {
+                    id: "cr-frontend",
+                    name: "Client, UX & delivery",
+                    prompt:
+                        "Review apps clients consume: UI architecture, routing, loading/error/empty states, accessibility basics, i18n if applicable, and performance footguns. Tie findings to concrete files.",
+                    graphId: GX.CODER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["cr-map.findings"],
+                },
+                {
+                    id: "cr-security-synth",
+                    name: "Security check & consolidated report",
+                    prompt:
+                        "Focus on security: secrets, injection, authz gaps, unsafe deserialization, SSRF, uploads, dependency/config risk. Then merge with themes from prior stages into one prioritized report: executive summary, top risks, quick wins, deeper follow-ups.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["cr-backend.findings", "cr-frontend.findings"],
                 },
             ],
         },
 
         /**
-         * I18n quality automation - Progressive validation
-         * Duration: ~2 hours
+         * Coding — PR-oriented review (git webhook)
          */
-        I18N_QUALITY: {
-            name: "I18n Quality Assurance",
-            description: "Comprehensive i18n audit with progressive validation stages",
-            stages: [
-                { id: "i18n-structure", name: "I18n Structure Analysis", graphId: "audit", llmProvider: "azure" },
-                {
-                    id: "i18n-completeness",
-                    name: "I18n Completeness Check",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["i18n-structure.findings"],
-                },
-                {
-                    id: "i18n-usage",
-                    name: "I18n Usage Verification",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["i18n-structure.findings"],
-                    skipIf: "i18n-completeness.findings.filter(f => f.type === 'BLOQUANT').length > 10",
-                },
-            ],
-        },
-
-        /**
-         * API quality gate - Pre-merge validation
-         * Duration: ~1 hour
-         */
-        API_QUALITY_GATE: {
-            name: "API Quality Gate",
-            description: "Fast pre-merge validation for API changes",
-            stages: [
-                { id: "api-audit", name: "API Audit", graphId: "audit", llmProvider: "azure" },
-                {
-                    id: "security-check",
-                    name: "Security Check",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["api-audit.findings"],
-                },
-                {
-                    id: "test-verification",
-                    name: "Test Verification",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["api-audit.findings", "security-check.findings"],
-                    skipIf: "api-audit.findings.length === 0 && security-check.findings.length === 0",
-                },
-            ],
-        },
-
-        /**
-         * Full Backend Audit
-         * Duration: ~4 hours
-         */
-        FULL_BACKEND_AUDIT: {
-            name: "Full Backend Audit",
-            description: "Comprehensive analysis of API patterns, Workers, Infrastructure, and Error handling",
-            stages: [
-                { id: "be-api", name: "API Audit", graphId: "audit", llmProvider: "azure" },
-                { id: "be-workers", name: "Worker Architecture", graphId: "audit", llmProvider: "azure" },
-                { id: "be-modules", name: "Module Consistency", graphId: "audit", llmProvider: "azure" },
-                { id: "be-infra", name: "Infrastructure Review", graphId: "audit", llmProvider: "azure" },
-                { id: "be-errors", name: "Error Logic", graphId: "audit", llmProvider: "azure" },
-                { id: "be-security", name: "Backend Security", graphId: "audit", llmProvider: "azure" },
-                { id: "be-perf", name: "Performance & Scaling", graphId: "audit", llmProvider: "azure" },
-            ],
-        },
-
-        /**
-         * Full Frontend & UX Audit
-         * Duration: ~4 hours
-         */
-        FULL_FRONTEND_AUDIT: {
-            name: "Full UX/UI & Frontend Audit",
-            description: "Deep dive into Portal Architecture, UX patterns, Navigation, and I18n compliance",
-            stages: [
-                { id: "fe-portals", name: "Portal Architecture", graphId: "audit", llmProvider: "azure" },
-                { id: "fe-ux", name: "UX/UI Standards", graphId: "audit", llmProvider: "azure" },
-                { id: "fe-nav", name: "Navigation Registry", graphId: "audit", llmProvider: "azure" },
-                { id: "fe-alerts", name: "Alerts & Feedback", graphId: "audit", llmProvider: "azure" },
-                { id: "fe-i18n", name: "I18n Compliance", graphId: "audit", llmProvider: "azure" },
-                { id: "fe-perf", name: "Frontend Performance", graphId: "audit", llmProvider: "azure" },
-            ],
-        },
-
-        /**
-         * MongoDB Index & Performance Audit
-         * Duration: ~1 hour
-         */
-        MONGO_INDEX_AUDIT: {
-            name: "MongoDB Index & Performance",
-            description: "Deep analysis of MongoDB indexes, text search limits, and query performance",
-            stages: [
-                { id: "mongo-index", name: "Index Strategy", graphId: "audit", llmProvider: "azure" },
-                {
-                    id: "mongo-patterns",
-                    name: "Schema Patterns",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["mongo-index.findings"],
-                },
-                {
-                    id: "mongo-perf",
-                    name: "Performance Impact",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["mongo-index.findings"],
-                },
-            ],
-        },
-
-        /**
-         * Documentation Quality Audit
-         * Duration: ~30 mins
-         */
-        DOC_QUALITY_AUDIT: {
-            name: "Documentation Quality Audit",
-            description: "Verify documentation consistency, freshness, and completeness",
-            stages: [
-                { id: "doc-freshness", name: "Documentation Freshness", graphId: "audit", llmProvider: "azure" },
-                {
-                    id: "doc-consistency",
-                    name: "Knowledge Consistency",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["doc-freshness.findings"],
-                },
-            ],
-        },
-
-        /**
-         * Continuous Improvement - Daily automated scan
-         * Duration: ~2 hours
-         */
-        CONTINUOUS_IMPROVEMENT: {
-            name: "Continuous Improvement (Daily)",
+        CODE_PR_GATE: {
+            name: "Code — pull request gate",
             description:
-                "Daily automated scan for bugs, features, UX/perf/security improvements with auto-fix and PR creation. Designed to run on a cron schedule.",
-            triggerType: "schedule" as AutomationTriggerType,
-            schedule: {
-                enabled: true,
-                cron: "0 2 * * 1-5",
-                timezone: "Europe/Zurich",
+                "Short review for integration flow: assess the change itself, then rollout/tests/docs risks. Suggested trigger: Git event on pull_request (adjust branches in step 3).",
+            triggerType: "git_event" as AutomationTriggerType,
+            gitEventConfig: {
+                events: ["pull_request"],
+                branches: ["main", "master", "develop"],
             },
             stages: [
                 {
-                    id: "ci-discovery",
-                    name: "Codebase Discovery & Health Scan",
+                    id: "pr-change",
+                    name: "Change-focused review",
                     prompt:
-                        "Scan the entire repository for improvement opportunities across all dimensions: code health (TODOs, complexity, churn, duplication, dead code), security vulnerabilities (injection, auth, secrets, input validation), UX quality (missing states, accessibility, design system consistency), and dependency health (outdated packages, CVEs, deprecated APIs). Use repo_metrics, describe_structure, git_log, search_code, semantic_code_search, dependency_info extensively. Output structured findings with file paths, evidence, severity, and auto-fixability assessment. Focus on the 40 most impactful findings.",
-                    graphId: "audit",
-                    llmProvider: "azure",
+                        "Review the current change context (diff, touched paths, PR description if present). Identify regressions, API compatibility breaks, missing validation, auth gaps, and risky shortcuts. Stay scoped to what changed plus its direct dependencies.",
+                    graphId: GX.CODER,
+                    llmProvider: "lmstudio",
                 },
                 {
-                    id: "ci-github",
-                    name: "GitHub Issues & PR Sync",
+                    id: "pr-ship",
+                    name: "Ship checklist",
                     prompt:
-                        "Fetch open GitHub issues and recent pull requests using github_api. Correlate GitHub issues with the codebase findings from the previous stage. Identify issues that match or relate to discovered findings. Flag stale PRs (open > 14 days). Output a correlation map linking findings to issue numbers.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["ci-discovery.findings"],
-                },
-                {
-                    id: "ci-triage",
-                    name: "Triage & Prioritize",
-                    prompt:
-                        "Categorize and prioritize all findings into structured improvement suggestions. For each finding, assign: category (feature/bug/ux/perf/security/refactor/deps/docs/testing), priority (CRITICAL/HIGH/MEDIUM/LOW) based on impact, effort estimate (XS/S/M/L/XL), confidence score (0-100, filter < 50), and auto-fixability. Deduplicate overlapping findings. Correlate with GitHub issues. Sort by priority then confidence. Maximum 50 suggestions.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["ci-discovery.findings", "ci-github.findings"],
-                },
-                {
-                    id: "ci-autofix",
-                    name: "Auto-Implement Safe Fixes",
-                    prompt:
-                        "Implement the highest-priority auto-fixable improvements (max 5 per run). Only make clearly correct, low-risk changes. Never modify core business logic, database schemas, or reduce test coverage. For each fix: read the file, implement the change using write_file/str_replace_editor, then verify with lint/typecheck. Skip and mark as needs_human_review if unsure. Record all changes made.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["ci-triage.tasks"],
-                    skipIf: "ci-triage.findings.length === 0",
-                },
-                {
-                    id: "ci-report",
-                    name: "Generate Improvement Report",
-                    prompt:
-                        "Generate a comprehensive daily improvement report in markdown format. Include: Executive Summary, Auto-Fixed Items (if any), Suggestions Requiring Human Review (grouped by priority), and Statistics. Create a GitHub issue with the report using github_api (resource='create_issue', labels=['continuous-improvement', 'automated']). Send a notification using the notify tool.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: [
-                        "ci-discovery.findings",
-                        "ci-triage.findings",
-                        "ci-autofix.findings",
-                    ],
+                        "From the change review, produce a concise ship checklist: required tests, docs/migration notes, feature flags, monitoring, and rollback. Flag anything that should block merge.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["pr-change.findings"],
                 },
             ],
         },
 
         /**
-         * Business Analysis (Full) — Complete BA pipeline
-         * Duration: ~1 hour
+         * Coding — security pass triggered by HTTP webhook
          */
-        BUSINESS_ANALYSIS_FULL: {
-            name: "Business Analysis (Full)",
+        CODE_SECURITY_WEBHOOK: {
+            name: "Code — security review (webhook)",
             description:
-                "Complete business analysis: context review, market scanning, competitive analysis, feature discovery, requirements drafting, prioritization, innovation scan, gap analysis, and final report.",
+                "Two-stage security pass suitable for CI or an external orchestrator posting to your automation webhook. Suggested trigger: Webhook (configure secret in step 3).",
+            triggerType: "webhook" as AutomationTriggerType,
             stages: [
                 {
-                    id: "ba-context",
-                    name: "Context & Strategy Review",
+                    id: "sec-pass",
+                    name: "Threat-oriented review",
                     prompt:
-                        "Load and analyze the product's business context and repository structure. Summarize the product vision, target personas, competitors, tech stack, existing features, and strategic positioning. Use describe_structure, list_files, read_file, and search_code to understand the codebase.",
-                    graphId: "audit",
-                    llmProvider: "azure",
+                        "Perform a security-oriented review of the repository: authentication and authorization, secret handling, input validation, data exposure, dependency and configuration risk, and common web/API vulnerabilities. Output findings with severity and remediation.",
+                    graphId: GX.EXPLORER,
+                    llmProvider: "lmstudio",
                 },
                 {
-                    id: "ba-market",
-                    name: "Market Scanning",
+                    id: "sec-report",
+                    name: "Security summary",
                     prompt:
-                        "Analyze current market trends, emerging technologies, and industry movements relevant to this product's domain. Use web_search to research market size, growth trends, opportunities, and threats. Identify key trends that could impact the product.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["ba-context.findings"],
-                },
-                {
-                    id: "ba-competitive",
-                    name: "Competitive Analysis",
-                    prompt:
-                        "Deep-dive into each competitor defined in the business context. Build a feature-by-feature competitive matrix scoring each area (absent/basic/good/excellent). Identify competitive gaps, advantages, and market gaps. Use web_search to research competitors and their features.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["ba-context.findings", "ba-market.findings"],
-                },
-                {
-                    id: "ba-features",
-                    name: "Feature Discovery & Generation",
-                    prompt:
-                        "Generate 15-25 comprehensive feature proposals based on the context, market analysis, competitive gaps, and persona needs. Include new features, improvements, innovations, competitive catch-ups, and technical debt items. For each feature provide: title, type (new_feature/improvement/fix/optimization/innovation/competitive/technical_debt/compliance), summary, detailed description, user story, business value (CRITICAL/HIGH/MEDIUM/LOW), effort (XS/S/M/L/XL), priority (0-100), confidence score (0-100), innovation score (0-100), competitive context, impact areas, and risks.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["ba-context.findings", "ba-market.findings", "ba-competitive.findings"],
-                },
-                {
-                    id: "ba-requirements",
-                    name: "Requirements Drafting",
-                    prompt:
-                        "For each feature proposal, draft detailed requirements: refine user stories, write 3-5 acceptance criteria, identify dependencies, explore the codebase to find affected files, and suggest implementation approaches. Focus on making requirements specific and testable.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["ba-features.findings"],
-                },
-                {
-                    id: "ba-scoring",
-                    name: "Prioritization & Scoring",
-                    prompt:
-                        "Final scoring pass. Re-score each feature on business value (40%), effort efficiency (20%), innovation (20%), and competitive advantage (20%). Deduplicate overlapping features. Sort by final priority score descending. Identify quick wins (high value, low effort).",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["ba-features.findings", "ba-requirements.findings"],
-                },
-                {
-                    id: "ba-innovation",
-                    name: "Innovation Opportunities",
-                    prompt:
-                        "Identify innovative, differentiating features that could set this product apart from competitors. Consider emerging technologies, novel user experiences, and unique value propositions. Focus on features that are hard for competitors to replicate.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["ba-competitive.findings", "ba-features.findings"],
-                },
-                {
-                    id: "ba-gaps",
-                    name: "Gap Analysis",
-                    prompt:
-                        "Perform a comprehensive gap analysis: identify what's missing from the product vs. market expectations, competitor offerings, and user needs. Prioritize gaps by business impact and feasibility.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["ba-competitive.findings", "ba-features.findings"],
-                },
-                {
-                    id: "ba-report",
-                    name: "Final BA Report",
-                    prompt:
-                        "Generate a comprehensive Business Analysis report in markdown format. Include: Executive Summary, Market Overview, Competitive Landscape (with matrix), Feature Proposals (grouped by type and sorted by priority), Quick Wins, Strategic Recommendations, Innovation Opportunities, and Statistics.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: [
-                        "ba-features.findings",
-                        "ba-scoring.findings",
-                        "ba-innovation.findings",
-                        "ba-gaps.findings",
-                    ],
+                        "Consolidate findings into a short report: critical path, grouped themes, recommended order of fixes, and items needing human verification.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["sec-pass.findings"],
                 },
             ],
         },
 
         /**
-         * Quick Feature Brainstorm — Fast ideation
-         * Duration: ~15 minutes
+         * Coding — scheduled lightweight scan
          */
-        QUICK_FEATURE_BRAINSTORM: {
-            name: "Quick Feature Brainstorm",
+        CODE_WEEKLY_HEALTH: {
+            name: "Code — weekly health scan",
             description:
-                "Fast feature ideation pipeline: context review, feature generation, and quick scoring.",
+                "Recurring hygiene: dependency and complexity signals, test/doc drift, then a brief summary. Suggested trigger: Schedule (Sundays 04:00 UTC by default; change in step 3).",
+            triggerType: "schedule" as AutomationTriggerType,
+            schedule: {
+                enabled: true,
+                cron: "0 4 * * 0",
+                timezone: "UTC",
+            },
             stages: [
                 {
-                    id: "qb-context",
-                    name: "Context Review",
+                    id: "wh-scan",
+                    name: "Hygiene & risk scan",
                     prompt:
-                        "Quickly analyze the repository structure, tech stack, and existing features. Summarize the product's current state, strengths, and areas for improvement.",
-                    graphId: "audit",
-                    llmProvider: "azure",
+                        "Scan for hygiene issues: outdated or vulnerable dependencies (if tools allow), noisy TODO/FIXME clusters, obvious complexity or duplication hotspots, and flaky-test smells. Cap at the highest-impact items.",
+                    graphId: GX.EXPLORER,
+                    llmProvider: "lmstudio",
                 },
                 {
-                    id: "qb-features",
-                    name: "Feature Generation",
+                    id: "wh-drift",
+                    name: "Tests & docs drift",
                     prompt:
-                        "Generate 10-15 feature proposals based on the product context. Mix of new features, improvements, and innovations. For each: title, type, summary, description, business value, effort, priority (0-100), and innovation score (0-100).",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["qb-context.findings"],
+                        "Check whether critical paths appear tested and whether public APIs or user-facing flows are reflected in docs or changelogs. Note gaps without boiling the ocean.",
+                    graphId: GX.CODER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["wh-scan.findings"],
                 },
                 {
-                    id: "qb-scoring",
-                    name: "Quick Scoring",
+                    id: "wh-summary",
+                    name: "Weekly summary",
                     prompt:
-                        "Score and prioritize all feature proposals. Sort by priority. Identify top 3 quick wins and top 3 strategic features. Generate a brief summary report.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["qb-features.findings"],
+                        "Write a brief weekly engineering summary from prior findings: top 5 actions, owners if inferable, and suggested ordering.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["wh-scan.findings", "wh-drift.findings"],
                 },
             ],
         },
 
         /**
-         * Competitive Deep Dive — In-depth competitive analysis
-         * Duration: ~30 minutes
+         * Coding — deep dive on one slice (edit placeholder)
          */
-        COMPETITIVE_DEEP_DIVE: {
-            name: "Competitive Deep Dive",
+        PRODUCT_AREA_DEEP_DIVE: {
+            name: "Code — product area deep dive",
             description:
-                "In-depth competitive analysis with feature matrix, gap analysis, and strategic recommendations.",
+                "Single-stage focused review. Replace [AREA] in the stage name and prompt with your target (module path, feature name, or bounded scope). Suggested trigger: Manual.",
+            triggerType: "manual" as AutomationTriggerType,
             stages: [
                 {
-                    id: "cd-context",
-                    name: "Context & Competitors",
+                    id: "pad-area",
+                    name: "Deep dive: [AREA]",
                     prompt:
-                        "Analyze the product's current features and defined competitors. Summarize our strengths and each competitor's positioning.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                },
-                {
-                    id: "cd-research",
-                    name: "Competitor Research",
-                    prompt:
-                        "Research each competitor in depth using web_search. Analyze their product features, pricing, user reviews, recent updates, and market positioning. Identify their innovations and strategies.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["cd-context.findings"],
-                },
-                {
-                    id: "cd-matrix",
-                    name: "Feature Matrix Builder",
-                    prompt:
-                        "Build a comprehensive feature-by-feature competitive matrix. For each feature area, score all players (us and each competitor) as: absent, basic, good, or excellent. Identify at least 15-20 feature areas for comparison.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["cd-context.findings", "cd-research.findings"],
-                },
-                {
-                    id: "cd-gaps",
-                    name: "Gap & Opportunity Analysis",
-                    prompt:
-                        "Based on the competitive matrix, identify all gaps (features competitors have that we lack), all advantages (features we excel at), and market opportunities (features no one does well). Prioritize by business impact.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["cd-matrix.findings"],
-                },
-                {
-                    id: "cd-strategy",
-                    name: "Strategic Recommendations",
-                    prompt:
-                        "Generate strategic recommendations: which competitive gaps to close first, which advantages to double down on, which market opportunities to pursue. Include quick wins (< 1 sprint) and long-term plays (multi-quarter). Produce a comprehensive competitive intelligence report.",
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    contextFromPreviousStages: ["cd-matrix.findings", "cd-gaps.findings"],
+                        "Review one product area only. Replace [AREA] with the concrete scope (e.g. module, route prefix, or capability).\n\n1) Map entry points: APIs/services, UI routes, config, and data touched.\n2) Audit correctness, edge cases, authorization, and data integrity.\n3) Note UX states (loading/error/empty) where relevant.\n4) List findings with severity and file references; finish with verdict and next steps.\n\nStay within [AREA]; avoid unrelated code.",
+                    graphId: GX.CODER,
+                    llmProvider: "lmstudio",
                 },
             ],
         },
 
         /**
-         * Feature Audit (A43) — Single feature template
-         * Duration: ~30 min per feature
+         * Business — strategy & market pipeline (manual)
          */
-        FEATURE_AUDIT: {
-            name: "Feature Audit (A43) — [FOCUS]",
+        BUSINESS_STRATEGY_PIPELINE: {
+            name: "Business — strategy & market",
             description:
-                "Complete A43 domain/feature audit with inventory reconstruction, deep audit across 13 axes, verdict, and remediation plan. Replace [FOCUS] with the target feature (e.g. sales/invoices).",
+                "From context to market signals, competition, opportunities, and an executive summary. Suggested trigger: Manual (workshops, planning). Use web_search where helpful.",
+            triggerType: "manual" as AutomationTriggerType,
             stages: [
                 {
-                    id: "fa-focus",
-                    name: "Feature Audit: [FOCUS]",
-                    prompt: AutomationConfigBuilder.buildFeatureAuditPrompt("[FOCUS]"),
-                    graphId: "audit",
-                    llmProvider: "azure",
-                    // NO contextFromPreviousStages → fresh LLM context guaranteed
+                    id: "bs-context",
+                    name: "Context & goals",
+                    prompt:
+                        "Clarify product, users, problem, current offerings, and business goals using repository/docs context where available. List explicit assumptions and unknowns.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                },
+                {
+                    id: "bs-market",
+                    name: "Market & trends",
+                    prompt:
+                        "Identify market structure, demand drivers, and macro trends relevant to this product. Use web_search. Highlight opportunities and threats.",
+                    graphId: GX.EXPLORER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["bs-context.findings"],
+                },
+                {
+                    id: "bs-compete",
+                    name: "Competitive landscape",
+                    prompt:
+                        "Summarize key alternatives and competitors, positioning, and typical buyer criteria. Note where the product can win or must catch up.",
+                    graphId: GX.EXPLORER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["bs-context.findings", "bs-market.findings"],
+                },
+                {
+                    id: "bs-opps",
+                    name: "Opportunities & priorities",
+                    prompt:
+                        "Propose prioritized initiatives (features, partnerships, pricing/packaging, geos) with rationale, rough effort, and dependencies. Separate quick wins from strategic bets.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["bs-compete.findings"],
+                },
+                {
+                    id: "bs-report",
+                    name: "Executive summary",
+                    prompt:
+                        "Produce a concise markdown brief: thesis, market, competition, recommended bets, risks, and metrics to track.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["bs-context.findings", "bs-market.findings", "bs-compete.findings", "bs-opps.findings"],
                 },
             ],
         },
+
+        /**
+         * Business — competitive scan
+         */
+        BUSINESS_COMPETITIVE_SCAN: {
+            name: "Business — competitive scan",
+            description:
+                "Focused competitor research and positioning. Suggested trigger: Manual before launches or pricing moves.",
+            triggerType: "manual" as AutomationTriggerType,
+            stages: [
+                {
+                    id: "bc-frame",
+                    name: "Category & rivals",
+                    prompt:
+                        "Define the category, buyer, and shortlist of competitors or substitutes. Summarize our differentiation hypothesis.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                },
+                {
+                    id: "bc-research",
+                    name: "Desk research",
+                    prompt:
+                        "Use web_search to capture each rival's positioning, packaging/pricing signals, strengths/weaknesses, and recent moves.",
+                    graphId: GX.EXPLORER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["bc-frame.findings"],
+                },
+                {
+                    id: "bc-out",
+                    name: "Matrix & plays",
+                    prompt:
+                        "Build a simple capability matrix and list strategic plays: what to emphasize, what to build, and what to ignore.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["bc-frame.findings", "bc-research.findings"],
+                },
+            ],
+        },
+
+        /**
+         * Business — fast ideation
+         */
+        BUSINESS_IDEATION: {
+            name: "Business — ideation sprint",
+            description:
+                "Short loop: context, ideas, prioritization. Suggested trigger: Manual for brainstorms.",
+            triggerType: "manual" as AutomationTriggerType,
+            stages: [
+                {
+                    id: "bi-context",
+                    name: "Snapshot context",
+                    prompt:
+                        "Capture user segments, Jobs-to-be-done, and current product footprint from available context. Keep it brief.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                },
+                {
+                    id: "bi-ideas",
+                    name: "Generate options",
+                    prompt:
+                        "Produce a diverse set of initiatives (product, GTM, ops). For each: title, hypothesis, impact, effort (S/M/L), and risks.",
+                    graphId: GX.EXPLORER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["bi-context.findings"],
+                },
+                {
+                    id: "bi-pick",
+                    name: "Prioritize",
+                    prompt:
+                        "Rank ideas, call out top 3 quick wins and top 3 strategic bets, and list experiments to validate uncertainty.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["bi-ideas.findings"],
+                },
+            ],
+        },
+
+        /**
+         * Business — GTM & sales narrative
+         */
+        BUSINESS_GTM_SALES: {
+            name: "Business — GTM & sales",
+            description:
+                "ICP, messaging, funnel, and objection handling. Suggested trigger: Manual before campaigns or pipeline reviews.",
+            triggerType: "manual" as AutomationTriggerType,
+            stages: [
+                {
+                    id: "gtm-icp",
+                    name: "ICP & segments",
+                    prompt:
+                        "Define ideal customer profiles, segments to avoid, and buying triggers. Tie to concrete pains and outcomes.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                },
+                {
+                    id: "gtm-msg",
+                    name: "Messaging & proof",
+                    prompt:
+                        "Draft core narrative: one-liner, value pillars, proof points, and comparative claims (honest).",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["gtm-icp.findings"],
+                },
+                {
+                    id: "gtm-funnel",
+                    name: "Funnel & motions",
+                    prompt:
+                        "Outline funnel stages, channels, assets needed, and handoffs (marketing → sales → success).",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["gtm-msg.findings"],
+                },
+                {
+                    id: "gtm-objections",
+                    name: "Objections & FAQs",
+                    prompt:
+                        "List top objections with concise responses; add a short discovery question cheat sheet for reps.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["gtm-funnel.findings"],
+                },
+            ],
+        },
+
+        /**
+         * Business — fundraising prep
+         */
+        BUSINESS_FUNDRAISING: {
+            name: "Business — fundraising prep",
+            description:
+                "Narrative, investor Q&A, and diligence checklist. Suggested trigger: Manual before outreach or data room updates.",
+            triggerType: "manual" as AutomationTriggerType,
+            stages: [
+                {
+                    id: "fr-story",
+                    name: "Story & milestones",
+                    prompt:
+                        "Articulate problem, solution, why now, traction, business model, and near-term milestones. Flag gaps in evidence.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                },
+                {
+                    id: "fr-market",
+                    name: "Market & ambition",
+                    prompt:
+                        "Frame TAM/SAM logic cautiously, expansion paths, and long-term vision without overclaiming.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["fr-story.findings"],
+                },
+                {
+                    id: "fr-qa",
+                    name: "Investor Q&A",
+                    prompt:
+                        "Prepare answers for standard investor questions: competition, moat, churn/risk, unit economics placeholders, team, and capital efficiency.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["fr-story.findings", "fr-market.findings"],
+                },
+                {
+                    id: "fr-diligence",
+                    name: "Diligence checklist",
+                    prompt:
+                        "Produce a practical diligence checklist (product, legal/IP, finance, security, people) mapped to typical documents or artifacts.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["fr-qa.findings"],
+                },
+            ],
+        },
+
+        /**
+         * Daily focus — ingest tasks, mail, calendar, memory; prioritize urgent vs important
+         */
+        DAILY_FOCUS_PRIORITIES: {
+            name: "Daily focus — prioritize today",
+            description:
+                "Pulls together workspace context (bootstrap_context), Gmail threads needing attention, calendar constraints, and repo todo markers (todo_search). Then separates urgent vs important and proposes a realistic \"do now\" plan. Suggested trigger: Schedule (weekday mornings); switch to Manual if you prefer on-demand.",
+            triggerType: "schedule" as AutomationTriggerType,
+            schedule: {
+                enabled: true,
+                cron: "0 8 * * 1-5",
+                timezone: "UTC",
+            },
+            stages: [
+                {
+                    id: "df-ingest",
+                    name: "Gather inbox, calendar & open loops",
+                    prompt:
+                        "Create a structured snapshot of what is competing for attention today.\n\n1) Call bootstrap_context to load relevant workspace/session memory, notes, and continuity context.\n2) Gmail: use gmail_list_labels then gmail_search_messages for unread or needs-reply in the last 48–72h (adjust query if empty). Read only what you must with gmail_read_message—stay concise.\n3) Calendar: calendar_list_calendars then calendar_list_events for today and tomorrow; note hard commitments and prep needed.\n4) Optional: todo_search for high-signal TODO/FIXME/HACK clusters in the active codebase if engineering work is in scope.\n5) Optional: github_api only if it helps surface assigned PRs/issues.\n\nOutput sections: **Inputs seen**, **Explicit deadlines**, **People waiting on you**, **Risks if slipped**.",
+                    graphId: GX.EXPLORER,
+                    llmProvider: "lmstudio",
+                },
+                {
+                    id: "df-matrix",
+                    name: "Urgent vs important & tradeoffs",
+                    prompt:
+                        "Using the prior snapshot, classify every significant item into an Eisenhower-style grid:\n\n- **Q1** urgent & important (do first)\n- **Q2** important, not urgent (schedule deep work)\n- **Q3** urgent, not important (delegate, shorten, or batch)\n- **Q4** neither (defer or drop)\n\nFlag confusion between \"loud\" (notifications) vs \"valuable\" (outcomes). Note dependencies, smallest next actions, and anything that should be a calendar block vs a 15-minute reply.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["df-ingest.findings"],
+                },
+                {
+                    id: "df-plan",
+                    name: "Today's plan & next actions",
+                    prompt:
+                        "Produce a single-page brief for TODAY:\n\n1) **Top 3 outcomes** (not tasks)\n2) **Do now** (ordered, time-boxed; include rough duration)\n3) **Schedule / calendar moves** (concrete slots)\n4) **Inbox zero tactics** (which threads get a reply, which get snoozed)\n5) **Protect focus**: what to ignore until afternoon\n6) **End-of-day check**: one metric or proof each outcome moved\n\nKeep tone actionable; avoid generic advice—tie bullets to items discovered earlier.",
+                    graphId: GX.PLANNER,
+                    llmProvider: "lmstudio",
+                    contextFromPreviousStages: ["df-ingest.findings", "df-matrix.findings"],
+                },
+            ],
+        },
+
     };
 
     /**
@@ -753,18 +644,14 @@ export class AutomationConfigBuilder {
     static buildAutomation(config: Partial<AutomationDefinition>): Partial<AutomationDefinition>;
     static buildAutomation(input: string | Partial<AutomationDefinition>): Partial<AutomationDefinition> {
         if (typeof input === "string") {
-            const preset = this.PRESETS[input];
+            const key = this.LEGACY_PRESET_ALIASES[input] ?? input;
+            const preset = this.PRESETS[key];
             if (!preset) {
                 throw new Error(`Unknown preset: ${input}`);
             }
             return this.ensurePresetPrompts(preset);
         }
         return input;
-    }
-
-    /** @deprecated Use buildAutomation instead */
-    static buildChain(input: string | Partial<AutomationDefinition>): Partial<AutomationDefinition> {
-        return this.buildAutomation(input as any);
     }
 
     /**
@@ -1062,7 +949,7 @@ export class AutomationConfigBuilder {
                 id: `fa-${slug}-inventory`,
                 name: `Inventory: ${focus}`,
                 prompt: this.buildInventoryPrompt(focus),
-                graphId: "simple_react",
+                graphId: GX.EXPLORER,
                 llmProvider: "lmstudio" as const,
                 // Fresh context — no dependencies
             },
@@ -1070,7 +957,7 @@ export class AutomationConfigBuilder {
                 id: `fa-${slug}-structural`,
                 name: `Structural Audit: ${focus}`,
                 prompt: this.buildStructuralAuditPrompt(focus),
-                graphId: "simple_react",
+                graphId: GX.CODER,
                 llmProvider: "lmstudio" as const,
                 contextFromPreviousStages: [`fa-${slug}-inventory.findings`],
             },
@@ -1078,7 +965,7 @@ export class AutomationConfigBuilder {
                 id: `fa-${slug}-behavioral`,
                 name: `Behavioral Audit: ${focus}`,
                 prompt: this.buildBehavioralAuditPrompt(focus),
-                graphId: "simple_react",
+                graphId: GX.CODER,
                 llmProvider: "lmstudio" as const,
                 contextFromPreviousStages: [`fa-${slug}-inventory.findings`],
             },
@@ -1086,7 +973,7 @@ export class AutomationConfigBuilder {
                 id: `fa-${slug}-verdict`,
                 name: `Verdict: ${focus}`,
                 prompt: this.buildVerdictPrompt(focus),
-                graphId: "simple_react",
+                graphId: GX.PLANNER,
                 llmProvider: "lmstudio" as const,
                 contextFromPreviousStages: [
                     `fa-${slug}-structural.findings`,
@@ -1110,7 +997,7 @@ export class AutomationConfigBuilder {
                     id: `fa-${focus.replace(/\//g, "-")}`,
                     name: `Feature Audit: ${label}`,
                     prompt: this.buildFeatureAuditPrompt(focus),
-                    graphId: "simple_react",
+                    graphId: GX.CODER,
                     llmProvider: "lmstudio",
                     // NO contextFromPreviousStages → fresh LLM context per feature
                 },
@@ -1149,7 +1036,7 @@ export class AutomationConfigBuilder {
                     id: `fa-${focus.replace(/\//g, "-")}`,
                     name: `Feature Audit: ${label}`,
                     prompt: this.buildFeatureAuditPrompt(focus),
-                    graphId: "simple_react",
+                    graphId: GX.CODER,
                     llmProvider: "lmstudio" as const,
                     // NO contextFromPreviousStages → fresh LLM context per feature
                 };
@@ -1341,11 +1228,6 @@ export class AutomationConfigBuilder {
         };
     }
 
-    /** @deprecated Use validateAutomationConfig instead */
-    static validateChainConfig(chain: Partial<AutomationDefinition>): { valid: boolean; errors: string[] } {
-        return this.validateAutomationConfig(chain);
-    }
-
     /**
      * Get list of available presets
      */
@@ -1362,34 +1244,29 @@ export class AutomationConfigBuilder {
         stageCount: number;
         estimatedDuration: string;
     } | null {
-        const preset = this.PRESETS[presetName];
+        const key = this.LEGACY_PRESET_ALIASES[presetName] ?? presetName;
+        const preset = this.PRESETS[key];
         if (!preset) return null;
 
         const durations: Record<string, string> = {
-            FULL_STACK_LOGIC_AUDIT: "~6 hours",
-            FULL_AUDIT: "~8 hours",
-            SECURITY_DEEP_DIVE: "~3 hours",
-            I18N_QUALITY: "~2 hours",
-            API_QUALITY_GATE: "~1 hour",
-            FULL_BACKEND_AUDIT: "~4 hours",
-            FULL_FRONTEND_AUDIT: "~4 hours",
-            MONGO_INDEX_AUDIT: "~1 hour",
-            DOC_QUALITY_AUDIT: "~30 mins",
-            CONTINUOUS_IMPROVEMENT: "~2 hours",
-            FEATURE_AUDIT: "~30 min per feature",
-            BUSINESS_ANALYSIS_FULL: "~1 hour",
-            QUICK_FEATURE_BRAINSTORM: "~15 mins",
-            COMPETITIVE_DEEP_DIVE: "~30 mins",
+            CODE_FULL_REVIEW: "~2–4 hours",
+            CODE_PR_GATE: "~20–40 mins",
+            CODE_SECURITY_WEBHOOK: "~30–60 mins",
+            CODE_WEEKLY_HEALTH: "~45–90 mins",
+            PRODUCT_AREA_DEEP_DIVE: "~30–90 mins",
+            BUSINESS_STRATEGY_PIPELINE: "~45–75 mins",
+            BUSINESS_COMPETITIVE_SCAN: "~25–45 mins",
+            BUSINESS_IDEATION: "~15–30 mins",
+            BUSINESS_GTM_SALES: "~30–50 mins",
+            BUSINESS_FUNDRAISING: "~35–55 mins",
+            DAILY_FOCUS_PRIORITIES: "~20–40 mins",
         };
 
         return {
             name: preset.name || presetName,
             description: preset.description || "",
             stageCount: preset.stages?.length || 0,
-            estimatedDuration: durations[presetName] || "Unknown",
+            estimatedDuration: durations[key] || "Unknown",
         };
     }
 }
-
-/** @deprecated Use AutomationConfigBuilder instead */
-export const ChainConfigBuilder = AutomationConfigBuilder;

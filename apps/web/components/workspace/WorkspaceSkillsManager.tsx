@@ -228,7 +228,7 @@ export function WorkspaceSkillsManager({ workspaceId }: { workspaceId: string })
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1 text-xs text-text-muted">
                     <Link
-                        href={`/app/${workspaceId}/connectors`}
+                        href="/app/config/connectors"
                         className="text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
                     >
                         Connectors

@@ -1,6 +1,7 @@
 // src/lib/auth/apiAuth.ts
 // Shared API auth helpers for app and pages routes (MongoDB/NextAuth version)
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { getServerSession, type AuthOptions } from 'next-auth';
 import { API_TOKEN_PREFIX, hashApiToken } from './apiTokens';
 import * as apiTokenService from '@kletron/server/services/apiTokenService';
 import { getToken } from 'next-auth/jwt';
@@ -21,6 +22,27 @@ export type AuthResult = {
 const INTERNAL_TOKEN_HEADERS = ['x-mcp-internal-token', 'x-internal-token'];
 const ON_BEHALF_HEADERS = ['x-on-behalf-of', 'x-kletron-user'];
 const NEXTAUTH_SESSION_COOKIE_NAMES = ['__Secure-next-auth.session-token', 'next-auth.session-token'] as const;
+const NEXTAUTH_SESSION_OPTIONS: AuthOptions = {
+    providers: [],
+    session: {
+        strategy: 'jwt' as const,
+    },
+    secret: process.env.NEXTAUTH_SECRET,
+    callbacks: {
+        async jwt({ token, user }: { token: any; user?: any }) {
+            if (user) {
+                token.id = user.id;
+            }
+            return token;
+        },
+        async session({ session, token }: { session: any; token: any }) {
+            if (session.user) {
+                session.user.id = token.id as string;
+            }
+            return session;
+        },
+    },
+};
 
 type CookieMap = Record<string, string>;
 
@@ -114,6 +136,21 @@ async function getNextAuthSessionAuthFromAppRequest(request: Request): Promise<A
 async function getNextAuthSessionAuthFromPagesRequest(req: NextApiRequest): Promise<AuthResult | null> {
     const cookies = Object.keys(req.cookies ?? {}).length > 0 ? (req.cookies as CookieMap) : parseCookieHeader(readReqCookieHeader(req));
     return getNextAuthSessionAuthFromCookies(cookies);
+}
+
+async function getNextAuthSessionAuthFromServer(): Promise<AuthResult | null> {
+    try {
+        const session = await getServerSession(NEXTAUTH_SESSION_OPTIONS);
+        const user = session?.user as Record<string, unknown> | undefined;
+        const userId = user?.id ?? user?.sub;
+        if (typeof userId === 'string' && userId.trim()) {
+            return { userId: userId.trim(), authType: 'session' };
+        }
+    } catch {
+        // Ignore and fall back to cookie parsing / bearer auth.
+    }
+
+    return null;
 }
 
 function constantTimeEqual(a: string, b: string): boolean {
@@ -231,15 +268,20 @@ export async function getAppRouteAuth(request: Request): Promise<AuthResult | nu
         return devBypass;
     }
 
+    const sessionAuth = await getNextAuthSessionAuthFromServer();
+    if (sessionAuth) {
+        return sessionAuth;
+    }
+
+    const cookieSessionAuth = await getNextAuthSessionAuthFromAppRequest(request);
+    if (cookieSessionAuth) {
+        return cookieSessionAuth;
+    }
+
     const token = extractBearerTokenFromHeaders(request.headers);
     if (token) {
         const verified = await verifyBearerToken(token);
         return verified ?? devBypass;
-    }
-
-    const sessionAuth = await getNextAuthSessionAuthFromAppRequest(request);
-    if (sessionAuth) {
-        return sessionAuth;
     }
 
     return devBypass;
@@ -265,15 +307,15 @@ export async function getPagesRouteAuth(req: NextApiRequest): Promise<AuthResult
         return devBypass;
     }
 
+    const sessionAuth = await getNextAuthSessionAuthFromPagesRequest(req);
+    if (sessionAuth) {
+        return sessionAuth;
+    }
+
     const token = extractBearerTokenFromReq(req);
     if (token) {
         const verified = await verifyBearerToken(token);
         return verified ?? devBypass;
-    }
-
-    const sessionAuth = await getNextAuthSessionAuthFromPagesRequest(req);
-    if (sessionAuth) {
-        return sessionAuth;
     }
 
     return devBypass;

@@ -67,6 +67,7 @@ const BASELINE_TOOLS = [
  */
 const TOOLS_REQUIRING_INTEGRATION: Record<string, string[]> = {
     github_api: ["github"],
+    sentry_api: ["sentry"],
     notify: ["slack"],
 };
 

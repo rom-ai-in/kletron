@@ -20,6 +20,11 @@ export type { ConversationCenterProps } from './ConversationCenter';
 export { InputBar } from './InputBar';
 export type { InputBarProps } from './InputBar';
 
+export { WorkspaceConnectorsHint } from './WorkspaceConnectorsHint';
+export type { WorkspaceConnectorsHintProps } from './WorkspaceConnectorsHint';
+
+export { CodeRepoConnectorStrip } from './CodeRepoConnectorStrip';
+
 export { ProjectUtilitySidebar } from './ProjectUtilitySidebar';
 export type { ProjectUtilitySidebarProps, PendingDiffItem, FileLink, GitSidebarData, SourceControlTab } from './ProjectUtilitySidebar';
 

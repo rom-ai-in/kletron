@@ -17,6 +17,10 @@
     "./multiClient": {
       "types": "./src/multiClient.ts",
       "default": "./src/multiClient.ts"
+    },
+    "./remoteMcpTransport": {
+      "types": "./src/remoteMcpTransport.ts",
+      "default": "./src/remoteMcpTransport.ts"
     }
   }
 }

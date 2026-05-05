@@ -24,24 +24,36 @@ import {
 } from "@kletron/ui/components/design-system";
 import {
     ArrowLeft,
+    Building2,
     ExternalLink,
     Link2,
-    Play,
+    Pencil,
+    Plug,
     Plus,
     RefreshCw,
     Search,
+    ShieldCheck,
     Trash2,
 } from "lucide-react";
 import {
+    getConnectorType,
     getPlugin,
+    type ConnectorWorkspaceBindingRow,
     type ConnectorIntegrationStatus,
     type ConnectorTypeDefinition,
+    type McpServerProbeInput,
     type McpServerTransport,
+    type McpServerUpdateInput,
     type WorkspaceIntegrationSummary,
     type WorkspaceMcpServerSummary,
 } from "@kletron/shared";
 import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
-import { useConnectorCatalog, useWorkspaceConnectors } from "../../hooks/useConnectors";
+import {
+    fetchAccountConnectorWorkspaceBindings,
+    putAccountConnectorWorkspaceBindings,
+    useConnectorCatalog,
+    useWorkspaceConnectors,
+} from "../../hooks/useConnectors";
 
 function parseKvText(text: string): Record<string, string> {
     const out: Record<string, string> = {};
@@ -53,6 +65,48 @@ function parseKvText(text: string): Record<string, string> {
         out[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
     }
     return out;
+}
+
+function recordToKvText(rec?: Record<string, string>): string {
+    if (!rec) return "";
+    const entries = Object.entries(rec).filter(([, v]) => v !== undefined && String(v).length > 0);
+    if (entries.length === 0) return "";
+    return entries.map(([k, v]) => `${k}=${v}`).join("\n");
+}
+
+function buildMcpProbeBodyFromDraft(draft: {
+    transport: McpServerTransport;
+    command: string;
+    args: string;
+    envText: string;
+    url: string;
+    headersText: string;
+}): { ok: true; body: McpServerProbeInput } | { ok: false; error: string } {
+    if (draft.transport === "stdio") {
+        if (!draft.command.trim()) {
+            return { ok: false, error: "Command is required for stdio transport." };
+        }
+        return {
+            ok: true,
+            body: {
+                transport: "stdio",
+                command: draft.command.trim(),
+                args: draft.args.trim() ? draft.args.split(/\s+/).filter(Boolean) : undefined,
+                env: draft.envText.trim() ? parseKvText(draft.envText) : undefined,
+            },
+        };
+    }
+    if (!draft.url.trim()) {
+        return { ok: false, error: "URL is required for remote transports." };
+    }
+    return {
+        ok: true,
+        body: {
+            transport: draft.transport,
+            url: draft.url.trim(),
+            headers: draft.headersText.trim() ? parseKvText(draft.headersText) : undefined,
+        },
+    };
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -105,6 +159,10 @@ function sortCatalogDefs(
     });
 }
 
+function catalogUnlockedToolCount(providerId: string): number {
+    return getConnectorType(providerId)?.unlocksTools?.length ?? 0;
+}
+
 /** Enabled MCP servers first; then connected before unknown/error; disabled last. */
 function mcpListSortKey(server: WorkspaceMcpServerSummary): number {
     if (!server.enabled) return 0;
@@ -155,6 +213,9 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
         updateMcpServer,
         deleteMcpServer,
         discoverMcpServer,
+        probeMcpServerDraft,
+        applyConnectorBindings,
+        refresh,
     } = useWorkspaceConnectors(workspaceId);
 
     const [search, setSearch] = useState("");
@@ -173,9 +234,86 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
     const [submitBusy, setSubmitBusy] = useState(false);
     const [discoveringId, setDiscoveringId] = useState<string | null>(null);
 
+    const [editOpen, setEditOpen] = useState(false);
+    const [editingServerId, setEditingServerId] = useState<string | null>(null);
+    const [editDraft, setEditDraft] = useState(blankMcpDraft);
+    const [editModalError, setEditModalError] = useState<string | null>(null);
+    const [editSubmitBusy, setEditSubmitBusy] = useState(false);
+    const [editProbeBusy, setEditProbeBusy] = useState(false);
+    const [editProbeOutcome, setEditProbeOutcome] = useState<
+        | null
+        | { kind: "success"; tools: Array<{ name: string; description?: string }> }
+        | { kind: "error"; message: string }
+    >(null);
+
+    const [bindingsModal, setBindingsModal] = useState<{
+        kind: "mcp_server" | "integration";
+        refId: string;
+        title: string;
+    } | null>(null);
+    const [bindingsRows, setBindingsRows] = useState<ConnectorWorkspaceBindingRow[]>([]);
+    const [bindingsLoading, setBindingsLoading] = useState(false);
+    const [bindingsSaving, setBindingsSaving] = useState(false);
+    const [bindingsError, setBindingsError] = useState<string | null>(null);
+
+    const closeBindingsModal = useCallback(() => {
+        setBindingsModal(null);
+        setBindingsRows([]);
+        setBindingsError(null);
+        setBindingsLoading(false);
+        setBindingsSaving(false);
+    }, []);
+
+    useEffect(() => {
+        if (!bindingsModal) {
+            setBindingsRows([]);
+            setBindingsError(null);
+            return;
+        }
+        const ac = new AbortController();
+        setBindingsLoading(true);
+        setBindingsError(null);
+        void (async () => {
+            try {
+                const rows = await fetchAccountConnectorWorkspaceBindings(
+                    bindingsModal.kind,
+                    bindingsModal.refId,
+                    ac.signal,
+                );
+                if (!ac.signal.aborted) setBindingsRows(rows);
+            } catch (err) {
+                if ((err as Error).name === "AbortError") return;
+                if (!ac.signal.aborted) setBindingsError((err as Error).message);
+            } finally {
+                if (!ac.signal.aborted) setBindingsLoading(false);
+            }
+        })();
+        return () => ac.abort();
+    }, [bindingsModal]);
+
     const showToast = useCallback((kind: "success" | "error", text: string) => {
         setToast({ kind, text });
     }, []);
+
+    const saveWorkspaceBindings = async () => {
+        if (!bindingsModal) return;
+        setBindingsSaving(true);
+        setBindingsError(null);
+        try {
+            await putAccountConnectorWorkspaceBindings(
+                bindingsModal.kind,
+                bindingsModal.refId,
+                bindingsRows.map((r) => ({ workspaceId: r.workspaceId, enabled: r.enabled })),
+            );
+            showToast("success", "Workspace availability saved");
+            closeBindingsModal();
+            await refresh();
+        } catch (err) {
+            setBindingsError((err as Error).message);
+        } finally {
+            setBindingsSaving(false);
+        }
+    };
 
     useEffect(() => {
         if (!toast) return;
@@ -309,7 +447,7 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                     pluginId !== undefined && pluginId !== ""
                         ? `?plugin=${encodeURIComponent(pluginId)}`
                         : "";
-                window.location.href = `/api/auth/connect/${selectedType.id}?workspaceId=${workspaceId}&redirect=${encodeURIComponent(`/app/${workspaceId}/connectors${pluginQs}`)}`;
+                window.location.href = `/api/auth/connect/${selectedType.id}?workspaceId=${workspaceId}&redirect=${encodeURIComponent(`/app/config/connectors${pluginQs}`)}`;
                 return;
             }
             await createIntegration({
@@ -366,6 +504,103 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
         }
     };
 
+    const openEditMcpServer = useCallback((server: WorkspaceMcpServerSummary) => {
+        setEditingServerId(server.id);
+        setEditDraft({
+            name: server.name,
+            transport: server.transport,
+            command: server.command ?? "",
+            args: (server.args ?? []).join(" "),
+            envText: recordToKvText(server.env),
+            url: server.url ?? "",
+            headersText: recordToKvText(server.headers),
+            enabled: server.enabled,
+        });
+        setEditModalError(null);
+        setEditProbeOutcome(null);
+        setEditProbeBusy(false);
+        setEditOpen(true);
+    }, []);
+
+    const closeEditMcpServer = useCallback(() => {
+        setEditOpen(false);
+        setEditingServerId(null);
+        setEditDraft({ ...blankMcpDraft });
+        setEditModalError(null);
+        setEditSubmitBusy(false);
+        setEditProbeBusy(false);
+        setEditProbeOutcome(null);
+    }, []);
+
+    const runEditMcpProbe = useCallback(async () => {
+        setEditProbeOutcome(null);
+        setEditModalError(null);
+        const built = buildMcpProbeBodyFromDraft(editDraft);
+        if (!built.ok) {
+            setEditProbeOutcome({ kind: "error", message: built.error });
+            return;
+        }
+        setEditProbeBusy(true);
+        try {
+            const res = await probeMcpServerDraft(built.body);
+            if (res.ok) {
+                const tools = res.tools ?? [];
+                setEditProbeOutcome({ kind: "success", tools });
+                showToast("success", `Connection OK — ${tools.length} tool(s)`);
+            } else {
+                setEditProbeOutcome({ kind: "error", message: res.error });
+            }
+        } catch (err) {
+            setEditProbeOutcome({ kind: "error", message: (err as Error).message });
+        } finally {
+            setEditProbeBusy(false);
+        }
+    }, [editDraft, probeMcpServerDraft, showToast]);
+
+    const submitEditMcpServer = async () => {
+        if (!editingServerId) return;
+        setEditModalError(null);
+        if (!editDraft.name.trim()) {
+            setEditModalError("Name is required.");
+            return;
+        }
+        if (editDraft.transport === "stdio") {
+            if (!editDraft.command.trim()) {
+                setEditModalError("Command is required for stdio transport.");
+                return;
+            }
+        } else if (!editDraft.url.trim()) {
+            setEditModalError("URL is required for remote transports.");
+            return;
+        }
+        setEditSubmitBusy(true);
+        try {
+            const payload: McpServerUpdateInput = {
+                name: editDraft.name.trim(),
+                transport: editDraft.transport,
+            };
+            if (editDraft.transport === "stdio") {
+                payload.command = editDraft.command.trim();
+                payload.args = editDraft.args.trim()
+                    ? editDraft.args.split(/\s+/).filter(Boolean)
+                    : [];
+                payload.env = editDraft.envText.trim() ? parseKvText(editDraft.envText) : {};
+            } else {
+                payload.url = editDraft.url.trim();
+                payload.headers = editDraft.headersText.trim()
+                    ? parseKvText(editDraft.headersText)
+                    : {};
+            }
+            await updateMcpServer(editingServerId, payload);
+            showToast("success", "MCP server updated");
+            closeEditMcpServer();
+        } catch (err) {
+            setEditModalError((err as Error).message);
+        } finally {
+            setEditSubmitBusy(false);
+        }
+    };
+
     /** Modal `title` is the small mono line; `subtitle` is the prominent headline (matches Skills editor). */
     const modalTitle = "Add connection";
     const modalSubtitle =
@@ -401,9 +636,12 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                             <p className="text-sm text-text-muted">
                                 {pageWorkspace ? (
                                     <>
-                                        <span className="font-medium text-text-secondary">{pageWorkspace.name}</span>
+                                        Credentials live on your account (shared across workspaces).{" "}
+                                        <span className="font-medium text-text-secondary">
+                                            {pageWorkspace.name}
+                                        </span>
                                         {" · "}
-                                        SaaS integrations and MCP servers for the agent.
+                                        Use each switch to enable a connector for this workspace only.
                                     </>
                                 ) : (
                                     <span className="text-status-warning-text">No workspace selected</span>
@@ -414,7 +652,7 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-3">
                     <Link
-                        href={`/app/${workspaceId}/plugins`}
+                        href="/app/plugins"
                         className="text-sm text-text-muted underline-offset-2 hover:text-text-primary hover:underline"
                     >
                         Plugins
@@ -423,7 +661,7 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                         ·
                     </span>
                     <Link
-                        href={`/app/${workspaceId}/skills`}
+                        href="/app/skills"
                         className="text-sm text-text-muted underline-offset-2 hover:text-text-primary hover:underline"
                     >
                         Skills
@@ -435,7 +673,7 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                         className="inline-flex items-center gap-1.5"
                     >
                         <Plus className="h-3.5 w-3.5" />
-                        Add
+                        Add connector
                     </Button>
                 </div>
             </div>
@@ -448,7 +686,7 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                         Catalog limited to{" "}
                         <span className="font-medium text-text-secondary">{plugin.name}</span>.{" "}
                         <Link
-                            href={`/app/${workspaceId}/connectors`}
+                            href="/app/config/connectors"
                             className="underline-offset-2 hover:text-text-primary hover:underline"
                         >
                             Show all
@@ -476,6 +714,37 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                     </Panel>
                 )}
 
+                {pageWorkspace ? (
+                    <Panel className="border border-border-subtle bg-bg-surface/70 p-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                            How to use this page
+                        </p>
+                        <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-[11px] leading-snug text-text-secondary">
+                            <li>
+                                <span className="font-medium text-text-primary">Add</span> a SaaS integration or MCP
+                                server (credentials are stored on your account).
+                            </li>
+                            <li>
+                                Use each <span className="font-medium text-text-primary">workspace switch</span> so
+                                only this workspace ({pageWorkspace.name}) can use that connector.
+                            </li>
+                            <li>
+                                For <span className="font-medium text-text-primary">MCP</span>: open{" "}
+                                <span className="font-medium text-text-primary">Discover</span> once the server is on —
+                                tools show up as{" "}
+                                <code className="rounded bg-bg-elevated px-1 font-mono text-[10px]">slug__tool</code>{" "}
+                                for the agent.
+                            </li>
+                            <li>
+                                For <span className="font-medium text-text-primary">SaaS</span>: the green{" "}
+                                <span className="font-medium text-text-primary">tools</span> badge counts catalog
+                                agent tools for that provider. Click{" "}
+                                <span className="font-medium text-text-primary">Verify</span> to check credentials.
+                            </li>
+                        </ol>
+                    </Panel>
+                ) : null}
+
                 {(error || typesError) && (
                     <p className="text-xs text-status-error-text">
                         Error: {error ?? typesError}
@@ -484,9 +753,16 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
 
                 <section className="space-y-3">
                     <div className="flex flex-wrap items-end justify-between gap-2">
-                        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
-                            Active
-                        </h2>
+                        <div>
+                            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                                Connected for this workspace
+                            </h2>
+                            <p className="mt-0.5 max-w-xl text-[10px] text-text-muted">
+                                Switches control whether the agent may use each connector here. SaaS rows show how many
+                                bundled agent tools the catalog attaches; MCP uses Discover to load tools from the
+                                server.
+                            </p>
+                        </div>
                         <span className="text-[10px] tabular-nums text-text-muted">
                             {statusSummary.saasActive} SaaS · {statusSummary.mcpEnabled} MCP on ·{" "}
                             {statusSummary.mcpReady} ready
@@ -506,9 +782,9 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                         <EmptyState
                             variant="default"
                             size="sm"
-                            title="Nothing connected"
-                            description="Add MCP or connect SaaS."
-                            action={{ label: "Add", onClick: () => openAddModal() }}
+                            title="No connectors yet"
+                            description="Use Add to connect SaaS or add an MCP server, turn on the workspace switch, then Discover for MCP or Verify for SaaS."
+                            action={{ label: "Add connector", onClick: () => openAddModal() }}
                         />
                     ) : (
                         <div className="space-y-4">
@@ -520,7 +796,9 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                             {filteredIntegrations.length > 0 ? (
                                 <div className="overflow-hidden rounded-lg border border-border-subtle bg-bg-surface/80">
                                     <ul className="divide-y divide-border-subtle">
-                                        {filteredIntegrations.map((integration) => (
+                                        {filteredIntegrations.map((integration) => {
+                                            const saasToolCount = catalogUnlockedToolCount(integration.providerId);
+                                            return (
                                             <li
                                                 key={integration.id}
                                                 className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5"
@@ -547,14 +825,79 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                                                   ? "Revoked"
                                                                   : "Error"}
                                                         </Badge>
+                                                        {saasToolCount > 0 ? (
+                                                            <Badge
+                                                                variant="success"
+                                                                size="xs"
+                                                                uppercase={false}
+                                                                showIcon
+                                                            >
+                                                                {saasToolCount}{" "}
+                                                                {saasToolCount === 1 ? "tool" : "tools"}
+                                                            </Badge>
+                                                        ) : null}
                                                     </div>
+                                                    {integration.accountIntegrationId != null &&
+                                                    integration.enabledWorkspaceCount != null &&
+                                                    integration.enabledWorkspaceCount > 0 ? (
+                                                        <p className="mt-1 text-[10px] text-text-muted">
+                                                            Active on {integration.enabledWorkspaceCount}{" "}
+                                                            {integration.enabledWorkspaceCount === 1
+                                                                ? "workspace"
+                                                                : "workspaces"}
+                                                        </p>
+                                                    ) : null}
                                                 </div>
-                                                <div className="flex shrink-0 items-center gap-0.5">
+                                                <div className="flex shrink-0 items-center gap-1">
+                                                    {integration.accountIntegrationId ? (
+                                                        <>
+                                                            <Switch
+                                                                checked={
+                                                                    integration.workspaceBindingEnabled === true
+                                                                }
+                                                                onChange={(next) => {
+                                                                    void (async () => {
+                                                                        try {
+                                                                            await applyConnectorBindings([
+                                                                                {
+                                                                                    kind: "integration",
+                                                                                    refId: integration.id,
+                                                                                    enabled: next,
+                                                                                },
+                                                                            ]);
+                                                                        } catch (err) {
+                                                                            showToast(
+                                                                                "error",
+                                                                                (err as Error).message,
+                                                                            );
+                                                                        }
+                                                                    })();
+                                                                }}
+                                                                aria-label={`Use ${integration.displayName} in this workspace`}
+                                                            />
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="sm"
+                                                                className="h-8 shrink-0 gap-1 px-2 text-[11px]"
+                                                                title="Choose which workspaces may use this connector"
+                                                                onClick={() =>
+                                                                    setBindingsModal({
+                                                                        kind: "integration",
+                                                                        refId: integration.id,
+                                                                        title: integration.displayName,
+                                                                    })
+                                                                }
+                                                            >
+                                                                <Building2 className="h-3.5 w-3.5 shrink-0" />
+                                                                Workspaces
+                                                            </Button>
+                                                        </>
+                                                    ) : null}
                                                     <Button
-                                                        variant="ghost"
+                                                        variant="secondary"
                                                         size="sm"
-                                                        className="h-8 w-8 p-0"
-                                                        title="Test credentials"
+                                                        className="h-8 shrink-0 gap-1 px-2 text-[11px]"
+                                                        title="Check that saved credentials can reach the provider"
                                                         onClick={() => {
                                                             void (async () => {
                                                                 const res = await testIntegration(integration.id);
@@ -566,21 +909,24 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                                             })();
                                                         }}
                                                     >
-                                                        <Play className="h-3.5 w-3.5" />
+                                                        <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                                                        Verify
                                                     </Button>
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
                                                         className="h-8 w-8 p-0 text-status-error-text"
-                                                        title="Remove"
+                                                        title={
+                                                            integration.accountIntegrationId
+                                                                ? "Remove from this workspace (library entry stays)"
+                                                                : "Remove"
+                                                        }
                                                         onClick={() => {
                                                             void (async () => {
-                                                                if (
-                                                                    !confirm(
-                                                                        `Remove ${integration.displayName}?`,
-                                                                    )
-                                                                )
-                                                                    return;
+                                                                const msg = integration.accountIntegrationId
+                                                                    ? `Remove ${integration.displayName} from this workspace? It stays in your account library.`
+                                                                    : `Remove ${integration.displayName}?`;
+                                                                if (!confirm(msg)) return;
                                                                 await deleteIntegration(integration.id);
                                                                 showToast("success", "Integration removed");
                                                             })();
@@ -590,7 +936,8 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                                     </Button>
                                                 </div>
                                             </li>
-                                        ))}
+                                            );
+                                        })}
                                     </ul>
                                 </div>
                             ) : null}
@@ -662,6 +1009,16 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                                         {server.statusMessage}
                                                     </p>
                                                 ) : null}
+                                                {server.accountServerId != null &&
+                                                server.enabledWorkspaceCount != null &&
+                                                server.enabledWorkspaceCount > 0 ? (
+                                                    <p className="text-[10px] text-text-muted">
+                                                        Active on {server.enabledWorkspaceCount}{" "}
+                                                        {server.enabledWorkspaceCount === 1
+                                                            ? "workspace"
+                                                            : "workspaces"}
+                                                    </p>
+                                                ) : null}
                                                 <details className="text-[10px] text-text-muted">
                                                     <summary className="cursor-pointer select-none hover:text-text-secondary">
                                                         Command / URL
@@ -695,11 +1052,38 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                                     }}
                                                     aria-label={`Enable ${server.name}`}
                                                 />
+                                                {server.accountServerId ? (
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        className="h-8 shrink-0 gap-1 px-2 text-[11px]"
+                                                        title="Choose which workspaces may use this MCP server"
+                                                        onClick={() =>
+                                                            setBindingsModal({
+                                                                kind: "mcp_server",
+                                                                refId: server.id,
+                                                                title: server.name,
+                                                            })
+                                                        }
+                                                    >
+                                                        <Building2 className="h-3.5 w-3.5 shrink-0" />
+                                                        Workspaces
+                                                    </Button>
+                                                ) : null}
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
                                                     className="h-8 w-8 p-0"
-                                                    title="Discover tools"
+                                                    title="Edit MCP connection"
+                                                    onClick={() => openEditMcpServer(server)}
+                                                >
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    className="h-8 shrink-0 gap-1 px-2 text-[11px]"
+                                                    title="Connect to the MCP server and list tools (required before slug__tool appears in the agent)"
                                                     disabled={discoveringId === server.id}
                                                     onClick={() => {
                                                         void (async () => {
@@ -724,8 +1108,9 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                                     }}
                                                 >
                                                     <RefreshCw
-                                                        className={`h-3.5 w-3.5 ${discoveringId === server.id ? "animate-spin" : ""}`}
+                                                        className={`h-3.5 w-3.5 shrink-0 ${discoveringId === server.id ? "animate-spin" : ""}`}
                                                     />
+                                                    Discover
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
@@ -758,11 +1143,12 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                 Browse catalog
                             </h2>
                             <p className="mt-0.5 max-w-lg text-[10px] leading-snug text-text-muted">
-                                Connect SaaS · MCP tools ={" "}
+                                Pick a provider and <span className="font-medium text-text-secondary">Connect</span>.
+                                For MCP added below, names become agent tools as{" "}
                                 <code className="rounded bg-bg-elevated px-1 font-mono text-[10px]">
                                     slug__tool
                                 </code>{" "}
-                                after Discover.
+                                after you run <span className="font-medium text-text-secondary">Discover</span>.
                             </p>
                         </div>
                         <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
@@ -843,6 +1229,12 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                             ) : null}
                                         </div>
                                         <p className="mt-1 font-mono text-[9px] text-text-muted">{def.id}</p>
+                                        {def.unlocksTools.length > 0 ? (
+                                            <p className="mt-1 text-[10px] text-text-secondary">
+                                                {def.unlocksTools.length} agent{" "}
+                                                {def.unlocksTools.length === 1 ? "tool" : "tools"}
+                                            </p>
+                                        ) : null}
                                         {active.length > 0 ? (
                                             <details className="mt-2 border-t border-border-subtle pt-2 text-[10px]">
                                                 <summary className="cursor-pointer text-text-muted hover:text-text-secondary">
@@ -859,10 +1251,10 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                                             </span>
                                                             <span className="flex shrink-0 gap-0.5">
                                                                 <Button
-                                                                    variant="ghost"
+                                                                    variant="secondary"
                                                                     size="sm"
-                                                                    className="h-6 w-6 p-0"
-                                                                    title="Test"
+                                                                    className="h-7 gap-0.5 px-1.5 text-[10px]"
+                                                                    title="Check that credentials still reach the provider"
                                                                     onClick={() => {
                                                                         void (async () => {
                                                                             const res = await testIntegration(
@@ -876,7 +1268,8 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                                                         })();
                                                                     }}
                                                                 >
-                                                                    <Play className="h-3 w-3" />
+                                                                    <ShieldCheck className="h-3 w-3 shrink-0" />
+                                                                    Verify
                                                                 </Button>
                                                                 <Button
                                                                     variant="ghost"
@@ -937,17 +1330,23 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                     <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-h-[36px] text-[11px] text-text-muted">
                             {addTab === "integration" && intPhase === "browse" && (
-                                <span>Select a provider below, or switch tab for MCP.</span>
+                                <span>
+                                    Choose SaaS below, or open the <strong className="font-medium">MCP server</strong>{" "}
+                                    tab for CLI or remote HTTP/SSE endpoints.
+                                </span>
                             )}
                             {addTab === "integration" && intPhase === "configure" && selectedType && (
                                 <span>
                                     {selectedType.auth === "oauth"
-                                        ? "You will return here after authorizing."
-                                        : "Secrets are encrypted for this workspace only."}
+                                        ? "After OAuth you land back here — turn the workspace switch on if needed."
+                                        : "Secrets are encrypted on your account. Then use Verify on the card to test reachability."}
                                 </span>
                             )}
                             {addTab === "mcp" && (
-                                <span>stdio runs where the app server runs (e.g. your laptop or VM).</span>
+                                <span>
+                                    Remote MCP: correct URL + headers (e.g. API key). Then enable for this workspace and
+                                    run Discover on the card.
+                                </span>
                             )}
                         </div>
                         <div className="flex flex-wrap justify-end gap-2">
@@ -1244,6 +1643,232 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                             </div>
                         </TabContent>
                     </Tabs>
+                </div>
+            </Modal>
+
+            <Modal
+                open={editOpen}
+                onClose={closeEditMcpServer}
+                title="Edit MCP server"
+                subtitle={editDraft.name || "Connection"}
+                footer={
+                    <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="min-h-[36px] text-[11px] text-text-muted">
+                            Remote MCP (e.g. Hunter): use{" "}
+                            <span className="font-mono">Streamable HTTP</span> + correct URL and{" "}
+                            <span className="font-mono">X-API-KEY</span> — wrong auth → 401.
+                        </p>
+                        <div className="flex flex-wrap justify-end gap-2">
+                            <Button
+                                variant="secondary"
+                                onClick={closeEditMcpServer}
+                                disabled={editSubmitBusy || editProbeBusy}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                onClick={() => void runEditMcpProbe()}
+                                disabled={editSubmitBusy || editProbeBusy}
+                                className="inline-flex items-center gap-1.5"
+                            >
+                                <Plug className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                {editProbeBusy ? "Testing…" : "Test connection"}
+                            </Button>
+                            <Button
+                                variant="primary"
+                                onClick={() => void submitEditMcpServer()}
+                                disabled={editSubmitBusy || editProbeBusy}
+                            >
+                                {editSubmitBusy ? "Saving…" : "Save"}
+                            </Button>
+                        </div>
+                    </div>
+                }
+            >
+                <div className="space-y-4">
+                    {editModalError && (
+                        <Panel className="border-status-error-border bg-status-error-bg/30 p-3">
+                            <p className="text-xs text-status-error-text">{editModalError}</p>
+                        </Panel>
+                    )}
+                    {editProbeOutcome?.kind === "success" && (
+                        <Panel className="border border-status-success-border bg-status-success-bg/25 p-3">
+                            <p className="text-xs font-medium text-status-success-text">
+                                Reachable — {editProbeOutcome.tools.length} tool(s). Values are not saved until
+                                you click Save; use Discover on the card to persist the tool list after saving.
+                            </p>
+                            <ul className="mt-2 max-h-36 overflow-y-auto font-mono text-[11px] leading-snug text-text-secondary">
+                                {editProbeOutcome.tools.slice(0, 24).map((t) => (
+                                    <li key={t.name}>{t.name}</li>
+                                ))}
+                                {editProbeOutcome.tools.length > 24 && (
+                                    <li className="text-text-muted">
+                                        …and {editProbeOutcome.tools.length - 24} more
+                                    </li>
+                                )}
+                            </ul>
+                        </Panel>
+                    )}
+                    {editProbeOutcome?.kind === "error" && (
+                        <Panel className="border-status-error-border bg-status-error-bg/30 p-3">
+                            <p className="text-xs text-status-error-text">{editProbeOutcome.message}</p>
+                        </Panel>
+                    )}
+                    <Field label="Display name">
+                        <Input
+                            value={editDraft.name}
+                            onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })}
+                            fullWidth
+                            size="sm"
+                        />
+                    </Field>
+                    <Selector
+                        label="Transport"
+                        value={editDraft.transport}
+                        options={MCP_TRANSPORT_OPTIONS}
+                        onSelect={(id) =>
+                            setEditDraft({
+                                ...editDraft,
+                                transport: id as McpServerTransport,
+                            })
+                        }
+                        fullWidth
+                        size="sm"
+                        direction="down"
+                    />
+                    {editDraft.transport === "stdio" ? (
+                        <>
+                            <Field label="Command">
+                                <Input
+                                    value={editDraft.command}
+                                    onChange={(e) =>
+                                        setEditDraft({ ...editDraft, command: e.target.value })
+                                    }
+                                    placeholder="npx"
+                                    fullWidth
+                                    size="sm"
+                                    className="font-mono"
+                                />
+                            </Field>
+                            <Field label="Arguments (space-separated)">
+                                <Input
+                                    value={editDraft.args}
+                                    onChange={(e) => setEditDraft({ ...editDraft, args: e.target.value })}
+                                    fullWidth
+                                    size="sm"
+                                    className="font-mono text-xs"
+                                />
+                            </Field>
+                            <Field label="Environment (optional)">
+                                <Textarea
+                                    value={editDraft.envText}
+                                    onChange={(e) =>
+                                        setEditDraft({ ...editDraft, envText: e.target.value })
+                                    }
+                                    placeholder={"KEY=value\n# comments allowed"}
+                                    rows={4}
+                                    className="font-mono text-xs"
+                                />
+                            </Field>
+                        </>
+                    ) : (
+                        <>
+                            <Field label="URL">
+                                <Input
+                                    value={editDraft.url}
+                                    onChange={(e) => setEditDraft({ ...editDraft, url: e.target.value })}
+                                    fullWidth
+                                    size="sm"
+                                    className="font-mono text-xs"
+                                />
+                            </Field>
+                            <Field label="Headers (optional)">
+                                <Textarea
+                                    value={editDraft.headersText}
+                                    onChange={(e) =>
+                                        setEditDraft({ ...editDraft, headersText: e.target.value })
+                                    }
+                                    placeholder={"X-API-KEY=…"}
+                                    rows={4}
+                                    className="font-mono text-xs"
+                                />
+                            </Field>
+                        </>
+                    )}
+                </div>
+            </Modal>
+
+            <Modal
+                open={bindingsModal !== null}
+                onClose={closeBindingsModal}
+                title="Workspaces"
+                subtitle={
+                    bindingsModal
+                        ? `${bindingsModal.title} · Choose where this connector is allowed`
+                        : undefined
+                }
+                footer={
+                    <div className="flex w-full justify-end gap-2">
+                        <Button
+                            variant="secondary"
+                            onClick={closeBindingsModal}
+                            disabled={bindingsSaving}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="primary"
+                            onClick={() => void saveWorkspaceBindings()}
+                            disabled={bindingsSaving || bindingsLoading}
+                        >
+                            {bindingsSaving ? "Saving…" : "Save"}
+                        </Button>
+                    </div>
+                }
+            >
+                <div className="space-y-3">
+                    {bindingsError ? (
+                        <Panel className="border-status-error-border bg-status-error-bg/30 p-3">
+                            <p className="text-xs text-status-error-text">{bindingsError}</p>
+                        </Panel>
+                    ) : null}
+                    {bindingsLoading ? (
+                        <Skeleton className="h-24 w-full" />
+                    ) : bindingsRows.length === 0 ? (
+                        <p className="text-xs text-text-muted">No workspaces on your account.</p>
+                    ) : (
+                        <ul className="divide-y divide-border-subtle overflow-hidden rounded-lg border border-border-subtle bg-bg-surface/80">
+                            {bindingsRows.map((row) => (
+                                <li
+                                    key={row.workspaceId}
+                                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="truncate text-sm font-medium text-text-primary">
+                                            {row.workspaceName}
+                                        </p>
+                                        {row.workspaceId === workspaceId ? (
+                                            <p className="text-[10px] text-text-muted">Current page workspace</p>
+                                        ) : null}
+                                    </div>
+                                    <Switch
+                                        checked={row.enabled}
+                                        onChange={(next) =>
+                                            setBindingsRows((prev) =>
+                                                prev.map((r) =>
+                                                    r.workspaceId === row.workspaceId
+                                                        ? { ...r, enabled: next }
+                                                        : r,
+                                                ),
+                                            )
+                                        }
+                                        aria-label={`Allow in ${row.workspaceName}`}
+                                    />
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                 </div>
             </Modal>
         </div>

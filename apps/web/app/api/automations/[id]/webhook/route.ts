@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { automationExecutor } from "@kletron/server/services/automationExecutor";
+import { getWorkspaceByIdUnsafe } from "@kletron/server/services/workspaceService";
+import { runWithWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 
 /**
  * POST /api/automations/[id]/webhook
@@ -77,9 +79,27 @@ export async function POST(
             }
         }
 
-        // Launch the automation as an agent thread (fire-and-forget).
         const workspaceId = automation.workspaceId?.toString();
-        const { threadId } = await automationExecutor.runAutomationAsThread(automationId, workspaceId);
+        if (!workspaceId) {
+            return NextResponse.json(
+                { error: "Automation has no workspace; re-create or attach a workspace" },
+                { status: 400 }
+            );
+        }
+        const workspace = await getWorkspaceByIdUnsafe(workspaceId);
+        if (!workspace?._id) {
+            return NextResponse.json({ error: "Workspace not found for this automation" }, { status: 500 });
+        }
+
+        let threadId: string | undefined;
+        await runWithWorkspaceContext(workspace, async () => {
+            const result = await automationExecutor.runAutomationAsThread(automationId, workspaceId);
+            threadId = result.threadId;
+        });
+
+        if (!threadId) {
+            return NextResponse.json({ error: "Failed to start automation thread" }, { status: 500 });
+        }
 
         return NextResponse.json({ status: "TRIGGERED", threadId }, { status: 200 });
     } catch (error) {

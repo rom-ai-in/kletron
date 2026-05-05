@@ -86,12 +86,6 @@ function isAssistantLikeMessage(message: BaseMessage): boolean {
 /** One-line `[AgentStreamKPI]` JSON logs per LLM stream; flip to false to silence. */
 const AGENT_STREAM_KPI_CONSOLE = true;
 
-/** Lowercase `provider` ids that must not use LangGraph dual `["values","messages"]` (values-only + snapshot deltas). */
-const LANGGRAPH_DUAL_STREAM_DENYLIST = new Set<string>(["lmstudio"]);
-
-/** When true, all providers use values-only streaming (ignore denylist for dual). */
-const LANGGRAPH_FORCE_VALUES_ONLY_STREAM = false;
-
 function isAgentStreamKpiLogEnabled(): boolean {
   return AGENT_STREAM_KPI_CONSOLE;
 }
@@ -99,12 +93,6 @@ function isAgentStreamKpiLogEnabled(): boolean {
 function logAgentStreamKpiLine(kpi: AgentStreamKpiV1) {
   if (!isAgentStreamKpiLogEnabled()) return;
   console.info("[AgentStreamKPI]", JSON.stringify(kpi));
-}
-
-function shouldUseLangGraphDualStream(providerLower: string, wantTokenStream: boolean): boolean {
-  if (!wantTokenStream) return false;
-  if (LANGGRAPH_FORCE_VALUES_ONLY_STREAM) return false;
-  return !LANGGRAPH_DUAL_STREAM_DENYLIST.has(providerLower);
 }
 
 /**
@@ -190,18 +178,9 @@ export async function streamReactAgentMessages(
     : { messages: [...(opts.extraMessages ?? []), { role: "user", content: opts.userPrompt }] };
 
   // Dual-stream LangGraph: ["values","messages"] yields token chunks + state snapshots.
-  // When disabled (denylist / force values-only), we use streamMode "values" only and still
-  // emit progressive text via growing assistant snapshots (see processValuesState).
+  // We force dual-stream whenever token/reasoning streaming is requested.
   const wantTokenStream = !!(opts.onTextDelta || opts.onReasoningDelta);
-  const providerLower = String(resolvedLlm.provider ?? "").toLowerCase();
-  const useMultiMode = shouldUseLangGraphDualStream(providerLower, wantTokenStream);
-  if (wantTokenStream && !useMultiMode) {
-    console.warn(
-      `[ReactAgentRunner] values-only LangGraph stream (provider=${resolvedLlm.provider}). ` +
-        "Partial assistant text still emits onTextDelta when state snapshots grow. " +
-        "Edit LANGGRAPH_DUAL_STREAM_DENYLIST / LANGGRAPH_FORCE_VALUES_ONLY_STREAM in reactAgentRunner.ts to change.",
-    );
-  }
+  const useMultiMode = wantTokenStream;
   const streamMode = useMultiMode ? (["values", "messages"] as any) : "values";
 
   // ── Build stream config ────────────────────────────────────────────

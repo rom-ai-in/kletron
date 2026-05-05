@@ -8,7 +8,7 @@ type Props = {
   apiOrigin: string;
   workspaceId: string | null;
   getRequestHeaders: GetRequestHeaders;
-  /** Opens e.g. `/app/app/{workspaceId}/connectors` on the web app (same origin as API). */
+  /** Opens `/app/config/connectors` on the web app (same origin as API). */
   onOpenConnectorsPortal: () => void;
 };
 

@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { AutomationDefinition, AutomationTriggerType } from "@kletron/shared/automationTypes";
-import { Button, Panel } from "@kletron/ui/components/design-system";
+import type { AutomationExecutionContextDTO } from "@kletron/shared/automationExecutionContext";
+import { AutomationExecutionContextPanel, Button, Panel, Skeleton } from "@kletron/ui";
 import { AutomationBuilderModal } from "@kletron/ui/components/AutomationBuilderModal";
 import { describeCron } from "@kletron/shared/cronUtils";
 
@@ -63,8 +64,93 @@ function getPromptIssues(automation: AutomationDefinition): PromptIssue[] {
         .filter(Boolean) as PromptIssue[];
 }
 
+function AutomationDetailPageSkeleton() {
+    return (
+        <div className="flex flex-col h-full bg-bg-surface">
+            <div className="flex flex-col border-b border-border-subtle bg-bg-surface px-6 pt-5 pb-0 gap-4">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-2 flex-1 min-w-0 max-w-2xl">
+                        <Skeleton className="h-8 w-[min(100%,20rem)]" height="h-8" />
+                        <Skeleton className="h-3 w-full" height="h-3" radius="rounded-md" />
+                        <Skeleton className="h-3 w-4/5 max-w-lg" height="h-3" radius="rounded-md" />
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <Skeleton className="w-28" height="h-8" radius="rounded-md" />
+                        <Skeleton className="w-8" height="h-8" radius="rounded-md" />
+                        <Skeleton className="w-8" height="h-8" radius="rounded-md" />
+                    </div>
+                </div>
+                <div className="flex items-center gap-6 mt-2 pb-1">
+                    {[1, 2, 3, 4].map((i) => (
+                        <Skeleton key={i} className="w-24" height="h-7" radius="rounded-md" />
+                    ))}
+                </div>
+            </div>
+            <div className="flex-1 overflow-y-auto scrollbar-elegant p-6 bg-bg-base/30">
+                <div className="space-y-6 max-w-4xl mx-auto">
+                    <div className="grid grid-cols-3 gap-4">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="rounded-lg border border-border-subtle bg-bg-surface p-4 space-y-2">
+                                <Skeleton className="w-20" height="h-3" radius="rounded" />
+                                <Skeleton className="w-12" height="h-6" radius="rounded-md" />
+                            </div>
+                        ))}
+                    </div>
+                    <div className="rounded-lg border border-border-subtle bg-bg-surface p-4 space-y-3">
+                        <Skeleton className="w-40" height="h-4" radius="rounded-md" />
+                        <Skeleton className="w-full" height="h-3" radius="rounded" />
+                        <Skeleton className="w-full" height="h-3" radius="rounded" />
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                            {[1, 2, 3, 4].map((i) => (
+                                <Skeleton key={i} className="w-full" height="h-14" radius="rounded-md" />
+                            ))}
+                        </div>
+                    </div>
+                    <div className="space-y-3">
+                        <Skeleton className="w-36 ml-1" height="h-3" radius="rounded" />
+                        {[1, 2, 3, 4].map((i) => (
+                            <div
+                                key={i}
+                                className="flex items-center gap-4 p-3 rounded-md border border-border-subtle bg-bg-surface"
+                            >
+                                <Skeleton className="w-6 shrink-0" height="h-6" radius="rounded-full" />
+                                <div className="flex-1 space-y-2 min-w-0">
+                                    <Skeleton className="w-3/5 max-w-xs" height="h-4" radius="rounded-md" />
+                                    <Skeleton className="w-full" height="h-3" radius="rounded" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ExecutionContextPanelSkeleton() {
+    return (
+        <div className="rounded-lg border border-border-subtle bg-bg-surface p-4 space-y-3">
+            <div className="flex items-start gap-2">
+                <Skeleton className="w-4 shrink-0" height="h-4" radius="rounded" />
+                <div className="flex-1 space-y-2">
+                    <Skeleton className="w-24" height="h-3" />
+                    <Skeleton className="w-2/3 max-w-sm" height="h-4" />
+                    <Skeleton className="w-full max-w-xl" height="h-3" />
+                </div>
+            </div>
+            <Skeleton className="w-full" height="h-16" radius="rounded-md" />
+            <div className="space-y-2">
+                <Skeleton className="w-40" height="h-3" />
+                <Skeleton className="w-full" height="h-20" radius="rounded-md" />
+                <Skeleton className="w-full" height="h-20" radius="rounded-md" />
+            </div>
+            <p className="text-[10px] text-text-muted pt-1">Loading workspace capabilities and stage tools…</p>
+        </div>
+    );
+}
+
 export default function AutomationDetailPage({ params }: AutomationDetailPageProps) {
-    const { activeWorkspaceId } = useWorkspace() ?? {};
+    const { activeWorkspaceId, activeWorkspace } = useWorkspace() ?? {};
     const fetchWithWorkspace = async (url: string, init?: RequestInit) => {
         const headers: Record<string, string> = { ...init?.headers as Record<string, string> };
         if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
@@ -72,7 +158,8 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
     };
     const router = useRouter();
     const [automation, setAutomation] = useState<AutomationDefinition | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [loadingAutomation, setLoadingAutomation] = useState(true);
+    const [loadingExecutionContext, setLoadingExecutionContext] = useState(true);
     const [error, setError] = useState("");
     const [executeError, setExecuteError] = useState("");
     const [executing, setExecuting] = useState(false);
@@ -81,25 +168,60 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
     const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
     const [showSecret, setShowSecret] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [executionContext, setExecutionContext] = useState<AutomationExecutionContextDTO | null>(null);
+    const [executionContextError, setExecutionContextError] = useState("");
 
     useEffect(() => {
+        setAutomation(null);
+        setExecutionContext(null);
+        setExecutionContextError("");
+        setError("");
         void fetchAutomation();
-    }, [params.id]);
+    }, [params.id, activeWorkspaceId]);
 
     const fetchAutomation = async () => {
-        setLoading(true);
+        setLoadingAutomation(true);
+        setLoadingExecutionContext(true);
         setError("");
         setExecuteError("");
+        setExecutionContextError("");
+
+        // Start execution-context immediately in parallel with automation (same total time as the slowest call).
+        const contextPromise = fetchWithWorkspace(`/api/automations/${params.id}/execution-context`);
+
         try {
             const res = await fetchWithWorkspace(`/api/automations/${params.id}`);
-            if (!res.ok) throw new Error("Failed to load automation");
+            if (!res.ok) {
+                const msg = res.status === 404 ? "Automation not found" : "Failed to load automation";
+                throw new Error(msg);
+            }
             const data = await res.json();
             setAutomation(data.automation);
             if (data.webhookUrl) setWebhookUrl(data.webhookUrl);
-        } catch (err: any) {
-            setError(err.message || "Unknown error");
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Unknown error");
+            setAutomation(null);
+            setLoadingExecutionContext(false);
+            return;
         } finally {
-            setLoading(false);
+            setLoadingAutomation(false);
+        }
+
+        try {
+            const ctxRes = await contextPromise;
+            if (ctxRes.ok) {
+                const ctxData = (await ctxRes.json()) as { executionContext?: AutomationExecutionContextDTO };
+                setExecutionContext(ctxData.executionContext ?? null);
+                setExecutionContextError("");
+            } else {
+                setExecutionContext(null);
+                setExecutionContextError("Could not load execution context for this workspace.");
+            }
+        } catch {
+            setExecutionContext(null);
+            setExecutionContextError("Could not load execution context for this workspace.");
+        } finally {
+            setLoadingExecutionContext(false);
         }
     };
 
@@ -146,15 +268,8 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
         }
     };
 
-    if (loading) {
-        return (
-            <div className="flex h-full items-center justify-center bg-bg-surface">
-                <div className="flex flex-col items-center gap-2">
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-border-subtle border-t-text-muted" />
-                    <span className="text-xs text-text-muted">Loading automation...</span>
-                </div>
-            </div>
-        );
+    if (loadingAutomation && !automation) {
+        return <AutomationDetailPageSkeleton />;
     }
 
     if (error || !automation) {
@@ -263,8 +378,31 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
                         <div className="grid grid-cols-3 gap-4">
                             <StatCard label="Total Stages" value={automation.stages.length} />
                             <StatCard label="Trigger" value={triggerTypeLabel(automation.triggerType)} />
-                            <StatCard label="Workspace" value={activeWorkspaceId ? "Set" : "—"} />
+                            <StatCard
+                                label="Workspace"
+                                value={
+                                    executionContext?.workspaceName
+                                        ?? activeWorkspace?.name
+                                        ?? (activeWorkspaceId ? `${activeWorkspaceId.slice(0, 8)}…` : "—")
+                                }
+                            />
                         </div>
+
+                        {loadingExecutionContext && !executionContext && !executionContextError && (
+                            <ExecutionContextPanelSkeleton />
+                        )}
+                        {executionContextError && (
+                            <div className="rounded-lg border border-status-warning-border bg-status-warning-bg/40 px-3 py-2 text-xs text-status-warning-text">
+                                {executionContextError}
+                            </div>
+                        )}
+                        {executionContext && (
+                            <AutomationExecutionContextPanel
+                                context={executionContext}
+                                activeWorkspaceId={activeWorkspaceId}
+                                connectorsHref="/app/connectors"
+                            />
+                        )}
 
                         {automation.triggerType && automation.triggerType !== "manual" && (
                             <TriggerInfoPanel
@@ -355,7 +493,20 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
                 )}
 
                 {activeTab === "configuration" && (
-                    <div className="max-w-4xl mx-auto">
+                    <div className="max-w-4xl mx-auto space-y-4">
+                        {executionContext && (
+                            <div className="rounded-lg border border-status-info-border bg-status-info-bg/30 px-4 py-3 text-xs text-text-secondary">
+                                Connectors, skills, and per-stage tools are summarized under{" "}
+                                <button
+                                    type="button"
+                                    className="text-status-info-text underline"
+                                    onClick={() => setActiveTab("overview")}
+                                >
+                                    Overview
+                                </button>
+                                . Raw JSON below is the saved automation document only.
+                            </div>
+                        )}
                         <div className="rounded-lg border border-border-subtle bg-bg-surface overflow-hidden">
                             <div className="p-4 border-b border-border-subtle bg-bg-elevated/30 flex justify-between items-center">
                                 <h3 className="text-sm font-semibold text-text-primary">Raw Configuration</h3>

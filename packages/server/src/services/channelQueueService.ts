@@ -1,6 +1,6 @@
 /**
- * Serial in-process queue for channel webhook handlers so HTTP can ack immediately
- * while agent runs complete asynchronously (Slack 3s limit, Telegram best-practice).
+ * Serial in-process queue for channel webhook handlers (legacy helper).
+ * Telegram uses {@link enqueueTelegramInboundJob} + Mongo `channel_inbound_jobs` by default.
  */
 type Job = () => Promise<void>;
 

@@ -21,21 +21,21 @@ export function WorkspaceLayout({ children, workspaceId }: LayoutProps) {
                     {workspaceId && (
                         <nav className="flex items-center gap-1">
                             <Link
-                                href={`/app/${workspaceId}/skills`}
+                                href="/app/skills"
                                 className="flex items-center gap-1 rounded-md px-3 py-1.5 text-sm text-text-secondary hover:bg-state-hover hover:text-text-primary"
                                 title="Workspace skills"
                             >
                                 <Wrench className="h-4 w-4" /> Skills
                             </Link>
                             <Link
-                                href={`/app/${workspaceId}/connectors`}
+                                href="/app/config/connectors"
                                 className="flex items-center gap-1 rounded-md px-3 py-1.5 text-sm text-text-secondary hover:bg-state-hover hover:text-text-primary"
                                 title="Workspace connectors"
                             >
                                 <LinkIcon className="h-4 w-4" /> Connectors
                             </Link>
                             <Link
-                                href={`/app/${workspaceId}/settings`}
+                                href="/app/workspace"
                                 className="flex items-center gap-1 rounded-md px-3 py-1.5 text-sm text-text-secondary hover:bg-state-hover hover:text-text-primary"
                                 title="Workspace settings"
                             >

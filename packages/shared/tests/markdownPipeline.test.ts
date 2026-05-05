@@ -25,9 +25,9 @@ import { normalizeMarkdown } from '../src/normalizeMarkdown';
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('sanitizeAssistantStreamPreview', () => {
-    it('does not blank the whole preview while a thinking block is unclosed (avoids flicker)', () => {
+    it('hides unclosed thinking blocks from preview', () => {
         const partial = '<think>secret reasoning so far';
-        expect(sanitizeAssistantStreamPreview(partial).length).toBeGreaterThan(0);
+        expect(sanitizeAssistantStreamPreview(partial)).toBe('');
     });
 
     it('shows only content after closed thinking block', () => {

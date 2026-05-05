@@ -9,14 +9,11 @@ import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 import { useWorkspacePlugins } from "../../hooks/useWorkspacePlugins";
 import { PluginCatalogModal } from "./PluginCatalogModal";
 
-export function PluginsCatalogClient(props: { workspaceId?: string } = {}) {
-    const { workspaceId: routeWorkspaceId } = props;
+export function PluginsCatalogClient() {
     const plugins = listPlugins();
-    const { activeWorkspaceId, activeWorkspace, workspaces } = useWorkspace();
-    const targetWorkspaceId = routeWorkspaceId ?? activeWorkspaceId ?? "";
-    const pageWorkspace = routeWorkspaceId
-        ? (workspaces.find((w) => w.id === routeWorkspaceId) ?? null)
-        : activeWorkspace;
+    const { activeWorkspaceId, activeWorkspace } = useWorkspace();
+    const targetWorkspaceId = activeWorkspaceId ?? "";
+    const pageWorkspace = activeWorkspace;
     const { installed, isLoading: wsLoading, setInstalled } = useWorkspacePlugins(targetWorkspaceId);
 
     const [openId, setOpenId] = useState<string | null>(null);
@@ -81,13 +78,13 @@ export function PluginsCatalogClient(props: { workspaceId?: string } = {}) {
                     {targetWorkspaceId ? (
                         <>
                             <Link
-                                href={`/app/${targetWorkspaceId}/skills`}
+                                href="/app/skills"
                                 className="text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
                             >
                                 Skills
                             </Link>
                             <Link
-                                href={`/app/${targetWorkspaceId}/connectors`}
+                                href="/app/config/connectors"
                                 className="text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
                             >
                                 Connectors
@@ -120,8 +117,8 @@ export function PluginsCatalogClient(props: { workspaceId?: string } = {}) {
                 ) : (
                     <Panel className="border border-status-warning-border bg-status-warning-bg/30 p-4">
                         <p className="text-sm text-text-primary">
-                            <span className="font-medium">Workspace unavailable.</span> Open this page from a
-                            workspace route or select a workspace in the shell.
+                            <span className="font-medium">Workspace unavailable.</span> Select a workspace in
+                            the shell.
                         </p>
                     </Panel>
                 )}
@@ -331,7 +328,7 @@ function PluginCatalogCard({
                             </button>
                         )}
                         <Link
-                            href={`/app/${activeWorkspaceId}/plugins`}
+                            href="/app/plugins"
                             className={buttonVariants({ variant: "secondary", size: "sm" })}
                         >
                             Open workspace

@@ -38,7 +38,7 @@ async function triggerAnalysis(workspaceId?: string | null): Promise<string | nu
     const res = await fetch("/api/business-analyst/analyze", {
         method: "POST",
         headers,
-        body: JSON.stringify({ preset: "COMPETITIVE_DEEP_DIVE", ...(workspaceId ? { workspaceId } : {}) }),
+        body: JSON.stringify({ preset: "BUSINESS_COMPETITIVE_SCAN", ...(workspaceId ? { workspaceId } : {}) }),
     });
     if (!res.ok) return null;
     return (await res.json()).automationId;

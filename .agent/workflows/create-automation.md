@@ -19,17 +19,19 @@ There are two ways to create automations:
 ### Option A: Use Pre-configured Presets
 
 ```typescript
-import { AutomationConfigBuilder } from "@numezis/shared/automationConfigBuilder";
+import { AutomationConfigBuilder } from "@kletron/shared/automationConfigBuilder";
 
-// Full audit (all 16 suites)
-const fullAudit = AutomationConfigBuilder.PRESETS.FULL_AUDIT;
+// Broad codebase review (manual)
+const fullReview = AutomationConfigBuilder.PRESETS.CODE_FULL_REVIEW;
 
-// Security-focused
-const securityAutomation = AutomationConfigBuilder.PRESETS.SECURITY_DEEP_DIVE;
+// PR-oriented gate (includes default git_event config)
+const prGate = AutomationConfigBuilder.PRESETS.CODE_PR_GATE;
 
-// I18n quality
-const i18nAutomation = AutomationConfigBuilder.PRESETS.I18N_QUALITY;
+// Security via webhook trigger
+const securityWebhook = AutomationConfigBuilder.PRESETS.CODE_SECURITY_WEBHOOK;
 ```
+
+**Legacy preset ids:** `POST /api/automations` with `{ "preset": "..." }` still accepts older names (for example `SECURITY_DEEP_DIVE`, `BUSINESS_ANALYSIS_FULL`, `FEATURE_AUDIT`). They are mapped internally to the current presets via `AutomationConfigBuilder`; prefer the canonical ids (`CODE_*`, `BUSINESS_*`, etc.) in new integrations.
 
 ### Option B: Create Custom Automation
 
@@ -41,16 +43,15 @@ const customAutomation = {
     {
       id: "stage-1",
       name: "Security Check",
-      graphId: "audit",
-      llmProvider: "azure",
-      llmModel: "gpt-4",
+      graphId: "000000000000000000000009",
+      llmProvider: "lmstudio",
       prompt: "Focus on authentication vulnerabilities in apps/api/",
     },
     {
       id: "stage-2",
       name: "Test Coverage",
-      graphId: "audit",
-      llmProvider: "azure",
+      graphId: "000000000000000000000008",
+      llmProvider: "lmstudio",
       prompt: "Check test coverage for files flagged in stage-1",
       contextFromPreviousStages: ["stage-1.findings"],
       skipIf: "stage-1.findings.length === 0",
@@ -70,7 +71,7 @@ const customAutomation = {
 curl -X POST http://localhost:3000/api/automations \
   -H "Content-Type: application/json" \
   -d '{
-    "preset": "SECURITY_DEEP_DIVE"
+    "preset": "CODE_SECURITY_WEBHOOK"
   }'
 ```
 
@@ -113,7 +114,7 @@ Response:
 {
   "automation": {
     "_id": "67a1b2c3d4e5f6a7b8c9d0e1",
-    "name": "Security Deep Dive",
+    "name": "Security review",
     "status": "RUNNING",
     "currentStageIndex": 1,
     "sessionIds": ["session-1", "session-2"],

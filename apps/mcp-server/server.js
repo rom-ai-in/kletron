@@ -285,7 +285,11 @@ async function runSseServer({ allTools, port }) {
         const transport = new SSEServerTransport("/message", res);
         const mcpServer = new Server(
           { name: "mcp-server", version: "1.0.0" },
-          { capabilities: {} }
+          {
+            capabilities: {
+              tools: {},
+            },
+          }
         );
 
         // Per-session workspace + category. Defaults come from config.json.

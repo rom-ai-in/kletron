@@ -47,6 +47,7 @@ import { syncWorkspaceExternalMcpServers } from "./mcpWorkspaceSync";
 import { simpleReactPhaseId, simpleReactWorkSystemPrompt } from "./agentGraphPresets";
 import { config } from "../config";
 import { RESEARCH_DEPTH_FAST_SYSTEM_SUFFIX } from "@kletron/shared/researchDepth";
+import { toolsUnlockedByConnectors } from "@kletron/shared";
 
 const runApprovalConfigCache = new Map<string, ToolApprovalConfig>();
 
@@ -1907,6 +1908,10 @@ export class AgentGraphExecutor {
                     const skillToolNamesForEffective = [
                         ...new Set([...skillTools, ...workspaceSkillToolNames]),
                     ];
+                    /** SaaS connector tools (e.g. sentry_api) must be requestable even if the graph node omits them — capabilities already gate by workspace binding + provider. */
+                    const integrationUnlockedToolNames = toolsUnlockedByConnectors(
+                        workspaceCaps?.enabledIntegrationProviderIds ?? []
+                    );
                     // Resolve the effective tool list using the unified policy.
                     // - Workspace capabilities gate bundled / admin tools.
                     // - Always-on tools (e.g. `write_todos`) bypass the gate.
@@ -1921,7 +1926,10 @@ export class AgentGraphExecutor {
                               ...skillToolNamesForEffective,
                           ]);
                     const effective = effectiveToolNames({
-                        nodeToolNames: node.react.toolNames ?? [],
+                        nodeToolNames: [
+                            ...(node.react.toolNames ?? []),
+                            ...integrationUnlockedToolNames,
+                        ],
                         skillToolNames: skillToolNamesForEffective,
                         adminToolNames: [...KLETRON_ADMIN_TOOL_NAMES],
                         capabilityToolSet: effectiveCaps,
@@ -1945,6 +1953,9 @@ export class AgentGraphExecutor {
                         !mergedToolNames.includes("web_search") && !mergedToolNames.includes("fetch_url");
                     const webHintBlock = webToolsMissing
                         ? "\n\n## AVAILABLE TOOLS NOTE\n`web_search` and `fetch_url` are **not** exposed for this run (workspace capabilities/connectors). Use workspace search and file tools only; **do not** cite or imply live web research you did not perform with an available tool.\n"
+                        : "";
+                    const sentryHintBlock = mergedToolNames.includes("sentry_api")
+                        ? "\n\n## SENTRY\nWhen the user asks about Sentry, incidents, or open issues **without naming an organization**, call **`sentry_api`** once with **`resource`: `\"digest\"`** (or `\"status\"`). **Do not** ask which org/project first unless that tool call fails.\n"
                         : "";
                     const fastSuffix =
                         researchDepth === "fast" ? RESEARCH_DEPTH_FAST_SYSTEM_SUFFIX : "";
@@ -1981,6 +1992,7 @@ export class AgentGraphExecutor {
                         "semantic_code_search", "structural_search", "symbols_list",
                         "find_symbol", "go_to_definition", "references",
                         "todo_search", "bootstrap_context", "web_search", "fetch_url",
+                        "github_api", "sentry_api",
                         "output_format", "write_todos",
                         "list_available_skills", "load_skill",
                         "list_all_skills", "list_skills",
@@ -2429,7 +2441,7 @@ export class AgentGraphExecutor {
                                   "- If a tool returns a cached/duplicate warning, stop calling it and use the existing result.",
                               ].join("\n");
 
-                    const enhancedSystemPrompt = `${baseSystemPrompt}${workspaceContextBlock}${contextBlock}${taskContextBlock}${webHintBlock}${fastSuffix}${auditContextPrompt ? `\n\n${auditContextPrompt}` : ""}`;
+                    const enhancedSystemPrompt = `${baseSystemPrompt}${workspaceContextBlock}${contextBlock}${taskContextBlock}${webHintBlock}${sentryHintBlock}${fastSuffix}${auditContextPrompt ? `\n\n${auditContextPrompt}` : ""}`;
 
                     // Update timeline with the ACTUAL prompt used (including context)
                     if (timeline[0]) {

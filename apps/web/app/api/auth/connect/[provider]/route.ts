@@ -67,7 +67,7 @@ export async function GET(
         userId: auth.userId,
         providerId: provider,
         iat: Date.now(),
-        redirect: url.searchParams.get("redirect") ?? `/app/${workspaceId}/connectors`,
+        redirect: url.searchParams.get("redirect") ?? `/app/config/connectors`,
     });
 
     const params2 = new URLSearchParams({

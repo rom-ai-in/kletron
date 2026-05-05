@@ -100,6 +100,7 @@ export const PLUGIN_CATALOG: PluginDefinition[] = [
             "ms365",
             "google-calendar",
             "gmail",
+            "sentry",
         ],
     },
     {

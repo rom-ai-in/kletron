@@ -13,7 +13,7 @@ import {
     GitBranch,
     Hand,
 } from "lucide-react";
-import { Button } from "@kletron/ui/components/design-system";
+import { Button, Skeleton } from "@kletron/ui/components/design-system";
 import { AutomationBuilderModal } from "../AutomationBuilderModal";
 import type { AutomationDefinition, AutomationTriggerType } from "@kletron/shared/automationTypes";
 import { cn } from "@kletron/shared/utils/cn";
@@ -29,25 +29,35 @@ export function AutomationListSidebar() {
     const params = useParams();
     const pathname = usePathname();
     const activeId = params?.id as string;
-    const { activeWorkspaceId } = useWorkspace() ?? {};
+    const { activeWorkspaceId, activeWorkspace } = useWorkspace() ?? {};
 
     // State
     const [automations, setAutomations] = useState<AutomationDefinition[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [filter, setFilter] = useState<"all" | "blocked">("all");
     const [triggerFilter, setTriggerFilter] = useState<"all" | AutomationTriggerType>("all");
-    const [loading, setLoading] = useState(false);
+    /** True until the first successful fetch for the current workspace (avoids empty flash). */
+    const [loading, setLoading] = useState(true);
     const [isBuilderOpen, setIsBuilderOpen] = useState(false);
     const [apiError, setApiError] = useState<string | null>(null);
 
     // Fetch automations
-    const fetchAutomations = async () => {
-        setLoading(true);
+    const fetchAutomations = async (opts?: { silent?: boolean }) => {
+        const silent = opts?.silent === true;
+        if (!activeWorkspaceId) {
+            setAutomations([]);
+            setLoading(false);
+            setApiError(null);
+            return;
+        }
+        if (!silent) {
+            setLoading(true);
+        }
         setApiError(null);
         try {
             const headers: Record<string, string> = {};
-            if (activeWorkspaceId) headers["x-workspace-id"] = activeWorkspaceId;
-            const res = await fetch("/api/automations", { headers });
+            headers["x-workspace-id"] = activeWorkspaceId;
+            const res = await fetch("/api/automations", { headers, cache: "no-store" });
             if (res.ok) {
                 const data = await res.json();
                 setAutomations(data.automations || data.chains || []);
@@ -65,13 +75,11 @@ export function AutomationListSidebar() {
 
     useEffect(() => {
         void fetchAutomations();
-        // Set up polling for active automations if needed, or just refresh on focus
+        const pollMs = 45_000;
         const interval = setInterval(() => {
-            // Only poll if we have running automations or if window is focused
-            if (document.hasFocus()) {
-                void fetchAutomations();
-            }
-        }, 10000); // 10s polling
+            if (document.visibilityState !== "visible") return;
+            void fetchAutomations({ silent: true });
+        }, pollMs);
         return () => clearInterval(interval);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeWorkspaceId]);
@@ -97,7 +105,7 @@ export function AutomationListSidebar() {
 
     const handleAutomationCreated = (id: string) => {
         setIsBuilderOpen(false);
-        void fetchAutomations();
+        void fetchAutomations({ silent: true });
         router.push(`/app/automations/${id}`);
     };
 
@@ -106,9 +114,16 @@ export function AutomationListSidebar() {
             {/* Header Area */}
             <div className="flex flex-col gap-3 p-3 border-b border-border-subtle bg-bg-surface/50">
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-text-primary px-1">
-                        <Layers className="h-4 w-4 text-text-muted" />
-                        <span className="text-sm font-semibold tracking-tight">Automations</span>
+                    <div className="flex flex-col gap-0.5 text-text-primary px-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                            <Layers className="h-4 w-4 text-text-muted shrink-0" />
+                            <span className="text-sm font-semibold tracking-tight">Automations</span>
+                        </div>
+                        {activeWorkspace?.name && (
+                            <span className="text-[10px] text-text-muted truncate pl-6" title={activeWorkspace.rootPath}>
+                                Workspace: {activeWorkspace.name}
+                            </span>
+                        )}
                     </div>
                     <Button
                         size="icon"
@@ -188,9 +203,21 @@ export function AutomationListSidebar() {
                     </div>
                 )}
                 {loading && automations.length === 0 ? (
-                    <div className="p-4 space-y-2">
-                        {[1, 2, 3].map(i => (
-                            <div key={i} className="h-12 w-full bg-bg-elevated/50 animate-pulse rounded-md" />
+                    <div className="p-3 space-y-2" aria-busy="true" aria-label="Loading automations">
+                        {Array.from({ length: 8 }).map((_, i) => (
+                            <div
+                                key={i}
+                                className="rounded-md border border-border-subtle/60 bg-bg-surface/40 px-3 py-2.5 space-y-2"
+                            >
+                                <div className="flex items-center justify-between gap-2">
+                                    <Skeleton className="flex-1 max-w-[200px]" height="h-3.5" radius="rounded-md" />
+                                    <Skeleton className="w-3.5 shrink-0" height="h-3.5" radius="rounded-full" />
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                    <Skeleton className="flex-1 max-w-[140px]" height="h-2.5" radius="rounded" />
+                                    <Skeleton className="w-16" height="h-2.5" radius="rounded" />
+                                </div>
+                            </div>
                         ))}
                     </div>
                 ) : (

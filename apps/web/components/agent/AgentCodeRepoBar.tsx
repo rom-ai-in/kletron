@@ -15,7 +15,7 @@ export function AgentCodeRepoBar({ workspaceId }: Props) {
   const { integrations, isLoading, error } = useWorkspaceConnectors(workspaceId);
   const github = integrations.find((i) => i.providerId === "github");
   const connected = github?.status === "active";
-  const href = `/app/app/${encodeURIComponent(workspaceId)}/connectors`;
+  const href = "/app/config/connectors";
 
   if (isLoading) {
     return (

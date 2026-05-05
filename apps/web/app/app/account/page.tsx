@@ -15,12 +15,16 @@ interface ApiTokenInfo {
 
 export default function AccountPage() {
     const router = useRouter();
-    const { user, profile, updateProfile, updatePassword, signOut } = useAuth();
+    const { user, profile, updateProfile, changePassword, signOut } = useAuth();
 
     const [fullName, setFullName] = useState('');
+    const [emailField, setEmailField] = useState('');
+    const [emailConfirm, setEmailConfirm] = useState('');
+    const [emailChangePassword, setEmailChangePassword] = useState('');
     const [profileStatus, setProfileStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
     const [profileError, setProfileError] = useState('');
 
+    const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [passwordStatus, setPasswordStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
@@ -39,6 +43,14 @@ export default function AccountPage() {
             setFullName(profile.full_name);
         }
     }, [profile]);
+
+    useEffect(() => {
+        const em = user?.email;
+        if (typeof em === 'string' && em) {
+            setEmailField(em);
+            setEmailConfirm(em);
+        }
+    }, [user?.email]);
 
     const fetchTokens = async () => {
         setTokensLoading(true);
@@ -67,9 +79,31 @@ export default function AccountPage() {
         setProfileStatus('saving');
         setProfileError('');
 
-        const result = await updateProfile({ fullName });
+        const normalizedNew = emailField.trim().toLowerCase();
+        const prior = (user?.email || '').trim().toLowerCase();
+        const emailChanging = normalizedNew.length > 0 && normalizedNew !== prior;
+
+        if (emailChanging) {
+            if (normalizedNew !== emailConfirm.trim().toLowerCase()) {
+                setProfileStatus('error');
+                setProfileError('Email confirmation does not match');
+                return;
+            }
+            if (!emailChangePassword) {
+                setProfileStatus('error');
+                setProfileError('Enter your current password to change email');
+                return;
+            }
+        }
+
+        const result = await updateProfile(
+            emailChanging
+                ? { fullName, email: normalizedNew, currentPassword: emailChangePassword }
+                : { fullName }
+        );
         if (result.success) {
             setProfileStatus('success');
+            setEmailChangePassword('');
             setTimeout(() => setProfileStatus('idle'), 2000);
         } else {
             setProfileStatus('error');
@@ -81,6 +115,12 @@ export default function AccountPage() {
         event.preventDefault();
         setPasswordStatus('saving');
         setPasswordError('');
+
+        if (!currentPassword) {
+            setPasswordStatus('error');
+            setPasswordError('Current password is required');
+            return;
+        }
 
         if (newPassword.length < 6) {
             setPasswordStatus('error');
@@ -94,9 +134,10 @@ export default function AccountPage() {
             return;
         }
 
-        const result = await updatePassword(newPassword);
+        const result = await changePassword(currentPassword, newPassword);
         if (result.success) {
             setPasswordStatus('success');
+            setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
             setTimeout(() => setPasswordStatus('idle'), 2000);
@@ -211,11 +252,48 @@ export default function AccountPage() {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-text-secondary mb-1.5">Email</label>
-                            <div className="rounded border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-muted">
-                                {user?.email || '—'}
-                            </div>
+                            <label htmlFor="email" className="block text-xs font-medium text-text-secondary mb-1.5">
+                                Email
+                            </label>
+                            <Input
+                                id="email"
+                                type="email"
+                                value={emailField}
+                                onChange={(e) => setEmailField(e.target.value)}
+                                fullWidth
+                                autoComplete="email"
+                            />
                         </div>
+                        <div>
+                            <label htmlFor="emailConfirm" className="block text-xs font-medium text-text-secondary mb-1.5">
+                                Confirm email
+                            </label>
+                            <Input
+                                id="emailConfirm"
+                                type="email"
+                                value={emailConfirm}
+                                onChange={(e) => setEmailConfirm(e.target.value)}
+                                fullWidth
+                                autoComplete="email"
+                            />
+                        </div>
+                        {emailField.trim().toLowerCase() !== (user?.email || '').trim().toLowerCase() && (
+                            <div>
+                                <label
+                                    htmlFor="emailChangePassword"
+                                    className="block text-xs font-medium text-text-secondary mb-1.5"
+                                >
+                                    Current password (required to change email)
+                                </label>
+                                <PasswordInput
+                                    id="emailChangePassword"
+                                    value={emailChangePassword}
+                                    onChange={(e) => setEmailChangePassword(e.target.value)}
+                                    fullWidth
+                                    autoComplete="current-password"
+                                />
+                            </div>
+                        )}
                         <Button
                             type="submit"
                             className="w-full"
@@ -241,6 +319,19 @@ export default function AccountPage() {
                             </div>
                         )}
                         <div>
+                            <label htmlFor="currentPassword" className="block text-xs font-medium text-text-secondary mb-1.5">
+                                Current password
+                            </label>
+                            <PasswordInput
+                                id="currentPassword"
+                                value={currentPassword}
+                                onChange={(e) => setCurrentPassword(e.target.value)}
+                                fullWidth
+                                placeholder="••••••••"
+                                autoComplete="current-password"
+                            />
+                        </div>
+                        <div>
                             <label htmlFor="newPassword" className="block text-xs font-medium text-text-secondary mb-1.5">
                                 New Password
                             </label>
@@ -250,6 +341,7 @@ export default function AccountPage() {
                                 onChange={(e) => setNewPassword(e.target.value)}
                                 fullWidth
                                 placeholder="••••••••"
+                                autoComplete="new-password"
                             />
                         </div>
                         <div>

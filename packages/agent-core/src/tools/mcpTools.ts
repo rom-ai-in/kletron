@@ -5,6 +5,7 @@ import { z } from "zod";
 import { McpClient } from "@kletron/mcp-client/client";
 import { getConfig } from "@kletron/server/config";
 import { getWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
+import { buildGoogleWorkspaceTools } from "@kletron/server/services/googleWorkspaceTools";
 
 // ── LLM-tolerant Zod helpers ────────────────────────────────────────────────
 // Many LLMs (especially local ones via LM Studio) send "True"/"False" strings
@@ -678,6 +679,55 @@ export const githubApiTool = tool(
   }
 );
 
+export const sentryApiTool = tool(
+  async (
+    input: {
+      resource: "digest" | "status" | "organizations" | "projects" | "list_issues" | "issue_detail";
+      organizationSlug?: string;
+      query?: string;
+      issueId?: string;
+      limit?: number;
+    },
+    config: any
+  ) => {
+    return formatResult(
+      await callMcpTool(
+        "sentry_api",
+        {
+          resource: input.resource,
+          organizationSlug: input.organizationSlug,
+          query: input.query,
+          issueId: input.issueId,
+          limit: input.limit,
+        },
+        config
+      )
+    );
+  },
+  {
+    name: "sentry_api",
+    description:
+      "Sentry REST API via the workspace connector. For vague questions (\"où on en est\", open issues, status), call **digest** first — it uses the connector default org or the first org your token can access, then lists issues (default query is:unresolved). Use organizations / projects / list_issues / issue_detail for specifics.",
+    schema: z.object({
+      resource: z
+        .enum(["digest", "status", "organizations", "projects", "list_issues", "issue_detail"])
+        .describe(
+          "Prefer **digest** (or **status**, same) when the user does not name an org. Other values for targeted API calls."
+        ),
+      organizationSlug: z
+        .string()
+        .optional()
+        .describe("Override default org slug from the connector"),
+      query: z
+        .string()
+        .optional()
+        .describe("Sentry issue search query (digest and list_issues); default for digest is is:unresolved"),
+      issueId: z.string().optional().describe("Numeric issue ID for issue_detail"),
+      limit: z.number().int().positive().max(100).optional().describe("Page size (default 25)"),
+    }),
+  }
+);
+
 export const bootstrapContextTool = tool(
   async (input: {
     path?: string;
@@ -942,7 +992,7 @@ export const semanticCodeSearchTool = tool(
         maxResults: input.maxResults ?? 10,
       });
       return formatResult(results);
-    } catch (error) {
+    } catch {
       const fallback = await callMcpTool("search_code", {
         query: input.query,
         path: input.path,
@@ -978,6 +1028,7 @@ export const allMcpTools = [
   outputFormatTool,
   listAllSkillsTool,
   listSkillsLegacyTool,
+  ...buildGoogleWorkspaceTools(),
   // Legacy code tools (keep for compatibility)
   searchCodeTool,
   repoMetricsTool,
@@ -994,6 +1045,7 @@ export const allMcpTools = [
   goToDefinitionTool,
   referencesTool,
   githubApiTool,
+  sentryApiTool,
   bootstrapContextTool,
   locateUiFeatureTool,
   strReplaceEditorTool,

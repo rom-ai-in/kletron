@@ -247,6 +247,8 @@ export function createWebLauncher(port: number = 3000) {
     env: {
       ...process.env,
       PORT: String(port),
+      // Avoid Next dev crash when lockfile patch can't resolve @next/swc-* metadata (registry shape / version drift).
+      NEXT_IGNORE_INCORRECT_LOCKFILE: process.env.NEXT_IGNORE_INCORRECT_LOCKFILE ?? "1",
     },
     stdio: "pipe",
   });

@@ -4,7 +4,9 @@ import { getDb } from "../lib/db";
 
 const COLLECTION = "channel_chat_context";
 
-export type ChannelPendingState = { kind: "awaiting_workspace_index" };
+export type ChannelPendingState =
+    | { kind: "awaiting_workspace_index" }
+    | { kind: "awaiting_graph_index" };
 
 export type ChannelChatContextDoc = {
     _id?: ObjectId;
@@ -96,6 +98,24 @@ export class ChannelChatContextService {
             externalUserId,
             kletronUserId,
             pending,
+        });
+    }
+
+    /** Per-chat graph override (resolver prefers this over workspace default). Pass null to clear. */
+    async setGraphOverride(
+        channel: ChannelId,
+        externalChatKey: string,
+        externalUserId: string,
+        kletronUserId: string,
+        graphId: string | null
+    ): Promise<void> {
+        await this.upsertContext({
+            channel,
+            externalChatKey,
+            externalUserId,
+            kletronUserId,
+            graphOverrideId: graphId === null ? null : graphId.trim(),
+            pending: null,
         });
     }
 }

@@ -1,4 +1,5 @@
 import type { ThreadApprovalMode } from "./threadApprovalTypes";
+import type { ResearchDepthId } from "./researchDepth";
 import type { WorkModeId } from "./workMode";
 
 /** Pagination slice returned with GET /api/sessions/:id */
@@ -21,6 +22,8 @@ export type SessionDetailPayload = {
   title?: string;
   status?: string;
   threadApprovalMode?: ThreadApprovalMode;
+  /** Persisted research depth for this run (new-message UX mirrors web agent). */
+  researchDepth?: ResearchDepthId;
   source?: string | null;
   startedAt?: string | null;
   graph?: {

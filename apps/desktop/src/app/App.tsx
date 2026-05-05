@@ -73,6 +73,7 @@ import { useProjects } from "../hooks/useProjects";
 import { useSkills } from "../hooks/useSkills";
 import { useCategories } from "../hooks/useCategories";
 import { WORK_MODES, normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode";
+import type { ResearchDepthId } from "@kletron/shared/researchDepth";
 import { sessionStatusToSidebarLiveStatus } from "@kletron/shared/chatTypes";
 import {
   CAPABILITY_DROPPED_BANNER_TAIL,
@@ -99,6 +100,7 @@ import { AgentGraphsPanel } from "./AgentGraphsPanel";
 import { DesktopPrimaryNav } from "./DesktopPrimaryNav";
 import { HistoryPanel } from "./HistoryPanel";
 import { CodeRepoConnectorStrip } from "@kletron/ui/components/CommandCenter/CodeRepoConnectorStrip";
+import { WorkspaceConnectorsHint } from "@kletron/ui/components/CommandCenter/WorkspaceConnectorsHint";
 import { AgentSessionChrome } from "@kletron/ui/components/CommandCenter/AgentSessionChrome";
 import { PORTAL_LINK_GROUPS } from "../portalLinks";
 import { SETTINGS_SECTIONS, formatRelativeTime, pathsEqual } from "../utils";
@@ -155,6 +157,24 @@ export default function App() {
     const hit = workspace.allWorkspaces.find((w) => pathsEqual(w.rootPath, rootPath));
     return hit?.id ?? null;
   }, [workspace.workspaceSummary?.id, workspace.workspace?.path, workspace.allWorkspaces]);
+
+  const automationsWorkspaceBanner = useMemo(() => {
+    const label =
+      workspace.workspaceSummary?.name?.trim() ||
+      workspace.allWorkspaces.find((w) => w.id === activeWorkspaceId)?.name?.trim() ||
+      workspace.workspace?.name?.trim() ||
+      (workspace.workspace?.path ? workspace.workspace.path.split("/").pop()?.trim() : undefined);
+    const root =
+      workspace.workspaceSummary?.rootPath?.trim() || workspace.workspace?.path?.trim() || undefined;
+    return { label: label || undefined, root };
+  }, [
+    workspace.workspaceSummary?.name,
+    workspace.workspaceSummary?.rootPath,
+    workspace.allWorkspaces,
+    workspace.workspace?.name,
+    workspace.workspace?.path,
+    activeWorkspaceId,
+  ]);
 
   // Work categories system (server + localStorage, same as web agent work mode)
   const categoriesHook = useCategories({
@@ -1160,6 +1180,8 @@ export default function App() {
             <AutomationsDashboard
               automations={automationsHook.automations}
               loading={automationsHook.loading}
+              workspaceLabel={automationsWorkspaceBanner.label}
+              workspaceRootHint={automationsWorkspaceBanner.root}
               onRemove={(id) => void automationsHook.remove(id)}
               onRunNow={async (id) => {
                 const tid = await automationsHook.runNow(id);
@@ -1484,6 +1506,8 @@ export default function App() {
                   <AutomationsDashboard
                     automations={automationsHook.automations}
                     loading={automationsHook.loading}
+                    workspaceLabel={automationsWorkspaceBanner.label}
+                    workspaceRootHint={automationsWorkspaceBanner.root}
                     onRemove={(id) => void automationsHook.remove(id)}
                     onRunNow={async (id) => {
                       const tid = await automationsHook.runNow(id);
@@ -1754,9 +1778,7 @@ export default function App() {
               apiOrigin={backendUrlTrimmed}
               workspaceId={activeWorkspaceId}
               getRequestHeaders={getAgentRequestHeaders}
-              onOpenConnectorsPortal={() =>
-                openPortalPath(`/app/app/${encodeURIComponent(activeWorkspaceId)}/connectors`)
-              }
+              onOpenConnectorsPortal={() => openPortalPath("/app/config/connectors")}
             />
           ) : undefined
         }
@@ -1829,13 +1851,7 @@ export default function App() {
                       <button
                         type="button"
                         className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
-                        onClick={() =>
-                          openPortalPath(
-                            activeWorkspaceId
-                              ? `/app/app/${encodeURIComponent(activeWorkspaceId)}/connectors`
-                              : "/app/config/connectors",
-                          )
-                        }
+                        onClick={() => openPortalPath("/app/config/connectors")}
                       >
                         <Settings2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
                         Connectors
@@ -1843,13 +1859,7 @@ export default function App() {
                       <button
                         type="button"
                         className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
-                        onClick={() =>
-                          openPortalPath(
-                            activeWorkspaceId
-                              ? `/app/app/${encodeURIComponent(activeWorkspaceId)}/skills`
-                              : "/app/config/skills",
-                          )
-                        }
+                        onClick={() => openPortalPath("/app/skills")}
                       >
                         <GraduationCap className="h-3.5 w-3.5 shrink-0" aria-hidden />
                         Skills
@@ -1961,8 +1971,8 @@ export default function App() {
             />
           )}
 
-          {/* Input Bar */}
-          <div className="relative z-10 mx-auto w-full max-w-3xl shrink-0 app-region-no-drag">
+          {/* Input Bar + connectors row (matches web agent layout) */}
+          <div className="relative z-10 mx-auto w-full max-w-3xl shrink-0 app-region-no-drag px-4 pb-3 pt-1">
             {/* Slash command menu */}
             <SlashCommandMenu
               open={slashMenuOpen}
@@ -2002,6 +2012,7 @@ export default function App() {
               className="mx-auto w-full max-w-3xl"
             />
             <InputBar
+              className="px-0 pb-0 pt-0"
               value={conversation.input}
               onChange={conversation.setInput}
               onSend={handleSendMessage}
@@ -2020,8 +2031,6 @@ export default function App() {
               onDismissChip={(id) => setContextChips((p) => p.filter((c) => c.id !== id))}
               onPaperclipClick={() => setMultimodalOpen((p) => !p)}
               planMode={planMode}
-              connected={composerConnection.connected}
-              connectionLabel={composerConnection.connectionLabel}
               tokenUsage={conversation.tokenUsage}
               graphSelector={
                 <Selector
@@ -2032,7 +2041,6 @@ export default function App() {
                   size="sm"
                   direction="up"
                   loading={agentGraphsLoading}
-                  menuAlign="end"
                 />
               }
               modelSelector={
@@ -2057,6 +2065,34 @@ export default function App() {
                   disabledReason="Approval mode is fixed for automation threads."
                 />
               }
+              depthSelector={
+                <label className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                  <span className="shrink-0">Depth</span>
+                  <select
+                    value={conversation.researchDepth}
+                    onChange={(e) =>
+                      conversation.setResearchDepth(e.target.value as ResearchDepthId)
+                    }
+                    disabled={!!threads.conversationId}
+                    title={
+                      threads.conversationId
+                        ? "Research depth is fixed for this thread (set when the session was created)."
+                        : "Exhaustive: more tools and context. Fast: fewer steps and shorter replies."
+                    }
+                    className="max-w-[120px] rounded border border-white/[0.12] bg-bg-elevated py-0.5 pl-1.5 pr-6 text-[10px] font-normal normal-case text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="exhaustive">Exhaustive</option>
+                    <option value="fast">Fast</option>
+                  </select>
+                </label>
+              }
+            />
+            <WorkspaceConnectorsHint
+              apiOrigin={backendUrlTrimmed}
+              workspaceId={activeWorkspaceId}
+              getRequestHeaders={getAgentRequestHeaders}
+              onOpenConnectors={() => openPortalPath("/app/config/connectors")}
+              className="mt-2"
             />
           </div>
 

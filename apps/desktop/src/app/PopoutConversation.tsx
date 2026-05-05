@@ -9,6 +9,8 @@ import type { InlineDiff } from "@kletron/ui/components/CommandCenter/InlineDiff
 import { PendingSessionEditsStrip, Selector } from "@kletron/ui/components/design-system";
 import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
 import { useAgentSession } from "@kletron/ui/hooks/useAgentSession";
+import type { ResearchDepthId } from "@kletron/shared/researchDepth";
+import { WorkspaceConnectorsHint } from "@kletron/ui/components/CommandCenter/WorkspaceConnectorsHint";
 import { Settings2, GraduationCap, X, AlertTriangle } from "lucide-react";
 import {
   CAPABILITY_DROPPED_BANNER_TAIL,
@@ -176,11 +178,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
                       type="button"
                       className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
                       onClick={() =>
-                        openPortalPath(
-                          activeWorkspaceId
-                            ? `/app/app/${encodeURIComponent(activeWorkspaceId)}/connectors`
-                            : "/app/config/connectors",
-                        )
+                        openPortalPath("/app/config/connectors")
                       }
                     >
                       <Settings2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -190,11 +188,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
                       type="button"
                       className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-status-warning-text underline-offset-2 hover:underline"
                       onClick={() =>
-                        openPortalPath(
-                          activeWorkspaceId
-                            ? `/app/app/${encodeURIComponent(activeWorkspaceId)}/skills`
-                            : "/app/config/skills",
-                        )
+                        openPortalPath("/app/skills")
                       }
                     >
                       <GraduationCap className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -302,30 +296,37 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
           />
         )}
 
-        {/* Input Bar */}
-        <div className="mx-auto w-full max-w-3xl shrink-0">
+        {/* Input Bar + connectors (parity with main window / web agent) */}
+        <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-3 pt-1">
           <InputBar
+            className="px-0 pb-0 pt-0"
             value={conversation.input}
             onChange={conversation.setInput}
             onSend={() => void conversation.sendMessage()}
             onStop={conversation.stopStreaming}
             sending={conversation.streaming}
             disabled={conversation.streaming || !backendReady || !auth.auth?.accessToken}
-            placeholder="Continue the conversation..."
+            placeholder={
+              conversation.streaming
+                ? "Add a follow-up (queued until agent finishes). Press / for slash commands (skills, plan, workspace)."
+                : "Write your message… Press / for slash commands (skills, plan, workspace)."
+            }
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 void conversation.sendMessage();
               }
             }}
-            connected={
-              backendConnected
-                ? agentSession.llmSelectorLoading
-                  ? "checking"
-                  : agentSession.llmStatus === "loading"
-                    ? "checking"
-                    : agentSession.llmStatus === "success"
-                : false
+            graphSelector={
+              <Selector
+                label="GRAPH"
+                value={agentSession.selectedGraphId}
+                options={agentSession.graphSelectOptions}
+                onSelect={agentSession.handleGraphChange}
+                size="sm"
+                direction="up"
+                loading={agentSession.graphSelectorLoading}
+              />
             }
             modelSelector={
               <Selector
@@ -349,6 +350,34 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
                 disabledReason="Approval mode is fixed for automation threads."
               />
             }
+            depthSelector={
+              <label className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                <span className="shrink-0">Depth</span>
+                <select
+                  value={conversation.researchDepth}
+                  onChange={(e) =>
+                    conversation.setResearchDepth(e.target.value as ResearchDepthId)
+                  }
+                  disabled={!!conversationId}
+                  title={
+                    conversationId
+                      ? "Research depth is fixed for this thread (set when the session was created)."
+                      : "Exhaustive: more tools and context. Fast: fewer steps and shorter replies."
+                  }
+                  className="max-w-[120px] rounded border border-white/[0.12] bg-bg-elevated py-0.5 pl-1.5 pr-6 text-[10px] font-normal normal-case text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <option value="exhaustive">Exhaustive</option>
+                  <option value="fast">Fast</option>
+                </select>
+              </label>
+            }
+          />
+          <WorkspaceConnectorsHint
+            apiOrigin={backendUrlTrimmed}
+            workspaceId={activeWorkspaceId}
+            getRequestHeaders={getAgentRequestHeaders}
+            onOpenConnectors={() => openPortalPath("/app/config/connectors")}
+            className="mt-2"
           />
         </div>
       </div>

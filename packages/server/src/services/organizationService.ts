@@ -132,6 +132,18 @@ export async function getMembershipByUserId(userId: string): Promise<TenantMembe
   return coll.findOne({ userId });
 }
 
+/** Keep tenant_members.email aligned with users.email after account email change. */
+export async function syncPrimaryMemberEmail(userId: string, email: string): Promise<boolean> {
+  await ensureIndexes();
+  const coll = await getMembersColl();
+  const normalized = email.toLowerCase().trim();
+  const r = await coll.updateOne(
+    { userId },
+    { $set: { email: normalized, updatedAt: new Date() } }
+  );
+  return r.matchedCount > 0;
+}
+
 /**
  * Ensures the user has a tenant with default company/group and admin membership.
  */

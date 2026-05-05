@@ -35,8 +35,13 @@ interface AuthContextValue {
     signIn: (email: string, password: string, rememberMe?: boolean) => Promise<{ success: boolean; error?: string }>;
     signOut: () => Promise<{ success: boolean; error?: string }>;
     resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
-    updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
-    updateProfile: (updates: { fullName?: string }) => Promise<{ success: boolean; error?: string }>;
+    /** Logged-in user: requires current password */
+    changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+    updateProfile: (updates: {
+        fullName?: string;
+        email?: string;
+        currentPassword?: string;
+    }) => Promise<{ success: boolean; error?: string }>;
     refreshProfile: () => Promise<void>;
     resendConfirmation: (email: string) => Promise<{ success: boolean; error?: string }>;
 }
@@ -49,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     // Use NextAuth session
-    const { data: session, status } = useSession();
+    const { data: session, status, update: updateSession } = useSession();
 
     // Fetch user profile from MongoDB via API
     const fetchProfile = useCallback(async () => {
@@ -187,18 +192,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // Update password - calls our custom API route
-    const updatePassword = async (newPassword: string) => {
+    const changePassword = async (currentPassword: string, newPassword: string) => {
         try {
-            const response = await fetch('/api/auth/update-password', {
+            const response = await fetch('/api/auth/change-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ newPassword })
+                body: JSON.stringify({ currentPassword, newPassword }),
             });
 
+            const result = await response.json().catch(() => ({}));
             if (!response.ok) {
-                const result = await response.json();
-                return { success: false, error: result.error || 'Failed to update password' };
+                return {
+                    success: false,
+                    error:
+                        (typeof result.error === 'string' && result.error) ||
+                        (typeof result.message === 'string' && result.message) ||
+                        'Failed to update password',
+                };
             }
 
             return { success: true };
@@ -207,17 +217,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const updateProfile = async (updates: { fullName?: string }) => {
+    const updateProfile = async (updates: {
+        fullName?: string;
+        email?: string;
+        currentPassword?: string;
+    }) => {
         try {
+            const payload: Record<string, unknown> = {};
+            if (updates.fullName !== undefined) {
+                payload.fullName = updates.fullName;
+            }
+            if (updates.email !== undefined) {
+                payload.email = updates.email;
+            }
+            if (updates.currentPassword !== undefined) {
+                payload.currentPassword = updates.currentPassword;
+            }
+
             const response = await fetch('/api/auth/profile', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: updates.fullName ?? null })
+                body: JSON.stringify(payload),
             });
 
+            const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-                const data = await response.json();
-                return { success: false, error: data.error || 'Failed to update profile' };
+                return {
+                    success: false,
+                    error:
+                        (typeof data.message === 'string' && data.message) ||
+                        (typeof data.error === 'string' && data.error) ||
+                        'Failed to update profile',
+                };
+            }
+
+            if (updates.email && typeof updateSession === 'function') {
+                const em = typeof data.profile?.email === 'string' ? data.profile.email : updates.email;
+                const nm =
+                    data.profile?.fullName !== undefined
+                        ? data.profile.fullName
+                        : updates.fullName !== undefined
+                          ? updates.fullName
+                          : session?.user?.name;
+                await updateSession({ email: em, name: nm ?? null });
             }
 
             await refreshProfile();
@@ -243,7 +285,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signOut,
         resetPassword,
-        updatePassword,
+        changePassword,
         updateProfile,
         refreshProfile,
         resendConfirmation,

@@ -40,7 +40,7 @@ export function WorkspaceSelector({ showCategories = false }: WorkspaceSelectorP
 
     const handleSelectWorkspace = (workspaceId: string) => {
         // Update URL with workspace ID
-        router.push(`/app/${workspaceId}/workbench`);
+        router.push("/app/agent");
         setCurrentWorkspace(workspaceId);
         setIsOpen(false);
     };

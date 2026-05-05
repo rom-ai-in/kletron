@@ -2,10 +2,7 @@
 // Persists the discovered tools so the UI can show them without reconnecting.
 
 import { NextResponse } from "next/server";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { EventSource } from "eventsource";
+import { probeMcpConnection } from "@kletron/server/lib/mcpDiscoverProbe";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import {
     getExternalMcpRuntimeConfig,
@@ -48,66 +45,28 @@ export async function POST(
     const config = target ?? (await listMcpServers(workspaceId)).find((s) => s.id === id);
     if (!config) return NextResponse.json({ error: "MCP server not found" }, { status: 404 });
 
-    let client: Client | null = null;
-    try {
-        let transport;
-        if (config.transport === "stdio") {
-            if (!config.command) throw new Error("stdio transport requires command");
-            const mergedEnv: Record<string, string> = {};
-            for (const [k, v] of Object.entries(process.env)) {
-                if (v !== undefined) mergedEnv[k] = v;
-            }
-            const cfgEnv = "env" in config && config.env ? config.env : {};
-            for (const [k, v] of Object.entries(cfgEnv)) {
-                if (v !== undefined) mergedEnv[k] = String(v);
-            }
-            transport = new StdioClientTransport({
-                command: config.command,
-                args: config.args ?? [],
-                env: mergedEnv,
-            });
-        } else {
-            if (!config.url) throw new Error("HTTP transport requires url");
-            (globalThis as any).EventSource = EventSource as any;
-            transport = new SSEClientTransport(new URL(config.url));
-        }
+    const probe = await probeMcpConnection({
+        transport: config.transport,
+        command: config.command,
+        args: config.args,
+        env: "env" in config ? config.env : undefined,
+        url: config.url,
+        headers: config.headers,
+    });
 
-        client = new Client(
-            { name: "kletron-mcp-discoverer", version: "1.0.0" },
-            { capabilities: {} }
-        );
-        // Prevent hanging on broken endpoints.
-        const connectPromise = client.connect(transport);
-        const timeout = new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error("discover timeout (10s)")), 10_000);
-        });
-        await Promise.race([connectPromise, timeout]);
-
-        const result = await client.listTools({});
-        const tools = (result.tools ?? []).map((t) => ({
-            name: t.name,
-            description: t.description,
-        }));
+    if (probe.ok) {
+        const { tools } = probe;
         await recordMcpServerStatus(workspaceId, id, {
             status: "connected",
             statusMessage: `${tools.length} tools`,
             discoveredTools: tools,
         });
         return NextResponse.json({ ok: true, tools });
-    } catch (error) {
-        const message = (error as Error).message;
-        await recordMcpServerStatus(workspaceId, id, {
-            status: "error",
-            statusMessage: message,
-        });
-        return NextResponse.json({ ok: false, error: message }, { status: 502 });
-    } finally {
-        if (client) {
-            try {
-                await client.close();
-            } catch {
-                // ignore
-            }
-        }
     }
+
+    await recordMcpServerStatus(workspaceId, id, {
+        status: "error",
+        statusMessage: probe.error,
+    });
+    return NextResponse.json({ ok: false, error: probe.error }, { status: 502 });
 }

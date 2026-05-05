@@ -42,10 +42,6 @@ export interface PluginCatalogModalProps {
     } | null;
 }
 
-function skillsLibraryHref(workspaceId: string | undefined) {
-    return workspaceId ? `/app/${workspaceId}/skills` : "/app/config/skills";
-}
-
 function PluginConnectorsPanel({ plugin }: { plugin: PluginDefinition }) {
     const [search, setSearch] = useState("");
     const { types, isLoading, error } = useConnectorCatalog();
@@ -159,7 +155,7 @@ export function PluginCatalogModal({
 }: PluginCatalogModalProps) {
     const [tab, setTab] = useState<Tab>("overview");
     const [skillDialog, setSkillDialog] = useState<SkillDialogState>({ open: false });
-    const skillsHref = skillsLibraryHref(workspacePluginActions?.workspaceId);
+    const skillsHref = "/app/skills";
 
     useEffect(() => {
         setTab("overview");
@@ -256,7 +252,7 @@ export function PluginCatalogModal({
                         ) : null}
                         {workspacePluginActions && plugin ? (
                             <Link
-                                href={`/app/${workspacePluginActions.workspaceId}/connectors?plugin=${encodeURIComponent(plugin.id)}`}
+                                href={`/app/config/connectors?plugin=${encodeURIComponent(plugin.id)}`}
                                 className={buttonVariants({ variant: "secondary", size: "sm" })}
                             >
                                 Connectors

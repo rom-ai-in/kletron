@@ -33,7 +33,7 @@ export async function POST(request: Request) {
         const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
         await db.collection('password_reset_tokens').insertOne({
-            userId: user._id.toString(),
+            userId: user._id,
             email: user.email,
             tokenHash: crypto.createHash('sha256').update(token).digest('hex'),
             expiresAt,

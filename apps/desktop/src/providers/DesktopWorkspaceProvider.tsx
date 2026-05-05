@@ -70,7 +70,7 @@ export function DesktopWorkspaceProvider({
     [switchWorkspaceById]
   );
 
-  const refreshWorkspaces = useCallback(async () => {
+  const refreshWorkspaces = useCallback(async (_opts?: { silent?: boolean }) => {
     await refreshAllWorkspaces();
   }, [refreshAllWorkspaces]);
 

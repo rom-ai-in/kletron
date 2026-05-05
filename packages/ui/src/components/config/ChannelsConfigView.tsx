@@ -37,7 +37,7 @@ const CHANNELS: Array<{
   {
     id: "telegram",
     name: "Telegram",
-    blurb: "Shared bot token, per-workspace graph, /switch in chat.",
+    blurb: "Shared bot token; /switch workspace, /graphs & /graph for per-chat graph override.",
     icon: Send,
   },
   {
@@ -366,10 +366,19 @@ export function ChannelsConfigView() {
               <div className="w-full min-w-0 space-y-4">
                 <div className="space-y-2">
                   <span className={fieldLabelClass}>Webhook URL</span>
-                  <p className="text-xs text-text-secondary">Set in BotFather / Telegram API.</p>
+                  <p className="text-xs text-text-secondary">
+                    Register with Telegram{" "}
+                    <code className="rounded bg-bg-elevated px-1 py-0.5 text-[10px]">setWebhook</code> (HTTPS). Optional:
+                    pass the same <code className="rounded bg-bg-elevated px-1 py-0.5 text-[10px]">secret_token</code> you store here so Telegram sends{" "}
+                    <code className="rounded bg-bg-elevated px-1 py-0.5 text-[10px]">X-Telegram-Bot-Api-Secret-Token</code>.
+                  </p>
                   <ConfigExplorerMonoBlock className="w-full break-all text-text-primary">
                     {webhookBase || "…"}/telegram
                   </ConfigExplorerMonoBlock>
+                  <p className="text-[11px] text-text-muted">
+                    In Telegram: /switch, /graphs, /graph clear — chat commands for workspace and graph override. Updates are queued in MongoDB (set{" "}
+                    <code className="rounded bg-bg-elevated px-0.5 text-[10px]">CHANNEL_TELEGRAM_QUEUE_BACKEND=memory</code> for fire-and-forget in-process only).
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">

@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { normalizeResearchDepth, type ResearchDepthId } from "@kletron/shared/researchDepth";
+import { normalizeToWorkModeId, workModeStorageValuesMatching } from "@kletron/shared/workMode";
 import { getDb } from "../lib/db";
 import type { AgentGraphNodeStatus, AgentGraphRun, AgentGraphStatus, AgentGraphState } from "./agentGraphTypes";
 import type { TokenUsage, TokenUsageSummary } from "./tokenUsageTypes";
@@ -478,8 +479,12 @@ export class AgentGraphRunService {
                 if (!opts?.includeArchived && run.archived) return false;
                 if (opts?.graphId && ObjectId.isValid(opts.graphId) && run.graphId?.toString() !== opts.graphId) return false;
                 if (opts?.excludeSource && run.source === opts.excludeSource) return false;
-                if (opts?.workMode === "work" && run.workMode !== "work") return false;
-                if (opts?.workMode === "code" && run.workMode === "work") return false;
+                if (
+                    opts?.workMode &&
+                    normalizeToWorkModeId(run.workMode as string | undefined) !== opts.workMode
+                ) {
+                    return false;
+                }
                 // Hide automation sub-stage runs from the sidebar listing.
                 if (run.parentRunId) return false;
                 return true;
@@ -504,13 +509,10 @@ export class AgentGraphRunService {
             filter.source = { $ne: opts.excludeSource };
         }
         if (opts?.workMode === "work") {
-            filter.workMode = "work";
+            filter.workMode = { $in: workModeStorageValuesMatching("work") };
         } else if (opts?.workMode === "code") {
-            filter.$or = [
-                { workMode: "code" },
-                { workMode: { $exists: false } },
-                { workMode: null },
-            ];
+            // Anything that is not explicitly a "work" bucket value (see LEGACY_CATEGORY_TO_WORK_MODE).
+            filter.$nor = [{ workMode: { $in: workModeStorageValuesMatching("work") } }];
         }
         const runs = await collection
             .find(filter)

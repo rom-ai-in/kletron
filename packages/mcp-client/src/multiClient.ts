@@ -16,6 +16,8 @@ import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { EventSource } from "eventsource";
 
+import { createRemoteMcpTransport } from "./remoteMcpTransport";
+
 export type McpServerTransport = "stdio" | "sse" | "streamable-http";
 
 export interface ExternalMcpClientConfig {
@@ -116,8 +118,13 @@ function buildTransport(config: ExternalMcpClientConfig | { slug: ""; transport:
     }
     const httpish = config as ExternalMcpClientConfig;
     if (!httpish.url) throw new Error(`MCP server '${httpish.slug}' missing url`);
-    (globalThis as any).EventSource = EventSource as any;
-    return new SSEClientTransport(new URL(httpish.url));
+    const wire: "sse" | "streamable-http" =
+        httpish.transport === "streamable-http" ? "streamable-http" : "sse";
+    return createRemoteMcpTransport({
+        transport: wire,
+        url: httpish.url,
+        headers: httpish.headers,
+    });
 }
 
 /**

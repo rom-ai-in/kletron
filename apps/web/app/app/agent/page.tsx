@@ -136,22 +136,16 @@ function CapabilityDroppedWorkspaceChrome({
   tools,
   bannerDismissed,
   onSetBannerDismissed,
-  workspaceId,
 }: {
   showSkeleton: boolean;
   tools: readonly string[];
   bannerDismissed: boolean;
   onSetBannerDismissed: (value: boolean) => void;
-  workspaceId: string | null;
 }) {
   if (showSkeleton || tools.length === 0) return null;
   const outer = "max-w-3xl mx-auto px-2 pt-3";
-  const connectorsHref = workspaceId
-    ? `/app/${encodeURIComponent(workspaceId)}/connectors`
-    : "/app/config/connectors";
-  const skillsHref = workspaceId
-    ? `/app/${encodeURIComponent(workspaceId)}/skills`
-    : "/app/config/skills";
+  const connectorsHref = "/app/config/connectors";
+  const skillsHref = "/app/skills";
   return (
     <>
       {!bannerDismissed && (
@@ -334,11 +328,7 @@ const AgentComposer = memo(function AgentComposer({
         action: () => {
           setDraft("/skills ");
           queueMicrotask(() => {
-            router.push(
-              activeWorkspaceId
-                ? `/app/${activeWorkspaceId}/skills`
-                : "/app/config/skills",
-            );
+            router.push("/app/skills");
           });
         },
       },
@@ -696,44 +686,42 @@ export default function AgentPage() {
   const pendingSessionListCatchUpRef = useRef<string | null>(null);
   /** Skip stale-list clear on first paint (same pattern as desktop `useThreads`). */
   const sessionListScopePrimedRef = useRef(false);
+  /** Drops out-of-order `/api/sessions` responses when workspace or Code/Work scope changes quickly. */
+  const sessionsFetchGenRef = useRef(0);
 
   // ── Fetch sessions (current workspace only) ─────────────────────────
   // Includes both chat threads (source="agent") and automation threads
   // (source="automation"). The sidebar visually distinguishes them.
   // Scoped by Code vs Work via `workMode` so the list matches the chrome.
   const fetchSessions = useCallback(async () => {
+    const gen = ++sessionsFetchGenRef.current;
     sessionsHydratedRef.current = false;
     setSessionsLoading(true);
     try {
       const wsQuery = activeWorkspaceId ? `&workspaceId=${encodeURIComponent(activeWorkspaceId)}` : "";
       const wmQuery = `&workMode=${encodeURIComponent(workMode)}`;
-      const base = `/api/sessions?limit=50${wsQuery}${wmQuery}`;
-      const [activeRes, allRes] = await Promise.all([
-        fetch(base),
-        fetch(`${base}&includeArchived=true`),
-      ]);
-      let merged: SessionSummary[] = [];
-      if (activeRes.ok) {
-        const data = await activeRes.json();
-        merged = Array.isArray(data) ? (data as SessionSummary[]) : [];
+      const url = `/api/sessions?limit=50&includeArchived=true${wsQuery}${wmQuery}`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (gen !== sessionsFetchGenRef.current) return;
+      if (!res.ok) {
+        const snippet = await res.text().catch(() => "");
+        console.error("[agent] fetchSessions failed:", res.status, snippet.slice(0, 200));
+        sessionsHydratedRef.current = true;
+        return;
       }
-      if (allRes.ok) {
-        const data = await allRes.json();
-        const full = Array.isArray(data) ? (data as SessionSummary[]) : [];
-        const seen = new Set(merged.map((s) => s.id));
-        for (const s of full) {
-          if (s.archived && !seen.has(s.id)) {
-            seen.add(s.id);
-            merged.push(s);
-          }
-        }
-      }
-      setSessions(merged);
+      const data = await res.json();
+      const list = Array.isArray(data) ? (data as SessionSummary[]) : [];
+      if (gen !== sessionsFetchGenRef.current) return;
+      setSessions(list);
       sessionsHydratedRef.current = true;
     } catch (e) {
+      if (gen !== sessionsFetchGenRef.current) return;
       console.error("Failed to fetch sessions:", e);
+      sessionsHydratedRef.current = true;
     } finally {
-      setSessionsLoading(false);
+      if (gen === sessionsFetchGenRef.current) {
+        setSessionsLoading(false);
+      }
     }
   }, [activeWorkspaceId, workMode]);
 
@@ -1917,7 +1905,6 @@ export default function AgentPage() {
               tools={capabilityDroppedTools}
               bannerDismissed={capabilityToolsBannerDismissed}
               onSetBannerDismissed={setCapabilityToolsBannerDismissed}
-              workspaceId={activeWorkspaceId}
             />
             {!showConversationSkeleton && (messages.length > 0 || agentBusy) && (
               <MessageList
@@ -1970,7 +1957,6 @@ export default function AgentPage() {
                   tools={capabilityDroppedTools}
                   bannerDismissed={capabilityToolsBannerDismissed}
                   onSetBannerDismissed={setCapabilityToolsBannerDismissed}
-                  workspaceId={activeWorkspaceId}
                 />
                 {eventStream.length === 0 && !sending && !isServerSideRunActive && (
                   <div className="flex flex-col items-center justify-center py-20 text-text-muted">

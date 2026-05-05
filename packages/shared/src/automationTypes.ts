@@ -7,9 +7,6 @@ import type { TokenUsage, TokenUsageSummary } from "@kletron/shared/tokenUsageTy
  */
 export type AutomationStatus = "PENDING" | "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED" | "CANCELLED";
 
-/** @deprecated Use AutomationStatus instead */
-export type ChainStatus = AutomationStatus;
-
 /**
  * Structured error classification for failed automation stages.
  * Used for diagnostics, notifications, and retry decisions.
@@ -58,9 +55,6 @@ export interface AutomationStageConfig {
         };
     };
 }
-
-/** @deprecated Use AutomationStageConfig instead */
-export type AuditStageConfig = AutomationStageConfig;
 
 /**
  * How an automation is triggered
@@ -243,14 +237,11 @@ export interface AutomationContext {
     githubIssues?: Array<{ number: number; title: string; labels: string[] }>;
 }
 
-/** @deprecated Use AutomationContext instead */
-export type AuditContext = AutomationContext;
-
 /**
  * A finding from a stage execution
  */
 export interface Finding {
-    /** Automation this finding belongs to (legacy DB field name) */
+    /** Owning automation document id (persisted as chainId in some stores for historical reasons) */
     chainId: string;
     /** Stage that produced this finding */
     stageId: string;

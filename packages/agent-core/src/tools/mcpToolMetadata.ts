@@ -191,6 +191,14 @@ export const mcpToolMetadata: McpToolMeta[] = [
     categories: ["web", "vcs"],
   },
   {
+    name: "sentry_api",
+    label: "Sentry API",
+    description:
+      "Sentry REST API (workspace connector): digest/status for open issues, or organizations, projects, list_issues, issue_detail.",
+    file: "packages/server/src/services/sentryApiTool.ts",
+    categories: ["web", "observability"],
+  },
+  {
     name: "bootstrap_context",
     label: "Bootstrap context",
     description: "Load high-signal project context files for quick grounding.",

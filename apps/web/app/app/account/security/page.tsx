@@ -24,8 +24,9 @@ interface Session {
 }
 
 export default function SecurityPage() {
-    const { updatePassword } = useAuth();
+    const { changePassword } = useAuth();
 
+    const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [passwordStatus, setPasswordStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
@@ -55,9 +56,15 @@ export default function SecurityPage() {
         setPasswordStatus('saving');
         setPasswordError('');
 
-        if (newPassword.length < 8) {
+        if (!currentPassword) {
             setPasswordStatus('error');
-            setPasswordError('Password must be at least 8 characters');
+            setPasswordError('Current password is required');
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            setPasswordStatus('error');
+            setPasswordError('Password must be at least 6 characters');
             return;
         }
 
@@ -67,9 +74,10 @@ export default function SecurityPage() {
             return;
         }
 
-        const result = await updatePassword(newPassword);
+        const result = await changePassword(currentPassword, newPassword);
         if (result.success) {
             setPasswordStatus('success');
+            setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
             setTimeout(() => setPasswordStatus('idle'), 3000);
@@ -120,6 +128,19 @@ export default function SecurityPage() {
 
                     <div>
                         <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                            Current password
+                        </label>
+                        <PasswordInput
+                            fullWidth
+                            value={currentPassword}
+                            onChange={(e) => setCurrentPassword(e.target.value)}
+                            placeholder="••••••••"
+                            autoComplete="current-password"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-text-secondary mb-1.5">
                             New Password
                         </label>
                         <PasswordInput
@@ -127,6 +148,7 @@ export default function SecurityPage() {
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
                             placeholder="••••••••"
+                            autoComplete="new-password"
                         />
                     </div>
 
@@ -145,7 +167,7 @@ export default function SecurityPage() {
                     <div className="text-[11px] text-text-muted space-y-1">
                         <p>Password requirements:</p>
                         <ul className="list-disc list-inside space-y-0.5 pl-2">
-                            <li>At least 8 characters long</li>
+                            <li>At least 6 characters long</li>
                             <li>Mix of uppercase and lowercase letters recommended</li>
                             <li>Include numbers and special characters for stronger security</li>
                         </ul>
@@ -155,7 +177,9 @@ export default function SecurityPage() {
                         type="submit"
                         className="w-full"
                         loading={passwordStatus === 'saving'}
-                        disabled={passwordStatus === 'saving' || !newPassword || !confirmPassword}
+                        disabled={
+                            passwordStatus === 'saving' || !currentPassword || !newPassword || !confirmPassword
+                        }
                     >
                         {passwordStatus === 'saving' ? 'Updating...' : 'Update Password'}
                     </Button>

@@ -8,3 +8,8 @@ export {
     resolveExternalToolRoute,
     type ExternalConnectionRoutingView,
 } from "./workspaceExternalRouting";
+export {
+    createRemoteMcpTransport,
+    installMcpNodeEventSource,
+    type RemoteMcpWireTransport,
+} from "./remoteMcpTransport";

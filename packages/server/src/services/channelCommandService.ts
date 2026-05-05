@@ -1,10 +1,13 @@
 import type { ChannelId } from "@kletron/shared/channelTypes";
 import type { TelegramInlineKeyboard } from "./telegramChannelAdapter";
+import { agentGraphService } from "./agentGraphService";
 import { channelChatContextService } from "./channelChatContextService";
 import { channelStoreService } from "./channelStoreService";
 import { assertUserOwnsWorkspace } from "./channelResolverService";
 import { parseSlashCommand } from "./channelSlashParse";
 import { getWorkspaceById, listWorkspaces } from "./workspaceService";
+
+const GRAPH_ID_HEX24 = /^[0-9a-fA-F]{24}$/;
 
 export type ChannelCommandResult =
     | {
@@ -41,7 +44,32 @@ export async function handleChannelUserCommand(params: {
 
     const ctx = await channelChatContextService.getByChatKey(channel, externalChatKey);
 
-    // Pending numeric pick (1–9) after /switch list
+    // Pending numeric pick (1–50) after /graphs list
+    if (ctx?.pending?.kind === "awaiting_graph_index" && /^\d+$/.test(text)) {
+        const n = parseInt(text, 10);
+        if (n >= 1 && n <= 50) {
+            const graphs = (await agentGraphService.listGraphs()).filter((g) => g._id);
+            const picked = graphs[n - 1];
+            const gid = picked?._id?.toString();
+            if (gid) {
+                await channelChatContextService.setGraphOverride(
+                    channel,
+                    externalChatKey,
+                    externalUserId,
+                    kletronUserId,
+                    gid
+                );
+                return {
+                    handled: true,
+                    replyText: `Active graph override: "${picked.name || gid}" (${gid}). Send /graph clear to use the workspace default.`,
+                };
+            }
+        }
+        await channelChatContextService.setPending(channel, externalChatKey, externalUserId, kletronUserId, null);
+        return { handled: true, replyText: "Invalid number. Send /graphs to see the list again." };
+    }
+
+    // Pending numeric pick (1–50) after /switch list
     if (ctx?.pending?.kind === "awaiting_workspace_index" && /^\d+$/.test(text)) {
         const n = parseInt(text, 10);
         if (n >= 1 && n <= 50) {
@@ -75,7 +103,76 @@ export async function handleChannelUserCommand(params: {
         return {
             handled: true,
             replyText:
-                "Commands:\n/switch — pick workspace (or use buttons)\n/workspaces — same\n/help — this message\n\nGroups: workspace is per chat. Link your account in the Kletron app first.",
+                "Commands:\n/switch — pick workspace\n/workspaces — same\n/graphs — pick agent graph for this chat\n/graph — show or set graph override (/graph clear)\n/help — this message\n\nGroups: workspace is per chat. Link your account in the Kletron app first.",
+        };
+    }
+
+    if (cmd === "graphs") {
+        const graphs = (await agentGraphService.listGraphs()).filter((g) => g._id);
+        if (!graphs.length) {
+            return { handled: true, replyText: "No agent graphs available yet. Create one in Kletron." };
+        }
+        const lines = graphs.map((g, i) => `${i + 1}. ${g.name || g._id} (${g._id})`);
+        await channelChatContextService.setPending(channel, externalChatKey, externalUserId, kletronUserId, {
+            kind: "awaiting_graph_index",
+        });
+        const keyboard: TelegramInlineKeyboard = {
+            inline_keyboard: graphs.slice(0, 8).map((g, i) => [
+                {
+                    text: `${i + 1}`,
+                    callback_data: `g:${g._id!.toString()}`,
+                },
+            ]),
+        };
+        return {
+            handled: true,
+            replyText: `Agent graphs (reply with a number or tap a button):\n\n${lines.join("\n")}`,
+            replyMarkup: keyboard,
+        };
+    }
+
+    if (cmd === "graph") {
+        const r = rest.trim();
+        const ctxNow = await channelChatContextService.getByChatKey(channel, externalChatKey);
+        if (!r) {
+            const ov = ctxNow?.graphOverrideId?.trim();
+            if (ov) {
+                const g = await agentGraphService.getGraph(ov);
+                return {
+                    handled: true,
+                    replyText: `Graph override: "${g?.name || ov}" (${ov}). Send /graph clear to use workspace default.`,
+                };
+            }
+            return {
+                handled: true,
+                replyText: "No graph override — using workspace default. Send /graphs to pick one.",
+            };
+        }
+        const lower = r.toLowerCase();
+        if (lower === "clear" || lower === "reset" || lower === "none") {
+            await channelChatContextService.setGraphOverride(
+                channel,
+                externalChatKey,
+                externalUserId,
+                kletronUserId,
+                null
+            );
+            return { handled: true, replyText: "Graph override cleared. Using workspace default graph." };
+        }
+        if (!GRAPH_ID_HEX24.test(r)) {
+            return {
+                handled: true,
+                replyText: "Usage: /graph — show status\n/graph clear — remove override\n/graph <24-char graph id>",
+            };
+        }
+        const g = await agentGraphService.getGraph(r);
+        if (!g?._id) {
+            return { handled: true, replyText: "Unknown graph id. Send /graphs for a list." };
+        }
+        await channelChatContextService.setGraphOverride(channel, externalChatKey, externalUserId, kletronUserId, r);
+        return {
+            handled: true,
+            replyText: `Graph override set to "${g.name || r}" (${r}).`,
         };
     }
 
@@ -139,6 +236,57 @@ export async function handleChannelUserCommand(params: {
     }
 
     return { handled: false };
+}
+
+/**
+ * Telegram inline keyboard callbacks: `w:<workspaceId>` | `g:<graphId>`
+ */
+export async function handleTelegramInlineCallback(params: {
+    callbackData: string;
+    externalChatKey: string;
+    externalUserId: string;
+}): Promise<{ ok: true; replyText: string } | { ok: false; replyText: string }> {
+    const { callbackData } = params;
+    if (callbackData.startsWith("w:")) {
+        return handleTelegramWorkspaceCallback(params);
+    }
+    if (callbackData.startsWith("g:")) {
+        return handleTelegramGraphCallback(params);
+    }
+    return { ok: false, replyText: "Unknown action." };
+}
+
+export async function handleTelegramGraphCallback(params: {
+    callbackData: string;
+    externalChatKey: string;
+    externalUserId: string;
+}): Promise<{ ok: true; replyText: string } | { ok: false; replyText: string }> {
+    const { callbackData, externalChatKey, externalUserId } = params;
+    const graphId = callbackData.slice(2).trim();
+    const channel: ChannelId = "telegram";
+    if (!GRAPH_ID_HEX24.test(graphId)) {
+        return { ok: false, replyText: "Invalid graph." };
+    }
+    const kletronUserId = await channelStoreService.findKletronUserIdForExternalUser(channel, externalUserId);
+    if (!kletronUserId) {
+        return { ok: false, replyText: "Not linked." };
+    }
+    const g = await agentGraphService.getGraph(graphId);
+    if (!g?._id) {
+        return { ok: false, replyText: "Unknown graph." };
+    }
+    await channelChatContextService.setGraphOverride(
+        channel,
+        externalChatKey,
+        externalUserId,
+        kletronUserId,
+        graphId
+    );
+    await channelChatContextService.setPending(channel, externalChatKey, externalUserId, kletronUserId, null);
+    return {
+        ok: true,
+        replyText: `Graph override: "${g.name || graphId}" (${graphId})`,
+    };
 }
 
 /**

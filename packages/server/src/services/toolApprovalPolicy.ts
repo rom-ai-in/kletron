@@ -112,6 +112,17 @@ export const READONLY_TOOLS = new Set<string>([
     "bootstrap_context",
     "web_search",
     "fetch_url",
+    "github_api",
+    "sentry_api",
+    "gmail_list_labels",
+    "gmail_search_messages",
+    "gmail_read_message",
+    "calendar_list_calendars",
+    "calendar_freebusy",
+    "calendar_list_events",
+    "calendar_get_event",
+    "drive_list_files",
+    "drive_read_file",
     "output_format",
     "locate_ui_feature",
     "write_todos",
@@ -378,4 +389,3 @@ export function applyThreadApprovalOverride(
 
     return base;
 }
-

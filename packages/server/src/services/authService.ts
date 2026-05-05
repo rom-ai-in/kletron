@@ -184,22 +184,63 @@ export class AuthService {
     }
 
     /**
-     * Update password (after clicking reset link)
+     * Complete password reset using the token from the reset link (?token= on /auth/update-password).
      */
-    async updatePassword(newPassword: string): Promise<AuthResponse> {
+    async completePasswordReset(token: string, newPassword: string): Promise<AuthResponse> {
         try {
             const response = await fetch('/api/auth/update-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ newPassword })
+                body: JSON.stringify({ token, newPassword })
             });
 
+            const result = await response.json().catch(() => ({}));
+
             if (!response.ok) {
-                const result = await response.json();
                 return {
                     success: false,
                     message: 'Password update failed',
-                    error: result.error || 'Unknown error'
+                    error:
+                        (typeof result.message === 'string' && result.message) ||
+                        (typeof result.error === 'string' && result.error) ||
+                        'Unknown error'
+                };
+            }
+
+            return {
+                success: true,
+                message: 'Password updated successfully'
+            };
+        } catch (err) {
+            return {
+                success: false,
+                message: 'An unexpected error occurred',
+                error: err instanceof Error ? err.message : 'Unknown error'
+            };
+        }
+    }
+
+    /**
+     * Change password while signed in (requires current password).
+     */
+    async changePassword(currentPassword: string, newPassword: string): Promise<AuthResponse> {
+        try {
+            const response = await fetch('/api/auth/change-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ currentPassword, newPassword })
+            });
+
+            const result = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                return {
+                    success: false,
+                    message: 'Password update failed',
+                    error:
+                        (typeof result.error === 'string' && result.error) ||
+                        (typeof result.message === 'string' && result.message) ||
+                        'Unknown error'
                 };
             }
 

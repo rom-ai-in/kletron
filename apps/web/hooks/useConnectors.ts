@@ -2,14 +2,50 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type {
+    ConnectorBindingUpsertInput,
+    ConnectorWorkspaceBindingRow,
     ConnectorTypeDefinition,
     IntegrationCreateInput,
     IntegrationUpdateInput,
     McpServerCreateInput,
+    McpServerProbeInput,
     McpServerUpdateInput,
     WorkspaceIntegrationSummary,
     WorkspaceMcpServerSummary,
 } from "@kletron/shared";
+
+export async function fetchAccountConnectorWorkspaceBindings(
+    kind: "mcp_server" | "integration",
+    refId: string,
+    signal?: AbortSignal
+): Promise<ConnectorWorkspaceBindingRow[]> {
+    const base =
+        kind === "mcp_server"
+            ? `/api/account/connectors/mcp-servers/${encodeURIComponent(refId)}/workspace-bindings`
+            : `/api/account/connectors/integrations/${encodeURIComponent(refId)}/workspace-bindings`;
+    const res = await fetch(base, { signal });
+    const json = (await res.json().catch(() => ({}))) as { workspaces?: ConnectorWorkspaceBindingRow[]; error?: string };
+    if (!res.ok) throw new Error(json.error ?? `Failed (${res.status})`);
+    return json.workspaces ?? [];
+}
+
+export async function putAccountConnectorWorkspaceBindings(
+    kind: "mcp_server" | "integration",
+    refId: string,
+    workspaces: Array<{ workspaceId: string; enabled: boolean }>
+): Promise<void> {
+    const base =
+        kind === "mcp_server"
+            ? `/api/account/connectors/mcp-servers/${encodeURIComponent(refId)}/workspace-bindings`
+            : `/api/account/connectors/integrations/${encodeURIComponent(refId)}/workspace-bindings`;
+    const res = await fetch(base, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaces }),
+    });
+    const json = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) throw new Error(json.error ?? `Failed (${res.status})`);
+}
 
 export function useConnectorCatalog() {
     const [types, setTypes] = useState<ConnectorTypeDefinition[]>([]);
@@ -205,6 +241,48 @@ export function useWorkspaceConnectors(workspaceId: string) {
         [workspaceId, refresh]
     );
 
+    const probeMcpServerDraft = useCallback(
+        async (body: McpServerProbeInput) => {
+            const res = await fetch(`/api/workspaces/${workspaceId}/connectors/mcp-servers/probe`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            const json = (await res.json().catch(() => ({}))) as {
+                ok?: boolean;
+                tools?: Array<{ name: string; description?: string }>;
+                error?: string;
+            };
+            if (!res.ok) {
+                return {
+                    ok: false as const,
+                    error: json.error ?? `Request failed (${res.status})`,
+                };
+            }
+            if (json.ok) {
+                return { ok: true as const, tools: json.tools ?? [] };
+            }
+            return { ok: false as const, error: json.error ?? "Connection test failed" };
+        },
+        [workspaceId]
+    );
+
+    const applyConnectorBindings = useCallback(
+        async (bindings: ConnectorBindingUpsertInput[]) => {
+            const res = await fetch(`/api/workspaces/${workspaceId}/connectors/bindings`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ bindings }),
+            });
+            if (!res.ok) {
+                const json = await res.json().catch(() => ({}));
+                throw new Error(json.error ?? `Failed (${res.status})`);
+            }
+            await refresh();
+        },
+        [workspaceId, refresh]
+    );
+
     return {
         integrations,
         mcpServers,
@@ -219,5 +297,7 @@ export function useWorkspaceConnectors(workspaceId: string) {
         updateMcpServer,
         deleteMcpServer,
         discoverMcpServer,
+        probeMcpServerDraft,
+        applyConnectorBindings,
     };
 }

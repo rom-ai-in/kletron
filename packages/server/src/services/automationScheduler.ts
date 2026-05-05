@@ -136,23 +136,37 @@ async function pollScheduledAutomations(): Promise<void> {
                     continue;
                 }
 
+                const workspaceId = fresh.workspaceId?.toString();
+                if (!workspaceId) {
+                    console.error(
+                        `[AutomationScheduler] Automation ${automationId} has no workspaceId, skipping`
+                    );
+                    continue;
+                }
+                const workspace = await getWorkspaceByIdUnsafe(workspaceId);
+                if (!workspace?._id) {
+                    console.error(
+                        `[AutomationScheduler] Workspace ${workspaceId} not found for automation ${automationId}, skipping`
+                    );
+                    continue;
+                }
+
                 console.log(`[AutomationScheduler] Triggering automation ${automationId} (${fresh.name})`);
 
                 // Increment schedule count (updates lastScheduledAt, computes nextScheduledAt)
                 await automationExecutor.incrementScheduleCount(automationId);
 
-                const workspaceId = fresh.workspaceId?.toString();
-
-                // Launch the automation as an agent thread; runAutomationAsThread
-                // is non-blocking (fire-and-forget background execution).
-                automationExecutor
-                    .runAutomationAsThread(automationId, workspaceId)
-                    .then(({ threadId }) => {
+                void Promise.resolve(
+                    runWithWorkspaceContext(workspace, () =>
+                        automationExecutor.runAutomationAsThread(automationId, workspaceId)
+                    )
+                )
+                    .then(({ threadId }: { threadId: string }) => {
                         console.info(
                             `[AutomationScheduler] Automation ${automationId} → thread ${threadId}`
                         );
                     })
-                    .catch((error) => {
+                    .catch((error: unknown) => {
                         console.error(
                             `[AutomationScheduler] Automation ${automationId} failed to start:`,
                             error
