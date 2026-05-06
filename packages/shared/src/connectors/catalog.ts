@@ -313,6 +313,7 @@ export const CONNECTOR_CATALOG: ConnectorTypeDefinition[] = [
         category: "communication",
         auth: "oauth",
         oauthScopes: [
+            "https://www.googleapis.com/auth/gmail.readonly",
             "https://www.googleapis.com/auth/gmail.modify",
             "https://www.googleapis.com/auth/gmail.metadata",
         ],

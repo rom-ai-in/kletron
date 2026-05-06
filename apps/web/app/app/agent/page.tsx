@@ -282,6 +282,10 @@ interface AgentComposerProps {
   executionBackend: "langgraph" | "codex";
   sessionExecutionBackend?: "langgraph" | "codex" | null;
   onExecutionBackendChange: (b: "langgraph" | "codex") => void;
+  selectedCodexModel: string;
+  codexModelOptions: { id: string; label: string; sub?: string }[];
+  onCodexModelChange: (modelId: string) => void;
+  codexModelsLoading?: boolean;
 }
 
 const AgentComposer = memo(function AgentComposer({
@@ -318,6 +322,10 @@ const AgentComposer = memo(function AgentComposer({
   executionBackend,
   sessionExecutionBackend,
   onExecutionBackendChange,
+  selectedCodexModel,
+  codexModelOptions,
+  onCodexModelChange,
+  codexModelsLoading = false,
 }: AgentComposerProps) {
   const router = useRouter();
   const queuedOrBusy = sending || runActive;
@@ -565,6 +573,25 @@ const AgentComposer = memo(function AgentComposer({
                 />
               </>
             }
+            codexControls={
+              codexModelsLoading || codexModelOptions.length > 0 ? (
+                <Selector
+                  label="Model"
+                  value={
+                    selectedCodexModel &&
+                    codexModelOptions.some((o) => o.id === selectedCodexModel)
+                      ? selectedCodexModel
+                      : (codexModelOptions[0]?.id ?? "")
+                  }
+                  options={codexModelOptions}
+                  onSelect={onCodexModelChange}
+                  size="sm"
+                  direction="up"
+                  loading={codexModelsLoading}
+                  status="none"
+                />
+              ) : null
+            }
             trailingControls={
               <>
                 <ThreadApprovalModeSelector
@@ -724,6 +751,9 @@ export default function AgentPage() {
     agentGraphs,
     graphSelectorLoading,
     llmSelectorLoading,
+    codexModelOptions,
+    handleCodexModelChange,
+    codexModelsLoading,
   } = useAgentSession();
 
   const agentLlmStrip = useMemo(
@@ -2211,6 +2241,10 @@ export default function AgentPage() {
           executionBackend={executionBackend}
           sessionExecutionBackend={sessionDetail?.executionBackend ?? null}
           onExecutionBackendChange={handleExecutionBackendChange}
+          selectedCodexModel={selectedCodexModel}
+          codexModelOptions={codexModelOptions}
+          onCodexModelChange={handleCodexModelChange}
+          codexModelsLoading={codexModelsLoading}
         />
         <WorkspaceConnectorsHint workspaceId={activeWorkspaceId} className="mt-2" />
       </div>

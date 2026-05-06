@@ -1998,6 +1998,28 @@ export default function App() {
                         />
                       </>
                     }
+                    codexControls={
+                      agentSession.codexModelsLoading || agentSession.codexModelOptions.length > 0 ? (
+                        <Selector
+                          label="Model"
+                          value={
+                            agentSession.selectedCodexModel &&
+                            agentSession.codexModelOptions.some((o) => o.id === agentSession.selectedCodexModel)
+                              ? agentSession.selectedCodexModel
+                              : (agentSession.codexModelOptions[0]?.id ?? "")
+                          }
+                          options={agentSession.codexModelOptions}
+                          onSelect={(id) => {
+                            agentSession.handleCodexModelChange(id);
+                            conversation.applyCodexModelSelection(id);
+                          }}
+                          size="sm"
+                          direction="up"
+                          loading={agentSession.codexModelsLoading}
+                          status="none"
+                        />
+                      ) : null
+                    }
                     trailingControls={
                       <>
                         <ThreadApprovalModeSelector

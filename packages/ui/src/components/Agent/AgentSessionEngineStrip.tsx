@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { resolveAgentExecutionBackend } from "../../hooks/agentExecutionSurface";
 import { ExecutionModeSegmented, type ExecutionBackendId } from "./ExecutionModeSegmented";
 import { cn } from "../../lib/utils";
 
@@ -20,17 +21,8 @@ export type AgentSessionEngineStripProps = {
   className?: string;
 };
 
-function resolveDisplayedBackend(
-  hasActiveSession: boolean,
-  sessionBackend: ExecutionBackendId | null | undefined,
-  preference: ExecutionBackendId,
-): ExecutionBackendId {
-  if (!hasActiveSession) return preference;
-  return sessionBackend ?? "langgraph";
-}
-
 /**
- * Single-line agent footer: engine toggle + thread hint + graph/LLM + policy + depth.
+ * Single-line agent footer: engine toggle + graph/LLM or Codex + policy + depth.
  * Narrow viewports scroll horizontally instead of wrapping (avoids a second “config row”).
  */
 export function AgentSessionEngineStrip({
@@ -43,7 +35,11 @@ export function AgentSessionEngineStrip({
   trailingControls,
   className,
 }: AgentSessionEngineStripProps) {
-  const displayed = resolveDisplayedBackend(hasActiveSession, sessionBackend, preferenceBackend);
+  const displayed = resolveAgentExecutionBackend({
+    preferenceBackend,
+    sessionBackend: sessionBackend ?? null,
+    hasActiveSession,
+  });
   const switchLocked = hasActiveSession;
   const showLangGraphChrome = displayed === "langgraph";
 
@@ -59,21 +55,9 @@ export function AgentSessionEngineStrip({
           value={switchLocked ? displayed : preferenceBackend}
           onChange={switchLocked ? undefined : onPreferenceBackendChange}
           disabled={switchLocked}
-          disabledReason="Execution mode is fixed for this conversation."
+          disabledReason={`This conversation uses ${displayed === "codex" ? "Codex (CLI)" : "LangGraph"}. Execution engine cannot be changed mid-thread.`}
         />
       </div>
-      {!switchLocked ? (
-        <span className="hidden shrink-0 text-[10px] text-text-muted md:inline">
-          New chats only — set before first send.
-        </span>
-      ) : (
-        <span className="shrink-0 text-[10px] text-text-muted">
-          This thread:{" "}
-          <span className="font-medium text-text-secondary">
-            {displayed === "codex" ? "Codex (ChatGPT)" : "LangGraph"}
-          </span>
-        </span>
-      )}
       {showLangGraphChrome ? langGraphControls : codexControls}
       {trailingControls}
     </div>

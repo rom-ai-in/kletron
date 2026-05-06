@@ -1,3 +1,5 @@
+import { resolveAgentExecutionBackend } from "./agentExecutionSurface";
+
 /**
  * LLM strip on the Agent shows live health for the LangGraph provider. When the user runs
  * Codex, that health is irrelevant (LM Studio can be off) — avoid a misleading red dot.
@@ -17,10 +19,12 @@ export function effectiveLlmStripHealth(input: {
   /** Short label for the selector ("LG" when Codex context so it fits the strip) */
   selectorLabel: string;
 } {
-  const sessionBackend = input.sessionExecutionBackend ?? "langgraph";
   const runUsesCodex =
-    (input.hasActiveSession && sessionBackend === "codex") ||
-    (!input.hasActiveSession && input.userExecutionBackend === "codex");
+    resolveAgentExecutionBackend({
+      preferenceBackend: input.userExecutionBackend,
+      sessionBackend: input.sessionExecutionBackend ?? null,
+      hasActiveSession: input.hasActiveSession,
+    }) === "codex";
 
   if (!runUsesCodex) {
     return {

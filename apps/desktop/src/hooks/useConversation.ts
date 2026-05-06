@@ -541,6 +541,10 @@ export function useConversation(
       : null
   );
 
+  const applyCodexModelSelection = useCallback((model: string) => {
+    setSelectedCodexModel(model.trim());
+  }, []);
+
   const buildThreadExport = useCallback(
     (overlay: {
       planMode: boolean;
@@ -648,5 +652,7 @@ export function useConversation(
     threadContextFootprint,
     sessionDetail: agentThread.sessionDetail,
     buildThreadExport,
+    /** Keep in sync when user picks Codex model from agent strip (`handleCodexModelChange` updates prefs). */
+    applyCodexModelSelection,
   };
 }

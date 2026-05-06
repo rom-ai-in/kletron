@@ -79,9 +79,35 @@ export interface UseAgentSessionReturn {
     llmSelectorLoading: boolean;
     /** True until graphs + LLM prefs resolved — matches desktop graph gate; use for GRAPH selector skeleton. */
     graphSelectorLoading: boolean;
+    /** Codex CLI model list (`/api/codex/models`) for the agent strip when execution is Codex. */
+    codexModelOptions: { id: string; label: string; sub?: string }[];
+    codexModelsLoading: boolean;
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
+
+function normalizeCodexModelsPayload(input: unknown): { id: string; label: string }[] {
+    const obj = input as { models?: unknown } | null | undefined;
+    const raw: unknown[] = Array.isArray(obj?.models)
+        ? (obj.models as unknown[])
+        : Array.isArray(input)
+          ? (input as unknown[])
+          : [];
+    const out: { id: string; label: string }[] = [];
+    for (const item of raw) {
+        if (!item || typeof item !== "object") continue;
+        const id = typeof (item as { id?: string }).id === "string" ? (item as { id: string }).id : "";
+        if (!id) continue;
+        const label =
+            typeof (item as { displayName?: string }).displayName === "string"
+                ? (item as { displayName: string }).displayName
+                : typeof (item as { name?: string }).name === "string"
+                  ? (item as { name: string }).name
+                  : id;
+        out.push({ id, label });
+    }
+    return out;
+}
 
 export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessionReturn {
     const apiOrigin = options?.apiOrigin;
@@ -109,11 +135,40 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
     const refreshGraphs = useCallback(() => setGraphsReloadNonce((n) => n + 1), []);
     const [llmPrefsReloadNonce, setLlmPrefsReloadNonce] = useState(0);
     const refreshLlmPreferences = useCallback(() => setLlmPrefsReloadNonce((n) => n + 1), []);
+    const [codexModelOptions, setCodexModelOptions] = useState<{ id: string; label: string }[]>([]);
+    const [codexModelsLoading, setCodexModelsLoading] = useState(false);
 
     const { status: llmStatus, message: llmStatusDetail } = useLlmHealth(llmProvider, {
         apiOrigin,
         getRequestHeaders: getHdr,
     });
+
+    useEffect(() => {
+        let cancelled = false;
+        void (async () => {
+            if (!llmPrefsLoaded) return;
+            setCodexModelsLoading(true);
+            try {
+                const res = await apiFetch({
+                    apiOrigin,
+                    path: "/api/codex/models",
+                    getRequestHeaders: getHdr,
+                    method: "GET",
+                    cache: "no-store",
+                });
+                const data = res.ok ? await res.json().catch(() => null) : null;
+                const list = normalizeCodexModelsPayload(data);
+                if (!cancelled) setCodexModelOptions(list);
+            } catch {
+                if (!cancelled) setCodexModelOptions([]);
+            } finally {
+                if (!cancelled) setCodexModelsLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [llmPrefsLoaded, apiOrigin, getHdr, llmPrefsReloadNonce]);
 
     // ── Fetch LLM config + user preferences (LLM provider + graph selection)
     useEffect(() => {
@@ -413,5 +468,7 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
         llmStatusDetail,
         llmSelectorLoading,
         graphSelectorLoading,
+        codexModelOptions,
+        codexModelsLoading,
     };
 }

@@ -1,4 +1,4 @@
-import { access, appendFile, mkdir, unlink, writeFile } from "node:fs/promises";
+import { access, appendFile, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createHash, randomUUID } from "node:crypto";
@@ -9,7 +9,7 @@ import { CodexBridge, type CodexBridgeNotification, type CodexBridgeServerReques
 import type { AgentEvent } from "@kletron/shared/types";
 import { agentGraphRunService } from "./agentGraphRunService";
 import { findActiveIntegration, getIntegrationCredentials } from "./connectorsService";
-import { tryGetGoogleOAuthClientCredentials } from "./googleWorkspaceApi";
+import { refreshGoogleAccessToken, tryGetGoogleOAuthClientCredentials } from "./googleWorkspaceApi";
 
 export type ExecutionBackend = "langgraph" | "codex";
 export type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
@@ -164,30 +164,200 @@ function shortHash(value: string): string {
 
 const KLETRON_GOOGLE_ADC_FILENAME = "kletron-google-adc.json";
 
+/** Remote Gmail MCP (Google Cloud); bearer must match Google OAuth access token for the user. */
+const GOOGLE_GMAIL_REMOTE_MCP_URL = "https://gmailmcp.googleapis.com/mcp/v1";
+
+const KLETRON_CODEX_TOML_MARK_BEGIN = "# BEGIN KLETRON SYNC";
+const KLETRON_CODEX_TOML_MARK_END = "# END KLETRON SYNC";
+
+/** Same inner names as Codex `config.toml` table headers (inside `[...]`). */
+const CODEX_TOML_GMAIL_PLUGIN_HEADER = `plugins."gmail@openai-curated"`;
+/** Single segment after `mcp_servers.` avoids some strict-TOML parsers choking on duplicate dotted paths. */
+const CODEX_TOML_KLETRON_GMAIL_MCP_HEADER = "mcp_servers.kletron_gmail_kletron";
+const CODEX_TOML_LEGACY_KLETRON_GMAIL_MCP_HEADER = "mcp_servers.kletron-gmail-google-remote";
+
+/** Strip one `[headerInner]` table block (standard tables only — lines until next top-level `[`). */
+function stripTomlTableSection(content: string, headerInner: string): string {
+  const headerLine = `[${headerInner}]`;
+  const lines = content.split(/\r?\n/);
+  const out: string[] = [];
+  let skip = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (!skip && t === headerLine) {
+      skip = true;
+      continue;
+    }
+    if (skip) {
+      if (t.startsWith("[") && t.endsWith("]")) {
+        skip = false;
+        if (t !== headerLine) out.push(line);
+      }
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
+function stripAllTomlTableSections(content: string, headerInner: string): string {
+  let prev = "";
+  let out = content;
+  while (prev !== out) {
+    prev = out;
+    out = stripTomlTableSection(out, headerInner);
+  }
+  return out;
+}
+
+/**
+ * Keep the **last** occurrence of each top-level `[table]` header (TOML forbids duplicate headers).
+ * Lines before the first `[` are treated as preamble and kept once at the top.
+ */
+function dedupeTomlTopLevelTableBlocks(content: string): string {
+  const lines = content.split(/\r?\n/);
+  type Block = { header: string; lines: string[] };
+  const blocks: Block[] = [];
+  let preamble: string[] = [];
+  let curHeader: string | null = null;
+  let curLines: string[] = [];
+
+  const flush = () => {
+    if (curHeader !== null) {
+      blocks.push({ header: curHeader, lines: curLines });
+      curHeader = null;
+      curLines = [];
+    }
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const m = trimmed.match(/^\[(.+)\]\s*$/);
+    if (m && trimmed.startsWith("[") && !trimmed.includes("#")) {
+      flush();
+      curHeader = m[1];
+      curLines = [line];
+    } else if (curHeader !== null) {
+      curLines.push(line);
+    } else {
+      preamble.push(line);
+    }
+  }
+  flush();
+
+  const seen = new Set<string>();
+  const kept: Block[] = [];
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const b = blocks[i];
+    if (seen.has(b.header)) continue;
+    seen.add(b.header);
+    kept.unshift(b);
+  }
+
+  const out: string[] = [];
+  while (preamble.length && !(preamble[preamble.length - 1] ?? "").trim()) {
+    preamble.pop();
+  }
+  out.push(...preamble);
+  if (out.length && kept.length && (out[out.length - 1] ?? "").trim()) {
+    out.push("");
+  }
+  for (let i = 0; i < kept.length; i++) {
+    if (i > 0 && (out[out.length - 1] ?? "").trim()) out.push("");
+    out.push(...kept[i].lines);
+  }
+  return `${out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
+}
+
 /** Avoid leaking the server's own ADC path into the Codex child; Kletron sets its own file per user CODEX_HOME. */
 function cloneProcessEnvWithoutInheritedGoogleAdc(): NodeJS.ProcessEnv {
   const env = { ...process.env } as NodeJS.ProcessEnv;
   delete env.GOOGLE_APPLICATION_CREDENTIALS;
+  delete env.KLETRON_GOOGLE_ACCESS_TOKEN;
   return env;
 }
 
+function mergeMarkedTomlSection(existing: string, blockBody: string): string {
+  const pattern = new RegExp(
+    `${KLETRON_CODEX_TOML_MARK_BEGIN}[\\s\\S]*?${KLETRON_CODEX_TOML_MARK_END}\\n?`,
+    "m",
+  );
+  const trimmed = existing.replace(/\s+$/, "");
+  if (!blockBody.trim()) {
+    const stripped = trimmed.replace(pattern, "").replace(/\s+$/, "");
+    return stripped ? `${stripped}\n` : "";
+  }
+  const insertion = `${KLETRON_CODEX_TOML_MARK_BEGIN}\n${blockBody.trim()}\n${KLETRON_CODEX_TOML_MARK_END}\n`;
+  if (pattern.test(trimmed)) {
+    return `${trimmed.replace(pattern, insertion).replace(/\s+$/, "")}\n`;
+  }
+  return trimmed ? `${trimmed}\n\n${insertion}` : insertion;
+}
+
 /**
- * Writes Google user OAuth as ADC-style JSON (`authorized_user`) so MCP stacks using google-auth-library pick up
- * the same refresh token as Kletron Connectors (gmail integration).
+ * OpenAI curated `gmail@openai-curated` uses ChatGPT app connectors — it ignores Kletron tokens.
+ * When Kletron Gmail is connected, disable that plugin and register Google's hosted Gmail MCP with a bearer from our refresh token.
+ */
+async function syncKletronCodexConfigToml(codexHome: string, injectKletronGmailRemote: boolean): Promise<void> {
+  const configPath = path.join(codexHome, "config.toml");
+  let existing = "";
+  try {
+    existing = await readFile(configPath, "utf8");
+  } catch {
+    existing = "";
+  }
+
+  const blockBody = injectKletronGmailRemote
+    ? [
+        `# Gmail: use Kletron workspace connector OAuth (see KLETRON_GOOGLE_ACCESS_TOKEN).`,
+        `# Disable OpenAI connector Gmail — it uses separate ChatGPT credentials and causes ACCESS_TOKEN_SCOPE_INSUFFICIENT.`,
+        `[plugins."gmail@openai-curated"]`,
+        `enabled = false`,
+        ``,
+        `[mcp_servers.kletron_gmail_kletron]`,
+        `url = "${GOOGLE_GMAIL_REMOTE_MCP_URL}"`,
+        `bearer_token_env_var = "KLETRON_GOOGLE_ACCESS_TOKEN"`,
+        `startup_timeout_sec = 45`,
+        `enabled = true`,
+      ].join("\n")
+    : "";
+
+  // Remove old Kletron block, then strip tables we (re)declare — avoids TOML "duplicate key" if the user
+  // already had `[plugins."gmail@openai-curated"]` above our synced section.
+  let working = mergeMarkedTomlSection(existing, "").replace(/\s+$/, "");
+  working = stripAllTomlTableSections(working, CODEX_TOML_LEGACY_KLETRON_GMAIL_MCP_HEADER);
+  working = stripAllTomlTableSections(working, CODEX_TOML_KLETRON_GMAIL_MCP_HEADER);
+  if (injectKletronGmailRemote) {
+    working = stripAllTomlTableSections(working, CODEX_TOML_GMAIL_PLUGIN_HEADER);
+  }
+
+  const merged = mergeMarkedTomlSection(working, blockBody).replace(/\n{3,}/g, "\n\n").trimEnd();
+  const next = merged ? dedupeTomlTopLevelTableBlocks(merged).trimEnd() : "";
+  const normalizedOut = next ? `${next}\n` : "";
+  const normalizedExisting = existing.replace(/\s+$/, "");
+  if (normalizedOut.replace(/\r\n/g, "\n") === `${normalizedExisting}\n`) return;
+  await writeFile(configPath, normalizedOut, { encoding: "utf8", mode: 0o600 });
+}
+
+/**
+ * Writes Google user OAuth as ADC-style JSON (`authorized_user`) for tooling that uses google-auth-library,
+ * and refreshes an access token for Google's hosted Gmail MCP (Streamable HTTP + bearer).
  */
 async function prepareCodexGoogleInjection(
   workspaceId: string | undefined,
   codexHome: string,
-): Promise<{ injectionKey: string; env: NodeJS.ProcessEnv }> {
+): Promise<{ injectionKey: string; env: NodeJS.ProcessEnv; injectKletronGmailRemote: boolean }> {
   const base = cloneProcessEnvWithoutInheritedGoogleAdc();
   const adcPath = path.join(codexHome, KLETRON_GOOGLE_ADC_FILENAME);
   const ws = workspaceId?.trim() ?? "";
 
   if (!ws) {
     await unlink(adcPath).catch(() => undefined);
+    await syncKletronCodexConfigToml(codexHome, false);
     return {
       injectionKey: "none",
       env: base,
+      injectKletronGmailRemote: false,
     };
   }
 
@@ -195,9 +365,11 @@ async function prepareCodexGoogleInjection(
   const integration = await findActiveIntegration(ws, "gmail");
   if (!oauth || !integration) {
     await unlink(adcPath).catch(() => undefined);
+    await syncKletronCodexConfigToml(codexHome, false);
     return {
       injectionKey: `ws:${ws}:no-gmail`,
       env: base,
+      injectKletronGmailRemote: false,
     };
   }
 
@@ -205,9 +377,11 @@ async function prepareCodexGoogleInjection(
   const refreshToken = typeof creds?.refreshToken === "string" ? creds.refreshToken.trim() : "";
   if (!refreshToken) {
     await unlink(adcPath).catch(() => undefined);
+    await syncKletronCodexConfigToml(codexHome, false);
     return {
       injectionKey: `ws:${ws}:no-refresh`,
       env: base,
+      injectKletronGmailRemote: false,
     };
   }
 
@@ -223,9 +397,26 @@ async function prepareCodexGoogleInjection(
   const env = { ...base };
   env.GOOGLE_APPLICATION_CREDENTIALS = adcPath;
 
+  let injectKletronGmailRemote = false;
+  try {
+    const accessToken = await refreshGoogleAccessToken(refreshToken);
+    if (accessToken) {
+      env.KLETRON_GOOGLE_ACCESS_TOKEN = accessToken;
+      injectKletronGmailRemote = true;
+    }
+  } catch (error) {
+    console.warn(
+      "[codexExecutionService] Gmail access token refresh failed (Kletron Gmail MCP may not start):",
+      (error as Error)?.message ?? error,
+    );
+  }
+
+  await syncKletronCodexConfigToml(codexHome, injectKletronGmailRemote);
+
   return {
     injectionKey: `ws:${ws}:${fingerprint}`,
     env,
+    injectKletronGmailRemote,
   };
 }
 

@@ -13,6 +13,7 @@ Kletron is a TypeScript monorepo: **Next.js** app, **Electron** desktop, **MCP t
 | **Send a PR** | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 | **Plugins & presets** | [community/README.md](./community/README.md) |
 | **Themes / priorities** | [ROADMAP.md](./ROADMAP.md) |
+| **Codex + Google connectors** | [Codex backend + Google Workspace connectors](#codex-backend--google-workspace-connectors) |
 
 **Community:** GitHub Discussions on your fork (enable in repo settings) · Discord _TBD_ — add your invite link here when live.
 
@@ -89,6 +90,19 @@ Deep dive tables and API notes live in **[docs/README-archive.md](./docs/README-
 If LM Studio runs on another host (e.g. **ai-beast**) and you use Kletron from the web or from your Mac, see **[docs/lm-studio-ai-beast-remote.md](./docs/lm-studio-ai-beast-remote.md)** for SSH forwards (`lm_up`), ngrok, Tailscale notes, and workspace paths on hosted Kletron (`WORKSPACE_SKIP_LOCAL_FS_VALIDATION`).
 
 For **hosted Kletron + real files on your laptop**, see **[docs/workspace-local-files-hosted-kletron.md](./docs/workspace-local-files-hosted-kletron.md)** (`WORKSPACE_SKIP_LOCAL_FS_VALIDATION` + `KLETRON_REMOTE_FILE_MCP_SLUG` and a tunneled local MCP).
+
+---
+
+## Codex backend + Google Workspace connectors
+
+When **Execution backend = Codex** (web or Electron), Kletron spawns the Codex CLI with  
+`CODEX_HOME=$HOME/.kletron/codex/<userHash>` — **not** `~/.codex`. If you never use the Codex CLI directly, you can ignore `~/.codex/config.toml`; Kletron maintains its own Codex state under `~/.kletron/codex/`.
+
+**Server `.env`:** set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` (same OAuth client as **Configuration → Connectors**).
+
+**Google Cloud Console** (project that owns that OAuth client): enable **Gmail API**, **Gmail MCP API** (`gmailmcp.googleapis.com`), **Google Calendar API**, and **Google Drive API** as needed.
+
+**In the app:** connect **Gmail**, **Google Calendar**, and **Google Drive** under Connectors and enable them for the workspace. LangGraph runs use Kletron-stored tokens directly. Codex runs additionally wire Gmail into the Codex process (refresh token → ADC JSON + bearer for Google’s hosted Gmail MCP; curated Gmail plugin is disabled to avoid ChatGPT-only credentials).
 
 ---
 
