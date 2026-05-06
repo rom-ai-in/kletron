@@ -11,6 +11,8 @@ import type { InlineDiff } from "@kletron/ui/components/CommandCenter/InlineDiff
 import { PendingSessionEditsStrip, Selector } from "@kletron/ui/components/design-system";
 import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
 import { useAgentSession } from "@kletron/ui/hooks/useAgentSession";
+import { effectiveLlmStripHealth } from "@kletron/ui/hooks/effectiveLlmStripHealth";
+import { AgentSessionEngineStrip } from "@kletron/ui/components/Agent/AgentSessionEngineStrip";
 import type { ResearchDepthId } from "@kletron/shared/researchDepth";
 import { WorkspaceConnectorsHint } from "@kletron/ui/components/CommandCenter/WorkspaceConnectorsHint";
 import { Settings2, GraduationCap, X, AlertTriangle } from "lucide-react";
@@ -91,6 +93,24 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
     undefined,
     diffs.setDiffs,
     activeWorkspaceId
+  );
+
+  const agentLlmStrip = useMemo(
+    () =>
+      effectiveLlmStripHealth({
+        llmStatus: agentSession.llmStatus,
+        llmStatusDetail: agentSession.llmStatusDetail,
+        userExecutionBackend: agentSession.executionBackend,
+        sessionExecutionBackend: conversation.sessionDetail?.executionBackend ?? null,
+        hasActiveSession: Boolean(conversationId),
+      }),
+    [
+      agentSession.llmStatus,
+      agentSession.llmStatusDetail,
+      agentSession.executionBackend,
+      conversation.sessionDetail?.executionBackend,
+      conversationId,
+    ],
   );
 
   const capabilityDroppedToolsKey = useMemo(
@@ -279,6 +299,9 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
               await conversation.sessionEdits.approveEdit(editId, toolName);
               await diffs.applyAllDiff(editId);
             }}
+            approveEditForSession={async (editId, toolName) => {
+              await conversation.sessionEdits.approveEditForSession(editId, toolName);
+            }}
             rejectEdit={(editId, toolName) => {
               void conversation.sessionEdits.rejectEdit(editId, toolName);
               diffs.rejectAllDiff(editId);
@@ -294,9 +317,10 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
           />
         )}
 
-        {/* Input Bar + connectors (parity with main window / web agent) */}
-        <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-3 pt-1">
-          <InputBar
+        {/* Input Bar + connectors (web parity: outer px-4, inner max-w-3xl) */}
+        <div className="flex flex-none flex-col shrink-0 px-4 pb-3 pt-1">
+          <div className="relative mx-auto w-full max-w-3xl">
+            <InputBar
             className="px-0 pb-0 pt-0"
             value={conversation.input}
             onChange={conversation.setInput}
@@ -315,61 +339,70 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
                 void conversation.sendMessage();
               }
             }}
-            graphSelector={
-              <Selector
-                label="GRAPH"
-                value={agentSession.selectedGraphId}
-                options={agentSession.graphSelectOptions}
-                onSelect={agentSession.handleGraphChange}
-                size="sm"
-                direction="up"
-                loading={agentSession.graphSelectorLoading}
+            sessionStripOverride={
+              <AgentSessionEngineStrip
+                preferenceBackend={agentSession.executionBackend}
+                sessionBackend={conversation.sessionDetail?.executionBackend ?? null}
+                hasActiveSession={Boolean(conversationId)}
+                onPreferenceBackendChange={agentSession.handleExecutionBackendChange}
+                langGraphControls={
+                  <>
+                    <Selector
+                      label="GRAPH"
+                      value={agentSession.selectedGraphId}
+                      options={agentSession.graphSelectOptions}
+                      onSelect={agentSession.handleGraphChange}
+                      size="sm"
+                      direction="up"
+                      loading={agentSession.graphSelectorLoading}
+                    />
+                    <Selector
+                      label={agentLlmStrip.selectorLabel}
+                      value={agentSession.llmProvider}
+                      options={agentSession.llmOptions}
+                      onSelect={agentSession.handleLlmChange}
+                      size="sm"
+                      direction="up"
+                      loading={agentSession.llmSelectorLoading}
+                      status={agentSession.llmSelectorLoading ? "none" : agentLlmStrip.status}
+                      menuAlign="end"
+                      statusTooltip={agentSession.llmSelectorLoading ? null : agentLlmStrip.detail}
+                    />
+                  </>
+                }
+                trailingControls={
+                  <>
+                    <ThreadApprovalModeSelector
+                      value={conversation.threadApprovalMode}
+                      onSelect={conversation.onThreadApprovalSelect}
+                      disabled={conversation.conversationRunSource === "automation"}
+                      disabledReason="Tool policy mode is fixed for automation threads."
+                    />
+                    <label className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                      <span className="shrink-0">Depth</span>
+                      <select
+                        value={conversation.researchDepth}
+                        onChange={(e) =>
+                          conversation.setResearchDepth(e.target.value as ResearchDepthId)
+                        }
+                        disabled={!!conversationId}
+                        title={
+                          conversationId
+                            ? "Research depth is fixed for this thread (set when the session was created)."
+                            : "Exhaustive: more tools and context. Fast: fewer steps and shorter replies."
+                        }
+                        className="max-w-[120px] rounded border border-white/[0.12] bg-bg-elevated py-0.5 pl-1.5 pr-6 text-[10px] font-normal normal-case text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <option value="exhaustive">Exhaustive</option>
+                        <option value="fast">Fast</option>
+                      </select>
+                    </label>
+                  </>
+                }
               />
             }
-            modelSelector={
-              <Selector
-                label="LLM"
-                value={agentSession.llmProvider}
-                options={agentSession.llmOptions}
-                onSelect={agentSession.handleLlmChange}
-                size="sm"
-                direction="up"
-                loading={agentSession.llmSelectorLoading}
-                status={agentSession.llmSelectorLoading ? "none" : agentSession.llmStatus}
-                menuAlign="end"
-                statusTooltip={agentSession.llmSelectorLoading ? null : agentSession.llmStatusDetail}
-              />
-            }
-            approvalSelector={
-              <ThreadApprovalModeSelector
-                value={conversation.threadApprovalMode}
-                onSelect={conversation.onThreadApprovalSelect}
-                disabled={conversation.conversationRunSource === "automation"}
-                disabledReason="Tool policy mode is fixed for automation threads."
-              />
-            }
-            depthSelector={
-              <label className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
-                <span className="shrink-0">Depth</span>
-                <select
-                  value={conversation.researchDepth}
-                  onChange={(e) =>
-                    conversation.setResearchDepth(e.target.value as ResearchDepthId)
-                  }
-                  disabled={!!conversationId}
-                  title={
-                    conversationId
-                      ? "Research depth is fixed for this thread (set when the session was created)."
-                      : "Exhaustive: more tools and context. Fast: fewer steps and shorter replies."
-                  }
-                  className="max-w-[120px] rounded border border-white/[0.12] bg-bg-elevated py-0.5 pl-1.5 pr-6 text-[10px] font-normal normal-case text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <option value="exhaustive">Exhaustive</option>
-                  <option value="fast">Fast</option>
-                </select>
-              </label>
-            }
-          />
+            />
+          </div>
           <WorkspaceConnectorsHint
             apiOrigin={backendUrlTrimmed}
             workspaceId={activeWorkspaceId}

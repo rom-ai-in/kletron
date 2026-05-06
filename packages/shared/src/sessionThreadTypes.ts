@@ -37,6 +37,16 @@ export type SessionDetailPayload = {
   /** Persisted research depth for this run (new-message UX mirrors web agent). */
   researchDepth?: ResearchDepthId;
   source?: string | null;
+  executionBackend?: "langgraph" | "codex";
+  codexThreadId?: string | null;
+  codexTurnId?: string | null;
+  codexModel?: string | null;
+  codexSandboxMode?: "read-only" | "workspace-write" | "danger-full-access" | null;
+  codexApprovalState?: {
+    hasPending?: boolean;
+    pendingCount?: number;
+    updatedAt?: string;
+  } | null;
   startedAt?: string | null;
   graph?: {
     name: string;

@@ -9,6 +9,7 @@ export default defineConfig({
             '@kletron/server': path.resolve(__dirname, 'packages/server/src'),
             '@kletron/agent-core': path.resolve(__dirname, 'packages/agent-core/src'),
             '@kletron/mcp-client': path.resolve(__dirname, 'packages/mcp-client/src'),
+            '@kletron/codex-bridge': path.resolve(__dirname, 'packages/codex-bridge/src'),
         },
     },
     test: {

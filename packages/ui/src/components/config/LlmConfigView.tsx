@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Sparkles, Save, RotateCcw, Monitor, Cloud, Check, Globe, Bot, Cpu, Server, Power, PowerOff, Download, Zap, Loader2, CheckCircle2, XCircle, AlertCircle, List } from "lucide-react";
+import { Sparkles, Save, RotateCcw, Monitor, Cloud, Check, Globe, Bot, Cpu, Server, Power, PowerOff, Download, Zap, Loader2, CheckCircle2, XCircle, AlertCircle, List, Code2, Info } from "lucide-react";
 import { Panel, Button } from "@kletron/ui/components/design-system";
 import type { LlmConfig, LMStudioConfig, LMStudioModelConfig, VLLMConfig, VLLMModelConfig } from "@kletron/shared/schemas/llmConfig.schema";
 import { MODEL_RECOMMENDATIONS, LLM_PROVIDERS, type LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
@@ -63,6 +63,72 @@ interface LlmConfigViewProps {
   hideHeader?: boolean;
 }
 
+type CodexModelOption = {
+  id: string;
+  label: string;
+};
+
+type CodexLoginHint = {
+  verificationUrl?: string;
+  userCode?: string;
+  authUrl?: string;
+  loginId?: string;
+} | null;
+
+type CodexAccountState = {
+  accountType: string | null;
+  authMode: string | null;
+  planType: string | null;
+  requiresOpenaiAuth: boolean | null;
+  email: string | null;
+  connected: boolean;
+};
+
+type CodexConnectionTestResult = {
+  success: boolean;
+  error?: string;
+  latencyMs?: number;
+  healthRunning?: boolean;
+  modelCount?: number;
+  accountConnected?: boolean;
+};
+
+type LlmSettingsSection = LlmProviderType | "codex";
+
+function normalizeCodexString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "[REDACTED]") return null;
+  return trimmed;
+}
+
+function parseCodexAccountState(payload: unknown): CodexAccountState {
+  const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const account = root.account && typeof root.account === "object" ? (root.account as Record<string, unknown>) : null;
+
+  const accountType = normalizeCodexString(account?.type);
+  const authMode =
+    normalizeCodexString(root.authMode) ??
+    normalizeCodexString(account?.authMode) ??
+    (accountType === "chatgpt" ? "chatgpt" : accountType === "apiKey" ? "apikey" : null);
+  const planType = normalizeCodexString(root.planType) ?? normalizeCodexString(account?.planType);
+  const requiresOpenaiAuth = typeof root.requiresOpenaiAuth === "boolean" ? root.requiresOpenaiAuth : null;
+  const email = normalizeCodexString(account?.email);
+
+  const connectedByAccount = accountType === "chatgpt" || accountType === "apiKey" || accountType === "amazonBedrock";
+  const connectedByAuthMode = Boolean(authMode && !["none", "unknown", "disconnected"].includes(authMode));
+  const connectedByLegacyState = Boolean(planType && requiresOpenaiAuth === false);
+
+  return {
+    accountType,
+    authMode,
+    planType,
+    requiresOpenaiAuth,
+    email,
+    connected: connectedByAccount || connectedByAuthMode || connectedByLegacyState,
+  };
+}
+
 export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
   const [config, setConfig] = useState<LlmConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -110,6 +176,59 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
   // Enabled providers state
   const [enabledProviders, setEnabledProviders] = useState<LlmProviderType[]>([...LLM_PROVIDERS]);
   const [togglingProvider, setTogglingProvider] = useState<string | null>(null);
+  const [codexLoading, setCodexLoading] = useState(false);
+  const [codexBusy, setCodexBusy] = useState(false);
+  const [codexHealth, setCodexHealth] = useState<any>(null);
+  const [codexAccount, setCodexAccount] = useState<any>(null);
+  const [codexRateLimits, setCodexRateLimits] = useState<any>(null);
+  const [codexModels, setCodexModels] = useState<CodexModelOption[]>([]);
+  const [selectedCodexModel, setSelectedCodexModel] = useState("");
+  const [codexExecutionBackend, setCodexExecutionBackend] = useState<"langgraph" | "codex">("langgraph");
+  const [codexLoginHint, setCodexLoginHint] = useState<CodexLoginHint>(null);
+  const [codexError, setCodexError] = useState<string | null>(null);
+  const [codexTesting, setCodexTesting] = useState(false);
+  const [codexTestResult, setCodexTestResult] = useState<CodexConnectionTestResult | null>(null);
+  const [selectedSettingsSection, setSelectedSettingsSection] = useState<LlmSettingsSection>("azure");
+
+  const codexAccountState = useMemo(() => parseCodexAccountState(codexAccount), [codexAccount]);
+  const codexAuthMode = codexAccountState.authMode;
+  const codexPlanType = codexAccountState.planType;
+  const codexConnected = codexAccountState.connected;
+  const codexHasDeviceCode = Boolean(codexLoginHint?.verificationUrl && codexLoginHint?.userCode);
+  const codexWaitingValidation = !codexConnected && codexHasDeviceCode;
+  const codexHealthLabel = codexHealth?.running ? "running" : codexHealth?.enabled === false ? "disabled" : "stopped";
+  const codexHealthTone = codexHealth?.running
+    ? "text-status-success-text border-status-success-border bg-status-success-bg/30"
+    : codexHealth?.enabled === false
+      ? "text-status-error-text border-status-error-border bg-status-error-bg/30"
+      : "text-status-warning-text border-status-warning-border bg-status-warning-bg/30";
+  const codexStep1Done = codexConnected || codexHasDeviceCode;
+  const codexStep2Done = codexConnected;
+  const codexStep3Done = codexExecutionBackend === "codex";
+  const codexStatusLabel = codexConnected ? "Connecté" : codexWaitingValidation ? "En attente de validation" : "Non connecté";
+  const codexStatusTone = codexConnected
+    ? "border-status-success-border bg-status-success-bg text-status-success-text"
+    : codexWaitingValidation
+      ? "border-status-warning-border bg-status-warning-bg text-status-warning-text"
+      : "border-border-subtle bg-bg-elevated text-text-muted";
+
+  const normalizeCodexModels = (input: unknown): CodexModelOption[] => {
+    const raw = Array.isArray((input as any)?.models) ? (input as any).models : Array.isArray(input) ? input : [];
+    const out: CodexModelOption[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const id = typeof (item as any).id === "string" ? (item as any).id : "";
+      if (!id) continue;
+      const label =
+        typeof (item as any).displayName === "string"
+          ? (item as any).displayName
+          : typeof (item as any).name === "string"
+            ? (item as any).name
+            : id;
+      out.push({ id, label });
+    }
+    return out;
+  };
 
   const fetchConfig = async () => {
     try {
@@ -117,6 +236,10 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
       if (!res.ok) throw new Error("Failed to fetch config");
       const data = await res.json();
       setConfig(data);
+      const providerFromConfig = typeof data?.provider === "string" ? data.provider : null;
+      if (providerFromConfig && LLM_PROVIDERS.includes(providerFromConfig as LlmProviderType)) {
+        setSelectedSettingsSection(providerFromConfig as LlmProviderType);
+      }
 
       // Initialize forms
       if (data.azure) setAzureForm(data.azure);
@@ -152,9 +275,43 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
     }
   };
 
+  const fetchCodexState = async () => {
+    setCodexLoading(true);
+    setCodexError(null);
+    try {
+      const [healthRes, accountRes, modelsRes, limitsRes, prefsRes] = await Promise.all([
+        fetch("/api/codex/health"),
+        fetch("/api/codex/account?refreshToken=true"),
+        fetch("/api/codex/models"),
+        fetch("/api/codex/rate-limits"),
+        fetch("/api/user-preferences"),
+      ]);
+
+      const health = healthRes.ok ? await healthRes.json().catch(() => null) : null;
+      const account = accountRes.ok ? await accountRes.json().catch(() => null) : null;
+      const modelsPayload = modelsRes.ok ? await modelsRes.json().catch(() => null) : null;
+      const limits = limitsRes.ok ? await limitsRes.json().catch(() => null) : null;
+      const prefsPayload = prefsRes.ok ? await prefsRes.json().catch(() => null) : null;
+
+      setCodexHealth(health);
+      setCodexAccount(account);
+      setCodexRateLimits(limits);
+      setCodexModels(normalizeCodexModels(modelsPayload));
+
+      const prefs = prefsPayload?.preferences ?? null;
+      setSelectedCodexModel(typeof prefs?.selectedCodexModel === "string" ? prefs.selectedCodexModel : "");
+      setCodexExecutionBackend(prefs?.executionBackend === "codex" ? "codex" : "langgraph");
+    } catch (error) {
+      setCodexError((error as Error)?.message ?? "Failed to load Codex status");
+    } finally {
+      setCodexLoading(false);
+    }
+  };
+
   useEffect(() => {
     void fetchConfig();
     void fetchEnabledProviders();
+    void fetchCodexState();
   }, []);
 
   const showMessage = (type: "success" | "error", text: string) => {
@@ -163,6 +320,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
   };
 
   const handleProviderChange = async (provider: LlmProviderType) => {
+    setSelectedSettingsSection(provider);
     setSaving(true);
     try {
       const res = await fetch("/api/llm-config", {
@@ -275,11 +433,205 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
     }
   };
 
+  const saveCodexPreferences = async (patch: Record<string, unknown>) => {
+    await fetch("/api/user-preferences", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+  };
+
+  const openUrl = async (url: string) => {
+    if (!url) return;
+    const desktop = (window as any)?.kletron;
+    if (desktop?.openExternal) {
+      await desktop.openExternal(url);
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const handleCodexLogin = async (type: "chatgptDeviceCode" | "chatgpt") => {
+    setCodexBusy(true);
+    setCodexError(null);
+    setCodexLoginHint(null);
+    try {
+      const res = await fetch("/api/codex/account/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error || "Login failed");
+      const hint: CodexLoginHint = {
+        verificationUrl: typeof payload?.verificationUrl === "string" ? payload.verificationUrl : undefined,
+        userCode: typeof payload?.userCode === "string" ? payload.userCode : undefined,
+        authUrl: typeof payload?.authUrl === "string" ? payload.authUrl : undefined,
+        loginId: typeof payload?.loginId === "string" ? payload.loginId : undefined,
+      };
+      setCodexLoginHint(hint);
+      if (hint.authUrl) {
+        await openUrl(hint.authUrl);
+      }
+      // Poll account state for up to 2 minutes so device-code validation updates automatically.
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < 120_000) {
+        const accountRes = await fetch("/api/codex/account?refreshToken=true");
+        const accountPayload = accountRes.ok ? await accountRes.json().catch(() => null) : null;
+        if (accountPayload) {
+          setCodexAccount(accountPayload);
+        }
+        const accountState = parseCodexAccountState(accountPayload);
+        if (accountState.connected) {
+          await fetchCodexState();
+          setCodexLoginHint(null);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+      }
+      await fetchCodexState();
+    } catch (error) {
+      setCodexError((error as Error)?.message ?? "Failed to start Codex login");
+    } finally {
+      setCodexBusy(false);
+    }
+  };
+
+  const handleCodexLogout = async () => {
+    setCodexBusy(true);
+    setCodexError(null);
+    try {
+      const res = await fetch("/api/codex/account/logout", { method: "POST" });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload?.error || "Logout failed");
+      }
+      setCodexLoginHint(null);
+      await fetchCodexState();
+    } catch (error) {
+      setCodexError((error as Error)?.message ?? "Failed to logout from Codex");
+    } finally {
+      setCodexBusy(false);
+    }
+  };
+
+  const handleCodexModelChange = async (value: string) => {
+    setSelectedCodexModel(value);
+    try {
+      await saveCodexPreferences({ selectedCodexModel: value || null });
+    } catch (error) {
+      setCodexError((error as Error)?.message ?? "Failed to save Codex model");
+    }
+  };
+
+  const handleCodexExecutionBackendChange = async (value: "langgraph" | "codex") => {
+    setCodexExecutionBackend(value);
+    try {
+      await saveCodexPreferences({ executionBackend: value });
+    } catch (error) {
+      setCodexError((error as Error)?.message ?? "Failed to save execution backend");
+    }
+  };
+
+  const inputFieldClass =
+    "w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all";
+
+  const handleCodexTestConnection = async () => {
+    setCodexTesting(true);
+    setCodexTestResult(null);
+    setCodexError(null);
+    const started = typeof performance !== "undefined" ? performance.now() : Date.now();
+    try {
+      const [healthRes, modelsRes, accountRes] = await Promise.all([
+        fetch("/api/codex/health"),
+        fetch("/api/codex/models"),
+        fetch("/api/codex/account?refreshToken=true"),
+      ]);
+
+      const latencyMs = Math.round(
+        (typeof performance !== "undefined" ? performance.now() : Date.now()) - started,
+      );
+
+      const readJson = async (res: Response) => {
+        try {
+          return await res.json();
+        } catch {
+          return null;
+        }
+      };
+
+      if (healthRes.status === 401 || modelsRes.status === 401 || accountRes.status === 401) {
+        setCodexTestResult({
+          success: false,
+          error: "Unauthorized — sign in to Kletron first.",
+          latencyMs,
+        });
+        return;
+      }
+
+      const healthPayload = await readJson(healthRes);
+      const modelsPayload = await readJson(modelsRes);
+      const accountPayload = await readJson(accountRes);
+
+      let error: string | undefined;
+      if (!healthRes.ok) {
+        error =
+          typeof healthPayload?.error === "string"
+            ? healthPayload.error
+            : `Health check failed (${healthRes.status})`;
+      }
+
+      if (!modelsRes.ok && !error) {
+        error =
+          typeof modelsPayload?.error === "string"
+            ? modelsPayload.error
+            : `Models request failed (${modelsRes.status})`;
+      }
+
+      const healthRunning = Boolean(healthPayload && typeof healthPayload === "object" && (healthPayload as any).running);
+      const modelsList = normalizeCodexModels(modelsPayload);
+      const accountState = parseCodexAccountState(accountPayload);
+
+      if (!error && !healthRunning) {
+        error = "Codex bridge is not running — start the Codex CLI / desktop bridge.";
+      }
+
+      const success = !error && healthRunning && modelsRes.ok;
+
+      if (healthRes.ok && healthPayload) {
+        setCodexHealth(healthPayload);
+      }
+      if (accountRes.ok && accountPayload) {
+        setCodexAccount(accountPayload);
+      }
+      if (modelsRes.ok) {
+        setCodexModels(modelsList);
+      }
+
+      setCodexTestResult({
+        success,
+        error: success ? undefined : error,
+        latencyMs,
+        healthRunning,
+        modelCount: modelsList.length,
+        accountConnected: accountState.connected,
+      });
+    } catch (err) {
+      setCodexTestResult({
+        success: false,
+        error: err instanceof Error ? err.message : "Failed to test Codex connection",
+      });
+    } finally {
+      setCodexTesting(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-8 text-text-muted">Loading configuration...</div>;
   }
 
   const activeProvider = config?.provider;
+  const isCodexSectionSelected = selectedSettingsSection === "codex";
 
   return (
     <div className="flex h-full flex-col bg-bg-app overflow-hidden">
@@ -319,30 +671,64 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
           </div>
         )}
 
+        <Panel className="border border-status-info-border/60 bg-status-info-bg/15 p-4">
+          <div className="flex gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-status-info-bg text-status-info-text">
+              <Info className="h-4 w-4" aria-hidden />
+            </div>
+            <div className="min-w-0 space-y-3 text-xs leading-relaxed text-text-secondary">
+              <p className="font-semibold text-text-primary">Deux modes dans l’app</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg border border-border-subtle bg-bg-app/80 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">Normal · LangGraph</p>
+                  <p className="mt-1.5 text-[11px] text-text-secondary">
+                    Choisis un <strong className="text-text-primary">provider</strong> (cartes) + <strong className="text-text-primary">graph</strong> dans l’Agent. C’est le flux Kletron classique (automatisations incluses).
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border-subtle bg-bg-app/80 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">ChatGPT · Codex</p>
+                  <p className="mt-1.5 text-[11px] text-text-secondary">
+                    Interrupteur <strong className="text-text-primary">LangGraph | Codex</strong> dans l’Agent + carte Codex ici. Pas de graph Kletron ni de provider LM Studio requis pour chatter.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Panel>
+
         {/* Provider Selection */}
         <Panel className="p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Select Active Provider</h2>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Provider LangGraph (chat &amp; automations)</h2>
+              <p className="mt-1 text-[11px] text-text-muted">
+                Choisis le modèle cloud ou local pour les agents orchestrés par Kletron — pas pour les threads Codex.
+              </p>
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {PROVIDERS.map((provider) => {
               const Icon = provider.icon;
-              const isActive = activeProvider === provider.id;
+              const isActiveProvider = activeProvider === provider.id;
+              const isSelectedSection = selectedSettingsSection === provider.id;
               const isEnabled = enabledProviders.includes(provider.id);
               const isToggling = togglingProvider === provider.id;
               return (
                 <div
                   key={provider.id}
-                  onClick={() => isEnabled && void handleProviderChange(provider.id)}
+                  onClick={() => {
+                    if (!isEnabled) return;
+                    void handleProviderChange(provider.id);
+                  }}
                   className={`group relative p-4 rounded-lg border-2 transition-all ${!isEnabled
                     ? "opacity-50 border-border-subtle bg-bg-elevated/30 cursor-not-allowed"
-                    : isActive
+                    : isSelectedSection
                       ? "cursor-pointer border-status-success-border bg-bg-surface"
                       : "cursor-pointer border-border-subtle bg-bg-elevated/50 hover:border-border-strong"
                     }`}
                 >
                   {/* Active indicator */}
-                  {isActive && (
+                  {isActiveProvider && (
                     <div className="absolute top-3 right-10 text-status-success-text">
                       <Check className="h-4 w-4" />
                     </div>
@@ -350,20 +736,20 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
                   {/* Enable/Disable toggle */}
                   <button
                     onClick={(e) => void handleToggleProvider(provider.id, e)}
-                    disabled={isToggling || (isActive && isEnabled)}
+                    disabled={isToggling || (isActiveProvider && isEnabled)}
                     className={`absolute top-3 right-3 p-1 rounded transition-colors ${isToggling
                       ? "animate-pulse"
                       : isEnabled
                         ? "text-status-success-text hover:bg-status-success-bg"
                         : "text-text-muted hover:bg-text-muted/10"
-                      } ${isActive && isEnabled ? "opacity-30 cursor-not-allowed" : ""}`}
-                    title={isActive && isEnabled ? "Cannot disable active provider" : isEnabled ? "Disable provider" : "Enable provider"}
+                      } ${isActiveProvider && isEnabled ? "opacity-30 cursor-not-allowed" : ""}`}
+                    title={isActiveProvider && isEnabled ? "Cannot disable active provider" : isEnabled ? "Disable provider" : "Enable provider"}
                   >
                     <Power className="h-4 w-4" />
                   </button>
                   <div className="flex items-start gap-4">
                     <div
-                      className={`p-2 rounded-md transition-colors ${isActive
+                      className={`p-2 rounded-md transition-colors ${isSelectedSection
                         ? "bg-status-success-bg text-status-success-text"
                         : "bg-bg-elevated text-text-muted group-hover:text-text-primary"
                         }`}
@@ -372,7 +758,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
                     </div>
                     <div>
                       <h3
-                        className={`font-semibold ${isActive
+                        className={`font-semibold ${isSelectedSection
                           ? "text-text-primary"
                           : "text-text-secondary group-hover:text-text-primary"
                           }`}
@@ -385,13 +771,51 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
                 </div>
               );
             })}
+            <div
+              onClick={() => setSelectedSettingsSection("codex")}
+              className={`group relative cursor-pointer p-4 rounded-lg border-2 transition-all ${
+                isCodexSectionSelected
+                  ? "border-status-success-border bg-bg-surface"
+                  : "border-border-subtle bg-bg-elevated/50 hover:border-border-strong"
+              }`}
+            >
+              {isCodexSectionSelected && (
+                <div className="absolute top-3 right-3 text-status-success-text">
+                  <Check className="h-4 w-4" />
+                </div>
+              )}
+              <div className="flex items-start gap-4">
+                <div className={`p-2 rounded-md transition-colors ${
+                  isCodexSectionSelected
+                    ? "bg-status-success-bg text-status-success-text"
+                    : "bg-bg-elevated text-text-muted group-hover:text-text-primary"
+                }`}>
+                  <Code2 className="h-6 w-6" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className={`font-semibold transition-colors ${
+                    isCodexSectionSelected ? "text-text-primary" : "text-text-secondary group-hover:text-text-primary"
+                  }`}>Codex (ChatGPT)</h3>
+                  <p className="text-xs text-text-muted mt-1">Backend local géré par Codex, sans clé OpenAI dans Kletron.</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] ${codexStatusTone}`}>
+                      {codexConnected ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                      {codexStatusLabel}
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-border-subtle bg-bg-elevated px-2 py-1 text-[11px] text-text-muted">
+                      Backend: {codexExecutionBackend}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </Panel>
 
         {/* Configuration Forms */}
         <div className="mt-6 space-y-6">
           {/* Azure Form */}
-          {activeProvider === "azure" && (
+          {selectedSettingsSection === "azure" && (
             <ProviderForm
               title="Azure OpenAI Settings"
               icon={Cloud}
@@ -411,7 +835,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
           )}
 
           {/* OpenAI Form */}
-          {activeProvider === "openai" && (
+          {selectedSettingsSection === "openai" && (
             <ProviderForm
               title="OpenAI Settings"
               icon={Sparkles}
@@ -429,7 +853,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
           )}
 
           {/* Claude Form */}
-          {activeProvider === "claude" && (
+          {selectedSettingsSection === "claude" && (
             <ProviderForm
               title="Claude (Anthropic) Settings"
               icon={Bot}
@@ -446,7 +870,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
           )}
 
           {/* Gemini Form */}
-          {activeProvider === "gemini" && (
+          {selectedSettingsSection === "gemini" && (
             <ProviderForm
               title="Google Gemini Settings"
               icon={Globe}
@@ -463,7 +887,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
           )}
 
           {/* LM Studio Form */}
-          {activeProvider === "lmstudio" && (
+          {selectedSettingsSection === "lmstudio" && (
             <LMStudioConfigForm
               formData={lmstudioForm}
               setFormData={setLmstudioForm}
@@ -476,7 +900,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
           )}
 
           {/* Ollama Form */}
-          {activeProvider === "ollama" && (
+          {selectedSettingsSection === "ollama" && (
             <OllamaConfigForm
               formData={ollamaForm}
               setFormData={setOllamaForm}
@@ -486,7 +910,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
           )}
 
           {/* vLLM Form */}
-          {activeProvider === "vllm" && (
+          {selectedSettingsSection === "vllm" && (
             <VLLMConfigForm
               formData={vllmForm}
               setFormData={setVllmForm}
@@ -496,6 +920,296 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
               lastUpdatedAt={config?.updatedAt}
               onSave={() => saveProvider("vllm", vllmForm)}
             />
+          )}
+
+          {selectedSettingsSection === "codex" && (
+          <Panel className="p-0 overflow-hidden">
+            <div className="border-b border-border-subtle bg-bg-elevated/30 px-5 py-3">
+              <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
+                <Code2 className="h-4 w-4 text-status-info-text" />
+                Codex (ChatGPT)
+              </h2>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${codexStatusTone}`}>
+                  {codexConnected ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                  {codexStatusLabel}
+                </span>
+                <span className={`rounded-full border px-2 py-0.5 ${codexHealthTone}`}>Health: {codexHealthLabel}</span>
+                <span>Execution backend: {codexExecutionBackend}</span>
+                <span>Settings apply per session — no LLM provider switch needed.</span>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-5">
+              <p className="text-xs text-text-muted">
+                Connexion locale gérée par Codex. Aucun jeton ChatGPT n’est stocké côté cloud Kletron.
+              </p>
+
+              {codexError ? (
+                <div className="rounded-lg border border-status-error-border bg-status-error-bg px-3 py-2 text-xs text-status-error-text space-y-2">
+                  <p>{codexError}</p>
+                  {codexError.includes("Codex CLI not found") ? (
+                    <div className="border-t border-status-error-border/40 pt-2 text-text-secondary">
+                      <p className="font-medium text-text-primary">Installer le CLI sur cette machine</p>
+                      <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+                        <li>
+                          Depuis le dépôt Kletron:{" "}
+                          <code className="rounded bg-bg-app px-1 py-0.5 font-mono text-[11px] text-text-primary">npm install</code>{" "}
+                          (inclut <code className="font-mono text-[11px]">@openai/codex</code> en dev)
+                        </li>
+                        <li>
+                          Ou en global:{" "}
+                          <code className="rounded bg-bg-app px-1 py-0.5 font-mono text-[11px] text-text-primary">
+                            npm install -g @openai/codex
+                          </code>
+                        </li>
+                        <li>
+                          macOS:{" "}
+                          <code className="rounded bg-bg-app px-1 py-0.5 font-mono text-[11px] text-text-primary">
+                            brew install --cask codex
+                          </code>
+                        </li>
+                      </ul>
+                      <p className="mt-2 text-[11px] leading-relaxed">
+                        Redémarre le serveur de dev, puis <span className="font-mono">Test connection</span>. Si besoin, définis{" "}
+                        <code className="font-mono">KLETRON_CODEX_BINARY</code> dans <code className="font-mono">.env</code> (chemin
+                        absolu vers l’exécutable <code className="font-mono">codex</code>).
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {codexLoading ? (
+                <div className="flex items-center gap-2 text-xs text-text-muted">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading Codex status…
+                </div>
+              ) : null}
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className={`flex items-center justify-center rounded-lg border px-3 py-2 text-center text-xs font-medium ${codexHealthTone}`}>
+                  Bridge: {codexHealthLabel}
+                </div>
+                <div className="flex items-center justify-center rounded-lg border border-border-subtle bg-bg-app px-3 py-2 text-center text-xs text-text-secondary">
+                  Plan: <span className="ml-1 font-medium text-text-primary">{codexPlanType || "—"}</span>
+                </div>
+                <div className="flex items-center justify-center rounded-lg border border-border-subtle bg-bg-app px-3 py-2 text-center text-xs text-text-secondary">
+                  Auth: <span className="ml-1 font-mono font-medium text-text-primary">{codexAuthMode || "none"}</span>
+                </div>
+                <div className="flex items-center justify-center rounded-lg border border-border-subtle bg-bg-app px-3 py-2 text-center text-xs text-text-secondary">
+                  Models: <span className="ml-1 font-medium text-text-primary">{codexModels.length}</span>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void handleCodexTestConnection()}
+                  disabled={codexTesting}
+                  className="w-full"
+                >
+                  {codexTesting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Testing connection…
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="mr-2 h-4 w-4" />
+                      Test connection
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {codexTestResult ? (
+                <div
+                  className={`rounded-lg border p-4 ${
+                    codexTestResult.success
+                      ? "bg-status-success-bg border-status-success-border"
+                      : "bg-status-error-bg border-status-error-border"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    {codexTestResult.success ? (
+                      <CheckCircle2 className="h-5 w-5 text-status-success-text flex-shrink-0 mt-0.5" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-status-error-text flex-shrink-0 mt-0.5" />
+                    )}
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <p
+                        className={`text-sm font-semibold ${
+                          codexTestResult.success ? "text-status-success-text" : "text-status-error-text"
+                        }`}
+                      >
+                        {codexTestResult.success ? "Connection successful" : "Connection failed"}
+                      </p>
+                      {codexTestResult.error ? (
+                        <p className="text-xs text-status-error-text">{codexTestResult.error}</p>
+                      ) : null}
+                      {codexTestResult.success ? (
+                        <div className="text-xs text-text-secondary space-y-0.5">
+                          {codexTestResult.latencyMs != null ? <p>Round-trip: {codexTestResult.latencyMs}ms</p> : null}
+                          <p>Bridge running: {codexTestResult.healthRunning ? "yes" : "no"}</p>
+                          <p>Models listed: {codexTestResult.modelCount ?? 0}</p>
+                          <p>ChatGPT linked: {codexTestResult.accountConnected ? "yes" : "no"}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="rounded-lg border border-border-subtle bg-bg-elevated/40 p-4 space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Setup (3 steps)</h3>
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3 text-xs">
+                    <span
+                      className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                        codexStep1Done
+                          ? "border-status-success-border bg-status-success-bg text-status-success-text"
+                          : "border-border-subtle text-text-muted"
+                      }`}
+                    >
+                      1
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div>
+                        <div className="font-medium text-text-primary">Start login</div>
+                        <p className="mt-0.5 text-text-muted">Device code is recommended on desktop.</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => void handleCodexLogin("chatgptDeviceCode")} disabled={codexBusy}>
+                          {codexBusy ? "Connexion…" : "Login (device code)"}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => void handleCodexLogin("chatgpt")} disabled={codexBusy}>
+                          Browser login
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 text-xs">
+                    <span
+                      className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                        codexStep2Done
+                          ? "border-status-success-border bg-status-success-bg text-status-success-text"
+                          : "border-border-subtle text-text-muted"
+                      }`}
+                    >
+                      2
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div>
+                        <div className="font-medium text-text-primary">Confirm in the browser</div>
+                        {codexHasDeviceCode ? (
+                          <div className="mt-2 space-y-2 rounded-lg border border-border-subtle bg-bg-app p-3">
+                            <div className="text-text-muted">
+                              URL: <span className="break-all text-text-primary">{codexLoginHint?.verificationUrl}</span>
+                            </div>
+                            <div className="text-text-muted">
+                              Code:{" "}
+                              <span className="font-mono text-sm text-text-primary">{codexLoginHint?.userCode}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => void openUrl(codexLoginHint?.verificationUrl || "")}
+                                disabled={!codexLoginHint?.verificationUrl || codexBusy}
+                              >
+                                Open device page
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => void fetchCodexState()} disabled={codexBusy || codexLoading}>
+                                Check status
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-text-muted">The code appears here after step 1.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 text-xs">
+                    <span
+                      className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                        codexStep3Done
+                          ? "border-status-success-border bg-status-success-bg text-status-success-text"
+                          : "border-border-subtle text-text-muted"
+                      }`}
+                    >
+                      3
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <div>
+                        <div className="font-medium text-text-primary">Use Codex for new chats</div>
+                        <p className="mt-0.5 text-text-muted">Set execution backend to Codex on the agent screen or below.</p>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2 md:items-end">
+                        <label className="flex flex-col gap-1.5">
+                          <span className="text-xs font-medium text-text-secondary">Execution backend (new sessions)</span>
+                          <select
+                            value={codexExecutionBackend}
+                            onChange={(e) => void handleCodexExecutionBackendChange(e.target.value === "codex" ? "codex" : "langgraph")}
+                            className={inputFieldClass}
+                          >
+                            <option value="langgraph">LangGraph</option>
+                            <option value="codex">Codex</option>
+                          </select>
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => void fetchCodexState()} disabled={codexBusy || codexLoading}>
+                            Refresh
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => void handleCodexLogout()} disabled={codexBusy}>
+                            Logout
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-text-secondary">Codex model</span>
+                  <select
+                    value={selectedCodexModel}
+                    onChange={(e) => void handleCodexModelChange(e.target.value)}
+                    className={inputFieldClass}
+                  >
+                    <option value="">Default model</option>
+                    {codexModels.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="rounded-lg border border-border-subtle bg-bg-app px-4 py-3 text-xs text-text-muted leading-relaxed">
+                  <span className="font-medium text-text-secondary">Expected:</span> bridge running,{" "}
+                  <span className="font-mono text-text-primary">Auth: chatgpt</span>, account connected.
+                  {codexAccountState.email ? (
+                    <div className="mt-2 text-text-secondary">
+                      Account: <span className="text-text-primary">{codexAccountState.email}</span>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              {codexRateLimits ? (
+                <details className="rounded-lg border border-border-subtle bg-bg-app px-4 py-3 text-xs text-text-muted">
+                  <summary className="cursor-pointer select-none font-medium text-text-secondary">Rate limits</summary>
+                  <pre className="mt-2 overflow-auto whitespace-pre-wrap text-[11px]">{JSON.stringify(codexRateLimits, null, 2)}</pre>
+                </details>
+              ) : null}
+            </div>
+          </Panel>
           )}
         </div>
       </div>

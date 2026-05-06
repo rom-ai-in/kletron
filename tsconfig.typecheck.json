@@ -19,6 +19,7 @@
     "apps/web/pages/**/*.tsx",
     "packages/agent-core/src/**/*.ts",
     "packages/bridge/src/**/*.ts",
+    "packages/codex-bridge/src/**/*.ts",
     "packages/mcp-client/src/**/*.ts",
     "packages/server/src/**/*.ts",
     "packages/shared/src/**/*.ts",

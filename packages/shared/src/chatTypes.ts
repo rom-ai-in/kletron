@@ -224,7 +224,19 @@ export type AgentStreamKpiV1 = {
 };
 
 export type StreamChunk =
-    | { type: 'init'; payload: { runId: string; graphId: string; skills?: ThreadSkillState } }
+    | {
+          type: 'init';
+          payload: {
+              runId: string;
+              graphId: string;
+              skills?: ThreadSkillState;
+              /**
+               * Exact user-turn text used in streamed `eventStream` rows (after server slash/skill preflight).
+               * Clients must match snapshots against this when it differs from the composed input.
+               */
+              turnAnchorMessage?: string;
+          };
+      }
     | { type: 'update'; payload: AgentWorkflowUpdate }
     | { type: 'text_delta'; payload: { content: string } }
     | { type: 'reasoning_delta'; payload: { content: string } }
@@ -249,6 +261,13 @@ export interface ConversationHistoryItem {
     workMode?: WorkModeId;
     /** Exhaustive (default) vs fast agent depth; omitted on older runs. */
     researchDepth?: ResearchDepthId;
+    /** Which execution engine produced this thread. */
+    executionBackend?: "langgraph" | "codex";
+    /** Codex metadata (present when executionBackend === "codex"). */
+    codexThreadId?: string | null;
+    codexTurnId?: string | null;
+    codexModel?: string | null;
+    codexSandboxMode?: "read-only" | "workspace-write" | "danger-full-access" | null;
 }
 
 /** Conversation detail (thread detail with history). */
@@ -259,6 +278,8 @@ export interface ConversationDetail extends ConversationHistoryItem {
     source?: string | null;
     workspaceId?: string | null;
     skills?: ThreadSkillState;
+    codexTurnId?: string | null;
+    codexSandboxMode?: "read-only" | "workspace-write" | "danger-full-access" | null;
 }
 
 /** Message type for the web-app simple chat view. */

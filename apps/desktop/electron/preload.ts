@@ -37,11 +37,29 @@ export type UpdateStatus = {
   releaseNotes?: string;
 };
 
+export type CodexHealth = {
+  enabled: boolean;
+  available: boolean;
+  binaryPath: string | null;
+  version?: string | null;
+  error?: string | null;
+};
+
+export type CodexDiagnostics = {
+  binaryPath: string;
+  ok: boolean;
+  version?: string;
+  error?: string;
+};
+
 const api = {
   selectWorkspace: (): Promise<WorkspaceInfo | null> => ipcRenderer.invoke("app:selectWorkspace"),
   setWorkspace: (workspacePath: string): Promise<WorkspaceInfo | null> => ipcRenderer.invoke("app:setWorkspace", workspacePath),
   getWorkspace: (): Promise<WorkspaceInfo | null> => ipcRenderer.invoke("app:getWorkspace"),
   openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke("app:openExternal", url),
+  openCodexAuthUrl: (url: string): Promise<boolean> => ipcRenderer.invoke("codex:openAuthUrl", url),
+  getCodexHealth: (): Promise<CodexHealth> => ipcRenderer.invoke("codex:health"),
+  getCodexDiagnostics: (): Promise<CodexDiagnostics> => ipcRenderer.invoke("codex:diagnostics"),
   /** OS-level: block system sleep while agent work is running (main uses `powerSaveBlocker`). */
   setPreventSleep: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke("app:setPreventSleep", enabled),
   openInVSCode: (targetPath?: string): Promise<boolean> => ipcRenderer.invoke("app:openInVSCode", targetPath),

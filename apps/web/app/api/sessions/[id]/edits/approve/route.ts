@@ -21,6 +21,7 @@ import {
     isMcpBundledToolNotFoundError,
 } from "@kletron/server/services/bundledToolApprovalFallback";
 import { resolveApprovedToolArgs } from "@kletron/server/services/approvedToolArgs";
+import { codexExecutionService, type CodexApprovalDecision } from "@kletron/server/services/codexExecutionService";
 
 const safeEditGate = SafeEditGate.getInstance();
 
@@ -30,6 +31,13 @@ const EVICT_CHARS = Number.isFinite(Number.parseInt(process.env.TOOL_RESULT_EVIC
 const PREVIEW_CHARS = Number.isFinite(Number.parseInt(process.env.TOOL_RESULT_PREVIEW_CHARS ?? "", 10))
   ? Number.parseInt(process.env.TOOL_RESULT_PREVIEW_CHARS ?? "", 10)
   : 2000;
+
+function parseApprovalDecision(input: unknown, fallback: CodexApprovalDecision): CodexApprovalDecision {
+  if (input === "accept") return "accept";
+  if (input === "acceptForSession") return "acceptForSession";
+  if (input === "decline") return "decline";
+  return fallback;
+}
 
 const stringifyResult = (raw: unknown) => {
   if (typeof raw === "string") return raw;
@@ -143,6 +151,45 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const body = await request.json().catch(() => ({} as Record<string, unknown>));
   const editId = typeof body?.editId === "string" ? body.editId : "";
   const action = typeof body?.action === "string" ? body.action : "";
+  const decision = parseApprovalDecision(body?.decision, "accept");
+
+  if (run.executionBackend === "codex") {
+    const listApprovals = async () => {
+      const latestRun = await agentGraphRunService.getRun(params.id);
+      const approvals = (latestRun?.state as any)?.approvals ?? {};
+      return {
+        pending: Array.isArray(approvals.pending) ? approvals.pending : [],
+        granted: Array.isArray(approvals.granted) ? approvals.granted : [],
+        rejected: Array.isArray(approvals.rejected) ? approvals.rejected : [],
+      };
+    };
+
+    if (action === "all") {
+      const pending = codexExecutionService.listPendingApprovals(params.id);
+      const processed: Array<{ id: string; ok: boolean }> = [];
+      for (const approval of pending) {
+        const ok = await codexExecutionService.resolveApproval(params.id, approval.id, decision);
+        processed.push({ id: approval.id, ok });
+      }
+      return NextResponse.json({
+        approved: decision === "decline" ? [] : pending,
+        processed,
+        approvals: await listApprovals(),
+      });
+    }
+
+    if (!editId) {
+      return NextResponse.json({ error: "editId is required" }, { status: 400 });
+    }
+    const ok = await codexExecutionService.resolveApproval(params.id, editId, decision);
+    if (!ok) {
+      return NextResponse.json({ error: "Edit not found" }, { status: 404 });
+    }
+    return NextResponse.json({
+      approved: decision === "decline" ? null : { id: editId, decision },
+      approvals: await listApprovals(),
+    });
+  }
 
   const executeEdit = async (edit: any) => {
     const toolName = String(edit.toolName ?? "");

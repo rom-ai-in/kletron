@@ -7,10 +7,11 @@ export type PendingSessionEditsStripProps = {
     pendingEdits: SessionPendingEdit[];
     flushNotice: SessionEditFlushNotice | null;
     dismissFlushNotice: () => void;
-    processingOp: { editId: string; op: "approve" | "reject" } | null;
+    processingOp: { editId: string; op: "approve" | "approve_session" | "reject" } | null;
     approvingAll: boolean;
     rejectingAll: boolean;
     approveEdit: (editId: string, toolName?: string) => void | Promise<void>;
+    approveEditForSession: (editId: string, toolName?: string) => void | Promise<void>;
     rejectEdit: (editId: string, toolName?: string) => void | Promise<void>;
     approveAll: () => void | Promise<void>;
     rejectAll: () => void | Promise<void>;
@@ -31,6 +32,7 @@ export function PendingSessionEditsStrip({
     approvingAll,
     rejectingAll,
     approveEdit,
+    approveEditForSession,
     rejectEdit,
     approveAll,
     rejectAll,
@@ -64,6 +66,15 @@ export function PendingSessionEditsStrip({
                                         {formatToolDisplayName(flushNotice.toolName)}
                                     </span>
                                     . Conversation continues above.
+                                </>
+                            )}
+                            {flushNotice.kind === "approved_session" && (
+                                <>
+                                    Approved for this session:{' '}
+                                    <span className="font-medium" title={flushNotice.toolName}>
+                                        {formatToolDisplayName(flushNotice.toolName)}
+                                    </span>
+                                    .
                                 </>
                             )}
                             {flushNotice.kind === "rejected" && (
@@ -126,6 +137,7 @@ export function PendingSessionEditsStrip({
                             {pendingEdits.map((edit) => {
                                 const busy = processingOp?.editId === edit.id;
                                 const approvingThis = busy && processingOp?.op === "approve";
+                                const approvingSessionThis = busy && processingOp?.op === "approve_session";
                                 const rejectingThis = busy && processingOp?.op === "reject";
                                 const desc = edit.description?.trim();
                                 const title = [
@@ -164,6 +176,21 @@ export function PendingSessionEditsStrip({
                                                     </>
                                                 ) : (
                                                     "Approve"
+                                                )}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => void approveEditForSession(edit.id, edit.toolName)}
+                                                disabled={busy || approvingAll || rejectingAll}
+                                                className="inline-flex items-center gap-0.5 rounded border border-status-success-border bg-status-success-bg px-1.5 py-0.5 text-[9px] text-status-success-text hover:opacity-80 disabled:opacity-50"
+                                            >
+                                                {approvingSessionThis ? (
+                                                    <>
+                                                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                                                        <span>Approving…</span>
+                                                    </>
+                                                ) : (
+                                                    "Session"
                                                 )}
                                             </button>
                                             <button

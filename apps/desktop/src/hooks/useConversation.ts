@@ -100,6 +100,8 @@ export function useConversation(
   const [conversationRunSource, setConversationRunSource] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [researchDepth, setResearchDepth] = useState<ResearchDepthId>("exhaustive");
+  const [executionBackend, setExecutionBackend] = useState<"langgraph" | "codex">("langgraph");
+  const [selectedCodexModel, setSelectedCodexModel] = useState<string>("");
 
   const getRequestHeaders = useCallback(async () => {
     const token = await getAccessToken();
@@ -151,6 +153,8 @@ export function useConversation(
   const stream = useSessionStream({
     sessionId: conversationId,
     selectedGraphId: selectedGraph ?? "",
+    executionBackend,
+    codexModel: selectedCodexModel || null,
     llmProvider: modelConfig?.provider ?? "azure",
     llmModel: resolveLlmModel(modelConfig),
     workspaceId: activeWorkspaceId ?? null,
@@ -168,6 +172,30 @@ export function useConversation(
     onTitleGenerate,
     researchDepth,
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const headers = await getRequestHeaders();
+        const res = await fetch(`${backendUrlTrimmed}/api/user-preferences`, {
+          method: "GET",
+          headers,
+        });
+        if (!res.ok) return;
+        const payload = await res.json().catch(() => null);
+        const prefs = payload?.preferences ?? null;
+        if (cancelled || !prefs) return;
+        setExecutionBackend(prefs.executionBackend === "codex" ? "codex" : "langgraph");
+        setSelectedCodexModel(typeof prefs.selectedCodexModel === "string" ? prefs.selectedCodexModel : "");
+      } catch {
+        // best effort only
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [backendUrlTrimmed, getRequestHeaders]);
 
   const sessionEdits = useSessionEdits({
     sessionId: conversationId,

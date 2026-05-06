@@ -14,13 +14,25 @@ export function getComposerConnectionState(args: {
   activeWorkspaceId: string | null;
   llmStatus: LlmStatusForComposer;
   llmProviderLabel: string;
+  /**
+   * When true (Codex execution path), LangGraph LLM reachability is optional — do not treat
+   * error/none as a broken connection for the composer chrome.
+   */
+  langGraphLlmOptional?: boolean;
 }): {
   connected: ComposerConnectionDot;
   connectionLabel: string;
   composerDisabled: boolean;
 } {
-  const { backendUrlValid, backendConnected, hasAccessToken, activeWorkspaceId, llmStatus, llmProviderLabel } =
-    args;
+  const {
+    backendUrlValid,
+    backendConnected,
+    hasAccessToken,
+    activeWorkspaceId,
+    llmStatus,
+    llmProviderLabel,
+    langGraphLlmOptional,
+  } = args;
   const label = llmProviderLabel.trim() || "LLM";
 
   if (!backendUrlValid) {
@@ -34,6 +46,14 @@ export function getComposerConnectionState(args: {
   }
   if (!activeWorkspaceId) {
     return { connected: false, connectionLabel: "Select a workspace", composerDisabled: true };
+  }
+
+  if (langGraphLlmOptional && (llmStatus === "error" || llmStatus === "none")) {
+    return {
+      connected: true,
+      connectionLabel: "Codex mode — LangGraph LLM not required",
+      composerDisabled: false,
+    };
   }
 
   if (llmStatus === "loading") {

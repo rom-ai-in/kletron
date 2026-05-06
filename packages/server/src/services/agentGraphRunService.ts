@@ -71,6 +71,13 @@ export type CreateRunOptions = {
     createdByUserId?: string;
     /** Agent research depth (default exhaustive). */
     researchDepth?: ResearchDepthId | string;
+    /** Execution backend for this run (default langgraph). */
+    executionBackend?: "langgraph" | "codex";
+    /** Optional initial Codex thread metadata. */
+    codexThreadId?: string;
+    codexTurnId?: string;
+    codexModel?: string;
+    codexSandboxMode?: "read-only" | "workspace-write" | "danger-full-access";
 };
 
 export class AgentGraphRunService {
@@ -104,6 +111,11 @@ export class AgentGraphRunService {
             ...(options?.workMode ? { workMode: options.workMode } : {}),
             ...(options?.createdByUserId ? { createdByUserId: options.createdByUserId } : {}),
             researchDepth: normalizeResearchDepth(options?.researchDepth),
+            executionBackend: options?.executionBackend ?? "langgraph",
+            ...(options?.codexThreadId ? { codexThreadId: options.codexThreadId } : {}),
+            ...(options?.codexTurnId ? { codexTurnId: options.codexTurnId } : {}),
+            ...(options?.codexModel ? { codexModel: options.codexModel } : {}),
+            ...(options?.codexSandboxMode ? { codexSandboxMode: options.codexSandboxMode } : {}),
             status: "PENDING",
             startedAt: new Date(),
             nodeOrder: [],

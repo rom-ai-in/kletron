@@ -304,6 +304,22 @@ export function useWorkspaceConnectors(workspaceId: string) {
         [workspaceId, refresh]
     );
 
+    /** Permanently removes credentials from the account and drops all workspace bindings. */
+    const deleteAccountIntegration = useCallback(
+        async (integrationId: string) => {
+            const res = await fetch(
+                `/api/account/connectors/integrations/${encodeURIComponent(integrationId)}`,
+                { method: "DELETE" }
+            );
+            if (!res.ok) {
+                const json = await res.json().catch(() => ({}));
+                throw new Error(json.error ?? `Failed (${res.status})`);
+            }
+            await refresh({ force: true });
+        },
+        [refresh]
+    );
+
     return {
         integrations,
         mcpServers,
@@ -313,6 +329,7 @@ export function useWorkspaceConnectors(workspaceId: string) {
         createIntegration,
         updateIntegration,
         deleteIntegration,
+        deleteAccountIntegration,
         testIntegration,
         createMcpServer,
         updateMcpServer,

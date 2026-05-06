@@ -3,8 +3,16 @@ import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import type { AgentEvent } from "@kletron/shared/types";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { SafeEditGate } from "@kletron/server/services/agent/SafeEditGate";
+import { codexExecutionService, type CodexApprovalDecision } from "@kletron/server/services/codexExecutionService";
 
 const safeEditGate = SafeEditGate.getInstance();
+
+function parseApprovalDecision(input: unknown, fallback: CodexApprovalDecision): CodexApprovalDecision {
+  if (input === "accept") return "accept";
+  if (input === "acceptForSession") return "acceptForSession";
+  if (input === "decline") return "decline";
+  return fallback;
+}
 
 /**
  * Fire-and-forget: resume the agent loop after a rejected tool call.
@@ -87,6 +95,45 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const body = await request.json().catch(() => ({} as Record<string, unknown>));
   const editId = typeof body?.editId === "string" ? body.editId : "";
   const action = typeof body?.action === "string" ? body.action : "";
+  const decision = parseApprovalDecision(body?.decision, "decline");
+
+  if (run.executionBackend === "codex") {
+    const listApprovals = async () => {
+      const latestRun = await agentGraphRunService.getRun(params.id);
+      const approvals = (latestRun?.state as any)?.approvals ?? {};
+      return {
+        pending: Array.isArray(approvals.pending) ? approvals.pending : [],
+        granted: Array.isArray(approvals.granted) ? approvals.granted : [],
+        rejected: Array.isArray(approvals.rejected) ? approvals.rejected : [],
+      };
+    };
+
+    if (action === "all") {
+      const pending = codexExecutionService.listPendingApprovals(params.id);
+      const processed: Array<{ id: string; ok: boolean }> = [];
+      for (const approval of pending) {
+        const ok = await codexExecutionService.resolveApproval(params.id, approval.id, decision);
+        processed.push({ id: approval.id, ok });
+      }
+      return NextResponse.json({
+        rejected: decision === "decline" ? pending : [],
+        processed,
+        approvals: await listApprovals(),
+      });
+    }
+
+    if (!editId) {
+      return NextResponse.json({ error: "editId is required" }, { status: 400 });
+    }
+    const ok = await codexExecutionService.resolveApproval(params.id, editId, decision);
+    if (!ok) {
+      return NextResponse.json({ error: "Edit not found" }, { status: 404 });
+    }
+    return NextResponse.json({
+      rejected: decision === "decline" ? { id: editId, decision } : null,
+      approvals: await listApprovals(),
+    });
+  }
 
   const updateRunApprovals = async (update: Record<string, any>) => {
     const latestRun = await agentGraphRunService.getRun(params.id);

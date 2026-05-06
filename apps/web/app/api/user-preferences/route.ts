@@ -23,6 +23,8 @@ export async function GET(request: Request) {
                 userId: auth.userId,
                 selectedLlmProvider: null,
                 selectedGraphId: null,
+                executionBackend: "langgraph",
+                selectedCodexModel: null,
                 updatedAt: null,
             },
         });
@@ -36,6 +38,8 @@ export async function GET(request: Request) {
                     userId: auth.userId,
                     selectedLlmProvider: null,
                     selectedGraphId: null,
+                    executionBackend: "langgraph",
+                    selectedCodexModel: null,
                     updatedAt: null,
                 },
             },
@@ -56,10 +60,15 @@ export async function PATCH(request: Request) {
 
     try {
         const body = await request.json();
-        const { selectedLlmProvider, selectedGraphId } = body;
+        const { selectedLlmProvider, selectedGraphId, executionBackend, selectedCodexModel } = body;
 
         // Validate at least one field is being updated
-        if (selectedLlmProvider === undefined && selectedGraphId === undefined) {
+        if (
+            selectedLlmProvider === undefined &&
+            selectedGraphId === undefined &&
+            executionBackend === undefined &&
+            selectedCodexModel === undefined
+        ) {
             return NextResponse.json(
                 { success: false, error: 'No fields to update' },
                 { status: 400 }
@@ -69,6 +78,8 @@ export async function PATCH(request: Request) {
         const prefs = await userPreferencesService.updatePreferences(auth.userId, {
             selectedLlmProvider,
             selectedGraphId,
+            executionBackend,
+            selectedCodexModel,
         });
 
         return NextResponse.json({

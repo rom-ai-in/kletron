@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { resolveLlmSelection } from "@kletron/server/llm";
 import type { AgentWorkflowResult, AgentWorkflowUpdate } from "@kletron/shared/types";
 import { agentGraphService } from "@kletron/server/services/agentGraphService";
@@ -17,17 +18,65 @@ import { categoryService } from "@kletron/server/services/categoryService";
 import { agentGraphExecutor } from "@kletron/server/services/agentGraphExecutor";
 import type { AgentStreamKpiV1 } from "@kletron/shared/chatTypes";
 import { buildThreadSkillState } from "@kletron/server/services/workspaceSkillStateService";
+import { codexExecutionService, type CodexSandboxMode } from "@kletron/server/services/codexExecutionService";
 
 const textEncoder = new TextEncoder();
 
 type StreamChunk =
-  | { type: "init"; payload: { runId: string; graphId: string; skills?: Awaited<ReturnType<typeof buildThreadSkillState>> } }
+  | {
+      type: "init";
+      payload: {
+        runId: string;
+        graphId: string;
+        skills?: Awaited<ReturnType<typeof buildThreadSkillState>>;
+        turnAnchorMessage?: string;
+      };
+    }
   | { type: "update"; payload: AgentWorkflowUpdate }
   | { type: "text_delta"; payload: { content: string } }
   | { type: "reasoning_delta"; payload: { content: string } }
   | { type: "stream_metrics"; payload: AgentStreamKpiV1 }
   | { type: "final"; payload: AgentWorkflowResult }
   | { type: "error"; payload: { message: string } };
+
+const CODEX_BACKEND = "codex";
+
+function parseExecutionBackend(input: unknown): "langgraph" | "codex" {
+  return input === CODEX_BACKEND ? CODEX_BACKEND : "langgraph";
+}
+
+function parseCodexSandboxMode(input: unknown): CodexSandboxMode {
+  if (input === "workspace-write") return "workspace-write";
+  if (input === "danger-full-access") return "danger-full-access";
+  return "read-only";
+}
+
+function parseCodexModel(payload: Record<string, unknown>): string | undefined {
+  const codexModel = typeof payload.codexModel === "string" ? payload.codexModel.trim() : "";
+  if (codexModel) return codexModel;
+  const model = typeof payload.model === "string" ? payload.model.trim() : "";
+  return model || undefined;
+}
+
+function buildCodexPlaceholderOutputs(mission: string, report: string): AgentWorkflowResult["outputs"] {
+  return {
+    context: { mission, languages: [], frameworks: [], hotspots: [] },
+    target_files: [],
+    raw_claims: [],
+    verified_findings: [],
+    findings: [],
+    tasks: [],
+    report,
+    meta: {},
+  };
+}
+
+function resolveCodexRunStatus(input: string, hasError: boolean): "COMPLETED" | "FAILED" | "CANCELLED" {
+  const normalized = input.toLowerCase();
+  if (normalized.includes("cancel") || normalized.includes("interrupt")) return "CANCELLED";
+  if (hasError || normalized.includes("fail") || normalized.includes("error")) return "FAILED";
+  return "COMPLETED";
+}
 
 /**
  * POST /api/sessions - Create a new session (run) and stream execution via NDJSON.
@@ -51,6 +100,9 @@ export async function POST(request: Request) {
   const message = typeof payload?.message === "string" ? payload.message.trim() : "";
   const provider = typeof payload?.provider === "string" ? payload.provider.trim() : undefined;
   const model = typeof payload?.model === "string" ? payload.model.trim() : undefined;
+  const executionBackend = parseExecutionBackend(payload?.executionBackend);
+  const codexModel = parseCodexModel(payload as Record<string, unknown>);
+  const codexSandboxMode = parseCodexSandboxMode(payload?.codexSandboxMode);
   const clientSentAtMs =
     typeof payload?.clientSentAtMs === "number" && Number.isFinite(payload.clientSentAtMs)
       ? payload.clientSentAtMs
@@ -66,14 +118,6 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "application/json" },
     });
   }
-  if (!graphId) {
-    console.log(`[sessions/create] ✗ Missing graphId`);
-    return new Response(JSON.stringify({ error: "Please provide a graphId." }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
   let graph: Awaited<ReturnType<typeof agentGraphService.resolveGraphForStage>> | null = null;
   let workspace: Awaited<ReturnType<typeof resolveWorkspaceFromRequestStrict>> | null = null;
   let effectiveApproval: Awaited<ReturnType<typeof resolveEffectiveToolApprovalConfigForUser>> | null = null;
@@ -131,6 +175,208 @@ export async function POST(request: Request) {
   }
 
   const workspaceId = workspace._id.toString();
+
+  if (executionBackend === "codex") {
+    if (!codexExecutionService.isEnabled()) {
+      return new Response(JSON.stringify({ error: "Codex backend is disabled on this server." }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    graph = await agentGraphService.resolveGraphForStage(graphId || undefined);
+    if (graphId && !graph?._id) {
+      return new Response(JSON.stringify({ error: `Graph ${graphId} not found.` }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    const resolvedGraphId = graph?._id ? String(graph._id) : new ObjectId().toString();
+    const researchDepth = normalizeResearchDepth(payload?.researchDepth);
+    const [runId, pre] = await Promise.all([
+      agentGraphRunService.createRun(resolvedGraphId, workspace._id.toString(), "agent", {
+        threadApprovalMode: resolvedThreadMode,
+        workMode,
+        createdByUserId: auth.userId,
+        researchDepth,
+        executionBackend: "codex",
+        ...(codexModel ? { codexModel } : {}),
+        codexSandboxMode,
+      }),
+      preflightMissionForNewRun(message, workspace._id.toString()),
+    ]);
+
+    const initialState = {
+      nodes: {},
+      mission: pre.mission,
+      userInput: pre.mission,
+      loadedSkillIds: pre.loadedSkillIds.length ? pre.loadedSkillIds : undefined,
+      skillLoads: pre.skillLoads.length ? pre.skillLoads : undefined,
+    };
+    const titleSource =
+      pre.mission.startsWith("[System:") && pre.mission.indexOf("]\n\n") !== -1
+        ? pre.mission.slice(pre.mission.indexOf("]\n\n") + 3)
+        : pre.mission;
+    const threadSkills = await buildThreadSkillState({
+      workspaceId,
+      graph,
+      state: {
+        loadedSkillIds: initialState.loadedSkillIds,
+        skillLoads: initialState.skillLoads,
+      },
+    }).catch(() => ({
+      availableSkills: [],
+      loadedSkills: [],
+      pinnedSkills: [],
+    }));
+
+    await agentGraphRunService.updateRunStatus(runId, "RUNNING", {
+      nodeOrder: [],
+      nodeStatuses: {},
+      state: initialState as any,
+      title: titleSource.trim().slice(0, 80),
+      conversationTurns: 1,
+      executionBackend: "codex",
+      codexApprovalState: { hasPending: false, pendingCount: 0, updatedAt: new Date().toISOString() },
+      ...(codexModel ? { codexModel } : {}),
+      codexSandboxMode,
+    } as any);
+
+    let clientDisconnected = false;
+    request.signal?.addEventListener("abort", () => {
+      clientDisconnected = true;
+    });
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sendChunk = (chunk: StreamChunk) => {
+          if (clientDisconnected) return;
+          try {
+            const taggedChunk = { ...chunk, workspaceId: workspace._id?.toString() };
+            controller.enqueue(textEncoder.encode(`${JSON.stringify(taggedChunk)}\n`));
+          } catch {
+            clientDisconnected = true;
+          }
+        };
+        sendChunk({
+          type: "init",
+          payload: {
+            runId,
+            graphId: resolvedGraphId,
+            skills: threadSkills,
+            turnAnchorMessage: pre.mission,
+          },
+        });
+
+        try {
+          const turn = await codexExecutionService.startTurnStream({
+            runId,
+            userId: auth.userId,
+            message: pre.mission,
+            cwd: workspace.rootPath,
+            workspaceId,
+            ...(codexModel ? { model: codexModel } : {}),
+            sandboxMode: codexSandboxMode,
+          });
+          await codexExecutionService.registerRunMetadata(runId, {
+            executionBackend: "codex",
+            codexThreadId: turn.threadId,
+            codexTurnId: turn.turnId,
+            ...(codexModel ? { codexModel } : {}),
+            codexSandboxMode,
+          });
+
+          for await (const event of turn.events) {
+            if (event.kind === "event_snapshot") {
+              sendChunk({
+                type: "update",
+                payload: {
+                  timeline: [],
+                  eventStream: event.events,
+                },
+              });
+              continue;
+            }
+            if (event.kind === "notification") {
+              if (event.method === "item/agentMessage/delta") {
+                const delta = typeof event.params?.delta === "string" ? event.params.delta : "";
+                if (delta) sendChunk({ type: "text_delta", payload: { content: delta } });
+                continue;
+              }
+              if (event.method === "item/reasoning/textDelta" || event.method === "item/reasoning/summaryTextDelta") {
+                const delta = typeof event.params?.delta === "string" ? event.params.delta : "";
+                if (delta) sendChunk({ type: "reasoning_delta", payload: { content: delta } });
+                continue;
+              }
+            } else if (event.kind === "error") {
+              sendChunk({ type: "error", payload: { message: event.message } });
+            }
+          }
+
+          const completed = await turn.completed;
+          const runRecord = await agentGraphRunService.getRun(runId);
+          const previousHistory = Array.isArray(runRecord?.state?.conversationHistory)
+            ? (runRecord?.state?.conversationHistory as any[])
+            : [];
+          const status = resolveCodexRunStatus(completed.status, Boolean(completed.error));
+          const nextState = {
+            ...(runRecord?.state ?? {}),
+            conversationHistory: [...previousHistory, ...completed.events],
+          };
+          await agentGraphRunService.updateRunStatus(runId, status, {
+            endedAt: new Date(),
+            state: nextState,
+            executionBackend: "codex",
+            codexThreadId: completed.threadId,
+            codexTurnId: completed.turnId,
+            ...(completed.error ? { error: completed.error } : {}),
+          } as any);
+
+          const result: AgentWorkflowResult = {
+            sessionId: runId,
+            timeline: [],
+            conclusion: completed.agentText || completed.error || "Codex turn completed.",
+            outputs: buildCodexPlaceholderOutputs(pre.mission, completed.agentText || completed.error || ""),
+            eventStream: completed.events,
+          };
+          sendChunk({ type: "final", payload: result });
+        } catch (error: unknown) {
+          const message = (error as Error)?.message ?? "Codex execution failed";
+          sendChunk({ type: "error", payload: { message } });
+          if (!clientDisconnected) {
+            await agentGraphRunService.updateRunStatus(runId, "FAILED", {
+              endedAt: new Date(),
+              error: message,
+            } as any).catch(() => {});
+          }
+        } finally {
+          if (clientDisconnected) {
+            const currentRun = await agentGraphRunService.getRun(runId);
+            if (currentRun && currentRun.status === "RUNNING") {
+              await codexExecutionService.stopRun(runId).catch(() => undefined);
+            }
+          }
+          try {
+            controller.close();
+          } catch {
+            // stream already closed
+          }
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store" },
+    });
+  }
+
+  if (!graphId) {
+    console.log(`[sessions/create] ✗ Missing graphId`);
+    return new Response(JSON.stringify({ error: "Please provide a graphId." }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   graph = await agentGraphService.getGraph(graphId);
   if (!graph?._id) {
     return new Response(JSON.stringify({ error: `Graph ${graphId} not found.` }), {
@@ -210,7 +456,15 @@ export async function POST(request: Request) {
           clientDisconnected = true;
         }
       };
-      sendChunk({ type: "init", payload: { runId, graphId: resolvedGraphId, skills: threadSkills } });
+      sendChunk({
+        type: "init",
+        payload: {
+          runId,
+          graphId: resolvedGraphId,
+          skills: threadSkills,
+          turnAnchorMessage: pre.mission,
+        },
+      });
       console.log(`[sessions/create] Stream started for run ${runId}`);
 
       try {
@@ -354,6 +608,12 @@ export async function GET(request: Request) {
       source: run.source ?? null,
       automationId: run.automationId?.toString() ?? null,
       workMode: normalizeToWorkModeId(run.workMode as string | undefined),
+      executionBackend: run.executionBackend ?? "langgraph",
+      codexThreadId: run.codexThreadId ?? null,
+      codexTurnId: run.codexTurnId ?? null,
+      codexModel: run.codexModel ?? null,
+      codexSandboxMode: run.codexSandboxMode ?? null,
+      codexApprovalState: run.codexApprovalState ?? null,
     }));
 
 

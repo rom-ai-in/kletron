@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage, Menu, powerSaveBlocker } from "electron";
 import path from "node:path";
 import fs from "node:fs";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import {
   applyFileChange,
   getGitStatus,
@@ -61,6 +61,67 @@ let updateStatus: UpdateStatus = { state: "idle" };
 
 /** Renderer asks to block system sleep while agent work is active (see Settings → General). */
 let preventSleepBlockerId: number | null = null;
+
+function resolveCodexBinaryCandidate(): string {
+  const envPath = process.env.KLETRON_CODEX_BINARY?.trim();
+  if (envPath) {
+    const resolved = path.isAbsolute(envPath) ? envPath : path.resolve(process.cwd(), envPath);
+    if (fs.existsSync(resolved)) return resolved;
+  }
+
+  const binNames = process.platform === "win32" ? ["codex.cmd", "codex.ps1", "codex"] : ["codex"];
+  let dir = path.resolve(process.cwd());
+  for (let i = 0; i < 14; i++) {
+    for (const name of binNames) {
+      const candidate = path.join(dir, "node_modules", ".bin", name);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  try {
+    const tool = process.platform === "win32" ? "where" : "which";
+    const stdout = execFileSync(tool, ["codex"], { encoding: "utf8", windowsHide: true });
+    const first = stdout
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean);
+    if (first && fs.existsSync(first)) return first;
+  } catch {
+    // ignore
+  }
+
+  return "codex";
+}
+
+async function readCodexVersion(binaryPath: string): Promise<{ ok: boolean; version?: string; error?: string }> {
+  return await new Promise((resolve) => {
+    const child = spawn(binaryPath, ["--version"], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", (error) => {
+      resolve({ ok: false, error: error.message });
+    });
+    child.on("exit", (code) => {
+      if (code === 0) {
+        resolve({ ok: true, version: stdout.trim() || stderr.trim() || "unknown" });
+        return;
+      }
+      resolve({ ok: false, error: stderr.trim() || stdout.trim() || `exit code ${code}` });
+    });
+  });
+}
 
 async function getAutoUpdater(): Promise<AutoUpdater | null> {
   if (autoUpdaterRef) return autoUpdaterRef;
@@ -493,6 +554,33 @@ ipcMain.handle("app:openExternal", async (_event, url: string) => {
   if (!url) return false;
   await shell.openExternal(url);
   return true;
+});
+
+ipcMain.handle("codex:openAuthUrl", async (_event, url: string) => {
+  if (!url) return false;
+  await shell.openExternal(url);
+  return true;
+});
+
+ipcMain.handle("codex:health", async () => {
+  const binaryPath = resolveCodexBinaryCandidate();
+  const version = await readCodexVersion(binaryPath);
+  return {
+    enabled: true,
+    available: version.ok,
+    binaryPath,
+    version: version.version ?? null,
+    error: version.error ?? null,
+  };
+});
+
+ipcMain.handle("codex:diagnostics", async () => {
+  const binaryPath = resolveCodexBinaryCandidate();
+  const version = await readCodexVersion(binaryPath);
+  return {
+    binaryPath,
+    ...version,
+  };
 });
 
 ipcMain.handle("app:setPreventSleep", async (_event, enabled: boolean) => {

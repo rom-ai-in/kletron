@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { codexExecutionService } from "@kletron/server/services/codexExecutionService";
 
 /**
  * POST /api/sessions/[id]/stop - Mark a running session as COMPLETED.
@@ -28,6 +29,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   console.log(`[sessions/stop] Run status="${run.status}"`);
+
+  if (run.executionBackend === "codex") {
+    await codexExecutionService.stopRun(params.id).catch(() => undefined);
+  }
 
   // Transition any non-terminal status to COMPLETED
   const terminalStatuses = ["COMPLETED", "FAILED", "CANCELLED"];

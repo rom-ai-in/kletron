@@ -53,6 +53,8 @@ export interface UseAgentSessionOptions {
 
 export interface UseAgentSessionReturn {
     llmProvider: string;
+    executionBackend: "langgraph" | "codex";
+    selectedCodexModel: string;
     enabledProviders: LlmProviderType[];
     selectedGraphId: string;
     agentGraphs: AgentGraphRecord[];
@@ -68,6 +70,8 @@ export interface UseAgentSessionReturn {
     graphSelectOptions: { id: string; label: string; sub?: string }[];
     handleLlmChange: (provider: string) => void;
     handleGraphChange: (graphId: string) => void;
+    handleExecutionBackendChange: (backend: "langgraph" | "codex") => void;
+    handleCodexModelChange: (model: string) => void;
     llmStatus: 'success' | 'error' | 'loading' | 'none';
     /** Human-readable reason for llmStatus (e.g. from health check). Hover LLM selector to see. */
     llmStatusDetail: string | null;
@@ -91,6 +95,8 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
     }, []);
 
     const [llmProvider, setLlmProvider] = useState<string>('');
+    const [executionBackend, setExecutionBackend] = useState<"langgraph" | "codex">("langgraph");
+    const [selectedCodexModel, setSelectedCodexModel] = useState<string>("");
     const [enabledProviders, setEnabledProviders] = useState<LlmProviderType[]>([]);
     const [llmPrefsLoaded, setLlmPrefsLoaded] = useState(false);
     const [enabledProvidersLoaded, setEnabledProvidersLoaded] = useState(false);
@@ -133,7 +139,12 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
                 if (prefsRes.ok) {
                     const prefsData = await prefsRes.json();
                     if (prefsData.success && prefsData.preferences) {
-                        const { selectedLlmProvider, selectedGraphId: prefGraphId } = prefsData.preferences;
+                        const {
+                            selectedLlmProvider,
+                            selectedGraphId: prefGraphId,
+                            executionBackend: prefExecutionBackend,
+                            selectedCodexModel: prefCodexModel,
+                        } = prefsData.preferences;
                         if (selectedLlmProvider) {
                             setLlmProvider(selectedLlmProvider);
                         } else {
@@ -153,6 +164,13 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
                             const cleaned = takeValidStoredGraphSelection();
                             if (cleaned) setSavedGraphId(cleaned);
                         }
+                        setExecutionBackend(prefExecutionBackend === "codex" ? "codex" : "langgraph");
+                        if (typeof prefCodexModel === "string") {
+                            setSelectedCodexModel(prefCodexModel);
+                        } else {
+                            const localCodexModel = window.localStorage.getItem("kletron-codex-model");
+                            if (localCodexModel) setSelectedCodexModel(localCodexModel);
+                        }
                         return;
                     }
                 }
@@ -169,6 +187,10 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
 
                 const cleanedGraph = takeValidStoredGraphSelection();
                 if (cleanedGraph) setSavedGraphId(cleanedGraph);
+                const localBackend = window.localStorage.getItem("kletron-execution-backend");
+                if (localBackend === "codex") setExecutionBackend("codex");
+                const localCodexModel = window.localStorage.getItem("kletron-codex-model");
+                if (localCodexModel) setSelectedCodexModel(localCodexModel);
             } catch (e) {
                 console.error("Failed to fetch preferences", e);
             } finally {
@@ -298,6 +320,33 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
         }).catch(() => { /* Silently fail, localStorage is fallback */ });
     }, [apiOrigin, getHdr]);
 
+    const handleExecutionBackendChange = useCallback((backend: "langgraph" | "codex") => {
+        setExecutionBackend(backend);
+        window.localStorage.setItem("kletron-execution-backend", backend);
+        void apiFetch({
+            apiOrigin,
+            path: "/api/user-preferences",
+            getRequestHeaders: getHdr,
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ executionBackend: backend }),
+        }).catch(() => { /* localStorage fallback */ });
+    }, [apiOrigin, getHdr]);
+
+    const handleCodexModelChange = useCallback((model: string) => {
+        const sanitized = model.trim();
+        setSelectedCodexModel(sanitized);
+        window.localStorage.setItem("kletron-codex-model", sanitized);
+        void apiFetch({
+            apiOrigin,
+            path: "/api/user-preferences",
+            getRequestHeaders: getHdr,
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ selectedCodexModel: sanitized || null }),
+        }).catch(() => { /* localStorage fallback */ });
+    }, [apiOrigin, getHdr]);
+
     // ── Auto-correct provider if current selection is disabled ───────────
     useEffect(() => {
         if (!enabledProvidersLoaded || !llmPrefsLoaded || enabledProviders.length === 0) return;
@@ -343,6 +392,8 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
 
     return {
         llmProvider,
+        executionBackend,
+        selectedCodexModel,
         enabledProviders,
         selectedGraphId,
         agentGraphs,
@@ -356,6 +407,8 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
         graphSelectOptions,
         handleLlmChange,
         handleGraphChange,
+        handleExecutionBackendChange,
+        handleCodexModelChange,
         llmStatus,
         llmStatusDetail,
         llmSelectorLoading,

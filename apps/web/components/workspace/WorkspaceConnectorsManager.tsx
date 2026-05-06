@@ -34,6 +34,7 @@ import {
     Search,
     ShieldCheck,
     Trash2,
+    Unplug,
 } from "lucide-react";
 import {
     getConnectorType,
@@ -163,6 +164,104 @@ function catalogUnlockedToolCount(providerId: string): number {
     return getConnectorType(providerId)?.unlocksTools?.length ?? 0;
 }
 
+function catalogUnlockedToolNames(providerId: string): string[] {
+    return getConnectorType(providerId)?.unlocksTools ?? [];
+}
+
+function SaasIntegrationActions({
+    integration,
+    deleteIntegration,
+    deleteAccountIntegration,
+    showToast,
+    compact,
+}: {
+    integration: WorkspaceIntegrationSummary;
+    deleteIntegration: (id: string) => Promise<void>;
+    deleteAccountIntegration: (id: string) => Promise<void>;
+    showToast: (kind: "success" | "error", text: string) => void;
+    compact?: boolean;
+}) {
+    const btnDetach = compact ? "h-7 gap-0.5 px-1.5 text-[10px]" : "h-8 gap-1 px-2 text-[11px]";
+    const btnTrash = compact ? "h-7 w-7 p-0" : "h-8 w-8 p-0";
+    const iconDetach = compact ? "h-3 w-3" : "h-3.5 w-3.5";
+    const iconTrash = compact ? "h-3 w-3" : "h-3.5 w-3.5";
+
+    if (!integration.accountIntegrationId) {
+        return (
+            <Button
+                variant="ghost"
+                size="sm"
+                className={`${btnTrash} text-status-error-text`}
+                title="Remove this connector from this workspace"
+                onClick={() => {
+                    void (async () => {
+                        const msg = `Remove ${integration.displayName} from this workspace?`;
+                        if (!confirm(msg)) return;
+                        try {
+                            await deleteIntegration(integration.id);
+                            showToast("success", "Connector removed");
+                        } catch (err) {
+                            showToast("error", (err as Error).message);
+                        }
+                    })();
+                }}
+            >
+                <Trash2 className={iconTrash} />
+            </Button>
+        );
+    }
+
+    return (
+        <div className="flex shrink-0 items-center gap-0.5">
+            <Button
+                variant="secondary"
+                size="sm"
+                className={`${btnDetach} shrink-0`}
+                title="Stop using this connector in this workspace only — it stays in your account for other workspaces"
+                onClick={() => {
+                    void (async () => {
+                        const msg =
+                            `Detach “${integration.displayName}” from this workspace only?\n\n` +
+                            `It remains in your account library and stays available in other workspaces where it is enabled.`;
+                        if (!confirm(msg)) return;
+                        try {
+                            await deleteIntegration(integration.id);
+                            showToast("success", "Detached from this workspace");
+                        } catch (err) {
+                            showToast("error", (err as Error).message);
+                        }
+                    })();
+                }}
+            >
+                <Unplug className={iconDetach} />
+                {!compact ? <span className="hidden sm:inline">Detach</span> : null}
+            </Button>
+            <Button
+                variant="ghost"
+                size="sm"
+                className={`${btnTrash} text-status-error-text`}
+                title="Delete this connector from your account — removes credentials and disconnects every workspace"
+                onClick={() => {
+                    void (async () => {
+                        const msg =
+                            `Permanently delete “${integration.displayName}” from your account?\n\n` +
+                            `This removes saved credentials and disconnects it from every workspace. This cannot be undone.`;
+                        if (!confirm(msg)) return;
+                        try {
+                            await deleteAccountIntegration(integration.id);
+                            showToast("success", "Connector deleted from account");
+                        } catch (err) {
+                            showToast("error", (err as Error).message);
+                        }
+                    })();
+                }}
+            >
+                <Trash2 className={iconTrash} />
+            </Button>
+        </div>
+    );
+}
+
 /** Enabled MCP servers first; then connected before unknown/error; disabled last. */
 function mcpListSortKey(server: WorkspaceMcpServerSummary): number {
     if (!server.enabled) return 0;
@@ -209,6 +308,7 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
         error,
         createIntegration,
         deleteIntegration,
+        deleteAccountIntegration,
         testIntegration,
         createMcpServer,
         updateMcpServer,
@@ -780,9 +880,10 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                 Connected for this workspace
                             </h2>
                             <p className="mt-0.5 max-w-xl text-[10px] text-text-muted">
-                                Switches control whether the agent may use each connector here. SaaS rows show how many
-                                bundled agent tools the catalog attaches; MCP uses Discover to load tools from the
-                                server.
+                                Switches control whether the agent may use each connector here. For SaaS accounts stored
+                                on your profile, use <span className="font-medium text-text-secondary">Detach</span> to
+                                unlink this workspace only, or the trash icon to delete the connector from your account
+                                everywhere. MCP uses Discover to load tools from the server.
                             </p>
                         </div>
                         <span className="text-[10px] tabular-nums text-text-muted">
@@ -820,12 +921,13 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                     <ul className="divide-y divide-border-subtle">
                                         {filteredIntegrations.map((integration) => {
                                             const saasToolCount = catalogUnlockedToolCount(integration.providerId);
+                                            const saasToolNames = catalogUnlockedToolNames(integration.providerId);
                                             return (
                                             <li
                                                 key={integration.id}
                                                 className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5"
                                             >
-                                                <div className="min-w-0">
+                                                <div className="min-w-0 flex-1">
                                                     <p className="truncate text-sm font-medium text-text-primary">
                                                         {integration.displayName}
                                                     </p>
@@ -868,6 +970,21 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                                                 ? "workspace"
                                                                 : "workspaces"}
                                                         </p>
+                                                    ) : null}
+                                                    {saasToolNames.length > 0 ? (
+                                                        <details
+                                                            className="mt-1.5 text-[10px]"
+                                                            title="Bundled agent tools from the Kletron catalog when this connector is enabled (not fetched live — unlike MCP Discover)."
+                                                        >
+                                                            <summary className="cursor-pointer select-none text-text-muted hover:text-text-secondary">
+                                                                Catalog tool names
+                                                            </summary>
+                                                            <ul className="mt-1 max-h-32 space-y-0.5 overflow-y-auto pl-3 font-mono text-[10px] text-text-secondary scrollbar-elegant">
+                                                                {saasToolNames.map((name) => (
+                                                                    <li key={name}>{name}</li>
+                                                                ))}
+                                                            </ul>
+                                                        </details>
                                                     ) : null}
                                                 </div>
                                                 <div className="flex shrink-0 items-center gap-1">
@@ -934,28 +1051,12 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                                         <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
                                                         Verify
                                                     </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 w-8 p-0 text-status-error-text"
-                                                        title={
-                                                            integration.accountIntegrationId
-                                                                ? "Remove from this workspace (library entry stays)"
-                                                                : "Remove"
-                                                        }
-                                                        onClick={() => {
-                                                            void (async () => {
-                                                                const msg = integration.accountIntegrationId
-                                                                    ? `Remove ${integration.displayName} from this workspace? It stays in your account library.`
-                                                                    : `Remove ${integration.displayName}?`;
-                                                                if (!confirm(msg)) return;
-                                                                await deleteIntegration(integration.id);
-                                                                showToast("success", "Integration removed");
-                                                            })();
-                                                        }}
-                                                    >
-                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                    </Button>
+                                                    <SaasIntegrationActions
+                                                        integration={integration}
+                                                        deleteIntegration={deleteIntegration}
+                                                        deleteAccountIntegration={deleteAccountIntegration}
+                                                        showToast={showToast}
+                                                    />
                                                 </div>
                                             </li>
                                             );
@@ -1293,31 +1394,15 @@ export function WorkspaceConnectorsManager({ workspaceId }: { workspaceId: strin
                                                                     <ShieldCheck className="h-3 w-3 shrink-0" />
                                                                     Verify
                                                                 </Button>
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    className="h-6 w-6 p-0 text-status-error-text"
-                                                                    title="Remove"
-                                                                    onClick={() => {
-                                                                        void (async () => {
-                                                                            if (
-                                                                                !confirm(
-                                                                                    `Remove ${integration.displayName}?`,
-                                                                                )
-                                                                            )
-                                                                                return;
-                                                                            await deleteIntegration(
-                                                                                integration.id,
-                                                                            );
-                                                                            showToast(
-                                                                                "success",
-                                                                                "Removed",
-                                                                            );
-                                                                        })();
-                                                                    }}
-                                                                >
-                                                                    <Trash2 className="h-3 w-3" />
-                                                                </Button>
+                                                                <SaasIntegrationActions
+                                                                    integration={integration}
+                                                                    deleteIntegration={deleteIntegration}
+                                                                    deleteAccountIntegration={
+                                                                        deleteAccountIntegration
+                                                                    }
+                                                                    showToast={showToast}
+                                                                    compact
+                                                                />
                                                             </span>
                                                         </li>
                                                     ))}

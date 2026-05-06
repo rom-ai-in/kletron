@@ -11,11 +11,24 @@ function sanitizeSelectedGraphId(id: string | null | undefined): string | null {
     return t;
 }
 
+function sanitizeExecutionBackend(value: string | null | undefined): "langgraph" | "codex" {
+    return value === "codex" ? "codex" : "langgraph";
+}
+
+function sanitizeCodexModel(value: string | null | undefined): string | null {
+    if (value == null) return null;
+    const trimmed = String(value).trim();
+    if (!trimmed) return null;
+    return trimmed.slice(0, 200);
+}
+
 export interface UserPreferences {
     _id?: string;
     userId: string;           // Auth user ID
     selectedLlmProvider: string | null;
     selectedGraphId: string | null;
+    executionBackend?: "langgraph" | "codex";
+    selectedCodexModel?: string | null;
     updatedAt: Date;
 }
 
@@ -23,6 +36,8 @@ export interface UserPreferencesPublic {
     userId: string;
     selectedLlmProvider: string | null;
     selectedGraphId: string | null;
+    executionBackend: "langgraph" | "codex";
+    selectedCodexModel: string | null;
     updatedAt: Date;
 }
 
@@ -50,7 +65,12 @@ async function getCollectionSafe() {
 
 function upsertFallbackPreferences(
     userId: string,
-    updates: { selectedLlmProvider?: string | null; selectedGraphId?: string | null } = {}
+    updates: {
+        selectedLlmProvider?: string | null;
+        selectedGraphId?: string | null;
+        executionBackend?: "langgraph" | "codex" | string | null;
+        selectedCodexModel?: string | null;
+    } = {}
 ): UserPreferencesPublic {
     const now = new Date();
     const existing = fallbackPreferences.get(userId);
@@ -64,6 +84,14 @@ function upsertFallbackPreferences(
             updates.selectedGraphId !== undefined
                 ? sanitizeSelectedGraphId(updates.selectedGraphId)
                 : sanitizeSelectedGraphId(existing?.selectedGraphId ?? null),
+        executionBackend:
+            updates.executionBackend !== undefined
+                ? sanitizeExecutionBackend(updates.executionBackend ?? undefined)
+                : sanitizeExecutionBackend(existing?.executionBackend),
+        selectedCodexModel:
+            updates.selectedCodexModel !== undefined
+                ? sanitizeCodexModel(updates.selectedCodexModel)
+                : sanitizeCodexModel(existing?.selectedCodexModel),
         updatedAt: now,
     };
     fallbackPreferences.set(userId, prefs);
@@ -98,6 +126,8 @@ export async function getPreferences(userId: string): Promise<UserPreferencesPub
         return {
             ...fb,
             selectedGraphId: sanitizeSelectedGraphId(fb.selectedGraphId),
+            executionBackend: sanitizeExecutionBackend(fb.executionBackend),
+            selectedCodexModel: sanitizeCodexModel(fb.selectedCodexModel),
         };
     }
     const prefs = await collection.findOne({ userId });
@@ -108,6 +138,8 @@ export async function getPreferences(userId: string): Promise<UserPreferencesPub
         userId: prefs.userId,
         selectedLlmProvider: prefs.selectedLlmProvider,
         selectedGraphId: sanitizeSelectedGraphId(prefs.selectedGraphId),
+        executionBackend: sanitizeExecutionBackend(prefs.executionBackend),
+        selectedCodexModel: sanitizeCodexModel(prefs.selectedCodexModel),
         updatedAt: prefs.updatedAt,
     };
 }
@@ -120,6 +152,8 @@ export async function updatePreferences(
     updates: {
         selectedLlmProvider?: string | null;
         selectedGraphId?: string | null;
+        executionBackend?: "langgraph" | "codex" | string | null;
+        selectedCodexModel?: string | null;
     }
 ): Promise<UserPreferencesPublic> {
     const collection = await getCollectionSafe();
@@ -138,6 +172,12 @@ export async function updatePreferences(
     if (updates.selectedGraphId !== undefined) {
         updateDoc.selectedGraphId = sanitizeSelectedGraphId(updates.selectedGraphId);
     }
+    if (updates.executionBackend !== undefined) {
+        updateDoc.executionBackend = sanitizeExecutionBackend(updates.executionBackend ?? undefined);
+    }
+    if (updates.selectedCodexModel !== undefined) {
+        updateDoc.selectedCodexModel = sanitizeCodexModel(updates.selectedCodexModel);
+    }
 
     const result = await collection.findOneAndUpdate(
         { userId },
@@ -155,6 +195,8 @@ export async function updatePreferences(
         userId: prefs.userId,
         selectedLlmProvider: prefs.selectedLlmProvider,
         selectedGraphId: sanitizeSelectedGraphId(prefs.selectedGraphId),
+        executionBackend: sanitizeExecutionBackend(prefs.executionBackend),
+        selectedCodexModel: sanitizeCodexModel(prefs.selectedCodexModel),
         updatedAt: prefs.updatedAt,
     };
 }

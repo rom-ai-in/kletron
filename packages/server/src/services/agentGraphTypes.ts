@@ -267,6 +267,22 @@ export interface AgentGraphRun {
     workMode?: "code" | "work";
     /** Exhaustive (default) vs fast agent depth for prompts and ReAct step budget. */
     researchDepth?: ResearchDepthId;
+    /** Execution engine used by the session (legacy default: langgraph). */
+    executionBackend?: "langgraph" | "codex";
+    /** Codex thread id when executionBackend === "codex". */
+    codexThreadId?: string;
+    /** Latest active turn id when executionBackend === "codex". */
+    codexTurnId?: string;
+    /** Selected Codex model id for the run. */
+    codexModel?: string;
+    /** Sandbox mode applied to Codex thread/turn. */
+    codexSandboxMode?: "read-only" | "workspace-write" | "danger-full-access";
+    /** Lightweight mirror for Codex approval queue state. */
+    codexApprovalState?: {
+        hasPending?: boolean;
+        pendingCount?: number;
+        updatedAt?: string;
+    };
 }
 
 /**

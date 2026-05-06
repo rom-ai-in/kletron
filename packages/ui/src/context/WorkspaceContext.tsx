@@ -21,6 +21,15 @@ export type WorkspaceSummary = {
   selectable?: boolean;
 };
 
+/**
+ * True when the workspace can be used: path exists on the server host, or
+ * `WORKSPACE_SKIP_LOCAL_FS_VALIDATION` allows API resolution without a local path.
+ */
+export function isWorkspaceOperational(w: WorkspaceSummary): boolean {
+  if (w.selectable === true) return true;
+  return (w.health ?? "healthy") === "healthy" && w.selectable !== false;
+}
+
 export interface WorkspaceContextValue {
   /** All active workspaces for the current user */
   workspaces: WorkspaceSummary[];
@@ -185,23 +194,21 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }, [refreshWorkspaces]);
 
   const deleteWorkspace = useCallback(async (id: string) => {
-    try {
-      const res = await fetch(`/api/workspaces/${id}`, { method: 'DELETE' });
-      if (res.status === 401) {
-        dispatchAuthSessionInvalid();
-        return;
-      }
-      if (!res.ok) throw new Error('Failed to delete workspace');
-      if (!mountedRef.current) return;
-      // Refresh list and update active if necessary
-      await refreshWorkspaces();
-    } catch (e) {
-      console.error('[WorkspaceContext] Failed to delete workspace:', e);
+    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (res.status === 401) {
+      dispatchAuthSessionInvalid();
+      throw new Error('Session expired');
     }
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as Record<string, string>;
+      throw new Error(data.error || data.message || 'Failed to delete workspace');
+    }
+    if (!mountedRef.current) return;
+    await refreshWorkspaces();
   }, [refreshWorkspaces]);
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
-  const hasWorkspaceHealthIssues = workspaces.some((w) => (w.health ?? "healthy") !== "healthy");
+  const hasWorkspaceHealthIssues = workspaces.some((w) => !isWorkspaceOperational(w));
 
   // Track if we've already attempted auto-recovery for the current activeWorkspaceId
   const autoRecoveryAttemptedRef = useRef<string | null>(null);
@@ -211,8 +218,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     if (!activeWorkspaceId || !workspaces.length) return;
     const current = workspaces.find((w) => w.id === activeWorkspaceId);
     if (!current) return;
-    const currentHealthy = (current.health ?? "healthy") === "healthy" && current.selectable !== false;
-    if (currentHealthy) {
+    if (isWorkspaceOperational(current)) {
       autoRecoveryAttemptedRef.current = null;
       return;
     }
@@ -220,8 +226,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     // Prevent infinite loop if the fallback post fails and it reverts the activeWorkspaceId
     if (autoRecoveryAttemptedRef.current === activeWorkspaceId) return;
 
-    const nextHealthy = workspaces.find((w) => (w.health ?? "healthy") === "healthy" && w.selectable !== false);
-    if (!nextHealthy || nextHealthy.id === activeWorkspaceId) return;
+    const nextHealthy = workspaces.find(
+      (w) => isWorkspaceOperational(w) && w.id !== activeWorkspaceId
+    );
+    if (!nextHealthy) return;
 
     autoRecoveryAttemptedRef.current = activeWorkspaceId;
     void switchWorkspace(nextHealthy.id);

@@ -28,6 +28,7 @@ import {
   DurationDisplay,
 } from "@kletron/ui/components/Agent/metrics";
 import { useAgentSession } from "@kletron/ui/hooks/useAgentSession";
+import { effectiveLlmStripHealth } from "@kletron/ui/hooks/effectiveLlmStripHealth";
 import { useSessionStream, normalizeMessage } from "@kletron/ui/hooks/useSessionStream";
 import { useSessionEdits } from "@kletron/ui/hooks/useSessionEdits";
 
@@ -79,6 +80,7 @@ import {
   formatDroppedToolsListPhrase,
 } from "@kletron/shared/capabilityDroppedToolsUx";
 import { AgentSessionChrome } from "@kletron/ui/components/CommandCenter/AgentSessionChrome";
+import { AgentSessionEngineStrip } from "@kletron/ui/components/Agent/AgentSessionEngineStrip";
 import { AgentCodeRepoBar } from "../../../components/agent/AgentCodeRepoBar";
 import { WorkspaceConnectorsHint } from "../../../components/agent/WorkspaceConnectorsHint";
 
@@ -106,6 +108,9 @@ type SessionSummary = {
   /** Stored Code vs Work mode for this run (defaults to `code` when unset server-side). */
   workMode?: WorkModeId;
   researchDepth?: ResearchDepthId;
+  executionBackend?: "langgraph" | "codex";
+  codexThreadId?: string | null;
+  codexModel?: string | null;
 };
 
 type SessionDetail = {
@@ -116,6 +121,11 @@ type SessionDetail = {
   status: string;
   threadApprovalMode?: ThreadApprovalMode;
   source?: string | null;
+  executionBackend?: "langgraph" | "codex";
+  codexThreadId?: string | null;
+  codexTurnId?: string | null;
+  codexModel?: string | null;
+  codexSandboxMode?: "read-only" | "workspace-write" | "danger-full-access" | null;
   startedAt?: string | null;
   workMode?: WorkModeId;
   researchDepth?: ResearchDepthId;
@@ -248,6 +258,8 @@ interface AgentComposerProps {
   onLlmChange: (value: string) => void;
   llmStatus?: "none" | "loading" | "success" | "error";
   llmStatusDetail?: string | null;
+  /** Short label for the LLM strip ("LG" when Codex is the execution path). */
+  llmSelectorLabel?: string;
   graphSelectorLoading?: boolean;
   llmSelectorLoading?: boolean;
   prefillText?: string | null;
@@ -267,6 +279,9 @@ interface AgentComposerProps {
   researchDepth: ResearchDepthId;
   onResearchDepthChange: (depth: ResearchDepthId) => void;
   activeSessionId: string | null;
+  executionBackend: "langgraph" | "codex";
+  sessionExecutionBackend?: "langgraph" | "codex" | null;
+  onExecutionBackendChange: (b: "langgraph" | "codex") => void;
 }
 
 const AgentComposer = memo(function AgentComposer({
@@ -282,6 +297,7 @@ const AgentComposer = memo(function AgentComposer({
   onLlmChange,
   llmStatus,
   llmStatusDetail,
+  llmSelectorLabel = "LLM",
   graphSelectorLoading = false,
   llmSelectorLoading = false,
   prefillText,
@@ -299,6 +315,9 @@ const AgentComposer = memo(function AgentComposer({
   researchDepth,
   onResearchDepthChange,
   activeSessionId,
+  executionBackend,
+  sessionExecutionBackend,
+  onExecutionBackendChange,
 }: AgentComposerProps) {
   const router = useRouter();
   const queuedOrBusy = sending || runActive;
@@ -516,52 +535,64 @@ const AgentComposer = memo(function AgentComposer({
           </>
         }
         sessionStrip={
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <Selector
-              label="GRAPH"
-              value={selectedGraphId}
-              options={graphSelectOptions}
-              onSelect={onGraphChange}
-              size="sm"
-              direction="up"
-              loading={graphSelectorLoading}
-            />
-            <Selector
-              label="LLM"
-              value={llmProvider}
-              options={llmOptions}
-              onSelect={onLlmChange}
-              size="sm"
-              direction="up"
-              loading={llmSelectorLoading}
-              status={llmSelectorLoading ? "none" : llmStatus}
-              menuAlign="end"
-              statusTooltip={llmSelectorLoading ? null : llmStatusDetail}
-            />
-            <ThreadApprovalModeSelector
-              value={threadApprovalMode}
-              onSelect={onThreadApprovalModeChange}
-              disabled={threadApprovalLocked}
-              disabledReason={threadApprovalLockedReason}
-            />
-            <label className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
-              <span className="shrink-0">Depth</span>
-              <select
-                value={researchDepth}
-                onChange={(e) => onResearchDepthChange(e.target.value as ResearchDepthId)}
-                disabled={!!activeSessionId}
-                title={
-                  activeSessionId
-                    ? "Research depth is fixed for this thread (set when the session was created)."
-                    : "Exhaustive: more tools and context. Fast: fewer steps and shorter replies."
-                }
-                className="max-w-[120px] rounded border border-white/[0.12] bg-bg-elevated py-0.5 pl-1.5 pr-6 text-[10px] font-normal normal-case text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <option value="exhaustive">Exhaustive</option>
-                <option value="fast">Fast</option>
-              </select>
-            </label>
-          </div>
+          <AgentSessionEngineStrip
+            preferenceBackend={executionBackend}
+            sessionBackend={sessionExecutionBackend ?? null}
+            hasActiveSession={Boolean(activeSessionId)}
+            onPreferenceBackendChange={onExecutionBackendChange}
+            langGraphControls={
+              <>
+                <Selector
+                  label="GRAPH"
+                  value={selectedGraphId}
+                  options={graphSelectOptions}
+                  onSelect={onGraphChange}
+                  size="sm"
+                  direction="up"
+                  loading={graphSelectorLoading}
+                />
+                <Selector
+                  label={llmSelectorLabel}
+                  value={llmProvider}
+                  options={llmOptions}
+                  onSelect={onLlmChange}
+                  size="sm"
+                  direction="up"
+                  loading={llmSelectorLoading}
+                  status={llmSelectorLoading ? "none" : llmStatus}
+                  menuAlign="end"
+                  statusTooltip={llmSelectorLoading ? null : llmStatusDetail}
+                />
+              </>
+            }
+            trailingControls={
+              <>
+                <ThreadApprovalModeSelector
+                  value={threadApprovalMode}
+                  onSelect={onThreadApprovalModeChange}
+                  disabled={threadApprovalLocked}
+                  disabledReason={threadApprovalLockedReason}
+                />
+                <label className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                  <span className="shrink-0">Depth</span>
+                  <select
+                    value={researchDepth}
+                    onChange={(e) => onResearchDepthChange(e.target.value as ResearchDepthId)}
+                    disabled={!!activeSessionId}
+                    title={
+                      activeSessionId
+                        ? "Research depth is fixed for this thread (set when the session was created)."
+                        : "Exhaustive: more tools and context. Fast: fewer steps and shorter replies."
+                    }
+                    className="max-w-[120px] rounded border border-white/[0.12] bg-bg-elevated py-0.5 pl-1.5 pr-6 text-[10px] font-normal normal-case text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="exhaustive">Exhaustive</option>
+                    <option value="fast">Fast</option>
+                  </select>
+                </label>
+              </>
+            }
+          />
         }
       />
       </div>
@@ -679,11 +710,14 @@ export default function AgentPage() {
   // ── Hooks ─────────────────────────────────────────────────────────────
   const {
     llmProvider,
+    executionBackend,
+    selectedCodexModel,
     selectedGraphId,
     llmOptions,
     graphSelectOptions,
     handleLlmChange,
     handleGraphChange,
+    handleExecutionBackendChange,
     llmStatus,
     llmStatusDetail,
     graphOptionsLoaded,
@@ -691,6 +725,24 @@ export default function AgentPage() {
     graphSelectorLoading,
     llmSelectorLoading,
   } = useAgentSession();
+
+  const agentLlmStrip = useMemo(
+    () =>
+      effectiveLlmStripHealth({
+        llmStatus,
+        llmStatusDetail,
+        userExecutionBackend: executionBackend,
+        sessionExecutionBackend: sessionDetail?.executionBackend ?? null,
+        hasActiveSession: Boolean(activeSessionId),
+      }),
+    [
+      llmStatus,
+      llmStatusDetail,
+      executionBackend,
+      sessionDetail?.executionBackend,
+      activeSessionId,
+    ],
+  );
 
   // Determine if the selected graph is single-node (simple chat) or multi-node (timeline)
   const isSimpleGraph = useMemo(() => {
@@ -874,6 +926,8 @@ export default function AgentPage() {
   } = useSessionStream({
     sessionId: activeSessionId,
     selectedGraphId,
+    executionBackend,
+    codexModel: selectedCodexModel || null,
     llmProvider,
     workspaceId: activeWorkspaceId,
     threadApprovalMode,
@@ -920,6 +974,7 @@ export default function AgentPage() {
     flushNotice,
     dismissFlushNotice,
     approveEdit,
+    approveEditForSession,
     rejectEdit,
     approveAll,
     rejectAll,
@@ -1838,6 +1893,7 @@ export default function AgentPage() {
       approvingAll={approvingAll}
       rejectingAll={rejectingAll}
       approveEdit={approveEdit}
+      approveEditForSession={approveEditForSession}
       rejectEdit={rejectEdit}
       approveAll={approveAll}
       rejectAll={rejectAll}
@@ -2132,8 +2188,9 @@ export default function AgentPage() {
           llmProvider={llmProvider}
           llmOptions={llmOptions}
           onLlmChange={handleLlmChange}
-          llmStatus={llmStatus}
-          llmStatusDetail={llmStatusDetail}
+          llmStatus={agentLlmStrip.status}
+          llmStatusDetail={agentLlmStrip.detail}
+          llmSelectorLabel={agentLlmStrip.selectorLabel}
           graphSelectorLoading={graphSelectorLoading}
           llmSelectorLoading={llmSelectorLoading}
           prefillText={composerPrefill}
@@ -2151,6 +2208,9 @@ export default function AgentPage() {
           researchDepth={researchDepth}
           onResearchDepthChange={setResearchDepth}
           activeSessionId={activeSessionId}
+          executionBackend={executionBackend}
+          sessionExecutionBackend={sessionDetail?.executionBackend ?? null}
+          onExecutionBackendChange={handleExecutionBackendChange}
         />
         <WorkspaceConnectorsHint workspaceId={activeWorkspaceId} className="mt-2" />
       </div>

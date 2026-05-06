@@ -17,10 +17,12 @@ vi.mock("@kletron/server/services/agentGraphService", () => ({
 
 const createRun = vi.hoisted(() => vi.fn());
 const updateRunStatus = vi.hoisted(() => vi.fn());
+const getRun = vi.hoisted(() => vi.fn());
 vi.mock("@kletron/server/services/agentGraphRunService", () => ({
     agentGraphRunService: {
         createRun: (...args: unknown[]) => createRun(...args),
         updateRunStatus: (...args: unknown[]) => updateRunStatus(...args),
+        getRun: (...args: unknown[]) => getRun(...args),
     },
 }));
 
@@ -77,6 +79,19 @@ vi.mock("@kletron/server/services/agentGraphExecutor", () => ({
 const buildThreadSkillState = vi.hoisted(() => vi.fn());
 vi.mock("@kletron/server/services/workspaceSkillStateService", () => ({
     buildThreadSkillState: (...args: unknown[]) => buildThreadSkillState(...args),
+}));
+
+const codexIsEnabled = vi.hoisted(() => vi.fn());
+const codexStartTurnStream = vi.hoisted(() => vi.fn());
+const codexRegisterRunMetadata = vi.hoisted(() => vi.fn());
+const codexStopRun = vi.hoisted(() => vi.fn());
+vi.mock("@kletron/server/services/codexExecutionService", () => ({
+    codexExecutionService: {
+        isEnabled: (...args: unknown[]) => codexIsEnabled(...args),
+        startTurnStream: (...args: unknown[]) => codexStartTurnStream(...args),
+        registerRunMetadata: (...args: unknown[]) => codexRegisterRunMetadata(...args),
+        stopRun: (...args: unknown[]) => codexStopRun(...args),
+    },
 }));
 
 import { POST } from "../app/api/sessions/route";
@@ -167,6 +182,13 @@ describe("POST /api/sessions", () => {
         });
         createRun.mockResolvedValue("run-1");
         updateRunStatus.mockResolvedValue(undefined);
+        getRun.mockResolvedValue({
+            _id: "run-1",
+            status: "RUNNING",
+            state: {
+                conversationHistory: [],
+            },
+        });
         preflightMissionForNewRun.mockImplementation(async (message: string) => ({
             mission: message,
             loadedSkillIds: [],
@@ -183,6 +205,42 @@ describe("POST /api/sessions", () => {
             conclusion: "done",
             outputs: {},
             eventStream: [],
+        });
+        codexIsEnabled.mockReturnValue(true);
+        codexRegisterRunMetadata.mockResolvedValue(undefined);
+        codexStopRun.mockResolvedValue(undefined);
+        codexStartTurnStream.mockImplementation(async () => {
+            const events = (async function* () {
+                yield {
+                    kind: "notification",
+                    method: "item/agentMessage/delta",
+                    params: { delta: "Hello from Codex" },
+                };
+            })();
+            return {
+                threadId: "thr_codex_1",
+                turnId: "turn_codex_1",
+                events,
+                completed: Promise.resolve({
+                    threadId: "thr_codex_1",
+                    turnId: "turn_codex_1",
+                    status: "completed",
+                    error: null,
+                    agentText: "Hello from Codex",
+                    reasoningText: "",
+                    events: [
+                        {
+                            id: "event-codex-assistant-1",
+                            phaseId: "chat",
+                            phaseLabel: "Assistant",
+                            kind: "assistant",
+                            role: "assistant",
+                            content: "Hello from Codex",
+                            timestamp: new Date("2026-05-05T08:00:00.000Z").toISOString(),
+                        },
+                    ],
+                }),
+            };
         });
     });
 
@@ -243,5 +301,28 @@ describe("POST /api/sessions", () => {
 
         const res = await POST(req);
         expect(res.status).toBe(404);
+    });
+
+    it("creates a codex session without requiring graphId", async () => {
+        const req = new Request("http://localhost/api/sessions", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+                executionBackend: "codex",
+                message: "réponds en français",
+                codexModel: "gpt-5.4",
+                workspaceId: "workspace-1",
+            }),
+        });
+
+        const res = await POST(req);
+        expect(res.status).toBe(200);
+        const chunks = await readNdjson(res);
+        expect(chunks[0]?.type).toBe("init");
+        expect(chunks.some((c) => c.type === "text_delta")).toBe(true);
+        expect(chunks.some((c) => c.type === "final")).toBe(true);
+        expect(createRun.mock.calls[0]?.[3]?.executionBackend).toBe("codex");
+        expect(codexStartTurnStream).toHaveBeenCalled();
+        expect(codexRegisterRunMetadata).toHaveBeenCalled();
     });
 });

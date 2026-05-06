@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Panel, Button, Badge, EmptyState, Modal } from "@kletron/ui/components/design-system";
-import { useWorkspace } from "@kletron/ui/context/WorkspaceContext";
+import { isWorkspaceOperational, useWorkspace } from "@kletron/ui/context/WorkspaceContext";
 import { InlineAddWorkspaceForm } from "./InlineAddWorkspaceForm";
 
 type ToolOverrideMode = "always_approve" | "always_require" | "default";
@@ -363,9 +363,7 @@ export default function WorkspaceConfigPage() {
                                     <ul className="divide-y divide-border-subtle">
                                         {workspaces.map((workspace) => {
                                             const isActive = workspace.id === activeWorkspaceId;
-                                            const isHealthy =
-                                                (workspace.health ?? "healthy") === "healthy" &&
-                                                workspace.selectable !== false;
+                                            const isHealthy = isWorkspaceOperational(workspace);
                                             return (
                                                 <li
                                                     key={workspace.id}

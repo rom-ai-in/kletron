@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentSession } from "@kletron/ui/hooks/useAgentSession";
+import { effectiveLlmStripHealth } from "@kletron/ui/hooks/effectiveLlmStripHealth";
+import { AgentSessionEngineStrip } from "@kletron/ui/components/Agent/AgentSessionEngineStrip";
 import { useSlashSkills } from "@kletron/ui/hooks/useSlashSkills";
 import {
   Eye,
@@ -215,27 +217,6 @@ export default function App() {
     workspaceId: activeWorkspaceId,
   });
 
-  const composerConnection = useMemo(
-    () =>
-      getComposerConnectionState({
-        backendUrlValid,
-        backendConnected,
-        hasAccessToken: !!auth.auth?.accessToken,
-        activeWorkspaceId,
-        llmStatus: agentSession.llmSelectorLoading ? "loading" : agentSession.llmStatus,
-        llmProviderLabel: agentSession.llmProvider.trim() || "LLM",
-      }),
-    [
-      backendUrlValid,
-      backendConnected,
-      auth.auth?.accessToken,
-      activeWorkspaceId,
-      agentSession.llmSelectorLoading,
-      agentSession.llmStatus,
-      agentSession.llmProvider,
-    ],
-  );
-
   const models = useModels(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
   const apiFetch = useDesktopApiFetch(backendUrlTrimmed, auth.getAccessToken, activeWorkspaceId);
   const automationsHook = useAutomations(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
@@ -286,6 +267,52 @@ export default function App() {
     diffs.setDiffs,
     activeWorkspaceId,
     categoriesHook.activeCategory
+  );
+
+  const agentLlmStrip = useMemo(
+    () =>
+      effectiveLlmStripHealth({
+        llmStatus: agentSession.llmStatus,
+        llmStatusDetail: agentSession.llmStatusDetail,
+        userExecutionBackend: agentSession.executionBackend,
+        sessionExecutionBackend: conversation.sessionDetail?.executionBackend ?? null,
+        hasActiveSession: Boolean(threads.conversationId),
+      }),
+    [
+      agentSession.llmStatus,
+      agentSession.llmStatusDetail,
+      agentSession.executionBackend,
+      conversation.sessionDetail?.executionBackend,
+      threads.conversationId,
+    ],
+  );
+
+  const composerConnection = useMemo(
+    () =>
+      getComposerConnectionState({
+        backendUrlValid,
+        backendConnected,
+        hasAccessToken: !!auth.auth?.accessToken,
+        activeWorkspaceId,
+        llmStatus: agentSession.llmSelectorLoading ? "loading" : agentLlmStrip.status,
+        llmProviderLabel: agentSession.llmProvider.trim() || "LLM",
+        langGraphLlmOptional:
+          (Boolean(threads.conversationId) &&
+            (conversation.sessionDetail?.executionBackend ?? "langgraph") === "codex") ||
+          (!threads.conversationId && agentSession.executionBackend === "codex"),
+      }),
+    [
+      backendUrlValid,
+      backendConnected,
+      auth.auth?.accessToken,
+      activeWorkspaceId,
+      agentSession.llmSelectorLoading,
+      agentLlmStrip.status,
+      agentSession.llmProvider,
+      threads.conversationId,
+      conversation.sessionDetail?.executionBackend,
+      agentSession.executionBackend,
+    ],
   );
 
   useEffect(() => {
@@ -1856,6 +1883,9 @@ export default function App() {
                 await conversation.sessionEdits.approveEdit(editId, toolName);
                 await diffs.applyAllDiff(editId);
               }}
+              approveEditForSession={async (editId, toolName) => {
+                await conversation.sessionEdits.approveEditForSession(editId, toolName);
+              }}
               rejectEdit={(editId, toolName) => {
                 void conversation.sessionEdits.rejectEdit(editId, toolName);
                 diffs.rejectAllDiff(editId);
@@ -1871,125 +1901,136 @@ export default function App() {
             />
           )}
 
-          {/* Input Bar + connectors row (matches web agent layout) */}
-          <div className="relative z-10 mx-auto w-full max-w-3xl shrink-0 app-region-no-drag px-4 pb-3 pt-1">
-            {/* Slash command menu */}
-            <SlashCommandMenu
-              open={slashMenuOpen}
-              onClose={() => setSlashMenuOpen(false)}
-              commands={slashCommands}
-              filter={conversation.input}
-            />
-            {/* Multimodal menu */}
-            <MultimodalMenu
-              open={multimodalOpen}
-              onClose={() => setMultimodalOpen(false)}
-              onIncludeFile={async () => {
-                try {
-                  const paths = await (window as any).kletron?.pickFile?.();
-                  if (Array.isArray(paths)) {
-                    for (const p of paths) {
-                      const filename = p.split("/").pop() || p;
-                      setContextChips((prev) => [...prev, createFileChip(filename, p)]);
+          {/* Queued messages — same order as web: before padded composer (aligns with thread + strip) */}
+          <MessageQueue
+            messages={messageQueue}
+            onEdit={handleQueueEdit}
+            onMoveUp={handleQueueMoveUp}
+            onDelete={handleQueueDelete}
+            onForceSend={handleQueueForceSend}
+            streaming={conversation.runActive}
+            className="mx-auto w-full max-w-3xl shrink-0"
+          />
+
+          {/* Input bar (web parity: outer px-4, inner max-w-3xl — not both on one node) */}
+          <div className="relative z-10 flex flex-none flex-col app-region-no-drag px-4 pb-3 pt-1">
+            <div className="relative mx-auto w-full max-w-3xl">
+              {/* Slash command menu */}
+              <SlashCommandMenu
+                open={slashMenuOpen}
+                onClose={() => setSlashMenuOpen(false)}
+                commands={slashCommands}
+                filter={conversation.input}
+              />
+              {/* Multimodal menu */}
+              <MultimodalMenu
+                open={multimodalOpen}
+                onClose={() => setMultimodalOpen(false)}
+                onIncludeFile={async () => {
+                  try {
+                    const paths = await (window as any).kletron?.pickFile?.();
+                    if (Array.isArray(paths)) {
+                      for (const p of paths) {
+                        const filename = p.split("/").pop() || p;
+                        setContextChips((prev) => [...prev, createFileChip(filename, p)]);
+                      }
                     }
-                  }
-                } catch { /* ignore */ }
-              }}
-              onTakeScreenshot={async () => {
-                try {
-                  await (window as any).kletron?.captureScreenshot?.();
-                } catch { /* ignore */ }
-              }}
-            />
-            {/* Queued messages (visible when agent is busy) */}
-            <MessageQueue
-              messages={messageQueue}
-              onEdit={handleQueueEdit}
-              onMoveUp={handleQueueMoveUp}
-              onDelete={handleQueueDelete}
-              onForceSend={handleQueueForceSend}
-              streaming={conversation.runActive}
-              className="mx-auto w-full max-w-3xl"
-            />
-            <InputBar
-              className="px-0 pb-0 pt-0"
-              value={conversation.input}
-              onChange={conversation.setInput}
-              onSend={handleSendMessage}
-              onStop={conversation.stopStreaming}
-              sending={conversation.runActive}
-              disabled={composerConnection.composerDisabled}
-              placeholder={
-                conversation.runActive
-                  ? "Add a follow-up (queued until agent finishes). Press / for slash commands (skills, plan, workspace)."
-                  : planMode
-                    ? "Describe what you want to plan… Press / for slash commands (skills, plan, workspace)."
-                    : "Write your message… Press / for slash commands (skills, plan, workspace)."
-              }
-              onKeyDown={handleInputKeyDown}
-              contextChips={[...slashSkillChips, ...draftSkillMirrorChips, ...contextChips]}
-              onDismissChip={(id) => {
-                setSlashSkillChips((p) => p.filter((c) => c.id !== id));
-                setContextChips((p) => p.filter((c) => c.id !== id));
-              }}
-              allowSendWhenEmpty={slashSkillChips.length > 0}
-              onPaperclipClick={() => setMultimodalOpen((p) => !p)}
-              planMode={planMode}
-              graphSelector={
-                <Selector
-                  label="GRAPH"
-                  value={agentSession.selectedGraphId}
-                  options={agentSession.graphSelectOptions}
-                  onSelect={agentSession.handleGraphChange}
-                  size="sm"
-                  direction="up"
-                  loading={agentGraphsLoading}
-                />
-              }
-              modelSelector={
-                <Selector
-                  label="LLM"
-                  value={agentSession.llmProvider}
-                  options={agentSession.llmOptions}
-                  onSelect={agentSession.handleLlmChange}
-                  size="sm"
-                  direction="up"
-                  loading={agentSession.llmSelectorLoading}
-                  status={agentSession.llmSelectorLoading ? "none" : agentSession.llmStatus}
-                  menuAlign="end"
-                  statusTooltip={agentSession.llmSelectorLoading ? null : agentSession.llmStatusDetail}
-                />
-              }
-              approvalSelector={
-                <ThreadApprovalModeSelector
-                  value={conversation.threadApprovalMode}
-                  onSelect={conversation.onThreadApprovalSelect}
-                  disabled={conversation.conversationRunSource === "automation"}
-                  disabledReason="Tool policy mode is fixed for automation threads."
-                />
-              }
-              depthSelector={
-                <label className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
-                  <span className="shrink-0">Depth</span>
-                  <select
-                    value={conversation.researchDepth}
-                    onChange={(e) =>
-                      conversation.setResearchDepth(e.target.value as ResearchDepthId)
+                  } catch { /* ignore */ }
+                }}
+                onTakeScreenshot={async () => {
+                  try {
+                    await (window as any).kletron?.captureScreenshot?.();
+                  } catch { /* ignore */ }
+                }}
+              />
+              <InputBar
+                className="px-0 pb-0 pt-0"
+                value={conversation.input}
+                onChange={conversation.setInput}
+                onSend={handleSendMessage}
+                onStop={conversation.stopStreaming}
+                sending={conversation.runActive}
+                disabled={composerConnection.composerDisabled}
+                placeholder={
+                  conversation.runActive
+                    ? "Add a follow-up (queued until agent finishes). Press / for slash commands (skills, plan, workspace)."
+                    : planMode
+                      ? "Describe what you want to plan… Press / for slash commands (skills, plan, workspace)."
+                      : "Write your message… Press / for slash commands (skills, plan, workspace)."
+                }
+                onKeyDown={handleInputKeyDown}
+                contextChips={[...slashSkillChips, ...draftSkillMirrorChips, ...contextChips]}
+                onDismissChip={(id) => {
+                  setSlashSkillChips((p) => p.filter((c) => c.id !== id));
+                  setContextChips((p) => p.filter((c) => c.id !== id));
+                }}
+                allowSendWhenEmpty={slashSkillChips.length > 0}
+                onPaperclipClick={() => setMultimodalOpen((p) => !p)}
+                planMode={planMode}
+                sessionStripOverride={
+                  <AgentSessionEngineStrip
+                    preferenceBackend={agentSession.executionBackend}
+                    sessionBackend={conversation.sessionDetail?.executionBackend ?? null}
+                    hasActiveSession={Boolean(threads.conversationId)}
+                    onPreferenceBackendChange={agentSession.handleExecutionBackendChange}
+                    langGraphControls={
+                      <>
+                        <Selector
+                          label="GRAPH"
+                          value={agentSession.selectedGraphId}
+                          options={agentSession.graphSelectOptions}
+                          onSelect={agentSession.handleGraphChange}
+                          size="sm"
+                          direction="up"
+                          loading={agentGraphsLoading}
+                        />
+                        <Selector
+                          label={agentLlmStrip.selectorLabel}
+                          value={agentSession.llmProvider}
+                          options={agentSession.llmOptions}
+                          onSelect={agentSession.handleLlmChange}
+                          size="sm"
+                          direction="up"
+                          loading={agentSession.llmSelectorLoading}
+                          status={agentSession.llmSelectorLoading ? "none" : agentLlmStrip.status}
+                          menuAlign="end"
+                          statusTooltip={agentSession.llmSelectorLoading ? null : agentLlmStrip.detail}
+                        />
+                      </>
                     }
-                    disabled={!!threads.conversationId}
-                    title={
-                      threads.conversationId
-                        ? "Research depth is fixed for this thread (set when the session was created)."
-                        : "Exhaustive: more tools and context. Fast: fewer steps and shorter replies."
+                    trailingControls={
+                      <>
+                        <ThreadApprovalModeSelector
+                          value={conversation.threadApprovalMode}
+                          onSelect={conversation.onThreadApprovalSelect}
+                          disabled={conversation.conversationRunSource === "automation"}
+                          disabledReason="Tool policy mode is fixed for automation threads."
+                        />
+                        <label className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                          <span className="shrink-0">Depth</span>
+                          <select
+                            value={conversation.researchDepth}
+                            onChange={(e) =>
+                              conversation.setResearchDepth(e.target.value as ResearchDepthId)
+                            }
+                            disabled={!!threads.conversationId}
+                            title={
+                              threads.conversationId
+                                ? "Research depth is fixed for this thread (set when the session was created)."
+                                : "Exhaustive: more tools and context. Fast: fewer steps and shorter replies."
+                            }
+                            className="max-w-[120px] rounded border border-white/[0.12] bg-bg-elevated py-0.5 pl-1.5 pr-6 text-[10px] font-normal normal-case text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <option value="exhaustive">Exhaustive</option>
+                            <option value="fast">Fast</option>
+                          </select>
+                        </label>
+                      </>
                     }
-                    className="max-w-[120px] rounded border border-white/[0.12] bg-bg-elevated py-0.5 pl-1.5 pr-6 text-[10px] font-normal normal-case text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <option value="exhaustive">Exhaustive</option>
-                    <option value="fast">Fast</option>
-                  </select>
-                </label>
-              }
-            />
+                  />
+                }
+              />
+            </div>
             <WorkspaceConnectorsHint
               apiOrigin={backendUrlTrimmed}
               workspaceId={activeWorkspaceId}

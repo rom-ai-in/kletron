@@ -29,6 +29,11 @@ export interface InputBarProps {
   approvalSelector?: React.ReactNode;
   /** Research depth (agent sessions) — same row as graph / LLM on web */
   depthSelector?: React.ReactNode;
+  /**
+   * When set, replaces the default strip built from graphSelector + modelSelector + approval + depth
+   * (e.g. LangGraph vs Codex engine switcher from {@link AgentSessionEngineStrip}).
+   */
+  sessionStripOverride?: React.ReactNode;
   /** Plan mode badge */
   planMode?: boolean;
   /** True when slash skill chips (or similar) make send valid without textarea text. */
@@ -57,6 +62,7 @@ export function InputBar({
   modelSelector,
   approvalSelector,
   depthSelector,
+  sessionStripOverride,
   planMode = false,
   allowSendWhenEmpty = false,
   connected: _connected = true,
@@ -92,16 +98,17 @@ export function InputBar({
   }, [onPaperclipClick, onDictationClick]);
 
   const sessionStrip = useMemo(() => {
+    if (sessionStripOverride) return sessionStripOverride;
     if (!graphSelector && !modelSelector && !approvalSelector && !depthSelector) return null;
     return (
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+      <div className="flex min-w-0 flex-nowrap items-center gap-x-1.5 overflow-x-auto overflow-y-hidden overscroll-x-contain scrollbar-elegant sm:gap-x-2">
         {graphSelector}
         {modelSelector}
         {approvalSelector}
         {depthSelector}
       </div>
     );
-  }, [graphSelector, modelSelector, approvalSelector, depthSelector]);
+  }, [sessionStripOverride, graphSelector, modelSelector, approvalSelector, depthSelector]);
 
   return (
     <div className={`px-4 pb-3 pt-1 ${className}`}>

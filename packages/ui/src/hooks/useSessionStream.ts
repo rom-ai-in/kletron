@@ -32,6 +32,10 @@ export interface UseSessionStreamOptions {
     sessionId: string | null;
     /** Currently selected graph ID. */
     selectedGraphId: string;
+    /** Runtime backend selector (`langgraph` default, or `codex`). */
+    executionBackend?: "langgraph" | "codex";
+    /** Optional Codex model override. */
+    codexModel?: string | null;
     /** Currently selected LLM provider. */
     llmProvider: string;
     /** LLM model override (optional). */
@@ -127,6 +131,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const {
         sessionId,
         selectedGraphId,
+        executionBackend = "langgraph",
+        codexModel = null,
         llmProvider,
         llmModel,
         workspaceId,
@@ -164,6 +170,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const [clientRequestToFirstTextMs, setClientRequestToFirstTextMs] = useState<number | null>(null);
     /** Client-side timing: POST start → first `text_delta` (end-to-end perceived latency). */
     const clientStreamMarkRef = useRef<{ sendAt: number; loggedFirstText: boolean } | null>(null);
+    /** Server `init` may set this when streamed user rows use preflight mission text (e.g. Codex slash skills). */
+    const streamTurnAnchorRef = useRef<string | null>(null);
 
     const abortControllerRef = useRef<AbortController | null>(null);
     const isAtBottomRef = useRef(true);
@@ -246,6 +254,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         setLatestStreamKpi(null);
         setClientRequestToFirstTextMs(null);
         clientStreamMarkRef.current = null;
+        streamTurnAnchorRef.current = null;
         clearStreamBuffers();
         // Reset first-message flag so title generation works for each new session
         isFirstMessageRef.current = true;
@@ -510,6 +519,10 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                     const chunk: StreamChunk = JSON.parse(trimmed);
 
                     if (chunk.type === "init") {
+                        const anchor = chunk.payload.turnAnchorMessage;
+                        if (typeof anchor === "string" && anchor.length > 0) {
+                            streamTurnAnchorRef.current = anchor;
+                        }
                         if (isNewSession && onSessionCreated) {
                             onSessionCreated(chunk.payload.runId, chunk.payload.graphId, userMessage);
                         }
@@ -545,6 +558,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                         streamFlushRafRef.current = null;
                         const update = chunk.payload;
                         let appliedSnapshot = false;
+                        let clearLiveStreamingBubble = false;
 
                         // Update timeline (full replacement — these are always complete)
                         if (update.timeline?.length) {
@@ -553,19 +567,30 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
                         // Update event stream (full replacement for timeline view)
                         if (update.eventStream?.length) {
-                            const currentTurnEvents = extractCurrentTurnEvents(update.eventStream, userMessage);
+                            const anchorMsg = streamTurnAnchorRef.current ?? userMessage;
+                            const currentTurnEvents = extractCurrentTurnEvents(update.eventStream, anchorMsg);
                             // Guard against stale snapshots from the previous turn.
                             if (
                                 currentTurnEvents.length > 0 &&
-                                streamSnapshotMatchesCurrentTurn(currentTurnEvents, userMessage)
+                                streamSnapshotMatchesCurrentTurn(currentTurnEvents, anchorMsg)
                             ) {
                                 setEventStream(currentTurnEvents);
                                 // Merge into chat messages (append + dedup, preserving previous turns)
                                 mergeStreamMessages(currentTurnEvents, optimisticTempId);
-                                // Re-anchor progressive deltas to the assistant for *this* turn only (after latest user).
+                                // Re-anchor progressive deltas only when the snapshot already includes the plain
+                                // assistant message (LangGraph). Tool-only snapshots (e.g. Codex mid-turn) must
+                                // not wipe refs fed by text_delta / reasoning_delta.
                                 const turnAssistant = lastPlainAssistantAfterLatestUser(currentTurnEvents);
-                                streamingTextRef.current =
-                                    typeof turnAssistant?.content === "string" ? turnAssistant.content : "";
+                                const syncedAssistantText =
+                                    typeof turnAssistant?.content === "string" && turnAssistant.content.length > 0;
+                                if (syncedAssistantText && turnAssistant) {
+                                    streamingTextRef.current = turnAssistant.content;
+                                    const rawThinking = (turnAssistant as { thinking?: string }).thinking;
+                                    if (typeof rawThinking === "string" && rawThinking.trim().length > 0) {
+                                        streamingReasoningRef.current = rawThinking;
+                                    }
+                                    clearLiveStreamingBubble = true;
+                                }
                                 appliedSnapshot = true;
                             }
                         }
@@ -581,8 +606,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                         if (update.capabilityDroppedTools !== undefined) {
                             setCapabilityDroppedTools(update.capabilityDroppedTools);
                         }
-                        // Hide the live bubble only when we actually applied a matching snapshot.
-                        if (appliedSnapshot) {
+                        // Hide the live bubble only when assistant text was merged from the snapshot (not for
+                        // tool-only partial snapshots while deltas are still arriving).
+                        if (appliedSnapshot && clearLiveStreamingBubble) {
                             setStreamingText("");
                             setStreamingReasoning("");
                         }
@@ -601,7 +627,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                             setTimeline(chunk.payload.timeline);
                         }
                         if (chunk.payload.eventStream?.length) {
-                            const currentTurnEvents = extractCurrentTurnEvents(chunk.payload.eventStream, userMessage);
+                            const anchorMsg = streamTurnAnchorRef.current ?? userMessage;
+                            const currentTurnEvents = extractCurrentTurnEvents(chunk.payload.eventStream, anchorMsg);
                             if (currentTurnEvents.length > 0) {
                                 setEventStream(currentTurnEvents);
                                 mergeStreamMessages(currentTurnEvents, optimisticTempId);
@@ -642,7 +669,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const handleSend = useCallback(async (options?: { text?: string; planMode?: boolean }) => {
         const msg = (options?.text ?? input).trim();
         if (!msg || sending) return;
-        if (!sessionId && !selectedGraphId) {
+        if (!sessionId && executionBackend !== "codex" && !selectedGraphId) {
             setErrorMessage("No agent graph selected. Please select a graph before sending.");
             return;
         }
@@ -655,6 +682,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
         setRunStartedAt(new Date().toISOString());
         setRunEndedAt(null);
         clearStreamBuffers();
+        streamTurnAnchorRef.current = null;
         setCapabilityDroppedTools([]);
         setFirstStreamKpi(null);
         setLatestStreamKpi(null);
@@ -680,10 +708,14 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
 
         const body = isNewSession
             ? {
-                ...(selectedGraphId ? { graphId: selectedGraphId } : {}),
+                ...(executionBackend === "codex"
+                    ? {}
+                    : (selectedGraphId ? { graphId: selectedGraphId } : {})),
+                executionBackend,
                 message: msg,
                 provider: llmProvider,
                 model: llmModel,
+                ...(executionBackend === "codex" && codexModel ? { codexModel } : {}),
                 ...(workspaceId ? { workspaceId } : {}),
                 ...(channel ? { channel } : {}),
                 ...(threadApprovalMode && threadApprovalMode !== 'inherit' ? { threadApprovalMode } : {}),
@@ -695,6 +727,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 message: msg,
                 provider: llmProvider,
                 model: llmModel,
+                executionBackend,
+                ...(executionBackend === "codex" && codexModel ? { codexModel } : {}),
                 ...(effectivePlanMode ? { planMode: true } : {}),
             };
         const requestBody = {
@@ -755,7 +789,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [input, sending, sessionId, selectedGraphId, llmProvider, llmModel, workspaceId, threadApprovalMode, apiOrigin, category, workMode, planMode, researchDepth, channel, processNdjsonStream]);
+    }, [input, sending, sessionId, selectedGraphId, executionBackend, codexModel, llmProvider, llmModel, workspaceId, threadApprovalMode, apiOrigin, category, workMode, planMode, researchDepth, channel, processNdjsonStream]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {

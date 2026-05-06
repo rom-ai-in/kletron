@@ -18,6 +18,7 @@ export interface SessionPendingEdit {
 /** Shown briefly after a pending edit is resolved so the panel does not “blink” away with no feedback. */
 export type SessionEditFlushNotice =
     | { kind: "approved"; toolName: string }
+    | { kind: "approved_session"; toolName: string }
     | { kind: "rejected"; toolName: string }
     | { kind: "approved_all"; count: number }
     | { kind: "rejected_all"; count: number };
@@ -36,12 +37,14 @@ export interface UseSessionEditsOptions {
 export interface UseSessionEditsReturn {
     pendingEdits: SessionPendingEdit[];
     /** Per-row in-flight approve/reject (for accurate button labels). */
-    processingOp: { editId: string; op: "approve" | "reject" } | null;
+    processingOp: { editId: string; op: "approve" | "approve_session" | "reject" } | null;
     /** Short-lived message after the queue changes (esp. when it becomes empty). */
     flushNotice: SessionEditFlushNotice | null;
     dismissFlushNotice: () => void;
     /** Approve a single edit. Pass toolName for accurate toast copy if the list updates mid-request. */
     approveEdit: (editId: string, toolName?: string) => Promise<void>;
+    /** Approve a single edit for the full session scope (Codex only). */
+    approveEditForSession: (editId: string, toolName?: string) => Promise<void>;
     /** Reject a single edit. */
     rejectEdit: (editId: string, toolName?: string) => Promise<void>;
     /** Approve all pending edits. */
@@ -68,7 +71,7 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
     const [pendingEdits, setPendingEdits] = useState<SessionPendingEdit[]>([]);
     const [processingOp, setProcessingOp] = useState<{
         editId: string;
-        op: "approve" | "reject";
+        op: "approve" | "approve_session" | "reject";
     } | null>(null);
     const [flushNotice, setFlushNotice] = useState<SessionEditFlushNotice | null>(null);
     const [approvingAll, setApprovingAll] = useState(false);
@@ -228,6 +231,40 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
         [sessionId, apiOrigin, fetchEdits, scheduleFlushNotice]
     );
 
+    const approveEditForSession = useCallback(
+        async (editId: string, toolName?: string) => {
+            if (!sessionId) return;
+            const name = toolName?.trim() || "tool";
+            setProcessingOp({ editId, op: "approve_session" });
+            try {
+                const authExtra = (await getRequestHeadersRef.current?.()) ?? {};
+                const res = await fetch(
+                    joinApiOrigin(apiOrigin, `/api/sessions/${sessionId}/edits/approve`),
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...authExtra },
+                        body: JSON.stringify({ editId, decision: "acceptForSession" }),
+                    },
+                );
+                if (!res.ok) {
+                    const payload = await res.json().catch(() => ({}));
+                    throw new Error(
+                        payload?.executionResult?.message ||
+                            payload?.error ||
+                            "Approval execution failed"
+                    );
+                }
+                await fetchEdits();
+                scheduleFlushNotice({ kind: "approved_session", toolName: name });
+            } catch (e) {
+                console.error("[useSessionEdits] Approve for session failed:", e);
+            } finally {
+                setProcessingOp((cur) => (cur?.editId === editId ? null : cur));
+            }
+        },
+        [sessionId, apiOrigin, fetchEdits, scheduleFlushNotice]
+    );
+
     const approveAll = useCallback(async () => {
         if (!sessionId) return;
         const count = pendingEdits.length;
@@ -285,6 +322,7 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
         flushNotice,
         dismissFlushNotice,
         approveEdit,
+        approveEditForSession,
         rejectEdit,
         approveAll,
         rejectAll,

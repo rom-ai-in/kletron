@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
 import { agentGraphRunService } from "@kletron/server/services/agentGraphRunService";
 import { SafeEditGate } from "@kletron/server/services/agent/SafeEditGate";
+import { codexExecutionService } from "@kletron/server/services/codexExecutionService";
 
 const safeEditGate = SafeEditGate.getInstance();
 
@@ -21,12 +22,20 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
     // Merge pending edits from SafeEditGate and run state
     const pendingFromGate = safeEditGate.listPendingEdits(params.id);
+    const pendingFromCodex = codexExecutionService.listPendingApprovals(params.id).map((approval) => ({
+      id: approval.id,
+      toolName: approval.toolName,
+      args: approval.args,
+      status: approval.status,
+      createdAt: approval.createdAt,
+      description: approval.description,
+    }));
     const pendingFromState = run?.state?.approvals?.pending
       ? (run.state.approvals.pending as Array<Record<string, unknown>>)
       : [];
 
     const seen = new Set<string>();
-    const merged = [...pendingFromGate, ...pendingFromState].filter((item: any) => {
+    const merged = [...pendingFromGate, ...pendingFromCodex, ...pendingFromState].filter((item: any) => {
       const id = String(item?.id ?? "");
       if (!id || seen.has(id)) return false;
       seen.add(id);

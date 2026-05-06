@@ -113,10 +113,11 @@ export function DesktopWorkspaceProvider({
       const token = await getAccessToken();
       if (!token) return;
       try {
-        await fetch(`${backendUrlTrimmed}/api/workspaces/${encodeURIComponent(id)}`, {
+        const res = await fetch(`${backendUrlTrimmed}/api/workspaces/${encodeURIComponent(id)}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (!res.ok) return;
         await refreshAllWorkspaces();
       } catch {
         // ignore

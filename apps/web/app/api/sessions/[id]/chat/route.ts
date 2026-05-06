@@ -10,17 +10,62 @@ import { agentGraphExecutor } from "@kletron/server/services/agentGraphExecutor"
 import type { AgentStreamKpiV1 } from "@kletron/shared/chatTypes";
 import { buildThreadSkillState } from "@kletron/server/services/workspaceSkillStateService";
 import { applySkillSlashPreflight, mergeLoadedSkillIds } from "@kletron/server/services/skillSlashPreflight";
+import { codexExecutionService, type CodexSandboxMode } from "@kletron/server/services/codexExecutionService";
+import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 const textEncoder = new TextEncoder();
 
 type StreamChunk =
-  | { type: "init"; payload: { runId: string; graphId: string; skills?: Awaited<ReturnType<typeof buildThreadSkillState>> } }
+  | {
+      type: "init";
+      payload: {
+        runId: string;
+        graphId: string;
+        skills?: Awaited<ReturnType<typeof buildThreadSkillState>>;
+        turnAnchorMessage?: string;
+      };
+    }
   | { type: "update"; payload: AgentWorkflowUpdate }
   | { type: "text_delta"; payload: { content: string } }
   | { type: "reasoning_delta"; payload: { content: string } }
   | { type: "stream_metrics"; payload: AgentStreamKpiV1 }
   | { type: "final"; payload: AgentWorkflowResult }
   | { type: "error"; payload: { message: string } };
+
+function parseCodexModel(payload: Record<string, unknown>, fallback?: string): string | undefined {
+  const fromBody = typeof payload.codexModel === "string" ? payload.codexModel.trim() : "";
+  if (fromBody) return fromBody;
+  const fromModel = typeof payload.model === "string" ? payload.model.trim() : "";
+  if (fromModel) return fromModel;
+  return fallback?.trim() || undefined;
+}
+
+function parseCodexSandboxMode(input: unknown, fallback: CodexSandboxMode = "read-only"): CodexSandboxMode {
+  if (input === "workspace-write") return "workspace-write";
+  if (input === "danger-full-access") return "danger-full-access";
+  if (input === "read-only") return "read-only";
+  return fallback;
+}
+
+function buildCodexPlaceholderOutputs(mission: string, report: string): AgentWorkflowResult["outputs"] {
+  return {
+    context: { mission, languages: [], frameworks: [], hotspots: [] },
+    target_files: [],
+    raw_claims: [],
+    verified_findings: [],
+    findings: [],
+    tasks: [],
+    report,
+    meta: {},
+  };
+}
+
+function resolveCodexRunStatus(input: string, hasError: boolean): "COMPLETED" | "FAILED" | "CANCELLED" {
+  const normalized = input.toLowerCase();
+  if (normalized.includes("cancel") || normalized.includes("interrupt")) return "CANCELLED";
+  if (hasError || normalized.includes("fail") || normalized.includes("error")) return "FAILED";
+  return "COMPLETED";
+}
 
 /**
  * POST /api/sessions/[id]/chat - Continue a session with a follow-up message.
@@ -109,6 +154,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   const graphId = run.graphId?.toString() ?? "";
+  const executionBackend = run.executionBackend === "codex" ? "codex" : "langgraph";
   const workspaceId = run.workspaceId?.toString() ?? "";
   const graph = graphId ? await agentGraphService.getGraph(graphId) : null;
   const slashPreflight = workspaceId
@@ -165,6 +211,181 @@ export async function POST(request: Request, { params }: { params: { id: string 
     clientDisconnected = true;
   });
 
+  if (executionBackend === "codex") {
+    let workspace;
+    try {
+      workspace = await resolveWorkspaceFromRequestStrict(
+        request,
+        auth.userId,
+        workspaceId ? ({ workspaceId } as Record<string, unknown>) : (payload as Record<string, unknown>),
+      );
+    } catch (error) {
+      const workspaceError = workspaceErrorToHttp(error);
+      if (workspaceError) {
+        return new Response(JSON.stringify(workspaceError.body), {
+          status: workspaceError.status,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      throw error;
+    }
+    if (!workspace || !workspace._id || !workspace.rootPath) {
+      return new Response(JSON.stringify({ error: "Workspace not configured" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const codexWorkspaceId = workspace._id.toString();
+
+    const codexModel = parseCodexModel(payload as Record<string, unknown>, run.codexModel);
+    const codexSandboxMode = parseCodexSandboxMode(payload?.codexSandboxMode, run.codexSandboxMode ?? "read-only");
+    const mergedLoadedSkillIds = mergeLoadedSkillIds(run.state?.loadedSkillIds, predictedSlashLoads);
+    const mergedSkillLoads = [
+      ...((run.state?.skillLoads as Array<{ slug: string; at: string; reason?: string }> | undefined) ?? []),
+      ...predictedSlashLoads.map((slug) => ({
+        slug,
+        at: new Date().toISOString(),
+        reason: "slash_preflight",
+      })),
+    ];
+    const preparedState = {
+      ...(run.state ?? {}),
+      loadedSkillIds: mergedLoadedSkillIds,
+      skillLoads: mergedSkillLoads,
+    };
+
+    await agentGraphRunService.updateRunStatus(params.id, "RUNNING", {
+      state: preparedState,
+      executionBackend: "codex",
+      codexApprovalState: run.codexApprovalState ?? { hasPending: false, pendingCount: 0, updatedAt: new Date().toISOString() },
+      ...(codexModel ? { codexModel } : {}),
+      codexSandboxMode,
+    } as any);
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sendChunk = (chunk: StreamChunk) => {
+          if (clientDisconnected) return;
+          try {
+            controller.enqueue(textEncoder.encode(`${JSON.stringify(chunk)}\n`));
+          } catch {
+            clientDisconnected = true;
+          }
+        };
+        sendChunk({
+          type: "init",
+          payload: {
+            runId: params.id,
+            graphId,
+            skills: threadSkills,
+            turnAnchorMessage: slashPreflight.mission,
+          },
+        });
+
+        try {
+          const turn = await codexExecutionService.startTurnStream({
+            runId: params.id,
+            userId: auth.userId,
+            message: slashPreflight.mission,
+            cwd: workspace.rootPath,
+            workspaceId: codexWorkspaceId,
+            ...(codexModel ? { model: codexModel } : {}),
+            threadId: run.codexThreadId ?? null,
+            sandboxMode: codexSandboxMode,
+          });
+          await codexExecutionService.registerRunMetadata(params.id, {
+            executionBackend: "codex",
+            codexThreadId: turn.threadId,
+            codexTurnId: turn.turnId,
+            ...(codexModel ? { codexModel } : {}),
+            codexSandboxMode,
+          });
+
+          for await (const event of turn.events) {
+            if (event.kind === "event_snapshot") {
+              sendChunk({
+                type: "update",
+                payload: {
+                  timeline: [],
+                  eventStream: event.events,
+                },
+              });
+              continue;
+            }
+            if (event.kind === "notification") {
+              if (event.method === "item/agentMessage/delta") {
+                const delta = typeof event.params?.delta === "string" ? event.params.delta : "";
+                if (delta) sendChunk({ type: "text_delta", payload: { content: delta } });
+                continue;
+              }
+              if (event.method === "item/reasoning/textDelta" || event.method === "item/reasoning/summaryTextDelta") {
+                const delta = typeof event.params?.delta === "string" ? event.params.delta : "";
+                if (delta) sendChunk({ type: "reasoning_delta", payload: { content: delta } });
+                continue;
+              }
+            } else if (event.kind === "error") {
+              sendChunk({ type: "error", payload: { message: event.message } });
+            }
+          }
+
+          const completed = await turn.completed;
+          const latestRun = await agentGraphRunService.getRun(params.id);
+          const previousHistory = Array.isArray(latestRun?.state?.conversationHistory)
+            ? (latestRun?.state?.conversationHistory as any[])
+            : [];
+          const status = resolveCodexRunStatus(completed.status, Boolean(completed.error));
+          const nextState = {
+            ...(latestRun?.state ?? preparedState),
+            conversationHistory: [...previousHistory, ...completed.events],
+            loadedSkillIds: mergedLoadedSkillIds,
+            skillLoads: mergedSkillLoads,
+          };
+          await agentGraphRunService.updateRunStatus(params.id, status, {
+            endedAt: new Date(),
+            state: nextState,
+            executionBackend: "codex",
+            conversationTurns: (latestRun?.conversationTurns ?? run.conversationTurns ?? 1) + 1,
+            codexThreadId: completed.threadId,
+            codexTurnId: completed.turnId,
+            ...(completed.error ? { error: completed.error } : {}),
+          } as any);
+
+          const result: AgentWorkflowResult = {
+            sessionId: params.id,
+            timeline: [],
+            conclusion: completed.agentText || completed.error || "Codex turn completed.",
+            outputs: buildCodexPlaceholderOutputs(slashPreflight.mission, completed.agentText || completed.error || ""),
+            eventStream: completed.events,
+          };
+          sendChunk({ type: "final", payload: result });
+        } catch (error: unknown) {
+          const message = (error as Error)?.message ?? "Codex execution failed";
+          sendChunk({ type: "error", payload: { message } });
+          if (!clientDisconnected) {
+            await agentGraphRunService.updateRunStatus(params.id, "FAILED", {
+              endedAt: new Date(),
+              error: message,
+            } as any).catch(() => {});
+          }
+        } finally {
+          if (clientDisconnected) {
+            await codexExecutionService.stopRun(params.id).catch(() => undefined);
+          }
+          try {
+            controller.close();
+          } catch {
+            // already closed
+          }
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store" },
+    });
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
       const sendChunk = (chunk: StreamChunk) => {
@@ -175,7 +396,15 @@ export async function POST(request: Request, { params }: { params: { id: string 
           clientDisconnected = true;
         }
       };
-      sendChunk({ type: "init", payload: { runId: params.id, graphId, skills: threadSkills } });
+      sendChunk({
+        type: "init",
+        payload: {
+          runId: params.id,
+          graphId,
+          skills: threadSkills,
+          turnAnchorMessage: slashPreflight.mission,
+        },
+      });
       console.log(`[sessions/chat] Stream started for run ${params.id}`);
 
       try {

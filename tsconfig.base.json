@@ -27,7 +27,9 @@
       "@kletron/mcp-client": ["packages/mcp-client/src/index.ts"],
       "@kletron/mcp-client/*": ["packages/mcp-client/src/*"],
       "@kletron/bridge": ["packages/bridge/src/index.ts"],
-      "@kletron/bridge/*": ["packages/bridge/src/*"]
+      "@kletron/bridge/*": ["packages/bridge/src/*"],
+      "@kletron/codex-bridge": ["packages/codex-bridge/src/index.ts"],
+      "@kletron/codex-bridge/*": ["packages/codex-bridge/src/*"]
     }
   }
 }

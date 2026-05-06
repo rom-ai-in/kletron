@@ -185,7 +185,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           <div
             role="toolbar"
             aria-label="Session settings"
-            className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-0.5 py-0.5"
+            className="flex min-w-0 flex-nowrap items-center gap-x-1.5 overflow-x-auto overflow-y-hidden overscroll-x-contain scrollbar-elegant py-0.5 sm:gap-x-2"
           >
             {sessionStrip}
           </div>

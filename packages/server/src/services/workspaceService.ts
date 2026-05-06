@@ -374,18 +374,21 @@ export async function updateWorkspace(
   return getWorkspaceById(id, ownerId);
 }
 
-export async function deleteWorkspace(id: string, ownerId: string): Promise<void> {
-  if (!ObjectId.isValid(id)) return;
+/** Archives the workspace. Returns false if id is invalid or no document matched (wrong owner). */
+export async function deleteWorkspace(id: string, ownerId: string): Promise<boolean> {
+  if (!ObjectId.isValid(id)) return false;
   const collection = await getWorkspaceCollection();
-  await collection.updateOne(
+  const result = await collection.updateOne(
     { _id: new ObjectId(id), ownerId },
     { $set: { status: "archived", updatedAt: new Date() } }
   );
+  if (result.matchedCount === 0) return false;
   const activeId = await getActiveWorkspaceId(ownerId);
   if (activeId === id) {
     await setActiveWorkspaceId(ownerId, null);
   }
   await syncConfigJson(ownerId);
+  return true;
 }
 
 export async function setActiveWorkspaceId(ownerId: string, id: string | null): Promise<void> {
@@ -486,7 +489,9 @@ export async function bootstrapFromLegacyConfig(ownerId: string): Promise<Worksp
   if (!legacy?.workingFolder) return null;
 
   try {
-    const workspace = await setActiveWorkspaceFromPath(ownerId, legacy.workingFolder, "Imported Workspace");
+    const derivedName =
+      path.basename(normalizeRootPath(legacy.workingFolder)).trim() || "Imported Workspace";
+    const workspace = await setActiveWorkspaceFromPath(ownerId, legacy.workingFolder, derivedName);
     return workspace;
   } catch (error) {
     console.warn("[Workspace] Failed to bootstrap from legacy config:", error);

@@ -21,6 +21,14 @@ function getGoogleClientCredentials(): { clientId: string; clientSecret: string 
     return { clientId, clientSecret };
 }
 
+/** Same client id/secret as {@link getGoogleClientCredentials}, but returns null when unset (optional injection paths). */
+export function tryGetGoogleOAuthClientCredentials(): { clientId: string; clientSecret: string } | null {
+    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID ?? "";
+    const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "";
+    if (!clientId || !clientSecret) return null;
+    return { clientId, clientSecret };
+}
+
 export function isGoogleWorkspaceProviderId(providerId: string): providerId is GoogleWorkspaceProviderId {
     return providerId === "google-drive" || providerId === "google-calendar" || providerId === "gmail";
 }
