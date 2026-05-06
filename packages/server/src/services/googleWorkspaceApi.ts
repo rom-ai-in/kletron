@@ -89,6 +89,15 @@ export async function googleAuthorizedFetch(
     return first;
 }
 
+function formatGoogleApiHttpError(status: number, text: string): string {
+    let detail = text.slice(0, 500);
+    if (detail.includes("ACCESS_TOKEN_SCOPE_INSUFFICIENT")) {
+        detail +=
+            " — Reconnect Gmail in Configuration → Connectors (scopes may have changed). In Google Cloud OAuth consent, include gmail.readonly and gmail.compose for hosted Gmail MCP; enable Gmail API + Gmail MCP API on the OAuth client project.";
+    }
+    return `Google API request failed (${status}): ${detail}`;
+}
+
 export async function googleJson<T>(
     auth: GoogleWorkspaceAuth,
     url: string,
@@ -97,7 +106,7 @@ export async function googleJson<T>(
     const response = await googleAuthorizedFetch(auth, url, init);
     const text = await response.text().catch(() => "");
     if (!response.ok) {
-        throw new Error(`Google API request failed (${response.status}): ${text.slice(0, 200)}`);
+        throw new Error(formatGoogleApiHttpError(response.status, text));
     }
     if (!text) {
         return {} as T;
@@ -113,7 +122,7 @@ export async function googleText(
     const response = await googleAuthorizedFetch(auth, url, init);
     const text = await response.text().catch(() => "");
     if (!response.ok) {
-        throw new Error(`Google API request failed (${response.status}): ${text.slice(0, 200)}`);
+        throw new Error(formatGoogleApiHttpError(response.status, text));
     }
     return {
         text,

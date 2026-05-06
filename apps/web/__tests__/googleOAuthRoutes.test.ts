@@ -99,6 +99,7 @@ describe("Google OAuth routes", () => {
         const scopes = (location.searchParams.get("scope") ?? "").split(/\s+/).filter(Boolean);
         expect(scopes).toEqual(
             expect.arrayContaining([
+                "https://www.googleapis.com/auth/gmail.compose",
                 "https://www.googleapis.com/auth/gmail.modify",
                 "https://www.googleapis.com/auth/gmail.metadata",
             ])
@@ -137,7 +138,7 @@ describe("Google OAuth routes", () => {
                 access_token: "access-token",
                 refresh_token: "refresh-token",
                 scope:
-                    "https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.metadata",
+                    "https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.metadata",
             }),
         });
 
@@ -175,6 +176,7 @@ describe("Google OAuth routes", () => {
                 accessToken: "access-token",
             },
             scopes: [
+                "https://www.googleapis.com/auth/gmail.compose",
                 "https://www.googleapis.com/auth/gmail.modify",
                 "https://www.googleapis.com/auth/gmail.metadata",
             ],
