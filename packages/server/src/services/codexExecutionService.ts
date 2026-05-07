@@ -716,6 +716,15 @@ function hashEnvToken(value: unknown): string {
   return shortHash(value);
 }
 
+function computeEffectiveInjectionKey(
+  injectionKey: string,
+  injectKletronGmailRemote: boolean,
+  hostedBearer: unknown,
+): string {
+  if (!injectKletronGmailRemote) return injectionKey;
+  return `${injectionKey}:hostedBearer:${hashEnvToken(hostedBearer)}`;
+}
+
 function buildUserEvent(message: string): AgentEvent {
   return {
     id: `codex-user-${randomUUID()}`,
@@ -871,6 +880,41 @@ function isPermissionsApprovalMethod(method: string, params: Record<string, unkn
   if (method.includes("permissions")) return true;
   const perms = params.permissions;
   return typeof perms === "object" && perms !== null;
+}
+
+function buildApprovalPayloadForMethodPure(
+  method: string,
+  params: Record<string, unknown>,
+  decision: CodexApprovalDecision,
+): unknown {
+  if (method === "applyPatchApproval" || method === "execCommandApproval") {
+    return {
+      decision: decision === "decline" ? "denied" : decision === "acceptForSession" ? "approved_for_session" : "approved",
+    };
+  }
+  if (isPermissionsApprovalMethod(method, params)) {
+    if (decision === "decline") {
+      return {
+        permissions: {
+          fileSystem: {
+            entries: [],
+          },
+          network: {
+            enabled: false,
+          },
+        },
+        scope: "turn",
+      };
+    }
+    const requested = (params.permissions ?? {}) as Record<string, unknown>;
+    return {
+      permissions: requested,
+      scope: decision === "acceptForSession" ? "session" : "turn",
+    };
+  }
+  return {
+    decision: decision === "decline" ? "decline" : decision,
+  };
 }
 
 function enumPrimitiveValues(values: unknown): Array<string | number | boolean> {
@@ -1339,10 +1383,11 @@ export class CodexExecutionService {
       workspaceId,
       codexHome,
     );
-    const hostedBearerKey = hashEnvToken(injectionEnv.KLETRON_GOOGLE_ACCESS_TOKEN);
-    const effectiveInjectionKey = injectKletronGmailRemote
-      ? `${injectionKey}:hostedBearer:${hostedBearerKey}`
-      : injectionKey;
+    const effectiveInjectionKey = computeEffectiveInjectionKey(
+      injectionKey,
+      injectKletronGmailRemote,
+      injectionEnv.KLETRON_GOOGLE_ACCESS_TOKEN,
+    );
     const existing = this.bridgeByUser.get(userId);
     const reusingExisting = Boolean(existing?.bridge.isRunning && existing.injectionKey === effectiveInjectionKey);
     console.log("[codexExecutionService] Gmail MCP injection", {
@@ -1708,34 +1753,7 @@ export class CodexExecutionService {
     params: Record<string, unknown>,
     decision: CodexApprovalDecision,
   ): unknown {
-    if (method === "applyPatchApproval" || method === "execCommandApproval") {
-      return {
-        decision: decision === "decline" ? "denied" : decision === "acceptForSession" ? "approved_for_session" : "approved",
-      };
-    }
-    if (isPermissionsApprovalMethod(method, params)) {
-      if (decision === "decline") {
-        return {
-          permissions: {
-            fileSystem: {
-              entries: [],
-            },
-            network: {
-              enabled: false,
-            },
-          },
-          scope: "turn",
-        };
-      }
-      const requested = (params.permissions ?? {}) as Record<string, unknown>;
-      return {
-        permissions: requested,
-        scope: decision === "acceptForSession" ? "session" : "turn",
-      };
-    }
-    return {
-      decision: decision === "decline" ? "decline" : decision,
-    };
+    return buildApprovalPayloadForMethodPure(method, params, decision);
   }
 
   private async addApprovalToRunState(approval: CodexPendingApproval): Promise<void> {
@@ -1842,3 +1860,16 @@ export class CodexExecutionService {
 }
 
 export const codexExecutionService = new CodexExecutionService();
+
+export const __codexExecutionServiceTestables = {
+  hashEnvToken,
+  computeEffectiveInjectionKey,
+  isApprovalRequestMethod,
+  mapApprovalToolName,
+  mapApprovalDescription,
+  buildMcpElicitationAcceptContent,
+  buildMcpElicitationResult,
+  buildToolRequestUserInputAutoResponse,
+  buildUnsupportedDynamicToolCallResponse,
+  buildApprovalPayloadForMethodPure,
+};
