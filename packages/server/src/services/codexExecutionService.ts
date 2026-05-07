@@ -711,6 +711,11 @@ function summarizeToolResult(item: Record<string, unknown>): string {
   return serializeUnknown(item).slice(0, 1_000);
 }
 
+function hashEnvToken(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) return "no-token";
+  return shortHash(value);
+}
+
 function buildUserEvent(message: string): AgentEvent {
   return {
     id: `codex-user-${randomUUID()}`,
@@ -800,13 +805,17 @@ function buildToolResultEvent(item: Record<string, unknown>): AgentEvent | null 
   if (!["commandExecution", "fileChange", "mcpToolCall", "dynamicToolCall"].includes(type)) return null;
   const itemId = typeof item.id === "string" ? item.id : randomUUID();
   const now = new Date().toISOString();
+  const resolvedToolName =
+    type === "mcpToolCall" || type === "dynamicToolCall"
+      ? String(item.tool ?? type)
+      : type;
   return {
     id: `codex-tool-result-${itemId}`,
     phaseId: "tool",
     phaseLabel: "Tool result",
     kind: "tool",
     role: "tool",
-    toolName: type,
+    toolName: resolvedToolName,
     toolCallId: itemId,
     content: summarizeToolResult(item),
     timestamp: now,
@@ -814,6 +823,8 @@ function buildToolResultEvent(item: Record<string, unknown>): AgentEvent | null 
 }
 
 function mapApprovalToolName(method: string): string {
+  if (method === "execCommandApproval") return "commandExecution";
+  if (method === "applyPatchApproval") return "fileChange";
   if (method.includes("commandExecution")) return "commandExecution";
   if (method.includes("fileChange")) return "fileChange";
   if (method.includes("permissions")) return "permissions";
@@ -821,6 +832,16 @@ function mapApprovalToolName(method: string): string {
 }
 
 function mapApprovalDescription(method: string, params: Record<string, unknown>): string {
+  if (method === "execCommandApproval") {
+    const cmd = Array.isArray(params.command)
+      ? (params.command as unknown[]).filter((v): v is string => typeof v === "string").join(" ")
+      : "";
+    return `Approve command: ${cmd || "command"}`;
+  }
+  if (method === "applyPatchApproval") {
+    const root = typeof params.grantRoot === "string" ? params.grantRoot : "workspace";
+    return `Approve file write access: ${root}`;
+  }
   if (method.includes("commandExecution")) {
     const command = typeof params.command === "string" ? params.command : "command";
     return `Approve command: ${command}`;
@@ -838,6 +859,7 @@ function mapApprovalDescription(method: string, params: Record<string, unknown>)
 }
 
 function isApprovalRequestMethod(method: string): boolean {
+  if (method === "applyPatchApproval" || method === "execCommandApproval") return true;
   return method.endsWith("/requestApproval") || method.includes("requestApproval");
 }
 
@@ -939,6 +961,7 @@ function buildMcpElicitationResult(params: Record<string, unknown>): Record<stri
     return {
       action: "accept",
       content: buildMcpElicitationAcceptContent(params),
+      _meta: null,
     };
   }
   if (mode === "url") {
@@ -946,11 +969,43 @@ function buildMcpElicitationResult(params: Record<string, unknown>): Record<stri
     return {
       action: "decline",
       content: null,
+      _meta: null,
     };
   }
   return {
     action: "cancel",
     content: null,
+    _meta: null,
+  };
+}
+
+function buildToolRequestUserInputAutoResponse(params: Record<string, unknown>): Record<string, unknown> {
+  const questions = Array.isArray(params.questions) ? (params.questions as unknown[]) : [];
+  const answers: Record<string, { answers: string[] }> = {};
+  for (const q of questions) {
+    if (!q || typeof q !== "object") continue;
+    const question = q as Record<string, unknown>;
+    const id = typeof question.id === "string" ? question.id.trim() : "";
+    if (!id) continue;
+    const options = Array.isArray(question.options) ? (question.options as unknown[]) : [];
+    const firstLabel = options
+      .map((opt) => (opt && typeof opt === "object" ? (opt as Record<string, unknown>).label : null))
+      .find((label): label is string => typeof label === "string" && label.trim().length > 0);
+    answers[id] = { answers: [firstLabel ?? "No preference"] };
+  }
+  return { answers };
+}
+
+function buildUnsupportedDynamicToolCallResponse(params: Record<string, unknown>): Record<string, unknown> {
+  const tool = typeof params.tool === "string" ? params.tool : "dynamicTool";
+  return {
+    success: false,
+    contentItems: [
+      {
+        type: "inputText",
+        text: `Dynamic tool call not supported by bridge client: ${tool}`,
+      },
+    ],
   };
 }
 
@@ -1279,9 +1334,25 @@ export class CodexExecutionService {
     await mkdir(codexHome, { recursive: true });
     await mkdir(LOG_ROOT, { recursive: true });
 
-    const { injectionKey, env: injectionEnv } = await prepareCodexGoogleInjection(userId, workspaceId, codexHome);
+    const { injectionKey, env: injectionEnv, injectKletronGmailRemote } = await prepareCodexGoogleInjection(
+      userId,
+      workspaceId,
+      codexHome,
+    );
+    const hostedBearerKey = hashEnvToken(injectionEnv.KLETRON_GOOGLE_ACCESS_TOKEN);
+    const effectiveInjectionKey = injectKletronGmailRemote
+      ? `${injectionKey}:hostedBearer:${hostedBearerKey}`
+      : injectionKey;
     const existing = this.bridgeByUser.get(userId);
-    if (existing?.bridge.isRunning && existing.injectionKey === injectionKey) {
+    const reusingExisting = Boolean(existing?.bridge.isRunning && existing.injectionKey === effectiveInjectionKey);
+    console.log("[codexExecutionService] Gmail MCP injection", {
+      injectionKey,
+      effectiveInjectionKey,
+      injectKletronGmailRemote,
+      hasHostedBearer: typeof injectionEnv.KLETRON_GOOGLE_ACCESS_TOKEN === "string" && injectionEnv.KLETRON_GOOGLE_ACCESS_TOKEN.length > 0,
+      reusingExisting,
+    });
+    if (reusingExisting && existing) {
       return existing;
     }
 
@@ -1328,7 +1399,7 @@ export class CodexExecutionService {
       codexHome,
       binaryPath,
       bridge,
-      injectionKey,
+      injectionKey: effectiveInjectionKey,
       lastWorkspaceId: workspaceId?.trim() ? workspaceId.trim() : undefined,
     };
     this.bridgeByUser.set(userId, ctx);
@@ -1511,6 +1582,48 @@ export class CodexExecutionService {
       return;
     }
 
+    if (method === "item/tool/requestUserInput") {
+      const ctx = this.bridgeByUser.get(userId);
+      if (!ctx) return;
+      const result = buildToolRequestUserInputAutoResponse(params);
+      ctx.bridge.respondToServerRequest(req.id, result);
+      const turnId = typeof params.turnId === "string" ? params.turnId : null;
+      if (turnId) {
+        const collector = this.collectorsByTurn.get(turnId);
+        if (collector) {
+          collector.queue.push({ kind: "notification", method, params: req.params });
+        }
+      }
+      await this.writeCodexEventLog("server_request", {
+        userId: shortHash(userId),
+        method,
+        params: redact(params),
+        resolvedWith: redact(result),
+      });
+      return;
+    }
+
+    if (method === "item/tool/call") {
+      const ctx = this.bridgeByUser.get(userId);
+      if (!ctx) return;
+      const result = buildUnsupportedDynamicToolCallResponse(params);
+      ctx.bridge.respondToServerRequest(req.id, result);
+      const turnId = typeof params.turnId === "string" ? params.turnId : null;
+      if (turnId) {
+        const collector = this.collectorsByTurn.get(turnId);
+        if (collector) {
+          collector.queue.push({ kind: "notification", method, params: req.params });
+        }
+      }
+      await this.writeCodexEventLog("server_request", {
+        userId: shortHash(userId),
+        method,
+        params: redact(params),
+        resolvedWith: redact(result),
+      });
+      return;
+    }
+
     if (!isApprovalRequestMethod(method)) {
       const turnId = typeof params.turnId === "string" ? params.turnId : null;
       if (turnId) {
@@ -1595,6 +1708,11 @@ export class CodexExecutionService {
     params: Record<string, unknown>,
     decision: CodexApprovalDecision,
   ): unknown {
+    if (method === "applyPatchApproval" || method === "execCommandApproval") {
+      return {
+        decision: decision === "decline" ? "denied" : decision === "acceptForSession" ? "approved_for_session" : "approved",
+      };
+    }
     if (isPermissionsApprovalMethod(method, params)) {
       if (decision === "decline") {
         return {
