@@ -1,5 +1,4 @@
-import "dotenv/config";
-
+import dotenv from "dotenv";
 import path from "node:path";
 import process from "node:process";
 import fs from "node:fs/promises";
@@ -7,6 +6,10 @@ import * as fsSync from "node:fs";
 import { execFile, spawn, ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
+
+/** Repo-root `.env.local` overrides `.env` so local OAuth can force localhost URLs without editing prod secrets. */
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+dotenv.config({ path: path.resolve(process.cwd(), ".env.local"), override: true });
 
 const execFileAsync = promisify(execFile);
 

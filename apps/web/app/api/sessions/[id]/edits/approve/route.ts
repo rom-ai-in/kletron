@@ -69,7 +69,15 @@ async function maybeEvictResult(rootDir: string, runId: string, toolName: string
  */
 async function resumeAgentAfterApproval(
   runId: string,
-  executionSummaries: Array<{ id: string; toolName: string; args?: Record<string, unknown>; result?: string; evictedPath?: string }>,
+  executionSummaries: Array<{
+    id: string;
+    toolName: string;
+    args?: Record<string, unknown>;
+    result?: string;
+    evictedPath?: string;
+    /** Tool ran after approval but MCP / runner returned failure — still resume the graph with an error tool result. */
+    isError?: boolean;
+  }>,
   userId?: string,
 ) {
   try {
@@ -102,12 +110,13 @@ async function resumeAgentAfterApproval(
         {
           id: `event-approval-tool-result-${s.id}`,
           phaseId: "approval",
-          phaseLabel: "Approved tool result",
+          phaseLabel: s.isError ? "Approved tool result (execution error)" : "Approved tool result",
           kind: "tool",
           role: "tool",
           toolName: s.toolName,
           toolCallId: s.id,
           content: resultSnippet,
+          ...(s.isError ? { isError: true as const } : {}),
           timestamp: now,
         },
       ];
@@ -258,7 +267,15 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
       const pending = Array.isArray(run.state?.approvals?.pending) ? [...run.state.approvals.pending as any[]] : [];
       const granted = Array.isArray(run.state?.approvals?.granted) ? [...run.state.approvals.granted as any[]] : [];
-      const executionSummaries: Array<{ id: string; toolName: string; args?: Record<string, unknown>; result?: string; evictedPath?: string }> = [];
+      const executionSummaries: Array<{
+        id: string;
+        toolName: string;
+        args?: Record<string, unknown>;
+        result?: string;
+        evictedPath?: string;
+        isError?: boolean;
+      }> = [];
+      let approvedFailedCount = 0;
 
       for (const edit of edits) {
         let executionResult: any;
@@ -282,22 +299,26 @@ export async function POST(request: Request, { params }: { params: { id: string 
             evictedPath: executionResult.evictedPath,
           });
         } else if (idx >= 0) {
-          pending[idx] = {
-            ...pending[idx],
-            status: "pending",
-            lastError: executionResult?.message ?? "Execution failed",
-            lastAttemptAt: new Date().toISOString(),
-          };
+          approvedFailedCount += 1;
+          pending.splice(idx, 1);
+          const errMsg = executionResult?.message ?? "Execution failed";
+          executionSummaries.push({
+            id: String(edit.id),
+            toolName: edit.toolName,
+            args: (edit.args ?? {}) as Record<string, unknown>,
+            result: errMsg,
+            isError: true,
+          });
         }
       }
       const approvals = await updateRunApprovals({ pending, granted });
 
-      // Fire-and-forget: resume the agent loop
+      // Fire-and-forget: resume the agent loop (success and execution-failure paths both inject tool history)
       if (executionSummaries.length > 0) {
         void resumeAgentAfterApproval(params.id, executionSummaries, auth.userId);
       }
 
-      return NextResponse.json({ approved: edits, approvals });
+      return NextResponse.json({ approved: edits, approvals, approvedFailedCount });
     }
 
     // Single edit approval
@@ -320,6 +341,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
       ? [...(run.state.approvals.pending as any[])] : [];
     const granted = Array.isArray(run.state?.approvals?.granted) ? [...run.state.approvals.granted as any[]] : [];
     const pendingIdx = pending.findIndex((p: any) => p?.id === editId);
+    const hadStatePending = pendingIdx >= 0;
+
     if (executionResult?.executed) {
       if (pendingIdx >= 0) pending.splice(pendingIdx, 1);
       granted.push({
@@ -328,17 +351,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
         result: executionResult.result ?? executionResult.message ?? "",
         evictedPath: executionResult.evictedPath ?? undefined,
       });
-    } else if (pendingIdx >= 0) {
-      pending[pendingIdx] = {
-        ...pending[pendingIdx],
-        status: "pending",
-        lastError: executionResult?.message ?? "Execution failed",
-        lastAttemptAt: new Date().toISOString(),
-      };
+    } else if (hadStatePending) {
+      pending.splice(pendingIdx, 1);
     }
     const approvals = await updateRunApprovals({ pending, granted });
 
-    // Fire-and-forget: resume the agent loop
+    const errMsg = executionResult?.message ?? "Execution failed";
     if (executionResult?.executed) {
       void resumeAgentAfterApproval(params.id, [{
         id: String(edit.id),
@@ -347,10 +365,21 @@ export async function POST(request: Request, { params }: { params: { id: string 
         result: executionResult.result,
         evictedPath: executionResult.evictedPath,
       }], auth.userId);
+    } else if (hadStatePending) {
+      void resumeAgentAfterApproval(params.id, [{
+        id: String(edit.id),
+        toolName: edit.toolName,
+        args: (edit.args ?? {}) as Record<string, unknown>,
+        result: errMsg,
+        isError: true,
+      }], auth.userId);
     }
 
-    return NextResponse.json({ approved: executionResult?.executed ? edit : null, executionResult, approvals }, {
-      status: executionResult?.executed ? 200 : 502,
+    return NextResponse.json({
+      approved: executionResult?.executed ? edit : null,
+      executionResult,
+      approvals,
+      pendingAutoCleared: hadStatePending && !executionResult?.executed,
     });
   } catch (error) {
     return NextResponse.json({ error: (error as Error)?.message ?? "Approval failed" }, { status: 500 });

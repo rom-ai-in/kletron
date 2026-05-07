@@ -22,7 +22,14 @@ import { resolveApprovedToolArgs } from "@kletron/server/services/approvedToolAr
  */
 async function resumeAgentAfterApproval(
     runId: string,
-    executionSummaries: Array<{ id: string; toolName: string; args?: Record<string, unknown>; result?: string; evictedPath?: string }>,
+    executionSummaries: Array<{
+        id: string;
+        toolName: string;
+        args?: Record<string, unknown>;
+        result?: string;
+        evictedPath?: string;
+        isError?: boolean;
+    }>,
     userId?: string,
 ) {
     try {
@@ -54,12 +61,13 @@ async function resumeAgentAfterApproval(
                 {
                     id: `event-approval-tool-result-${s.id}`,
                     phaseId: "approval",
-                    phaseLabel: "Approved tool result",
+                    phaseLabel: s.isError ? "Approved tool result (execution error)" : "Approved tool result",
                     kind: "tool",
                     role: "tool",
                     toolName: s.toolName,
                     toolCallId: s.id,
                     content: resultSnippet,
+                    ...(s.isError ? { isError: true as const } : {}),
                     timestamp: now,
                 },
             ];
@@ -317,6 +325,8 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
                 ? (run?.state?.approvals?.granted ?? [])
                 : [];
             const pendingIdx = pending.findIndex((p: any) => p?.id === id);
+            const hadStatePending = pendingIdx >= 0;
+
             if (executionResult?.executed) {
                 if (pendingIdx >= 0) pending.splice(pendingIdx, 1);
                 granted.push({
@@ -328,17 +338,12 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
                     result: executionResult.result ?? executionResult.message ?? "",
                     evictedPath: executionResult.evictedPath ?? undefined,
                 });
-            } else if (pendingIdx >= 0) {
-                pending[pendingIdx] = {
-                    ...pending[pendingIdx],
-                    status: "pending",
-                    lastError: executionResult?.message ?? "Execution failed",
-                    lastAttemptAt: new Date().toISOString(),
-                };
+            } else if (hadStatePending) {
+                pending.splice(pendingIdx, 1);
             }
             const approvals = await updateRunApprovals({ pending, granted });
 
-            // Fire-and-forget: resume the agent loop
+            const errMsg = executionResult?.message ?? "Execution failed";
             if (executionResult?.executed) {
                 void resumeAgentAfterApproval(params.runId, [{
                     id: String(edit.id),
@@ -347,10 +352,21 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
                     result: executionResult.result,
                     evictedPath: executionResult.evictedPath,
                 }], auth.userId);
+            } else if (hadStatePending) {
+                void resumeAgentAfterApproval(params.runId, [{
+                    id: String(edit.id),
+                    toolName: edit.toolName,
+                    args: (edit.args ?? {}) as Record<string, unknown>,
+                    result: errMsg,
+                    isError: true,
+                }], auth.userId);
             }
 
-            return NextResponse.json({ approved: executionResult?.executed ? edit : null, executionResult, approvals }, {
-                status: executionResult?.executed ? 200 : 502,
+            return NextResponse.json({
+                approved: executionResult?.executed ? edit : null,
+                executionResult,
+                approvals,
+                pendingAutoCleared: hadStatePending && !executionResult?.executed,
             });
         }
         if (action === "reject" && id) {
@@ -392,6 +408,16 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
             const run = await agentGraphRunService.getRun(params.runId);
             const pending = Array.isArray(run?.state?.approvals?.pending) ? [...(run?.state?.approvals?.pending ?? [])] : [];
             const granted = Array.isArray(run?.state?.approvals?.granted) ? [...(run?.state?.approvals?.granted ?? [])] : [];
+            const executionSummaries: Array<{
+                id: string;
+                toolName: string;
+                args?: Record<string, unknown>;
+                result?: string;
+                evictedPath?: string;
+                isError?: boolean;
+            }> = [];
+            let approvedFailedCount = 0;
+
             for (const edit of edits) {
                 const targetId = edit.id;
                 const index = pending.findIndex((p: any) => p?.id === targetId);
@@ -412,33 +438,32 @@ export async function POST(req: NextRequest, { params }: { params: { runId: stri
                         result: executionResult.result ?? executionResult.message ?? "",
                         evictedPath: executionResult.evictedPath ?? undefined,
                     });
+                    executionSummaries.push({
+                        id: String(edit.id),
+                        toolName: String(edit.toolName),
+                        args: (edit.args ?? {}) as Record<string, unknown>,
+                        result: executionResult.result,
+                        evictedPath: executionResult.evictedPath,
+                    });
                 } else if (index >= 0) {
-                    pending[index] = {
-                        ...pending[index],
-                        status: "pending",
-                        lastError: executionResult?.message ?? "Execution failed",
-                        lastAttemptAt: new Date().toISOString(),
-                    };
+                    approvedFailedCount += 1;
+                    pending.splice(index, 1);
+                    executionSummaries.push({
+                        id: String(edit.id),
+                        toolName: String(edit.toolName),
+                        args: (edit.args ?? {}) as Record<string, unknown>,
+                        result: executionResult?.message ?? "Execution failed",
+                        isError: true,
+                    });
                 }
             }
             const approvals = await updateRunApprovals({ pending, granted });
 
-            // Fire-and-forget: resume the agent loop
-            const executedEdits = edits.filter((e: any) => granted.some((g: any) => g.id === e.id));
-            if (executedEdits.length > 0) {
-                void resumeAgentAfterApproval(params.runId, executedEdits.map((e: any) => {
-                    const g = granted.find((g: any) => g.id === e.id) as any;
-                    return {
-                        id: String(e.id),
-                        toolName: String(e.toolName),
-                        args: (e.args ?? {}) as Record<string, unknown>,
-                        result: String(g?.result ?? ""),
-                        evictedPath: g?.evictedPath as string | undefined,
-                    };
-                }), auth.userId);
+            if (executionSummaries.length > 0) {
+                void resumeAgentAfterApproval(params.runId, executionSummaries, auth.userId);
             }
 
-            return NextResponse.json({ approved: edits, approvals }, { status: 200 });
+            return NextResponse.json({ approved: edits, approvals, approvedFailedCount });
         }
         if (action === "reject_all") {
             const pendingFromState = await getPendingFromState();

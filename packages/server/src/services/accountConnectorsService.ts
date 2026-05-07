@@ -297,13 +297,16 @@ export async function createAccountIntegration(
     const c = await integrationsColl();
     const now = new Date();
 
-    /** Google often omits `refresh_token` on re-consent; without it we would store an empty string and break API access. */
+    /**
+     * Google often omits `refresh_token` on re-consent; we merge the previous refresh for Calendar/Drive.
+     * For **Gmail**, never merge: a legacy refresh without mailbox scopes causes ACCESS_TOKEN_SCOPE_INSUFFICIENT
+     * forever (Codex MCP refreshes from it). Gmail reconnect must rely on the new token response only —
+     * use stored access_token via {@link resolveGoogleHostedGmailMcpBearer} until Google returns a new refresh.
+     */
     let preservedGoogleRefreshToken: string | undefined;
     if (
         def.auth === "oauth" &&
-        (validated.providerId === "gmail" ||
-            validated.providerId === "google-calendar" ||
-            validated.providerId === "google-drive")
+        (validated.providerId === "google-calendar" || validated.providerId === "google-drive")
     ) {
         const prevActive = await c.findOne(
             { ownerId, providerId: validated.providerId, status: "active" },

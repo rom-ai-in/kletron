@@ -77,6 +77,8 @@ function handleCors(request: NextRequest): NextResponse {
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
+    // `/api/*` is not gated by NextAuth (only CORS). Per-route auth applies; e.g. Codex local MCP
+    // (`/api/mcp/workspace/*`) uses `Authorization: Bearer <HMAC>` from KLETRON_LOCAL_MCP_AUTH, not a session cookie.
     if (pathname.startsWith("/api/")) {
         return handleCors(request);
     }

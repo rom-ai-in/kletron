@@ -713,8 +713,10 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                     : (selectedGraphId ? { graphId: selectedGraphId } : {})),
                 executionBackend,
                 message: msg,
-                provider: llmProvider,
-                model: llmModel,
+                /** LangGraph only — omit for Codex so logs/API don't mix ChatGPT Codex auth with Kletron LLM picker. */
+                ...(executionBackend === "codex"
+                    ? {}
+                    : { provider: llmProvider, model: llmModel }),
                 ...(executionBackend === "codex" && codexModel ? { codexModel } : {}),
                 ...(workspaceId ? { workspaceId } : {}),
                 ...(channel ? { channel } : {}),
@@ -725,8 +727,9 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             }
             : {
                 message: msg,
-                provider: llmProvider,
-                model: llmModel,
+                ...(executionBackend === "codex"
+                    ? {}
+                    : { provider: llmProvider, model: llmModel }),
                 executionBackend,
                 ...(executionBackend === "codex" && codexModel ? { codexModel } : {}),
                 ...(effectivePlanMode ? { planMode: true } : {}),

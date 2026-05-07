@@ -9,6 +9,7 @@ import {
     getOauthProvider,
 } from "@kletron/server/services/oauthProviders";
 import { createIntegration } from "@kletron/server/services/connectorsService";
+import { debugLogGoogleAccessTokenScopes } from "@kletron/server/services/googleWorkspaceApi";
 import { getWorkspaceById } from "@kletron/server/services/workspaceService";
 import { isMongoBackedUserId } from "../../../../../../lib/accountEligibility";
 import { getPublicAppOrigin } from "../../../../../../lib/publicAppUrl";
@@ -107,6 +108,14 @@ export async function GET(
         }
         const credentials = def.buildCredentials(json);
         const scopes = def.extractScopes ? def.extractScopes(json) : def.defaultScopes;
+
+        const accessForDebug =
+            typeof (credentials as { accessToken?: string }).accessToken === "string"
+                ? (credentials as { accessToken: string }).accessToken
+                : typeof json.access_token === "string"
+                  ? json.access_token
+                  : "";
+        await debugLogGoogleAccessTokenScopes(`oauth-callback:${provider}`, accessForDebug);
 
         await createIntegration(state.workspaceId, {
             providerId: provider,

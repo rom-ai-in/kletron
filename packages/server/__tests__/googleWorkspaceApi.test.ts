@@ -1,5 +1,26 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { probeGoogleWorkspaceConnection } from "../src/services/googleWorkspaceApi";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+    googleScopeStringHasGmailMailboxApi,
+    probeGoogleWorkspaceConnection,
+    resolveGoogleHostedGmailMcpBearer,
+} from "../src/services/googleWorkspaceApi";
+
+describe("googleScopeStringHasGmailMailboxApi", () => {
+    it("returns true for Gmail API scope URLs", () => {
+        expect(
+            googleScopeStringHasGmailMailboxApi(
+                "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose"
+            )
+        ).toBe(true);
+    });
+
+    it("returns false for calendar-only or openid-only scopes", () => {
+        expect(googleScopeStringHasGmailMailboxApi("openid email profile")).toBe(false);
+        expect(
+            googleScopeStringHasGmailMailboxApi("https://www.googleapis.com/auth/calendar.events")
+        ).toBe(false);
+    });
+});
 
 describe("probeGoogleWorkspaceConnection", () => {
     const fetchMock = vi.fn();
@@ -80,5 +101,96 @@ describe("probeGoogleWorkspaceConnection", () => {
 
         expect(result.ok).toBe(true);
         expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/calendar/v3/freeBusy"))).toBe(true);
+    });
+});
+
+describe("resolveGoogleHostedGmailMcpBearer", () => {
+    const fetchMock = vi.fn();
+    const prevId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+    const prevSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.stubGlobal("fetch", fetchMock);
+        process.env.GOOGLE_OAUTH_CLIENT_ID = "test-client";
+        process.env.GOOGLE_OAUTH_CLIENT_SECRET = "test-secret";
+    });
+
+    afterEach(() => {
+        process.env.GOOGLE_OAUTH_CLIENT_ID = prevId;
+        process.env.GOOGLE_OAUTH_CLIENT_SECRET = prevSecret;
+    });
+
+    it("prefers stored access_token when labels probe succeeds (no refresh)", async () => {
+        fetchMock.mockImplementation(async (input: RequestInfo) => {
+            const url = String(input);
+            if (url.includes("/gmail/v1/users/me/labels")) {
+                return new Response(JSON.stringify({ labels: [{ id: "INBOX" }] }), {
+                    status: 200,
+                    headers: { "content-type": "application/json" },
+                });
+            }
+            return new Response("{}", { status: 404 });
+        });
+
+        const out = await resolveGoogleHostedGmailMcpBearer({
+            accessToken: "good-at",
+            refreshToken: "rt",
+        });
+
+        expect(out).toBe("good-at");
+        expect(fetchMock.mock.calls.filter(([u]) => String(u).includes("/oauth2.googleapis.com/token"))).toHaveLength(0);
+    });
+
+    it("falls back to refresh when stored access fails labels probe", async () => {
+        let labelsCalls = 0;
+        fetchMock.mockImplementation(async (input: RequestInfo) => {
+            const url = String(input);
+            if (url.includes("/gmail/v1/users/me/labels")) {
+                labelsCalls += 1;
+                if (labelsCalls === 1) {
+                    return new Response(JSON.stringify({ error: { code: 403 } }), { status: 403 });
+                }
+                return new Response(JSON.stringify({ labels: [] }), { status: 200 });
+            }
+            if (url.includes("/oauth2.googleapis.com/token")) {
+                return new Response(JSON.stringify({ access_token: "from-refresh" }), {
+                    status: 200,
+                    headers: { "content-type": "application/json" },
+                });
+            }
+            return new Response("{}", { status: 404 });
+        });
+
+        const out = await resolveGoogleHostedGmailMcpBearer({
+            accessToken: "bad-at",
+            refreshToken: "rt",
+        });
+
+        expect(out).toBe("from-refresh");
+        expect(labelsCalls).toBe(2);
+    });
+
+    it("returns null when neither token can list labels", async () => {
+        fetchMock.mockImplementation(async (input: RequestInfo) => {
+            const url = String(input);
+            if (url.includes("/gmail/v1/users/me/labels")) {
+                return new Response(JSON.stringify({ error: { code: 403 } }), { status: 403 });
+            }
+            if (url.includes("/oauth2.googleapis.com/token")) {
+                return new Response(JSON.stringify({ access_token: "still-bad" }), {
+                    status: 200,
+                    headers: { "content-type": "application/json" },
+                });
+            }
+            return new Response("{}", { status: 404 });
+        });
+
+        const out = await resolveGoogleHostedGmailMcpBearer({
+            accessToken: "bad-at",
+            refreshToken: "rt",
+        });
+
+        expect(out).toBe(null);
     });
 });

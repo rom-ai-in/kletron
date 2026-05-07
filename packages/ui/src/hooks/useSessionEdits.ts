@@ -88,7 +88,7 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
     }, []);
 
     const scheduleFlushNotice = useCallback(
-        (notice: SessionEditFlushNotice) => {
+        (notice: SessionEditFlushNotice, ttlMs: number = NOTICE_MS) => {
             if (noticeTimeoutRef.current) {
                 clearTimeout(noticeTimeoutRef.current);
             }
@@ -96,7 +96,7 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
             noticeTimeoutRef.current = setTimeout(() => {
                 setFlushNotice(null);
                 noticeTimeoutRef.current = null;
-            }, NOTICE_MS);
+            }, ttlMs);
         },
         []
     );
@@ -189,18 +189,22 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
                         body: JSON.stringify({ editId }),
                     },
                 );
+                const payload = await res.json().catch(() => ({} as Record<string, unknown>));
                 if (!res.ok) {
-                    const payload = await res.json().catch(() => ({}));
                     throw new Error(
-                        payload?.executionResult?.message ||
-                            payload?.error ||
+                        (payload?.executionResult as { message?: string } | undefined)?.message ||
+                            (payload?.error as string | undefined) ||
                             "Approval execution failed"
                     );
                 }
                 await fetchEdits();
-                scheduleFlushNotice({ kind: "approved", toolName: name });
+                const exec = payload?.executionResult as { executed?: boolean } | undefined;
+                if (exec?.executed) {
+                    scheduleFlushNotice({ kind: "approved", toolName: name });
+                }
             } catch (e) {
                 console.error("[useSessionEdits] Approve failed:", e);
+                await fetchEdits();
             } finally {
                 setProcessingOp((cur) => (cur?.editId === editId ? null : cur));
             }
@@ -246,18 +250,22 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
                         body: JSON.stringify({ editId, decision: "acceptForSession" }),
                     },
                 );
+                const payload = await res.json().catch(() => ({} as Record<string, unknown>));
                 if (!res.ok) {
-                    const payload = await res.json().catch(() => ({}));
                     throw new Error(
-                        payload?.executionResult?.message ||
-                            payload?.error ||
+                        (payload?.executionResult as { message?: string } | undefined)?.message ||
+                            (payload?.error as string | undefined) ||
                             "Approval execution failed"
                     );
                 }
                 await fetchEdits();
-                scheduleFlushNotice({ kind: "approved_session", toolName: name });
+                const exec = payload?.executionResult as { executed?: boolean } | undefined;
+                if (exec?.executed) {
+                    scheduleFlushNotice({ kind: "approved_session", toolName: name });
+                }
             } catch (e) {
                 console.error("[useSessionEdits] Approve for session failed:", e);
+                await fetchEdits();
             } finally {
                 setProcessingOp((cur) => (cur?.editId === editId ? null : cur));
             }
@@ -280,11 +288,12 @@ export function useSessionEdits(options: UseSessionEditsOptions): UseSessionEdit
                 },
             );
             if (!res.ok) {
-                const payload = await res.json().catch(() => ({}));
-                throw new Error(payload?.error || "Bulk approval execution failed");
+                const payload = await res.json().catch(() => ({} as Record<string, unknown>));
+                throw new Error((payload?.error as string | undefined) || "Bulk approval execution failed");
             }
+            const payload = await res.json().catch(() => ({} as Record<string, unknown>));
             await fetchEdits();
-            if (count > 0) {
+            if (count > 0 && !(typeof payload?.approvedFailedCount === "number" && payload.approvedFailedCount > 0)) {
                 scheduleFlushNotice({ kind: "approved_all", count });
             }
         } catch (e) {

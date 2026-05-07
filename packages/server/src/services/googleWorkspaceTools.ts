@@ -25,6 +25,8 @@ import { getWorkspaceContext } from "../workspace/workspaceContext";
 const GMAIL_BASE = "https://gmail.googleapis.com";
 const GOOGLE_API_BASE = "https://www.googleapis.com";
 const TOOL_MAX_TEXT_CHARS = 20_000;
+const GMAIL_LOCAL_FALLBACK_MAX_RESULTS = 20;
+const GMAIL_LOCAL_FALLBACK_FACTOR = 2;
 
 const addressListSchema = z.union([z.string(), z.array(z.string())]);
 
@@ -279,7 +281,7 @@ async function gmailListMessageIds(
         const uniqueLabels = Array.from(new Set(fallbackLabels.filter(Boolean)));
         url.searchParams.set(
             "maxResults",
-            String(Math.min(Math.max((input.maxResults ?? 10) * 5, 20), 50))
+            String(Math.min(Math.max((input.maxResults ?? 10) * GMAIL_LOCAL_FALLBACK_FACTOR, 10), GMAIL_LOCAL_FALLBACK_MAX_RESULTS))
         );
         for (const labelId of uniqueLabels) {
             url.searchParams.append("labelIds", labelId);
@@ -351,7 +353,11 @@ async function gmailListMessages(auth: GoogleWorkspaceAuth, input: {
 
         const data = await gmailListMessageIds(auth, input, "fallback");
         const messages = Array.isArray(data.messages) ? data.messages : [];
-        const hydrated = await gmailHydrateMessageRows(auth, messages, Math.min(Math.max((input.maxResults ?? 10) * 5, 20), 50));
+        const hydrated = await gmailHydrateMessageRows(
+            auth,
+            messages,
+            Math.min(Math.max((input.maxResults ?? 10) * GMAIL_LOCAL_FALLBACK_FACTOR, 10), GMAIL_LOCAL_FALLBACK_MAX_RESULTS),
+        );
         const filtered = filterGmailMessagesLocally(hydrated, input.query);
         const limited = filtered.filtered.slice(0, input.maxResults ?? 10);
         return {
@@ -1349,6 +1355,102 @@ export function buildGoogleWorkspaceTools(workspaceId?: string): any[] {
         }
     );
 
+    /** Google hosted MCP / Codex docs often use these names; they delegate to the `gmail_*` tools. */
+    const searchThreadsAlias = tool(
+        async (input: { query?: string; maxResults?: number; includeSpamTrash?: boolean; pageToken?: string }) =>
+            gmailSearchMessagesTool.invoke(input),
+        {
+            name: "search_threads",
+            description: "Search Gmail messages (alias for gmail_search_messages).",
+            schema: z.object({
+                query: z.string().optional(),
+                maxResults: z.number().int().positive().max(50).optional(),
+                includeSpamTrash: z.boolean().optional(),
+                pageToken: z.string().optional(),
+            }),
+        }
+    );
+
+    const getThreadAlias = tool(
+        async (input: { messageId: string; format?: "full" | "metadata" }) => gmailReadMessageTool.invoke(input),
+        {
+            name: "get_thread",
+            description: "Read a Gmail message by id (alias for gmail_read_message).",
+            schema: z.object({
+                messageId: z.string().min(1),
+                format: z.enum(["full", "metadata"]).optional(),
+            }),
+        }
+    );
+
+    const listDraftsAlias = tool(
+        async (input: { maxResults?: number; pageToken?: string }) =>
+            gmailSearchMessagesTool.invoke({
+                query: "in:drafts",
+                maxResults: input.maxResults ?? 20,
+                pageToken: input.pageToken,
+                includeSpamTrash: false,
+            }),
+        {
+            name: "list_drafts",
+            description: "List Gmail drafts (alias for gmail_search_messages with query in:drafts).",
+            schema: z.object({
+                maxResults: z.number().int().positive().max(50).optional(),
+                pageToken: z.string().optional(),
+            }),
+        }
+    );
+
+    const listLabelsAlias = tool(
+        async () => gmailListLabelsTool.invoke({}),
+        {
+            name: "list_labels",
+            description: "List Gmail labels (alias for gmail_list_labels).",
+            schema: z.object({}),
+        }
+    );
+
+    const labelThreadAlias = tool(
+        async (input: { messageId: string; addLabelIds?: string[]; removeLabelIds?: string[] }) =>
+            gmailModifyLabelsTool.invoke(input),
+        {
+            name: "label_thread",
+            description: "Add or remove labels on a message (alias for gmail_modify_message_labels).",
+            schema: z.object({
+                messageId: z.string().min(1),
+                addLabelIds: z.array(z.string()).optional(),
+                removeLabelIds: z.array(z.string()).optional(),
+            }),
+        }
+    );
+
+    const createDraftAlias = tool(
+        async (input: {
+            to: string | string[];
+            subject?: string;
+            body: string;
+            cc?: string | string[];
+            bcc?: string | string[];
+            threadId?: string;
+            replyToMessageId?: string;
+            contentType?: "text/plain" | "text/html";
+        }) => gmailCreateDraftTool.invoke(input),
+        {
+            name: "create_draft",
+            description: "Create a Gmail draft (alias for gmail_create_draft).",
+            schema: z.object({
+                to: addressListSchema,
+                subject: z.string().optional(),
+                body: z.string().min(1),
+                cc: addressListSchema.optional(),
+                bcc: addressListSchema.optional(),
+                threadId: z.string().optional(),
+                replyToMessageId: z.string().optional(),
+                contentType: z.enum(["text/plain", "text/html"]).optional(),
+            }),
+        }
+    );
+
     return [
         gmailListLabelsTool,
         gmailSearchMessagesTool,
@@ -1366,6 +1468,12 @@ export function buildGoogleWorkspaceTools(workspaceId?: string): any[] {
         driveListFilesTool,
         driveReadFileTool,
         driveWriteTextFileTool,
+        searchThreadsAlias,
+        getThreadAlias,
+        listDraftsAlias,
+        listLabelsAlias,
+        labelThreadAlias,
+        createDraftAlias,
     ];
 }
 

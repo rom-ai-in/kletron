@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import type { ThreadApprovalMode } from "@kletron/shared/threadApprovalTypes";
 import { ChevronDown, Check, Settings2, Shield, Zap } from "lucide-react";
 import { cn } from "../../lib/utils";
+
+/** Match {@link Selector} menus — above modal overlays and typical nested chrome */
+const POLICY_MENU_Z = 200;
 
 const OPTIONS: { id: ThreadApprovalMode; label: string; sub?: string }[] = [
   { id: "inherit", label: "Workspace policy", sub: "Rules from Configuration → Workspace" },
@@ -40,16 +44,43 @@ export function ThreadApprovalModeSelector({
   menuAlign = "end",
 }: ThreadApprovalModeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuRect, setMenuRect] = useState<DOMRect | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuPortalRef = useRef<HTMLDivElement>(null);
 
   const close = useCallback(() => setIsOpen(false), []);
 
+  const updateMenuPosition = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setMenuRect(el.getBoundingClientRect());
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!isOpen || disabled) return;
+    updateMenuPosition();
+  }, [isOpen, disabled, updateMenuPosition]);
+
   useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) close();
+    if (!isOpen || disabled) return;
+    const onScrollOrResize = () => updateMenuPosition();
+    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("scroll", onScrollOrResize, true);
+    return () => {
+      window.removeEventListener("resize", onScrollOrResize);
+      window.removeEventListener("scroll", onScrollOrResize, true);
     };
-    document.addEventListener("mousedown", onDoc, true);
-    return () => document.removeEventListener("mousedown", onDoc, true);
+  }, [isOpen, disabled, updateMenuPosition]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const t = event.target as Node;
+      if (containerRef.current?.contains(t)) return;
+      if (menuPortalRef.current?.contains(t)) return;
+      close();
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [close]);
 
   const selected = OPTIONS.find((o) => o.id === value) ?? OPTIONS[0];
@@ -67,7 +98,13 @@ export function ThreadApprovalModeSelector({
       <button
         type="button"
         disabled={disabled}
-        onClick={() => setIsOpen((o) => !o)}
+        onClick={() => {
+          if (disabled) return;
+          if (!isOpen) {
+            setMenuRect(containerRef.current?.getBoundingClientRect() ?? null);
+          }
+          setIsOpen((open) => !open);
+        }}
         className={cn(
           "flex h-7 max-w-full shrink-0 items-center gap-1 rounded-md border border-border-subtle bg-bg-surface/80 px-1.5 py-0 text-text-secondary transition-colors",
           "hover:border-border-strong hover:bg-state-hover hover:text-text-primary",
@@ -85,47 +122,61 @@ export function ThreadApprovalModeSelector({
         />
       </button>
 
-      {isOpen && !disabled && (
-        <div
-          role="listbox"
-          aria-label="Tool policy mode"
-          className={cn(
-            "absolute bottom-full z-[120] mb-1 flex max-h-60 min-w-[240px] max-w-[min(100vw-1.5rem,22rem)] flex-col overflow-y-auto rounded-lg border border-border-strong bg-bg-surface p-1 shadow-2xl",
-            menuAlign === "end" ? "right-0 left-auto" : "left-0"
-          )}
-        >
-          {OPTIONS.map((opt) => {
-            const OIcon = MODE_ICON[opt.id];
-            const active = opt.id === value;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                role="option"
-                aria-selected={active}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelect(opt.id);
-                  close();
-                }}
-                className={cn(
-                  "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
-                  active ? "bg-state-active text-text-primary" : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
-                )}
-              >
-                <OIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[11px] font-medium leading-tight break-words">{opt.label}</span>
-                  {opt.sub && (
-                    <span className="mt-0.5 block text-[9px] leading-snug text-text-muted break-words">{opt.sub}</span>
+      {isOpen &&
+        !disabled &&
+        menuRect &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuPortalRef}
+            role="listbox"
+            aria-label="Tool policy mode"
+            style={{
+              position: "fixed",
+              zIndex: POLICY_MENU_Z,
+              bottom: window.innerHeight - menuRect.top + 4,
+              ...(menuAlign === "end"
+                ? { right: window.innerWidth - menuRect.right }
+                : { left: menuRect.left }),
+              minWidth: 240,
+              maxWidth: "min(calc(100vw - 1.5rem), 22rem)",
+              maxHeight: Math.max(120, menuRect.top - 12),
+            }}
+            className="flex flex-col overflow-y-auto rounded-lg border border-border-strong bg-bg-surface p-1 shadow-2xl"
+          >
+            {OPTIONS.map((opt) => {
+              const OIcon = MODE_ICON[opt.id];
+              const active = opt.id === value;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(opt.id);
+                    close();
+                  }}
+                  className={cn(
+                    "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
+                    active ? "bg-state-active text-text-primary" : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
                   )}
-                </span>
-                {active && <Check className="h-3 w-3 shrink-0 text-status-success-text" aria-hidden />}
-              </button>
-            );
-          })}
-        </div>
-      )}
+                >
+                  <OIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[11px] font-medium leading-tight break-words">{opt.label}</span>
+                    {opt.sub && (
+                      <span className="mt-0.5 block text-[9px] leading-snug text-text-muted break-words">{opt.sub}</span>
+                    )}
+                  </span>
+                  {active && <Check className="h-3 w-3 shrink-0 text-status-success-text" aria-hidden />}
+                </button>
+              );
+            })}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

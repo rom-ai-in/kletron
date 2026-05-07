@@ -1,4 +1,4 @@
-import { access, appendFile, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { access, appendFile, mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createHash, randomUUID } from "node:crypto";
@@ -7,9 +7,19 @@ import { execFile } from "node:child_process";
 
 import { CodexBridge, type CodexBridgeNotification, type CodexBridgeServerRequest, type JsonRpcId } from "@kletron/codex-bridge";
 import type { AgentEvent } from "@kletron/shared/types";
+import { issueLocalMcpToken } from "../lib/codexLocalMcpAuth";
 import { agentGraphRunService } from "./agentGraphRunService";
 import { findActiveIntegration, getIntegrationCredentials } from "./connectorsService";
-import { refreshGoogleAccessToken, tryGetGoogleOAuthClientCredentials } from "./googleWorkspaceApi";
+import {
+  debugLogGoogleAccessTokenScopes,
+  GMAIL_HOSTED_MCP_URL,
+  gmailAccessTokenCanListMailbox,
+  probeGoogleHostedGmailMcpSearchThreads,
+  probeGoogleHostedGmailMcpToolsList,
+  probeKletronLocalMcpToolsList,
+  resolveGoogleHostedGmailMcpBearer,
+  tryGetGoogleOAuthClientCredentials,
+} from "./googleWorkspaceApi";
 
 export type ExecutionBackend = "langgraph" | "codex";
 export type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
@@ -27,7 +37,7 @@ type CodexPendingApproval = {
   runId: string;
   userId: string;
   requestId: JsonRpcId;
-  method: CodexApprovalMethod;
+  method: string;
   threadId: string;
   turnId: string;
   itemId?: string;
@@ -162,10 +172,20 @@ function shortHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 16);
 }
 
-const KLETRON_GOOGLE_ADC_FILENAME = "kletron-google-adc.json";
+/** Codex child or SQLite state may reset (e.g. bridge respawn); persisted `codexThreadId` then becomes invalid. */
+function isCodexThreadStaleError(message: string | null | undefined): boolean {
+  if (!message) return false;
+  const m = message.toLowerCase();
+  return m.includes("thread not found") || m.includes("unknown thread");
+}
 
-/** Remote Gmail MCP (Google Cloud); bearer must match Google OAuth access token for the user. */
-const GOOGLE_GMAIL_REMOTE_MCP_URL = "https://gmailmcp.googleapis.com/mcp/v1";
+const KLETRON_GOOGLE_ADC_FILENAME = "kletron-google-adc.json";
+/** Full `Authorization` header value for Codex MCP HTTP (`env_http_headers`); avoids flaky `bearer_token_env_var` path in some Codex builds. */
+const KLETRON_GOOGLE_AUTHORIZATION_ENV = "KLETRON_GOOGLE_AUTHORIZATION";
+/** Full `Authorization` header for Kletron’s local workspace MCP route (`/api/mcp/workspace/[id]`). */
+const KLETRON_LOCAL_MCP_AUTH_ENV = "KLETRON_LOCAL_MCP_AUTH";
+/** Bump when synced Codex `[mcp_servers.*]` Kletron blocks change so the Codex process restarts and reloads MCP. */
+const KLETRON_CODEX_GMAIL_MCP_CONFIG_VERSION = 5;
 
 const KLETRON_CODEX_TOML_MARK_BEGIN = "# BEGIN KLETRON SYNC";
 const KLETRON_CODEX_TOML_MARK_END = "# END KLETRON SYNC";
@@ -174,7 +194,11 @@ const KLETRON_CODEX_TOML_MARK_END = "# END KLETRON SYNC";
 const CODEX_TOML_GMAIL_PLUGIN_HEADER = `plugins."gmail@openai-curated"`;
 /** Single segment after `mcp_servers.` avoids some strict-TOML parsers choking on duplicate dotted paths. */
 const CODEX_TOML_KLETRON_GMAIL_MCP_HEADER = "mcp_servers.kletron_gmail_kletron";
+/** REST-backed Gmail/Calendar/Drive MCP exposed by this Next.js app (no Google hosted preview). */
+const CODEX_TOML_KLETRON_WORKSPACE_MCP_HEADER = "mcp_servers.kletron_workspace";
 const CODEX_TOML_LEGACY_KLETRON_GMAIL_MCP_HEADER = "mcp_servers.kletron-gmail-google-remote";
+/** Codex ChatGPT Apps connector; tools are namespaced `mcp__codex_apps__gmail` — separate OAuth from Kletron Gmail. */
+const CODEX_TOML_APPS_GMAIL_HEADER = "apps.gmail";
 
 /** Strip one `[headerInner]` table block (standard tables only — lines until next top-level `[`). */
 function stripTomlTableSection(content: string, headerInner: string): string {
@@ -274,6 +298,8 @@ function cloneProcessEnvWithoutInheritedGoogleAdc(): NodeJS.ProcessEnv {
   const env = { ...process.env } as NodeJS.ProcessEnv;
   delete env.GOOGLE_APPLICATION_CREDENTIALS;
   delete env.KLETRON_GOOGLE_ACCESS_TOKEN;
+  delete env[KLETRON_GOOGLE_AUTHORIZATION_ENV];
+  delete env[KLETRON_LOCAL_MCP_AUTH_ENV];
   return env;
 }
 
@@ -294,11 +320,19 @@ function mergeMarkedTomlSection(existing: string, blockBody: string): string {
   return trimmed ? `${trimmed}\n\n${insertion}` : insertion;
 }
 
+type KletronCodexGoogleMcpSyncMode = "none" | "hosted" | "local";
+
 /**
  * OpenAI curated `gmail@openai-curated` uses ChatGPT app connectors — it ignores Kletron tokens.
- * When Kletron Gmail is connected, disable that plugin and register Google's hosted Gmail MCP with a bearer from our refresh token.
+ * Default: register Kletron’s **local** workspace MCP (`[mcp_servers.kletron_workspace]`) backed by REST tools.
+ * Opt-in (`KLETRON_CODEX_USE_HOSTED_GMAIL_MCP=1`): Google’s hosted Gmail MCP preview instead.
+ *
+ * Set `KLETRON_CODEX_KEEP_APPS_MCP=1` on the server to skip disabling Apps MCP flags / cache clear if you need other Codex ChatGPT Apps connectors.
  */
-async function syncKletronCodexConfigToml(codexHome: string, injectKletronGmailRemote: boolean): Promise<void> {
+async function syncKletronCodexConfigToml(
+  codexHome: string,
+  sync: { mode: KletronCodexGoogleMcpSyncMode; workspaceId: string },
+): Promise<void> {
   const configPath = path.join(codexHome, "config.toml");
   let existing = "";
   try {
@@ -307,28 +341,74 @@ async function syncKletronCodexConfigToml(codexHome: string, injectKletronGmailR
     existing = "";
   }
 
-  const blockBody = injectKletronGmailRemote
-    ? [
-        `# Gmail: use Kletron workspace connector OAuth (see KLETRON_GOOGLE_ACCESS_TOKEN).`,
-        `# Disable OpenAI connector Gmail — it uses separate ChatGPT credentials and causes ACCESS_TOKEN_SCOPE_INSUFFICIENT.`,
-        `[plugins."gmail@openai-curated"]`,
-        `enabled = false`,
+  let blockBody = "";
+  if (sync.mode === "hosted") {
+    const lines = [
+      `# Gmail: use Kletron workspace connector OAuth (Authorization via ${KLETRON_GOOGLE_AUTHORIZATION_ENV}).`,
+      `# Disable OpenAI connector Gmail — it uses separate ChatGPT credentials and causes ACCESS_TOKEN_SCOPE_INSUFFICIENT.`,
+      `[plugins."gmail@openai-curated"]`,
+      `enabled = false`,
+      ``,
+      `# Codex Apps Gmail (tool prefix mcp__codex_apps__gmail) uses ChatGPT OAuth — conflicts with Kletron bearer.`,
+      `[apps.gmail]`,
+      `enabled = false`,
+      ``,
+      `[mcp_servers.kletron_gmail_kletron]`,
+      `url = "${GMAIL_HOSTED_MCP_URL}"`,
+      `# Prefer env_http_headers over bearer_token_env_var: probe proves token OK while Codex still failed with bearer_token_env_var-only.`,
+      `env_http_headers = { Authorization = "${KLETRON_GOOGLE_AUTHORIZATION_ENV}" }`,
+      `startup_timeout_sec = 45`,
+      `enabled = true`,
+    ];
+    if (process.env.KLETRON_CODEX_KEEP_APPS_MCP !== "1") {
+      lines.push(
         ``,
-        `[mcp_servers.kletron_gmail_kletron]`,
-        `url = "${GOOGLE_GMAIL_REMOTE_MCP_URL}"`,
-        `bearer_token_env_var = "KLETRON_GOOGLE_ACCESS_TOKEN"`,
-        `startup_timeout_sec = 45`,
-        `enabled = true`,
-      ].join("\n")
-    : "";
+        `# Disable ChatGPT Apps (mcp__codex_apps__* incl. gmail_search_emails — ChatGPT OAuth, not Kletron tokens).`,
+        `# Need both: enable_mcp_apps alone left Gmail Apps tools registered per codex_apps_tools cache.`,
+        `[features]`,
+        `apps = false`,
+        `enable_mcp_apps = false`,
+      );
+    }
+    blockBody = lines.join("\n");
+  } else if (sync.mode === "local") {
+    const base = (process.env.KLETRON_LOCAL_MCP_BASE_URL ?? "http://127.0.0.1:3000").replace(/\/+$/, "");
+    const wid = sync.workspaceId.trim();
+    const lines = [
+      `# Local Kletron MCP — Gmail/Calendar/Drive REST in-process (no Workspace Developer Preview required).`,
+      `[plugins."gmail@openai-curated"]`,
+      `enabled = false`,
+      ``,
+      `# Codex Apps Gmail (ChatGPT OAuth) conflicts with Kletron workspace tools.`,
+      `[apps.gmail]`,
+      `enabled = false`,
+      ``,
+      `[${CODEX_TOML_KLETRON_WORKSPACE_MCP_HEADER}]`,
+      `url = "${base}/api/mcp/workspace/${wid}"`,
+      `env_http_headers = { Authorization = "${KLETRON_LOCAL_MCP_AUTH_ENV}" }`,
+      `startup_timeout_sec = 30`,
+      `enabled = true`,
+    ];
+    if (process.env.KLETRON_CODEX_KEEP_APPS_MCP !== "1") {
+      lines.push(
+        ``,
+        `[features]`,
+        `apps = false`,
+        `enable_mcp_apps = false`,
+      );
+    }
+    blockBody = lines.join("\n");
+  }
 
   // Remove old Kletron block, then strip tables we (re)declare — avoids TOML "duplicate key" if the user
   // already had `[plugins."gmail@openai-curated"]` above our synced section.
   let working = mergeMarkedTomlSection(existing, "").replace(/\s+$/, "");
   working = stripAllTomlTableSections(working, CODEX_TOML_LEGACY_KLETRON_GMAIL_MCP_HEADER);
   working = stripAllTomlTableSections(working, CODEX_TOML_KLETRON_GMAIL_MCP_HEADER);
-  if (injectKletronGmailRemote) {
+  working = stripAllTomlTableSections(working, CODEX_TOML_KLETRON_WORKSPACE_MCP_HEADER);
+  if (sync.mode === "hosted" || sync.mode === "local") {
     working = stripAllTomlTableSections(working, CODEX_TOML_GMAIL_PLUGIN_HEADER);
+    working = stripAllTomlTableSections(working, CODEX_TOML_APPS_GMAIL_HEADER);
   }
 
   const merged = mergeMarkedTomlSection(working, blockBody).replace(/\n{3,}/g, "\n\n").trimEnd();
@@ -341,9 +421,11 @@ async function syncKletronCodexConfigToml(codexHome: string, injectKletronGmailR
 
 /**
  * Writes Google user OAuth as ADC-style JSON (`authorized_user`) for tooling that uses google-auth-library,
- * and refreshes an access token for Google's hosted Gmail MCP (Streamable HTTP + bearer).
+ * configures Codex MCP: **local** Kletron workspace MCP by default, or Google hosted Gmail MCP when
+ * `KLETRON_CODEX_USE_HOSTED_GMAIL_MCP=1` and a mailbox-capable bearer is available.
  */
 async function prepareCodexGoogleInjection(
+  userId: string,
   workspaceId: string | undefined,
   codexHome: string,
 ): Promise<{ injectionKey: string; env: NodeJS.ProcessEnv; injectKletronGmailRemote: boolean }> {
@@ -351,9 +433,13 @@ async function prepareCodexGoogleInjection(
   const adcPath = path.join(codexHome, KLETRON_GOOGLE_ADC_FILENAME);
   const ws = workspaceId?.trim() ?? "";
 
+  const syncNone = async () => {
+    await syncKletronCodexConfigToml(codexHome, { mode: "none", workspaceId: ws });
+  };
+
   if (!ws) {
     await unlink(adcPath).catch(() => undefined);
-    await syncKletronCodexConfigToml(codexHome, false);
+    await syncNone();
     return {
       injectionKey: "none",
       env: base,
@@ -365,7 +451,7 @@ async function prepareCodexGoogleInjection(
   const integration = await findActiveIntegration(ws, "gmail");
   if (!oauth || !integration) {
     await unlink(adcPath).catch(() => undefined);
-    await syncKletronCodexConfigToml(codexHome, false);
+    await syncNone();
     return {
       injectionKey: `ws:${ws}:no-gmail`,
       env: base,
@@ -374,49 +460,132 @@ async function prepareCodexGoogleInjection(
   }
 
   const creds = await getIntegrationCredentials(ws, integration.id);
-  const refreshToken = typeof creds?.refreshToken === "string" ? creds.refreshToken.trim() : "";
-  if (!refreshToken) {
+  const credRecord = (creds ?? {}) as Record<string, string>;
+  const refreshToken = typeof credRecord.refreshToken === "string" ? credRecord.refreshToken.trim() : "";
+  const accessStored = typeof credRecord.accessToken === "string" ? credRecord.accessToken.trim() : "";
+
+  if (!refreshToken && !accessStored) {
     await unlink(adcPath).catch(() => undefined);
-    await syncKletronCodexConfigToml(codexHome, false);
+    await syncNone();
     return {
-      injectionKey: `ws:${ws}:no-refresh`,
+      injectionKey: `ws:${ws}:no-google-tokens`,
       env: base,
       injectKletronGmailRemote: false,
     };
   }
 
-  const fingerprint = shortHash(`${integration.id}:${refreshToken}`);
-  const adcPayload = {
-    type: "authorized_user",
-    client_id: oauth.clientId,
-    client_secret: oauth.clientSecret,
-    refresh_token: refreshToken,
-  };
-  await writeFile(adcPath, `${JSON.stringify(adcPayload)}\n`, { encoding: "utf8", mode: 0o600 });
+  const fingerprint = shortHash(`${integration.id}:${refreshToken}:${accessStored.slice(0, 24)}`);
 
   const env = { ...base };
-  env.GOOGLE_APPLICATION_CREDENTIALS = adcPath;
+  env.KLETRON_CODEX_WORKSPACE_ID = ws;
+  if (refreshToken) {
+    const adcPayload = {
+      type: "authorized_user",
+      client_id: oauth.clientId,
+      client_secret: oauth.clientSecret,
+      refresh_token: refreshToken,
+    };
+    await writeFile(adcPath, `${JSON.stringify(adcPayload)}\n`, { encoding: "utf8", mode: 0o600 });
+    env.GOOGLE_APPLICATION_CREDENTIALS = adcPath;
+  } else {
+    await unlink(adcPath).catch(() => undefined);
+  }
 
-  let injectKletronGmailRemote = false;
-  try {
-    const accessToken = await refreshGoogleAccessToken(refreshToken);
-    if (accessToken) {
-      env.KLETRON_GOOGLE_ACCESS_TOKEN = accessToken;
-      injectKletronGmailRemote = true;
+  const useHosted =
+    process.env.KLETRON_CODEX_USE_HOSTED_GMAIL_MCP === "1";
+
+  /** Hosted Gmail MCP only — skip token refresh + Gmail probes when using local Kletron MCP (default). */
+  let mailboxBearer: string | null = null;
+  if (useHosted) {
+    try {
+      mailboxBearer = await resolveGoogleHostedGmailMcpBearer(credRecord);
+      if (mailboxBearer) {
+        env.KLETRON_GOOGLE_ACCESS_TOKEN = mailboxBearer;
+        env[KLETRON_GOOGLE_AUTHORIZATION_ENV] = `Bearer ${mailboxBearer}`;
+        await debugLogGoogleAccessTokenScopes(
+          `codex-gmail-mcp workspaceId=${ws} integration=${String(integration.id).slice(0, 8)}…`,
+          mailboxBearer,
+        );
+      } else {
+        console.warn(
+          "[codexExecutionService] Gmail: no bearer with Gmail API scopes (check merged refresh token / reconnect Gmail).",
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "[codexExecutionService] Gmail access token resolution failed:",
+        (error as Error)?.message ?? error,
+      );
     }
-  } catch (error) {
-    console.warn(
-      "[codexExecutionService] Gmail access token refresh failed (Kletron Gmail MCP may not start):",
-      (error as Error)?.message ?? error,
+  }
+
+  /** Google hosted `gmailmcp.googleapis.com` (Workspace Developer Preview). */
+  const injectHosted = Boolean(useHosted && mailboxBearer);
+  /** Kletron Next.js `/api/mcp/workspace/*` using the same REST tools as LangGraph. */
+  const injectLocal = !injectHosted;
+
+  if (injectLocal) {
+    env[KLETRON_LOCAL_MCP_AUTH_ENV] = `Bearer ${issueLocalMcpToken({
+      userId,
+      workspaceId: ws,
+      ttlSec: 6 * 3600,
+    })}`;
+  }
+
+  // Hosted Gmail MCP + explicit bearer: drop ADC so MCP stack does not mint a different access token.
+  if (injectHosted && env.KLETRON_GOOGLE_ACCESS_TOKEN) {
+    delete env.GOOGLE_APPLICATION_CREDENTIALS;
+  }
+
+  await syncKletronCodexConfigToml(codexHome, {
+    mode: injectHosted ? "hosted" : injectLocal ? "local" : "none",
+    workspaceId: ws,
+  });
+
+  if ((injectHosted || injectLocal) && process.env.KLETRON_CODEX_KEEP_APPS_MCP !== "1") {
+    await rm(path.join(codexHome, "cache", "codex_apps_tools"), { recursive: true, force: true }).catch(
+      () => undefined,
     );
   }
 
-  await syncKletronCodexConfigToml(codexHome, injectKletronGmailRemote);
+  // Diagnostics: hosted vs local MCP endpoint Codex will use.
+  if (injectHosted && typeof mailboxBearer === "string" && mailboxBearer.length > 0) {
+    const labelsProbeOk = await gmailAccessTokenCanListMailbox(mailboxBearer);
+    const mcpProbe = await probeGoogleHostedGmailMcpToolsList(mailboxBearer);
+    const stProbe = await probeGoogleHostedGmailMcpSearchThreads(mailboxBearer);
+    const mcpCallFailed = !stProbe.ok;
+    const previewMismatchLikely =
+      labelsProbeOk &&
+      mcpCallFailed &&
+      (stProbe.bodyHasPermissionDenied || stProbe.mcpToolResultIsError);
+    if (labelsProbeOk && mcpCallFailed) {
+      console.warn(
+        `[codexExecutionService] Hosted Gmail MCP probe failed (tools/list ok=${String(mcpProbe.ok)} tools/call search_threads ok=${String(stProbe.ok)} jsonRpcError=${String(stProbe.jsonRpcError)} http=${stProbe.status}).`,
+      );
+    }
+    if (previewMismatchLikely) {
+      console.warn(
+        "[codexExecutionService] Hosted Gmail MCP may require Workspace Developer Preview enrollment — https://developers.google.com/workspace/preview — Consider unsetting KLETRON_CODEX_USE_HOSTED_GMAIL_MCP to use Kletron local MCP instead.",
+      );
+    }
+  } else if (injectLocal) {
+    const baseUrl = (process.env.KLETRON_LOCAL_MCP_BASE_URL ?? "http://127.0.0.1:3000").replace(/\/+$/, "");
+    const localUrl = `${baseUrl}/api/mcp/workspace/${encodeURIComponent(ws)}`;
+    const authHdr = env[KLETRON_LOCAL_MCP_AUTH_ENV];
+    // Do not block Codex spawn on a self-HTTP probe; Codex will hit the same URL immediately after.
+    void probeKletronLocalMcpToolsList(localUrl, typeof authHdr === "string" ? authHdr : "").then((probe) => {
+      if (!probe.ok) {
+        console.warn(
+          `[codexExecutionService] Kletron local MCP tools/list probe failed (http=${probe.status}). Is the web app reachable at ${baseUrl}?`,
+        );
+      }
+    });
+  }
 
   return {
-    injectionKey: `ws:${ws}:${fingerprint}`,
+    injectionKey: `ws:${ws}:${fingerprint}:mcpv${KLETRON_CODEX_GMAIL_MCP_CONFIG_VERSION}`,
     env,
-    injectKletronGmailRemote,
+    injectKletronGmailRemote: injectHosted,
   };
 }
 
@@ -455,19 +624,46 @@ function buildTurnInput(message: string) {
   return [{ type: "text", text: message }];
 }
 
+function pickTrimmedString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const t = value.trim();
+  return t.length ? t : null;
+}
+
 function notificationThreadId(note: CodexBridgeNotification): string | null {
   const params = (note.params ?? {}) as Record<string, unknown>;
-  if (typeof params.threadId === "string") return params.threadId;
+  const fromRoot = pickTrimmedString(params.threadId);
+  if (fromRoot) return fromRoot;
   const thread = params.thread as Record<string, unknown> | undefined;
-  if (thread && typeof thread.id === "string") return thread.id;
+  const fromThread = pickTrimmedString(thread?.id);
+  if (fromThread) return fromThread;
+  const item = params.item as Record<string, unknown> | undefined;
+  if (item) {
+    const fromItem = pickTrimmedString(item.threadId);
+    if (fromItem) return fromItem;
+    const itemThread = item.thread as Record<string, unknown> | undefined;
+    const fromItemThread = pickTrimmedString(itemThread?.id);
+    if (fromItemThread) return fromItemThread;
+  }
   return null;
 }
 
+/** Codex sometimes omits top-level turnId on item/completed; also check nested item.turn / item.turnId. */
 function notificationTurnId(note: CodexBridgeNotification): string | null {
   const params = (note.params ?? {}) as Record<string, unknown>;
-  if (typeof params.turnId === "string") return params.turnId;
+  const fromRoot = pickTrimmedString(params.turnId);
+  if (fromRoot) return fromRoot;
   const turn = params.turn as Record<string, unknown> | undefined;
-  if (turn && typeof turn.id === "string") return turn.id;
+  const fromTurn = pickTrimmedString(turn?.id);
+  if (fromTurn) return fromTurn;
+  const item = params.item as Record<string, unknown> | undefined;
+  if (item) {
+    const fromItem = pickTrimmedString(item.turnId);
+    if (fromItem) return fromItem;
+    const itemTurn = item.turn as Record<string, unknown> | undefined;
+    const fromItemTurn = pickTrimmedString(itemTurn?.id);
+    if (fromItemTurn) return fromItemTurn;
+  }
   return null;
 }
 
@@ -617,23 +813,145 @@ function buildToolResultEvent(item: Record<string, unknown>): AgentEvent | null 
   };
 }
 
-function mapApprovalToolName(method: CodexApprovalMethod): string {
-  if (method === "item/commandExecution/requestApproval") return "commandExecution";
-  if (method === "item/fileChange/requestApproval") return "fileChange";
+function mapApprovalToolName(method: string): string {
+  if (method.includes("commandExecution")) return "commandExecution";
+  if (method.includes("fileChange")) return "fileChange";
+  if (method.includes("permissions")) return "permissions";
   return "permissions";
 }
 
-function mapApprovalDescription(method: CodexApprovalMethod, params: Record<string, unknown>): string {
-  if (method === "item/commandExecution/requestApproval") {
+function mapApprovalDescription(method: string, params: Record<string, unknown>): string {
+  if (method.includes("commandExecution")) {
     const command = typeof params.command === "string" ? params.command : "command";
     return `Approve command: ${command}`;
   }
-  if (method === "item/fileChange/requestApproval") {
+  if (method.includes("fileChange")) {
     const root = typeof params.grantRoot === "string" ? params.grantRoot : "workspace";
     return `Approve file write access: ${root}`;
   }
+  if (method.includes("permissions")) {
+    const reason = typeof params.reason === "string" ? params.reason : "permission request";
+    return `Approve permissions: ${reason}`;
+  }
   const reason = typeof params.reason === "string" ? params.reason : "permission request";
   return `Approve permissions: ${reason}`;
+}
+
+function isApprovalRequestMethod(method: string): boolean {
+  return method.endsWith("/requestApproval") || method.includes("requestApproval");
+}
+
+function isMcpElicitationRequestMethod(method: string): boolean {
+  return method === "mcpServer/elicitation/request" || method === "elicitation/create";
+}
+
+function isPermissionsApprovalMethod(method: string, params: Record<string, unknown>): boolean {
+  if (method.includes("permissions")) return true;
+  const perms = params.permissions;
+  return typeof perms === "object" && perms !== null;
+}
+
+function enumPrimitiveValues(values: unknown): Array<string | number | boolean> {
+  if (!Array.isArray(values)) return [];
+  return values.filter((v): v is string | number | boolean =>
+    typeof v === "string" || typeof v === "number" || typeof v === "boolean",
+  );
+}
+
+function chooseEnumValue(
+  key: string,
+  values: Array<string | number | boolean>,
+): string | number | boolean | null {
+  if (values.length === 0) return null;
+  const lowered = values.map((v) => (typeof v === "string" ? v.toLowerCase() : v));
+  const findPreferred = (candidates: string[]) => {
+    for (const candidate of candidates) {
+      const idx = lowered.findIndex((v) => typeof v === "string" && v === candidate);
+      if (idx >= 0) return values[idx]!;
+    }
+    return null;
+  };
+  const k = key.toLowerCase();
+  if (k.includes("decision") || k.includes("action")) {
+    return findPreferred(["accept", "approve", "allow", "yes"]) ?? values[0]!;
+  }
+  if (k.includes("persist") || k.includes("scope")) {
+    return findPreferred(["session", "always", "turn"]) ?? values[0]!;
+  }
+  return values[0]!;
+}
+
+function defaultPrimitiveForSchema(
+  key: string,
+  schema: Record<string, unknown>,
+): string | number | boolean {
+  const enumVals = enumPrimitiveValues(schema.enum);
+  const fromEnum = chooseEnumValue(key, enumVals);
+  if (fromEnum !== null) return fromEnum;
+
+  const t = typeof schema.type === "string" ? schema.type : "";
+  if (t === "boolean") return true;
+  if (t === "number" || t === "integer") {
+    const min = typeof schema.minimum === "number" ? schema.minimum : 0;
+    return Number.isFinite(min) ? min : 0;
+  }
+  if (key.toLowerCase().includes("decision") || key.toLowerCase().includes("action")) return "accept";
+  if (key.toLowerCase().includes("persist") || key.toLowerCase().includes("scope")) return "session";
+  return "yes";
+}
+
+function buildMcpElicitationAcceptContent(params: Record<string, unknown>): Record<string, unknown> {
+  const schema = (params.requestedSchema ?? null) as Record<string, unknown> | null;
+  if (!schema || schema.type !== "object") return {};
+  const props = (schema.properties ?? null) as Record<string, unknown> | null;
+  if (!props || typeof props !== "object") return {};
+  const required = Array.isArray(schema.required)
+    ? schema.required.filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+    : [];
+
+  const out: Record<string, unknown> = {};
+  const requiredKeys = required.length > 0 ? required : Object.keys(props);
+  for (const key of requiredKeys) {
+    const rawDef = props[key];
+    if (!rawDef || typeof rawDef !== "object" || Array.isArray(rawDef)) continue;
+    out[key] = defaultPrimitiveForSchema(key, rawDef as Record<string, unknown>);
+  }
+
+  const meta = (params.meta ?? null) as Record<string, unknown> | null;
+  const approvalKind = typeof meta?.codex_approval_kind === "string" ? meta.codex_approval_kind : "";
+  if (approvalKind === "mcp_tool_call") {
+    if (typeof out.decision !== "string") out.decision = "accept";
+    if (out.persist == null) {
+      const persist = meta?.persist;
+      if (typeof persist === "string") out.persist = persist;
+      if (Array.isArray(persist)) {
+        const s = persist.find((v) => typeof v === "string");
+        if (typeof s === "string") out.persist = s;
+      }
+    }
+  }
+  return out;
+}
+
+function buildMcpElicitationResult(params: Record<string, unknown>): Record<string, unknown> {
+  const mode = typeof params.mode === "string" ? params.mode : "";
+  if (mode === "form") {
+    return {
+      action: "accept",
+      content: buildMcpElicitationAcceptContent(params),
+    };
+  }
+  if (mode === "url") {
+    // Headless backend cannot complete browser URL elicitation safely.
+    return {
+      action: "decline",
+      content: null,
+    };
+  }
+  return {
+    action: "cancel",
+    content: null,
+  };
 }
 
 async function execFileUtf8(command: string, args: string[]): Promise<string> {
@@ -808,17 +1126,38 @@ export class CodexExecutionService {
     model?: string;
     threadId?: string | null;
     sandboxMode?: CodexSandboxMode;
-    /** When set, Kletron injects the workspace Gmail integration into the Codex process (GOOGLE_APPLICATION_CREDENTIALS). */
+    /** When set, Kletron injects the workspace Gmail integration (`KLETRON_GOOGLE_AUTHORIZATION` + raw token for probes; ADC file may be written but is omitted from env when bearer is set). */
     workspaceId?: string;
   }): Promise<CodexTurnStreamHandle> {
     const ctx = await this.ensureBridgeForTurn(options.userId, options.workspaceId);
-    const threadId = await this.ensureThreadId(ctx, options.threadId ?? null, options.cwd, options.model, options.sandboxMode ?? "read-only");
+    const sandboxMode = options.sandboxMode ?? "read-only";
+    let threadId = await this.ensureThreadId(ctx, options.threadId ?? null, options.cwd, options.model, sandboxMode);
+
+    let turnResponse: any;
+    try {
+      turnResponse = await ctx.bridge.call<any>("turn/start", {
+        threadId,
+        input: buildTurnInput(options.message),
+        ...(options.model ? { model: options.model } : {}),
+      });
+    } catch (err) {
+      const msg = (err as Error)?.message ?? String(err);
+      if (options.threadId?.trim() && isCodexThreadStaleError(msg)) {
+        console.warn(
+          `[codexExecutionService] turn/start stale thread ${String(options.threadId).slice(0, 12)}… (${msg.slice(0, 120)}) — creating a new Codex thread.`,
+        );
+        threadId = await this.ensureThreadId(ctx, null, options.cwd, options.model, sandboxMode);
+        turnResponse = await ctx.bridge.call<any>("turn/start", {
+          threadId,
+          input: buildTurnInput(options.message),
+          ...(options.model ? { model: options.model } : {}),
+        });
+      } else {
+        throw err;
+      }
+    }
+
     const userEvent = buildUserEvent(options.message);
-    const turnResponse = await ctx.bridge.call<any>("turn/start", {
-      threadId,
-      input: buildTurnInput(options.message),
-      ...(options.model ? { model: options.model } : {}),
-    });
     const turnId = String(turnResponse?.turn?.id ?? "");
     if (!turnId) {
       throw new Error("Codex turn/start did not return a turn id");
@@ -880,6 +1219,21 @@ export class CodexExecutionService {
     collector.queue.push({ kind: "event_snapshot", events: cloneAgentEventSnapshot(collector.events) });
   }
 
+  /**
+   * Resolve stream collector when Codex omits turnId on some notifications (notably item/completed).
+   * Falls back to the sole active collector for the same Codex threadId.
+   */
+  private resolveCollectorForCodexTurn(turnId: string | null, threadId: string | null): TurnCollector | null {
+    if (turnId) {
+      const direct = this.collectorsByTurn.get(turnId);
+      if (direct) return direct;
+    }
+    if (!threadId) return null;
+    const matches = [...this.collectorsByTurn.values()].filter((c) => c.threadId === threadId);
+    if (matches.length === 1) return matches[0]!;
+    return null;
+  }
+
   async registerRunMetadata(runId: string, metadata: Partial<{
     codexThreadId: string;
     codexTurnId: string;
@@ -889,13 +1243,16 @@ export class CodexExecutionService {
   }>): Promise<void> {
     const run = await agentGraphRunService.getRun(runId);
     if (!run) return;
-    await agentGraphRunService.updateRunStatus(runId, run.status, {
-      ...(metadata.codexThreadId ? { codexThreadId: metadata.codexThreadId } : {}),
-      ...(metadata.codexTurnId ? { codexTurnId: metadata.codexTurnId } : {}),
-      ...(metadata.codexModel ? { codexModel: metadata.codexModel } : {}),
-      ...(metadata.codexSandboxMode ? { codexSandboxMode: metadata.codexSandboxMode } : {}),
-      ...(metadata.executionBackend ? { executionBackend: metadata.executionBackend } : {}),
-    } as any);
+    const patch: Record<string, unknown> = {};
+    const tid = pickTrimmedString(metadata.codexThreadId ?? null);
+    const tur = pickTrimmedString(metadata.codexTurnId ?? null);
+    if (tid) patch.codexThreadId = tid;
+    if (tur) patch.codexTurnId = tur;
+    const cm = pickTrimmedString(metadata.codexModel ?? null);
+    if (cm) patch.codexModel = cm;
+    if (metadata.codexSandboxMode) patch.codexSandboxMode = metadata.codexSandboxMode;
+    if (metadata.executionBackend) patch.executionBackend = metadata.executionBackend;
+    await agentGraphRunService.updateRunStatus(runId, run.status, patch as any);
   }
 
   /** Used for account/models/approvals: never downgrade an existing bridge that already has Gmail injection. */
@@ -922,7 +1279,7 @@ export class CodexExecutionService {
     await mkdir(codexHome, { recursive: true });
     await mkdir(LOG_ROOT, { recursive: true });
 
-    const { injectionKey, env: injectionEnv } = await prepareCodexGoogleInjection(workspaceId, codexHome);
+    const { injectionKey, env: injectionEnv } = await prepareCodexGoogleInjection(userId, workspaceId, codexHome);
     const existing = this.bridgeByUser.get(userId);
     if (existing?.bridge.isRunning && existing.injectionKey === injectionKey) {
       return existing;
@@ -937,7 +1294,10 @@ export class CodexExecutionService {
 
     const bridge = new CodexBridge({
       command: binaryPath,
-      env: childEnv,
+      // Isolate config discovery: Codex merges project `.codex/config.toml` layers from cwd→git root;
+      // defaulting cwd to the server repo could pull extra MCP/plugins. CODEX_HOME already holds our config.toml.
+      cwd: codexHome,
+      env: childEnv as NodeJS.ProcessEnv,
       reconnect: { enabled: true, minDelayMs: 500, maxDelayMs: 10_000 },
       logger: (entry) => {
         void this.writeLocalLogs(entry);
@@ -983,12 +1343,13 @@ export class CodexExecutionService {
     sandboxMode: CodexSandboxMode,
   ): Promise<string> {
     if (existingThreadId && existingThreadId.trim()) return existingThreadId.trim();
+    const needsInteractiveApprovals = sandboxMode !== "read-only";
     const startResponse = await ctx.bridge.call<any>("thread/start", {
       cwd,
       ...(model ? { model } : {}),
       sandbox: codexSandboxToThreadSandbox(sandboxMode),
-      approvalPolicy: "on-request",
-      approvalsReviewer: "user",
+      approvalPolicy: needsInteractiveApprovals ? "on-request" : "never",
+      ...(needsInteractiveApprovals ? { approvalsReviewer: "user" } : {}),
       ephemeral: false,
     });
     const threadId = String(startResponse?.thread?.id ?? "");
@@ -1019,11 +1380,12 @@ export class CodexExecutionService {
       return;
     }
 
-    if ((method === "item/started" || method === "item/completed") && turnId) {
-      const collector = this.collectorsByTurn.get(turnId);
-      if (!collector) return;
+    if (method === "item/started" || method === "item/completed") {
+      const collector = this.resolveCollectorForCodexTurn(turnId, threadId);
       const item = ((note.params as Record<string, unknown>)?.item ?? null) as Record<string, unknown> | null;
-      if (!item) return;
+      if (!collector || !item) {
+        return;
+      }
 
       if (method === "item/started") {
         const callEvent = buildToolCallEvent(item);
@@ -1044,8 +1406,8 @@ export class CodexExecutionService {
       return;
     }
 
-    if (method === "turn/completed" && turnId) {
-      const collector = this.collectorsByTurn.get(turnId);
+    if (method === "turn/completed") {
+      const collector = this.resolveCollectorForCodexTurn(turnId, threadId);
       if (!collector) return;
       const params = (note.params ?? {}) as Record<string, unknown>;
       const turn = (params.turn ?? {}) as Record<string, unknown>;
@@ -1068,7 +1430,8 @@ export class CodexExecutionService {
       this.pushEventSnapshot(collector);
       collector.queue.push({ kind: "notification", method, params: note.params });
       collector.queue.close();
-      this.collectorsByTurn.delete(turnId);
+      const mapKey = collector.turnId;
+      this.collectorsByTurn.delete(mapKey);
       this.activeTurnsByRun.delete(collector.runId);
       collector.resolveCompleted({
         threadId: collector.threadId,
@@ -1082,16 +1445,27 @@ export class CodexExecutionService {
       return;
     }
 
-    if (method === "error" && turnId) {
-      const collector = this.collectorsByTurn.get(turnId);
+    if (method === "error") {
+      const collector = this.resolveCollectorForCodexTurn(turnId, threadId);
       if (!collector) return;
       const params = (note.params ?? {}) as Record<string, unknown>;
       const message = typeof params.message === "string" ? params.message : "Codex error";
       collector.queue.push({ kind: "error", message });
-      collector.queue.fail(new Error(message));
-      this.collectorsByTurn.delete(turnId);
+      // Do not queue.fail + rejectCompleted: fail() rejects the async iterator while rejectCompleted()
+      // rejects `completed` — if the for-await loop exits on iterator rejection first, nobody awaits
+      // `completed` and Node reports an unhandled rejection. Mirror turn/completed instead.
+      collector.queue.close();
+      this.collectorsByTurn.delete(collector.turnId);
       this.activeTurnsByRun.delete(collector.runId);
-      collector.rejectCompleted(new Error(message));
+      collector.resolveCompleted({
+        threadId: collector.threadId,
+        turnId: collector.turnId,
+        status: "failed",
+        error: message,
+        agentText: collector.assistantText,
+        reasoningText: collector.reasoningText,
+        events: collector.events,
+      });
       return;
     }
 
@@ -1110,35 +1484,74 @@ export class CodexExecutionService {
   }
 
   private async handleServerRequest(userId: string, req: CodexBridgeServerRequest): Promise<void> {
-    const method = req.method as CodexApprovalMethod | string;
-    if (
-      method !== "item/commandExecution/requestApproval" &&
-      method !== "item/fileChange/requestApproval" &&
-      method !== "item/permissions/requestApproval"
-    ) {
-      const turnId = typeof (req.params as Record<string, unknown>)?.turnId === "string"
-        ? String((req.params as Record<string, unknown>).turnId)
-        : null;
+    const method = req.method as string;
+    const params = (req.params ?? {}) as Record<string, unknown>;
+    console.warn(
+      `[codexExecutionService] server request method=${method} turnId=${String(params.turnId ?? "none")} threadId=${String(params.threadId ?? "none")}`,
+    );
+
+    if (isMcpElicitationRequestMethod(method)) {
+      const ctx = this.bridgeByUser.get(userId);
+      if (!ctx) return;
+      const result = buildMcpElicitationResult(params);
+      ctx.bridge.respondToServerRequest(req.id, result);
+      const turnId = typeof params.turnId === "string" ? params.turnId : null;
       if (turnId) {
         const collector = this.collectorsByTurn.get(turnId);
         if (collector) {
           collector.queue.push({ kind: "notification", method, params: req.params });
         }
       }
+      await this.writeCodexEventLog("server_request", {
+        userId: shortHash(userId),
+        method,
+        params: redact(params),
+        resolvedWith: redact(result),
+      });
       return;
     }
-    const params = (req.params ?? {}) as Record<string, unknown>;
+
+    if (!isApprovalRequestMethod(method)) {
+      const turnId = typeof params.turnId === "string" ? params.turnId : null;
+      if (turnId) {
+        const collector = this.collectorsByTurn.get(turnId);
+        if (collector) {
+          collector.queue.push({ kind: "notification", method, params: req.params });
+        }
+      }
+      const ctx = this.bridgeByUser.get(userId);
+      ctx?.bridge.respondToServerRequestError(req.id, {
+        code: -32601,
+        message: `Unhandled server request method: ${method}`,
+      });
+      await this.writeCodexEventLog("server_request_unhandled", {
+        userId: shortHash(userId),
+        method,
+        params: redact(params),
+      });
+      return;
+    }
+
+    console.warn(
+      `[codexExecutionService] approval request method=${method} turnId=${String(params.turnId ?? "none")} threadId=${String(params.threadId ?? "none")}`,
+    );
     const threadId = String(params.threadId ?? "");
     const turnId = String(params.turnId ?? "");
     if (!threadId || !turnId) {
       const ctx = this.bridgeByUser.get(userId);
-      ctx?.bridge.respondToServerRequest(req.id, { decision: "decline" });
+      ctx?.bridge.respondToServerRequest(
+        req.id,
+        this.buildApprovalPayloadForMethod(method, params, "decline"),
+      );
       return;
     }
     const collector = this.collectorsByTurn.get(turnId);
     if (!collector) {
       const ctx = this.bridgeByUser.get(userId);
-      ctx?.bridge.respondToServerRequest(req.id, { decision: "decline" });
+      ctx?.bridge.respondToServerRequest(
+        req.id,
+        this.buildApprovalPayloadForMethod(method, params, "decline"),
+      );
       return;
     }
 
@@ -1174,7 +1587,15 @@ export class CodexExecutionService {
   }
 
   private buildApprovalPayload(entry: CodexPendingApproval, decision: CodexApprovalDecision): unknown {
-    if (entry.method === "item/permissions/requestApproval") {
+    return this.buildApprovalPayloadForMethod(entry.method, entry.args, decision);
+  }
+
+  private buildApprovalPayloadForMethod(
+    method: string,
+    params: Record<string, unknown>,
+    decision: CodexApprovalDecision,
+  ): unknown {
+    if (isPermissionsApprovalMethod(method, params)) {
       if (decision === "decline") {
         return {
           permissions: {
@@ -1188,7 +1609,7 @@ export class CodexExecutionService {
           scope: "turn",
         };
       }
-      const requested = (entry.args.permissions ?? {}) as Record<string, unknown>;
+      const requested = (params.permissions ?? {}) as Record<string, unknown>;
       return {
         permissions: requested,
         scope: decision === "acceptForSession" ? "session" : "turn",

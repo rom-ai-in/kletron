@@ -281,6 +281,13 @@ export async function listAllWorkspaces(): Promise<Workspace[]> {
   }
 }
 
+/** Rejects malformed ids before Mongo calls (API routes, MCP path segments). */
+export function isMongoObjectIdParam(value: string | undefined | null): boolean {
+  const t = typeof value === "string" ? value.trim() : "";
+  if (!/^[a-f0-9]{24}$/i.test(t)) return false;
+  return ObjectId.isValid(t);
+}
+
 export async function getWorkspaceById(id: string, ownerId: string): Promise<Workspace | null> {
   try {
     await claimLegacyWorkspaces(ownerId);

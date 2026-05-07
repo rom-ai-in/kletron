@@ -40,6 +40,11 @@ function decodeKeyMaterial(raw: string): Buffer | null {
     return null;
 }
 
+/** Same 32-byte material as {@link encryptSecret} — also used for HMAC signing (e.g. local MCP bearer tokens). */
+export function getKletronSymmetricKeyBytes(): Buffer {
+    return getKey();
+}
+
 function getKey(): Buffer {
     if (cachedKey) return cachedKey;
     const explicit = process.env.KLETRON_ENCRYPTION_KEY;

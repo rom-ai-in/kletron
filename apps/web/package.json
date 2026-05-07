@@ -13,6 +13,7 @@
     "test-auth": "tsx scripts/test-auth.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@kletron/agent-core": "file:../../packages/agent-core",
     "@kletron/mcp-client": "file:../../packages/mcp-client",
     "@kletron/server": "file:../../packages/server",
