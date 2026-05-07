@@ -22,6 +22,7 @@ describe("oauthProviders", () => {
         expect(OAUTH_PROVIDERS["google-drive"].extraAuthParams).toEqual({
             access_type: "offline",
             prompt: "consent",
+            include_granted_scopes: "true",
         });
 
         expect(OAUTH_PROVIDERS.gmail.defaultScopes).toEqual([

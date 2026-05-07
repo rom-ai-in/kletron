@@ -83,6 +83,8 @@ export const OAUTH_PROVIDERS: Record<string, OauthProviderConfig> = {
         extraAuthParams: {
             access_type: "offline",
             prompt: "consent",
+            // Incremental auth: combine new scopes with previously granted ones on the same client.
+            include_granted_scopes: "true",
         },
         clientIdEnv: "GOOGLE_OAUTH_CLIENT_ID",
         clientSecretEnv: "GOOGLE_OAUTH_CLIENT_SECRET",
@@ -111,6 +113,7 @@ export const OAUTH_PROVIDERS: Record<string, OauthProviderConfig> = {
         extraAuthParams: {
             access_type: "offline",
             prompt: "consent",
+            include_granted_scopes: "true",
         },
         clientIdEnv: "GOOGLE_OAUTH_CLIENT_ID",
         clientSecretEnv: "GOOGLE_OAUTH_CLIENT_SECRET",
@@ -139,6 +142,7 @@ export const OAUTH_PROVIDERS: Record<string, OauthProviderConfig> = {
         extraAuthParams: {
             access_type: "offline",
             prompt: "consent",
+            include_granted_scopes: "true",
         },
         clientIdEnv: "GOOGLE_OAUTH_CLIENT_ID",
         clientSecretEnv: "GOOGLE_OAUTH_CLIENT_SECRET",

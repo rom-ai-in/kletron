@@ -173,29 +173,33 @@ export function useConversation(
     researchDepth,
   });
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const headers = await getRequestHeaders();
-        const res = await fetch(`${backendUrlTrimmed}/api/user-preferences`, {
-          method: "GET",
-          headers,
-        });
-        if (!res.ok) return;
-        const payload = await res.json().catch(() => null);
-        const prefs = payload?.preferences ?? null;
-        if (cancelled || !prefs) return;
-        setExecutionBackend(prefs.executionBackend === "codex" ? "codex" : "langgraph");
-        setSelectedCodexModel(typeof prefs.selectedCodexModel === "string" ? prefs.selectedCodexModel : "");
-      } catch {
-        // best effort only
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  /** Same GET as mount — call after LLM settings change so streaming matches `useAgentSession` + API. */
+  const syncUserPreferencesFromApi = useCallback(async () => {
+    try {
+      const headers = await getRequestHeaders();
+      const res = await fetch(`${backendUrlTrimmed}/api/user-preferences`, {
+        method: "GET",
+        headers,
+      });
+      if (!res.ok) return;
+      const payload = await res.json().catch(() => null);
+      const prefs = payload?.preferences ?? null;
+      if (!prefs) return;
+      setExecutionBackend(prefs.executionBackend === "codex" ? "codex" : "langgraph");
+      setSelectedCodexModel(typeof prefs.selectedCodexModel === "string" ? prefs.selectedCodexModel : "");
+    } catch {
+      // best effort only
+    }
   }, [backendUrlTrimmed, getRequestHeaders]);
+
+  useEffect(() => {
+    void syncUserPreferencesFromApi();
+  }, [syncUserPreferencesFromApi]);
+
+  /** Keep `useSessionStream` aligned when the strip toggles LangGraph/Codex (`useAgentSession` updates API separately). */
+  const applyExecutionBackendSelection = useCallback((backend: "langgraph" | "codex") => {
+    setExecutionBackend(backend);
+  }, []);
 
   const sessionEdits = useSessionEdits({
     sessionId: conversationId,
@@ -654,5 +658,9 @@ export function useConversation(
     buildThreadExport,
     /** Keep in sync when user picks Codex model from agent strip (`handleCodexModelChange` updates prefs). */
     applyCodexModelSelection,
+    /** Keep in sync when user toggles LangGraph/Codex from agent strip. */
+    applyExecutionBackendSelection,
+    /** Reload execution backend + Codex model from server (e.g. after saving in Settings LLM). */
+    syncUserPreferencesFromApi,
   };
 }

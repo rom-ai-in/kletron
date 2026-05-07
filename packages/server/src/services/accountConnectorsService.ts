@@ -296,16 +296,47 @@ export async function createAccountIntegration(
     }
     const c = await integrationsColl();
     const now = new Date();
+
+    /** Google often omits `refresh_token` on re-consent; without it we would store an empty string and break API access. */
+    let preservedGoogleRefreshToken: string | undefined;
+    if (
+        def.auth === "oauth" &&
+        (validated.providerId === "gmail" ||
+            validated.providerId === "google-calendar" ||
+            validated.providerId === "google-drive")
+    ) {
+        const prevActive = await c.findOne(
+            { ownerId, providerId: validated.providerId, status: "active" },
+            { sort: { updatedAt: -1, createdAt: -1, _id: -1 } }
+        );
+        if (prevActive) {
+            try {
+                const prevCreds = decryptJson<Record<string, string>>(prevActive.credentials);
+                const rt = typeof prevCreds.refreshToken === "string" ? prevCreds.refreshToken.trim() : "";
+                if (rt) preservedGoogleRefreshToken = rt;
+            } catch {
+                /* ignore */
+            }
+        }
+    }
+
     await c.updateMany(
         { ownerId, providerId: validated.providerId, status: "active" },
         { $set: { status: "revoked", updatedAt: now } }
     );
+
+    const credentials: Record<string, string> = { ...validated.credentials };
+    const newRt = typeof credentials.refreshToken === "string" ? credentials.refreshToken.trim() : "";
+    if (!newRt && preservedGoogleRefreshToken) {
+        credentials.refreshToken = preservedGoogleRefreshToken;
+    }
+
     const doc: AccountIntegrationDoc = {
         ownerId,
         providerId: validated.providerId,
         displayName: validated.displayName?.trim() || def.name,
-        credentials: encryptJson(validated.credentials),
-        credentialPreview: buildPreview(validated.credentials),
+        credentials: encryptJson(credentials),
+        credentialPreview: buildPreview(credentials),
         scopes: validated.scopes ?? def.oauthScopes ?? [],
         status: "active",
         lastUsedAt: null,

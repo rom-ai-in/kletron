@@ -95,6 +95,7 @@ describe("Google OAuth routes", () => {
         expect(location.searchParams.get("response_type")).toBe("code");
         expect(location.searchParams.get("access_type")).toBe("offline");
         expect(location.searchParams.get("prompt")).toBe("consent");
+        expect(location.searchParams.get("include_granted_scopes")).toBe("true");
 
         const scopes = (location.searchParams.get("scope") ?? "").split(/\s+/).filter(Boolean);
         expect(scopes).toEqual(

@@ -344,7 +344,10 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
                 preferenceBackend={agentSession.executionBackend}
                 sessionBackend={conversation.sessionDetail?.executionBackend ?? null}
                 hasActiveSession={Boolean(conversationId)}
-                onPreferenceBackendChange={agentSession.handleExecutionBackendChange}
+                onPreferenceBackendChange={(backend) => {
+                  agentSession.handleExecutionBackendChange(backend);
+                  conversation.applyExecutionBackendSelection(backend);
+                }}
                 langGraphControls={
                   <>
                     <Selector

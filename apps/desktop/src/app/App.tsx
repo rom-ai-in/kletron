@@ -269,6 +269,22 @@ export default function App() {
     categoriesHook.activeCategory
   );
 
+  /** When leaving Settings (e.g. after saving LLM/Codex prefs), re-fetch so `useSessionStream` matches server + `useAgentSession`. */
+  const settingsViewPrevRef = useRef(settings.activeView);
+  useEffect(() => {
+    const prev = settingsViewPrevRef.current;
+    settingsViewPrevRef.current = settings.activeView;
+    if (prev === "settings" && settings.activeView !== "settings" && backendReady) {
+      agentSession.refreshLlmPreferences();
+      void conversation.syncUserPreferencesFromApi();
+    }
+  }, [
+    settings.activeView,
+    backendReady,
+    agentSession.refreshLlmPreferences,
+    conversation.syncUserPreferencesFromApi,
+  ]);
+
   const agentLlmStrip = useMemo(
     () =>
       effectiveLlmStripHealth({
@@ -1972,7 +1988,10 @@ export default function App() {
                     preferenceBackend={agentSession.executionBackend}
                     sessionBackend={conversation.sessionDetail?.executionBackend ?? null}
                     hasActiveSession={Boolean(threads.conversationId)}
-                    onPreferenceBackendChange={agentSession.handleExecutionBackendChange}
+                    onPreferenceBackendChange={(backend) => {
+                      agentSession.handleExecutionBackendChange(backend);
+                      conversation.applyExecutionBackendSelection(backend);
+                    }}
                     langGraphControls={
                       <>
                         <Selector

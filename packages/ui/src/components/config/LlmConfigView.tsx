@@ -433,12 +433,32 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
     }
   };
 
-  const saveCodexPreferences = async (patch: Record<string, unknown>) => {
-    await fetch("/api/user-preferences", {
+  const saveCodexPreferences = async (
+    patch: Record<string, unknown>,
+    options?: { successMessage?: string },
+  ) => {
+    const res = await fetch("/api/user-preferences", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
+    const payload = (await res.json().catch(() => ({}))) as {
+      success?: boolean;
+      error?: string;
+    };
+    if (!res.ok) {
+      throw new Error(
+        typeof payload?.error === "string" ? payload.error : `Enregistrement impossible (${res.status})`,
+      );
+    }
+    if (payload.success === false) {
+      throw new Error(
+        typeof payload?.error === "string" ? payload.error : "Échec de l’enregistrement des préférences",
+      );
+    }
+    if (options?.successMessage) {
+      showMessage("success", options.successMessage);
+    }
   };
 
   const openUrl = async (url: string) => {
@@ -516,20 +536,39 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
   };
 
   const handleCodexModelChange = async (value: string) => {
+    const previous = selectedCodexModel;
     setSelectedCodexModel(value);
     try {
-      await saveCodexPreferences({ selectedCodexModel: value || null });
+      await saveCodexPreferences(
+        { selectedCodexModel: value || null },
+        { successMessage: "Modèle Codex enregistré." },
+      );
     } catch (error) {
-      setCodexError((error as Error)?.message ?? "Failed to save Codex model");
+      setSelectedCodexModel(previous);
+      const msg = (error as Error)?.message ?? "Échec de l’enregistrement du modèle Codex";
+      setCodexError(msg);
+      showMessage("error", msg);
     }
   };
 
   const handleCodexExecutionBackendChange = async (value: "langgraph" | "codex") => {
+    const previous = codexExecutionBackend;
     setCodexExecutionBackend(value);
     try {
-      await saveCodexPreferences({ executionBackend: value });
+      await saveCodexPreferences(
+        { executionBackend: value },
+        {
+          successMessage:
+            value === "codex"
+              ? "Préférence enregistrée : nouvelles conversations sur Codex."
+              : "Préférence enregistrée : nouvelles conversations sur LangGraph.",
+        },
+      );
     } catch (error) {
-      setCodexError((error as Error)?.message ?? "Failed to save execution backend");
+      setCodexExecutionBackend(previous);
+      const msg = (error as Error)?.message ?? "Échec de l’enregistrement du moteur d’exécution";
+      setCodexError(msg);
+      showMessage("error", msg);
     }
   };
 
@@ -979,6 +1018,21 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
                   ) : null}
                 </div>
               ) : null}
+
+              <div className="flex items-start gap-2.5 rounded-lg border border-status-info-border/60 bg-status-info-bg/15 px-3 py-2.5 text-[11px] leading-snug text-text-secondary">
+                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-status-info-bg text-status-info-text">
+                  <Info className="h-3.5 w-3.5" aria-hidden />
+                </div>
+                <p>
+                  <span className="font-medium text-text-primary">Enregistrement automatique</span>
+                  {" — "}
+                  Le moteur d’exécution (nouvelles sessions) et le modèle Codex sont enregistrés sur ton compte dès que tu modifies les listes
+                  ci-dessous. Pas de bouton « Save » : c’est voulu.{" "}
+                  <span className="text-text-muted">
+                    Même persistance serveur que l’écran Agent et l’app desktop (préférences utilisateur).
+                  </span>
+                </p>
+              </div>
 
               {codexLoading ? (
                 <div className="flex items-center gap-2 text-xs text-text-muted">
