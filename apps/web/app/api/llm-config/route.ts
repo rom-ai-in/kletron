@@ -36,6 +36,12 @@ export async function GET(request: NextRequest) {
                     apiKey: config.openai.apiKey ? "••••••••" : "",
                 }
                 : undefined,
+            codex: config.codex
+                ? {
+                    ...config.codex,
+                    apiKey: config.codex.apiKey ? "••••••••" : "",
+                }
+                : undefined,
             claude: config.claude
                 ? {
                     ...config.claude,

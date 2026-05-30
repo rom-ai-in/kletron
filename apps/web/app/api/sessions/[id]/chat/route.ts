@@ -14,6 +14,7 @@ import { codexExecutionService, type CodexSandboxMode } from "@kletron/server/se
 import { resolveWorkspaceFromRequestStrict, workspaceErrorToHttp } from "@kletron/server/services/workspaceService";
 
 const textEncoder = new TextEncoder();
+const CODEX_BACKEND = "codex";
 
 type StreamChunk =
   | {
@@ -31,6 +32,11 @@ type StreamChunk =
   | { type: "stream_metrics"; payload: AgentStreamKpiV1 }
   | { type: "final"; payload: AgentWorkflowResult }
   | { type: "error"; payload: { message: string } };
+
+function parseExecutionBackend(input: unknown, provider?: string): "langgraph" | "codex" {
+  if (typeof provider === "string" && provider.trim().toLowerCase() === CODEX_BACKEND) return CODEX_BACKEND;
+  return input === CODEX_BACKEND ? CODEX_BACKEND : "langgraph";
+}
 
 function parseCodexModel(payload: Record<string, unknown>, fallback?: string): string | undefined {
   const fromBody = typeof payload.codexModel === "string" ? payload.codexModel.trim() : "";
@@ -89,6 +95,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const message = typeof payload?.message === "string" ? payload.message.trim() : "";
   const provider = typeof payload?.provider === "string" ? payload.provider.trim() : undefined;
   const model = typeof payload?.model === "string" ? payload.model.trim() : undefined;
+  const requestedExecutionBackend = parseExecutionBackend(payload?.executionBackend, provider);
   const clientSentAtMs =
     typeof payload?.clientSentAtMs === "number" && Number.isFinite(payload.clientSentAtMs)
       ? payload.clientSentAtMs
@@ -154,7 +161,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   const graphId = run.graphId?.toString() ?? "";
-  const executionBackend = run.executionBackend === "codex" ? "codex" : "langgraph";
+  const executionBackend =
+    requestedExecutionBackend === "codex" ? "codex" : run.executionBackend === "codex" ? "codex" : "langgraph";
   const workspaceId = run.workspaceId?.toString() ?? "";
   const graph = graphId ? await agentGraphService.getGraph(graphId) : null;
   const slashPreflight = workspaceId
@@ -237,7 +245,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
 
     const codexWorkspaceId = workspace._id.toString();
-
     const codexModel = parseCodexModel(payload as Record<string, unknown>, run.codexModel);
     const codexSandboxMode = parseCodexSandboxMode(payload?.codexSandboxMode, run.codexSandboxMode ?? "read-only");
     const mergedLoadedSkillIds = mergeLoadedSkillIds(run.state?.loadedSkillIds, predictedSlashLoads);

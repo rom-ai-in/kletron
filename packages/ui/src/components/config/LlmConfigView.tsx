@@ -59,6 +59,11 @@ const PROVIDERS = [
   },
 ];
 
+function getProviderDisplayName(provider: LlmProviderType): string {
+  if (provider === "codex") return "Codex (ChatGPT)";
+  return PROVIDERS.find((p) => p.id === provider)?.name ?? provider;
+}
+
 interface LlmConfigViewProps {
   hideHeader?: boolean;
 }
@@ -183,7 +188,6 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
   const [codexRateLimits, setCodexRateLimits] = useState<any>(null);
   const [codexModels, setCodexModels] = useState<CodexModelOption[]>([]);
   const [selectedCodexModel, setSelectedCodexModel] = useState("");
-  const [codexExecutionBackend, setCodexExecutionBackend] = useState<"langgraph" | "codex">("langgraph");
   const [codexLoginHint, setCodexLoginHint] = useState<CodexLoginHint>(null);
   const [codexError, setCodexError] = useState<string | null>(null);
   const [codexTesting, setCodexTesting] = useState(false);
@@ -204,7 +208,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
       : "text-status-warning-text border-status-warning-border bg-status-warning-bg/30";
   const codexStep1Done = codexConnected || codexHasDeviceCode;
   const codexStep2Done = codexConnected;
-  const codexStep3Done = codexExecutionBackend === "codex";
+  const codexStep3Done = true;
   const codexStatusLabel = codexConnected ? "Connecté" : codexWaitingValidation ? "En attente de validation" : "Non connecté";
   const codexStatusTone = codexConnected
     ? "border-status-success-border bg-status-success-bg text-status-success-text"
@@ -300,7 +304,6 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
 
       const prefs = prefsPayload?.preferences ?? null;
       setSelectedCodexModel(typeof prefs?.selectedCodexModel === "string" ? prefs.selectedCodexModel : "");
-      setCodexExecutionBackend(prefs?.executionBackend === "codex" ? "codex" : "langgraph");
     } catch (error) {
       setCodexError((error as Error)?.message ?? "Failed to load Codex status");
     } finally {
@@ -333,7 +336,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
 
       const updated = await res.json();
       setConfig(updated);
-      showMessage("success", `Active provider switched to ${PROVIDERS.find(p => p.id === provider)?.name}`);
+      showMessage("success", `Active provider switched to ${getProviderDisplayName(provider)}`);
     } catch (error) {
       console.error(error);
       showMessage("error", "Failed to switch provider");
@@ -361,7 +364,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
 
       const data = await res.json();
       setEnabledProviders(data.enabledProviders || [...LLM_PROVIDERS]);
-      showMessage("success", `${PROVIDERS.find(p => p.id === provider)?.name} ${!isCurrentlyEnabled ? "enabled" : "disabled"}`);
+      showMessage("success", `${getProviderDisplayName(provider)} ${!isCurrentlyEnabled ? "enabled" : "disabled"}`);
     } catch (error) {
       console.error(error);
       showMessage("error", error instanceof Error ? error.message : "Failed to toggle provider");
@@ -551,27 +554,6 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
     }
   };
 
-  const handleCodexExecutionBackendChange = async (value: "langgraph" | "codex") => {
-    const previous = codexExecutionBackend;
-    setCodexExecutionBackend(value);
-    try {
-      await saveCodexPreferences(
-        { executionBackend: value },
-        {
-          successMessage:
-            value === "codex"
-              ? "Préférence enregistrée : nouvelles conversations sur Codex."
-              : "Préférence enregistrée : nouvelles conversations sur LangGraph.",
-        },
-      );
-    } catch (error) {
-      setCodexExecutionBackend(previous);
-      const msg = (error as Error)?.message ?? "Échec de l’enregistrement du moteur d’exécution";
-      setCodexError(msg);
-      showMessage("error", msg);
-    }
-  };
-
   const inputFieldClass =
     "w-full rounded-md border border-border-subtle bg-bg-app px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-status-info-border focus:outline-none focus:ring-1 focus:ring-status-info-border transition-all";
 
@@ -716,18 +698,18 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
               <Info className="h-4 w-4" aria-hidden />
             </div>
             <div className="min-w-0 space-y-3 text-xs leading-relaxed text-text-secondary">
-              <p className="font-semibold text-text-primary">Deux modes dans l’app</p>
+              <p className="font-semibold text-text-primary">Exécution unifiée</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="rounded-lg border border-border-subtle bg-bg-app/80 p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">Normal · LangGraph</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">Execution</p>
                   <p className="mt-1.5 text-[11px] text-text-secondary">
-                    Choisis un <strong className="text-text-primary">provider</strong> (cartes) + <strong className="text-text-primary">graph</strong> dans l’Agent. C’est le flux Kletron classique (automatisations incluses).
+                    LangGraph reste le moteur par défaut. Quand le provider sélectionné est <strong className="text-text-primary">Codex</strong>, les chats passent automatiquement par le backend Codex.
                   </p>
                 </div>
                 <div className="rounded-lg border border-border-subtle bg-bg-app/80 p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">ChatGPT · Codex</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">Codex provider</p>
                   <p className="mt-1.5 text-[11px] text-text-secondary">
-                    Interrupteur <strong className="text-text-primary">LangGraph | Codex</strong> dans l’Agent + carte Codex ici. Pas de graph Kletron ni de provider LM Studio requis pour chatter.
+                    Le provider Codex est utilisable directement dans l’Agent, sans dépendre d’un fallback LM Studio.
                   </p>
                 </div>
               </div>
@@ -739,9 +721,9 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
         <Panel className="p-4 space-y-4">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Provider LangGraph (chat &amp; automations)</h2>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Provider LLM actif (chat &amp; automations)</h2>
               <p className="mt-1 text-[11px] text-text-muted">
-                Choisis le modèle cloud ou local pour les agents orchestrés par Kletron — pas pour les threads Codex.
+                Choisis le provider et le modèle utilisés par LangGraph pour tous les runs, y compris avec Codex.
               </p>
             </div>
           </div>
@@ -811,18 +793,37 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
               );
             })}
             <div
-              onClick={() => setSelectedSettingsSection("codex")}
-              className={`group relative cursor-pointer p-4 rounded-lg border-2 transition-all ${
-                isCodexSectionSelected
-                  ? "border-status-success-border bg-bg-surface"
-                  : "border-border-subtle bg-bg-elevated/50 hover:border-border-strong"
+              onClick={() => {
+                if (!enabledProviders.includes("codex")) return;
+                void handleProviderChange("codex");
+              }}
+              className={`group relative p-4 rounded-lg border-2 transition-all ${
+                !enabledProviders.includes("codex")
+                  ? "opacity-50 border-border-subtle bg-bg-elevated/30 cursor-not-allowed"
+                  : isCodexSectionSelected
+                    ? "cursor-pointer border-status-success-border bg-bg-surface"
+                    : "cursor-pointer border-border-subtle bg-bg-elevated/50 hover:border-border-strong"
               }`}
             >
-              {isCodexSectionSelected && (
-                <div className="absolute top-3 right-3 text-status-success-text">
+              {activeProvider === "codex" && (
+                <div className="absolute top-3 right-10 text-status-success-text">
                   <Check className="h-4 w-4" />
                 </div>
               )}
+              <button
+                onClick={(e) => void handleToggleProvider("codex", e)}
+                disabled={togglingProvider === "codex" || (activeProvider === "codex" && enabledProviders.includes("codex"))}
+                className={`absolute top-3 right-3 p-1 rounded transition-colors ${
+                  togglingProvider === "codex"
+                    ? "animate-pulse"
+                    : enabledProviders.includes("codex")
+                      ? "text-status-success-text hover:bg-status-success-bg"
+                      : "text-text-muted hover:bg-text-muted/10"
+                } ${(activeProvider === "codex" && enabledProviders.includes("codex")) ? "opacity-30 cursor-not-allowed" : ""}`}
+                title={(activeProvider === "codex" && enabledProviders.includes("codex")) ? "Cannot disable active provider" : enabledProviders.includes("codex") ? "Disable provider" : "Enable provider"}
+              >
+                <Power className="h-4 w-4" />
+              </button>
               <div className="flex items-start gap-4">
                 <div className={`p-2 rounded-md transition-colors ${
                   isCodexSectionSelected
@@ -835,14 +836,11 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
                   <h3 className={`font-semibold transition-colors ${
                     isCodexSectionSelected ? "text-text-primary" : "text-text-secondary group-hover:text-text-primary"
                   }`}>Codex (ChatGPT)</h3>
-                  <p className="text-xs text-text-muted mt-1">Backend local géré par Codex, sans clé OpenAI dans Kletron.</p>
+                  <p className="text-xs text-text-muted mt-1">Provider LLM Codex natif pour LangGraph (connexion locale, sans clé OpenAI stockée par Kletron).</p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] ${codexStatusTone}`}>
                       {codexConnected ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                       {codexStatusLabel}
-                    </span>
-                    <span className="inline-flex items-center rounded-full border border-border-subtle bg-bg-elevated px-2 py-1 text-[11px] text-text-muted">
-                      Backend: {codexExecutionBackend}
                     </span>
                   </div>
                 </div>
@@ -974,8 +972,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
                   {codexStatusLabel}
                 </span>
                 <span className={`rounded-full border px-2 py-0.5 ${codexHealthTone}`}>Health: {codexHealthLabel}</span>
-                <span>Execution backend: {codexExecutionBackend}</span>
-                <span>Settings apply per session — no LLM provider switch needed.</span>
+                <span>Codex is available as a standard LLM provider.</span>
               </div>
             </div>
 
@@ -1026,8 +1023,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
                 <p>
                   <span className="font-medium text-text-primary">Enregistrement automatique</span>
                   {" — "}
-                  Le moteur d’exécution (nouvelles sessions) et le modèle Codex sont enregistrés sur ton compte dès que tu modifies les listes
-                  ci-dessous. Pas de bouton « Save » : c’est voulu.{" "}
+                  Le modèle Codex est enregistré sur ton compte dès que tu modifies la liste ci-dessous. Pas de bouton « Save » : c’est voulu.{" "}
                   <span className="text-text-muted">
                     Même persistance serveur que l’écran Agent et l’app desktop (préférences utilisateur).
                   </span>
@@ -1200,29 +1196,16 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
                     </span>
                     <div className="min-w-0 flex-1 space-y-3">
                       <div>
-                        <div className="font-medium text-text-primary">Use Codex for new chats</div>
-                        <p className="mt-0.5 text-text-muted">Set execution backend to Codex on the agent screen or below.</p>
+                        <div className="font-medium text-text-primary">Use Codex as LLM provider</div>
+                        <p className="mt-0.5 text-text-muted">Select provider `Codex` in the agent strip.</p>
                       </div>
-                      <div className="grid gap-3 md:grid-cols-2 md:items-end">
-                        <label className="flex flex-col gap-1.5">
-                          <span className="text-xs font-medium text-text-secondary">Execution backend (new sessions)</span>
-                          <select
-                            value={codexExecutionBackend}
-                            onChange={(e) => void handleCodexExecutionBackendChange(e.target.value === "codex" ? "codex" : "langgraph")}
-                            className={inputFieldClass}
-                          >
-                            <option value="langgraph">LangGraph</option>
-                            <option value="codex">Codex</option>
-                          </select>
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                          <Button size="sm" variant="ghost" onClick={() => void fetchCodexState()} disabled={codexBusy || codexLoading}>
-                            Refresh
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => void handleCodexLogout()} disabled={codexBusy}>
-                            Logout
-                          </Button>
-                        </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="ghost" onClick={() => void fetchCodexState()} disabled={codexBusy || codexLoading}>
+                          Refresh
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => void handleCodexLogout()} disabled={codexBusy}>
+                          Logout
+                        </Button>
                       </div>
                     </div>
                   </div>

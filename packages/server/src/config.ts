@@ -303,7 +303,7 @@ const vllmApiKey = process.env.VLLM_API_KEY;
 const vllmModel = process.env.VLLM_MODEL ?? "";
 
 // Default provider
-const VALID_PROVIDERS = ["azure", "openai", "claude", "gemini", "lmstudio", "ollama", "vllm"];
+const VALID_PROVIDERS = ["azure", "openai", "codex", "claude", "gemini", "lmstudio", "ollama", "vllm"];
 const defaultProviderRaw = process.env.LLM_DEFAULT_PROVIDER;
 const isDefaultProviderValid = VALID_PROVIDERS.includes(defaultProviderRaw ?? "");
 const defaultProvider =

@@ -32,7 +32,11 @@ export async function POST(req: NextRequest) {
         }
 
         const fullConfig = await getLlmConfig();
-        const slice = (fullConfig as Record<string, unknown>)[provider] as Record<string, unknown> | undefined;
+        const slice =
+            ((fullConfig as Record<string, unknown>)[provider] as Record<string, unknown> | undefined) ??
+            (provider === "codex"
+                ? ((fullConfig as Record<string, unknown>).openai as Record<string, unknown> | undefined)
+                : undefined);
 
         if (!slice) {
             return NextResponse.json(
@@ -54,7 +58,7 @@ export async function POST(req: NextRequest) {
         const hasEndpoint = !!slice.endpoint;
 
         const needsKey = ["azure", "openai", "claude", "gemini"].includes(provider);
-        const needsUrl = ["lmstudio", "ollama", "vllm"].includes(provider);
+        const needsUrl = ["codex", "lmstudio", "ollama", "vllm"].includes(provider);
 
         if (needsKey && !hasApiKey) {
             return NextResponse.json(

@@ -100,7 +100,6 @@ export function useConversation(
   const [conversationRunSource, setConversationRunSource] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [researchDepth, setResearchDepth] = useState<ResearchDepthId>("exhaustive");
-  const [executionBackend, setExecutionBackend] = useState<"langgraph" | "codex">("langgraph");
   const [selectedCodexModel, setSelectedCodexModel] = useState<string>("");
 
   const getRequestHeaders = useCallback(async () => {
@@ -153,7 +152,6 @@ export function useConversation(
   const stream = useSessionStream({
     sessionId: conversationId,
     selectedGraphId: selectedGraph ?? "",
-    executionBackend,
     codexModel: selectedCodexModel || null,
     llmProvider: modelConfig?.provider ?? "azure",
     llmModel: resolveLlmModel(modelConfig),
@@ -185,7 +183,6 @@ export function useConversation(
       const payload = await res.json().catch(() => null);
       const prefs = payload?.preferences ?? null;
       if (!prefs) return;
-      setExecutionBackend(prefs.executionBackend === "codex" ? "codex" : "langgraph");
       setSelectedCodexModel(typeof prefs.selectedCodexModel === "string" ? prefs.selectedCodexModel : "");
     } catch {
       // best effort only
@@ -195,11 +192,6 @@ export function useConversation(
   useEffect(() => {
     void syncUserPreferencesFromApi();
   }, [syncUserPreferencesFromApi]);
-
-  /** Keep `useSessionStream` aligned when the strip toggles LangGraph/Codex (`useAgentSession` updates API separately). */
-  const applyExecutionBackendSelection = useCallback((backend: "langgraph" | "codex") => {
-    setExecutionBackend(backend);
-  }, []);
 
   const sessionEdits = useSessionEdits({
     sessionId: conversationId,
@@ -658,8 +650,6 @@ export function useConversation(
     buildThreadExport,
     /** Keep in sync when user picks Codex model from agent strip (`handleCodexModelChange` updates prefs). */
     applyCodexModelSelection,
-    /** Keep in sync when user toggles LangGraph/Codex from agent strip. */
-    applyExecutionBackendSelection,
     /** Reload execution backend + Codex model from server (e.g. after saving in Settings LLM). */
     syncUserPreferencesFromApi,
   };

@@ -279,9 +279,6 @@ interface AgentComposerProps {
   researchDepth: ResearchDepthId;
   onResearchDepthChange: (depth: ResearchDepthId) => void;
   activeSessionId: string | null;
-  executionBackend: "langgraph" | "codex";
-  sessionExecutionBackend?: "langgraph" | "codex" | null;
-  onExecutionBackendChange: (b: "langgraph" | "codex") => void;
   selectedCodexModel: string;
   codexModelOptions: { id: string; label: string; sub?: string }[];
   onCodexModelChange: (modelId: string) => void;
@@ -319,9 +316,6 @@ const AgentComposer = memo(function AgentComposer({
   researchDepth,
   onResearchDepthChange,
   activeSessionId,
-  executionBackend,
-  sessionExecutionBackend,
-  onExecutionBackendChange,
   selectedCodexModel,
   codexModelOptions,
   onCodexModelChange,
@@ -544,11 +538,7 @@ const AgentComposer = memo(function AgentComposer({
         }
         sessionStrip={
           <AgentSessionEngineStrip
-            preferenceBackend={executionBackend}
-            sessionBackend={sessionExecutionBackend ?? null}
-            hasActiveSession={Boolean(activeSessionId)}
-            onPreferenceBackendChange={onExecutionBackendChange}
-            langGraphControls={
+            primaryControls={
               <>
                 <Selector
                   label="GRAPH"
@@ -571,26 +561,24 @@ const AgentComposer = memo(function AgentComposer({
                   menuAlign="end"
                   statusTooltip={llmSelectorLoading ? null : llmStatusDetail}
                 />
+                {llmProvider === "codex" && (codexModelsLoading || codexModelOptions.length > 0) ? (
+                  <Selector
+                    label="Model"
+                    value={
+                      selectedCodexModel &&
+                      codexModelOptions.some((o) => o.id === selectedCodexModel)
+                        ? selectedCodexModel
+                        : (codexModelOptions[0]?.id ?? "")
+                    }
+                    options={codexModelOptions}
+                    onSelect={onCodexModelChange}
+                    size="sm"
+                    direction="up"
+                    loading={codexModelsLoading}
+                    status="none"
+                  />
+                ) : null}
               </>
-            }
-            codexControls={
-              codexModelsLoading || codexModelOptions.length > 0 ? (
-                <Selector
-                  label="Model"
-                  value={
-                    selectedCodexModel &&
-                    codexModelOptions.some((o) => o.id === selectedCodexModel)
-                      ? selectedCodexModel
-                      : (codexModelOptions[0]?.id ?? "")
-                  }
-                  options={codexModelOptions}
-                  onSelect={onCodexModelChange}
-                  size="sm"
-                  direction="up"
-                  loading={codexModelsLoading}
-                  status="none"
-                />
-              ) : null
             }
             trailingControls={
               <>
@@ -737,14 +725,12 @@ export default function AgentPage() {
   // ── Hooks ─────────────────────────────────────────────────────────────
   const {
     llmProvider,
-    executionBackend,
     selectedCodexModel,
     selectedGraphId,
     llmOptions,
     graphSelectOptions,
     handleLlmChange,
     handleGraphChange,
-    handleExecutionBackendChange,
     llmStatus,
     llmStatusDetail,
     graphOptionsLoaded,
@@ -761,16 +747,10 @@ export default function AgentPage() {
       effectiveLlmStripHealth({
         llmStatus,
         llmStatusDetail,
-        userExecutionBackend: executionBackend,
-        sessionExecutionBackend: sessionDetail?.executionBackend ?? null,
-        hasActiveSession: Boolean(activeSessionId),
       }),
     [
       llmStatus,
       llmStatusDetail,
-      executionBackend,
-      sessionDetail?.executionBackend,
-      activeSessionId,
     ],
   );
 
@@ -956,7 +936,6 @@ export default function AgentPage() {
   } = useSessionStream({
     sessionId: activeSessionId,
     selectedGraphId,
-    executionBackend,
     codexModel: selectedCodexModel || null,
     llmProvider,
     workspaceId: activeWorkspaceId,
@@ -2238,9 +2217,6 @@ export default function AgentPage() {
           researchDepth={researchDepth}
           onResearchDepthChange={setResearchDepth}
           activeSessionId={activeSessionId}
-          executionBackend={executionBackend}
-          sessionExecutionBackend={sessionDetail?.executionBackend ?? null}
-          onExecutionBackendChange={handleExecutionBackendChange}
           selectedCodexModel={selectedCodexModel}
           codexModelOptions={codexModelOptions}
           onCodexModelChange={handleCodexModelChange}

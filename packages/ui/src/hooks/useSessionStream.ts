@@ -32,9 +32,7 @@ export interface UseSessionStreamOptions {
     sessionId: string | null;
     /** Currently selected graph ID. */
     selectedGraphId: string;
-    /** Runtime backend selector (`langgraph` default, or `codex`). */
-    executionBackend?: "langgraph" | "codex";
-    /** Optional Codex model override. */
+    /** Optional Codex model override when provider is `codex`. */
     codexModel?: string | null;
     /** Currently selected LLM provider. */
     llmProvider: string;
@@ -131,7 +129,6 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const {
         sessionId,
         selectedGraphId,
-        executionBackend = "langgraph",
         codexModel = null,
         llmProvider,
         llmModel,
@@ -669,7 +666,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
     const handleSend = useCallback(async (options?: { text?: string; planMode?: boolean }) => {
         const msg = (options?.text ?? input).trim();
         if (!msg || sending) return;
-        if (!sessionId && executionBackend !== "codex" && !selectedGraphId) {
+        if (!sessionId && !selectedGraphId) {
             setErrorMessage("No agent graph selected. Please select a graph before sending.");
             return;
         }
@@ -706,18 +703,13 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
                 ? { workMode: resolvedMode, category: resolvedMode }
                 : {};
 
+        const resolvedModel = llmProvider === "codex" ? (codexModel || llmModel) : llmModel;
         const body = isNewSession
             ? {
-                ...(executionBackend === "codex"
-                    ? {}
-                    : (selectedGraphId ? { graphId: selectedGraphId } : {})),
-                executionBackend,
+                ...(selectedGraphId ? { graphId: selectedGraphId } : {}),
                 message: msg,
-                /** LangGraph only — omit for Codex so logs/API don't mix ChatGPT Codex auth with Kletron LLM picker. */
-                ...(executionBackend === "codex"
-                    ? {}
-                    : { provider: llmProvider, model: llmModel }),
-                ...(executionBackend === "codex" && codexModel ? { codexModel } : {}),
+                provider: llmProvider,
+                ...(resolvedModel ? { model: resolvedModel } : {}),
                 ...(workspaceId ? { workspaceId } : {}),
                 ...(channel ? { channel } : {}),
                 ...(threadApprovalMode && threadApprovalMode !== 'inherit' ? { threadApprovalMode } : {}),
@@ -727,11 +719,8 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             }
             : {
                 message: msg,
-                ...(executionBackend === "codex"
-                    ? {}
-                    : { provider: llmProvider, model: llmModel }),
-                executionBackend,
-                ...(executionBackend === "codex" && codexModel ? { codexModel } : {}),
+                provider: llmProvider,
+                ...(resolvedModel ? { model: resolvedModel } : {}),
                 ...(effectivePlanMode ? { planMode: true } : {}),
             };
         const requestBody = {
@@ -792,7 +781,7 @@ export function useSessionStream(options: UseSessionStreamOptions): UseSessionSt
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [input, sending, sessionId, selectedGraphId, executionBackend, codexModel, llmProvider, llmModel, workspaceId, threadApprovalMode, apiOrigin, category, workMode, planMode, researchDepth, channel, processNdjsonStream]);
+    }, [input, sending, sessionId, selectedGraphId, codexModel, llmProvider, llmModel, workspaceId, threadApprovalMode, apiOrigin, category, workMode, planMode, researchDepth, channel, processNdjsonStream]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {

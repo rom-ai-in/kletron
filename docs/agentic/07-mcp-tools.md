@@ -2,6 +2,8 @@
 
 > Source: `apps/mcp-server/` (33 tools)  
 > Source: `packages/mcp-client/src/client.ts` (188 lines)
+>
+> For the complete end-to-end product documentation (frontend + API + backend runtime + operations), see `docs/mcp-connectors-integration.md`.
 
 ## Overview
 

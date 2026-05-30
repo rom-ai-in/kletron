@@ -100,15 +100,10 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
       effectiveLlmStripHealth({
         llmStatus: agentSession.llmStatus,
         llmStatusDetail: agentSession.llmStatusDetail,
-        userExecutionBackend: agentSession.executionBackend,
-        sessionExecutionBackend: conversation.sessionDetail?.executionBackend ?? null,
-        hasActiveSession: Boolean(conversationId),
       }),
     [
       agentSession.llmStatus,
       agentSession.llmStatusDetail,
-      agentSession.executionBackend,
-      conversation.sessionDetail?.executionBackend,
       conversationId,
     ],
   );
@@ -341,14 +336,7 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
             }}
             sessionStripOverride={
               <AgentSessionEngineStrip
-                preferenceBackend={agentSession.executionBackend}
-                sessionBackend={conversation.sessionDetail?.executionBackend ?? null}
-                hasActiveSession={Boolean(conversationId)}
-                onPreferenceBackendChange={(backend) => {
-                  agentSession.handleExecutionBackendChange(backend);
-                  conversation.applyExecutionBackendSelection(backend);
-                }}
-                langGraphControls={
+                primaryControls={
                   <>
                     <Selector
                       label="GRAPH"
@@ -371,29 +359,28 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
                       menuAlign="end"
                       statusTooltip={agentSession.llmSelectorLoading ? null : agentLlmStrip.detail}
                     />
+                    {agentSession.llmProvider === "codex" &&
+                    (agentSession.codexModelsLoading || agentSession.codexModelOptions.length > 0) ? (
+                      <Selector
+                        label="Model"
+                        value={
+                          agentSession.selectedCodexModel &&
+                          agentSession.codexModelOptions.some((o) => o.id === agentSession.selectedCodexModel)
+                            ? agentSession.selectedCodexModel
+                            : (agentSession.codexModelOptions[0]?.id ?? "")
+                        }
+                        options={agentSession.codexModelOptions}
+                        onSelect={(id) => {
+                          agentSession.handleCodexModelChange(id);
+                          conversation.applyCodexModelSelection(id);
+                        }}
+                        size="sm"
+                        direction="up"
+                        loading={agentSession.codexModelsLoading}
+                        status="none"
+                      />
+                    ) : null}
                   </>
-                }
-                codexControls={
-                  agentSession.codexModelsLoading || agentSession.codexModelOptions.length > 0 ? (
-                    <Selector
-                      label="Model"
-                      value={
-                        agentSession.selectedCodexModel &&
-                        agentSession.codexModelOptions.some((o) => o.id === agentSession.selectedCodexModel)
-                          ? agentSession.selectedCodexModel
-                          : (agentSession.codexModelOptions[0]?.id ?? "")
-                      }
-                      options={agentSession.codexModelOptions}
-                      onSelect={(id) => {
-                        agentSession.handleCodexModelChange(id);
-                        conversation.applyCodexModelSelection(id);
-                      }}
-                      size="sm"
-                      direction="up"
-                      loading={agentSession.codexModelsLoading}
-                      status="none"
-                    />
-                  ) : null
                 }
                 trailingControls={
                   <>

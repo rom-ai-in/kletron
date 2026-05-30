@@ -6,6 +6,7 @@ import type {
     LlmConfig,
     AzureOpenAIConfig,
     OpenAIConfig,
+    CodexConfig,
     ClaudeConfig,
     GeminiConfig,
     LMStudioConfig,
@@ -19,6 +20,7 @@ const {
     validateLlmConfig,
     AzureOpenAIConfigSchema,
     OpenAIConfigSchema,
+    CodexConfigSchema,
     ClaudeConfigSchema,
     GeminiConfigSchema,
     LMStudioConfigSchema,
@@ -41,6 +43,7 @@ let llmConfigCache:
 const DEFAULT_ENABLED_PROVIDERS: LlmProviderType[] = [
     "azure",
     "openai",
+    "codex",
     "claude",
     "gemini",
     "lmstudio",
@@ -225,6 +228,20 @@ export async function updateOpenAIConfig(
         apiKey: preserveApiKey(openaiConfig.apiKey, currentConfig.openai?.apiKey) ?? "",
     };
     return updateProviderConfig("openai", configToSave, OpenAIConfigSchema);
+}
+
+/**
+ * Update Codex configuration
+ */
+export async function updateCodexConfig(
+    codexConfig: CodexConfig
+): Promise<LlmConfig> {
+    const currentConfig = await getLlmConfig();
+    const configToSave = {
+        ...codexConfig,
+        apiKey: preserveApiKey(codexConfig.apiKey, currentConfig.codex?.apiKey) ?? "",
+    };
+    return updateProviderConfig("codex", configToSave, CodexConfigSchema);
 }
 
 /**
@@ -444,6 +461,12 @@ export async function getLlmConfigMaskedForDisplay(): Promise<Record<string, unk
             ? {
                   ...config.openai,
                   apiKey: config.openai.apiKey ? "••••••••" : "",
+              }
+            : undefined,
+        codex: config.codex
+            ? {
+                  ...config.codex,
+                  apiKey: config.codex.apiKey ? "••••••••" : "",
               }
             : undefined,
         claude: config.claude

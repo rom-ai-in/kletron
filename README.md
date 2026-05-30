@@ -10,6 +10,7 @@ Kletron is a TypeScript monorepo: **Next.js** app, **Electron** desktop, **MCP t
 |------------|--|
 | **Run in ~15 min** | [Quickstart](#quickstart) |
 | **Where code lives** | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| **MCP connectors (full doc)** | [docs/mcp-connectors-integration.md](./docs/mcp-connectors-integration.md) |
 | **Send a PR** | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 | **Plugins & presets** | [community/README.md](./community/README.md) |
 | **Themes / priorities** | [ROADMAP.md](./ROADMAP.md) |

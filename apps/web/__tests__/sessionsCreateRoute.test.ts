@@ -76,22 +76,20 @@ vi.mock("@kletron/server/services/agentGraphExecutor", () => ({
     },
 }));
 
-const buildThreadSkillState = vi.hoisted(() => vi.fn());
-vi.mock("@kletron/server/services/workspaceSkillStateService", () => ({
-    buildThreadSkillState: (...args: unknown[]) => buildThreadSkillState(...args),
-}));
-
-const codexIsEnabled = vi.hoisted(() => vi.fn());
 const codexStartTurnStream = vi.hoisted(() => vi.fn());
 const codexRegisterRunMetadata = vi.hoisted(() => vi.fn());
 const codexStopRun = vi.hoisted(() => vi.fn());
 vi.mock("@kletron/server/services/codexExecutionService", () => ({
     codexExecutionService: {
-        isEnabled: (...args: unknown[]) => codexIsEnabled(...args),
         startTurnStream: (...args: unknown[]) => codexStartTurnStream(...args),
         registerRunMetadata: (...args: unknown[]) => codexRegisterRunMetadata(...args),
         stopRun: (...args: unknown[]) => codexStopRun(...args),
     },
+}));
+
+const buildThreadSkillState = vi.hoisted(() => vi.fn());
+vi.mock("@kletron/server/services/workspaceSkillStateService", () => ({
+    buildThreadSkillState: (...args: unknown[]) => buildThreadSkillState(...args),
 }));
 
 import { POST } from "../app/api/sessions/route";
@@ -206,41 +204,23 @@ describe("POST /api/sessions", () => {
             outputs: {},
             eventStream: [],
         });
-        codexIsEnabled.mockReturnValue(true);
         codexRegisterRunMetadata.mockResolvedValue(undefined);
         codexStopRun.mockResolvedValue(undefined);
-        codexStartTurnStream.mockImplementation(async () => {
-            const events = (async function* () {
-                yield {
-                    kind: "notification",
-                    method: "item/agentMessage/delta",
-                    params: { delta: "Hello from Codex" },
-                };
-            })();
-            return {
-                threadId: "thr_codex_1",
-                turnId: "turn_codex_1",
-                events,
-                completed: Promise.resolve({
-                    threadId: "thr_codex_1",
-                    turnId: "turn_codex_1",
-                    status: "completed",
-                    error: null,
-                    agentText: "Hello from Codex",
-                    reasoningText: "",
-                    events: [
-                        {
-                            id: "event-codex-assistant-1",
-                            phaseId: "chat",
-                            phaseLabel: "Assistant",
-                            kind: "assistant",
-                            role: "assistant",
-                            content: "Hello from Codex",
-                            timestamp: new Date("2026-05-05T08:00:00.000Z").toISOString(),
-                        },
-                    ],
-                }),
-            };
+        codexStartTurnStream.mockResolvedValue({
+            threadId: "thread-1",
+            turnId: "turn-1",
+            events: (async function* () {
+                yield { kind: "event_snapshot", events: [] };
+            })(),
+            completed: Promise.resolve({
+                threadId: "thread-1",
+                turnId: "turn-1",
+                status: "completed",
+                error: null,
+                agentText: "done",
+                reasoningText: "",
+                events: [],
+            }),
         });
     });
 
@@ -270,7 +250,7 @@ describe("POST /api/sessions", () => {
         expect(executeRunStreaming.mock.calls[0]?.[1]?.workspaceContextUserId).toBe("user-1");
     });
 
-    it("rejects session creation when graphId is missing", async () => {
+    it("falls back to the default graph when graphId is missing", async () => {
         const req = new Request("http://localhost/api/sessions", {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -282,7 +262,10 @@ describe("POST /api/sessions", () => {
         });
 
         const res = await POST(req);
-        expect(res.status).toBe(400);
+        expect(res.status).toBe(200);
+        const chunks = await readNdjson(res);
+        expect(chunks[0]?.type).toBe("init");
+        expect(chunks[0]?.payload.graphId).toBe(coderGraph._id);
     });
 
     it("returns 404 when the requested graph does not exist", async () => {
@@ -303,26 +286,38 @@ describe("POST /api/sessions", () => {
         expect(res.status).toBe(404);
     });
 
-    it("creates a codex session without requiring graphId", async () => {
+    it("creates a run with langgraph execution by default", async () => {
         const req = new Request("http://localhost/api/sessions", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
-                executionBackend: "codex",
+                graphId: coderGraph._id,
                 message: "réponds en français",
-                codexModel: "gpt-5.4",
                 workspaceId: "workspace-1",
             }),
         });
 
         const res = await POST(req);
         expect(res.status).toBe(200);
-        const chunks = await readNdjson(res);
-        expect(chunks[0]?.type).toBe("init");
-        expect(chunks.some((c) => c.type === "text_delta")).toBe(true);
-        expect(chunks.some((c) => c.type === "final")).toBe(true);
+        expect(createRun.mock.calls[0]?.[3]?.executionBackend).toBe("langgraph");
+    });
+
+    it("forces codex execution backend when provider is codex", async () => {
+        const req = new Request("http://localhost/api/sessions", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+                graphId: coderGraph._id,
+                provider: "codex",
+                message: "réponds vite",
+                workspaceId: "workspace-1",
+            }),
+        });
+
+        const res = await POST(req);
+        expect(res.status).toBe(200);
         expect(createRun.mock.calls[0]?.[3]?.executionBackend).toBe("codex");
         expect(codexStartTurnStream).toHaveBeenCalled();
-        expect(codexRegisterRunMetadata).toHaveBeenCalled();
+        expect(executeRunStreaming).not.toHaveBeenCalled();
     });
 });

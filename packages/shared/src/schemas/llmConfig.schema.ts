@@ -19,6 +19,12 @@ export const OpenAIConfigSchema = z.object({
     baseUrl: z.string().url().optional().describe("Custom base URL (optional, for proxies)"),
 });
 
+export const CodexConfigSchema = z.object({
+    apiKey: z.string().min(1).describe("Codex API key"),
+    model: z.string().min(1).describe("Model name (e.g., gpt-5-codex)"),
+    baseUrl: z.string().url().optional().describe("Custom base URL (optional, for proxies)"),
+});
+
 export const ClaudeConfigSchema = z.object({
     apiKey: z.string().min(1).describe("Anthropic API key"),
     model: z.string().min(1).describe("Model name (e.g., claude-sonnet-4-20250514, claude-3-5-sonnet-20241022)"),
@@ -74,7 +80,7 @@ export const VLLMConfigSchema = z.object({
 // Provider types
 // ============================================================================
 
-export const LLM_PROVIDERS = ["azure", "openai", "claude", "gemini", "lmstudio", "ollama", "vllm"] as const;
+export const LLM_PROVIDERS = ["azure", "openai", "codex", "claude", "gemini", "lmstudio", "ollama", "vllm"] as const;
 export type LlmProviderType = (typeof LLM_PROVIDERS)[number];
 
 // ============================================================================
@@ -86,6 +92,7 @@ export const LlmConfigSchema = z.object({
     provider: z.enum(LLM_PROVIDERS).describe("Active LLM provider"),
     azure: AzureOpenAIConfigSchema.optional(),
     openai: OpenAIConfigSchema.optional(),
+    codex: CodexConfigSchema.optional(),
     claude: ClaudeConfigSchema.optional(),
     gemini: GeminiConfigSchema.optional(),
     lmstudio: LMStudioConfigSchema.optional(),
@@ -103,6 +110,7 @@ export const LlmConfigSchema = z.object({
 
 export type AzureOpenAIConfig = z.infer<typeof AzureOpenAIConfigSchema>;
 export type OpenAIConfig = z.infer<typeof OpenAIConfigSchema>;
+export type CodexConfig = z.infer<typeof CodexConfigSchema>;
 export type ClaudeConfig = z.infer<typeof ClaudeConfigSchema>;
 export type GeminiConfig = z.infer<typeof GeminiConfigSchema>;
 export type LMStudioModelConfig = z.infer<typeof LMStudioModelConfigSchema>;
@@ -126,6 +134,10 @@ export function validateAzureConfig(data: unknown): AzureOpenAIConfig {
 
 export function validateOpenAIConfig(data: unknown): OpenAIConfig {
     return OpenAIConfigSchema.parse(data);
+}
+
+export function validateCodexConfig(data: unknown): CodexConfig {
+    return CodexConfigSchema.parse(data);
 }
 
 export function validateClaudeConfig(data: unknown): ClaudeConfig {
@@ -155,6 +167,7 @@ export function validateVLLMConfig(data: unknown): VLLMConfig {
 export const MODEL_RECOMMENDATIONS = {
     azure: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4"],
     openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o3-mini", "o1"],
+    codex: ["gpt-5-codex", "gpt-5-codex-mini"],
     claude: ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-haiku-20240307"],
     gemini: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-pro"],
     lmstudio: ["local-model"],

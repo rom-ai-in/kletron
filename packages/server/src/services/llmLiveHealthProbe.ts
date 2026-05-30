@@ -133,6 +133,15 @@ export async function probeLlmLiveHealth(
             if (!c?.apiKey) return { ok: false, message: "API key not configured" };
             return probeOpenAI(c.apiKey, c.baseUrl);
         }
+        case "codex": {
+            const c = fullConfig.codex;
+            const fallback = fullConfig.openai;
+            const lmstudio = fullConfig.lmstudio;
+            const baseUrl = c?.baseUrl ?? fallback?.baseUrl ?? lmstudio?.baseUrl;
+            if (!baseUrl) return { ok: false, message: "Base URL not configured" };
+            const apiKey = c?.apiKey ?? fallback?.apiKey ?? lmstudio?.apiKey ?? "codex-local";
+            return probeOpenAI(apiKey, baseUrl);
+        }
         case "azure": {
             const c = fullConfig.azure;
             if (!c?.endpoint || !c.apiKey || !c.apiVersion) {

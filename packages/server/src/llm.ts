@@ -16,7 +16,7 @@ export type LlmSelection = {
 const normalizeProvider = (value?: string): LlmProvider | undefined => {
   if (!value) return undefined;
   const normalized = value.trim().toLowerCase();
-  const validProviders: LlmProvider[] = ["azure", "openai", "claude", "gemini", "lmstudio", "ollama", "vllm"];
+  const validProviders: LlmProvider[] = ["azure", "openai", "codex", "claude", "gemini", "lmstudio", "ollama", "vllm"];
   return validProviders.includes(normalized as LlmProvider) ? (normalized as LlmProvider) : undefined;
 };
 
@@ -54,6 +54,7 @@ export type ResolvedLlmInfo = {
   // Provider-specific debugging fields
   azure?: { deployment?: string; endpoint?: string; apiVersion?: string };
   openai?: { organization?: string };
+  codex?: { baseUrl?: string };
   claude?: Record<string, never>;
   gemini?: Record<string, never>;
   lmstudio?: { baseUrl?: string };
@@ -70,6 +71,27 @@ export type ChatModelOverrides = {
   presencePenalty?: number;
   frequencyPenalty?: number;
 };
+
+async function ensureOpenAiCompatibleEndpointReachable(baseUrl: string): Promise<void> {
+  const normalized = baseUrl.replace(/\/+$/, "");
+  const candidate = normalized.endsWith("/v1") ? normalized : `${normalized}/v1`;
+  try {
+    const res = await fetch(`${candidate}/models`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(5000),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "unknown error";
+    throw new Error(
+      `Codex endpoint unreachable at ${candidate}/models (${reason}). Configure a reachable OpenAI-compatible base URL for Codex.`
+    );
+  }
+}
 
 export async function resolveResolvedLlmInfo(selection?: Partial<LlmSelection>): Promise<ResolvedLlmInfo> {
   const runtimeConfig = await getLlmConfig();
@@ -96,6 +118,22 @@ export async function resolveResolvedLlmInfo(selection?: Partial<LlmSelection>):
         model: selection?.model ?? openaiConfig?.model,
         openai: {
           organization: openaiConfig?.organization,
+        },
+      };
+    }
+    case "codex": {
+      const codexConfig = runtimeConfig.codex;
+      const openaiConfig = runtimeConfig.openai;
+      const azureConfig = runtimeConfig.azure;
+      return {
+        provider: "codex",
+        model:
+          selection?.model ??
+          codexConfig?.model ??
+          azureConfig?.model ??
+          "gpt-5-codex",
+        codex: {
+          baseUrl: codexConfig?.baseUrl ?? openaiConfig?.baseUrl,
         },
       };
     }
@@ -194,6 +232,35 @@ export async function getChatModel(selection?: Partial<LlmSelection>, overrides?
           ? { organization: openaiConfig.organization }
           : undefined,
         temperature,
+      });
+    }
+
+    case "codex": {
+      const codexConfig = runtimeConfig.codex;
+      const openaiConfig = runtimeConfig.openai;
+      const baseUrl = codexConfig?.baseUrl ?? openaiConfig?.baseUrl;
+      if (!baseUrl) {
+        throw new Error(
+          "Codex is not configured. Set a Codex/OpenAI-compatible base URL (or OpenAI base URL) before running."
+        );
+      }
+      // Some local OpenAI-compatible gateways do not require a real bearer token.
+      const apiKey = codexConfig?.apiKey ?? openaiConfig?.apiKey ?? "codex-local";
+      const model =
+        selection?.model ??
+        codexConfig?.model ??
+        runtimeConfig.azure?.model ??
+        "gpt-5-codex";
+      if (!model) {
+        throw new Error("Codex model name is required.");
+      }
+      await ensureOpenAiCompatibleEndpointReachable(baseUrl);
+      return new ChatOpenAI({
+        model,
+        apiKey,
+        configuration: { baseURL: baseUrl },
+        temperature,
+        timeout: 90_000,
       });
     }
 

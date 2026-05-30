@@ -11,8 +11,9 @@ function sanitizeSelectedGraphId(id: string | null | undefined): string | null {
     return t;
 }
 
-function sanitizeExecutionBackend(value: string | null | undefined): "langgraph" | "codex" {
-    return value === "codex" ? "codex" : "langgraph";
+function sanitizeExecutionBackend(_value: string | null | undefined): "langgraph" {
+    // Deprecated: LangGraph is now the only execution backend.
+    return "langgraph";
 }
 
 function sanitizeCodexModel(value: string | null | undefined): string | null {

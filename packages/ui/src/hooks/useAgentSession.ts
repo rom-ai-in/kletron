@@ -9,6 +9,7 @@ import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 const PROVIDER_LABELS: Record<string, string> = {
     azure: "Azure",
     openai: "OpenAI",
+    codex: "Codex",
     claude: "Claude",
     gemini: "Gemini",
     lmstudio: "LM Studio",
@@ -53,7 +54,6 @@ export interface UseAgentSessionOptions {
 
 export interface UseAgentSessionReturn {
     llmProvider: string;
-    executionBackend: "langgraph" | "codex";
     selectedCodexModel: string;
     enabledProviders: LlmProviderType[];
     selectedGraphId: string;
@@ -70,7 +70,6 @@ export interface UseAgentSessionReturn {
     graphSelectOptions: { id: string; label: string; sub?: string }[];
     handleLlmChange: (provider: string) => void;
     handleGraphChange: (graphId: string) => void;
-    handleExecutionBackendChange: (backend: "langgraph" | "codex") => void;
     handleCodexModelChange: (model: string) => void;
     llmStatus: 'success' | 'error' | 'loading' | 'none';
     /** Human-readable reason for llmStatus (e.g. from health check). Hover LLM selector to see. */
@@ -79,7 +78,7 @@ export interface UseAgentSessionReturn {
     llmSelectorLoading: boolean;
     /** True until graphs + LLM prefs resolved — matches desktop graph gate; use for GRAPH selector skeleton. */
     graphSelectorLoading: boolean;
-    /** Codex CLI model list (`/api/codex/models`) for the agent strip when execution is Codex. */
+    /** Codex CLI model list (`/api/codex/models`) for the provider/model strip. */
     codexModelOptions: { id: string; label: string; sub?: string }[];
     codexModelsLoading: boolean;
 }
@@ -121,7 +120,6 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
     }, []);
 
     const [llmProvider, setLlmProvider] = useState<string>('');
-    const [executionBackend, setExecutionBackend] = useState<"langgraph" | "codex">("langgraph");
     const [selectedCodexModel, setSelectedCodexModel] = useState<string>("");
     const [enabledProviders, setEnabledProviders] = useState<LlmProviderType[]>([]);
     const [llmPrefsLoaded, setLlmPrefsLoaded] = useState(false);
@@ -197,7 +195,6 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
                         const {
                             selectedLlmProvider,
                             selectedGraphId: prefGraphId,
-                            executionBackend: prefExecutionBackend,
                             selectedCodexModel: prefCodexModel,
                         } = prefsData.preferences;
                         if (selectedLlmProvider) {
@@ -219,7 +216,6 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
                             const cleaned = takeValidStoredGraphSelection();
                             if (cleaned) setSavedGraphId(cleaned);
                         }
-                        setExecutionBackend(prefExecutionBackend === "codex" ? "codex" : "langgraph");
                         if (typeof prefCodexModel === "string") {
                             setSelectedCodexModel(prefCodexModel);
                         } else {
@@ -242,8 +238,6 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
 
                 const cleanedGraph = takeValidStoredGraphSelection();
                 if (cleanedGraph) setSavedGraphId(cleanedGraph);
-                const localBackend = window.localStorage.getItem("kletron-execution-backend");
-                if (localBackend === "codex") setExecutionBackend("codex");
                 const localCodexModel = window.localStorage.getItem("kletron-codex-model");
                 if (localCodexModel) setSelectedCodexModel(localCodexModel);
             } catch (e) {
@@ -375,19 +369,6 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
         }).catch(() => { /* Silently fail, localStorage is fallback */ });
     }, [apiOrigin, getHdr]);
 
-    const handleExecutionBackendChange = useCallback((backend: "langgraph" | "codex") => {
-        setExecutionBackend(backend);
-        window.localStorage.setItem("kletron-execution-backend", backend);
-        void apiFetch({
-            apiOrigin,
-            path: "/api/user-preferences",
-            getRequestHeaders: getHdr,
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ executionBackend: backend }),
-        }).catch(() => { /* localStorage fallback */ });
-    }, [apiOrigin, getHdr]);
-
     const handleCodexModelChange = useCallback((model: string) => {
         const sanitized = model.trim();
         setSelectedCodexModel(sanitized);
@@ -447,7 +428,6 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
 
     return {
         llmProvider,
-        executionBackend,
         selectedCodexModel,
         enabledProviders,
         selectedGraphId,
@@ -462,7 +442,6 @@ export function useAgentSession(options?: UseAgentSessionOptions): UseAgentSessi
         graphSelectOptions,
         handleLlmChange,
         handleGraphChange,
-        handleExecutionBackendChange,
         handleCodexModelChange,
         llmStatus,
         llmStatusDetail,
