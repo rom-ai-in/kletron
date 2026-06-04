@@ -22,7 +22,11 @@ jobs:
           cache: npm
 
       - name: Install
-        run: npm ci
+        # `--legacy-peer-deps` is required because @langchain/anthropic@1.3.13 pins
+        # a `@langchain/core@1.1.18` peer that conflicts with the >=1.1.47 peer
+        # pulled in by @langchain/google-vertexai for the Vertex provider. Runtime
+        # is fine; only the strict resolver complains.
+        run: npm ci --legacy-peer-deps
 
       - name: Lint (informational)
         continue-on-error: true
