@@ -2,7 +2,7 @@
 # One-time (or idempotent) GCP setup for Kletron on Cloud Run.
 #
 # Prérequis locaux:
-#   gcloud auth login hello@kletron.com
+#   gcloud auth login <your-account@example.com>
 #
 # Usage (projet implicite kletron):
 #   ./infra/gcp/bootstrap.sh

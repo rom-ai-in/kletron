@@ -83,6 +83,12 @@ replace_yaml_subst "_MCP_SERVICE" "${MCP_SERVICE}"
 replace_yaml_subst "_EXPECTED_PROJECT" "${EXPECTED_PROJECT}"
 replace_yaml_subst "_ALLOW_NON_KLETRON_PROJECT" "\"${ALLOW_NON_KLETRON_PROJECT}\""
 
+# Vertex AI defaults — override via env: VERTEX_LOCATION=… VERTEX_MODEL=…
+VERTEX_LOCATION="${VERTEX_LOCATION:-us-central1}"
+VERTEX_MODEL="${VERTEX_MODEL:-gemini-2.5-pro}"
+replace_yaml_subst "_VERTEX_LOCATION" "${VERTEX_LOCATION}"
+replace_yaml_subst "_VERTEX_MODEL" "${VERTEX_MODEL}"
+
 gcloud builds submit \
   --config="${CLOUD_BUILD_TMP}" \
   --project="${PROJECT_ID}" \

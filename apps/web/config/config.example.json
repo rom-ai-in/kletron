@@ -1,0 +1,41 @@
+{
+  "llmConfig": {
+    "provider": "lmstudio",
+    "azure": {
+      "endpoint": "",
+      "apiKey": "",
+      "deployment": "",
+      "model": "",
+      "apiVersion": "2025-04-01-preview"
+    },
+    "openai": null,
+    "claude": null,
+    "gemini": null,
+    "lmstudio": {
+      "baseUrl": "http://127.0.0.1:1234/v1",
+      "apiKey": "lm-studio",
+      "model": "your-local-model"
+    },
+    "ollama": {
+      "baseUrl": "http://127.0.0.1:11434",
+      "model": "qwen2.5:14b"
+    },
+    "vllm": {
+      "baseUrl": "http://127.0.0.1:8001",
+      "apiKey": "",
+      "model": "your-vllm-model"
+    },
+    "defaultProvider": "lmstudio",
+    "enabledProviders": [
+      "lmstudio",
+      "openai",
+      "claude",
+      "gemini",
+      "vllm"
+    ]
+  },
+  "workingFolder": "./examples/quickstart-workspace",
+  "workspaceRoots": [
+    "./examples/quickstart-workspace"
+  ]
+}

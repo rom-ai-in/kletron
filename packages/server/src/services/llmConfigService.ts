@@ -9,6 +9,7 @@ import type {
     CodexConfig,
     ClaudeConfig,
     GeminiConfig,
+    VertexAIConfig,
     LMStudioConfig,
     OllamaConfig,
     VLLMConfig,
@@ -23,6 +24,7 @@ const {
     CodexConfigSchema,
     ClaudeConfigSchema,
     GeminiConfigSchema,
+    VertexAIConfigSchema,
     LMStudioConfigSchema,
     OllamaConfigSchema,
     VLLMConfigSchema,
@@ -46,6 +48,7 @@ const DEFAULT_ENABLED_PROVIDERS: LlmProviderType[] = [
     "codex",
     "claude",
     "gemini",
+    "vertex",
     "lmstudio",
     "ollama",
     "vllm",
@@ -273,6 +276,29 @@ export async function updateGeminiConfig(
 }
 
 /**
+ * Update Vertex AI configuration
+ * `credentialsJson` is masked like an API key; empty/masked input preserves the
+ * existing JSON. On Cloud Run with an attached service account, leave it empty
+ * and Application Default Credentials are used automatically.
+ */
+export async function updateVertexAIConfig(
+    vertexConfig: VertexAIConfig
+): Promise<LlmConfig> {
+    const currentConfig = await getLlmConfig();
+    const preservedCredentials = preserveApiKey(
+        vertexConfig.credentialsJson,
+        currentConfig.vertex?.credentialsJson
+    );
+    const configToSave: VertexAIConfig = {
+        ...vertexConfig,
+        ...(preservedCredentials !== undefined && preservedCredentials !== ""
+            ? { credentialsJson: preservedCredentials }
+            : { credentialsJson: undefined }),
+    };
+    return updateProviderConfig("vertex", configToSave, VertexAIConfigSchema);
+}
+
+/**
  * Update LM Studio configuration
  */
 export async function updateLMStudioConfig(
@@ -479,6 +505,12 @@ export async function getLlmConfigMaskedForDisplay(): Promise<Record<string, unk
             ? {
                   ...config.gemini,
                   apiKey: config.gemini.apiKey ? "••••••••" : "",
+              }
+            : undefined,
+        vertex: config.vertex
+            ? {
+                  ...config.vertex,
+                  credentialsJson: config.vertex.credentialsJson ? "••••••••" : "",
               }
             : undefined,
         lmstudio: config.lmstudio

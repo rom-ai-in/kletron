@@ -105,6 +105,70 @@ async function probeGemini(apiKey: string): Promise<{ ok: boolean; message: stri
         : { ok: false, message: "Cannot reach Google AI. Check API key." };
 }
 
+async function probeVertex(
+    projectId: string,
+    location: string,
+    credentialsJson?: string
+): Promise<{ ok: boolean; message: string }> {
+    let GoogleAuthCtor: typeof import("google-auth-library").GoogleAuth;
+    try {
+        // Lazy-loaded so we don't pull google-auth-library into the cold path
+        // for users on other providers.
+        ({ GoogleAuth: GoogleAuthCtor } = await import("google-auth-library"));
+    } catch (error) {
+        const reason = error instanceof Error ? error.message : "unknown error";
+        return { ok: false, message: `google-auth-library not available: ${reason}` };
+    }
+
+    let parsedCreds: object | undefined;
+    if (credentialsJson && credentialsJson.trim().length > 0) {
+        try {
+            parsedCreds = JSON.parse(credentialsJson);
+        } catch (error) {
+            const reason = error instanceof Error ? error.message : "invalid JSON";
+            return { ok: false, message: `Service account JSON invalid: ${reason}` };
+        }
+    }
+
+    let token: string | undefined;
+    try {
+        const auth = new GoogleAuthCtor({
+            scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+            projectId,
+            ...(parsedCreds ? { credentials: parsedCreds as never } : {}),
+        });
+        const client = await auth.getClient();
+        const tokenResponse = await client.getAccessToken();
+        token = typeof tokenResponse === "string" ? tokenResponse : tokenResponse?.token ?? undefined;
+    } catch (error) {
+        const reason = error instanceof Error ? error.message : "unknown error";
+        return {
+            ok: false,
+            message: parsedCreds
+                ? `Service account auth failed: ${reason}`
+                : `Application Default Credentials unavailable: ${reason}. On Cloud Run, attach a service account; locally, run \`gcloud auth application-default login\` or paste a service account JSON.`,
+        };
+    }
+
+    if (!token) {
+        return { ok: false, message: "Could not acquire a Vertex AI access token." };
+    }
+
+    const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models?pageSize=1`;
+    const ok = await fetchOk(url, {
+        headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+        },
+    });
+    return ok
+        ? { ok: true, message: "Vertex AI reachable" }
+        : {
+              ok: false,
+              message: `Cannot reach Vertex AI at ${location}. Check projectId, location, and that the service account has the Vertex AI User role.`,
+          };
+}
+
 /**
  * Server-side reachability probe (no chat completion). Used for live UI status.
  */
@@ -158,6 +222,13 @@ export async function probeLlmLiveHealth(
             const c = fullConfig.gemini;
             if (!c?.apiKey) return { ok: false, message: "API key not configured" };
             return probeGemini(c.apiKey);
+        }
+        case "vertex": {
+            const c = fullConfig.vertex;
+            if (!c?.projectId || !c.location) {
+                return { ok: false, message: "Project ID and location are required" };
+            }
+            return probeVertex(c.projectId, c.location, c.credentialsJson);
         }
         default:
             return { ok: false, message: "Unknown provider" };

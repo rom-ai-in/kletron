@@ -1,0 +1,14 @@
+{
+  "fetchAllowlist": [
+    "*.github.com",
+    "*.npmjs.com",
+    "raw.githubusercontent.com",
+    "*.wikipedia.org",
+    "localhost",
+    "127.0.0.1"
+  ],
+  "workingFolder": "./examples/quickstart-workspace",
+  "workspaceRoots": [
+    "./examples/quickstart-workspace"
+  ]
+}

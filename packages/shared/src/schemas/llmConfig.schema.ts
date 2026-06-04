@@ -35,6 +35,18 @@ export const GeminiConfigSchema = z.object({
     model: z.string().min(1).describe("Model name (e.g., gemini-2.5-pro, gemini-2.5-flash)"),
 });
 
+export const VertexAIConfigSchema = z.object({
+    projectId: z.string().min(1).describe("Google Cloud project ID (e.g., kletron)"),
+    location: z.string().min(1).describe("Vertex AI region (e.g., us-central1, europe-west4)"),
+    model: z.string().min(1).describe("Model name (e.g., gemini-2.5-pro, gemini-2.5-flash)"),
+    credentialsJson: z
+        .string()
+        .optional()
+        .describe(
+            "Service account JSON (paste full JSON). Leave empty when running on GCP — Application Default Credentials are used automatically."
+        ),
+});
+
 export const LMStudioModelConfigSchema = z.object({
     contextWindow: z.number().int().positive().optional().describe("Context window size (tokens)"),
     maxTokens: z.number().int().positive().optional().describe("Max output tokens"),
@@ -80,7 +92,7 @@ export const VLLMConfigSchema = z.object({
 // Provider types
 // ============================================================================
 
-export const LLM_PROVIDERS = ["azure", "openai", "codex", "claude", "gemini", "lmstudio", "ollama", "vllm"] as const;
+export const LLM_PROVIDERS = ["azure", "openai", "codex", "claude", "gemini", "vertex", "lmstudio", "ollama", "vllm"] as const;
 export type LlmProviderType = (typeof LLM_PROVIDERS)[number];
 
 // ============================================================================
@@ -95,6 +107,7 @@ export const LlmConfigSchema = z.object({
     codex: CodexConfigSchema.optional(),
     claude: ClaudeConfigSchema.optional(),
     gemini: GeminiConfigSchema.optional(),
+    vertex: VertexAIConfigSchema.optional(),
     lmstudio: LMStudioConfigSchema.optional(),
     ollama: OllamaConfigSchema.optional(),
     vllm: VLLMConfigSchema.optional(),
@@ -113,6 +126,7 @@ export type OpenAIConfig = z.infer<typeof OpenAIConfigSchema>;
 export type CodexConfig = z.infer<typeof CodexConfigSchema>;
 export type ClaudeConfig = z.infer<typeof ClaudeConfigSchema>;
 export type GeminiConfig = z.infer<typeof GeminiConfigSchema>;
+export type VertexAIConfig = z.infer<typeof VertexAIConfigSchema>;
 export type LMStudioModelConfig = z.infer<typeof LMStudioModelConfigSchema>;
 export type LMStudioConfig = z.infer<typeof LMStudioConfigSchema>;
 export type OllamaConfig = z.infer<typeof OllamaConfigSchema>;
@@ -148,6 +162,10 @@ export function validateGeminiConfig(data: unknown): GeminiConfig {
     return GeminiConfigSchema.parse(data);
 }
 
+export function validateVertexAIConfig(data: unknown): VertexAIConfig {
+    return VertexAIConfigSchema.parse(data);
+}
+
 export function validateLMStudioConfig(data: unknown): LMStudioConfig {
     return LMStudioConfigSchema.parse(data);
 }
@@ -170,6 +188,7 @@ export const MODEL_RECOMMENDATIONS = {
     codex: ["gpt-5-codex", "gpt-5-codex-mini"],
     claude: ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-haiku-20240307"],
     gemini: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-pro"],
+    vertex: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-pro"],
     lmstudio: ["local-model"],
     ollama: ["llama3.2", "llama3.1", "mistral", "codellama", "deepseek-coder"],
     vllm: ["nvidia/nemotron-3-nano", "mistralai/Mistral-Small-24B", "Qwen/Qwen3-32B", "deepseek-ai/deepseek-coder-33b", "meta-llama/Llama-3.1-8B-Instruct"],

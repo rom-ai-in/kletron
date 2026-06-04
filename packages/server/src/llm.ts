@@ -1,6 +1,7 @@
 import { AzureChatOpenAI, ChatOpenAI } from "@langchain/openai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatVertexAI } from "@langchain/google-vertexai";
 import { ChatOllama } from "@langchain/ollama";
 
 import { getLlmConfig } from "./services/llmConfigService";
@@ -16,7 +17,7 @@ export type LlmSelection = {
 const normalizeProvider = (value?: string): LlmProvider | undefined => {
   if (!value) return undefined;
   const normalized = value.trim().toLowerCase();
-  const validProviders: LlmProvider[] = ["azure", "openai", "codex", "claude", "gemini", "lmstudio", "ollama", "vllm"];
+  const validProviders: LlmProvider[] = ["azure", "openai", "codex", "claude", "gemini", "vertex", "lmstudio", "ollama", "vllm"];
   return validProviders.includes(normalized as LlmProvider) ? (normalized as LlmProvider) : undefined;
 };
 
@@ -57,6 +58,7 @@ export type ResolvedLlmInfo = {
   codex?: { baseUrl?: string };
   claude?: Record<string, never>;
   gemini?: Record<string, never>;
+  vertex?: { projectId?: string; location?: string };
   lmstudio?: { baseUrl?: string };
   ollama?: { baseUrl?: string };
   vllm?: { baseUrl?: string };
@@ -151,6 +153,17 @@ export async function resolveResolvedLlmInfo(selection?: Partial<LlmSelection>):
         provider: "gemini",
         model: selection?.model ?? geminiConfig?.model,
         gemini: {},
+      };
+    }
+    case "vertex": {
+      const vertexConfig = runtimeConfig.vertex;
+      return {
+        provider: "vertex",
+        model: selection?.model ?? vertexConfig?.model,
+        vertex: {
+          projectId: vertexConfig?.projectId,
+          location: vertexConfig?.location,
+        },
       };
     }
     case "lmstudio": {
@@ -297,6 +310,42 @@ export async function getChatModel(selection?: Partial<LlmSelection>, overrides?
         model,
         apiKey: geminiConfig.apiKey,
         temperature,
+      });
+    }
+
+    case "vertex": {
+      const vertexConfig = runtimeConfig.vertex;
+      if (!vertexConfig?.projectId || !vertexConfig?.location) {
+        throw new Error(
+          "Vertex AI is not configured. Set Google Cloud project and location in the UI."
+        );
+      }
+      const model = selection?.model ?? vertexConfig.model;
+      if (!model) {
+        throw new Error("Vertex AI model name is required.");
+      }
+      // On GCP (Cloud Run, GKE, GCE) the service account attached to the runtime
+      // is used automatically via ADC — no credentialsJson needed.
+      // Off-GCP, the user supplies a service account JSON in the UI.
+      const authOptions =
+        vertexConfig.credentialsJson && vertexConfig.credentialsJson.trim().length > 0
+          ? (() => {
+              try {
+                return { credentials: JSON.parse(vertexConfig.credentialsJson!) };
+              } catch (error) {
+                const reason = error instanceof Error ? error.message : "invalid JSON";
+                throw new Error(`Vertex AI credentialsJson is not valid JSON: ${reason}`);
+              }
+            })()
+          : undefined;
+      return new ChatVertexAI({
+        model,
+        location: vertexConfig.location,
+        temperature,
+        authOptions: {
+          projectId: vertexConfig.projectId,
+          ...(authOptions ?? {}),
+        },
       });
     }
 

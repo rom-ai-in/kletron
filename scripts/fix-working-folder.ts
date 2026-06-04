@@ -28,7 +28,8 @@ async function main() {
 
   if (!target) {
     // Legacy fallback – prefer not to use this in normal flows.
-    target = "/home/romain/machine-trade";
+    // Default to the current working directory so we never leak a private path.
+    target = process.cwd();
   }
   const db = await getDb();
   const collection = db.collection("workspace_configs");

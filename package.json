@@ -2,7 +2,17 @@
   "name": "kletron",
   "version": "1.0.0",
   "type": "module",
-  "description": "LangGraph-based TS agentic coder backed by the GitHub MCP server.",
+  "description": "MCP-native agent graphs with a real UI. Local-first / BYOK — run models on your keys or on your machine.",
+  "license": "MIT",
+  "author": "Romain Magnin",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rom-ai-in/kletron.git"
+  },
+  "homepage": "https://github.com/rom-ai-in/kletron#readme",
+  "bugs": {
+    "url": "https://github.com/rom-ai-in/kletron/issues"
+  },
   "scripts": {
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true",
     "dev:infra": "docker compose up -d mongo",
@@ -31,13 +41,17 @@
     "test": "npm run typecheck && npm run test:unit",
     "seed:skills": "tsx scripts/seed-builtin-skills.ts",
     "seed:canonical": "tsx scripts/seed-canonical-db.ts",
-    "seed:all-workspaces": "tsx scripts/seed-all-workspaces.ts"
+    "seed:all-workspaces": "tsx scripts/seed-all-workspaces.ts",
+    "dev:adk": "tsx apps/mcp-server/adk-entrypoint.ts",
+    "start:adk": "tsx apps/mcp-server/adk-entrypoint.ts"
   },
   "dependencies": {
     "@cyntler/react-doc-viewer": "^1.14.1",
+    "@google/adk": "^1.1.0",
     "@langchain/anthropic": "^1.3.13",
-    "@langchain/core": "1.1.18",
+    "@langchain/core": "1.1.48",
     "@langchain/google-genai": "^2.1.14",
+    "@langchain/google-vertexai": "^2.1.31",
     "@langchain/langgraph": "^1.1.0",
     "@langchain/langgraph-checkpoint-mongodb": "^1.1.7",
     "@langchain/ollama": "^1.2.2",
@@ -87,8 +101,8 @@
     "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
-    "@openai/codex": "^0.128.0",
     "@langchain/langgraph-cli": "^1.1.11",
+    "@openai/codex": "^0.128.0",
     "@types/mongodb": "^4.0.6",
     "@types/node": "^20.6.0",
     "@types/react": "^18.2.35",

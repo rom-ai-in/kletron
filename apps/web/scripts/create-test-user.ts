@@ -7,8 +7,8 @@ async function main() {
     console.log('Initializing test user...');
     await initializeTestUser();
     console.log('✓ Test user initialization completed successfully!');
-    console.log('  Email: romain-client@gmail.com');
-    console.log('  Password: password123');
+    console.log('  Email: demo@kletron.local');
+    console.log('  Password: kletron-demo');
     console.log('\nYou can now use this test user to log in to the application.');
     process.exit(0);
   } catch (error) {

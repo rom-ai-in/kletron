@@ -7,8 +7,8 @@
  * account.
  *
  * Usage:
- *   TARGET_EMAIL=romain@numezis.com TARGET_PASSWORD=password123 \
- *   MONGODB_URI="..." npx tsx scripts/seed-numezis-account.ts
+ *   TARGET_EMAIL=user@example.com TARGET_PASSWORD=change-me \
+ *   MONGODB_URI="..." npx tsx scripts/seed-account.ts
  */
 
 import dotenv from "dotenv";
@@ -28,10 +28,10 @@ dotenv.config({ path: path.join(ROOT, ".env") });
 dotenv.config();
 
 const SOURCE_USER_ID = (process.env.SOURCE_USER_ID || "test-user-1").trim();
-const SOURCE_EMAIL = (process.env.SOURCE_EMAIL || "romain-client@gmail.com").trim().toLowerCase();
-const TARGET_EMAIL = (process.env.TARGET_EMAIL || "romain@numezis.com").trim().toLowerCase();
-const TARGET_FULL_NAME = (process.env.TARGET_FULL_NAME || "Romain Client").trim();
-const TARGET_PASSWORD = process.env.TARGET_PASSWORD || "password123";
+const SOURCE_EMAIL = (process.env.SOURCE_EMAIL || "demo@kletron.local").trim().toLowerCase();
+const TARGET_EMAIL = (process.env.TARGET_EMAIL || "user@example.com").trim().toLowerCase();
+const TARGET_FULL_NAME = (process.env.TARGET_FULL_NAME || "Demo User").trim();
+const TARGET_PASSWORD = process.env.TARGET_PASSWORD || "change-me";
 const DRY_RUN = process.env.DRY_RUN === "1";
 
 function toObjectId(value: unknown): ObjectId | null {
@@ -213,7 +213,7 @@ async function main() {
 
 main()
     .catch((error) => {
-        console.error("seed-numezis-account failed:", error);
+        console.error("seed-account failed:", error);
         process.exitCode = 1;
     })
     .finally(async () => {

@@ -7,26 +7,39 @@ One-page map for contributors. **Deeper notes:** [docs/architecture.md](./docs/a
 ```mermaid
 flowchart LR
   user[User]
-  webUI[Nextjs_UI_apps_web]
-  apiRoutes[AppRouter_APIs]
-  graphExec[Graph_execution_packages_server]
-  agentCore[Agent_runner_packages_agent_core]
-  llm[LLM_providers_BYOK_or_local]
-  mcpClient[MCP_client_packages_mcp_client]
-  bundledMcp[MCP_server_apps_mcp_server]
-  userMcp[Workspace_MCP_servers]
-  mongo[MongoDB]
+
+  subgraph cloudrun["Google Cloud Run (project: kletron)"]
+    webUI[kletron-web<br/>Next.js UI + API]
+    bundledMcp[kletron-mcp<br/>MCP tool server]
+    adk[kletron-adk<br/>ADK + A2A endpoint]
+  end
+
+  subgraph google["Google AI"]
+    gemini[Gemini 2.5 Pro / Flash<br/>via Vertex AI]
+  end
+
+  agentCore[Agent runner<br/>packages/agent-core]
+  graphExec[Graph execution<br/>packages/server]
+  mcpClient[MCP client<br/>packages/mcp-client]
+  userMcp[Workspace MCP servers<br/>stdio / SSE / HTTP]
+  mongo[(MongoDB Atlas)]
+  secrets[Secret Manager]
 
   user --> webUI
-  webUI --> apiRoutes
-  apiRoutes --> graphExec
+  webUI --> graphExec
   graphExec --> agentCore
-  agentCore --> llm
+  agentCore --> gemini
+  adk --> gemini
   agentCore --> mcpClient
+  adk --> mcpClient
   mcpClient --> bundledMcp
   mcpClient --> userMcp
   graphExec --> mongo
+  webUI -. ADC / IAM .-> gemini
+  webUI -. secrets .-> secrets
 ```
+
+Mermaid PNG export (used in the Devpost submission): `docs/assets/architecture-google.png` (regenerate with `npx -y @mermaid-js/mermaid-cli -i ARCHITECTURE.md -o docs/assets/architecture-google.png`).
 
 ## Where things live
 
@@ -52,7 +65,7 @@ flowchart LR
 
 ## Data flow (one paragraph)
 
-The user drives **Next.js** (`apps/web`). Route handlers call **`packages/server`** services, which run **agent graphs** from **`packages/agent-core`**. Tool calls go through **`packages/mcp-client`** to the **bundled MCP server** (`apps/mcp-server`) and any **workspace-attached MCP** processes. Durable config and runs land in **MongoDB**.
+The user drives **Next.js** (`apps/web`). Route handlers call **`packages/server`** services, which run **agent graphs** from **`packages/agent-core`**. Tool calls go through **`packages/mcp-client`** to the **bundled MCP server** (`apps/mcp-server`) and any **workspace-attached MCP** processes. Durable config and runs land in **MongoDB**. On Google Cloud, both `kletron-web` and `kletron-mcp` run on **Cloud Run**; the same Simple ReAct node is also exposed as an **ADK + A2A** endpoint (`apps/mcp-server/adk-entrypoint.ts`, served by `npm run dev:adk`) so external A2A clients can call it. LLM calls go to **Gemini 2.5** through **Vertex AI** using Cloud Run's attached service account (no API keys in containers).
 
 ## Local dev processes
 

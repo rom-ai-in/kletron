@@ -154,8 +154,10 @@ export async function streamReactAgentMessages(
   const llmResolveAndModelMs = performance.now() - t0;
 
   // ── Build createReactAgent params ──────────────────────────────────
+  // `@langchain/google-vertexai` ships its own nested @langchain/core; cast the
+  // model to break the structural-typing mismatch across that boundary.
   const agentParams: Parameters<typeof createReactAgent>[0] = {
-    llm: model,
+    llm: model as Parameters<typeof createReactAgent>[0]["llm"],
     tools: opts.tools,
     prompt: new SystemMessage(opts.systemPrompt),
     name: opts.name,

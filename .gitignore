@@ -24,17 +24,27 @@ dist/
 *.swp
 *.swo
 
-# Numezis Code outputs
-numezis_results.json
+# Kletron outputs
+kletron_results.json
 *.log
 
 # LangGraph Studio
 .langgraph/
 .langgraph_api/
 
+# Build output / caches (never commit)
 .next/
-.numezis/
+*.tsbuildinfo
+apps/desktop/dist-electron/
 .DS_Store
+
+# Local agent / tool state (regenerated; machine-specific)
+.kletron/
+
+# Runtime config (machine-specific; may contain provider keys & local paths).
+# Copy the committed *.example.json to bootstrap your own.
+/config/config.json
+apps/web/config/config.json
 
 # Legacy finance artifacts (removed from active logic) — repo root only
 /graph/

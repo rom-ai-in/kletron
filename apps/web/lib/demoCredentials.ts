@@ -3,7 +3,7 @@ import { findTestUser, initializeTestUser, verifyPassword } from "./auth";
 export interface DemoSessionProfile {
     id: "test-user-1";
     email: string;
-    name: "Romain Client";
+    name: "Demo User";
 }
 
 /**
@@ -33,6 +33,6 @@ export async function resolveDemoCredentials(
     return {
         id: "test-user-1",
         email: testUser.email,
-        name: "Romain Client",
+        name: "Demo User",
     };
 }

@@ -132,6 +132,8 @@ export function DriftAnalysisModal({
             case "claude":
             case "gemini":
                 return Boolean(data.model);
+            case "vertex":
+                return Boolean(data.projectId && data.location && data.model);
             case "lmstudio":
                 return Boolean(data.baseUrl && data.model);
             case "ollama":

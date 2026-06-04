@@ -2,8 +2,8 @@
 // Simple authentication utilities for development/testing
 
 // Pre-defined test user (persistent across script runs)
-const TEST_USER_EMAIL = 'romain-client@gmail.com';
-const TEST_USER_PASSWORD = 'password123';
+const TEST_USER_EMAIL = 'demo@kletron.local';
+const TEST_USER_PASSWORD = 'kletron-demo';
 let testUserPasswordHash: string | null = null;
 
 export const hashPassword = async (password: string): Promise<string> => {

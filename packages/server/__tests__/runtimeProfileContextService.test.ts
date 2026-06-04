@@ -35,10 +35,10 @@ describe("runtimeProfileContextService", () => {
         resolveSafeConnectorPromptDefaults.mockResolvedValue([]);
         agentMemoryRead.mockImplementation(async (path: string) => {
             if (path === "/memories/profile.md") {
-                return "# User Profile\n- Display name: Romain Magnin\n- Preferred language: fr\n";
+                return "# User Profile\n- Display name: Ada Lovelace\n- Preferred language: fr\n";
             }
             if (path === "/memories/company.md") {
-                return "# Company\n- Workspace name: business\n- Organization: Numezis\n";
+                return "# Company\n- Workspace name: business\n- Organization: Kletron\n";
             }
             throw new Error(`Unexpected path ${path}`);
         });
@@ -57,11 +57,11 @@ describe("runtimeProfileContextService", () => {
             enabledIntegrationProviderIds: [],
         });
 
-        expect(context.userDisplayName).toBe("Romain Magnin");
-        expect(context.companyOrOrg).toBe("Numezis");
+        expect(context.userDisplayName).toBe("Ada Lovelace");
+        expect(context.companyOrOrg).toBe("Kletron");
         expect(context.preferredLanguage).toBe("fr");
         expect(context.connectorDefaults).toEqual([]);
-        expect(formatRunContextPrompt(context)).toContain("User name: Romain Magnin");
-        expect(formatRunContextPrompt(context)).toContain("Company / org: Numezis");
+        expect(formatRunContextPrompt(context)).toContain("User name: Ada Lovelace");
+        expect(formatRunContextPrompt(context)).toContain("Company / org: Kletron");
     });
 });

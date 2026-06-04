@@ -26,26 +26,26 @@ export function FileTree({ workspace: _workspace }: FileTreeProps) {
                 id: 'src',
                 name: 'src',
                 type: 'directory',
-                path: '/Users/romainmagnin/Desktop/kletron/src',
+                path: 'src',
                 children: [
                     {
                         id: 'components',
                         name: 'components',
                         type: 'directory',
-                        path: '/Users/romainmagnin/Desktop/kletron/src/components',
+                        path: 'src/components',
                         children: [
-                            { id: 'Button.tsx', name: 'Button.tsx', type: 'file', path: '/Users/romainmagnin/Desktop/kletron/src/components/Button.tsx' },
-                            { id: 'Card.tsx', name: 'Card.tsx', type: 'file', path: '/Users/romainmagnin/Desktop/kletron/src/components/Card.tsx' }
+                            { id: 'Button.tsx', name: 'Button.tsx', type: 'file', path: 'src/components/Button.tsx' },
+                            { id: 'Card.tsx', name: 'Card.tsx', type: 'file', path: 'src/components/Card.tsx' }
                         ]
                     },
                     {
                         id: 'pages',
                         name: 'pages',
                         type: 'directory',
-                        path: '/Users/romainmagnin/Desktop/kletron/src/pages',
+                        path: 'src/pages',
                         children: [
-                            { id: 'Home.tsx', name: 'Home.tsx', type: 'file', path: '/Users/romainmagnin/Desktop/kletron/src/pages/Home.tsx' },
-                            { id: '_app.tsx', name: '_app.tsx', type: 'file', path: '/Users/romainmagnin/Desktop/kletron/src/pages/_app.tsx' }
+                            { id: 'Home.tsx', name: 'Home.tsx', type: 'file', path: 'src/pages/Home.tsx' },
+                            { id: '_app.tsx', name: '_app.tsx', type: 'file', path: 'src/pages/_app.tsx' }
                         ]
                     }
                 ]
@@ -54,13 +54,13 @@ export function FileTree({ workspace: _workspace }: FileTreeProps) {
                 id: 'package.json',
                 name: 'package.json',
                 type: 'file',
-                path: '/Users/romainmagnin/Desktop/kletron/package.json'
+                path: 'package.json'
             },
             {
                 id: 'tsconfig.json',
                 name: 'tsconfig.json',
                 type: 'file',
-                path: '/Users/romainmagnin/Desktop/kletron/tsconfig.json'
+                path: 'tsconfig.json'
             }
         ];
 

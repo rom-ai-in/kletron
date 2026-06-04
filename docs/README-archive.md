@@ -897,4 +897,4 @@ For macOS notarization issues, ensure you have:
 
 ## License
 
-Private — All rights reserved.
+MIT — see [LICENSE](../LICENSE).

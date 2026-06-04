@@ -7,7 +7,7 @@ async function main() {
     console.log('Testing authentication...');
     
     // Test finding the user
-    const email = 'romain-client@gmail.com';
+    const email = 'demo@kletron.local';
     const testUser = findTestUser(email);
     
     if (!testUser) {
@@ -18,7 +18,7 @@ async function main() {
     console.log('✓ Found test user:', email);
     
     // Test password verification
-    const correctPassword = 'password123';
+    const correctPassword = 'kletron-demo';
     const wrongPassword = 'wrongpassword';
     
     const isCorrectValid = await verifyPassword(correctPassword, testUser.passwordHash);

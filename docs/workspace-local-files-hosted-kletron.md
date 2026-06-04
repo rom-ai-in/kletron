@@ -85,6 +85,6 @@ Un tunnel vers votre MCP expose une surface d’attaque. Limitez la durée d’e
 
 ## Voir aussi
 
-- **[docs/lm-studio-ai-beast-remote.md](./lm-studio-ai-beast-remote.md)** — LLM local + ngrok (orthogonal aux fichiers workspace).
+- **LLM local + tunnel** — exécuter un LLM en local exposé via un tunnel HTTPS (orthogonal aux fichiers workspace).
 - **`docs/agentic/07-mcp-tools.md`** — Architecture MCP et `slug__tool`.
 - **`packages/agent-core/src/tools/mcpTools.ts`** — liste `REMOTE_REDIRECT_BUNDLED_MCP_TOOLS` et logique de redirection.

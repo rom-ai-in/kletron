@@ -13,6 +13,9 @@ substitutions:
   _EXPECTED_PROJECT: kletron
   _ALLOW_NON_KLETRON_PROJECT: "false"
   _NEXT_PUBLIC_APP_URL: https://change-me-after-first-deploy.run.app
+  # Vertex AI (Gemini Enterprise)
+  _VERTEX_LOCATION: us-central1
+  _VERTEX_MODEL: gemini-2.5-pro
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -109,6 +112,12 @@ steps:
           printf 'MCP_URL: "%s"\n' "$${MCP_SSE}"
           printf 'NEXT_PUBLIC_APP_URL: "%s"\n' "${_NEXT_PUBLIC_APP_URL}"
           printf 'NEXTAUTH_URL: "%s"\n' "${_NEXT_PUBLIC_APP_URL}"
+          # Vertex AI auto-detect: with these set, Kletron's Vertex provider
+          # uses Application Default Credentials from the Cloud Run service
+          # account. No service-account JSON in the image.
+          printf 'GOOGLE_CLOUD_PROJECT: "%s"\n' "$PROJECT_ID"
+          printf 'GOOGLE_CLOUD_LOCATION: "%s"\n' "${_VERTEX_LOCATION}"
+          printf 'VERTEX_MODEL: "%s"\n' "${_VERTEX_MODEL}"
         } > /tmp/kletron-web-env.yaml
         RUN_SECRETS="NEXTAUTH_SECRET=kletron-nextauth-secret:latest,MONGODB_URI=kletron-mongodb-uri:latest,GOOGLE_OAUTH_CLIENT_ID=kletron-google-oauth-client-id:latest,AZURE_OPENAI_API_KEY=kletron-azure-openai-api-key:latest,TAVILY_API_KEY=kletron-tavily-api-key:latest,LANGSMITH_API_KEY=kletron-langsmith-api-key:latest"
         if gcloud secrets describe kletron-google-oauth-client-secret --project="$PROJECT_ID" &>/dev/null; then

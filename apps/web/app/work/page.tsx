@@ -28,7 +28,7 @@ const capabilities = [
     },
     {
         title: 'Word templates',
-        body: 'templates/Word anchors consistent letterheads and long-form flows.',
+        body: 'Reusable document templates anchor consistent letterheads and long-form flows.',
         shipped: true,
     },
     {

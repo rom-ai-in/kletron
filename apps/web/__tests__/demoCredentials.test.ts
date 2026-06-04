@@ -11,19 +11,19 @@ describe("resolveDemoCredentials", () => {
     it("resolves the built-in demo account outside production", async () => {
         process.env.NODE_ENV = "test";
 
-        const profile = await resolveDemoCredentials("romain-client@gmail.com", "password123");
+        const profile = await resolveDemoCredentials("demo@kletron.local", "kletron-demo");
 
         expect(profile).toEqual({
             id: "test-user-1",
-            email: "romain-client@gmail.com",
-            name: "Romain Client",
+            email: "demo@kletron.local",
+            name: "Demo User",
         });
     });
 
     it("refuses the built-in demo account in production", async () => {
         process.env.NODE_ENV = "production";
 
-        const profile = await resolveDemoCredentials("romain-client@gmail.com", "password123");
+        const profile = await resolveDemoCredentials("demo@kletron.local", "kletron-demo");
 
         expect(profile).toBeNull();
     });

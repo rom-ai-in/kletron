@@ -56,9 +56,12 @@ export async function POST(req: NextRequest) {
         const hasApiKey = !!slice.apiKey;
         const hasBaseUrl = !!slice.baseUrl;
         const hasEndpoint = !!slice.endpoint;
+        const hasProjectId = !!slice.projectId;
+        const hasLocation = !!slice.location;
 
         const needsKey = ["azure", "openai", "claude", "gemini"].includes(provider);
         const needsUrl = ["codex", "lmstudio", "ollama", "vllm"].includes(provider);
+        const needsGcpProject = ["vertex"].includes(provider);
 
         if (needsKey && !hasApiKey) {
             return NextResponse.json(
@@ -70,6 +73,13 @@ export async function POST(req: NextRequest) {
         if (needsUrl && !hasBaseUrl && !hasEndpoint) {
             return NextResponse.json(
                 { status: "error" as const, message: "Base URL not configured" },
+                { status: 200, headers: { "Cache-Control": "no-store" } }
+            );
+        }
+
+        if (needsGcpProject && (!hasProjectId || !hasLocation)) {
+            return NextResponse.json(
+                { status: "error" as const, message: "Project ID and location are required" },
                 { status: 200, headers: { "Cache-Control": "no-store" } }
             );
         }

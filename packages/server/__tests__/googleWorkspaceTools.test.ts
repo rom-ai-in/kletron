@@ -17,8 +17,8 @@ const baseMessage: GmailMessageSummary = {
     historyId: "1",
     internalDate: String(Date.now()),
     subject: "UBS follow-up",
-    from: "leonor@newco.ch",
-    to: "romain@numezis.com",
+    from: "alice@example.com",
+    to: "bob@example.com",
     date: new Date().toUTCString(),
 };
 
@@ -41,9 +41,9 @@ describe("googleWorkspaceTools Gmail fallback helpers", () => {
     });
 
     it("extracts label and field terms from a Gmail query", () => {
-        const parsed = parseGmailLocalQuery("in:inbox is:unread from:leonor@newco.ch subject:UBS newer_than:7d");
+        const parsed = parseGmailLocalQuery("in:inbox is:unread from:alice@example.com subject:UBS newer_than:7d");
         expect(parsed.labelIds).toEqual(["INBOX", "UNREAD"]);
-        expect(parsed.fromTerms).toEqual(["leonor@newco.ch"]);
+        expect(parsed.fromTerms).toEqual(["alice@example.com"]);
         expect(parsed.subjectTerms).toEqual(["UBS"]);
         expect(parsed.newerThanDays).toBe(7);
     });
@@ -62,7 +62,7 @@ describe("googleWorkspaceTools Gmail fallback helpers", () => {
 
         const filtered = filterGmailMessagesLocally(
             messages,
-            "in:inbox from:leonor@newco.ch subject:UBS"
+            "in:inbox from:alice@example.com subject:UBS"
         );
 
         expect(filtered.filtered.map((message) => message.id)).toEqual(["msg-1"]);

@@ -338,7 +338,7 @@ export async function clarifyWithUser(
     messages: formatMessagesForPrompt(messages),
     date: formatDate(),
   });
-  const model = (await getConfiguredChatModel(config))
+  const model = ((await getConfiguredChatModel(config)) as any)
     .withStructuredOutput(ClarifySchema)
     .withRetry({ stopAfterAttempt: settings.maxStructuredOutputRetries });
   const response = await model.invoke([new HumanMessage(prompt)]);
@@ -364,7 +364,7 @@ export async function writeResearchBrief(
     date: formatDate(),
   });
 
-  const model = (await getConfiguredChatModel(config))
+  const model = ((await getConfiguredChatModel(config)) as any)
     .withStructuredOutput(ResearchBriefSchema)
     .withRetry({ stopAfterAttempt: settings.maxStructuredOutputRetries });
   const response = await model.invoke([new HumanMessage(prompt)]);

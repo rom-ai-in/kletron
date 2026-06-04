@@ -44,13 +44,14 @@ export function useModels(
       setSelectedProvider(provider);
       setSelectedModel(model);
 
-      const knownProviders = ["openai", "codex", "claude", "azure", "gemini", "ollama", "lmstudio", "vllm"];
+      const knownProviders = ["openai", "codex", "claude", "azure", "gemini", "vertex", "ollama", "lmstudio", "vllm"];
       const providerLabels: Record<string, string> = {
         openai: "OpenAI",
         codex: "Codex",
         claude: "Anthropic",
         azure: "Azure",
-        gemini: "Google",
+        gemini: "Google Gemini",
+        vertex: "Vertex AI",
         ollama: "Ollama",
         lmstudio: "LM Studio",
         vllm: "vLLM",

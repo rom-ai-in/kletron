@@ -8,7 +8,7 @@ async function runTest() {
   console.log('=== TEST CONTEXT SCANNER ===\n');
   
   // Workspace à scanner (le projet Kletron lui-même)
-  const workspaceRoot = process.env.WORKSPACE_ROOT || '/home/romain/.openclaw/workspace/kletron';
+  const workspaceRoot = process.env.WORKSPACE_ROOT || process.cwd();
   
   console.log(`Workspace: ${workspaceRoot}`);
   console.log('Starting scan...\n');

@@ -37,6 +37,13 @@ const PROVIDERS = [
     color: "purple",
   },
   {
+    id: "vertex" as const,
+    name: "Vertex AI",
+    description: "Google Cloud Gemini Enterprise",
+    icon: Cloud,
+    color: "indigo",
+  },
+  {
     id: "lmstudio" as const,
     name: "LM Studio",
     description: "Local inference via localhost",
@@ -146,6 +153,7 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
   const [openaiForm, setOpenaiForm] = useState<Record<string, string>>({});
   const [claudeForm, setClaudeForm] = useState<Record<string, string>>({});
   const [geminiForm, setGeminiForm] = useState<Record<string, string>>({});
+  const [vertexForm, setVertexForm] = useState<Record<string, string>>({});
   const [lmstudioForm, setLmstudioForm] = useState<Partial<LMStudioConfig>>({});
   const [ollamaForm, setOllamaForm] = useState<Record<string, string>>({});
   const [vllmForm, setVllmForm] = useState<Partial<VLLMConfig>>({});
@@ -250,6 +258,16 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
       if (data.openai) setOpenaiForm(data.openai);
       if (data.claude) setClaudeForm(data.claude);
       if (data.gemini) setGeminiForm(data.gemini);
+      if (data.vertex) {
+        setVertexForm({
+          projectId: data.vertex.projectId ?? "",
+          location: data.vertex.location ?? "us-central1",
+          model: data.vertex.model ?? "",
+          credentialsJson: data.vertex.credentialsJson ?? "",
+        });
+      } else {
+        setVertexForm({ projectId: "", location: "us-central1", model: "", credentialsJson: "" });
+      }
       if (data.lmstudio) {
         setLmstudioForm(data.lmstudio);
         setLmstudioBaseline(data.lmstudio);
@@ -920,6 +938,30 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
               ]}
               formData={geminiForm}
               setFormData={setGeminiForm}
+            />
+          )}
+
+          {/* Vertex AI Form */}
+          {selectedSettingsSection === "vertex" && (
+            <ProviderForm
+              title="Vertex AI (Gemini Enterprise) Settings"
+              icon={Cloud}
+              onSubmit={(e) => void handleSaveProvider(e, "vertex", vertexForm)}
+              saving={saving}
+              provider="vertex"
+              fields={[
+                { label: "Google Cloud Project ID", key: "projectId", placeholder: "kletron" },
+                { label: "Location", key: "location", placeholder: "us-central1" },
+                { label: "Model", key: "model", placeholder: "gemini-2.5-pro", suggestions: MODEL_RECOMMENDATIONS.vertex },
+                {
+                  label: "Service Account JSON (leave empty on Cloud Run / GCE)",
+                  key: "credentialsJson",
+                  type: "password",
+                  placeholder: "{ \"type\": \"service_account\", ... }",
+                },
+              ]}
+              formData={vertexForm}
+              setFormData={setVertexForm}
             />
           )}
 

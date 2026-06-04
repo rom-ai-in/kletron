@@ -284,9 +284,14 @@ const openaiOrganization = process.env.OPENAI_ORGANIZATION;
 const claudeApiKey = process.env.ANTHROPIC_API_KEY;
 const claudeModel = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514";
 
-// Google Gemini
-const geminiApiKey = process.env.GOOGLE_API_KEY;
-const geminiModel = process.env.GOOGLE_MODEL ?? "gemini-2.5-flash";
+// Google Gemini (AI Studio API)
+const geminiApiKey = process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY;
+const geminiModel = process.env.GOOGLE_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+
+// Google Vertex AI (Gemini Enterprise — Cloud Run uses ADC, no API key)
+const vertexProjectId = process.env.GOOGLE_CLOUD_PROJECT;
+const vertexLocation = process.env.GOOGLE_CLOUD_LOCATION ?? "us-central1";
+const vertexModel = process.env.VERTEX_MODEL ?? "gemini-2.5-pro";
 
 // LM Studio
 const lmstudioBaseUrl = process.env.LMSTUDIO_BASE_URL ?? "http://127.0.0.1:1234/v1";
@@ -303,7 +308,7 @@ const vllmApiKey = process.env.VLLM_API_KEY;
 const vllmModel = process.env.VLLM_MODEL ?? "";
 
 // Default provider
-const VALID_PROVIDERS = ["azure", "openai", "codex", "claude", "gemini", "lmstudio", "ollama", "vllm"];
+const VALID_PROVIDERS = ["azure", "openai", "codex", "claude", "gemini", "vertex", "lmstudio", "ollama", "vllm"];
 const defaultProviderRaw = process.env.LLM_DEFAULT_PROVIDER;
 const isDefaultProviderValid = VALID_PROVIDERS.includes(defaultProviderRaw ?? "");
 const defaultProvider =
@@ -311,7 +316,8 @@ const defaultProvider =
   (azureEndpoint && azureApiKey && azureDeployment ? "azure" :
     openaiApiKey ? "openai" :
       claudeApiKey ? "claude" :
-        geminiApiKey ? "gemini" : "lmstudio");
+        vertexProjectId ? "vertex" :
+          geminiApiKey ? "gemini" : "lmstudio");
 
 const parsedGraphRecursionLimit = Number.parseInt(
   process.env.GRAPH_RECURSION_LIMIT ?? "",
@@ -367,6 +373,11 @@ export const config = {
   gemini: {
     apiKey: geminiApiKey,
     model: geminiModel,
+  },
+  vertex: {
+    projectId: vertexProjectId,
+    location: vertexLocation,
+    model: vertexModel,
   },
   lmstudio: {
     baseUrl: lmstudioBaseUrl,

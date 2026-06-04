@@ -72,7 +72,7 @@ Normalizes raw user input into a partial `LlmSelection`. Used by API routes to s
 - API key defaults to `"lm-studio"` / `"vllm"` (local models don't need real keys)
 - vLLM auto-appends `/v1` to base URL for OpenAI compatibility
 - Supports advanced model kwargs: `top_k`, `repeat_penalty`
-- **Remote GPU box + Kletron cloud:** LM Studio on a Linux host, SSH tunnel from Mac, ngrok HTTPS → full ops guide in **[`docs/lm-studio-ai-beast-remote.md`](../lm-studio-ai-beast-remote.md)** (Base URL must include `/v1`; hosted Kletron calls ngrok from the server, not from your laptop).
+- **Remote GPU box + Kletron cloud:** LM Studio on a separate Linux GPU host, reached via SSH tunnel or HTTPS tunnel (ngrok/Cloudflare); Base URL must include `/v1`; hosted Kletron calls the tunnel from the server.
 
 ### Ollama
 - Uses dedicated `ChatOllama` class
