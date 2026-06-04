@@ -18,11 +18,25 @@ build/
 dist/
 *.egg-info/
 
-# IDE
+# IDE / editor / AI-tool state (machine- and user-specific)
 .vscode/
 .idea/
+.cursor/
+.cursorrules
+.windsurfrules
+.continue/
+.aider*
+.zed/
+.fleet/
+.tabnine/
+.codeium/
 *.swp
 *.swo
+
+# Claude Code / Codex CLI per-machine state
+.claude/
+.codex/
+CLAUDE.local.md
 
 # Kletron outputs
 kletron_results.json
