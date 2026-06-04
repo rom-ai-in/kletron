@@ -38,8 +38,9 @@ kletron_results.json
 apps/desktop/dist-electron/
 .DS_Store
 
-# Local agent / tool state (regenerated; machine-specific)
-.kletron/
+# Local agent / tool state (regenerated; machine-specific).
+# Root-anchored so it does not shadow sample-workspace/.kletron sample content.
+/.kletron/
 
 # Runtime config (machine-specific; may contain provider keys & local paths).
 # Copy the committed *.example.json to bootstrap your own.
