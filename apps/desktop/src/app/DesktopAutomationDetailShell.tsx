@@ -1,4 +1,4 @@
-import { ExternalLink, Play, MessageSquare } from "lucide-react";
+import { ArrowLeft, ExternalLink, Play, MessageSquare } from "lucide-react";
 import { Button } from "@kletron/ui/components/design-system";
 import type { Automation } from "@kletron/ui/components/CommandCenter/AutomationsDashboard";
 import { DesktopAutomationDetailSkeleton } from "../components/DesktopLoadingSkeletons";
@@ -27,6 +27,8 @@ type Props = {
   onRunNow: () => void | Promise<void>;
   onOpenInBrowser: () => void;
   onOpenThread?: () => void;
+  /** Returns to the automations list (no master rail in the Claude layout). */
+  onBack?: () => void;
   runBusy?: boolean;
 };
 
@@ -38,6 +40,7 @@ export function DesktopAutomationDetailShell({
   onRunNow,
   onOpenInBrowser,
   onOpenThread,
+  onBack,
   runBusy = false,
 }: Props) {
   if (loading) {
@@ -81,6 +84,16 @@ export function DesktopAutomationDetailShell({
   return (
     <div className="flex flex-1 min-w-0 flex-col overflow-y-auto scrollbar-elegant bg-bg-surface">
       <div className="border-b border-border-subtle px-6 py-4">
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="-ml-1 mb-2 inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[11px] text-text-muted transition-colors hover:bg-state-hover hover:text-text-primary"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Automation
+          </button>
+        ) : null}
         <h2 className="text-lg font-semibold text-text-primary truncate">{automation.name}</h2>
         {automation.description ? (
           <p className="mt-1 text-sm text-text-secondary">{automation.description}</p>

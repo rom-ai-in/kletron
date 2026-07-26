@@ -16,6 +16,11 @@ import type {
     LlmProviderType,
 } from "@kletron/shared/schemas/llmConfig.schema";
 import * as LlmSchema from "@kletron/shared/schemas/llmConfig.schema";
+import {
+    assertProviderEndpoints,
+    openConfigSecrets,
+    sealConfigSecrets,
+} from "./llmConfigSecrets";
 
 const {
     validateLlmConfig,
@@ -76,6 +81,14 @@ function readConfigFile(): LlmConfig | null {
     }
 }
 
+/**
+ * Single choke point for writing the config to disk.
+ *
+ * Sealing happens here rather than at each call site: the in-memory config is
+ * decrypted, so any caller passing one straight through would write provider
+ * credentials to config.json in the clear. Sealing is idempotent, so callers
+ * that already sealed lose nothing.
+ */
 function writeConfigFile(configToWrite: LlmConfig): void {
     const dir = path.dirname(CONFIG_JSON_PATH);
     if (!fs.existsSync(dir)) {
@@ -90,7 +103,7 @@ function writeConfigFile(configToWrite: LlmConfig): void {
             existing = {};
         }
     }
-    existing[LLM_CONFIG_KEY] = configToWrite;
+    existing[LLM_CONFIG_KEY] = sealConfigSecrets(configToWrite as Record<string, unknown>);
     fs.writeFileSync(CONFIG_JSON_PATH, JSON.stringify(existing, null, 2), "utf-8");
 }
 
@@ -113,10 +126,12 @@ export async function getLlmConfig(): Promise<LlmConfig> {
         const storedConfig = await collection.findOne({});
 
         if (storedConfig) {
-            const normalized = {
+            // Credentials are sealed at rest; the in-memory value is plaintext
+            // so provider clients can use it directly.
+            const normalized = openConfigSecrets({
                 ...storedConfig,
                 _id: storedConfig._id.toString(),
-            };
+            });
             llmConfigCache = {
                 value: normalized,
                 expiresAt: Date.now() + LLM_CONFIG_CACHE_TTL_MS,
@@ -127,7 +142,7 @@ export async function getLlmConfig(): Promise<LlmConfig> {
         console.warn("Failed to fetch LLM config from MongoDB, using config.json fallback:", error);
     }
 
-    const fallback = readConfigFile() ?? getDefaultConfig();
+    const fallback = openConfigSecrets(readConfigFile() ?? getDefaultConfig());
     llmConfigCache = {
         value: fallback,
         expiresAt: Date.now() + LLM_CONFIG_CACHE_TTL_MS,
@@ -173,31 +188,40 @@ async function updateProviderConfig<T>(
 
     const validatedConfig = schema.parse(configToSave);
 
+    // Reject endpoints that would exfiltrate prompts or reach link-local
+    // metadata before anything is persisted.
+    assertProviderEndpoints(String(providerKey), validatedConfig);
+
     const updatedConfig: LlmConfig = {
         ...currentConfig,
         [providerKey]: validatedConfig,
         updatedAt: new Date(),
     };
 
+    // Everything leaving the process is sealed; `updatedConfig` stays plaintext
+    // for the cache and the return value.
+    const configForStorage = sealConfigSecrets(updatedConfig as Record<string, unknown>) as LlmConfig;
+
     if (collection) {
         if (currentConfig._id) {
-             
-            const { _id, ...configWithoutId } = updatedConfig;
+
+            const { _id, ...configWithoutId } = configForStorage;
 
             await collection.updateOne(
                 { _id: new ObjectId(currentConfig._id) } as any,
                 { $set: configWithoutId }
             );
         } else {
+            const { _id: _ignored, ...configWithoutId } = configForStorage;
             const result = await collection.insertOne({
-                ...updatedConfig,
+                ...configWithoutId,
                 createdAt: new Date(),
-            });
+            } as any);
             updatedConfig._id = result.insertedId.toString();
         }
     }
 
-    writeConfigFile(updatedConfig);
+    writeConfigFile(configForStorage);
     llmConfigCache = {
         value: updatedConfig,
         expiresAt: Date.now() + LLM_CONFIG_CACHE_TTL_MS,
@@ -370,10 +394,12 @@ export async function updateDefaultProvider(
                 { $set: { provider, defaultProvider: provider, updatedAt: new Date() } }
             );
         } else {
+            // First write: the whole document is persisted, so credentials
+            // carried over from the in-memory config must be sealed.
             const result = await collection.insertOne({
-                ...updatedConfig,
+                ...sealConfigSecrets(updatedConfig as Record<string, unknown>),
                 createdAt: new Date(),
-            });
+            } as any);
             updatedConfig._id = result.insertedId.toString();
         }
     }
@@ -460,10 +486,11 @@ export async function setProviderEnabled(
                 { $set: { enabledProviders: newEnabledProviders, updatedAt: new Date() } }
             );
         } else {
+            // First write: see updateDefaultProvider — seal before persisting.
             const result = await collection.insertOne({
-                ...updatedConfig,
+                ...sealConfigSecrets(updatedConfig as Record<string, unknown>),
                 createdAt: new Date(),
-            });
+            } as any);
             updatedConfig._id = result.insertedId.toString();
         }
     }

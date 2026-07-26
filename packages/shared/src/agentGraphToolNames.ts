@@ -8,6 +8,8 @@ export const EXECUTOR_ONLY_AGENT_GRAPH_TOOLS = [
     "write_todos",
     "list_available_skills",
     "load_skill",
+    /** Delegation to subagents with isolated context windows (see `subagentRunner`). */
+    "task",
 ] as const;
 
 /** Build the full allowlist used by POST/PATCH `/api/agent-graphs`. */

@@ -1,30 +1,18 @@
 import type { AgentGraphDefinition, AgentGraphExecutionMode, AgentGraphState } from "./agentGraphTypes";
 import { topoSortAgentGraph } from "./agentGraphTopo";
 
-export function resolveExecutionMode(graph: AgentGraphDefinition): AgentGraphExecutionMode {
-    return graph.execution?.mode === "state_machine" ? "state_machine" : "dag";
+/**
+ * Graphs execute as a DAG. The former `state_machine` mode (conditional edges
+ * evaluated against run state) was never enabled by any shipped graph and has
+ * been removed — runtime branching now happens *inside* a node through the
+ * `task` tool rather than *between* nodes.
+ */
+export function resolveExecutionMode(_graph: AgentGraphDefinition): AgentGraphExecutionMode {
+    return "dag";
 }
 
 export function getGraphNodeOrder(graph: AgentGraphDefinition): string[] {
-    const mode = resolveExecutionMode(graph);
-    if (mode === "dag") {
-        return topoSortAgentGraph(graph.nodes, graph.edges);
-    }
-    return graph.nodes.map((n) => n.id);
-}
-
-export function getEntryNodeIds(graph: AgentGraphDefinition): string[] {
-    const mode = resolveExecutionMode(graph);
-    const nodeIds = new Set(graph.nodes.map((n) => n.id));
-    const entry = graph.execution?.entryNodeId;
-    if (mode === "state_machine" && entry && nodeIds.has(entry)) {
-        return [entry];
-    }
-    const incoming = new Set(graph.edges.map((e) => e.target));
-    const roots = graph.nodes.filter((n) => !incoming.has(n.id)).map((n) => n.id);
-    if (roots.length > 0) return roots;
-    const first = graph.nodes[0]?.id;
-    return first ? [first] : [];
+    return topoSortAgentGraph(graph.nodes, graph.edges);
 }
 
 export function buildInitialState(graph: AgentGraphDefinition, mission: string): AgentGraphState {

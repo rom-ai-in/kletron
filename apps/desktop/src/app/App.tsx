@@ -11,6 +11,8 @@ import {
   X,
   AlertTriangle,
   ClipboardCopy,
+  Network,
+  Clock,
 } from "lucide-react";
 
 // Design system components
@@ -27,8 +29,9 @@ import { Terminal } from "@kletron/ui/components/Terminal";
 
 // Command Center components
 import { TitleBar } from "@kletron/ui/components/CommandCenter/TitleBar";
+import { AccountStatusButton } from "@kletron/ui/components/CommandCenter/AccountStatusButton";
 import { ProjectSidebar } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
-import type { SidebarProject } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import type { SidebarProject, SidebarMoreLink } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
 import { ThreadSearchPalette } from "@kletron/ui/components/CommandCenter/ThreadSearchPalette";
 import { ThreadSearchHeaderTrigger } from "@kletron/ui/components/CommandCenter/ThreadSearchHeaderTrigger";
 import { MessageList } from "@kletron/ui/components/Agent/MessageList";
@@ -51,7 +54,10 @@ import type { InlineDiff } from "@kletron/ui/components/CommandCenter/InlineDiff
 import { SlashCommandMenu } from "@kletron/ui/components/CommandCenter/SlashCommandMenu";
 import type { SlashCommandItem } from "@kletron/ui/components/CommandCenter/SlashCommandMenu";
 import { MultimodalMenu } from "@kletron/ui/components/CommandCenter/MultimodalMenu";
-import { AutomationListPanel } from "@kletron/ui/components/automations/AutomationListPanel";
+import {
+  AutomationsClaudePage,
+  type AutomationsClaudeItem,
+} from "@kletron/ui/components/automations/AutomationsClaudePage";
 import { ThreadApprovalModeSelector } from "@kletron/ui/components/Agent/ThreadApprovalModeSelector";
 import { ReplayConfirmDialog } from "@kletron/ui/components/CommandCenter/ReplayConfirmDialog";
 
@@ -71,6 +77,7 @@ import { useCategories } from "../hooks/useCategories";
 import { useStableAgentRequestHeaders } from "../hooks/useStableAgentRequestHeaders";
 import { WORK_MODES, normalizeToWorkModeId, type WorkModeId } from "@kletron/shared/workMode";
 import type { ResearchDepthId } from "@kletron/shared/researchDepth";
+import { describeCron } from "@kletron/shared/cronUtils";
 import { finalizeSidebarLiveStatus, sessionStatusToSidebarLiveStatus } from "@kletron/shared/chatTypes";
 import { useThreadReadCursors } from "@kletron/ui/hooks/useThreadReadCursors";
 import {
@@ -88,12 +95,12 @@ import type {
   LlmConfig,
   AgentGraphSummary,
   EnvVariable,
+  SettingsSectionId,
 } from "../types";
 import { useAutomations } from "../hooks/useAutomations";
 import { useDesktopApiFetch } from "../hooks/useDesktopApiFetch";
 import { AutomationBuilderModal } from "@kletron/ui/components/AutomationBuilderModal";
 import { AgentGraphsPanel } from "./AgentGraphsPanel";
-import { DesktopPrimaryNav } from "./DesktopPrimaryNav";
 import { HistoryPanel } from "./HistoryPanel";
 import { CodeRepoConnectorStrip } from "@kletron/ui/components/CommandCenter/CodeRepoConnectorStrip";
 import { WorkspaceConnectorsHint } from "@kletron/ui/components/CommandCenter/WorkspaceConnectorsHint";
@@ -107,6 +114,8 @@ import { getComposerConnectionState } from "../composerConnection";
 import { usePortalConfigSnapshot } from "../hooks/usePortalConfigSnapshot";
 import { DesktopAutomationDetailShell } from "./DesktopAutomationDetailShell";
 import { DesktopSettingsView } from "./DesktopSettingsView";
+import { DesktopAuthGate } from "./DesktopAuthGate";
+import { isSessionUnlocked } from "../sessionAccess";
 
 function augmentMessageWithFileChips(text: string, chips: ContextChip[]): string {
   const files = chips.filter((c) => c.variant === "file");
@@ -218,8 +227,55 @@ export default function App() {
   });
 
   const models = useModels(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
-  const apiFetch = useDesktopApiFetch(backendUrlTrimmed, auth.getAccessToken, activeWorkspaceId);
+  const apiFetch = useDesktopApiFetch(
+    backendUrlTrimmed,
+    auth.getAccessToken,
+    activeWorkspaceId,
+    auth.notifyUnauthorized,
+  );
   const automationsHook = useAutomations(backendUrlTrimmed, backendReady, auth.getAccessToken, activeWorkspaceId);
+
+  /**
+   * Desktop rows for the Claude-style automations list. No enable switch: the
+   * desktop transport has no schedule-toggle endpoint, so the row omits it.
+   */
+  const desktopAutomationItems = useMemo<AutomationsClaudeItem[]>(
+    () =>
+      automationsHook.automations.map((automation) => ({
+        id: automation.id,
+        name: automation.name,
+        description: automation.description,
+        triggerType: automation.schedule ? "schedule" : "manual",
+        // Same human-readable phrasing as the web list — not the raw cron.
+        triggerLabel: automation.schedule
+          ? `${describeCron(automation.schedule)}${automation.status === "paused" ? " · paused" : ""}`
+          : undefined,
+        lastRunAt: automation.lastRunAt ?? null,
+        nextRunAt: automation.nextRunAt ?? null,
+      })),
+    [automationsHook.automations],
+  );
+
+  /** Secondary destinations — this rail is the desktop's only sidebar. */
+  const openSettingsSection = useCallback(
+    (section: SettingsSectionId) => {
+      settings.setActiveSettingsSection(section);
+      settings.setActiveView("settings");
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settings.setActiveSettingsSection, settings.setActiveView],
+  );
+
+  /** Top-level destinations only — settings sub-sections live inside Settings. */
+  const desktopSidebarMoreLinks = useMemo<SidebarMoreLink[]>(
+    () => [
+      { label: "Agent Graphs", icon: Network, onClick: () => settings.setActiveView("agent-graphs") },
+      { label: "History", icon: Clock, onClick: () => settings.setActiveView("history") },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settings.setActiveView],
+  );
+
   const threads = useThreads(
     backendUrlTrimmed,
     backendReady,
@@ -462,7 +518,42 @@ export default function App() {
     toast,
   ]);
 
-  const desktopPrimaryNavTrailing = useMemo(
+  /** Host shown in the account menu status line, e.g. `localhost:3000`. */
+  const backendHostLabel = useMemo(() => {
+    try {
+      return new URL(backendUrlTrimmed).host || null;
+    } catch {
+      return null;
+    }
+  }, [backendUrlTrimmed]);
+
+  /**
+   * Session state, always visible on the trailing edge of the window chrome —
+   * the desktop answer to the web sidebar's profile block.
+   */
+  const accountButtonProps = {
+    status: auth.sessionStatus,
+    email: auth.auth?.user?.email,
+    fullName: auth.auth?.user?.fullName,
+    userId: auth.auth?.user?.id,
+    backendLabel: backendHostLabel,
+    onSignIn: () => void auth.startWebLogin(),
+    onSignOut: auth.signOut,
+    onOpenAccount: () => {
+      settings.setActiveView("settings");
+      settings.setActiveSettingsSection("account");
+    },
+    onOpenPortal: () => openPortalPath("/app/account"),
+  };
+
+  /** Full-width identity row at the top of the rail — the only place it appears. */
+  const accountRow = <AccountStatusButton variant="row" {...accountButtonProps} />;
+
+  /** Compact avatar, for surfaces with no rail (the auth gate). */
+  const accountChip = <AccountStatusButton {...accountButtonProps} />;
+
+  /** Copy the full thread JSON — lives in the titlebar of every view. */
+  const threadLogsButton = useMemo(
     () => (
       <button
         type="button"
@@ -617,15 +708,15 @@ export default function App() {
     };
   }, [settings.settingsToggles.preventSleep, conversation.runActive]);
 
+  /**
+   * The automations view now opens on the list (Claude-style) rather than a
+   * master/detail split, so only drop a selection that no longer exists —
+   * never auto-select the first row.
+   */
   useEffect(() => {
     if (settings.activeView !== "automations") return;
-    const list = automationsHook.automations;
-    const ids = list.map((a) => a.id);
-    if (ids.length === 0) {
-      setSelectedAutomationId(null);
-      return;
-    }
-    setSelectedAutomationId((prev) => (prev && ids.includes(prev) ? prev : ids[0]));
+    const ids = automationsHook.automations.map((a) => a.id);
+    setSelectedAutomationId((prev) => (prev && ids.includes(prev) ? prev : null));
   }, [settings.activeView, automationsHook.automations]);
 
   useEffect(() => {
@@ -1140,6 +1231,9 @@ export default function App() {
   setActiveViewRef.current = settings.setActiveView;
   const setActiveSettingsSectionRef = useRef(settings.setActiveSettingsSection);
   setActiveSettingsSectionRef.current = settings.setActiveSettingsSection;
+  /** Stable handles for the app-menu listener registered once below. */
+  const authActionsRef = useRef({ signIn: auth.startWebLogin, signOut: auth.signOut });
+  authActionsRef.current = { signIn: auth.startWebLogin, signOut: auth.signOut };
 
   useEffect(() => {
     const k = window.kletron;
@@ -1152,12 +1246,22 @@ export default function App() {
       }
     });
     const u3 = k.onToggleWorkModeRequest?.(() => toggleWorkModeRef.current());
+    const u4 = k.onAuthMenuAction?.((action) => {
+      if (action === "sign-in") void authActionsRef.current.signIn();
+      else authActionsRef.current.signOut();
+    });
     return () => {
       u1();
       u2?.();
       u3?.();
+      u4?.();
     };
   }, []);
+
+  /** Grey out the native menu's navigation while the shell is locked. */
+  useEffect(() => {
+    void window.kletron?.setSignedIn?.(isSessionUnlocked(auth.sessionStatus));
+  }, [auth.sessionStatus]);
 
   function handleThreadSelect(threadId: string) {
     if (threadId === threads.conversationId) return;
@@ -1331,6 +1435,76 @@ export default function App() {
   // No project auto-assignment: threads are now scoped purely by workspace.
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // AUTH GATE — single choke point: no view below renders without a live session,
+  // the desktop equivalent of the web middleware refusing `/app/*`.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  if (!isSessionUnlocked(auth.sessionStatus)) {
+    return (
+      <DesktopAuthGate
+        status={auth.sessionStatus}
+        backendUrl={settings.backendUrl}
+        setBackendUrl={settings.setBackendUrl}
+        backendUrlValid={backendUrlValid}
+        backendConnected={backendConnected}
+        loginPending={auth.loginPending}
+        loginError={auth.loginError}
+        onSignIn={() => void auth.startWebLogin()}
+        onRegister={() => void auth.startWebRegister()}
+        onCancelSignIn={auth.cancelLogin}
+        accountSlot={accountChip}
+      />
+    );
+  }
+
+  /**
+   * Top of the rail. The sidebar now runs to the top of the window, so it owns
+   * the macOS traffic-light zone: that strip must stay a drag region and keep
+   * its 76px inset or the window buttons land on the account chip.
+   */
+  const desktopRailHeader = (
+    <div className="flex flex-col">
+      {/* Reserved for the macOS traffic lights; stays draggable. */}
+      <div className="h-9 shrink-0 app-region-drag" aria-hidden />
+      <div className="app-region-no-drag border-b border-white/[0.06] px-2 pb-2 pt-0.5">{accountRow}</div>
+    </div>
+  );
+
+  /**
+   * Same sidebar as the agent workspace, so History / Automation / Agent graphs
+   * navigate identically instead of each growing its own top bar.
+   */
+  const secondaryViewRail = (
+    <ProjectSidebar
+      projects={sidebarProjects}
+      activeThreadId={null}
+      activeProjectId={workspace.workspace?.path ?? null}
+      loading={workspace.switching || threads.threadsLoading}
+      workMode={desktopWorkMode}
+      onWorkModeChange={handleWorkModeSelect}
+      workModeSwitcherDisabled={workspace.switching || threads.threadsLoading}
+      onThreadSelect={(sessionId) => {
+        settings.setActiveView("app");
+        threads.setConversationId(sessionId);
+        void threads.loadThreads(sessionId);
+      }}
+      onNewThreadInProject={(projectId) => {
+        settings.setActiveView("app");
+        handleNewThreadInProject(projectId);
+      }}
+      onOpenAutomations={() => settings.setActiveView("automations")}
+      automationsActive={settings.activeView === "automations"}
+      onOpenCustomize={() => openSettingsSection("configuration")}
+      moreLinks={desktopSidebarMoreLinks}
+      showAddProjectButton={false}
+      onSettings={() => settings.setActiveView("settings")}
+      onRenameThread={(threadId, newTitle) => threads.renameThread(threadId, newTitle)}
+      onArchiveThread={(threadId) => void threads.archiveThread(threadId)}
+      onDeleteThread={(threadId) => void threads.deleteThread(threadId)}
+    />
+  );
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // HISTORY VIEW
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1341,27 +1515,30 @@ export default function App() {
         getAccessToken={auth.getAccessToken}
         workspace={workspace}
       >
-        <div className="flex h-screen flex-col text-text-primary min-h-0">
-          <header className="flex h-10 shrink-0 items-center glass-titlebar px-4 pl-[76px] app-region-drag">
+        <div className="flex h-screen text-text-primary min-h-0">
+          {secondaryViewRail}
+          <div className="flex min-w-0 flex-1 flex-col">
+          <header className="relative z-50 flex h-9 shrink-0 items-center justify-between glass-titlebar px-4 app-region-drag">
             <span className="text-xs font-medium text-text-secondary">History</span>
+            <div className="app-region-no-drag">{threadLogsButton}</div>
           </header>
-          <DesktopPrimaryNav
-            activeView={settings.activeView}
-            onSelect={(v) => settings.setActiveView(v)}
-            trailing={desktopPrimaryNavTrailing}
-          />
-          <HistoryPanel
-            backendUrlTrimmed={backendUrlTrimmed}
-            backendReady={backendReady}
-            getAccessToken={auth.getAccessToken}
-            activeWorkspaceId={activeWorkspaceId}
-            onOpenThread={(sessionId) => {
-              settings.setActiveView("app");
-              threads.setConversationId(sessionId);
-              void threads.loadThreads(sessionId);
-            }}
-            onOpenFullHistoryPortal={() => openPortalPath("/app/history")}
-          />
+          <div className="flex flex-1 min-h-0 overflow-hidden">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+              <HistoryPanel
+                backendUrlTrimmed={backendUrlTrimmed}
+                backendReady={backendReady}
+                getAccessToken={auth.getAccessToken}
+                activeWorkspaceId={activeWorkspaceId}
+                onOpenThread={(sessionId) => {
+                  settings.setActiveView("app");
+                  threads.setConversationId(sessionId);
+                  void threads.loadThreads(sessionId);
+                }}
+                onOpenFullHistoryPortal={() => openPortalPath("/app/history")}
+              />
+            </div>
+          </div>
+          </div>
         </div>
       </DesktopWorkspaceProvider>
     );
@@ -1376,7 +1553,21 @@ export default function App() {
       selectedAutomationId != null
         ? automationsHook.automations.find((a) => a.id === selectedAutomationId) ?? null
         : null;
-    const listEmpty = !automationsHook.loading && automationsHook.automations.length === 0;
+
+    const runAutomationById = async (id: string) => {
+      setRunAutomationBusy(true);
+      try {
+        const tid = await automationsHook.runNow(id);
+        if (tid) {
+          const automation = automationsHook.automations.find((item) => item.id === id);
+          settings.setActiveView("app");
+          threads.setConversationId(tid);
+          void threads.loadThreads(tid, { provisionalTitle: automation?.name });
+        }
+      } finally {
+        setRunAutomationBusy(false);
+      }
+    };
 
     return (
       <DesktopWorkspaceProvider
@@ -1384,65 +1575,46 @@ export default function App() {
         getAccessToken={auth.getAccessToken}
         workspace={workspace}
       >
-        <div className="flex h-screen flex-col text-text-primary min-h-0">
-          <header className="flex h-10 shrink-0 items-center glass-titlebar px-4 pl-[76px] app-region-drag">
+        <div className="flex h-screen text-text-primary min-h-0">
+          {secondaryViewRail}
+          <div className="flex min-w-0 flex-1 flex-col">
+          <header className="relative z-50 flex h-9 shrink-0 items-center justify-between glass-titlebar px-4 app-region-drag">
             <span className="text-xs font-medium text-text-secondary">Automations</span>
+            <div className="app-region-no-drag">{threadLogsButton}</div>
           </header>
-          <DesktopPrimaryNav
-            activeView={settings.activeView}
-            onSelect={(v) => settings.setActiveView(v)}
-            trailing={desktopPrimaryNavTrailing}
-          />
           <div className="flex flex-1 min-h-0 overflow-hidden">
-            <AutomationListPanel
-              automations={automationsHook.automations}
-              selectedId={selectedAutomationId}
-              onSelect={setSelectedAutomationId}
-              loading={automationsHook.loading}
-              error={automationsHook.error}
-              workspaceName={automationsWorkspaceBanner.label}
-              workspaceRootHint={automationsWorkspaceBanner.root}
-              onCreateClick={() => setAutomationBuilderOpen(true)}
-            />
-            <DesktopAutomationDetailShell
-              automation={selectedAutomation}
-              loading={automationsHook.loading && automationsHook.automations.length === 0}
-              emptySelection={
-                !automationsHook.loading && automationsHook.automations.length > 0 && selectedAutomationId === null
-              }
-              listEmpty={listEmpty}
-              runBusy={runAutomationBusy}
-              onRunNow={async () => {
-                if (!selectedAutomationId) return;
-                setRunAutomationBusy(true);
-                try {
-                  const tid = await automationsHook.runNow(selectedAutomationId);
-                  if (tid) {
-                    const automation = automationsHook.automations.find((item) => item.id === selectedAutomationId);
-                    settings.setActiveView("app");
-                    threads.setConversationId(tid);
-                    void threads.loadThreads(tid, {
-                      provisionalTitle: automation?.name,
-                    });
-                  }
-                } finally {
-                  setRunAutomationBusy(false);
+            {selectedAutomation ? (
+              <DesktopAutomationDetailShell
+                automation={selectedAutomation}
+                runBusy={runAutomationBusy}
+                onBack={() => setSelectedAutomationId(null)}
+                onRunNow={() => runAutomationById(selectedAutomation.id)}
+                onOpenInBrowser={() =>
+                  openPortalPath(`/app/automations/${encodeURIComponent(selectedAutomation.id)}`)
                 }
-              }}
-              onOpenInBrowser={() => {
-                if (!selectedAutomationId) return;
-                openPortalPath(`/app/automations/${encodeURIComponent(selectedAutomationId)}`);
-              }}
-              onOpenThread={
-                selectedAutomation?.lastSessionId
-                  ? () => {
-                      settings.setActiveView("app");
-                      threads.setConversationId(selectedAutomation!.lastSessionId!);
-                      void threads.loadThreads(selectedAutomation!.lastSessionId!);
-                    }
-                  : undefined
-              }
-            />
+                onOpenThread={
+                  selectedAutomation.lastSessionId
+                    ? () => {
+                        settings.setActiveView("app");
+                        threads.setConversationId(selectedAutomation.lastSessionId!);
+                        void threads.loadThreads(selectedAutomation.lastSessionId!);
+                      }
+                    : undefined
+                }
+              />
+            ) : (
+              <AutomationsClaudePage
+                items={desktopAutomationItems}
+                loading={automationsHook.loading}
+                error={automationsHook.error}
+                onRetry={() => void automationsHook.load()}
+                onSelect={setSelectedAutomationId}
+                onCreate={() => setAutomationBuilderOpen(true)}
+                onRun={(id) => void runAutomationById(id)}
+                workspaceName={automationsWorkspaceBanner.label}
+                className="flex-1 min-w-0"
+              />
+            )}
           </div>
           <AutomationBuilderModal
             open={automationBuilderOpen}
@@ -1454,6 +1626,7 @@ export default function App() {
               if (id) setSelectedAutomationId(id);
             }}
           />
+          </div>
         </div>
       </DesktopWorkspaceProvider>
     );
@@ -1470,16 +1643,15 @@ export default function App() {
         getAccessToken={auth.getAccessToken}
         workspace={workspace}
       >
-        <div className="flex h-screen flex-col text-text-primary min-h-0">
-          <header className="flex h-10 shrink-0 items-center glass-titlebar px-4 pl-[76px] app-region-drag">
+        <div className="flex h-screen text-text-primary min-h-0">
+          {secondaryViewRail}
+          <div className="flex min-w-0 flex-1 flex-col">
+          <header className="relative z-50 flex h-9 shrink-0 items-center justify-between glass-titlebar px-4 app-region-drag">
             <span className="text-xs font-medium text-text-secondary">Agent graphs</span>
+            <div className="app-region-no-drag">{threadLogsButton}</div>
           </header>
-          <DesktopPrimaryNav
-            activeView={settings.activeView}
-            onSelect={(v) => settings.setActiveView(v)}
-            trailing={desktopPrimaryNavTrailing}
-          />
-          <AgentGraphsPanel
+          <div className="flex flex-1 min-h-0 overflow-hidden">
+            <AgentGraphsPanel
             backendUrlTrimmed={backendUrlTrimmed}
             getAccessToken={auth.getAccessToken}
             activeWorkspaceId={activeWorkspaceId}
@@ -1511,7 +1683,9 @@ export default function App() {
               }
             }}
             createGraphBusy={createGraphBusy}
-          />
+            />
+          </div>
+          </div>
         </div>
       </DesktopWorkspaceProvider>
     );
@@ -1582,6 +1756,7 @@ export default function App() {
           envVariables={envVariables}
           setEnvVariables={setEnvVariables}
           apiFetch={apiFetch}
+          accountSlot={accountRow}
         />
       </DesktopWorkspaceProvider>
     );
@@ -1597,8 +1772,48 @@ export default function App() {
       getAccessToken={auth.getAccessToken}
       workspace={workspace}
     >
-    <div className="flex h-screen flex-col text-text-primary">
-      {/* ── Title Bar ── */}
+    <div className="flex h-screen text-text-primary">
+      {/* Left rail runs the full height; the title bar starts after it. */}
+      {sidebarVisible && (
+        <>
+          <ProjectSidebar
+            projects={sidebarProjects}
+            activeThreadId={threads.conversationId}
+            activeProjectId={workspace.workspace?.path ?? null}
+            loading={workspace.switching || threads.threadsLoading}
+            workMode={desktopWorkMode}
+            onWorkModeChange={handleWorkModeSelect}
+            workModeSwitcherDisabled={workspace.switching || threads.threadsLoading}
+            onThreadSelect={handleThreadSelect}
+            onNewThreadInProject={handleNewThreadInProject}
+            onOpenAutomations={() => settings.setActiveView("automations")}
+            onOpenCustomize={() => openSettingsSection("configuration")}
+            moreLinks={desktopSidebarMoreLinks}
+            header={desktopRailHeader}
+            onAddProject={handleAddProject}
+            showAddProjectButton={false}
+            className="border-r-0"
+            onSettings={() => settings.setActiveView("settings")}
+            onRenameThread={(threadId, newTitle) => threads.renameThread(threadId, newTitle)}
+            onArchiveThread={(threadId) => void threads.archiveThread(threadId)}
+            onDeleteThread={(threadId) => void threads.deleteThread(threadId)}
+            onRemoveProject={(projectId) => {
+              const path = workspace.workspace?.path;
+              if (!path || !pathsEqual(projectId, path)) return;
+              handleRemoveCurrentWorkspace();
+            }}
+            style={{ width: leftPanel.width }}
+          />
+          <ResizeHandle
+            onMouseDown={leftPanel.startDrag}
+            onDoubleClick={leftPanel.resetToDefault}
+            active={leftPanel.isDragging}
+          />
+        </>
+      )}
+
+    <div className="flex min-w-0 flex-1 flex-col">
+      {/* ── Title Bar — only over the content column ── */}
       <TitleBar
         workspaceName={workspace.workspace?.name || workspace.workspace?.path?.split("/").pop() || "Kletron Desktop"}
         workspaceSelectorLabel={workspace.workspace?.name || workspace.workspace?.path?.split("/").pop() || "Select workspace"}
@@ -1609,6 +1824,8 @@ export default function App() {
         onAddWorkspace={handleAddProject}
         onRemoveWorkspace={workspace.workspace?.path ? handleRemoveCurrentWorkspace : undefined}
         showTrafficLights={false}
+        /* The full-height rail owns the traffic-light zone when it is visible. */
+        reserveTrafficLightInset={!sidebarVisible}
         openEditorLabel={isCodeMode ? "VS Code" : "Folder"}
         openEditorTitle={
           isCodeMode
@@ -1694,6 +1911,7 @@ export default function App() {
         }
         sourceControlVisible={isCodeMode ? rightSidebarVisible : false}
         gitDiffStats={isCodeMode ? (git.diffStats ?? undefined) : undefined}
+        account={threadLogsButton}
       />
 
       <AgentSessionChrome
@@ -1715,49 +1933,8 @@ export default function App() {
         }
       />
 
-      <DesktopPrimaryNav
-        activeView={settings.activeView}
-        onSelect={(v) => settings.setActiveView(v)}
-        trailing={desktopPrimaryNavTrailing}
-      />
-
       {/* ── Three-Pane Body ── */}
       <div className="app-region-no-drag flex flex-1 min-h-0 relative">
-        {/* Left Sidebar: Project Navigation */}
-        {sidebarVisible && (
-          <>
-          <ProjectSidebar
-            projects={sidebarProjects}
-            activeThreadId={threads.conversationId}
-            activeProjectId={workspace.workspace?.path ?? null}
-            loading={workspace.switching || threads.threadsLoading}
-            workMode={desktopWorkMode}
-            onWorkModeChange={handleWorkModeSelect}
-            workModeSwitcherDisabled={workspace.switching || threads.threadsLoading}
-            onThreadSelect={handleThreadSelect}
-            onNewThreadInProject={handleNewThreadInProject}
-            onAddProject={handleAddProject}
-            showAddProjectButton={false}
-            className="border-r-0"
-            onSettings={() => settings.setActiveView("settings")}
-            onRenameThread={(threadId, newTitle) => threads.renameThread(threadId, newTitle)}
-            onArchiveThread={(threadId) => void threads.archiveThread(threadId)}
-            onDeleteThread={(threadId) => void threads.deleteThread(threadId)}
-            onRemoveProject={(projectId) => {
-              const path = workspace.workspace?.path;
-              if (!path || !pathsEqual(projectId, path)) return;
-              handleRemoveCurrentWorkspace();
-            }}
-            style={{ width: leftPanel.width }}
-          />
-          <ResizeHandle
-            onMouseDown={leftPanel.startDrag}
-            onDoubleClick={leftPanel.resetToDefault}
-            active={leftPanel.isDragging}
-          />
-          </>
-        )}
-
         {/* Center: Conversation Workspace */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Conversation Messages */}
@@ -2193,6 +2370,7 @@ export default function App() {
         onSelect={handleThreadSelect}
         placeholder="Search threads…"
       />
+    </div>
     </div>
     </DesktopWorkspaceProvider>
   );

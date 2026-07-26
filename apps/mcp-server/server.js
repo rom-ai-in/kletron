@@ -9,6 +9,16 @@ import { fileURLToPath } from "url";
 import http from "http";
 import { URL } from "url";
 
+import {
+  assertTransportSecurity,
+  isAuthorizedRequest,
+  McpAuthConfigError,
+  isLoopbackHost,
+  rejectUnauthorized,
+  resolveBindHost,
+  resolveMcpAuthToken,
+} from "./lib/httpAuth.js";
+
 import { listFiles } from "./tools/listFiles.js";
 import { globFiles } from "./tools/globFiles.js";
 import { readFile } from "./tools/readFile.js";
@@ -63,14 +73,29 @@ const MODE = (() => {
 // Use `--mcp` / `--diagnostic` to force a mode and avoid accidental exits.
 const isInteractive = Boolean(process.stdin.isTTY);
 
+/**
+ * A refused startup is a configuration error, not a crash: report it as a
+ * single actionable line and exit non-zero so orchestrators surface it.
+ */
+function startServer() {
+  runServer().catch((error) => {
+    if (error instanceof McpAuthConfigError) {
+      console.error(`[mcp] ${error.message}`);
+    } else {
+      console.error(error);
+    }
+    process.exit(1);
+  });
+}
+
 if (MODE === "diagnostic") {
   runDiagnostic();
 } else if (MODE === "mcp") {
-  runServer();
+  startServer();
 } else if (isInteractive) {
   runDiagnostic();
 } else {
-  runServer();
+  startServer();
 }
 
 /**
@@ -89,7 +114,20 @@ async function runServer() {
     if (!Number.isFinite(port) || port <= 0) {
       throw new Error(`Invalid MCP_PORT: ${portRaw}`);
     }
-    await runSseServer({ allTools, port });
+
+    // Resolve and validate the security posture before the socket is opened:
+    // a misconfiguration must abort startup, never degrade to an open server.
+    const host = resolveBindHost();
+    const authToken = resolveMcpAuthToken();
+    assertTransportSecurity({ host, token: authToken });
+    if (!authToken && isLoopbackHost(host)) {
+      console.error(
+        "[mcp] No shared secret configured — binding loopback only. " +
+          "Set MCP_SERVER_TOKEN to accept remote clients."
+      );
+    }
+
+    await runSseServer({ allTools, port, host, authToken });
     return;
   }
 
@@ -254,14 +292,18 @@ async function wireToolHandlers({ server, allTools: _allTools, workspaceRoot, ca
   });
 }
 
-async function runSseServer({ allTools, port }) {
+async function runSseServer({ allTools, port, host, authToken }) {
   const sessions = new Map();
 
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
+      // Health stays reachable without credentials so platform probes (Cloud
+      // Run, k8s) work, but it only reports liveness. Workspace path and tool
+      // inventory are reconnaissance material and require the shared secret.
       if (req.method === "GET" && url.pathname === "/health") {
+        const authed = isAuthorizedRequest(req, authToken);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify(
@@ -270,13 +312,24 @@ async function runSseServer({ allTools, port }) {
               name: "mcp-server",
               version: "1.0.0",
               transport: "sse",
-              defaultDir: config.defaultDir ?? null,
-              tools: Object.keys(allTools).length,
+              authRequired: Boolean(authToken),
+              ...(authed
+                ? {
+                    defaultDir: config.defaultDir ?? null,
+                    tools: Object.keys(allTools).length,
+                  }
+                : {}),
             },
             null,
             2
           )
         );
+        return;
+      }
+
+      // Every tool-bearing endpoint below is authenticated.
+      if (!isAuthorizedRequest(req, authToken)) {
+        rejectUnauthorized(res);
         return;
       }
 
@@ -327,10 +380,11 @@ async function runSseServer({ allTools, port }) {
     }
   });
 
-  server.listen(port, "0.0.0.0", () => {
+  server.listen(port, host, () => {
     // SSE/HTTP transport: stdout is fine, but we still prefer stderr to keep
     // the convention identical to stdio mode.
-    console.error(`MCP server running on http://0.0.0.0:${port}/sse`);
+    const scope = authToken ? "authenticated" : "loopback-only, no auth required";
+    console.error(`MCP server running on http://${host}:${port}/sse (${scope})`);
   });
 }
 

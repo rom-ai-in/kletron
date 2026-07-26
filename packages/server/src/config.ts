@@ -328,6 +328,29 @@ const graphRecursionLimit =
     ? parsedGraphRecursionLimit
     : 120;
 
+/** Positive-integer env parser with fallback (shared by the subagent budgets below). */
+const positiveIntEnv = (raw: string | undefined, fallback: number): number => {
+  const parsed = Number.parseInt(raw ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+/**
+ * Budgets for `task`-spawned subagents. A fan-out of N subagents costs roughly
+ * N× a normal turn, so every one of these is a real cost ceiling, not a hint.
+ */
+const subagents = {
+  /** Global kill switch. When false the `task` tool is never exposed. */
+  enabled: (process.env.KLETRON_SUBAGENTS_ENABLED ?? "true").toLowerCase() !== "false",
+  /** Max subagents running concurrently within a single run. */
+  maxConcurrency: positiveIntEnv(process.env.KLETRON_SUBAGENT_MAX_CONCURRENCY, 4),
+  /** Max subagents spawned over the lifetime of a single run. */
+  maxPerRun: positiveIntEnv(process.env.KLETRON_SUBAGENT_MAX_PER_RUN, 12),
+  /** Default ReAct step budget per subagent (overridable per graph via `subagent.maxSteps`). */
+  maxSteps: positiveIntEnv(process.env.KLETRON_SUBAGENT_MAX_STEPS, 32),
+  /** Total tokens subagents may burn in one run before `task` starts refusing. */
+  tokenCeiling: positiveIntEnv(process.env.KLETRON_SUBAGENT_TOKEN_CEILING, 2_000_000),
+};
+
 if (!azureEndpoint && !openaiApiKey && !claudeApiKey && !geminiApiKey) {
   console.warn(
     "⚠️  No LLM API keys configured. Set one of: AZURE_OPENAI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, or GOOGLE_API_KEY"
@@ -394,6 +417,7 @@ export const config = {
     model: vllmModel,
   },
   graphRecursionLimit,
+  subagents,
   mongo: {
     uri: process.env.MONGODB_URI,
     user: process.env.MONGODB_USER,

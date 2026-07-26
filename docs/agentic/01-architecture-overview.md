@@ -128,6 +128,6 @@ sequenceDiagram
 | LLM Providers | Azure OpenAI, OpenAI, Anthropic, Google Gemini, LM Studio, Ollama, vLLM |
 | Tool Protocol | Model Context Protocol (MCP) |
 | Database | MongoDB (Azure Cosmos DB compatible) |
-| Auth | Supabase Auth |
+| Auth | NextAuth v4 (JWT sessions) + bcrypt, users in MongoDB |
 | Git | simple-git |
 | Streaming | Server-Sent Events (SSE) |

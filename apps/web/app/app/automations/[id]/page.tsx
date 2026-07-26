@@ -304,7 +304,16 @@ export default function AutomationDetailPage({ params }: AutomationDetailPagePro
             {/* Header */}
             <div className="flex flex-col border-b border-border-subtle bg-bg-surface px-6 pt-5 pb-0 gap-4">
                 <div className="flex items-start justify-between">
-                    <div className="space-y-1">
+                    <div className="min-w-0 space-y-1">
+                        {/* The list lives on /app/automations now — no master rail to fall back on. */}
+                        <button
+                            type="button"
+                            onClick={() => router.push("/app/automations")}
+                            className="-ml-1 mb-1 inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[11px] text-text-muted transition-colors hover:bg-state-hover hover:text-text-primary"
+                        >
+                            <ArrowLeft className="h-3.5 w-3.5" />
+                            Automation
+                        </button>
                         <h1 className="text-xl font-bold tracking-tight text-text-primary">{automation.name}</h1>
                         <p className="text-xs text-text-muted max-w-2xl">{automation.description || "No description provided."}</p>
                     </div>

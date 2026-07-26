@@ -34,6 +34,12 @@ const DEV_SERVER_URL = process.env.DESKTOP_DEV_SERVER_URL;
 let mainWindow: BrowserWindow | null = null;
 let currentWorkspacePath: string | null = null;
 let pendingAuthUrl: string | null = null;
+/**
+ * Renderer-reported session state (`app:setSignedIn`). Drives the app menu: signed out,
+ * the navigation items are greyed out to match the in-app gate instead of pointing at
+ * views the renderer will refuse to show.
+ */
+let signedIn = false;
 
 type AutoUpdater = (typeof import("electron-updater"))["autoUpdater"];
 
@@ -209,6 +215,21 @@ function installAppMenu() {
             submenu: [
               { role: "about" },
               { type: "separator" },
+              {
+                label: "Account…",
+                enabled: signedIn,
+                click: () => mainWindow?.webContents.send("app:openSettings", "account"),
+              },
+              signedIn
+                ? {
+                    label: "Sign Out",
+                    click: () => mainWindow?.webContents.send("app:auth", "sign-out"),
+                  }
+                : {
+                    label: "Sign In…",
+                    click: () => mainWindow?.webContents.send("app:auth", "sign-in"),
+                  },
+              { type: "separator" },
               { role: "services" },
               { type: "separator" },
               { role: "hide" },
@@ -228,11 +249,13 @@ function installAppMenu() {
               {
                 label: "Add workspace…",
                 accelerator: "CommandOrControl+O",
+                enabled: signedIn,
                 click: () => mainWindow?.webContents.send("app:addWorkspace"),
               },
               {
                 label: "Configuration…",
                 accelerator: "CommandOrControl+,",
+                enabled: signedIn,
                 click: () => mainWindow?.webContents.send("app:openSettings"),
               },
               { type: "separator" },
@@ -247,11 +270,13 @@ function installAppMenu() {
               {
                 label: "Add workspace…",
                 accelerator: "CommandOrControl+O",
+                enabled: signedIn,
                 click: () => mainWindow?.webContents.send("app:addWorkspace"),
               },
               {
                 label: "Configuration…",
                 accelerator: "CommandOrControl+,",
+                enabled: signedIn,
                 click: () => mainWindow?.webContents.send("app:openSettings"),
               },
               { type: "separator" },
@@ -276,6 +301,7 @@ function installAppMenu() {
         {
           label: "Toggle Code / Work mode",
           accelerator: "CommandOrControl+Shift+M",
+          enabled: signedIn,
           click: () => mainWindow?.webContents.send("app:toggleWorkMode"),
         },
         { type: "separator" },
@@ -294,42 +320,49 @@ function installAppMenu() {
       submenu: [
         {
           label: "Agent",
+          enabled: signedIn,
           click: () => {
             mainWindow?.webContents.send("app:navigate", "app");
           },
         },
         {
           label: "History",
+          enabled: signedIn,
           click: () => {
             mainWindow?.webContents.send("app:navigate", "history");
           },
         },
         {
           label: "Automations",
+          enabled: signedIn,
           click: () => {
             mainWindow?.webContents.send("app:navigate", "automations");
           },
         },
         {
           label: "Agent Graphs",
+          enabled: signedIn,
           click: () => {
             mainWindow?.webContents.send("app:navigate", "agent-graphs");
           },
         },
         {
           label: "Configuration",
+          enabled: signedIn,
           click: () => {
             mainWindow?.webContents.send("app:navigate", "settings");
           },
         },
         {
           label: "Account",
+          enabled: signedIn,
           click: () => {
             mainWindow?.webContents.send("app:openSettings", "account");
           },
         },
         {
           label: "Messenger channels",
+          enabled: signedIn,
           click: () => {
             mainWindow?.webContents.send("app:openSettings", "channels");
           },
@@ -593,6 +626,15 @@ ipcMain.handle("app:setPreventSleep", async (_event, enabled: boolean) => {
     preventSleepBlockerId = null;
   }
   return true;
+});
+
+/** Renderer mirrors its session state here so the app menu matches the in-app gate. */
+ipcMain.handle("app:setSignedIn", (_event, value: boolean) => {
+  const next = !!value;
+  if (next === signedIn) return signedIn;
+  signedIn = next;
+  installAppMenu();
+  return signedIn;
 });
 
 ipcMain.handle("app:getVersion", () => app.getVersion());

@@ -36,7 +36,10 @@ services:
     environment:
       NODE_ENV: production
       MCP_TRANSPORT: sse
-      MCP_INTERNAL_TOKEN: ${MCP_INTERNAL_TOKEN:-change-me-long-random-token}
+      # Reachable from the compose network, so the shared secret is mandatory:
+      # the server refuses to start on a non-loopback bind without it.
+      MCP_BIND_HOST: 0.0.0.0
+      MCP_INTERNAL_TOKEN: ${MCP_INTERNAL_TOKEN:?set MCP_INTERNAL_TOKEN (openssl rand -hex 32) in .env}
       KLETRON_WEB_BASE_URL: ${KLETRON_WEB_BASE_URL:-http://web:3000}
     networks:
       - kletron-net
@@ -60,9 +63,9 @@ services:
       NODE_ENV: production
       MONGODB_URI: mongodb://mongo:27017/kletron
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-development-only-change-me-32chars-min}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set NEXTAUTH_SECRET (openssl rand -hex 32) in .env}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-      MCP_INTERNAL_TOKEN: ${MCP_INTERNAL_TOKEN:-change-me-long-random-token}
+      MCP_INTERNAL_TOKEN: ${MCP_INTERNAL_TOKEN:?set MCP_INTERNAL_TOKEN (openssl rand -hex 32) in .env}
       AUTH_TRUST_HOST: "true"
     networks:
       - kletron-net

@@ -16,6 +16,7 @@ import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { EventSource } from "eventsource";
 
+import { bundledMcpTransportOptions } from "./bundledMcpAuth";
 import { createRemoteMcpTransport } from "./remoteMcpTransport";
 
 export type McpServerTransport = "stdio" | "sse" | "streamable-http";
@@ -154,7 +155,7 @@ export class MultiMcpClient {
               })
             : (() => {
                   (globalThis as any).EventSource = EventSource as any;
-                  return new SSEClientTransport(new URL(mcpUrl));
+                  return new SSEClientTransport(new URL(mcpUrl), bundledMcpTransportOptions());
               })();
         await client.connect(transport);
         const tools = (await client.listTools({})).tools ?? [];

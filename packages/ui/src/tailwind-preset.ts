@@ -20,6 +20,7 @@ const preset: Partial<Config> = {
         bg: {
           app: 'var(--bg-app)',
           surface: 'var(--bg-surface)',
+          rail: 'var(--bg-rail)',
           elevated: 'var(--bg-elevated)',
         },
         border: {

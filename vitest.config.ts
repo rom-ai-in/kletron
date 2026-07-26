@@ -19,10 +19,14 @@ export default defineConfig({
             'packages/**/tests/**/*.test.ts',
             'apps/**/__tests__/**/*.test.ts',
             'apps/mcp-server/tests/safety.test.js',
+            'apps/mcp-server/tests/httpAuth.test.js',
         ],
         exclude: [
             '**/node_modules/**',
             '**/dist/**',
+            // Next.js copies test files into its standalone build output; collecting
+            // them re-runs every suite against stale, unresolvable build artifacts.
+            '**/.next/**',
             'apps/mcp-server/tests/tools.test.js',
             'apps/mcp-server/tests/mcpRegistration.test.js',
             // Run with `npx tsx --test <file>` — Vitest does not collect `node:test` suites.

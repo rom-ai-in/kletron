@@ -99,6 +99,16 @@ const api = {
     ipcRenderer.on("app:openSettings", listener);
     return () => ipcRenderer.removeListener("app:openSettings", listener);
   },
+  /** Mirror the renderer session state into the main process (greys out menu items). */
+  setSignedIn: (signedIn: boolean): Promise<boolean> => ipcRenderer.invoke("app:setSignedIn", signedIn),
+  /** App menu → "Sign In…" / "Sign Out" */
+  onAuthMenuAction: (handler: (action: "sign-in" | "sign-out") => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, action: string) => {
+      if (action === "sign-in" || action === "sign-out") handler(action);
+    };
+    ipcRenderer.on("app:auth", listener);
+    return () => ipcRenderer.removeListener("app:auth", listener);
+  },
   /** Menu: toggle Code / Work mode (Cmd+Shift+M) */
   onToggleWorkModeRequest: (handler: () => void): (() => void) => {
     const listener = () => handler();

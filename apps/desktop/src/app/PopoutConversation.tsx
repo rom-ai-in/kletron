@@ -29,6 +29,7 @@ import { useSettings } from "../hooks/useSettings";
 import { useWorkspace } from "../hooks/useWorkspace";
 import { useConversation } from "../hooks/useConversation";
 import { useDiffs } from "../hooks/useDiffs";
+import { isSessionUnlocked } from "../sessionAccess";
 import type { LlmConfig } from "../types";
 
 export interface PopoutConversationProps {
@@ -156,6 +157,28 @@ export default function PopoutConversation({ threadId }: PopoutConversationProps
   }));
 
   const isCodeMode = conversation.threadWorkMode === "code";
+
+  // Pop-outs are a second protected surface: lock them with the shell. Sign-in itself stays
+  // in the main window (that is where the Backend URL and the browser flow live).
+  if (!isSessionUnlocked(auth.sessionStatus)) {
+    return (
+      <div className="flex h-screen flex-col bg-bg-app text-text-primary">
+        <header className="flex h-10 items-center glass-titlebar px-4 pl-[76px] app-region-drag">
+          <span className="text-xs font-medium text-text-secondary truncate">Pop-out Thread</span>
+        </header>
+        <div className="flex flex-1 items-center justify-center p-8">
+          <div className="max-w-[320px] text-center">
+            <p className="text-sm font-medium text-text-primary">
+              {auth.sessionStatus === "expired" ? "Session expired" : "Signed out"}
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-text-muted">
+              Sign in from the main Kletron window to keep working on this thread.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen flex-col text-text-primary">

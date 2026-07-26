@@ -5,8 +5,11 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from 'next-auth/react';
 import { AUTH_SESSION_INVALID_EVENT } from './authSessionEvents';
 
-// Development auth bypass - set NEXT_PUBLIC_SKIP_AUTH=true in .env to skip authentication
-const SKIP_AUTH = process.env.NEXT_PUBLIC_SKIP_AUTH === 'true';
+// Development auth bypass - set NEXT_PUBLIC_SKIP_AUTH=true in .env to skip authentication.
+// Hard-gated on NODE_ENV for the same reason as AuthGuard: the flag is inlined
+// into the client bundle, so it must never be honoured in a production build.
+const SKIP_AUTH =
+    process.env.NEXT_PUBLIC_SKIP_AUTH === 'true' && process.env.NODE_ENV !== 'production';
 
 interface UserProfile {
     id: string;

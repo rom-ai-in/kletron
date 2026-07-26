@@ -20,6 +20,7 @@ const cssVars: Record<string, string> = {
   // ── Surfaces ───────────────────────────────────────────────────────────────
   '--bg-app': rawColors.bgApp,
   '--bg-surface': rawColors.bgSurface,
+  '--bg-rail': rawColors.bgRail,
   '--bg-elevated': rawColors.bgElevated,
 
   // ── Borders ────────────────────────────────────────────────────────────────
@@ -219,8 +220,11 @@ const cssVars: Record<string, string> = {
   '--sidebar-density-icon': '16px',
 
   // ── Glass / frosted surface ───────────────────────────────────────────────
-  '--glass-bg-sidebar': 'rgba(24, 24, 27, 0.52)',
-  '--glass-bg-titlebar': 'rgba(24, 24, 27, 0.42)',
+  // The rail is an opaque panel one step lighter than the body, matching the web
+  // (`bg-surface` rail on a `bg-app` body). Translucent glass let the desktop
+  // wallpaper through and left the rail and the title bar indistinguishable.
+  '--glass-bg-sidebar': 'var(--bg-rail)',
+  '--glass-bg-titlebar': 'rgba(14, 14, 17, 0.86)',
   '--glass-bg-panel': 'rgba(24, 24, 27, 0.55)',
   '--glass-bg-card': 'rgba(255, 255, 255, 0.04)',
   '--glass-bg-card-hover': 'rgba(255, 255, 255, 0.06)',

@@ -183,7 +183,18 @@ export function validateVLLMConfig(data: unknown): VLLMConfig {
 // ============================================================================
 
 export const MODEL_RECOMMENDATIONS = {
-    azure: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4"],
+    // Suggestions only — the Model Name field stays free text so a client can
+    // enter whatever their own Azure resource exposes. Range 5.4 → 5.6.
+    // 5.4/5.5 have bare aliases in the Azure catalog; 5.6 ships only as three
+    // dated variants (luna/sol/terra), so those are listed by full id.
+    azure: [
+        "gpt-5.6-luna-2026-07-09",
+        "gpt-5.6-sol-2026-07-09",
+        "gpt-5.6-terra-2026-07-09",
+        "gpt-5.5",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+    ],
     openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o3-mini", "o1"],
     codex: ["gpt-5-codex", "gpt-5-codex-mini"],
     claude: ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-haiku-20240307"],

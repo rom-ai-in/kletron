@@ -25,6 +25,18 @@ const UpdateAutomationSchema = z.object({
                 skipIf: z.string().optional(),
                 retryOnFailure: z.boolean().optional(),
                 maxRetries: z.number().int().min(1).max(10).optional(),
+                // `updateAutomation` $sets the whole stage array, so anything the
+                // schema drops is erased from the document. Keep the remaining
+                // AutomationStageConfig fields instead of silently losing them.
+                timeoutMs: z.number().int().positive().optional(),
+                phaseOverrides: z
+                    .record(
+                        z.object({
+                            maxToolCalls: z.number().int().positive().optional(),
+                            timeoutMs: z.number().int().positive().optional(),
+                        })
+                    )
+                    .optional(),
             })
         ),
         triggerType: z.enum(["manual", "schedule", "webhook", "git_event"]).optional(),

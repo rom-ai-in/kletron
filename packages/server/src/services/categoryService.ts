@@ -270,9 +270,11 @@ export class CategoryService {
       throw new Error(`Base category ${categoryId} not found`);
     }
     
-    // Check if already exists
+    // Check if already exists. `workspaceId` is stored as an ObjectId (see the
+    // insert below), so it must be queried as one — comparing against the raw
+    // string never matches and silently inserts a duplicate on every call.
     const existing = await collection.findOne({
-      workspaceId,
+      workspaceId: new ObjectId(workspaceId),
       categoryId
     });
     
@@ -366,11 +368,14 @@ export class CategoryService {
     const db = await getDatabase();
     const collection = db.collection<WorkspaceCategoryDoc>(WORKSPACE_CATEGORY_COLLECTION);
     
-    const result = await collection.deleteOne({
+    // deleteMany, not deleteOne: (workspaceId, categoryId) is logically unique
+    // but is not enforced by an index, so any duplicates left by earlier writes
+    // would otherwise survive the delete and resurface on the next read.
+    const result = await collection.deleteMany({
       workspaceId: new ObjectId(workspaceId),
       categoryId
     });
-    
+
     return result.deletedCount > 0;
   }
 

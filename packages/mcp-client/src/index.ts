@@ -13,3 +13,7 @@ export {
     installMcpNodeEventSource,
     type RemoteMcpWireTransport,
 } from "./remoteMcpTransport";
+export {
+    bundledMcpTransportOptions,
+    resolveBundledMcpToken,
+} from "./bundledMcpAuth";

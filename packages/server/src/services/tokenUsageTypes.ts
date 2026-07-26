@@ -25,7 +25,11 @@ export function addTokenUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
 /**
  * Call type for categorizing token usage
  */
-export type TokenUsageCallType = "react_agent" | "chain_stage" | "embedding" | "delegate_agent" | "delegate_summary" | "other";
+/**
+ * `delegate_agent` / `delegate_summary` are retained for historical records written
+ * by the removed `delegate` node kind; new delegation is logged as `subagent`.
+ */
+export type TokenUsageCallType = "react_agent" | "chain_stage" | "embedding" | "subagent" | "delegate_agent" | "delegate_summary" | "other";
 
 /**
  * Individual token usage record for granular logging

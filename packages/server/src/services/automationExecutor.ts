@@ -214,13 +214,21 @@ export class AutomationExecutor {
             }
         }
 
-        if (triggerType === "schedule" && updateData.schedule?.enabled && updateData.schedule.cron && updateData.schedule.timezone) {
+        // `$set` replaces the whole schedule subdocument, so run-history fields must be
+        // carried over on every schedule write — including a plain enable/disable
+        // toggle, which would otherwise reset the execution count to nothing.
+        if (triggerType === "schedule" && updateData.schedule) {
             const existing = await this.getAutomation(chainId, workspaceId);
-            const nextRun = computeNextRun(updateData.schedule.cron, updateData.schedule.timezone);
+            const canComputeNextRun =
+                updateData.schedule.enabled && updateData.schedule.cron && updateData.schedule.timezone;
+            const nextRun = canComputeNextRun
+                ? computeNextRun(updateData.schedule.cron, updateData.schedule.timezone)
+                : null;
             updateData.schedule = {
                 ...updateData.schedule,
                 executionCount: existing?.schedule?.executionCount ?? 0,
                 lastScheduledAt: existing?.schedule?.lastScheduledAt ?? undefined,
+                // Paused schedules keep no next run; re-enabling recomputes it.
                 nextScheduledAt: nextRun ?? undefined,
             };
         }

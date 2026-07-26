@@ -1,6 +1,6 @@
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useCallback, useEffect, useState } from "react";
-import { Brain } from "lucide-react";
+import { ArrowLeft, Brain } from "lucide-react";
 import {
   Button,
   Toggle,
@@ -16,7 +16,6 @@ import {
   DesktopPortalStatusLinesSkeleton,
   DesktopSettingsGraphRowsSkeleton,
 } from "../components/DesktopLoadingSkeletons";
-import { DesktopPrimaryNav } from "./DesktopPrimaryNav";
 import { AccountView } from "./AccountView";
 import { PORTAL_LINK_GROUPS } from "../portalLinks";
 import { SETTINGS_SECTIONS, formatRelativeTime } from "../utils";
@@ -96,6 +95,8 @@ type Props = {
   setEnvVariables: Dispatch<SetStateAction<EnvVariable[]>>;
   /** Authenticated fetch (Bearer + workspace header). Used for Channels status. */
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  /** Account status chip, so session state stays on the window chrome here too. */
+  accountSlot?: ReactNode;
 };
 
 export function DesktopSettingsView({
@@ -135,6 +136,7 @@ export function DesktopSettingsView({
   envVariables,
   setEnvVariables,
   apiFetch,
+  accountSlot,
 }: Props) {
   const [channelsSnap, setChannelsSnap] = useState<{
     loading: boolean;
@@ -185,13 +187,22 @@ export function DesktopSettingsView({
   }, [activeSettingsSection, refreshChannelsSnap]);
 
   return (
-    <div className="flex h-screen flex-col text-text-primary min-h-0">
-      <header className="flex h-10 shrink-0 items-center glass-titlebar px-4 pl-[76px] app-region-drag">
-        <span className="text-xs font-medium text-text-secondary">Settings</span>
-      </header>
-      <DesktopPrimaryNav activeView="settings" onSelect={(v) => setActiveView(v)} />
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        <aside className="flex w-60 flex-col glass-sidebar px-2 py-3 shrink-0">
+    <div className="flex h-screen text-text-primary min-h-0">
+      {/* Sections rail runs to the top and owns the macOS traffic-light zone. */}
+      <aside className="flex w-60 shrink-0 flex-col glass-sidebar">
+        <div className="h-9 shrink-0 app-region-drag" aria-hidden />
+        <div className="app-region-no-drag border-b border-white/[0.06] px-2 pb-2">{accountSlot}</div>
+        <div className="flex min-h-0 flex-1 flex-col px-2 py-3">
+          {/* Way out of Settings, above the section list. */}
+          <button
+            type="button"
+            onClick={() => setActiveView("app")}
+            className="mb-3 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-state-hover hover:text-text-primary"
+            title="Back to the agent"
+          >
+            <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Agent
+          </button>
           <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Sections</div>
           <div className="mt-2 flex flex-col gap-1 overflow-y-auto scrollbar-elegant">
             {SETTINGS_SECTIONS.map((section) => (
@@ -209,7 +220,16 @@ export function DesktopSettingsView({
               </button>
             ))}
           </div>
-        </aside>
+        </div>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+      {/* `relative z-50`: glass-titlebar's backdrop-filter makes a stacking context, so the
+          account popover's own z-index is scoped here — without it the page body paints over it. */}
+      <header className="relative z-50 flex h-9 shrink-0 items-center justify-between glass-titlebar px-4 app-region-drag">
+        <span className="text-xs font-medium text-text-secondary app-region-no-drag">Settings</span>
+      </header>
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         <main className="flex-1 overflow-y-auto px-6 py-4 scrollbar-elegant">
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
             {activeSettingsSection === "configuration" && (
@@ -274,6 +294,12 @@ export function DesktopSettingsView({
                 </section>
                 <section className="space-y-3">
                   <h2 className="text-sm font-semibold text-text-primary">Models</h2>
+                  <PortalBrowserBanner
+                    portalPath="/app/config/llm"
+                    onOpenPortal={openPortalPath}
+                    title="Providers are configured in the web portal"
+                    description="Pick the active provider and model here. API keys, endpoints and connection tests — including Ollama, LM Studio and vLLM — live in the web app."
+                  />
                   <LLMSelector
                     providers={providers}
                     selectedProvider={selectedProvider}
@@ -393,10 +419,12 @@ export function DesktopSettingsView({
             {activeSettingsSection === "connectors" && (
               <section className="space-y-3">
                 <h2 className="text-sm font-semibold text-text-primary">Connectors</h2>
-                <DeviceOnlyPortalBanner portalPath="/app/config/connectors" onOpenPortal={openPortalPath} />
-                <p className="text-xs text-text-muted">
-                  OAuth and MCP integrations for your workspace are managed in the web app.
-                </p>
+                <PortalBrowserBanner
+                  portalPath="/app/config/connectors"
+                  onOpenPortal={openPortalPath}
+                  title="Connectors belong to your workspace"
+                  description="OAuth and MCP integrations are shared across your devices and are set up in the web app."
+                />
               </section>
             )}
             {activeSettingsSection === "channels" && (
@@ -515,6 +543,7 @@ export function DesktopSettingsView({
                 <p className="text-xs text-text-muted">
                   Skills extend the agent&apos;s capabilities by connecting to external tools and platforms.
                 </p>
+                <DeviceOnlyPortalBanner portalPath="/app/skills" onOpenPortal={openPortalPath} />
                 <SkillsManager
                   skills={skillsHook.skills}
                   onAdd={skillsHook.addSkill}
@@ -528,6 +557,12 @@ export function DesktopSettingsView({
                 <p className="text-xs text-text-muted">
                   Manage automations in the dedicated view for full create/edit, or browse the list below.
                 </p>
+                <PortalBrowserBanner
+                  portalPath="/app/automations"
+                  onOpenPortal={openPortalPath}
+                  title="Automations belong to your workspace"
+                  description="Run and inspect them here. Triggers, stages and prompts are edited in the web app."
+                />
                 <Button size="sm" variant="secondary" onClick={() => setActiveView("automations")}>
                   Open automations
                 </Button>
@@ -555,7 +590,12 @@ export function DesktopSettingsView({
             {activeSettingsSection === "graphs" && (
               <section className="space-y-3">
                 <h2 className="text-sm font-semibold text-text-primary">Agent Graphs</h2>
-                <DeviceOnlyPortalBanner portalPath="/app/agent-graphs" onOpenPortal={openPortalPath} />
+                <PortalBrowserBanner
+                  portalPath="/app/agent-graphs"
+                  onOpenPortal={openPortalPath}
+                  title="Graphs belong to your workspace"
+                  description="Pick a graph when starting a conversation. Nodes, edges and tool allow-lists are edited in the web app."
+                />
                 <p className="text-xs text-text-muted">
                   Agent graphs define different workflows for the AI. Select a graph when starting a conversation to guide the
                   agent&apos;s behavior.
@@ -615,6 +655,7 @@ export function DesktopSettingsView({
             )}
           </div>
         </main>
+      </div>
       </div>
     </div>
   );

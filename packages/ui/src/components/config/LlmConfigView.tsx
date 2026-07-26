@@ -881,8 +881,8 @@ export function LlmConfigView({ hideHeader = false }: LlmConfigViewProps) {
                 { label: "Endpoint URL", key: "endpoint", type: "url", placeholder: "https://resource-name.openai.azure.com/" },
                 { label: "API Key", key: "apiKey", type: "password", placeholder: "••••••••" },
                 { label: "Deployment Name", key: "deployment", placeholder: "my-deployment" },
-                { label: "Model Name", key: "model", placeholder: "gpt-4o", suggestions: MODEL_RECOMMENDATIONS.azure },
-                { label: "API Version", key: "apiVersion", placeholder: "2024-12-01-preview" },
+                { label: "Model Name", key: "model", placeholder: "gpt-5.2", suggestions: MODEL_RECOMMENDATIONS.azure },
+                { label: "API Version", key: "apiVersion", placeholder: "2025-04-01-preview" },
               ]}
               formData={azureForm}
               setFormData={setAzureForm}

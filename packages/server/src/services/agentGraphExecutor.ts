@@ -17,14 +17,15 @@ import type { AgentGraphNode } from "./agentGraphTypes";
 import type { LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 import { nodeOutputSchemaRegistry } from "@kletron/shared/nodeOutputSchemas";
 import { findExistingMissionUserEvent, parseJsonOutput, renderUserPrompt } from "./agentGraphUtils";
-import { evaluateCondition } from "./agentGraphConditions";
-import { buildInitialState, getEntryNodeIds, getGraphNodeOrder, resolveExecutionMode } from "./agentGraphRuntime";
+import { buildInitialState, getGraphNodeOrder, resolveExecutionMode } from "./agentGraphRuntime";
 import { setNestedValue } from "./agentGraphState";
 import { skillRegistry } from "@kletron/agent-core/skills/registry";
 import type { ResolvedSkill, SkillDefinition } from "@kletron/agent-core/skills/types";
 import { loadAllSkillsForRegistry } from "./skillsService";
 import { resolveWorkspaceCapabilities, type WorkspaceCapabilities } from "./workspaceCapabilityResolver";
 import { effectiveToolNames } from "./effectiveToolNames";
+import { buildTaskToolDescription, listSubagents } from "./subagentRegistry";
+import { SubagentSemaphore, runSubagent } from "./subagentRunner";
 import { applySkillSlashPreflight, mergeLoadedSkillIds } from "./skillSlashPreflight";
 import {
     listWorkspaceSkillRecords,
@@ -1670,42 +1671,130 @@ export class AgentGraphExecutor {
                 }
             );
 
+            // ── `task`: delegate to subagents with isolated context windows ───
+            // Subagents are resolved from this workspace's own graphs (those with
+            // `subagent.key`), so the graph editor doubles as the subagent editor.
+            // Parallelism is free: LangGraph's ToolNode dispatches the tool calls of
+            // a single assistant turn with `Promise.all`, so N `task` calls emitted
+            // together actually run together — bounded by the semaphore below.
+            const availableSubagents = config.subagents.enabled
+                ? await listSubagents(workspace._id?.toString()).catch(() => [])
+                : [];
+            const subagentSemaphore = new SubagentSemaphore(config.subagents.maxConcurrency);
+            let subagentsSpawned = 0;
+            let subagentTokensSpent = 0;
+
+            const taskTool = createTool(
+                async (input: { description: string; prompt: string; subagent_type: string }) => {
+                    const fail = (error: string) => JSON.stringify({ ok: false, error }, null, 2);
+
+                    const subagent = availableSubagents.find((s) => s.key === input.subagent_type);
+                    if (!subagent) {
+                        return fail(
+                            `Unknown subagent_type "${input.subagent_type}". Available: ${availableSubagents
+                                .map((s) => s.key)
+                                .join(", ") || "(none)"}.`
+                        );
+                    }
+                    if (subagentsSpawned >= config.subagents.maxPerRun) {
+                        return fail(
+                            `Subagent budget exhausted for this run (${config.subagents.maxPerRun} max). ` +
+                                `Do not call \`task\` again — finish with the findings you already have.`
+                        );
+                    }
+                    if (subagentTokensSpent >= config.subagents.tokenCeiling) {
+                        return fail(
+                            `Subagent token ceiling reached for this run. ` +
+                                `Do not call \`task\` again — conclude with what you have.`
+                        );
+                    }
+                    const prompt = String(input.prompt ?? "").trim();
+                    if (!prompt) return fail("`prompt` is required and must be self-contained.");
+
+                    const index = subagentsSpawned++;
+                    try {
+                        const result = await subagentSemaphore.run(() =>
+                            runSubagent({
+                                parentRunId: runId,
+                                subagent,
+                                prompt,
+                                description: String(input.description ?? "").trim(),
+                                index,
+                                workspaceId: workspace._id?.toString(),
+                                workspaceRoot: rootDir,
+                                llmSelection: opts?.llmSelectionOverride,
+                                createdByUserId: run.createdByUserId,
+                                abortSignal: abortController.signal,
+                            })
+                        );
+                        subagentTokensSpent += result.tokenUsage.totalTokens ?? 0;
+
+                        // Large reports are evicted to disk rather than pasted back
+                        // into the caller's context — the point of delegating is to
+                        // keep the caller's window small.
+                        let text = result.text;
+                        if (text.length > TOOL_RESULT_EVICT_CHARS) {
+                            const relativePath = await writeEvictedToolResult({
+                                rootDir,
+                                runId,
+                                nodeId: `subagent-${subagent.key}-${index}`,
+                                toolName: "task",
+                                content: text,
+                            });
+                            text = `Result was ${text.length} chars and has been written to ${relativePath}. Use read_file to inspect it.`;
+                        }
+
+                        return JSON.stringify(
+                            {
+                                ok: true,
+                                subagent_type: subagent.key,
+                                description: input.description ?? "",
+                                sub_run_id: result.subRunId,
+                                steps: result.steps,
+                                tokens: result.tokenUsage.totalTokens ?? 0,
+                                result: text,
+                            },
+                            null,
+                            2
+                        );
+                    } catch (err) {
+                        return fail(
+                            `Subagent "${subagent.key}" failed: ${(err as Error)?.message ?? String(err)}`
+                        );
+                    }
+                },
+                {
+                    name: "task",
+                    description: buildTaskToolDescription(availableSubagents),
+                    schema: z.object({
+                        description: z
+                            .string()
+                            .describe("Short label (3-6 words) shown in the UI while the subagent runs"),
+                        prompt: z
+                            .string()
+                            .describe(
+                                "The complete, SELF-CONTAINED instruction. The subagent sees none of this " +
+                                    "conversation — include every piece of context it needs and state exactly " +
+                                    "what you want back."
+                            ),
+                        subagent_type: z
+                            .string()
+                            .describe("Key of the subagent to run (see the list in this tool's description)"),
+                    }),
+                }
+            );
+
             // Always-on Kletron admin tools (graphs/automations/skills/...).
             // Each tool reads identity from `runWithWorkspaceContext` and logs
             // every call to the agent_audit collection. They are gated by zod
             // schemas + safe-edit confirmation, not by skill activation.
-            const localTools = [writeTodosTool, listAvailableSkillsTool, loadSkillTool, ...kletronAdminTools];
-
-            const runSubGraph = async (message: string, graphId: string) => {
-                const subGraph = await agentGraphService.getGraph(graphId);
-                if (!subGraph) {
-                    throw new Error(`Subgraph ${graphId} not found`);
-                }
-                if (run.graphId?.toString?.() === graphId) {
-                    throw new Error("Subgraph cannot reference the current graph");
-                }
-                const nodeOrder = getGraphNodeOrder(subGraph);
-                const subRunId = await agentGraphRunService.createRun(graphId, workspace._id?.toString(), runSource, {
-                    createdByUserId: run.createdByUserId,
-                });
-                const initialNodeStatuses: Record<string, any> = {};
-                for (const node of subGraph.nodes) {
-                    initialNodeStatuses[node.id] = "PENDING";
-                }
-                await agentGraphRunService.updateRunStatus(subRunId, "RUNNING", {
-                    nodeOrder,
-                    nodeStatuses: initialNodeStatuses,
-                    state: buildInitialState(subGraph, message),
-                } as any);
-
-                return await this.executeRunStreaming(subRunId, {
-                    llmSelectionOverride: opts?.llmSelectionOverride,
-                    workspaceContextUserId: opts?.workspaceContextUserId,
-                    onLlmStreamKpi: opts?.onLlmStreamKpi,
-                    clientSentAtMs: opts?.clientSentAtMs,
-                    serverRequestReceivedAtMs: opts?.serverRequestReceivedAtMs,
-                });
-            };
+            const localTools = [
+                writeTodosTool,
+                listAvailableSkillsTool,
+                loadSkillTool,
+                ...(availableSubagents.length ? [taskTool] : []),
+                ...kletronAdminTools,
+            ];
             if (auditContext) {
                 const existingContext = (state as any).context;
                 if (existingContext && typeof existingContext === "object" && !Array.isArray(existingContext)) {
@@ -1809,26 +1898,9 @@ export class AgentGraphExecutor {
 
             await emitUpdate();
 
-            const pendingNodeIds =
-                executionMode === "dag" ? timelineNodeIds.slice() : getEntryNodeIds(graph);
+            const pendingNodeIds = timelineNodeIds.slice();
             const maxIterations = graph.execution?.maxIterations ?? 200;
             const maxNodeRuns = graph.execution?.maxNodeRuns ?? 20;
-
-            const selectNextNodes = (currentId: string) => {
-                if (executionMode !== "state_machine") return [];
-                const matched: string[] = [];
-                const seen = new Set<string>();
-                const outgoing = graph.edges.filter((e) => e.source === currentId);
-                for (const edge of outgoing) {
-                    if (evaluateCondition(edge.condition, state)) {
-                        if (!seen.has(edge.target)) {
-                            matched.push(edge.target);
-                            seen.add(edge.target);
-                        }
-                    }
-                }
-                return matched;
-            };
 
             while (pendingNodeIds.length) {
                 await ensureNotAborted();
@@ -1951,7 +2023,6 @@ export class AgentGraphExecutor {
                 await flushUpdate();
 
                 try {
-                    const nodeKind = node.kind ?? "react";
 
                     // ---------------------------------------------------------
                     // 2.5. Skills Injection (pinned graph skillIds + runtime loadedSkillIds)
@@ -2026,6 +2097,9 @@ export class AgentGraphExecutor {
                             "write_todos",
                             "list_available_skills",
                             "load_skill",
+                            // Only expose `task` when this workspace actually has
+                            // subagents to delegate to.
+                            ...(availableSubagents.length ? ["task"] : []),
                             ...KLETRON_ADMIN_TOOL_NAMES,
                         ],
                     });
@@ -2586,178 +2660,10 @@ export class AgentGraphExecutor {
 
                     // We'll capture the *new* messages from this turn
                     let validated: unknown;
-                    if (nodeKind === "router") {
-                        const routerNote: AgentEvent = {
-                            id: nextEventId(),
-                            phaseId: node.id,
-                            phaseLabel: node.label,
-                            kind: "assistant",
-                            role: "assistant",
-                            content: "Router node executed. Evaluating outgoing conditions.",
-                            timestamp: new Date().toISOString(),
-                        };
-                        eventStream.push(routerNote);
-                        globalEventStream.push(routerNote);
-                        await flushUpdate();
-                        const schemaId = node.output.schemaId as keyof typeof nodeOutputSchemaRegistry;
-                        const schema = nodeOutputSchemaRegistry[schemaId];
-                        if (!schema) {
-                            throw new Error(`Unknown schemaId: ${node.output.schemaId}`);
-                        }
-                        validated = schema.parse({
-                            route: "conditional_edges",
-                            timestamp: new Date().toISOString(),
-                        });
-                    } else if (nodeKind === "delegate") {
-                        const delegateConfig = node.delegate ?? { mode: "react" };
-                        const delegateInput = userPrompt;
-                        let rawResult = "";
-
-                        if (delegateConfig.mode === "graph") {
-                            if (!delegateConfig.graphId) {
-                                throw new Error(`Delegate node ${node.id} requires delegate.graphId`);
-                            }
-                            const delegateRun = await runSubGraph(delegateInput, delegateConfig.graphId);
-                            rawResult = typeof delegateRun.outputs?.report === "string"
-                                ? delegateRun.outputs.report
-                                : JSON.stringify(delegateRun.outputs ?? {}, null, 2);
-                        } else {
-                            const delegateResult = await streamReactAgentMessages({
-                                name: `Delegate:${node.id}`,
-                                systemPrompt: enhancedSystemPrompt,
-                                userPrompt: delegateInput,
-                                tools,
-                                recursionLimit: reactRecursionLimit,
-                                llmSelection: opts?.llmSelectionOverride,
-                                upstreamPrepMs: performance.now() - runWallClockT0,
-                                clientSentAtMs: opts?.clientSentAtMs,
-                                serverRequestReceivedAtMs: opts?.serverRequestReceivedAtMs,
-                                runId,
-                                abortSignal: abortController.signal,
-                                getAbortReason: () => abortReason,
-                                shouldAbort: checkAbortReason,
-                                workspaceRoot: rootDir,
-                                onTokenUsage: async (usage, model) => {
-                                    await tokenUsageService.logUsage({
-                                        timestamp: new Date(),
-                                        provider: (opts?.llmSelectionOverride?.provider ?? "default") as any,
-                                        model,
-                                        usage,
-                                        ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
-                                        runId: new ObjectId(runId),
-                                        nodeId: node.id,
-                                        callType: "delegate_agent",
-                                    });
-                                },
-                            });
-                            emitLlmKpi(delegateResult.kpi);
-                            const delegateMessages = delegateResult.messages ?? [];
-                            const delegateFinal =
-                                delegateMessages
-                                    .slice()
-                                    .reverse()
-                                    .find((message) => {
-                                        const role = typeof (message as any).role === "string" ? String((message as any).role).toLowerCase() : "";
-                                        const type = typeof message.type === "string" ? message.type.toLowerCase() : "";
-                                        return role === "assistant" || type === "ai" || type === "assistant";
-                                    }) ?? delegateMessages.at(-1);
-                            rawResult = delegateFinal ? describeMessageContent(delegateFinal) : "";
-                        }
-
-                        if (rawResult.length > TOOL_RESULT_EVICT_CHARS) {
-                            const relativePath = await writeEvictedToolResult({
-                                rootDir,
-                                runId,
-                                nodeId: node.id,
-                                toolName: "delegate_result",
-                                content: rawResult,
-                            });
-                            rawResult = `Delegate result evicted to ${relativePath}. Use read_file to inspect.`;
-                        }
-
-                        const schemaId = node.output.schemaId as keyof typeof nodeOutputSchemaRegistry;
-                        const schema = nodeOutputSchemaRegistry[schemaId];
-                        if (!schema) {
-                            throw new Error(`Unknown schemaId: ${node.output.schemaId}`);
-                        }
-
-                        let parsed: unknown;
-                        if (delegateConfig.summaryPrompt && delegateConfig.summaryPrompt.trim().length > 0) {
-                            const summaryPrompt = renderUserPrompt(delegateConfig.summaryPrompt, state);
-                            const summaryResult = await streamReactAgentMessages({
-                                name: `DelegateSummary:${node.id}`,
-                                systemPrompt: summaryPrompt,
-                                userPrompt: rawResult,
-                                tools: [],
-                                recursionLimit: reactRecursionLimit,
-                                llmSelection: opts?.llmSelectionOverride,
-                                upstreamPrepMs: performance.now() - runWallClockT0,
-                                clientSentAtMs: opts?.clientSentAtMs,
-                                serverRequestReceivedAtMs: opts?.serverRequestReceivedAtMs,
-                                runId,
-                                abortSignal: abortController.signal,
-                                getAbortReason: () => abortReason,
-                                shouldAbort: checkAbortReason,
-                                workspaceRoot: rootDir,
-                                onTokenUsage: async (usage, model) => {
-                                    await tokenUsageService.logUsage({
-                                        timestamp: new Date(),
-                                        provider: (opts?.llmSelectionOverride?.provider ?? "default") as any,
-                                        model,
-                                        usage,
-                                        ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
-                                        runId: new ObjectId(runId),
-                                        nodeId: node.id,
-                                        callType: "delegate_summary",
-                                    });
-                                },
-                            });
-                            emitLlmKpi(summaryResult.kpi);
-                            const summaryMessages = summaryResult.messages ?? [];
-                            const summaryFinal =
-                                summaryMessages
-                                    .slice()
-                                    .reverse()
-                                    .find((message) => {
-                                        const role = typeof (message as any).role === "string" ? String((message as any).role).toLowerCase() : "";
-                                        const type = typeof message.type === "string" ? message.type.toLowerCase() : "";
-                                        return role === "assistant" || type === "ai" || type === "assistant";
-                                    }) ?? summaryMessages.at(-1);
-                            const summaryContent = summaryFinal ? describeMessageContent(summaryFinal) : "";
-                            const summaryEvent: AgentEvent = {
-                                id: nextEventId(),
-                                phaseId: node.id,
-                                phaseLabel: node.label,
-                                kind: "assistant",
-                                role: "assistant",
-                                content: summaryContent,
-                                timestamp: new Date().toISOString(),
-                            };
-                            eventStream.push(summaryEvent);
-                            globalEventStream.push(summaryEvent);
-                            await flushUpdate();
-                            parsed = parseJsonOutput(summaryContent);
-                        } else {
-                            parsed = {
-                                summary: rawResult.slice(0, 4000),
-                                raw: rawResult,
-                            };
-                            const summaryEvent: AgentEvent = {
-                                id: nextEventId(),
-                                phaseId: node.id,
-                                phaseLabel: node.label,
-                                kind: "assistant",
-                                role: "assistant",
-                                content: JSON.stringify(parsed, null, 2),
-                                timestamp: new Date().toISOString(),
-                            };
-                            eventStream.push(summaryEvent);
-                            globalEventStream.push(summaryEvent);
-                            await flushUpdate();
-                        }
-
-                        validated = schema.parse(parsed);
-                    } else {
+                    // Single execution path: every node is a ReAct agent. The former `router`
+                    // and `delegate` node kinds are gone — delegation is now dynamic, through
+                    // the `task` tool (see subagentRegistry / subagentRunner).
+                    {
                         // Build extraMessages from prior conversation history for multi-turn
                         const priorHistory = state.conversationHistory ?? [];
                         const historyWindow = recentHistoryForReplay;
@@ -2985,13 +2891,6 @@ export class AgentGraphExecutor {
                         }
                     }
                     await emitUpdate();
-
-                    if (executionMode === "state_machine") {
-                        const nextNodes = selectNextNodes(nodeId);
-                        if (nextNodes.length) {
-                            pendingNodeIds.push(...nextNodes);
-                        }
-                    }
                 } catch (err: any) {
                     if (err instanceof ToolApprovalPauseError || err?.name === "ToolApprovalPauseError") {
                         const { summary: runTokenUsage } = tokenUsageService.finalizeRunTracking(runId);

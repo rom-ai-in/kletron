@@ -47,6 +47,29 @@ export type LoginSession = {
   startedAt: number;
 };
 
+/**
+ * Desktop session lifecycle. Richer than the web's `user | null` because the desktop
+ * talks to a user-configured backend: "no server" and "server unreachable" are real
+ * states that must not be confused with "signed out".
+ *
+ * Only `active` unlocks the app shell (see `DesktopAuthGate`).
+ */
+export type SessionStatus =
+  /** No / invalid Backend URL — cannot even attempt a sign-in. */
+  | "unconfigured"
+  /** No tokens stored. */
+  | "signed-out"
+  /** Browser sign-in in flight (waiting on the deep link / poll). */
+  | "signing-in"
+  /** Tokens valid, `/api/auth/me` answered. */
+  | "active"
+  /** Access token expiring / refresh in flight. */
+  | "refreshing"
+  /** Tokens were rejected by the server (refresh refused, or a 401 survived a refresh). */
+  | "expired"
+  /** Tokens kept, but the backend is unreachable — distinct from signed out. */
+  | "offline";
+
 // ─── Chat Types (canonical from @kletron/shared) ─────────────────────────────
 // Import shared types so they're available locally, then re-export.
 import type {

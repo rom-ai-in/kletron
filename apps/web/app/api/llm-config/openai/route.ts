@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateOpenAIConfig } from "@kletron/server/services/llmConfigService";
-import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { requireAppRouteAdmin } from "@kletron/server/lib/auth/adminAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,10 +10,10 @@ export const dynamic = "force-dynamic";
  */
 export async function PUT(req: NextRequest) {
     try {
-        const auth = await requireAppRouteAuth(req);
-        if (!auth) {
-            return new Response(JSON.stringify({ error: "Unauthorized" }), {
-                status: 401,
+        const admin = await requireAppRouteAdmin(req);
+        if (!admin.ok) {
+            return new Response(JSON.stringify({ error: admin.error }), {
+                status: admin.status,
                 headers: { "Content-Type": "application/json" },
             });
         }

@@ -1,7 +1,7 @@
 'use client';
 // app/app/layout.tsx
 // Layout for authenticated /app/* pages with Sidebar
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@kletron/ui/context/AuthContext';
 import { WorkspaceProvider } from '@kletron/ui/context/WorkspaceContext';
@@ -19,6 +19,26 @@ export default function AppLayout({ children }: AppLayoutProps) {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
+
+    /**
+     * Rail visibility is shell state: the toggle lives in `AppHeader` so it stays
+     * reachable once the rail is a narrow strip. ⌘B mirrors the desktop shortcut.
+     */
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const toggleSidebar = useCallback(() => setSidebarCollapsed((prev) => !prev), []);
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (!(event.metaKey || event.ctrlKey) || event.shiftKey) return;
+            if (event.key !== 'b' && event.key !== 'B') return;
+            // Rich-text editors own ⌘B for bold — don't steal it from them.
+            const target = event.target as HTMLElement | null;
+            if (target?.isContentEditable) return;
+            event.preventDefault();
+            toggleSidebar();
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [toggleSidebar]);
 
     // Redirect to login if not authenticated
     useEffect(() => {
@@ -55,15 +75,23 @@ export default function AppLayout({ children }: AppLayoutProps) {
         );
     }
 
+    // The agent workspace is a single-rail surface: `ProjectSidebar` already
+    // carries Work | Code, the nav rows and the account block, exactly like the
+    // desktop shell. Rendering the app rail there duplicated every entry.
+    const singleRailSurface = pathname === '/app/agent';
+
     // Authenticated - render app shell with sidebar
     return (
         <WorkspaceProvider>
             <div className="flex h-screen overflow-hidden">
-                <Sidebar />
+                {!singleRailSurface && <Sidebar collapsed={sidebarCollapsed} />}
                 <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
                     <BreadcrumbOverridesProvider>
                         <AppHeaderCenterProvider>
-                            <AppHeader />
+                            <AppHeader
+                                onToggleSidebar={singleRailSurface ? undefined : toggleSidebar}
+                                sidebarCollapsed={sidebarCollapsed}
+                            />
                             <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-elegant">
                                 {children}
                             </div>

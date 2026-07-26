@@ -69,3 +69,10 @@ github-mcp/node_modules/
 
 # Electron installer output (can exceed GitHub 100MB limit — never commit)
 apps/desktop/dist-desktop/
+
+# Local credential dumps (plaintext provider keys — never commit)
+*.local.txt
+
+# Backups de fichiers env (contiennent des secrets en clair — never commit)
+*.bak-*
+.env.bak*

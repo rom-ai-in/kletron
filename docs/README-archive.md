@@ -723,7 +723,7 @@ Copy `env.example` to `.env` and fill in your values. See below for all supporte
 | `MONGODB_USER` | No | MongoDB username |
 | `MONGODB_PASS` | No | MongoDB password |
 | `NEXTAUTH_SECRET` | Yes | NextAuth secret key (use a random string in production) |
-| `IDE_JWT_SECRET` | No | Secret for IDE token signing (defaults to hardcoded value) |
+| `IDE_JWT_SECRET` | Required for IDE sign-in | Secret for IDE token signing (`openssl rand -hex 32`). Unset in production disables IDE tokens; outside production a key is derived from `NEXTAUTH_SECRET`. |
 
 ### MCP & Agent
 

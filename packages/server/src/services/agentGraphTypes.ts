@@ -31,17 +31,12 @@ export type AgentGraphNodeReactConfig = {
     interruptBeforeTools?: boolean;
 };
 
-export type AgentGraphNodeKind = "react" | "router" | "delegate";
-
-export type AgentGraphNodeDelegateMode = "react" | "graph";
-
-export type AgentGraphNodeDelegateConfig = {
-    mode: AgentGraphNodeDelegateMode;
-    /** When mode === "graph", execute this graph id as a sub-run. */
-    graphId?: string;
-    /** Optional summarization prompt for the delegate result. */
-    summaryPrompt?: string;
-};
+/**
+ * Only `react` remains. Delegation is no longer a *static* node kind drawn on the
+ * graph — it happens at runtime through the `task` tool, which spawns subagents
+ * with isolated context windows (see `subagentRegistry` / `subagentRunner`).
+ */
+export type AgentGraphNodeKind = "react";
 
 export type AgentGraphNodeOutputConfig = {
     /**
@@ -65,7 +60,6 @@ export type AgentGraphNode = {
     label: string;
     kind?: AgentGraphNodeKind;
     react: AgentGraphNodeReactConfig;
-    delegate?: AgentGraphNodeDelegateConfig;
     output: AgentGraphNodeOutputConfig;
 };
 
@@ -73,21 +67,18 @@ export type AgentGraphEdge = {
     id: string;
     source: string;
     target: string;
-    /**
-     * Optional condition expression evaluated against current state.
-     * Examples: "state.nextStep == \"debug\"" or "exists(state.plan)".
-     */
-    condition?: string;
 };
 
-export type AgentGraphExecutionMode = "dag" | "state_machine";
+/**
+ * Kept as a single-member union (rather than removed) so that `execution.mode`
+ * persisted on pre-existing run documents still parses.
+ */
+export type AgentGraphExecutionMode = "dag";
 
 export type AgentGraphExecutionConfig = {
     mode?: AgentGraphExecutionMode;
-    /** Optional entry node for state machine mode. */
-    entryNodeId?: string;
     /**
-     * Max total **graph node** executions (DAG / state-machine loop guard).
+     * Max total **graph node** executions (DAG loop guard).
      * This is **not** the LangGraph ReAct recursion limit; see `maxReactSteps` and `GRAPH_RECURSION_LIMIT`.
      */
     maxIterations?: number;
@@ -105,6 +96,31 @@ export type AgentGraphRoutingConfig = {
     requiredConnectors?: string[];
 };
 
+/**
+ * Marks a graph as invocable as a **subagent** through the `task` tool.
+ *
+ * This is what makes the graph catalog load-bearing: `task({ subagent_type })`
+ * resolves against the workspace's own graphs, so the existing graph editor
+ * doubles as the subagent editor and customers can author their own.
+ */
+export type AgentGraphSubagentConfig = {
+    /** Exposed as `subagent_type` in the `task` tool. kebab-case, stable across renames. */
+    key: string;
+    /** Injected into the `task` tool description — this is what teaches the model *when* to pick it. */
+    whenToUse: string;
+    /** When false, the graph is hidden from the conversation graph selector (subagent-only). */
+    selectable?: boolean;
+    /**
+     * v1: always true. Write tools are stripped from subagents because a subagent has no
+     * checkpoint thread, therefore no human-in-the-loop approval path (see `toolApprovalPolicy`).
+     */
+    readOnly?: boolean;
+    /** Allows `execute_bash` despite `readOnly` (test/build runners). Still subject to tool approval. */
+    allowExec?: boolean;
+    /** ReAct step budget for this subagent. Defaults to `config.subagents.maxSteps`. */
+    maxSteps?: number;
+};
+
 export interface AgentGraphDefinition {
     _id?: ObjectId;
     name: string;
@@ -119,6 +135,8 @@ export interface AgentGraphDefinition {
     stateDefaults?: Record<string, unknown>;
     /** Declarative routing hints for auto-selection. */
     routing?: AgentGraphRoutingConfig;
+    /** When present, this graph can be invoked as a subagent via the `task` tool. */
+    subagent?: AgentGraphSubagentConfig;
 }
 
 export type AgentConversationSummary = {

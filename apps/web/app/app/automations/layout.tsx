@@ -1,8 +1,11 @@
 "use client";
 
-import { AutomationListSidebar } from "@kletron/ui/components/automations/AutomationListSidebar";
 import { RequireWorkspace } from "@kletron/ui/components/workspace/RequireWorkspace";
 
+/**
+ * Single-column shell — the Claude-style index page *is* the list, and the
+ * detail route opens full width with its own back control (no master list rail).
+ */
 export default function AutomationsLayout({
     children,
 }: {
@@ -10,14 +13,8 @@ export default function AutomationsLayout({
 }) {
     return (
         <RequireWorkspace message="Select a workspace to manage automations and runs.">
-            <div className="flex h-full w-full overflow-hidden bg-bg-base">
-                {/* Persistent Master List */}
-                <AutomationListSidebar />
-
-                {/* Detail Pane / Empty State */}
-                <main className="flex-1 min-w-0 h-full overflow-hidden flex flex-col bg-bg-surface">
-                    {children}
-                </main>
+            <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-bg-base">
+                {children}
             </div>
         </RequireWorkspace>
     );

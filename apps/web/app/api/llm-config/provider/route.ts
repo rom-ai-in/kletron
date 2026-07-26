@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateDefaultProvider } from "@kletron/server/services/llmConfigService";
 import { z } from "zod";
-import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { requireAppRouteAdmin } from "@kletron/server/lib/auth/adminAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +14,10 @@ const ProviderSchema = z.object({
  * Update default LLM provider
  */
 export async function PUT(request: NextRequest) {
-    const auth = await requireAppRouteAuth(request);
-    if (!auth) {
-        return new Response(JSON.stringify({ "error": "Unauthorized" }), {
-            status: 401,
+    const admin = await requireAppRouteAdmin(request);
+    if (!admin.ok) {
+        return new Response(JSON.stringify({ error: admin.error }), {
+            status: admin.status,
             headers: { "Content-Type": "application/json" },
         });
     }

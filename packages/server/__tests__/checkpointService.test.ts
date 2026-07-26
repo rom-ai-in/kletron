@@ -98,9 +98,9 @@ describe("computeGraphHash", () => {
         );
     });
 
-    it("changes when a node kind changes", () => {
+    it("changes when a node is renamed", () => {
         const modified = [
-            { id: "plan", kind: "router" as const },
+            { id: "plan-v2", kind: "react" as const },
             { id: "execute", kind: "react" as const },
         ];
         assert.notEqual(

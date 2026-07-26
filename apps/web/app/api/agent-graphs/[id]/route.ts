@@ -4,8 +4,6 @@ import { z } from "zod";
 
 import { agentGraphService } from "@kletron/server/services/agentGraphService";
 import { topoSortAgentGraph } from "@kletron/server/services/agentGraphTopo";
-import { validateCondition } from "@kletron/server/services/agentGraphConditions";
-import { resolveExecutionMode } from "@kletron/server/services/agentGraphRuntime";
 import { nodeOutputSchemaRegistry } from "@kletron/shared/nodeOutputSchemas";
 import { createGraphValidToolNameSet } from "@kletron/shared/agentGraphToolNames";
 import { allMcpTools } from "@kletron/agent-core/tools/mcpTools";
@@ -21,8 +19,7 @@ const GraphSchema = z.object({
     description: z.string().max(1000).optional(),
     execution: z
         .object({
-            mode: z.enum(["dag", "state_machine"]).optional(),
-            entryNodeId: z.string().min(1).optional(),
+            mode: z.literal("dag").optional(),
             maxIterations: z.number().int().positive().optional(),
             maxNodeRuns: z.number().int().positive().optional(),
             maxReactSteps: z.number().int().positive().optional(),
@@ -33,7 +30,7 @@ const GraphSchema = z.object({
         z.object({
             id: z.string().min(1),
             label: z.string().min(1).max(200),
-            kind: z.enum(["react", "router"]).optional(),
+            kind: z.literal("react").optional(),
             react: z.object({
                 systemPrompt: z.string(),
                 userPromptTemplate: z.string(),
@@ -54,9 +51,31 @@ const GraphSchema = z.object({
             id: z.string().min(1),
             source: z.string().min(1),
             target: z.string().min(1),
-            condition: z.string().max(500).optional(),
         })
     ),
+    routing: z
+        .object({
+            intents: z.array(z.string()).optional(),
+            domains: z.array(z.string()).optional(),
+            keywords: z.array(z.string()).optional(),
+            preferredWorkModes: z.array(z.enum(["code", "work"])).optional(),
+            requiredConnectors: z.array(z.string()).optional(),
+        })
+        .optional(),
+    subagent: z
+        .object({
+            key: z
+                .string()
+                .min(1)
+                .max(64)
+                .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "subagent.key must be kebab-case"),
+            whenToUse: z.string().min(1).max(500),
+            selectable: z.boolean().optional(),
+            readOnly: z.boolean().optional(),
+            allowExec: z.boolean().optional(),
+            maxSteps: z.number().int().positive().max(200).optional(),
+        })
+        .optional(),
 });
 
 const UpdateGraphSchema = z.object({
@@ -88,20 +107,10 @@ function validateGraphSemantics(graph: z.infer<typeof GraphSchema>) {
     for (const edge of graph.edges) {
         if (!nodeIds.has(edge.source)) errors.push(`Edge ${edge.id} references unknown source node: ${edge.source}`);
         if (!nodeIds.has(edge.target)) errors.push(`Edge ${edge.id} references unknown target node: ${edge.target}`);
-        if (edge.condition) {
-            const check = validateCondition(edge.condition);
-            if (!check.valid) {
-                errors.push(`Edge ${edge.id} has invalid condition: ${check.error ?? "invalid condition"}`);
-            }
-        }
     }
 
-    const mode = resolveExecutionMode(graph as any);
-    if (graph.execution?.entryNodeId && !nodeIds.has(graph.execution.entryNodeId)) {
-        errors.push(`Execution entryNodeId not found: ${graph.execution.entryNodeId}`);
-    }
-
-    if (mode === "dag") {
+    // DAG validation (graphs always execute as a DAG)
+    {
         try {
             topoSortAgentGraph(graph.nodes as any, graph.edges as any);
         } catch (e: any) {

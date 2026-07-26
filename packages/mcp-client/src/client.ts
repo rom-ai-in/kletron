@@ -8,6 +8,7 @@ import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { EventSource } from "eventsource";
 
+import { bundledMcpTransportOptions } from "./bundledMcpAuth";
 import { getConfig } from "@kletron/server/config";
 import { getWorkspaceContext } from "@kletron/server/workspace/workspaceContext";
 import { createRemoteMcpTransport } from "./remoteMcpTransport";
@@ -95,7 +96,7 @@ export class McpClient {
       ? (() => {
         // SSEClientTransport requires an EventSource implementation in Node.
         (globalThis as any).EventSource = EventSource as any;
-        return new SSEClientTransport(new URL(mcpUrl));
+        return new SSEClientTransport(new URL(mcpUrl), bundledMcpTransportOptions());
       })()
       : (() => {
         const serverScript = path.resolve("apps", "mcp-server", "server.js");

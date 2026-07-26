@@ -2,12 +2,18 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { Plus, History } from "lucide-react";
+import { Plus, History, PanelLeft, PanelLeftClose } from "lucide-react";
 import { Breadcrumbs, Selector, type SelectorOption } from "@kletron/ui/components/design-system";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { useOptionalAppHeaderCenter } from "./AppHeaderCenterSlot";
 
-export function AppHeader() {
+export interface AppHeaderProps {
+  /** Show/hide the app rail. Omit to hide the control (e.g. rail-less surfaces). */
+  onToggleSidebar?: () => void;
+  sidebarCollapsed?: boolean;
+}
+
+export function AppHeader({ onToggleSidebar, sidebarCollapsed = false }: AppHeaderProps = {}) {
   const headerCenter = useOptionalAppHeaderCenter();
   const {
     workspaces,
@@ -44,6 +50,19 @@ export function AppHeader() {
     <header className="border-b border-white/[0.06] bg-bg-surface">
       {/* Fixed row height so bottom border lines up with Sidebar brand row (content height varies otherwise) */}
       <div className="flex h-14 shrink-0 items-center gap-4 px-6 min-w-0">
+        {/* Panel toggle sits at the content edge, not inside the rail: it must
+            stay reachable and legible once the rail is a 72px strip. */}
+        {onToggleSidebar ? (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="-ml-2 flex shrink-0 items-center justify-center rounded-md p-1.5 text-text-muted transition-colors hover:bg-state-hover hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={`${sidebarCollapsed ? "Expand" : "Collapse"} sidebar  ⌘B`}
+          >
+            {sidebarCollapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
+        ) : null}
         <div className="flex shrink-0 min-w-0">
           <Breadcrumbs />
         </div>

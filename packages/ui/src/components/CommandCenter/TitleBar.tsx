@@ -57,6 +57,12 @@ export interface TitleBarProps {
   gitDiffStats?: GitDiffStats | null;
   /** Show custom traffic light dots (set false in Electron where native ones exist) */
   showTrafficLights?: boolean;
+  /**
+   * Reserve the macOS traffic-light inset on the leading edge. Defaults to true
+   * whenever the OS draws the lights over this bar. Pass false when a
+   * full-height sidebar sits to the left and already owns that zone.
+   */
+  reserveTrafficLightInset?: boolean;
   /** Hide the small workspace label on the leading edge (e.g. desktop when workspace appears in center search). */
   hideLeadingWorkspaceLabel?: boolean;
   /** Callbacks for top-bar actions — opens workspace in external editor (e.g. VS Code) */
@@ -86,6 +92,8 @@ export interface TitleBarProps {
   onOpenThreadSearch?: () => void;
   threadSearchPlaceholder?: string;
   threadSearchDisabled?: boolean;
+  /** Trailing slot on the far right — desktop puts the account status chip here. */
+  account?: React.ReactNode;
 }
 
 export function TitleBar({
@@ -101,6 +109,7 @@ export function TitleBar({
   center,
   gitDiffStats,
   showTrafficLights = true,
+  reserveTrafficLightInset,
   hideLeadingWorkspaceLabel = false,
   onOpen,
   onCommit,
@@ -122,6 +131,7 @@ export function TitleBar({
   onOpenThreadSearch,
   threadSearchPlaceholder = '',
   threadSearchDisabled = false,
+  account,
 }: TitleBarProps) {
   const [gitMenuOpen, setGitMenuOpen] = useState(false);
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
@@ -149,7 +159,11 @@ export function TitleBar({
     showTrafficLights || !hideLeadingWorkspaceLabel || Boolean(onOpenThreadSearch);
 
   return (
-    <header className={`relative z-50 flex h-9 items-center justify-between glass-titlebar px-4 app-region-drag ${!showTrafficLights ? 'pl-[76px]' : ''}`}>
+    <header
+      className={`relative z-50 flex h-9 items-center justify-between glass-titlebar px-4 app-region-drag ${
+        (reserveTrafficLightInset ?? !showTrafficLights) ? 'pl-[76px]' : ''
+      }`}
+    >
       {/* Left: traffic lights + workspace name + optional thread search */}
       {showLeadingCluster ? (
         <div className="flex min-w-0 max-w-[min(100%,50%)] shrink items-center gap-2 app-region-no-drag">
@@ -446,6 +460,14 @@ export function TitleBar({
               <span className="text-red-400">-{gitDiffStats.deletions.toLocaleString()}</span>
             )}
           </div>
+        )}
+
+        {/* Account status chip (trailing edge) */}
+        {account && (
+          <>
+            <div className="w-px h-3.5 bg-white/[0.08] mx-1" />
+            {account}
+          </>
         )}
       </div>
     </header>

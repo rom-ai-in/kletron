@@ -4,7 +4,6 @@ import React, { useState, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { cn } from '../../lib/utils';
 import {
-  Settings,
   ChevronDown,
   ChevronRight,
   Pencil,
@@ -19,6 +18,9 @@ import {
   ClipboardCheck,
   Bot,
   Loader2,
+  Plus,
+  Zap,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { WORK_MODES, type WorkModeId } from '@kletron/shared/workMode';
 import {
@@ -28,8 +30,9 @@ import {
   parseThreadRecencyMs,
   threadRecencyBucket,
 } from '@kletron/shared/threadRecency';
+import type { LucideIcon } from 'lucide-react';
 import { WorkModeSegmented } from './WorkModeSegmented';
-import { Button } from '../ui/Button';
+import { SidebarNavGroup, SidebarNavItem } from '../nav/SidebarNav';
 import type { ThreadLiveStatus } from '@kletron/shared/chatTypes';
 
 export type { ThreadLiveStatus };
@@ -101,8 +104,35 @@ export interface ProjectSidebarProps {
   onWorkModeChange?: (mode: WorkModeId) => void;
   /** Disable mode control (e.g. while workspace or threads are loading). */
   workModeSwitcherDisabled?: boolean;
-  /** Full-width primary CTA above the thread list (default matches shell-style copy). */
+  /** Label of the top nav row that starts a thread (default "New Agent"). */
   newSessionButtonLabel?: string;
+  /** Renders the "Automation" row under "New Agent". */
+  onOpenAutomations?: () => void;
+  /** Highlights the Automation row when that surface is showing. */
+  automationsActive?: boolean;
+  /** Renders the "Settings" row. Falls back to `onSettings` when omitted. */
+  onOpenCustomize?: () => void;
+  /** Highlights the Settings row. */
+  customizeActive?: boolean;
+  /**
+   * Secondary destinations behind the "More" disclosure. Pass these when this
+   * rail is the app's only sidebar, so nothing becomes unreachable.
+   */
+  moreLinks?: SidebarMoreLink[];
+  /**
+   * Top slot — the account block sits above everything, like the desktop shell.
+   * On macOS the caller must reserve the traffic-light zone here.
+   */
+  header?: React.ReactNode;
+  /** Extra bottom slot, above the Settings row. */
+  footer?: React.ReactNode;
+}
+
+export interface SidebarMoreLink {
+  label: string;
+  icon: LucideIcon;
+  onClick: () => void;
+  active?: boolean;
 }
 
 function StatusDot({ status }: { status: ThreadLiveStatus }) {
@@ -196,6 +226,13 @@ export function ProjectSidebar({
   onWorkModeChange,
   workModeSwitcherDisabled = false,
   newSessionButtonLabel = 'New Agent',
+  onOpenAutomations,
+  automationsActive = false,
+  onOpenCustomize,
+  customizeActive = false,
+  moreLinks,
+  header,
+  footer,
 }: ProjectSidebarProps) {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
@@ -207,6 +244,7 @@ export function ProjectSidebar({
   const [threadFilter, setThreadFilter] = useState<SidebarFilter>('all');
   /** Per-project expanded state for the Archived block (default collapsed). */
   const [archivedExpandedProjects, setArchivedExpandedProjects] = useState<Set<string>>(() => new Set());
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const recencyNow = new Date();
 
@@ -288,12 +326,14 @@ export function ProjectSidebar({
       className={cn(
         'flex h-full flex-shrink-0 flex-col',
         surface === 'solid'
-          ? 'bg-bg-surface border-r border-white/[0.06]'
+          ? 'bg-bg-rail border-r border-white/[0.06]'
           : 'glass-sidebar',
         className,
       )}
       style={{ width: 260, ...style }}
     >
+      {header ? <div className="flex-none">{header}</div> : null}
+
       {/* ── Top section: Review queue + Add project (omit wrapper when empty to avoid orphan divider) ── */}
       {showTopSection && (
         <div className="flex flex-col border-b border-white/[0.06]">
@@ -326,8 +366,8 @@ export function ProjectSidebar({
         </div>
       )}
 
-      {/* ── Mode first (scopes list), then Threads header — icons stay muted, no accent stripe ── */}
-      <div className="mt-1 flex flex-col gap-1.5 px-3 py-2">
+      {/* ── Mode switch, then the primary nav rows (New Agent → Automation → Settings) ── */}
+      <div className="mt-1 flex flex-col gap-2 px-3 py-2">
         {workMode != null && onWorkModeChange ? (
           <div className="flex flex-col gap-1" role="region" aria-label="Code or work thread list">
             <WorkModeSegmented
@@ -344,26 +384,57 @@ export function ProjectSidebar({
           </div>
         ) : null}
 
-        {onNewThreadInProject && projects.length > 0 ? (
-          <Button
-            type="button"
-            variant="primary"
-            size="md"
-            fullWidth
-            title="Start a new agent thread"
-            onClick={() => {
-              const targetId =
-                activeProjectId && projects.some((p) => p.id === activeProjectId)
-                  ? activeProjectId
-                  : projects[0]?.id;
-              if (targetId) {
-                onNewThreadInProject(targetId);
-              }
-            }}
-          >
-            {newSessionButtonLabel}
-          </Button>
-        ) : null}
+        <SidebarNavGroup>
+          {onNewThreadInProject && projects.length > 0 ? (
+            <SidebarNavItem
+              icon={Plus}
+              label={newSessionButtonLabel}
+              title="Start a new agent thread"
+              onClick={() => {
+                const targetId =
+                  activeProjectId && projects.some((p) => p.id === activeProjectId)
+                    ? activeProjectId
+                    : projects[0]?.id;
+                if (targetId) {
+                  onNewThreadInProject(targetId);
+                }
+              }}
+            />
+          ) : null}
+
+          {onOpenAutomations ? (
+            <SidebarNavItem
+              icon={Zap}
+              label="Automation"
+              active={automationsActive}
+              onClick={onOpenAutomations}
+            />
+          ) : null}
+
+          {moreLinks && moreLinks.length > 0 ? (
+            <>
+              <SidebarNavItem
+                icon={MoreHorizontal}
+                label="More"
+                active={moreOpen}
+                expanded={moreOpen}
+                onClick={() => setMoreOpen((open) => !open)}
+              />
+              {moreOpen
+                ? moreLinks.map((link) => (
+                    <SidebarNavItem
+                      key={link.label}
+                      icon={link.icon}
+                      label={link.label}
+                      active={link.active ?? false}
+                      onClick={link.onClick}
+                      className="pl-4"
+                    />
+                  ))
+                : null}
+            </>
+          ) : null}
+        </SidebarNavGroup>
       </div>
 
       {/* ── Category filter chips (chat vs automation within this mode) ── */}
@@ -747,20 +818,19 @@ export function ProjectSidebar({
         )}
       </div>
 
-      {/* ── Bottom: settings (aligned with thread column width) ── */}
-      {onSettings && showThreadsSettingsButton && (
-        <div className="flex-none border-t border-white/[0.06] px-2 py-2">
-          <button
-            type="button"
-            onClick={onSettings}
-            className="flex w-full items-center justify-center gap-2 rounded-lg px-2 py-2 text-[11px] font-medium text-text-muted transition-colors hover:bg-state-hover hover:text-text-primary"
-            title="Settings"
-          >
-            <Settings className="h-3.5 w-3.5 shrink-0" />
-            <span>Settings</span>
-          </button>
+      {footer ? <div className="flex-none border-t border-white/[0.06]">{footer}</div> : null}
+
+      {/* ── Bottom: Settings, the last thing in the rail ── */}
+      {showThreadsSettingsButton && (onOpenCustomize || onSettings) ? (
+        <div className="flex-none border-t border-white/[0.06] p-3">
+          <SidebarNavItem
+            icon={SlidersHorizontal}
+            label="Settings"
+            active={customizeActive}
+            onClick={onOpenCustomize ?? onSettings}
+          />
         </div>
-      )}
+      ) : null}
 
     </div>
   );

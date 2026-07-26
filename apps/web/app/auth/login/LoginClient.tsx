@@ -72,7 +72,9 @@ export default function LoginClient() {
             } else if (isExtensionFlow) {
                 router.push('/auth/extension-success');
             } else {
-                router.push(safeRedirect ?? '/');
+                // Default to the app, not `/`: the landing page is public marketing and the
+                // middleware never guards it, so `/` would leave a signed-in user outside the app.
+                router.push(safeRedirect ?? '/app/agent');
             }
         } else {
             setError(result.error || 'Sign in failed');

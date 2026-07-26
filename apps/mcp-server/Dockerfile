@@ -22,6 +22,10 @@ ENV NODE_ENV=production
 ENV MCP_TRANSPORT=sse
 ENV GITHUB_MCP_TRANSPORT=sse
 ENV HOSTNAME=0.0.0.0
+# Container platforms route traffic to 0.0.0.0, so the tool surface is reachable
+# off-host. The server refuses to start in this posture unless MCP_SERVER_TOKEN
+# (or MCP_INTERNAL_TOKEN) is supplied at runtime — see lib/httpAuth.js.
+ENV MCP_BIND_HOST=0.0.0.0
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package.json ./package.json

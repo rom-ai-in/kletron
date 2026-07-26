@@ -7,6 +7,7 @@ import * as apiTokenService from '@kletron/server/services/apiTokenService';
 import { getToken } from 'next-auth/jwt';
 import { jwtVerify } from 'jose';
 import { timingSafeEqual } from 'node:crypto';
+import { resolveIdeTokenSecret } from './ideTokenSecret';
 
 export type AuthResult = {
     userId: string;
@@ -192,27 +193,63 @@ function buildInternalAuth(onBehalfOf: string | null): AuthResult {
     };
 }
 
+/**
+ * The dev bypass authenticates callers as a fixed user with no credentials, so
+ * it is gated on NODE_ENV being *explicitly* a local value. Testing
+ * `NODE_ENV !== 'production'` instead would have turned the bypass on for any
+ * deployment that simply forgot to set NODE_ENV.
+ */
+const LOCAL_NODE_ENVS = new Set(['development', 'test']);
+
 const DEV_AUTH_BYPASS =
     process.env.KLETRON_AUTH_BYPASS === 'true' ||
-    (process.env.NODE_ENV !== 'production' && process.env.KLETRON_AUTH_BYPASS !== 'false');
+    (LOCAL_NODE_ENVS.has(process.env.NODE_ENV ?? '') &&
+        process.env.KLETRON_AUTH_BYPASS !== 'false');
 
-function getDevBypassAuth(request?: Request): AuthResult | null {
+/**
+ * Strict loopback match on the Host header. A substring test would accept
+ * attacker-controlled hosts such as `notlocalhost.example.com`, so the
+ * hostname is isolated from any port and compared exactly.
+ */
+function isLocalhostHost(host: string): boolean {
+    const trimmed = String(host ?? '').trim().toLowerCase();
+    if (!trimmed) return false;
+
+    // Bracketed IPv6 literal, e.g. [::1]:3000
+    const ipv6 = trimmed.match(/^\[([^\]]+)\](?::\d+)?$/);
+    const hostname = ipv6 ? ipv6[1] : trimmed.replace(/:\d+$/, '');
+
+    return (
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname === '::1' ||
+        hostname === '0:0:0:0:0:0:0:1'
+    );
+}
+
+/**
+ * Dev bypass is only ever granted to loopback callers. `host` is required so
+ * both the App Router and the Pages Router enforce the same check — an earlier
+ * version left the Pages Router path unguarded.
+ */
+function getDevBypassAuthForHost(host: string | null): AuthResult | null {
     if (!DEV_AUTH_BYPASS) return null;
-    if (request) {
-        const host = request.headers.get('host') || '';
-        const isLocalhost =
-            host.includes('localhost') || host.startsWith('127.0.0.1') || host.startsWith('::1');
-        if (!isLocalhost) return null;
-    }
+    if (host !== null && !isLocalhostHost(host)) return null;
     return {
         userId: process.env.KLETRON_DEV_USER_ID || 'dev-user',
         authType: 'session',
     };
 }
 
-const IDE_JWT_SECRET = new TextEncoder().encode(
-    process.env.IDE_JWT_SECRET || 'ide-secret-key-change-in-production'
-);
+function getDevBypassAuth(request?: Request): AuthResult | null {
+    return getDevBypassAuthForHost(request ? request.headers.get('host') || '' : null);
+}
+
+if (!process.env.IDE_JWT_SECRET?.trim() && process.env.NODE_ENV === 'production') {
+    console.error(
+        '[auth] IDE_JWT_SECRET is not set — IDE token authentication is disabled in production.'
+    );
+}
 
 function extractBearerTokenFromHeaders(headers: Headers): string | null {
     const authHeader = headers.get('authorization') || headers.get('Authorization');
@@ -249,9 +286,14 @@ async function verifyBearerToken(token: string): Promise<AuthResult | null> {
             return { userId: tokenData.userId, authType: 'api-token' };
         }
 
-        // Check if it's an IDE access token
+        // Check if it's an IDE access token. Resolved per call so the key is
+        // never a committed constant and so tests can toggle configuration.
+        const ideSecret = resolveIdeTokenSecret();
+        if (!ideSecret) {
+            return null;
+        }
         try {
-            const verified = await jwtVerify(token, IDE_JWT_SECRET);
+            const verified = await jwtVerify(token, ideSecret);
             const payload = verified.payload;
             if (payload?.type === 'ide_access' && payload.sub) {
                 return { userId: String(payload.sub), authType: 'ide-token' };
@@ -315,9 +357,9 @@ export async function getPagesRouteAuth(req: NextApiRequest): Promise<AuthResult
         }
     }
 
-    const devBypass = DEV_AUTH_BYPASS
-        ? { userId: process.env.KLETRON_DEV_USER_ID || 'dev-user', authType: 'session' as const }
-        : null;
+    const devBypass = getDevBypassAuthForHost(
+        typeof req.headers.host === 'string' ? req.headers.host : ''
+    );
     if (devBypass && process.env.KLETRON_AUTH_BYPASS === 'true') {
         return devBypass;
     }

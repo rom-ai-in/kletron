@@ -24,17 +24,12 @@ type SkillMeta = {
 export type AgentNodeEditorValue = {
     id: string;
     label: string;
-    kind?: "react" | "router" | "delegate";
+    kind?: "react";
     react: {
         systemPrompt: string;
         userPromptTemplate: string;
         toolNames: string[];
         skillIds?: string[];
-    };
-    delegate?: {
-        mode?: "react" | "graph";
-        graphId?: string;
-        summaryPrompt?: string;
     };
     output: { schemaId: string; statePath?: string; stateMerge?: boolean };
 };
@@ -118,9 +113,6 @@ export function NodeInspector({
         );
     }
 
-    const isRouter = node.kind === "router";
-    const isDelegate = node.kind === "delegate";
-
     const toggleTool = (name: string) => {
         const current = new Set(node.react.toolNames ?? []);
         if (current.has(name)) current.delete(name);
@@ -164,30 +156,6 @@ export function NodeInspector({
                         placeholder="Node label"
                     />
                     <div className="text-[10px] font-mono text-text-muted">id: {node.id}</div>
-                </div>
-
-                <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                        Node type
-                    </label>
-                    <select
-                        value={node.kind ?? "react"}
-                        onChange={(e) =>
-                            onChange({
-                                ...node,
-                                kind: e.target.value as "react" | "router" | "delegate",
-                                delegate:
-                                    e.target.value === "delegate"
-                                        ? node.delegate ?? { mode: "react", summaryPrompt: "" }
-                                        : node.delegate,
-                            })
-                        }
-                        className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
-                    >
-                        <option value="react">ReAct node</option>
-                        <option value="router">Router node</option>
-                        <option value="delegate">Delegate node</option>
-                    </select>
                 </div>
 
                 <div
@@ -270,9 +238,8 @@ export function NodeInspector({
                 <textarea
                     value={node.react.systemPrompt}
                     onChange={(e) => onChange({ ...node, react: { ...node.react, systemPrompt: e.target.value } })}
-                    className="min-h-[220px] w-full resize-y rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm font-mono leading-relaxed text-text-secondary disabled:opacity-60"
+                    className="min-h-[220px] w-full resize-y rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm font-mono leading-relaxed text-text-secondary "
                     placeholder="System prompt for this ReAct node"
-                    disabled={node.kind === "router"}
                     rows={12}
                 />
             </Panel>
@@ -289,70 +256,9 @@ export function NodeInspector({
                     }
                     className="min-h-[200px] w-full resize-y rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm font-mono leading-relaxed text-text-secondary disabled:opacity-60"
                     placeholder={"Example:\nAnalyze this state:\n{{state}}\nReturn strict JSON."}
-                    disabled={node.kind === "router"}
                     rows={10}
                 />
             </Panel>
-
-            {isDelegate && (
-                <Panel className="space-y-3 p-4">
-                    <div className="text-sm font-semibold text-text-primary">Delegate settings</div>
-                    <div className="space-y-1.5">
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                            Delegate mode
-                        </label>
-                        <select
-                            value={node.delegate?.mode ?? "react"}
-                            onChange={(e) =>
-                                onChange({
-                                    ...node,
-                                    delegate: {
-                                        ...(node.delegate ?? {}),
-                                        mode: e.target.value as "react" | "graph",
-                                    },
-                                })
-                            }
-                            className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
-                        >
-                            <option value="react">ReAct subagent</option>
-                            <option value="graph">Nested graph</option>
-                        </select>
-                    </div>
-                    <div className="space-y-1.5">
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                            Graph ID (for nested graph)
-                        </label>
-                        <input
-                            value={node.delegate?.graphId ?? ""}
-                            onChange={(e) =>
-                                onChange({
-                                    ...node,
-                                    delegate: { ...(node.delegate ?? {}), graphId: e.target.value || undefined },
-                                })
-                            }
-                            className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
-                            placeholder="Mongo ObjectId of graph to run"
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                            Summary prompt (optional)
-                        </label>
-                        <textarea
-                            value={node.delegate?.summaryPrompt ?? ""}
-                            onChange={(e) =>
-                                onChange({
-                                    ...node,
-                                    delegate: { ...(node.delegate ?? {}), summaryPrompt: e.target.value },
-                                })
-                            }
-                            className="min-h-[120px] w-full resize-y rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm font-mono leading-relaxed text-text-secondary"
-                            placeholder="Summarize the delegate result. Return JSON compatible with the node output schema."
-                            rows={5}
-                        />
-                    </div>
-                </Panel>
-            )}
 
             <Panel className="space-y-3 p-4">
                 <div className="flex items-center justify-between gap-2">
@@ -408,12 +314,6 @@ export function NodeInspector({
                     <div className="text-sm font-semibold text-text-primary">Tools</div>
                     <div className="text-xs text-text-muted">{node.react.toolNames?.length ?? 0} enabled</div>
                 </div>
-                {isRouter && (
-                    <div className="text-xs text-text-muted">
-                        Router nodes do not execute tools. Tool selection is ignored.
-                    </div>
-                )}
-
                 <input
                     value={toolSearch}
                     onChange={(e) => setToolSearch(e.target.value)}
@@ -435,7 +335,6 @@ export function NodeInspector({
                                         checked={checked}
                                         onChange={() => toggleTool(tool.name)}
                                         className="mt-1"
-                                        disabled={isRouter}
                                     />
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2">

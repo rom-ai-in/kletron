@@ -7,6 +7,7 @@
 :root {
   --bg-app: #09090b;
   --bg-surface: #18181b;
+  --bg-rail: #16191f;
   --bg-elevated: #27272a;
   --border-subtle: rgba(255, 255, 255, 0.05);
   --border-strong: rgba(255, 255, 255, 0.10);
@@ -154,8 +155,8 @@
   --sidebar-density-gap: 4px;
   --sidebar-density-font: 12px;
   --sidebar-density-icon: 16px;
-  --glass-bg-sidebar: rgba(24, 24, 27, 0.52);
-  --glass-bg-titlebar: rgba(24, 24, 27, 0.42);
+  --glass-bg-sidebar: var(--bg-rail);
+  --glass-bg-titlebar: rgba(14, 14, 17, 0.86);
   --glass-bg-panel: rgba(24, 24, 27, 0.55);
   --glass-bg-card: rgba(255, 255, 255, 0.04);
   --glass-bg-card-hover: rgba(255, 255, 255, 0.06);

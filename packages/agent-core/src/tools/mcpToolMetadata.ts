@@ -65,6 +65,14 @@ export const mcpToolMetadata: McpToolMeta[] = [
     categories: ["planning", "state"],
   },
   {
+    name: "task",
+    label: "Delegate to subagent",
+    description:
+      "Delegate a self-contained piece of work to a read-only subagent with its own isolated context window. Multiple calls emitted in one turn run in parallel.",
+    file: "packages/server/src/services/subagentRunner.ts",
+    categories: ["planning", "delegation"],
+  },
+  {
     name: "dependency_info",
     label: "Dependency info",
     description: "Summarize dependencies, devDependencies, and scripts for npm/yarn projects.",

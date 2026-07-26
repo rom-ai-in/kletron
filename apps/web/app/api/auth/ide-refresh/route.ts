@@ -6,10 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify, SignJWT } from 'jose';
 import { randomBytes } from 'crypto';
 
-// Must match the secret used in ide-auth
-const IDE_JWT_SECRET = new TextEncoder().encode(
-    process.env.IDE_JWT_SECRET || 'ide-secret-key-change-in-production'
-);
+import { resolveIdeTokenSecret } from '@kletron/server/lib/auth/ideTokenSecret';
 
 const ACCESS_TOKEN_EXPIRY = '1h';  // 1 hour
 const REFRESH_TOKEN_EXPIRY = '30d'; // 30 days
@@ -30,6 +27,16 @@ interface IDERefreshResponse {
  */
 export async function POST(request: NextRequest): Promise<NextResponse<IDERefreshResponse>> {
     try {
+        // Shared with the minting and verifying paths; null means IDE tokens
+        // are not configured, in which case refresh must not be possible.
+        const ideJwtSecret = resolveIdeTokenSecret();
+        if (!ideJwtSecret) {
+            return NextResponse.json(
+                { success: false, error: 'IDE token authentication is not configured' },
+                { status: 503 }
+            );
+        }
+
         const body = await request.json();
         const { refreshToken } = body;
 
@@ -43,7 +50,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<IDERefres
         // Verify the refresh token
         let payload;
         try {
-            const verified = await jwtVerify(refreshToken, IDE_JWT_SECRET);
+            const verified = await jwtVerify(refreshToken, ideJwtSecret);
             payload = verified.payload;
         } catch (jwtError) {
             console.error('[IDE Refresh] Invalid refresh token:', jwtError);
@@ -82,7 +89,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<IDERefres
             .setProtectedHeader({ alg: 'HS256' })
             .setExpirationTime(ACCESS_TOKEN_EXPIRY)
             .setIssuedAt()
-            .sign(IDE_JWT_SECRET);
+            .sign(ideJwtSecret);
 
         // Optionally rotate the refresh token for added security
         // (issuing a new refresh token each time)
@@ -97,7 +104,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<IDERefres
             .setProtectedHeader({ alg: 'HS256' })
             .setExpirationTime(REFRESH_TOKEN_EXPIRY)
             .setIssuedAt()
-            .sign(IDE_JWT_SECRET);
+            .sign(ideJwtSecret);
 
         return NextResponse.json({
             success: true,

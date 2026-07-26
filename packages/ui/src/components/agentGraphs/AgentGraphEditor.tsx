@@ -13,30 +13,32 @@ type AgentGraphDto = {
     name: string;
     description?: string;
     execution?: {
-        mode?: "dag" | "state_machine";
-        entryNodeId?: string;
+        mode?: "dag";
         maxIterations?: number;
         maxNodeRuns?: number;
+    };
+    subagent?: {
+        key: string;
+        whenToUse: string;
+        selectable?: boolean;
+        readOnly?: boolean;
+        allowExec?: boolean;
+        maxSteps?: number;
     };
     stateDefaults?: Record<string, unknown>;
     nodes: Array<{
         id: string;
         label: string;
-        kind?: "react" | "router" | "delegate";
+        kind?: "react";
         react: {
             systemPrompt: string;
             userPromptTemplate: string;
             toolNames: string[];
             skillIds?: string[];
         };
-        delegate?: {
-            mode?: "react" | "graph";
-            graphId?: string;
-            summaryPrompt?: string;
-        };
         output: { schemaId: string; statePath?: string; stateMerge?: boolean };
     }>;
-    edges: Array<{ id: string; source: string; target: string; condition?: string }>;
+    edges: Array<{ id: string; source: string; target: string }>;
 };
 
 // Default tools for new nodes - focused on coding workflows
@@ -115,15 +117,13 @@ function makeDefaultNode(idx: number, palette: "code" | "work" = "code") {
 
 function normalizeEdges(edges: AgentGraphDto["edges"]) {
     // Ensure deterministic IDs and uniqueness.
-    const unique = new Map<string, { id: string; source: string; target: string; condition?: string }>();
+    const unique = new Map<string, { id: string; source: string; target: string }>();
     for (const e of edges) {
         const key = `${e.source}=>${e.target}`;
-        const existing = unique.get(key);
         unique.set(key, {
             id: `edge-${e.source}-${e.target}`,
             source: e.source,
             target: e.target,
-            condition: e.condition ?? existing?.condition,
         });
     }
     return Array.from(unique.values());
@@ -131,16 +131,11 @@ function normalizeEdges(edges: AgentGraphDto["edges"]) {
 
 function buildEdgesForTarget(targetId: string, upstreamIds: string[], existingEdges: AgentGraphDto["edges"]) {
     const kept = existingEdges.filter((e) => e.target !== targetId);
-    const existingByKey = new Map(existingEdges.map((e) => [`${e.source}=>${e.target}`, e]));
-    const added = upstreamIds.map((source) => {
-        const existing = existingByKey.get(`${source}=>${targetId}`);
-        return {
-            id: `edge-${source}-${targetId}`,
-            source,
-            target: targetId,
-            condition: existing?.condition,
-        };
-    });
+    const added = upstreamIds.map((source) => ({
+        id: `edge-${source}-${targetId}`,
+        source,
+        target: targetId,
+    }));
     return normalizeEdges([...kept, ...added]);
 }
 
@@ -164,11 +159,11 @@ export function AgentGraphEditor({
     const [nodes, setNodes] = useState<AgentGraphDto["nodes"]>(() => initialGraph.nodes ?? []);
     const [edges, setEdges] = useState<AgentGraphDto["edges"]>(() => normalizeEdges(initialGraph.edges ?? []));
     const [execution, setExecution] = useState<AgentGraphDto["execution"]>(() => ({
-        mode: initialGraph.execution?.mode ?? "dag",
-        entryNodeId: initialGraph.execution?.entryNodeId,
+        mode: "dag",
         maxIterations: initialGraph.execution?.maxIterations,
         maxNodeRuns: initialGraph.execution?.maxNodeRuns,
     }));
+    const [subagent, setSubagent] = useState<AgentGraphDto["subagent"]>(() => initialGraph.subagent);
     const [stateDefaults, setStateDefaults] = useState<Record<string, unknown>>(
         () => initialGraph.stateDefaults ?? {}
     );
@@ -189,18 +184,11 @@ export function AgentGraphEditor({
         if (!n) return null;
         const react = { ...n.react };
         delete (react as { llmSelection?: unknown }).llmSelection;
-        let delegate = n.delegate;
-        if (delegate) {
-            const d = { ...delegate };
-            delete (d as { summaryLlmSelection?: unknown }).summaryLlmSelection;
-            delegate = d;
-        }
         return {
             id: n.id,
             label: n.label,
             kind: n.kind ?? "react",
             react,
-            delegate,
             output: n.output,
         } satisfies AgentNodeEditorValue;
     }, [nodes, selectedNodeId]);
@@ -215,9 +203,6 @@ export function AgentGraphEditor({
     const handleDeleteNode = (nodeId: string) => {
         setNodes((prev) => prev.filter((n) => n.id !== nodeId));
         setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
-        setExecution((prev) =>
-            prev?.entryNodeId === nodeId ? { ...prev, entryNodeId: undefined } : prev
-        );
         setSelectedNodeId(null);
     };
 
@@ -230,7 +215,6 @@ export function AgentGraphEditor({
             label: next.label,
             kind: next.kind ?? n.kind,
             react: next.react,
-            delegate: next.delegate,
             output: next.output,
         };
     })
@@ -249,23 +233,6 @@ export function AgentGraphEditor({
         if (current.has(sourceId)) current.delete(sourceId);
         else current.add(sourceId);
         setEdges(buildEdgesForTarget(selectedNodeId, Array.from(current), edges));
-    };
-
-    const getEdgeCondition = (sourceId: string, targetId: string) => {
-        return edges.find((e) => e.source === sourceId && e.target === targetId)?.condition ?? "";
-    };
-
-    const updateEdgeCondition = (sourceId: string, targetId: string, condition: string) => {
-        const trimmed = condition.trim();
-        setEdges((prev) =>
-            prev.map((e) => {
-                if (e.source !== sourceId || e.target !== targetId) return e;
-                return {
-                    ...e,
-                    condition: trimmed ? trimmed : undefined,
-                };
-            })
-        );
     };
 
     const saveTimer = useRef<number | null>(null);
@@ -300,13 +267,7 @@ export function AgentGraphEditor({
                     const graphNodes = nodes.map((n) => {
                         const react = { ...n.react };
                         delete (react as { llmSelection?: unknown }).llmSelection;
-                        const next = { ...n, react };
-                        if (n.delegate) {
-                            const d = { ...n.delegate };
-                            delete (d as { summaryLlmSelection?: unknown }).summaryLlmSelection;
-                            return { ...next, delegate: d };
-                        }
-                        return next;
+                        return { ...n, react };
                     });
                     const graphEdges = normalizeEdges(edges);
                     const payload = {
@@ -316,6 +277,7 @@ export function AgentGraphEditor({
                             nodes: graphNodes,
                             edges: graphEdges,
                             execution: execution ?? { mode: "dag" },
+                            subagent: subagent?.key ? subagent : undefined,
                             stateDefaults: Object.keys(stateDefaults ?? {}).length ? stateDefaults : undefined,
                         },
                     };
@@ -343,7 +305,7 @@ export function AgentGraphEditor({
         return () => {
             if (saveTimer.current) window.clearTimeout(saveTimer.current);
         };
-    }, [nodes, edges, execution, stateDefaults, graphId, request]);
+    }, [nodes, edges, execution, subagent, stateDefaults, graphId, request]);
 
     const handleResetToDefault = async () => {
         if (!confirm("Reset all nodes to default prompts and tools? This cannot be undone.")) return;
@@ -358,98 +320,131 @@ export function AgentGraphEditor({
                 setNodes(data.graph.nodes ?? []);
                 setEdges(normalizeEdges(data.graph.edges ?? []));
                 if (data.graph.execution) setExecution(data.graph.execution);
+                setSubagent(data.graph.subagent);
             }
         } catch (err: any) {
             alert(err.message || "Failed to reset to default");
         }
     };
 
+    const patchSubagent = (patch: Partial<NonNullable<AgentGraphDto["subagent"]>>) =>
+        setSubagent((prev) => ({
+            key: prev?.key ?? "",
+            whenToUse: prev?.whenToUse ?? "",
+            ...prev,
+            ...patch,
+        }));
+
     const graphSettingsFields = (
         <>
             <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                     <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                        Execution mode
+                        Max node executions
                     </label>
-                    <select
-                        value={execution?.mode ?? "dag"}
+                    <input
+                        type="number"
+                        min={1}
+                        value={execution?.maxIterations ?? ""}
                         onChange={(e) =>
                             setExecution((prev) => ({
                                 ...prev,
-                                mode: e.target.value as "dag" | "state_machine",
+                                mode: "dag",
+                                maxIterations: e.target.value ? Number(e.target.value) : undefined,
                             }))
                         }
-                        className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
-                    >
-                        <option value="dag">DAG (static order)</option>
-                        <option value="state_machine">State machine (conditional)</option>
-                    </select>
+                        className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
+                        placeholder="200"
+                    />
                 </div>
                 <div className="space-y-1.5">
                     <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                        Entry node
+                        Max runs per node
                     </label>
-                    <select
-                        value={execution?.entryNodeId ?? ""}
+                    <input
+                        type="number"
+                        min={1}
+                        value={execution?.maxNodeRuns ?? ""}
                         onChange={(e) =>
                             setExecution((prev) => ({
                                 ...prev,
-                                entryNodeId: e.target.value || undefined,
+                                mode: "dag",
+                                maxNodeRuns: e.target.value ? Number(e.target.value) : undefined,
                             }))
                         }
-                        className="w-full rounded border-border-subtle bg-bg-surface px-2 py-2 text-sm"
-                        disabled={(execution?.mode ?? "dag") !== "state_machine"}
-                    >
-                        <option value="">Auto (roots)</option>
-                        {nodes.map((n) => (
-                            <option key={n.id} value={n.id}>
-                                {n.label}
-                            </option>
-                        ))}
-                    </select>
+                        className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
+                        placeholder="20"
+                    />
                 </div>
             </div>
 
-            {(execution?.mode ?? "dag") === "state_machine" && (
+            <div className="space-y-2 rounded-md border border-border-subtle bg-bg-elevated/60 p-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                    Subagent
+                </div>
+                <p className="text-[11px] leading-snug text-text-muted">
+                    Give this graph a key to make it callable by other agents through the{" "}
+                    <span className="font-mono text-text-secondary">task</span> tool. Subagents run with an
+                    isolated context window and are read-only.
+                </p>
                 <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                         <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                            Max iterations
+                            Key (kebab-case)
                         </label>
                         <input
-                            type="number"
-                            min={1}
-                            value={execution?.maxIterations ?? ""}
-                            onChange={(e) =>
-                                setExecution((prev) => ({
-                                    ...prev,
-                                    maxIterations: e.target.value ? Number(e.target.value) : undefined,
-                                }))
-                            }
-                            className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
-                            placeholder="200"
+                            value={subagent?.key ?? ""}
+                            onChange={(e) => patchSubagent({ key: e.target.value.trim() })}
+                            className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm font-mono text-text-primary"
+                            placeholder="repo-cartographer"
                         />
                     </div>
                     <div className="space-y-1.5">
                         <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                            Max node runs
+                            Max steps
                         </label>
                         <input
                             type="number"
                             min={1}
-                            value={execution?.maxNodeRuns ?? ""}
+                            value={subagent?.maxSteps ?? ""}
                             onChange={(e) =>
-                                setExecution((prev) => ({
-                                    ...prev,
-                                    maxNodeRuns: e.target.value ? Number(e.target.value) : undefined,
-                                }))
+                                patchSubagent({ maxSteps: e.target.value ? Number(e.target.value) : undefined })
                             }
                             className="w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-sm text-text-primary"
-                            placeholder="20"
+                            placeholder="32"
                         />
                     </div>
                 </div>
-            )}
+                <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                        When to use
+                    </label>
+                    <textarea
+                        value={subagent?.whenToUse ?? ""}
+                        onChange={(e) => patchSubagent({ whenToUse: e.target.value })}
+                        className="h-20 w-full resize-y rounded-md border border-border-subtle bg-bg-elevated px-3 py-2 text-xs text-text-secondary"
+                        placeholder="Shown to the calling agent so it knows when to pick this subagent."
+                    />
+                </div>
+                <div className="flex flex-wrap gap-4">
+                    <label className="flex items-center gap-2 text-xs text-text-muted">
+                        <input
+                            type="checkbox"
+                            checked={subagent?.selectable !== false}
+                            onChange={(e) => patchSubagent({ selectable: e.target.checked })}
+                        />
+                        Selectable in conversations
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-text-muted">
+                        <input
+                            type="checkbox"
+                            checked={Boolean(subagent?.allowExec)}
+                            onChange={(e) => patchSubagent({ allowExec: e.target.checked || undefined })}
+                        />
+                        Allow execute_bash
+                    </label>
+                </div>
+            </div>
 
             <div className="space-y-1.5">
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-text-muted">
@@ -494,16 +489,6 @@ export function AgentGraphEditor({
                                                 onChange={() => toggleUpstream(n.id)}
                                             />
                                         </label>
-                                        {checked && (
-                                            <input
-                                                value={getEdgeCondition(n.id, selectedNodeId)}
-                                                onChange={(e) =>
-                                                    updateEdgeCondition(n.id, selectedNodeId, e.target.value)
-                                                }
-                                                className="mt-2 w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-[11px] font-mono text-text-secondary"
-                                                placeholder='Condition (e.g. state.nextStep == "debug")'
-                                            />
-                                        )}
                                     </div>
                                 );
                             })}
@@ -520,9 +505,9 @@ export function AgentGraphEditor({
         <Panel className="mt-1 p-3">
             <div className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Notes</div>
             <div className="mt-1 text-xs text-text-muted leading-relaxed">
-                - Nodes can be ReAct, Router, or Delegate.\n
-                - Router nodes skip LLM execution and only route via edge conditions.\n
-                - Delegate nodes run a subagent or nested graph and return a summarized result.\n
+                - Every node is a ReAct agent; graphs run as a DAG.\n
+                - Delegation happens at runtime via the `task` tool, not via edges.\n
+                - Give the graph a subagent key to make it callable by other agents.\n
                 - LLM is chosen on Agent / automation / Configuration defaults — not on nodes.\n
                 - Node output must be strict JSON.\n
                 - `{"{{state}}"}` injects the current run state JSON.

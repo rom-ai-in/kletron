@@ -22,6 +22,8 @@ export const surfaces = {
     bgApp: 'var(--bg-app)',
     /** Zinc 900 - Panel/card backgrounds */
     bgSurface: 'var(--bg-surface)',
+    /** Primary navigation rail, shared by web and desktop */
+    bgRail: 'var(--bg-rail)',
     /** Zinc 800 - Modals/popovers */
     bgElevated: 'var(--bg-elevated)',
 } as const;
@@ -214,6 +216,8 @@ export const rawColors = {
     // Surfaces
     bgApp: '#09090b',
     bgSurface: '#18181b',
+    /** Primary navigation rail — cooled toward the brand accent (#3994BC). */
+    bgRail: '#16191f',
     bgElevated: '#27272a',
 
     // Borders

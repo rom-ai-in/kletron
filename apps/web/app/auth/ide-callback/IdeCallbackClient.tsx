@@ -176,34 +176,39 @@ export default function IdeCallbackClient() {
                         <p className="text-xs text-text-muted mb-4">
                             If the app doesn&apos;t open automatically:
                         </p>
-                        <a
-                            href={redirectUrl || '#'}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-text-primary text-bg-app text-sm font-medium hover:bg-text-secondary transition-colors"
-                        >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                            Open Kletron
-                        </a>
-                        {loopbackUrl && (
+                        {/* Flex row with an explicit gap: these are sibling inline-flex
+                            elements, so JSX strips the whitespace between them and they
+                            would otherwise render edge to edge. */}
+                        <div className="flex flex-wrap items-center justify-center gap-3">
                             <a
-                                href={loopbackUrl}
-                                className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-md bg-bg-elevated hover:bg-state-hover border border-border-subtle text-sm font-medium text-text-primary transition-colors"
+                                href={redirectUrl || '#'}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-text-primary text-bg-app text-sm font-medium hover:bg-text-secondary transition-colors"
                             >
-                                Finish In App
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                                Open Kletron
                             </a>
-                        )}
-                        <button
-                            onClick={async () => {
-                                if (!redirectUrl) return;
-                                await navigator.clipboard.writeText(redirectUrl);
-                                setCopied(true);
-                                setTimeout(() => setCopied(false), 2000);
-                            }}
-                            className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-md bg-bg-elevated hover:bg-state-hover border border-border-subtle text-sm font-medium text-text-primary transition-colors"
-                        >
-                            {copied ? 'Copied!' : 'Copy Sign-In Link'}
-                        </button>
+                            {loopbackUrl && (
+                                <a
+                                    href={loopbackUrl}
+                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-bg-elevated hover:bg-state-hover border border-border-subtle text-sm font-medium text-text-primary transition-colors"
+                                >
+                                    Finish In App
+                                </a>
+                            )}
+                            <button
+                                onClick={async () => {
+                                    if (!redirectUrl) return;
+                                    await navigator.clipboard.writeText(redirectUrl);
+                                    setCopied(true);
+                                    setTimeout(() => setCopied(false), 2000);
+                                }}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-bg-elevated hover:bg-state-hover border border-border-subtle text-sm font-medium text-text-primary transition-colors"
+                            >
+                                {copied ? 'Copied!' : 'Copy Sign-In Link'}
+                            </button>
+                        </div>
                     </>
                 )}
 

@@ -14,6 +14,8 @@ import {
 } from "@kletron/ui/components/design-system";
 import type { ContextChip } from "@kletron/ui/components/design-system";
 import { ProjectSidebar } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import type { SidebarMoreLink } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
+import { SidebarAccountBlock } from "@kletron/ui/components/nav/SidebarAccountBlock";
 import type { SidebarProject, SidebarThread } from "@kletron/ui/components/CommandCenter/ProjectSidebar";
 import { ThreadSearchPalette } from "@kletron/ui/components/CommandCenter/ThreadSearchPalette";
 import { ThreadSearchHeaderTrigger } from "@kletron/ui/components/CommandCenter/ThreadSearchHeaderTrigger";
@@ -53,12 +55,17 @@ import {
   Wrench,
   GitBranch,
   Settings2,
+  Home as HomeIcon,
+  Network as NetworkIcon,
+  Clock as ClockIcon,
+  Building2 as Building2Icon,
   GraduationCap,
   X,
   AlertTriangle,
 } from "lucide-react";
 import type { WorkModeId } from "@kletron/shared/workMode";
 import { normalizeToWorkModeId } from "@kletron/shared/workMode";
+import { workModeStorageKey } from "@kletron/shared/workModePreference";
 import type { ResearchDepthId } from "@kletron/shared/researchDepth";
 import { normalizeResearchDepth } from "@kletron/shared/researchDepth";
 import {
@@ -629,6 +636,7 @@ const AgentComposer = memo(function AgentComposer({
 export default function AgentPage() {
   // ── Read handoff params from BA Feature detail ────────────────────────
   const searchParams = useSearchParams();
+  const pageRouter = useRouter();
 
   // ── State ─────────────────────────────────────────────────────────────
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -676,6 +684,13 @@ export default function AgentPage() {
 
   // ── Code vs Work mode (per workspace, persisted server + local mirror) ──
   const [workMode, setWorkMode] = useState<WorkModeId>("code");
+  /**
+   * Set by the `?mode=` handler below, keyed to the workspace it was chosen for.
+   * Effects all run before this effect's awaited fetch resolves, so the loader
+   * can use it to avoid clobbering an explicit choice with the value the server
+   * held a moment ago. Keyed, so switching workspace still loads from the server.
+   */
+  const workModeIntentRef = useRef<{ workspaceId: string; mode: WorkModeId } | null>(null);
   /** New-session agent depth (stored on run at creation). */
   const [researchDepth, setResearchDepth] = useState<ResearchDepthId>("exhaustive");
   useEffect(() => {
@@ -683,7 +698,7 @@ export default function AgentPage() {
       setWorkMode("code");
       return;
     }
-    const lsKey = `kletron-work-mode-${activeWorkspaceId}`;
+    const lsKey = workModeStorageKey(activeWorkspaceId);
     const fromLs =
       typeof window !== "undefined" ? window.localStorage.getItem(lsKey) : null;
     let cancelled = false;
@@ -696,7 +711,8 @@ export default function AgentPage() {
           const json = (await res.json()) as { data?: string | null };
           if (json.data != null && json.data !== "") {
             const m = normalizeToWorkModeId(String(json.data));
-            if (!cancelled) {
+            const overridden = workModeIntentRef.current?.workspaceId === activeWorkspaceId;
+            if (!cancelled && !overridden) {
               setWorkMode(m);
               try {
                 window.localStorage.setItem(lsKey, m);
@@ -710,7 +726,7 @@ export default function AgentPage() {
       } catch {
         /* fall through */
       }
-      if (cancelled) return;
+      if (cancelled || workModeIntentRef.current?.workspaceId === activeWorkspaceId) return;
       if (fromLs === "code" || fromLs === "work") {
         setWorkMode(fromLs);
       } else {
@@ -1313,6 +1329,38 @@ export default function AgentPage() {
     setResearchDepth("exhaustive");
   }, [setMessages, handleStop]);
 
+  /**
+   * This page is the app's only rail, so it owns the secondary destinations
+   * that the app rail exposes everywhere else.
+   */
+  const agentSidebarMoreLinks = useMemo<SidebarMoreLink[]>(
+    () => [
+      // Mirrors the app rail's "More" list — this page hides that rail, so any
+      // destination missing here is unreachable from the agent workspace.
+      { label: "Home", icon: HomeIcon, onClick: () => pageRouter.push("/app") },
+      { label: "Agent Graphs", icon: NetworkIcon, onClick: () => pageRouter.push("/app/agent-graphs") },
+      { label: "History", icon: ClockIcon, onClick: () => pageRouter.push("/app/history") },
+      { label: "Organization", icon: Building2Icon, onClick: () => pageRouter.push("/app/organization") },
+    ],
+    [pageRouter],
+  );
+
+  /**
+   * `?new=1` — the sidebar "New Agent" row lands here to open a fresh composer.
+   * Consumed once, then stripped so a refresh doesn't discard the thread.
+   */
+  const newSessionLinkRef = useRef(false);
+  useEffect(() => {
+    if (searchParams?.get("new") !== "1") {
+      newSessionLinkRef.current = false;
+      return;
+    }
+    if (newSessionLinkRef.current) return;
+    newSessionLinkRef.current = true;
+    handleNewSession();
+    pageRouter.replace("/app/agent");
+  }, [searchParams, handleNewSession, pageRouter]);
+
   useEffect(() => {
     if (!activeSessionId || !sessionsHydratedRef.current) return;
     if (sessions.some((s) => s.id === activeSessionId)) {
@@ -1346,7 +1394,7 @@ export default function AgentPage() {
       handleNewSession();
 
       setWorkMode(next);
-      const lsKey = activeWorkspaceId ? `kletron-work-mode-${activeWorkspaceId}` : null;
+      const lsKey = activeWorkspaceId ? workModeStorageKey(activeWorkspaceId) : null;
       if (lsKey) {
         try {
           window.localStorage.setItem(lsKey, next);
@@ -1377,6 +1425,33 @@ export default function AgentPage() {
     },
     [workMode, activeWorkspaceId, handleNewSession],
   );
+
+  /**
+   * `?mode=work|code` — the app rail routes here to enter a mode. Applied once,
+   * then stripped so a refresh doesn't re-trigger the switch.
+   */
+  const modeLinkRef = useRef<string | null>(null);
+  useEffect(() => {
+    const raw = searchParams?.get("mode");
+    if (!raw) {
+      modeLinkRef.current = null;
+      return;
+    }
+    // Wait for the workspace: the mode is persisted per workspace, and the
+    // intent below has to be recorded against a real id.
+    if (!activeWorkspaceId) return;
+    if (modeLinkRef.current === raw) return;
+    modeLinkRef.current = raw;
+    const next = normalizeToWorkModeId(raw);
+    workModeIntentRef.current = { workspaceId: activeWorkspaceId, mode: next };
+    if (next !== workMode) {
+      void handleWorkModeSelect(next);
+    } else {
+      setWorkMode(next);
+    }
+    pageRouter.replace("/app/agent");
+  }, [searchParams, activeWorkspaceId, workMode, handleWorkModeSelect, pageRouter]);
+
 
   const handleLoadOlderMessages = useCallback(async () => {
     if (!activeSessionId || loadingOlder || !historyPage.hasOlder) return;
@@ -1921,6 +1996,14 @@ export default function AgentPage() {
       workModeSwitcherDisabled={workspaceSwitching || sessionsLoading}
       onThreadSelect={handleSelectSession}
       onNewThreadInProject={() => { void handleNewSessionInActiveWorkspace(); }}
+      onOpenAutomations={() => pageRouter.push("/app/automations")}
+      onOpenCustomize={() => pageRouter.push("/app/config")}
+      moreLinks={agentSidebarMoreLinks}
+      header={
+        <div className="border-b border-white/[0.06] p-3">
+          <SidebarAccountBlock onOpenAccount={() => pageRouter.push("/app/account")} />
+        </div>
+      }
       onRenameThread={(id, title) => void handleRenameSession(id, title)}
       onArchiveThread={(id) => void handleArchiveSession(id)}
       onDeleteThread={(id) => void handleDeleteSession(id)}

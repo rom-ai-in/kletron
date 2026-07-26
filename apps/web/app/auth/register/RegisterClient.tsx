@@ -86,7 +86,7 @@ export default function RegisterClient() {
                     router.replace(buildIdeLoginPath(searchParams));
                 }
             } else {
-                router.push(safeRedirect ?? '/');
+                router.push(safeRedirect ?? '/app/agent');
             }
         } else {
             setError(result.error || 'Registration failed');

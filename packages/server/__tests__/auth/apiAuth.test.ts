@@ -189,4 +189,90 @@ describe("apiAuth", () => {
       onBehalfOf: "user-789",
     });
   });
+
+  describe("dev auth bypass", () => {
+    const anonymousRequest = (host: string) =>
+      new Request(`${TEST_URL}/api/sessions`, { headers: { host } });
+
+    it("is off in production", async () => {
+      process.env.NODE_ENV = "production";
+      const { getAppRouteAuth } = await loadApiAuth();
+      expect(await getAppRouteAuth(anonymousRequest("localhost:3000"))).toBeNull();
+    });
+
+    // Gating on `NODE_ENV !== 'production'` meant any deployment that simply
+    // forgot to set NODE_ENV authenticated anonymous callers as dev-user.
+    it("is off when NODE_ENV is unset", async () => {
+      delete process.env.NODE_ENV;
+      const { getAppRouteAuth } = await loadApiAuth();
+      expect(await getAppRouteAuth(anonymousRequest("localhost:3000"))).toBeNull();
+    });
+
+    it("is off for an unrecognised NODE_ENV", async () => {
+      process.env.NODE_ENV = "staging";
+      const { getAppRouteAuth } = await loadApiAuth();
+      expect(await getAppRouteAuth(anonymousRequest("localhost:3000"))).toBeNull();
+    });
+
+    it("is on for local development from a loopback host", async () => {
+      process.env.NODE_ENV = "development";
+      const { getAppRouteAuth } = await loadApiAuth();
+      const auth = await getAppRouteAuth(anonymousRequest("localhost:3000"));
+      expect(auth).toEqual({ userId: "dev-user", authType: "session" });
+    });
+
+    // `host.includes('localhost')` accepted any attacker-controlled hostname
+    // that merely contained the substring.
+    it("does not accept a host that only contains 'localhost'", async () => {
+      process.env.NODE_ENV = "development";
+      const { getAppRouteAuth } = await loadApiAuth();
+      for (const host of [
+        "notlocalhost.example.com",
+        "localhost.attacker.com",
+        "evil.com#localhost",
+      ]) {
+        expect(await getAppRouteAuth(anonymousRequest(host))).toBeNull();
+      }
+    });
+
+    it("accepts loopback IP forms with a port", async () => {
+      process.env.NODE_ENV = "development";
+      const { getAppRouteAuth } = await loadApiAuth();
+      for (const host of ["127.0.0.1:3000", "[::1]:3000", "localhost"]) {
+        expect(await getAppRouteAuth(anonymousRequest(host))).toEqual({
+          userId: "dev-user",
+          authType: "session",
+        });
+      }
+    });
+
+    it("can be disabled explicitly even in development", async () => {
+      process.env.NODE_ENV = "development";
+      process.env.KLETRON_AUTH_BYPASS = "false";
+      const { getAppRouteAuth } = await loadApiAuth();
+      expect(await getAppRouteAuth(anonymousRequest("localhost:3000"))).toBeNull();
+    });
+  });
+
+  describe("IDE tokens", () => {
+    it("rejects IDE tokens in production when no secret is configured", async () => {
+      process.env.NODE_ENV = "production";
+      const { SignJWT } = await import("jose");
+      // Signed with the constant this repository used to ship.
+      const forged = await new SignJWT({ sub: SESSION_USER_ID, type: "ide_access" })
+        .setProtectedHeader({ alg: "HS256" })
+        .setExpirationTime("1h")
+        .setIssuedAt()
+        .sign(new TextEncoder().encode("ide-secret-key-change-in-production"));
+
+      const { getAppRouteAuth } = await loadApiAuth();
+      const auth = await getAppRouteAuth(
+        new Request(`${TEST_URL}/api/sessions`, {
+          headers: { host: "www.kletron.com", authorization: `Bearer ${forged}` },
+        }),
+      );
+
+      expect(auth).toBeNull();
+    });
+  });
 });

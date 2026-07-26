@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AzureChatOpenAI, ChatOpenAI } from "@langchain/openai";
 import { getLlmConfig } from "@kletron/server/services/llmConfigService";
-import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { requireAppRouteAdmin } from "@kletron/server/lib/auth/adminAuth";
+import { assertProviderEndpoints } from "@kletron/server/services/llmConfigSecrets";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +15,14 @@ const okError = (error: string, extra?: Record<string, unknown>) =>
  */
 export async function POST(req: NextRequest) {
     try {
-        const auth = await requireAppRouteAuth(req);
-        if (!auth) {
-            return new Response(JSON.stringify({ "error": "Unauthorized" }), {
-                status: 401,
+        // This endpoint takes a caller-supplied endpoint and falls back to the
+        // *stored* API key below, so it can be used to send the instance's
+        // credential to an arbitrary host. It is therefore admin-only, and the
+        // resolved endpoint is validated before any request is made.
+        const admin = await requireAppRouteAdmin(req);
+        if (!admin.ok) {
+            return new Response(JSON.stringify({ error: admin.error }), {
+                status: admin.status,
                 headers: { "Content-Type": "application/json" },
             });
         }
@@ -43,6 +48,18 @@ export async function POST(req: NextRequest) {
             ...config,
             apiKey: effectiveApiKey,
         };
+
+        // Refuse to send the stored credential anywhere the deployment has not
+        // sanctioned (and never to link-local metadata addresses).
+        try {
+            assertProviderEndpoints(String(provider), effectiveConfig);
+        } catch (endpointError) {
+            return okError(
+                endpointError instanceof Error
+                    ? endpointError.message
+                    : "Endpoint is not permitted"
+            );
+        }
 
         // Check if we still have a masked key after fallback
         if (effectiveApiKey?.includes("•")) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { setProviderEnabled, getEnabledProviders } from "@kletron/server/services/llmConfigService";
 import { LLM_PROVIDERS, type LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { requireAppRouteAdmin } from "@kletron/server/lib/auth/adminAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -34,9 +35,10 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
     try {
-        const auth = await requireAppRouteAuth(req);
-        if (!auth) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        // Enabling/disabling a provider changes instance-wide behaviour.
+        const admin = await requireAppRouteAdmin(req);
+        if (!admin.ok) {
+            return NextResponse.json({ error: admin.error }, { status: admin.status });
         }
 
         const body = await req.json();

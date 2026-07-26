@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLlmConfig, resetToDefaultConfig, updateDefaultProvider } from "@kletron/server/services/llmConfigService";
 import { requireAppRouteAuth } from "@kletron/server/lib/auth/apiAuth";
+import { requireAppRouteAdmin } from "@kletron/server/lib/auth/adminAuth";
 import { LLM_PROVIDERS, type LlmProviderType } from "@kletron/shared/schemas/llmConfig.schema";
 
 export const dynamic = "force-dynamic";
@@ -85,10 +86,11 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(req: NextRequest) {
     try {
-        const auth = await requireAppRouteAuth(req);
-        if (!auth) {
-            return new Response(JSON.stringify({ error: "Unauthorized" }), {
-                status: 401,
+        // Changing the default provider redirects every prompt in the instance.
+        const admin = await requireAppRouteAdmin(req);
+        if (!admin.ok) {
+            return new Response(JSON.stringify({ error: admin.error }), {
+                status: admin.status,
                 headers: { "Content-Type": "application/json" },
             });
         }
@@ -123,10 +125,10 @@ export async function POST(req: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
     try {
-        const auth = await requireAppRouteAuth(request);
-        if (!auth) {
-            return new Response(JSON.stringify({ error: "Unauthorized" }), {
-                status: 401,
+        const admin = await requireAppRouteAdmin(request);
+        if (!admin.ok) {
+            return new Response(JSON.stringify({ error: admin.error }), {
+                status: admin.status,
                 headers: { "Content-Type": "application/json" },
             });
         }

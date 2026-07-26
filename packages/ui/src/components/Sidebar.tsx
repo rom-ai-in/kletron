@@ -1,117 +1,103 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
-    Settings,
-    Terminal,
+    Code2,
     Home,
-    Layers,
+    Briefcase,
+    Zap,
     Clock,
-    ChevronLeft,
-    ChevronRight,
-    UserCircle,
     LogOut,
     Building2,
+    Plus,
+    MoreHorizontal,
+    Network,
+    SlidersHorizontal,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useWorkspace } from "../context/WorkspaceContext";
+import {
+    DEFAULT_WORK_MODE,
+    readWorkModePreference,
+    writeWorkModePreference,
+} from "@kletron/shared/workModePreference";
+import { WORK_MODES, type WorkModeId } from "@kletron/shared/workMode";
+import { SidebarNavGroup, SidebarNavItem, SidebarSegmented } from "./nav/SidebarNav";
+import { SidebarAccountBlock } from "./nav/SidebarAccountBlock";
 
-
-const navItems = [
-    {
-        label: "App Overview",
-        icon: Home,
-        href: "/app",
-    },
-    {
-        label: "Agent",
-        icon: Terminal,
-        href: "/app/agent",
-    },
-    {
-        label: "Automations",
-        icon: Layers,
-        href: "/app/automations",
-    },
-    {
-        label: "History",
-        icon: Clock,
-        href: "/app/history",
-    },
-    {
-        label: "Configuration",
-        icon: Settings,
-        href: "/app/config",
-    },
-    {
-        label: "Organization",
-        icon: Building2,
-        href: "/app/organization",
-    }
+/** Work first, Code second — the same switch the thread rail shows. */
+const WORK_MODE_SEGMENTS = [
+    { id: "work" as const, label: WORK_MODES.work.name, icon: Briefcase, title: WORK_MODES.work.description },
+    { id: "code" as const, label: WORK_MODES.code.name, icon: Code2, title: WORK_MODES.code.description },
 ];
 
-/** Generate a stable gradient based on a string (user ID or email) */
-function getAvatarGradient(seed: string): string {
-    const colors = [
-        'from-violet-600 to-indigo-600',
-        'from-blue-600 to-cyan-500',
-        'from-emerald-500 to-teal-500',
-        'from-amber-500 to-orange-500',
-        'from-rose-500 to-pink-500',
-        'from-fuchsia-500 to-purple-500',
-        'from-emerald-500 to-teal-600',
-        'from-lime-500 to-emerald-500',
-    ];
-    let hash = 0;
-    for (let i = 0; i < seed.length; i++) {
-        hash = seed.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
+/**
+ * Primary rows: New Agent → Automation → Settings.
+ * "Settings" is `/app/config`, the hub that already lists AI models, embeddings,
+ * context, tools, connectors, skills and plugins — its sub-pages never go in the
+ * menu, you reach them from the hub.
+ */
+const primaryItems: Array<{ label: string; icon: typeof Plus; href: string; action?: true }> = [
+    { label: "New Agent", icon: Plus, href: "/app/agent?new=1", action: true },
+    { label: "Automation", icon: Zap, href: "/app/automations" },
+];
+
+/** Everything else lives behind the "More" disclosure — top-level destinations only. */
+const moreItems = [
+    { label: "Agent Graphs", icon: Network, href: "/app/agent-graphs" },
+    { label: "History", icon: Clock, href: "/app/history" },
+    { label: "Organization", icon: Building2, href: "/app/organization" },
+];
+
+/** Strip the query string so `/app/agent?new=1` still matches `/app/agent`. */
+function pathOf(href: string): string {
+    return href.split("?")[0];
 }
 
-/** Get initials from a name or email */
-function getInitials(name?: string | null, email?: string | null): string {
-    if (name) {
-        const parts = name.trim().split(/\s+/);
-        if (parts.length >= 2) {
-            return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-        }
-        return name.slice(0, 2).toUpperCase();
-    }
-    if (email) {
-        const localPart = email.split('@')[0];
-        return localPart.slice(0, 2).toUpperCase();
-    }
-    return 'U';
+export interface SidebarProps {
+    /** Controlled by the app shell so the toggle can live in the header. */
+    collapsed?: boolean;
 }
 
-export function Sidebar() {
+export function Sidebar({ collapsed = false }: SidebarProps = {}) {
     const pathname = usePathname();
-    const { user, profile, loading: authLoading, signOut } = useAuth();
+    const router = useRouter();
+    const { signOut } = useAuth();
 
-    const [isCollapsed, setIsCollapsed] = useState(false);
+    const isCollapsed = collapsed;
+    const [moreOpen, setMoreOpen] = useState(false);
 
-    // Memoize user display values
-    const displayName = useMemo(() => {
-        if (profile?.full_name) return profile.full_name;
-        if (user?.email) return user.email.split('@')[0];
-        return 'User';
-    }, [profile, user]);
+    /**
+     * The mode lives with the agent workspace; here it is the entry point into it.
+     * Read from the shared preference so this rail and the thread rail agree.
+     */
+    const { activeWorkspaceId } = useWorkspace() ?? {};
+    const [workMode, setWorkMode] = useState<WorkModeId>(DEFAULT_WORK_MODE);
+    useEffect(() => {
+        setWorkMode(readWorkModePreference(activeWorkspaceId) ?? DEFAULT_WORK_MODE);
+    }, [activeWorkspaceId]);
 
-    const displayEmail = useMemo(() => {
-        return user?.email || 'account@kletron.ch';
-    }, [user]);
+    const handleWorkModeSelect = (mode: WorkModeId) => {
+        setWorkMode(mode);
+        writeWorkModePreference(activeWorkspaceId, mode);
+        router.push(`/app/agent?mode=${mode}`);
+    };
 
-    const avatarGradient = useMemo(() => {
-        return getAvatarGradient(user?.id || user?.email || 'default');
-    }, [user]);
+    /**
+     * Segment-boundary match, so `/app/agent` does not light up on
+     * `/app/agent-graphs`. Query strings are ignored (`/app/agent?new=1`).
+     */
+    /** The Work/Code switch only reflects a current mode while on the agent surface. */
+    const isAgentSurface = pathname === "/app/agent";
 
-    const initials = useMemo(() => {
-        return getInitials(profile?.full_name, user?.email);
-    }, [profile, user]);
-
-    const isAccountActive = pathname === '/app/account' || pathname?.startsWith('/app/account/');
+    const isActive = (href: string) => {
+        const base = pathOf(href);
+        if (pathname === base) return true;
+        if (base === "/app") return false;
+        return pathname?.startsWith(`${base}/`) ?? false;
+    };
 
     const handleSignOut = async () => {
         await signOut();
@@ -120,118 +106,129 @@ export function Sidebar() {
 
     return (
         <aside
-            className={`flex h-full flex-col border-r border-white/[0.06] bg-bg-surface text-text-primary transition-all duration-300 ease-in-out ${isCollapsed ? "w-[72px]" : "w-64"
+            className={`flex h-full flex-col border-r border-white/[0.06] bg-bg-rail text-text-primary transition-all duration-300 ease-in-out ${isCollapsed ? "w-[72px]" : "w-64"
                 }`}
         >
-            {/* Header — h-14 matches AppHeader. Collapsed: logo hidden (narrow rail); home stays in nav. */}
+            {/* Top: identity. The collapse control lives in the header, not here —
+                two chevrons side by side read as one broken control. */}
             <div
-                className={`shrink-0 border-b border-white/[0.06] transition-all duration-300 ${isCollapsed
-                    ? "flex h-14 items-center justify-center px-2"
-                    : "flex h-14 items-center gap-3 px-6"
-                    }`}
+                className={`flex h-14 shrink-0 items-center border-b border-white/[0.06] ${
+                    isCollapsed ? "justify-center px-2" : "px-2"
+                }`}
             >
-                {!isCollapsed && (
-                    <>
-                        <Link href="/" className="flex shrink-0 items-center text-2xl leading-none hover:opacity-80 transition-opacity" title="Go to landing page">
-                            🧠
-                        </Link>
-                        <span className="text-sm font-semibold tracking-tight text-text-primary whitespace-nowrap overflow-hidden transition-opacity duration-300">
-                            Kletron
-                        </span>
-                    </>
-                )}
-                <button
-                    type="button"
-                    onClick={() => setIsCollapsed(!isCollapsed)}
-                    className={`flex items-center justify-center rounded-md p-1.5 text-text-muted hover:bg-state-hover hover:text-text-primary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/15 ${isCollapsed ? "" : "ml-auto"}`}
-                    title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-                >
-                    {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-                </button>
+                <SidebarAccountBlock
+                    collapsed={isCollapsed}
+                    onOpenAccount={() => router.push("/app/account")}
+                    className={isCollapsed ? "" : "min-w-0 flex-1"}
+                />
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 space-y-1 p-3 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-border-strong scrollbar-track-transparent">
-                {/* Nav Items */}
-                {navItems.map((item) => {
-                    const isActive = pathname === item.href || (item.href !== "/" && (pathname?.startsWith(item.href) ?? false));
-                    const Icon = item.icon;
+            <nav className="flex-1 overflow-y-auto overflow-x-hidden p-3 scrollbar-thin scrollbar-thumb-border-strong scrollbar-track-transparent">
+                {/* Work | Code — same switch as the thread rail */}
+                {isCollapsed ? (
+                    <SidebarNavGroup className="mb-2">
+                        {WORK_MODE_SEGMENTS.map(({ id, label, icon, title }) => (
+                            <SidebarNavItem
+                                key={id}
+                                icon={icon}
+                                label={label}
+                                title={title}
+                                collapsed
+                                active={isAgentSurface && workMode === id}
+                                onClick={() => handleWorkModeSelect(id)}
+                            />
+                        ))}
+                    </SidebarNavGroup>
+                ) : (
+                    <SidebarSegmented
+                        ariaLabel="Work mode"
+                        options={WORK_MODE_SEGMENTS}
+                        value={isAgentSurface ? workMode : undefined}
+                        onChange={handleWorkModeSelect}
+                        className="mb-3 flex w-full"
+                    />
+                )}
 
-                    return (
-                        <Link
-                            key={item.href}
+                <SidebarNavGroup>
+                    <SidebarNavItem
+                        icon={Home}
+                        label="Home"
+                        collapsed={isCollapsed}
+                        active={pathname === "/app"}
+                        href="/app"
+                        LinkComponent={Link}
+                    />
+                    {primaryItems.map((item) => (
+                        <SidebarNavItem
+                            key={item.label}
+                            icon={item.icon}
+                            label={item.label}
+                            collapsed={isCollapsed}
+                            /* "New Agent" is an action, never a location — never highlighted. */
+                            active={item.action ? false : isActive(item.href)}
                             href={item.href}
-                            title={isCollapsed ? item.label : undefined}
-                            className={`group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-all duration-200 ${isActive
-                                ? "bg-state-selected text-text-primary"
-                                : "text-text-secondary hover:bg-state-hover hover:text-text-primary"
-                                } ${isCollapsed ? "justify-center" : "gap-3"}`}
-                        >
-                            <div className="relative flex items-center justify-center">
-                                <Icon className={`h-4 w-4 transition-colors ${isActive ? "text-text-primary" : "text-text-muted group-hover:text-text-primary"}`} />
-                            </div>
-                            {!isCollapsed && (
-                                <span className="flex-1 whitespace-nowrap overflow-hidden">{item.label}</span>
-                            )}
-                        </Link>
-                    );
-                })}
+                            LinkComponent={Link}
+                        />
+                    ))}
 
+                    {/* Collapsed: no room for the disclosure, so show the rows directly. */}
+                    {isCollapsed ? (
+                        moreItems.map((item) => (
+                            <SidebarNavItem
+                                key={item.label}
+                                icon={item.icon}
+                                label={item.label}
+                                collapsed
+                                active={isActive(item.href)}
+                                href={item.href}
+                                LinkComponent={Link}
+                            />
+                        ))
+                    ) : (
+                        <>
+                            <SidebarNavItem
+                                icon={MoreHorizontal}
+                                label="More"
+                                active={moreOpen}
+                                expanded={moreOpen}
+                                onClick={() => setMoreOpen((open) => !open)}
+                                title="More"
+                            />
+                            {moreOpen
+                                ? moreItems.map((item) => (
+                                    <SidebarNavItem
+                                        key={item.label}
+                                        icon={item.icon}
+                                        label={item.label}
+                                        active={isActive(item.href)}
+                                        href={item.href}
+                                        LinkComponent={Link}
+                                        className="pl-4"
+                                    />
+                                ))
+                                : null}
+                        </>
+                    )}
+                </SidebarNavGroup>
             </nav>
 
-            {/* Footer */}
-            <div className={`border-t border-white/[0.06] p-4 transition-all duration-300 ${isCollapsed ? "px-2" : ""}`}>
-                {/* Profile Section - Linked to /app/account */}
-                <Link
-                    href="/app/account"
-                    title={isCollapsed ? `${displayName} - Mon compte` : undefined}
-                    className={`group flex items-center rounded-lg border mt-4 transition-all duration-300 ${isAccountActive
-                        ? "border-border-strong bg-state-selected"
-                        : "border-border-subtle bg-bg-elevated hover:border-border-strong hover:bg-state-hover"
-                        } ${isCollapsed ? "justify-center border-transparent bg-transparent p-2 mt-2 hover:bg-bg-elevated" : "gap-3 p-3"}`}
-                >
-                    {/* Avatar */}
-                    {authLoading ? (
-                        <div className="h-8 w-8 shrink-0 rounded-full bg-bg-elevated animate-pulse" />
-                    ) : (
-                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr ${avatarGradient} text-text-primary text-xs font-semibold shadow-sm`}>
-                            {initials}
-                        </div>
-                    )}
-
-                    {/* User Info */}
-                    {!isCollapsed && (
-                        <div className="flex-1 overflow-hidden">
-                            {authLoading ? (
-                                <>
-                                    <div className="h-3 w-20 bg-bg-elevated rounded animate-pulse mb-1" />
-                                    <div className="h-2.5 w-28 bg-bg-elevated rounded animate-pulse" />
-                                </>
-                            ) : (
-                                <>
-                                    <p className="truncate text-xs font-medium text-text-primary group-hover:text-text-primary">
-                                        {displayName}
-                                    </p>
-                                    <p className="truncate text-[10px] text-text-muted">
-                                        {displayEmail}
-                                    </p>
-                                </>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Account indicator icon in expanded mode */}
-                    {!isCollapsed && (
-                        <UserCircle className={`h-4 w-4 shrink-0 transition-colors ${isAccountActive ? "text-text-primary" : "text-text-muted group-hover:text-text-secondary"}`} />
-                    )}
-                </Link>
-
-                {/* Logout button in collapsed mode */}
+            {/* Bottom: Settings — the hub at /app/config, never its sub-pages. */}
+            <div className="shrink-0 border-t border-white/[0.06] p-3">
+                <SidebarNavItem
+                    icon={SlidersHorizontal}
+                    label="Settings"
+                    collapsed={isCollapsed}
+                    active={isActive("/app/config")}
+                    href="/app/config"
+                    LinkComponent={Link}
+                />
                 {isCollapsed && (
                     <button
-                        onClick={handleSignOut}
-                        title="Se déconnecter"
-                        className="mt-2 flex w-full items-center justify-center rounded-lg p-2 text-text-muted transition hover:bg-status-error-bg hover:text-status-error-text"
+                        type="button"
+                        onClick={() => void handleSignOut()}
+                        title="Sign out"
+                        className="mt-1 flex w-full items-center justify-center rounded-lg p-2 text-text-muted transition hover:bg-status-error-bg hover:text-status-error-text"
                     >
                         <LogOut className="h-4 w-4" />
                     </button>
