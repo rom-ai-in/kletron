@@ -1,0 +1,56 @@
+=== Kletron platform local proof ===
+date_europe_zurich: Thu, 05 Nov 2026 22:24:53 +0100
+node: v24.22.1
+npm: 11.21.1
+
+=== typecheck ===
+
+> kletron-platform@0.1.0-demo typecheck
+> tsc -p tsconfig.json --noEmit
+
+
+=== tests ===
+
+> kletron-platform@0.1.0-demo test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/kletron/kletron-platform
+
+ ✓ tests/journal-policy-litellm.test.ts (5 tests) 5ms
+ ✓ tests/security-scenarios.test.ts (6 tests) 13ms
+ ✓ tests/gateway-http.test.ts (2 tests) 41ms
+ ✓ tests/console.test.ts (2 tests) 45ms
+
+ Test Files  4 passed (4)
+      Tests  15 passed (15)
+   Start at  22:24:54
+   Duration  399ms (transform 152ms, setup 0ms, collect 543ms, tests 104ms, environment 1ms, prepare 239ms)
+
+
+=== litellm config generate ===
+
+> kletron-platform@0.1.0-demo litellm:config
+> tsx src/litellm/cli.ts /workspace/kletron/kletron-platform/proofs/litellm.generated.yaml
+
+Wrote /workspace/kletron/kletron-platform/proofs/litellm.generated.yaml
+
+=== journal append-only sample ===
+journal_path /tmp/kletron-j-f2MLVY/journal.jsonl
+events [
+  {
+    "seq": 1,
+    "ts": "2026-11-05T21:24:55.846Z",
+    "kind": "config_served",
+    "actor": "prove"
+  },
+  {
+    "seq": 2,
+    "ts": "2026-11-05T21:24:55.846Z",
+    "kind": "tool_deny",
+    "actor": "prove",
+    "reason": "default_deny"
+  }
+]
+
+PROOF_OK

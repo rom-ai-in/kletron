@@ -1,0 +1,64 @@
+{
+  "version": "2026-11-05.demo",
+  "clientId": "demo-client",
+  "connectors": [
+    { "connector": "bexio", "enabled": true },
+    { "connector": "m365", "enabled": true }
+  ],
+  "grants": [
+    {
+      "group": "Kletron-Utilisateurs",
+      "connector": "bexio",
+      "resource": "contacts",
+      "actions": ["read"],
+      "maxClass": "C0"
+    },
+    {
+      "group": "Kletron-Utilisateurs",
+      "connector": "bexio",
+      "resource": "invoices",
+      "actions": ["read"],
+      "maxClass": "C0"
+    },
+    {
+      "group": "Kletron-Validateurs",
+      "connector": "bexio",
+      "resource": "contacts",
+      "actions": ["read", "write"],
+      "maxClass": "C0"
+    },
+    {
+      "group": "Kletron-Utilisateurs",
+      "connector": "m365",
+      "resource": "mail",
+      "actions": ["read"],
+      "maxClass": "C0"
+    },
+    {
+      "group": "Kletron-Validateurs",
+      "connector": "m365",
+      "resource": "mail",
+      "actions": ["read", "write"],
+      "maxClass": "C0"
+    },
+    {
+      "group": "Kletron-Utilisateurs",
+      "connector": "m365",
+      "resource": "calendar",
+      "actions": ["read"],
+      "maxClass": "C0"
+    },
+    {
+      "group": "Kletron-Utilisateurs",
+      "connector": "m365",
+      "resource": "files",
+      "actions": ["read"],
+      "maxClass": "C0"
+    }
+  ],
+  "writeApprovalRequired": [
+    { "connector": "bexio", "resource": "contacts" },
+    { "connector": "bexio", "resource": "invoices" },
+    { "connector": "m365", "resource": "mail" }
+  ]
+}

@@ -1,0 +1,21 @@
+Kletron Agent
+=============
+
+Kletron Agent is a modified distribution ("fork") of Hermes Agent.
+
+  Upstream project : Hermes Agent
+  Upstream author  : Nous Research
+  Upstream source  : https://github.com/NousResearch/hermes-agent
+  Upstream license : MIT License — Copyright (c) 2025 Nous Research
+                     (full text unchanged in the LICENSE file of this repository)
+
+Modifications by the Kletron project are listed as a patch queue in
+kletron/patches/ (see kletron/patches/series) and are distributed under the
+same MIT License.
+
+"Hermes Agent" and "Nous Research" are names / marks of Nous Research, Inc.
+(a US trademark application for "HERMES AGENT", serial 50111354, was filed on
+2026-09-16). They are used here only to identify the upstream origin of the
+code. Kletron is NOT affiliated with, sponsored by, or endorsed by Nous Research.
+
+Third-party components bundled by upstream keep their own licenses and notices.

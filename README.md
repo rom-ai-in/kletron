@@ -1,193 +1,243 @@
-# Kletron
+<p align="center">
+  <img src="assets/banner.png" alt="Hermes Agent" width="100%">
+</p>
 
-**MCP-native agent graphs with a real UI.** Local-first / BYOK — run models on your keys or on your machine.
+# Hermes Agent ☤
+<p align="center">
+  <a href="https://hermes-agent.nousresearch.com/">Hermes Agent</a> | <a href="https://hermes-agent.nousresearch.com/">Hermes Desktop</a>
+</p>
+<p align="center">
+  <a href="https://hermes-agent.nousresearch.com/docs/"><img src="https://img.shields.io/badge/Docs-hermes--agent.nousresearch.com-FFD700?style=for-the-badge" alt="Documentation"></a>
+  <a href="https://discord.gg/NousResearch"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://github.com/NousResearch/hermes-agent/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
+  <a href="https://nousresearch.com"><img src="https://img.shields.io/badge/Built%20by-Nous%20Research-blueviolet?style=for-the-badge" alt="Built by Nous Research"></a>
+  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/Lang-中文-red?style=for-the-badge" alt="中文"></a>
+  <a href="README.ur-pk.md"><img src="https://img.shields.io/badge/Lang-اردو-green?style=for-the-badge" alt="اردو"></a>
+  <a href="README.es.md"><img src="https://img.shields.io/badge/Lang-Español-orange?style=for-the-badge" alt="Español"></a>
+</p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Powered by Gemini + Vertex AI](https://img.shields.io/badge/Powered%20by-Gemini%20%2B%20Vertex%20AI-4285F4)](#google-cloud-deployment)
-[![Cloud Run](https://img.shields.io/badge/Runs%20on-Google%20Cloud%20Run-34A853)](#google-cloud-deployment)
+**The self-improving AI agent built by [Nous Research](https://nousresearch.com).** It's the only agent with a built-in learning loop — it creates skills from experience, improves them during use, nudges itself to persist knowledge, searches its own past conversations, and builds a deepening model of who you are across sessions. Run it on a $5 VPS, a GPU cluster, or serverless infrastructure that costs nearly nothing when idle. It's not tied to your laptop — talk to it from Telegram while it works on a cloud VM.
 
-> **Submitted to the [Google for Startups AI Agents Challenge](https://googleforstartups-aiagents.devpost.com/) — Track 3: *Refactor for Google Cloud Marketplace & Gemini Enterprise*.**
-> Live demo: <https://www.kletron.com> · credentials: `demo@kletron.local` / `kletron-demo` · ADK/A2A endpoint: see [`apps/mcp-server/adk-entrypoint.ts`](./apps/mcp-server/adk-entrypoint.ts).
-
-![Kletron architecture on Google Cloud](./docs/assets/architecture-google.png)
-
-Kletron is a TypeScript monorepo: **Next.js** app, **Electron** desktop, **MCP tool server**, and shared **agent/graph** packages. Compose multi-node graphs, attach workspace MCP servers, and ship with traces—not a single opaque chat thread.
-
-## Product tour
+Use any model you want — [Nous Portal](https://portal.nousresearch.com), OpenRouter, OpenAI, your own endpoint, and [many others](https://hermes-agent.nousresearch.com/docs/integrations/providers). Switch with `hermes model` — no code changes, no lock-in.
 
 <table>
-  <tr>
-    <td width="50%"><a href="./docs/assets/screenshot-landing.png"><img src="./docs/assets/screenshot-landing.png" alt="Kletron landing — Agents for everything you build"/></a></td>
-    <td width="50%"><a href="./docs/assets/screenshot-platform.png"><img src="./docs/assets/screenshot-platform.png" alt="One runtime, two modes — Code and Work share one stack"/></a></td>
-  </tr>
-  <tr>
-    <td><sub><b>Landing.</b> Agent graphs, MCP tools, and a real UI — local-first / BYOK.</sub></td>
-    <td><sub><b>Platform.</b> Six pillars: graph runtime, workspace context, MCP layer, modes, automations, EU posture.</sub></td>
-  </tr>
-  <tr>
-    <td><a href="./docs/assets/screenshot-mcp.png"><img src="./docs/assets/screenshot-mcp.png" alt="Bundled MCP toolset — namespaced tools, easy to read in traces"/></a></td>
-    <td><a href="./docs/assets/screenshot-login.png"><img src="./docs/assets/screenshot-login.png" alt="Sign in"/></a></td>
-  </tr>
-  <tr>
-    <td><sub><b>MCP.</b> Bundled toolset (file I/O, git, search, exec) plus workspace-scoped servers — tools stay namespaced.</sub></td>
-    <td><sub><b>Sign in.</b> Self-serve auth. The hosted demo at <a href="https://www.kletron.com">www.kletron.com</a> uses <code>demo@kletron.local</code> / <code>kletron-demo</code>.</sub></td>
-  </tr>
+<tr><td><b>A real terminal interface</b></td><td>Full TUI with multiline editing, slash-command autocomplete, conversation history, interrupt-and-redirect, and streaming tool output.</td></tr>
+<tr><td><b>Lives where you do</b></td><td>Telegram, Discord, Slack, WhatsApp, Signal, and CLI — all from a single gateway process. Voice memo transcription, cross-platform conversation continuity.</td></tr>
+<tr><td><b>A closed learning loop</b></td><td>Agent-curated memory with periodic nudges. Autonomous skill creation after complex tasks. Skills self-improve during use. FTS5 session search with LLM summarization for cross-session recall. <a href="https://github.com/plastic-labs/honcho">Honcho</a> dialectic user modeling. Compatible with the <a href="https://agentskills.io">agentskills.io</a> open standard.</td></tr>
+<tr><td><b>Scheduled automations</b></td><td>Built-in cron scheduler with delivery to any platform. Daily reports, nightly backups, weekly audits — all in natural language, running unattended.</td></tr>
+<tr><td><b>Delegates and parallelizes</b></td><td>Spawn isolated subagents for parallel workstreams. In Desktop, choose their provider, model, and limits under Settings → Model → Subagents, then Apply the complete route. Write Python scripts that call tools via RPC, collapsing multi-step pipelines into zero-context-cost turns.</td></tr>
+<tr><td><b>Runs anywhere, not just your laptop</b></td><td>Six built-in terminal backends — local, Docker, SSH, Modal, Daytona, and Vercel Sandbox — plus plugin backends such as Singularity/Apptainer. Daytona and Modal offer serverless persistence — your agent's environment hibernates when idle and wakes on demand, costing nearly nothing between sessions. Run it on a $5 VPS or a GPU cluster.</td></tr>
+<tr><td><b>Research-ready</b></td><td>Batch trajectory generation, trajectory compression for training the next generation of tool-calling models.</td></tr>
 </table>
 
-| Start here | |
-|------------|--|
-| **Run in ~15 min** | [Quickstart](#quickstart) |
-| **Where code lives** | [ARCHITECTURE.md](./ARCHITECTURE.md) |
-| **MCP connectors (full doc)** | [docs/mcp-connectors-integration.md](./docs/mcp-connectors-integration.md) |
-| **Send a PR** | [CONTRIBUTING.md](./CONTRIBUTING.md) |
-| **Plugins & presets** | [community/README.md](./community/README.md) |
-| **Themes / priorities** | [ROADMAP.md](./ROADMAP.md) |
-| **Codex + Google connectors** | [Codex backend + Google Workspace connectors](#codex-backend--google-workspace-connectors) |
-
-**Community:** GitHub Discussions on your fork (enable in repo settings) · Discord: coming soon.
-
 ---
 
-## Quickstart
+## Quick Install
 
-**Prerequisites:** Node 20+, Docker (for Mongo), `git`.
+### Linux, macOS, WSL2
 
 ```bash
-git clone https://github.com/rom-ai-in/kletron.git
-cd kletron
-cp env.example .env
-# Edit .env: set NEXTAUTH_SECRET, MCP_INTERNAL_TOKEN, and LM Studio / Azure keys (see MINIMUM section in env.example)
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 ```
 
-**One path (Make):**
+### Windows (native, PowerShell)
+
+> **Heads up:** Native Windows runs Hermes without WSL — CLI, gateway, TUI, and tools all work natively. If you'd rather use WSL2, the Linux/macOS one-liner above works there too. Found a bug? Please [file issues](https://github.com/NousResearch/hermes-agent/issues).
+
+Run this in PowerShell:
+
+```powershell
+iex (irm https://hermes-agent.nousresearch.com/install.ps1)
+```
+
+The source installer delegates Python 3.14, Node.js, npm, ripgrep, FFmpeg,
+and Python dependencies to PM. If Git is absent, it stages the verified Git
+for Windows archive in Hermes' tool store. It does not replace your system Git.
+See [installation methods](https://hermes-agent.nousresearch.com/docs/getting-started/installation)
+for the separate MSIX/App Installer package and its update ownership.
+
+> **Android / Termux:** A signed APT repository is available for aarch64 devices, with a `stable` channel (tagged releases) and a prerelease `canary` channel. The package includes Python, Node.js, and the TUI. Use the [Termux guide](https://hermes-agent.nousresearch.com/docs/getting-started/termux), not the desktop/server installer script.
+>
+> **Windows:** Native Windows is fully supported — the PowerShell one-liner above installs everything. If you'd rather use WSL2, the Linux command works there too. Native Windows install lives under `%LOCALAPPDATA%\hermes`; WSL2 installs under `~/.hermes` as on Linux.
+
+After installation:
 
 ```bash
-make quickstart
+source ~/.bashrc    # reload shell (or: source ~/.zshrc)
+hermes              # start chatting!
 ```
 
-**Same path (npm + shell):**
+### Troubleshooting
+
+#### Windows Defender or antivirus flags `uv.exe` as malware
+
+If your antivirus (Bitdefender, Windows Defender, etc.) quarantines `uv.exe` from the Hermes `bin` folder (`%LOCALAPPDATA%\hermes\bin\uv.exe`), this is a **false positive**. The file is Astral's `uv` — the Rust Python package manager Hermes bundles to manage its Python environment. ML-based antivirus engines commonly flag unsigned Rust binaries that download and install packages.
+
+**To verify your copy is authentic:**
+
+```powershell
+# Install GitHub CLI if needed
+winget install --id GitHub.cli
+
+# Login to GitHub
+gh auth login
+
+# Run verification
+$uv = "$env:LOCALAPPDATA\hermes\bin\uv.exe"
+$ver = (& $uv --version).Split(' ')[1]
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$zip = "$env:TEMP\uv.zip"
+Invoke-WebRequest "https://github.com/astral-sh/uv/releases/download/$ver/uv-x86_64-pc-windows-msvc.zip" -OutFile $zip -UseBasicParsing
+gh attestation verify $zip --repo astral-sh/uv
+Expand-Archive $zip "$env:TEMP\uv_x" -Force
+(Get-FileHash "$env:TEMP\uv_x\uv.exe").Hash -eq (Get-FileHash $uv).Hash
+```
+
+If attestation says "Verification succeeded" and the last line prints `True`, you're good.
+
+**To whitelist Hermes:**
+- **Windows Defender:** Run PowerShell as Admin → `Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\hermes\bin"`
+- **Bitdefender:** Add an exception in the Bitdefender console (Protection > Antivirus > Settings > Manage Exceptions)
+- Whitelist the **folder**, not the file hash — Hermes updates `uv` and the hash changes every version
+
+For more context, see the upstream Astral reports: [astral-sh/uv#13553](https://github.com/astral-sh/uv/issues/13553), [astral-sh/uv#15011](https://github.com/astral-sh/uv/issues/15011), [astral-sh/uv#10079](https://github.com/astral-sh/uv/issues/10079).
+
+---
+
+## Getting Started
 
 ```bash
-npm run quickstart
-# or: ./bin/quickstart.sh
+hermes              # Interactive CLI — start a conversation
+hermes model        # Choose your LLM provider and model
+hermes tools        # Configure which tools are enabled
+hermes config set   # Set individual config values
+hermes config get   # Print individual config values
+hermes gateway      # Start the messaging gateway (Telegram, Discord, etc.)
+hermes setup        # Run the full setup wizard (configures everything at once)
+hermes update       # Update to the latest version
+hermes doctor       # Diagnose any issues
 ```
 
-This starts **MongoDB**, installs deps, runs **`npm run seed:demo`** (demo user + [`examples/quickstart-workspace`](./examples/quickstart-workspace) + default graphs), then **`npm run dev`** (MCP + LangGraph dev + web + desktop launcher per [scripts/dev-all.ts](./scripts/dev-all.ts)).
-
-**Log in after seed**
-
-- URL: `http://localhost:3000/auth/login` (or your `NEXT_PUBLIC_APP_URL`)
-- Email: `demo@kletron.local`
-- Password: `kletron-demo`
+📖 **[Full documentation →](https://hermes-agent.nousresearch.com/docs/)**
 
 ---
 
-## Why Kletron (vs wiring LangGraph + a random UI yourself)
+## Skip the API-key collection — Nous Portal
 
-- **Graph editor + runtime** — presets, branching, and traces in product, not only in notebooks.
-- **MCP everywhere** — bundled tools + **workspace-scoped** MCP (stdio / SSE / HTTP); tools namespaced for readable logs.
-- **BYOK & local models** — LM Studio, Ollama, vLLM, plus cloud APIs; you control spend and data routing.
-- **EU / self-host posture** — run the stack where your policy says; see [Enterprise](https://kletron.com/enterprise) for managed options.
-- **Contributor-friendly surface** — [`community/`](./community/) for MCP templates, graph JSON presets, and skills without touching core internals.
+Hermes works with whatever provider you want — that's not changing. But if you'd rather not collect five separate API keys for the model, web search, image generation, TTS, and a cloud browser, **[Nous Portal](https://portal.nousresearch.com)** covers all of them under one subscription:
 
----
+- **300+ models** — pick any of them with `/model <name>`
+- **Tool Gateway** — web search, image generation (FAL), text-to-speech (OpenAI), cloud browser (Browser Use), all routed through your sub. No extra accounts.
 
-## Repo layout (short)
+One command from a fresh install:
 
-| Path | Role |
-|------|------|
-| `apps/web` | Next.js UI + App Router APIs |
-| `apps/mcp-server` | MCP SSE server (tools) |
-| `apps/desktop` | Electron shell |
-| `apps/cli` | CLI entrypoints |
-| `packages/agent-core` | Graphs, agents, workflows |
-| `packages/server` | DB, auth helpers, graph execution services |
-| `packages/ui` | Design system & shared UI |
-| `packages/shared` | Types & pure utilities |
-| `packages/mcp-client` | MCP client |
+```bash
+hermes setup --portal
+```
 
-Deep dive tables and API notes live in **[docs/README-archive.md](./docs/README-archive.md)** (archived long README).
+That logs you in via OAuth, sets Nous as your provider, and turns on the Tool Gateway. Check what's wired up any time with `hermes portal info`. Full details on the [Tool Gateway docs page](https://hermes-agent.nousresearch.com/docs/user-guide/features/tool-gateway).
+
+You can still bring your own keys per-tool whenever you want — the gateway is per-backend, not all-or-nothing.
 
 ---
 
-## Google Cloud deployment
+## CLI vs Messaging Quick Reference
 
-Kletron ships first-class **Google Gemini** and **Vertex AI** providers, and runs on **Google Cloud Run** out of the box (`infra/gcp/`).
+Hermes has two entry points: start the terminal UI with `hermes`, or run the gateway and talk to it from Telegram, Discord, Slack, WhatsApp, Signal, or Email. Once you're in a conversation, many slash commands are shared across both interfaces.
 
-| Surface | Path | Notes |
-|---------|------|-------|
-| Gemini (AI Studio API) | Settings → LLM → **Google Gemini** | Paste a key from <https://aistudio.google.com/apikey>. Code: [`packages/server/src/llm.ts`](./packages/server/src/llm.ts) `case "gemini"`. |
-| Vertex AI (Gemini Enterprise) | Settings → LLM → **Vertex AI** | Set Google Cloud project + location. On Cloud Run, leave credentials empty — Application Default Credentials are used via the attached service account. Code: same file, `case "vertex"`. |
-| ADK + A2A endpoint | `npm run dev:adk` | Wraps the Simple ReAct node as a Google ADK `LlmAgent` and serves it over the A2A protocol. Source: [`packages/agent-core/src/adk/kletronAgent.ts`](./packages/agent-core/src/adk/kletronAgent.ts), [`apps/mcp-server/adk-entrypoint.ts`](./apps/mcp-server/adk-entrypoint.ts). |
-| Cloud Run deploy | `./infra/gcp/vertex-ai-setup.sh && ./infra/gcp/deploy.sh` | Builds & rolls `kletron-web` + `kletron-mcp` to Cloud Run, wires Vertex env vars, grants the `Vertex AI User` role to the runtime service account. |
+| Action                         | CLI                                           | Messaging platforms                                                              |
+| ------------------------------ | --------------------------------------------- | -------------------------------------------------------------------------------- |
+| Start chatting                 | `hermes`                                      | Run `hermes gateway setup` + `hermes gateway start`, then send the bot a message |
+| Start fresh conversation       | `/new` or `/reset`                            | `/new` or `/reset`                                                               |
+| Change model                   | `/model [provider:model]`                     | `/model [provider:model]`                                                        |
+| Set a personality              | `/personality [name]`                         | `/personality [name]`                                                            |
+| Retry or undo the last turn    | `/retry`, `/undo`                             | `/retry`, `/undo`                                                                |
+| Compress context / check usage | `/compress`, `/usage`, `/insights [--days N]` | `/compress`, `/usage`, `/insights [days]`                                        |
+| Browse skills                  | `/skills` or `/<skill-name>`                  | `/<skill-name>`                                                                  |
+| Interrupt current work         | `Ctrl+C` or send a new message                | `/stop` or send a new message                                                    |
+| Platform-specific status       | `/platforms`                                  | `/status`, `/sethome`                                                            |
 
-After deploy, the web service auto-reads `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and `VERTEX_MODEL` and lights up the Vertex provider with zero per-user key management.
-
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full Google Cloud topology.
-
----
-
-## LM Studio on a remote machine (GPU server)
-
-LM Studio can run on a separate GPU host while you use Kletron from the web or from your Mac. Expose the LM Studio server to Kletron via an SSH tunnel or an HTTPS tunnel (ngrok, Cloudflare Tunnel, etc.), then set the LM Studio **Base URL** in Kletron to the reachable endpoint (it must include the `/v1` suffix). For hosted Kletron, also set `WORKSPACE_SKIP_LOCAL_FS_VALIDATION` so workspace paths are not validated against the server's local filesystem.
-
-For **hosted Kletron + real files on your laptop**, see **[docs/workspace-local-files-hosted-kletron.md](./docs/workspace-local-files-hosted-kletron.md)** (`WORKSPACE_SKIP_LOCAL_FS_VALIDATION` + `KLETRON_REMOTE_FILE_MCP_SLUG` and a tunneled local MCP).
+For the full command lists, see the [CLI guide](https://hermes-agent.nousresearch.com/docs/user-guide/cli) and the [Messaging Gateway guide](https://hermes-agent.nousresearch.com/docs/user-guide/messaging).
 
 ---
 
-## Codex backend + Google Workspace connectors
+## Documentation
 
-When **Execution backend = Codex** (web or Electron), Kletron spawns the Codex CLI with  
-`CODEX_HOME=$HOME/.kletron/codex/<userHash>` — **not** `~/.codex`. If you never use the Codex CLI directly, you can ignore `~/.codex/config.toml`; Kletron maintains its own Codex state under `~/.kletron/codex/`.
+All documentation lives at **[hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)**:
 
-**Server `.env`:** set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` (same OAuth client as **Configuration → Connectors**).
-
-**Google Cloud Console** (project that owns that OAuth client): enable **Gmail API**, **Gmail MCP API** (`gmailmcp.googleapis.com`), **Google Calendar API**, and **Google Drive API** as needed.
-
-**In the app:** connect **Gmail**, **Google Calendar**, and **Google Drive** under Connectors and enable them for the workspace. LangGraph runs use Kletron-stored tokens directly. Codex runs additionally wire Gmail into the Codex process (refresh token → ADC JSON + bearer for Google’s hosted Gmail MCP; curated Gmail plugin is disabled to avoid ChatGPT-only credentials).
-
----
-
-## Telegram (Messenger channel)
-
-1. **HTTPS URL** — Telegram requires a public `https://` endpoint. Local dev: use a tunnel (ngrok, Cloudflare Tunnel, etc.) toward your Next.js port (default `3000`).
-2. **Secrets** — In the app: **Configuration → Messenger channels**. Save the bot token there (requires `KLETRON_CHANNEL_SECRETS_KEY` on the server) or set `CHANNEL_TELEGRAM_BOT_TOKEN` in `.env`. Optionally set `CHANNEL_TELEGRAM_WEBHOOK_SECRET` and the same value as `secret_token` when registering the webhook.
-3. **GCP prod (`kletron` project)** — Put Telegram vars in repo-root `.env`, then run `gcloud config set project kletron` and `python3 infra/gcp/provision_secrets.py`. That creates Secret Manager entries (`kletron-channel-telegram-*`) and binds **Cloud Run `kletron-web`**. Cloud Build deploys attach the same secrets if they already exist. Scripts refuse GCP project IDs containing `numezis`.
-4. **Register the webhook** — After Cloud Run has the token + webhook secret, run `./infra/gcp/set-telegram-webhook.sh` (reads `.env`, defaults to `https://www.kletron.com`) or call Telegram manually:
-
-   ```bash
-   curl -sS "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
-     -d "url=https://your-host.example.com/api/webhooks/channels/telegram" \
-     -d "secret_token=<same as CHANNEL_TELEGRAM_WEBHOOK_SECRET>"
-   ```
-
-5. **Link your account** — In the web app **Messenger channels**: enter your Telegram user id and link so routing can find your Kletron user (required — otherwise « not linked »).
-6. **Workspace & graph** — In **Messenger channels**, pick the workspace and set **default agent graph** + **Telegram enabled**. In Telegram use `/switch`, `/graphs`, `/graph clear` for per-chat overrides.
-7. **Queue** — By default, webhook updates are stored in MongoDB (`channel_inbound_jobs`) and drained FIFO so multiple server instances do not drop work. For single-process in-process handling only, set `CHANNEL_TELEGRAM_QUEUE_BACKEND=memory`.
-8. **Tool approvals** — New Telegram runs default to `CHANNEL_TELEGRAM_THREAD_APPROVAL_MODE=full_auto_thread` so read-only tools run without the web UI; set `confirm_everything` if you want every tool to queue for approval (you would approve in the Kletron web app, not in Telegram).
-
-See **`env.example`** for all related variables.
+| Section                                                                                             | What's Covered                                             |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [Quickstart](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart)                 | Install → setup → first conversation in 2 minutes          |
+| [CLI Usage](https://hermes-agent.nousresearch.com/docs/user-guide/cli)                              | Commands, keybindings, personalities, sessions             |
+| [Configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)                | Config file, providers, models, all options                |
+| [Messaging Gateway](https://hermes-agent.nousresearch.com/docs/user-guide/messaging)                | Telegram, Discord, Slack, WhatsApp, Signal, Home Assistant |
+| [Security](https://hermes-agent.nousresearch.com/docs/user-guide/security)                          | Command approval, DM pairing, container isolation          |
+| [Tools & Toolsets](https://hermes-agent.nousresearch.com/docs/user-guide/features/tools)            | 40+ tools, toolset system, terminal backends               |
+| [Skills System](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)              | Procedural memory, Skills Hub, creating skills             |
+| [Memory](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory)                     | Persistent memory, user profiles, best practices           |
+| [MCP Integration](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)               | Connect any MCP server for extended capabilities           |
+| [Cron Scheduling](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)              | Scheduled tasks with platform delivery                     |
+| [Context Files](https://hermes-agent.nousresearch.com/docs/user-guide/features/context-files)       | Project context that shapes every conversation             |
+| [Architecture](https://hermes-agent.nousresearch.com/docs/developer-guide/architecture)             | Project structure, agent loop, key classes                 |
+| [Contributing](https://hermes-agent.nousresearch.com/docs/developer-guide/contributing)             | Development setup, PR process, code style                  |
+| [CLI Reference](https://hermes-agent.nousresearch.com/docs/reference/cli-commands)                  | All commands and flags                                     |
+| [Environment Variables](https://hermes-agent.nousresearch.com/docs/reference/environment-variables) | Complete env var reference                                 |
 
 ---
 
-## Docker
+## Migrating from OpenClaw or another agent
 
-- **Default:** `docker compose up -d mongo` — local database only (used by `npm run dev:infra`).
-- **Optional profile:** `docker compose --profile fullstack up -d --build` — builds **web** + **mcp-server** images (smoke / prod-like; set secrets via `.env` or compose defaults).
+If you're coming from OpenClaw, Claude Code, Codex CLI or Cursor, Hermes can import your settings, memories and skills (and, for OpenClaw, API keys when you ask for them).
+
+**During setup:** `hermes setup` asks whether to import from another agent, pre-selects the ones it finds (`~/.openclaw`, `~/.claude`, `~/.codex`, `~/.cursor`), installs the official `agent-importers` plugin and runs the import with a preview first.
+
+**Anytime after install:**
+
+```bash
+hermes plugins install agent-importers          # once per profile
+hermes import-agent openclaw                    # interactive migration (full preset)
+hermes import-agent openclaw --dry-run          # preview what would be migrated
+hermes import-agent openclaw --migrate-secrets  # also bring allowlisted API keys
+hermes import-agent claude-code                 # or codex / cursor
+```
+
+What gets imported from OpenClaw:
+
+- **SOUL.md** — persona file
+- **Memories** — MEMORY.md and USER.md entries
+- **Skills** — user-created skills → `~/.hermes/skills/openclaw-imports/`
+- **Command allowlist** — approval patterns
+- **Messaging settings** — platform configs, allowed users, working directory
+- **API keys** — allowlisted secrets (Telegram, OpenRouter, OpenAI, Anthropic, ElevenLabs), only with `--migrate-secrets`
+- **TTS assets** — workspace audio files
+- **Workspace instructions** — AGENTS.md (with `--workspace-target`)
+
+`hermes claw migrate` still works as the older spelling. See the [OpenClaw migration guide](https://hermes-agent.nousresearch.com/docs/guides/migrate-from-openclaw) and [Import from Other Agents](https://hermes-agent.nousresearch.com/docs/user-guide/import-from-other-agents).
 
 ---
 
-## Scripts (root)
+## Contributing
 
-| Script | Purpose |
-|--------|---------|
-| `npm run quickstart` | Mongo + install + `seed:demo` + `dev` |
-| `npm run dev` | Full dev stack ([scripts/dev-all.ts](./scripts/dev-all.ts)) |
-| `npm run seed:demo` | Demo user + workspace + graphs |
-| `npm run typecheck` / `npm run lint` / `npm run test:unit` | CI checks |
+We welcome contributions! See the [Contributing Guide](https://hermes-agent.nousresearch.com/docs/developer-guide/contributing) for development setup, code style, and PR process.
+
+Start with the [PM developer workflow](website/docs/reference/package-management.md#developer-workflow)
+for activation, daily use, dependency changes, and leaving the environment.
+[Development Setup](CONTRIBUTING.md#development-setup) covers the separate test environment and verification commands.
+
+---
+
+## Community
+
+- 💬 [Discord](https://discord.gg/NousResearch)
+- 📚 [Skills Hub](https://agentskills.io)
+- 🐛 [Issues](https://github.com/NousResearch/hermes-agent/issues)
+- 🔌 [computer-use-linux](https://github.com/avifenesh/computer-use-linux) — Linux desktop-control MCP server for Hermes and other MCP hosts, with AT-SPI accessibility trees, Wayland/X11 input, screenshots, and compositor window targeting.
+- 🔌 [HermesClaw](https://github.com/AaronWong1999/hermesclaw) — Community WeChat bridge: Run Hermes Agent and OpenClaw on the same WeChat account.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT — see [LICENSE](LICENSE).
+
+Built by [Nous Research](https://nousresearch.com).

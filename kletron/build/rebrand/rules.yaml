@@ -1,0 +1,119 @@
+# Kletron — rebrand AU BUILD (modèle VSCodium / Cursor sur VS Code).
+# Appliqué par kletron/build/rebrand/apply.py sur une COPIE jetable de l'arbre (git archive -> $BUILD_DIR).
+# Les sources du dépôt ne sont jamais modifiées ; les tests amont tournent sur l'arbre source.
+# Revue : toute modification de ce fichier se relit comme un patch (docs/06 §« Rebrand au build »).
+version: 1
+product:
+  name: Kletron
+  full_name: Kletron Agent
+
+# Seuls les LITTÉRAUX de chaînes sont touchés (Python : tokenize ; TS/TSX : AST TypeScript ;
+# YAML : valeurs ; HTML : texte hors balises/scripts). Jamais un identifiant, un import, un commentaire.
+scopes:
+  python:
+    include: ["hermes_cli/**/*.py", "agent/**/*.py", "tools/**/*.py", "gateway/**/*.py", "tui_gateway/**/*.py",
+              "cron/**/*.py", "acp_adapter/**/*.py", "plugins/**/*.py", "providers/**/*.py", "hermes_platform/**/*.py",
+              "pm/**/*.py", "*.py"]
+  ts:
+    include: ["apps/desktop/electron/**/*.ts", "apps/desktop/src/**/*.ts", "apps/desktop/src/**/*.tsx",
+              "apps/shared/src/**/*.ts", "apps/shared/src/**/*.tsx",
+              "ui-tui/src/**/*.ts", "ui-tui/src/**/*.tsx", "web/src/**/*.ts", "web/src/**/*.tsx"]
+  json:
+    # valeurs JSON seulement (jamais les clés) ; fichiers listés un par un (le JSON est surtout de la donnée)
+    include: ["apps/desktop/src/components/chat/intro-copy.jsonl", "apps/bootstrap-installer/src-tauri/tauri.conf.json"]
+  yaml:
+    include: ["locales/*.yaml"]
+  html:
+    include: ["apps/desktop/index.html", "web/index.html"]
+  # Tests (amont) : JAMAIS réécrits pour le livrable. `--with-tests` les réécrit seulement dans un arbre de
+  # VÉRIFICATION, pour prouver que le renommage est cohérent (producteurs et consommateurs renommés ensemble).
+  tests: ["tests/**/*.py", "**/tests/**/*.py", "**/test_*.py", "**/conftest.py", "**/*.test.ts", "**/*.test.tsx",
+          "**/__tests__/**/*.ts", "**/__tests__/**/*.tsx"]
+  # Communes à toutes les portées : tests (amont et Kletron), code Kletron, scripts de dev/CI.
+  exclude: ["tests/**", "**/tests/**", "**/test_*.py", "**/*_test.py", "**/conftest.py", "**/*.test.ts",
+            "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx", "**/__tests__/**", "**/test/**", "**/testing/**",
+            "kletron/**", "**/kletron_*.py", "**/kletron-*.ts", "setup.py",
+            "scripts/**", "evals/**", "website/**", "skills/**", "optional-skills/**"]
+
+# Chaîne entière ignorée si elle contient l'un de ces motifs (attribution, origine, noms de modèles tiers).
+keep:
+  - 'Nous Research'
+  - 'based on Hermes'
+  - 'Hermes Agent by'
+  - "portal.s Hermes"
+  - 'NousResearch'
+  - 'nousresearch'
+
+# Règles appliquées dans l'ordre ; une règle spécifique passe avant la règle générique.
+rules:
+  - id: cli-description
+    pattern: 'Hermes Agent - AI assistant'
+    replacement: 'Kletron Agent (based on Hermes Agent by Nous Research) - AI assistant'
+    scope: [python]
+    context: "argparse description de `hermes --help` (attribution conservée)"
+  - id: desktop-artifact-names
+    # L'app Desktop s'appelle Kletron (productName, 0001) : Kletron.app, Kletron.exe, …/MacOS/Kletron. Le code CLI
+    # qui la retrouve (mise à jour, désinstallation, doctor) doit viser ces noms, y compris dans les chemins.
+    pattern: '(?<![\w@$-])Hermes(?=\.app\b|\.exe\b|\.desktop\b)|(?<=MacOS/)Hermes\b'
+    replacement: Kletron
+    scope: [python]
+    files: ["hermes_cli/gui_uninstall.py", "hermes_cli/main_desktop.py", "hermes_cli/doctor_platform.py",
+            "hermes_cli/bundled_app.py", "hermes_cli/update_cmd.py", "hermes_cli/update_cmd_zip.py",
+            "hermes_cli/uninstall.py", "hermes_cli/steward.py", "hermes_cli/setup_quick.py"]
+    overrides: [path, matcher]
+    context: "chemins des artefacts Desktop (bundle macOS, exe Windows, entrée .desktop)"
+  - id: log-prefix
+    # Préfixe des journaux Desktop/CLI (« [hermes] … » dans desktop.log et la console). Aucun consommateur
+    # hors tests (vérifié : git grep '\[hermes\]').
+    pattern: '\[hermes\]'
+    replacement: '[kletron]'
+    scope: [python, ts]
+    context: "préfixe de log"
+  # NON réécrit (décision 5 nov 2026) : le nom de COMMANDE minuscule `hermes` (argparse prog=, « `hermes setup` »).
+  # prog a des consommateurs (_parser.py `prog != "hermes"`, left_core_migration `f"{prog} {value}"` vs
+  # old_command, console_engine `tokens[0] == "hermes"`) : le renommer casse les indices de commandes déplacées.
+  # Les deux binaires `hermes` et `kletron` sont installés ; le mot produit « Hermes » est, lui, à 0.
+  - id: regex-accepts-both
+    # Regex TS (/…/) : ce sont des CONSOMMATEURS (ils lisent la sortie du backend, des messages d'erreur…). Ils
+    # acceptent les deux noms : vrai avec le backend renommé (build) comme avec un backend source (dev).
+    # Ex. local-runtime-version.ts /^\s*Hermes Agent\s+…/ lit `--version` (« Kletron Agent v… » au build).
+    pattern: '(?<![\w./@$-])(?<!Kletron\|)Hermes(?![\w$-]|\s?\d)'
+    replacement: '(?:Kletron|Hermes)'
+    scope: [ts]
+    overrides: [regex]
+    only_data: true   # jamais sur un texte affiché
+    context: "littéraux regex TypeScript"
+  - id: product-word
+    # Mot « Hermes » isolé. Non touchés par construction : hermes / HERMES_* (casse), ~/.hermes, hermes-agent,
+    # @hermes/…, HermesCLI / HermesPlugin (identifiants), « Hermes 3 », « Hermes-4 », « Hermes4 » (modèles).
+    # « \nHermes » (échappement dans le source) compte comme un début de mot.
+    pattern: '(?:(?<=\\[nrt])|(?<![\w./@$-]))(?<!Kletron\|)Hermes(?![\w$-]|\s?\d)'
+    replacement: Kletron
+    scope: [python, ts, yaml, html, json]
+    context: "toute chaîne affichée : aide CLI, messages, logs, prompts, i18n, fenêtres, page de crash"
+
+# Blocs : substitution exacte, ligne à ligne, à l'intérieur des littéraux (logo ASCII de la bannière CLI et du TUI).
+blocks:
+  - id: ascii-logo
+    from: assets/logo-hermes-agent.txt
+    to: assets/logo-kletron-agent.txt
+    scope: [python, ts]
+    context: "HERMES_AGENT_LOGO (hermes_cli/banner.py), LOGO_ART (ui-tui/src/banner.ts)"
+
+# Contextes où un littéral est une DONNÉE et non un texte affiché : jamais réécrit, toujours listé au rapport
+# (skipped), et comparé aux décisions revues de data-literals.txt — un nouveau cas non revu fait échouer --check (CI).
+exclusions:
+  - {id: comparison, why: "comparaison (==, !=, in, is, case) : renommer casserait la logique (cf. prog == \"hermes\")"}
+  - {id: matcher, why: "argument d'une fonction de recherche/parsing/chemin/env (startswith, re.*, get, join, getenv, keyring…)"}
+  - {id: subscript, why: "clé d'accès x[\"…\"]"}
+  - {id: dict-key, why: "clé de dictionnaire / propriété d'objet"}
+  - {id: property-key, why: "nom de propriété TS"}
+  - {id: module-specifier, why: "import / require / export"}
+  - {id: type, why: "type littéral TS"}
+  - {id: raw-string, why: "chaîne brute r\"…\" (regex) ou bytes"}
+  - {id: path, why: "fragment de chemin ou d'identifiant système (Application Support, AppData, séparateurs)"}
+  - {id: data-attribute, why: "attribut JSX technique (className, id, data-*, href…)"}
+  - {id: regex, why: "littéral regex TS : jamais réécrit en Kletron seul ; la règle regex-accepts-both le rend tolérant aux deux noms"}
+  - {id: tagged-template, why: "gabarit étiqueté (CSS/GraphQL…)"}
+  - {id: switch-case, why: "case d'un switch / match"}
+  - {id: fstring-position, why: "f-string dont la position de jeton est ambiguë (accolades doublées)"}

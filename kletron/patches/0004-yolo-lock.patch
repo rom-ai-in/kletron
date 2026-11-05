@@ -1,0 +1,247 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Kletron (local box)" <kletron-local@invalid>
+Date: Thu, 5 Nov 2026 22:25:00 +0100
+Subject: [PATCH] =?UTF-8?q?kletron-patch:=200004=20yolo-lock=20=E2=80=94?=
+ =?UTF-8?q?=20forbid=20YOLO=20when=20managed=20kletron.forbid=5Fyolo?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Residual lock after Managed Scope pins approvals.mode: when
+kletron.forbid_yolo is true, --yolo / HERMES_YOLO_MODE exit 2,
+_yolo_active and approval bypass return false, session /yolo enable is a
+no-op. Prefer config locks first; this covers process and session bypasses
+config alone cannot stop.
+
+Owner: Romain Magnin (Kletron)
+Test: tests/kletron/test_yolo_lock.py
+Forwarded: not-needed (fork policy: nothing is asked of upstream)
+Upstreamable: no (distribution policy gate)
+Budget: see kletron/tools/budget.py (target <= 150 contact lines)
+Last-Update: 2026-11-05
+---
+ hermes_cli/kletron_yolo.py      | 46 +++++++++++++++++++++++++
+ hermes_cli/main.py              | 16 ++++-----
+ hermes_cli/oneshot.py           |  3 +-
+ tests/kletron/test_yolo_lock.py | 61 +++++++++++++++++++++++++++++++++
+ tools/approval.py               | 10 ++++++
+ 5 files changed, 127 insertions(+), 9 deletions(-)
+ create mode 100644 hermes_cli/kletron_yolo.py
+ create mode 100644 tests/kletron/test_yolo_lock.py
+
+diff --git a/hermes_cli/kletron_yolo.py b/hermes_cli/kletron_yolo.py
+new file mode 100644
+index 000000000..f5da42e24
+--- /dev/null
++++ b/hermes_cli/kletron_yolo.py
+@@ -0,0 +1,46 @@
++"""Kletron residual YOLO / approval-bypass lock (patch 0004).
++
++When Managed Scope sets ``kletron.forbid_yolo: true``, every bypass source is
++forced off: process ``HERMES_YOLO_MODE`` / ``--yolo``, session ``/yolo``, and
++``approvals.mode: off``. Prefer locking ``approvals.mode`` via Managed Scope
++first; this module covers what config alone cannot.
++"""
++from __future__ import annotations
++
++import logging
++import os
++import sys
++
++logger = logging.getLogger(__name__)
++
++REFUSAL = (
++    "Kletron managed policy forbids YOLO "
++    "(--yolo / HERMES_YOLO_MODE / /yolo / approvals.mode=off). "
++    "Unset kletron.forbid_yolo in the Managed Scope config to allow bypass."
++)
++
++
++def forbid_yolo() -> bool:
++    """True when managed config pins ``kletron.forbid_yolo``."""
++    try:
++        from hermes_cli.managed_scope import load_managed_config
++
++        cfg = load_managed_config()
++    except Exception:
++        return False
++    if not isinstance(cfg, dict):
++        return False
++    block = cfg.get("kletron")
++    if not isinstance(block, dict):
++        return False
++    return bool(block.get("forbid_yolo"))
++
++
++def activate_yolo_from_cli(enabled: bool) -> None:
++    """Set ``HERMES_YOLO_MODE`` from ``--yolo``, or exit 2 when forbidden."""
++    if not enabled:
++        return
++    if forbid_yolo():
++        print(REFUSAL, file=sys.stderr)
++        raise SystemExit(2)
++    os.environ["HERMES_YOLO_MODE"] = "1"
+diff --git a/hermes_cli/main.py b/hermes_cli/main.py
+index 6e4ac4bf0..beed14f12 100644
+--- a/hermes_cli/main.py
++++ b/hermes_cli/main.py
+@@ -1713,8 +1713,8 @@ def cmd_chat(args):
+     # before _prepare_agent_startup() — the authoritative site, since it runs
+     # before tool imports freeze _YOLO_MODE_FROZEN. This is a safety net for
+     # callers that invoke cmd_chat directly (e.g. subcommand dispatch).
+-    if getattr(args, "yolo", False):
+-        os.environ["HERMES_YOLO_MODE"] = "1"
++    from hermes_cli.kletron_yolo import activate_yolo_from_cli
++    activate_yolo_from_cli(getattr(args, "yolo", False))
+     # --ignore-rules: skip AGENTS.md/SOUL.md/.cursorrules injection, memory
+     # entries and preloaded skills (AIAgent(skip_context_files, skip_memory)).
+     if getattr(args, "ignore_rules", False):
+@@ -2856,8 +2856,8 @@ def _prepare_agent_startup(args) -> None:
+     # main() sets it earlier too, but other launchers (Termux fast-CLI) reach
+     # here directly, so the guarantee lives where the import is triggered.
+     # See #7994.
+-    if getattr(args, "yolo", False):
+-        os.environ["HERMES_YOLO_MODE"] = "1"
++    from hermes_cli.kletron_yolo import activate_yolo_from_cli
++    activate_yolo_from_cli(getattr(args, "yolo", False))
+     if args.command in {None, "chat"} and _bypass_chat_launch(args):
+         # Bypass launches are frozen by the gateway owner and executed out of process. This
+         # client is a transport: no env mutation (it would ride into an authority spawn),
+@@ -3103,8 +3103,8 @@ def _try_fast_chat_launch() -> bool:
+         return False
+ 
+     _enable_cpu_profile(args)
+-    if getattr(args, "yolo", False):
+-        os.environ["HERMES_YOLO_MODE"] = "1"
++    from hermes_cli.kletron_yolo import activate_yolo_from_cli
++    activate_yolo_from_cli(getattr(args, "yolo", False))
+     _prepare_agent_startup(args)
+ 
+     if getattr(args, "oneshot", None):
+@@ -3512,8 +3512,8 @@ def main():
+ 
+     # --yolo must be set *before* plugin discovery: tools.approval freezes
+     # _YOLO_MODE_FROZEN at import; set later (inside cmd_chat) it does nothing.
+-    if getattr(args, "yolo", False):
+-        os.environ["HERMES_YOLO_MODE"] = "1"
++    from hermes_cli.kletron_yolo import activate_yolo_from_cli
++    activate_yolo_from_cli(getattr(args, "yolo", False))
+ 
+     # Plugin discovery + shell hooks once, gated so introspection commands
+     # (hooks list, cron list, gateway status, ...) pay no discovery cost and
+diff --git a/hermes_cli/oneshot.py b/hermes_cli/oneshot.py
+index cfddfc975..e2643c10c 100644
+--- a/hermes_cli/oneshot.py
++++ b/hermes_cli/oneshot.py
+@@ -273,7 +273,8 @@ def run_oneshot(
+     use_config_toolsets = _normalize_toolsets(toolsets) is None
+ 
+     # Non-interactive by definition — an approval prompt would hang forever.
+-    os.environ["HERMES_YOLO_MODE"] = "1"
++    from hermes_cli.kletron_yolo import activate_yolo_from_cli
++    activate_yolo_from_cli(True)
+     os.environ["HERMES_ACCEPT_HOOKS"] = "1"
+     # Same finite-chat marker as `hermes chat -q` (cli.py): the session-source resolver uses it to drop an
+     # inherited tui/desktop transport label, and delegate dispatch to route detached results inline.
+diff --git a/tests/kletron/test_yolo_lock.py b/tests/kletron/test_yolo_lock.py
+new file mode 100644
+index 000000000..b7e86b2ae
+--- /dev/null
++++ b/tests/kletron/test_yolo_lock.py
+@@ -0,0 +1,61 @@
++"""Kletron patch 0004 — residual YOLO lock behind kletron.forbid_yolo."""
++from __future__ import annotations
++
++import os
++import textwrap
++
++import pytest
++
++
++def _managed(tmp_path, monkeypatch, body: str):
++    from hermes_cli import managed_scope
++
++    managed = tmp_path / "managed"
++    managed.mkdir(exist_ok=True)
++    (managed / "config.yaml").write_text(textwrap.dedent(body), encoding="utf-8")
++    monkeypatch.setenv("HERMES_MANAGED_DIR", str(managed))
++    managed_scope.invalidate_managed_cache()
++    return managed
++
++
++def test_forbid_yolo_reads_managed_key(tmp_path, monkeypatch):
++    from hermes_cli.kletron_yolo import forbid_yolo
++
++    _managed(tmp_path, monkeypatch, """        kletron:
++          forbid_yolo: true
++        """)
++    assert forbid_yolo() is True
++    _managed(tmp_path, monkeypatch, """        kletron:
++          forbid_yolo: false
++        """)
++    assert forbid_yolo() is False
++    _managed(tmp_path, monkeypatch, """        approvals:
++          mode: smart
++        """)
++    assert forbid_yolo() is False
++
++
++def test_activate_yolo_from_cli_refuses(tmp_path, monkeypatch):
++    from hermes_cli.kletron_yolo import activate_yolo_from_cli
++
++    _managed(tmp_path, monkeypatch, """        kletron:
++          forbid_yolo: true
++        """)
++    monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
++    with pytest.raises(SystemExit) as ei:
++        activate_yolo_from_cli(True)
++    assert ei.value.code == 2
++    assert "HERMES_YOLO_MODE" not in os.environ
++
++
++def test_yolo_active_and_bypass_forced_off(tmp_path, monkeypatch):
++    from tools import approval
++
++    _managed(tmp_path, monkeypatch, """        kletron:
++          forbid_yolo: true
++        """)
++    monkeypatch.setattr(approval, "_YOLO_MODE_FROZEN", True)
++    assert approval._yolo_active() is False
++    assert approval.is_approval_bypass_active_for_session("s1") is False
++    approval.enable_session_yolo("s1")
++    assert approval.is_session_yolo_enabled("s1") is False
+diff --git a/tools/approval.py b/tools/approval.py
+index 82bdcc62b..e1743dc40 100644
+--- a/tools/approval.py
++++ b/tools/approval.py
+@@ -301,6 +301,10 @@ def _set_session_yolo(session_key: str, enabled: bool) -> None:
+ 
+ def enable_session_yolo(session_key: str) -> None:
+     """Enable YOLO bypass for a single session key."""
++    from hermes_cli.kletron_yolo import forbid_yolo
++    if forbid_yolo():
++        logger.warning("Kletron managed policy forbids enabling session YOLO")
++        return
+     _set_session_yolo(session_key, True)
+ 
+ 
+@@ -350,6 +354,9 @@ def is_current_session_yolo_enabled() -> bool:
+ def _yolo_active() -> bool:
+     """CLI ``--yolo`` (process-scoped, frozen at import) or gateway ``/yolo``
+     (session-scoped). Hardline / deny-rule floors run BEFORE this everywhere."""
++    from hermes_cli.kletron_yolo import forbid_yolo
++    if forbid_yolo():
++        return False
+     if _YOLO_MODE_FROZEN or is_current_session_yolo_enabled():
+         return True
+     from gateway.session_finite import unattended_turn
+@@ -542,6 +549,9 @@ def is_approval_bypass_active_for_session(session_key: str) -> bool:
+     """Canonical three-source bypass check: process ``--yolo`` (frozen at import), the
+     session-scoped gateway ``/yolo`` toggle, ``approvals.mode: off``. Pure bypass
+     sub-expression only — hardline blocklist / permanent allowlist are the caller's job."""
++    from hermes_cli.kletron_yolo import forbid_yolo
++    if forbid_yolo():
++        return False
+     return (_YOLO_MODE_FROZEN or is_session_yolo_enabled(session_key) or approval_context._get_approval_mode() == "off")
+ 
+ 

@@ -1,0 +1,138 @@
+{
+ "agent/anthropic_adapter.py": {
+  "category": "comment",
+  "count": 1
+ },
+ "agent/nous_wire.py": {
+  "category": "comment",
+  "count": 1
+ },
+ "gateway/pairing.py": {
+  "category": "comment",
+  "count": 1
+ },
+ "gateway/relay/media.py": {
+  "category": "ua",
+  "count": 1
+ },
+ "gateway/session_context.py": {
+  "category": "comment",
+  "count": 1
+ },
+ "hermes_cli/banner.py": {
+  "category": "text",
+  "count": 2
+ },
+ "hermes_cli/config.py": {
+  "category": "docker",
+  "count": 5
+ },
+ "hermes_cli/config_defaults.py": {
+  "category": "docker",
+  "count": 3
+ },
+ "hermes_cli/config_migrations.py": {
+  "category": "docker",
+  "count": 1
+ },
+ "hermes_cli/debug.py": {
+  "category": "text",
+  "count": 1
+ },
+ "hermes_cli/kletron_sources.py": {
+  "category": "comment",
+  "count": 1
+ },
+ "hermes_cli/model_switch.py": {
+  "category": "comment",
+  "count": 1
+ },
+ "hermes_cli/plugins_cmd_catalog.py": {
+  "category": "user-action",
+  "count": 1
+ },
+ "hermes_cli/providers.py": {
+  "category": "comment",
+  "count": 1
+ },
+ "hermes_cli/source_releases.py": {
+  "category": "update",
+  "count": 1
+ },
+ "hermes_cli/steward.py": {
+  "category": "docker",
+  "count": 1
+ },
+ "hermes_cli/update_cmd_git.py": {
+  "category": "update",
+  "count": 9
+ },
+ "hermes_cli/update_cmd_zip.py": {
+  "category": "update",
+  "count": 1
+ },
+ "plugins/computer_use/cua/__init__.py": {
+  "category": "comment",
+  "count": 1
+ },
+ "plugins/image_gen/openrouter/__init__.py": {
+  "category": "ua",
+  "count": 1
+ },
+ "plugins/model-providers/nebius-token-factory/__init__.py": {
+  "category": "model-name",
+  "count": 1
+ },
+ "plugins/platforms/telegram/adapter.py": {
+  "category": "text",
+  "count": 3
+ },
+ "plugins/video_gen/openrouter/__init__.py": {
+  "category": "ua",
+  "count": 1
+ },
+ "tools/bot_desktop/sandbox_host.py": {
+  "category": "docker",
+  "count": 1
+ },
+ "tools/computer_use/backend.py": {
+  "category": "comment",
+  "count": 1
+ },
+ "tools/computer_use/cua_backend.py": {
+  "category": "comment",
+  "count": 1
+ },
+ "tools/computer_use/cua_backend_capture.py": {
+  "category": "comment",
+  "count": 1
+ },
+ "tools/computer_use/cua_backend_driver.py": {
+  "category": "comment",
+  "count": 1
+ },
+ "tools/computer_use/cua_backend_input.py": {
+  "category": "comment",
+  "count": 2
+ },
+ "tools/computer_use/cua_backend_parse.py": {
+  "category": "comment",
+  "count": 3
+ },
+ "tools/discord_tool.py": {
+  "category": "ua",
+  "count": 1
+ },
+ "tools/skills_hub_official.py": {
+  "category": "user-action",
+  "count": 1
+ },
+ "tools/skills_sync_bundled_ops.py": {
+  "category": "comment",
+  "count": 4
+ },
+ "tui_gateway/methods_display.py": {
+  "category": "docker",
+  "count": 1
+ }
+}

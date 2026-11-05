@@ -1,0 +1,221 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Kletron (local box)" <kletron-local@invalid>
+Date: Thu, 5 Nov 2026 10:54:16 +0100
+Subject: [PATCH] =?UTF-8?q?kletron-patch:=200001=20identity=20=E2=80=94=20?=
+ =?UTF-8?q?product=20name,=20app=20id,=20CLI=20alias?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Central product identity only (the equivalent of VS Code's product.json for VSCodium/Cursor):
+Desktop productName/description, product-identity.cjs (display/pascal names, appId
+ch.numezis.kletron*, MSIX id Numezis.*), Windows AppUserModelId, Tauri productName, `kletron`
+alias console script, Linux desktop-entry APP_ID (= appId, hermes_cli/kletron_identity.py).
+NOTICE (origin, MIT, non-affiliation).
+
+Displayed strings are NOT patched. "Hermes" -> "Kletron" in CLI help, messages, logs, i18n
+catalogs, window titles and the Desktop crash page is rewritten at BUILD time, in a throw-away
+copy of the tree, by kletron/build/rebrand (rules.yaml + data-literals.txt, overlay). Upstream
+tests run on the untouched source tree. Icons ride the upstream --icons flavor door
+(kletron/brand/apps/desktop/{assets,public}).
+
+Owner: Romain Magnin (Kletron)
+Test: kletron/tests/py/test_identity.py; kletron/build/rebrand checks (kletron/build/build.sh)
+Forwarded: not-needed (product identity of a downstream distribution)
+Upstreamable: no
+Budget: see kletron/tools/budget.py (target <= 40 contact lines)
+Last-Update: 2026-11-05
+---
+ NOTICE                                        | 21 +++++++++++++++++++
+ .../src-tauri/tauri.conf.json                 |  2 +-
+ apps/desktop/electron-builder.config.cjs      |  8 +++----
+ apps/desktop/electron/main.ts                 |  2 +-
+ apps/desktop/package.json                     |  4 ++--
+ apps/desktop/product-identity.cjs             | 14 ++++++-------
+ hermes_cli/kletron_identity.py                | 11 ++++++++++
+ hermes_cli/linux_desktop_entry.py             |  2 +-
+ pyproject.toml                                |  1 +
+ 9 files changed, 49 insertions(+), 16 deletions(-)
+ create mode 100644 NOTICE
+ create mode 100644 hermes_cli/kletron_identity.py
+
+diff --git a/NOTICE b/NOTICE
+new file mode 100644
+index 000000000..cbb121f64
+--- /dev/null
++++ b/NOTICE
+@@ -0,0 +1,21 @@
++Kletron Agent
++=============
++
++Kletron Agent is a modified distribution ("fork") of Hermes Agent.
++
++  Upstream project : Hermes Agent
++  Upstream author  : Nous Research
++  Upstream source  : https://github.com/NousResearch/hermes-agent
++  Upstream license : MIT License — Copyright (c) 2025 Nous Research
++                     (full text unchanged in the LICENSE file of this repository)
++
++Modifications by the Kletron project are listed as a patch queue in
++kletron/patches/ (see kletron/patches/series) and are distributed under the
++same MIT License.
++
++"Hermes Agent" and "Nous Research" are names / marks of Nous Research, Inc.
++(a US trademark application for "HERMES AGENT", serial 50111354, was filed on
++2026-09-16). They are used here only to identify the upstream origin of the
++code. Kletron is NOT affiliated with, sponsored by, or endorsed by Nous Research.
++
++Third-party components bundled by upstream keep their own licenses and notices.
+diff --git a/apps/bootstrap-installer/src-tauri/tauri.conf.json b/apps/bootstrap-installer/src-tauri/tauri.conf.json
+index a82b4ca70..db784f0fb 100644
+--- a/apps/bootstrap-installer/src-tauri/tauri.conf.json
++++ b/apps/bootstrap-installer/src-tauri/tauri.conf.json
+@@ -1,6 +1,6 @@
+ {
+   "$schema": "https://schema.tauri.app/config/2",
+-  "productName": "Hermes",
++  "productName": "Kletron",
+   "version": "0.0.0",
+   "identifier": "com.nousresearch.hermes.setup",
+   "build": {
+diff --git a/apps/desktop/electron-builder.config.cjs b/apps/desktop/electron-builder.config.cjs
+index 532830508..651fb2b9f 100644
+--- a/apps/desktop/electron-builder.config.cjs
++++ b/apps/desktop/electron-builder.config.cjs
+@@ -250,7 +250,7 @@ module.exports = {
+     applicationId: appNamePascal,
+     displayName,
+     publisher: store ? mustStoreMsix(storeMsixWhenStore).publisher : OUT_OF_STORE_PUBLISHER,
+-    publisherDisplayName: store ? mustStoreMsix(storeMsixWhenStore).publisherDisplayName : 'Nous Research',
++    publisherDisplayName: store ? mustStoreMsix(storeMsixWhenStore).publisherDisplayName : 'Kletron',
+     // The native quad is the build time (scripts/msix-shared.mjs::nativeQuad),
+     // baked into the manifest template, so the builder's own build-number
+     // override would stamp a second, conflicting version.
+@@ -280,10 +280,10 @@ module.exports = {
+   },
+   linux: {
+     category: 'Development',
+-    maintainer: 'Nous Research <support@nousresearch.com>',
++    maintainer: 'Kletron',
+     synopsis: light
+-      ? 'Remote-only desktop client for Hermes Agent.'
+-      : 'Native desktop shell for Hermes Agent.',
++      ? `Remote-only desktop client for ${displayName} (based on Hermes Agent).`
++      : `Native desktop shell for ${displayName} (based on Hermes Agent).`,
+     target: ['AppImage']
+   }
+ }
+diff --git a/apps/desktop/electron/main.ts b/apps/desktop/electron/main.ts
+index 1d67df257..150af963f 100644
+--- a/apps/desktop/electron/main.ts
++++ b/apps/desktop/electron/main.ts
+@@ -1779,7 +1779,7 @@ Menu.setApplicationMenu(null)
+ // need this, so gate it on Windows. (Fixes: desktop approval/turn notifications
+ // never firing on Windows.)
+ if (IS_WINDOWS) {
+-  app.setAppUserModelId(IDENTITY_APP_NAME ? PRODUCT_IDENTITY.appId : 'com.nousresearch.hermes')
++  app.setAppUserModelId(PRODUCT_IDENTITY.appId) // Kletron: always the build appId
+ }
+ 
+ // Seed the native About panel with the best-known Hermes version. This is
+diff --git a/apps/desktop/package.json b/apps/desktop/package.json
+index ecdbf0a53..09b77f8e3 100644
+--- a/apps/desktop/package.json
++++ b/apps/desktop/package.json
+@@ -1,9 +1,9 @@
+ {
+   "name": "hermes",
+-  "productName": "Hermes",
++  "productName": "Kletron",
+   "private": true,
+   "version": "0.0.0",
+-  "description": "Native desktop shell for Hermes Agent.",
++  "description": "Native desktop shell for Kletron Agent (based on Hermes Agent by Nous Research, MIT).",
+   "author": "Nous Research",
+   "repository": {
+     "type": "git",
+diff --git a/apps/desktop/product-identity.cjs b/apps/desktop/product-identity.cjs
+index 5e2353eb4..b0af665ed 100644
+--- a/apps/desktop/product-identity.cjs
++++ b/apps/desktop/product-identity.cjs
+@@ -9,16 +9,16 @@
+ 'use strict'
+ 
+ const variants = {
+-  '': { display: 'Hermes', kebab: 'hermes', pascal: 'Hermes' },
++  '': { display: 'Kletron', kebab: 'hermes', pascal: 'Kletron' },
+   light: {
+-    display: 'Hermes Light',
++    display: 'Kletron Light',
+     kebab: 'hermes-light',
+-    pascal: 'HermesLight'
++    pascal: 'KletronLight'
+   },
+   bundled: {
+-    display: 'Hermes Agent',
++    display: 'Kletron Agent',
+     kebab: 'hermes-bundled',
+-    pascal: 'HermesBundled'
++    pascal: 'KletronBundled'
+   }
+ }
+ 
+@@ -66,14 +66,14 @@ const identity = {
+   store,
+   light,
+   displayName,
+-  appId: `com.nousresearch.${name.kebab}${kebabSuffix}`,
++  appId: `ch.numezis.${name.kebab.replace(/^hermes/, 'kletron')}${kebabSuffix}`, // Kletron identity (provisional, D7)
+   // Store and commit builds do not publish a release feed.
+   channel: store || buildCommit ? null : light ? (canary ? 'light-canary' : 'light') : (canary ? 'canary' : 'latest'),
+   appNamePascal: `${name.pascal}${pascalSuffix}`,
+   artifactNamePascal: name.pascal,
+   windowsExecutableName: kebabSuffix ? cliName : displayName,
+   cliName,
+-  msixAppIdWithOrg: `NousResearch.${name.pascal}${pascalSuffix}`,
++  msixAppIdWithOrg: `Numezis.${name.pascal}${pascalSuffix}`,
+   ...(store
+     ? {
+         storeMsix: {
+diff --git a/hermes_cli/kletron_identity.py b/hermes_cli/kletron_identity.py
+new file mode 100644
+index 000000000..464e97a53
+--- /dev/null
++++ b/hermes_cli/kletron_identity.py
+@@ -0,0 +1,11 @@
++"""Kletron product identity (Python side): the desktop application id.
++
++Kletron is a distribution of Hermes Agent by Nous Research (MIT, see LICENSE / NOTICE).
++Module names, ``HERMES_*`` variables, ``~/.hermes`` paths and the ``hermes`` command are deliberately
++unchanged; ``kletron`` is an alias entry point. Displayed strings ("Hermes" -> "Kletron") are NOT
++patched: they are rewritten at build time in a throw-away copy of the tree (kletron/build/rebrand,
++VSCodium/Cursor model, docs/06-STRATEGIE-FORK-AMONT.md).
++"""
++
++# Must equal apps/desktop/product-identity.cjs appId (upstream test_linux_desktop_entry checks it).
++APP_ID = "ch.numezis.kletron"
+diff --git a/hermes_cli/linux_desktop_entry.py b/hermes_cli/linux_desktop_entry.py
+index c6bcc0300..af09e300b 100644
+--- a/hermes_cli/linux_desktop_entry.py
++++ b/hermes_cli/linux_desktop_entry.py
+@@ -27,7 +27,7 @@ from typing import Callable, Mapping, Optional
+ # verbatim (Wayland app_id, CHROME_DESKTOP). GNOME links a window to a launcher by StartupWMClass
+ # or by a `<app_id>.desktop` file name, so the entry has to carry the same id — under the old
+ # "hermes.desktop" name a packaged launch matches neither rung and lands on the placeholder icon.
+-APP_ID = "com.nousresearch.hermes"
++from hermes_cli.kletron_identity import APP_ID  # Kletron: mirrors product-identity.cjs appId
+ DESKTOP_ENTRY_NAME = f"{APP_ID}.desktop"
+ 
+ # Entry name written before the app-id rename; a successful install converts it into a hidden
+diff --git a/pyproject.toml b/pyproject.toml
+index 3f1155f35..9188577aa 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -585,6 +585,7 @@ build-backend = "setuptools.build_meta"
+ 
+ [project.scripts]
+ hermes = "hermes_cli.main:main"
++kletron = "hermes_cli.main:main"
+ hermes-agent = "agent.legacy_cli:main"
+ hermes-acp = "acp_adapter.entry:main"
+ 

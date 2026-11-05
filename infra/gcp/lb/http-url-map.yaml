@@ -1,6 +1,0 @@
-# HTTP → HTTPS redirect on port 80 (same host).
-kind: compute#urlMap
-name: kletron-http-url-map
-defaultUrlRedirect:
-  httpsRedirect: true
-  redirectResponseCode: MOVED_PERMANENTLY_DEFAULT

@@ -1,0 +1,103 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Kletron (local box)" <kletron-local@invalid>
+Date: Thu, 5 Nov 2026 22:25:00 +0100
+Subject: [PATCH] =?UTF-8?q?kletron-patch:=200003=20managed-scope=20?=
+ =?UTF-8?q?=E2=80=94=20macOS/Windows=20native=20Managed=20Scope=20dirs?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Linux v1 keeps /etc/hermes (unchanged). get_managed_dir() is the upstream seam
+for other platforms: resolve via hermes_cli/kletron_managed.py
+(macOS /Library/Application Support/Kletron/managed,
+Windows %ProgramData%\Kletron\managed). HERMES_MANAGED_DIR override still wins.
+
+Owner: Romain Magnin (Kletron)
+Test: tests/kletron/test_managed_platforms.py
+Forwarded: not-needed (fork policy: nothing is asked of upstream)
+Upstreamable: partial (platform dirs only; product name Kletron is distribution-specific)
+Budget: see kletron/tools/budget.py (target <= 150 contact lines)
+Last-Update: 2026-11-05
+---
+ hermes_cli/kletron_managed.py           | 21 +++++++++++++++++++
+ hermes_cli/managed_scope.py             |  4 +++-
+ tests/kletron/test_managed_platforms.py | 27 +++++++++++++++++++++++++
+ 3 files changed, 51 insertions(+), 1 deletion(-)
+ create mode 100644 hermes_cli/kletron_managed.py
+ create mode 100644 tests/kletron/test_managed_platforms.py
+
+diff --git a/hermes_cli/kletron_managed.py b/hermes_cli/kletron_managed.py
+new file mode 100644
+index 000000000..cd4615784
+--- /dev/null
++++ b/hermes_cli/kletron_managed.py
+@@ -0,0 +1,21 @@
++"""Platform-native Managed Scope directories for Kletron (patch 0003).
++
++Upstream documents ``get_managed_dir()`` as the single seam for adding macOS /
++Windows locations later. Linux keeps the POSIX default ``/etc/hermes`` (v1).
++Paths are product-named Kletron; the ``HERMES_MANAGED_DIR`` override still wins.
++"""
++from __future__ import annotations
++
++import os
++import sys
++from pathlib import Path
++
++
++def resolve_default_managed_dir(posix_default: Path) -> Path:
++    """Return the IT-managed directory for this platform (may not exist yet)."""
++    if sys.platform == "darwin":
++        return Path("/Library/Application Support/Kletron/managed")
++    if sys.platform == "win32":
++        base = os.environ.get("PROGRAMDATA") or r"C:\ProgramData"
++        return Path(base) / "Kletron" / "managed"
++    return posix_default
+diff --git a/hermes_cli/managed_scope.py b/hermes_cli/managed_scope.py
+index a00ac0630..da276197d 100644
+--- a/hermes_cli/managed_scope.py
++++ b/hermes_cli/managed_scope.py
+@@ -55,7 +55,9 @@ def get_managed_dir() -> Optional[Path]:
+     elif _under_pytest():
+         return None
+     else:
+-        p = _DEFAULT_MANAGED_DIR
++        # Kletron 0003: macOS / Windows native locations (Linux keeps /etc/hermes).
++        from hermes_cli.kletron_managed import resolve_default_managed_dir
++        p = resolve_default_managed_dir(_DEFAULT_MANAGED_DIR)
+     return p if p.is_dir() else None
+ 
+ 
+diff --git a/tests/kletron/test_managed_platforms.py b/tests/kletron/test_managed_platforms.py
+new file mode 100644
+index 000000000..b54e92712
+--- /dev/null
++++ b/tests/kletron/test_managed_platforms.py
+@@ -0,0 +1,27 @@
++"""Kletron patch 0003 — platform Managed Scope directories (no upstream test edits)."""
++from __future__ import annotations
++
++from pathlib import Path
++
++from hermes_cli.kletron_managed import resolve_default_managed_dir
++
++
++def test_linux_keeps_posix_default(monkeypatch):
++    monkeypatch.setattr("hermes_cli.kletron_managed.sys.platform", "linux")
++    assert resolve_default_managed_dir(Path("/etc/hermes")) == Path("/etc/hermes")
++
++
++def test_darwin_kletron_path(monkeypatch):
++    monkeypatch.setattr("hermes_cli.kletron_managed.sys.platform", "darwin")
++    assert resolve_default_managed_dir(Path("/etc/hermes")) == Path(
++        "/Library/Application Support/Kletron/managed"
++    )
++
++
++def test_win32_programdata(monkeypatch):
++    monkeypatch.setattr("hermes_cli.kletron_managed.sys.platform", "win32")
++    monkeypatch.setenv("PROGRAMDATA", r"D:\ProgramData")
++    got = resolve_default_managed_dir(Path("/etc/hermes"))
++    # On a POSIX test host Path joins with /; compare logical parts only.
++    assert got.parts[-2:] == ("Kletron", "managed")
++    assert "ProgramData" in got.parts or str(got).replace("\\", "/").endswith("ProgramData/Kletron/managed") or "ProgramData" in str(got)

@@ -1,0 +1,16 @@
+# Example LiteLLM config for a Kletron client pile (demo).
+# Generate a concrete file with: npm run litellm:config -- config/litellm.generated.yaml
+# Secrets come from environment variables only.
+model_list:
+  - model_name: kletron-default
+    litellm_params:
+      model: openai/${EVERYWARE_MODEL}
+      api_base: ${EVERYWARE_API_BASE}
+      api_key: ${EVERYWARE_API_KEY}
+      custom_llm_provider: openai
+general_settings:
+  master_key: ${LITELLM_MASTER_KEY}
+  alerting: []
+litellm_settings:
+  drop_params: true
+  set_verbose: false

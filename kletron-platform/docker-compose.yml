@@ -1,0 +1,49 @@
+# Blueprint local — une pile Kletron de démo (pas un déploiement ELCA réel).
+# Aucun secret réel. Les services "everyware" et connecteurs externes sont simulés.
+name: kletron-platform-demo
+
+services:
+  console:
+    image: node:22-bookworm-slim
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - demo-data:/app/data/runtime
+    environment:
+      CONSOLE_HOST: 0.0.0.0
+      CONSOLE_PORT: 7100
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: 7101
+      KLETRON_DATA_DIR: /app/data/runtime
+      KLETRON_POLICY_FILE: /app/config/demo-policy.json
+      GATEWAY_INTERNAL_TOKEN: demo-gateway-internal-not-a-secret
+      LITELLM_PORT: 4000
+      OPENSHELL_ALLOWLIST: console:7100,gateway:7101,127.0.0.1:7100,127.0.0.1:7101
+    command: bash -lc "npm install && npx tsx src/demo/main.ts"
+    ports:
+      - "7100:7100"
+      - "7101:7101"
+    # In this demo, console process also binds the gateway (single Node process).
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7100/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    profiles: ["with-litellm"]
+    volumes:
+      - ./config/litellm.example.yaml:/app/config.yaml:ro
+    environment:
+      LITELLM_MASTER_KEY: sk-demo-master-not-real
+      EVERYWARE_API_BASE: https://everyware.example.invalid/v1
+      EVERYWARE_API_KEY: sk-everyware-demo-not-real
+      EVERYWARE_MODEL: everyware-demo-small
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
+    ports:
+      - "4000:4000"
+    # Intentional: EveryWare endpoint is invalid — proves config wiring, not live inference.
+
+volumes:
+  demo-data:
