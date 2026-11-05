@@ -9,16 +9,16 @@
 'use strict'
 
 const variants = {
-  '': { display: 'Hermes', kebab: 'hermes', pascal: 'Hermes' },
+  '': { display: 'Kletron', kebab: 'hermes', pascal: 'Kletron' },
   light: {
-    display: 'Hermes Light',
+    display: 'Kletron Light',
     kebab: 'hermes-light',
-    pascal: 'HermesLight'
+    pascal: 'KletronLight'
   },
   bundled: {
-    display: 'Hermes Agent',
+    display: 'Kletron Agent',
     kebab: 'hermes-bundled',
-    pascal: 'HermesBundled'
+    pascal: 'KletronBundled'
   }
 }
 
@@ -66,14 +66,14 @@ const identity = {
   store,
   light,
   displayName,
-  appId: `com.nousresearch.${name.kebab}${kebabSuffix}`,
+  appId: `ch.numezis.${name.kebab.replace(/^hermes/, 'kletron')}${kebabSuffix}`, // Kletron identity (provisional, D7)
   // Store and commit builds do not publish a release feed.
   channel: store || buildCommit ? null : light ? (canary ? 'light-canary' : 'light') : (canary ? 'canary' : 'latest'),
   appNamePascal: `${name.pascal}${pascalSuffix}`,
   artifactNamePascal: name.pascal,
   windowsExecutableName: kebabSuffix ? cliName : displayName,
   cliName,
-  msixAppIdWithOrg: `NousResearch.${name.pascal}${pascalSuffix}`,
+  msixAppIdWithOrg: `Numezis.${name.pascal}${pascalSuffix}`,
   ...(store
     ? {
         storeMsix: {
