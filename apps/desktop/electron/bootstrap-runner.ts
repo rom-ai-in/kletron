@@ -229,7 +229,15 @@ function downloadInstallScript(ref, destPath) {
   // install, the branch for an existing checkout or a non-git fallback stamp
   // (never the all-zero placeholder, which is not a real GitHub commit).
   const scriptName = installScriptName()
-  const url = `https://raw.githubusercontent.com/NousResearch/hermes-agent/${ref}/scripts/${scriptName}`
+  // Kletron: installer source = KLETRON_INSTALL_SOURCE (raw base serving <ref>/scripts/<name>);
+  // unset => remote install disabled, never the upstream repository.
+  const base = (process.env.KLETRON_INSTALL_SOURCE || '').trim().replace(/\/+$/, '')
+
+  if (!base) {
+    return Promise.reject(new Error(`Kletron: remote installer download is disabled (no KLETRON_INSTALL_SOURCE); ${scriptName} not fetched`))
+  }
+
+  const url = `${base}/${ref}/scripts/${scriptName}`
 
   return new Promise((resolve, reject) => {
     fs.mkdirSync(path.dirname(destPath), { recursive: true })

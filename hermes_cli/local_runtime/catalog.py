@@ -304,8 +304,7 @@ def recommended_entry(budget: HardwareBudget,
 # packaged copy remains the offline truth. A reverted commit on main heals every install on its
 # next fetch, and day-0 entries reach users without an app release.
 
-_CATALOG_URL = ("https://raw.githubusercontent.com/NousResearch/hermes-agent"
-                "/main/hermes_cli/local_runtime/catalog.json")
+from hermes_cli.kletron_sources import LOCAL_RUNTIME_CATALOG_URL as _CATALOG_URL  # Kletron: no auto-fetch from NousResearch GitHub
 _SCHEMA_VERSION = 3  # bump when an older app would read a newer catalog but launch its entries wrongly
 _REFRESH_TTL_S = 6 * 3600
 _refresh_lock = threading.Lock()

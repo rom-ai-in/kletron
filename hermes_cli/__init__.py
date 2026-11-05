@@ -2,6 +2,13 @@
 
 import sys
 
+try:  # Kletron: Nous hosts do not resolve (tolerant of partial copies of this file)
+    from hermes_cli.kletron_netguard import install as _kletron_netguard
+except ImportError:  # pragma: no cover - release tooling copying this file alone
+    pass
+else:
+    _kletron_netguard()
+
 __release_date__ = "2026.9.24"
 # Declared for type checkers and the old-updater surface audit; served lazily by __getattr__.
 __version__: str

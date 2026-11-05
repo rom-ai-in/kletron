@@ -1,3 +1,5 @@
+import './kletron-netguard' // Kletron: Nous hosts do not resolve (must stay first)
+
 import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 
 import type { GatewayEndpoint } from './local-gateway'

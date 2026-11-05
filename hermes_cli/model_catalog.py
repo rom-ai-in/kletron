@@ -27,9 +27,7 @@ DEFAULT_CATALOG_URL = (
     "https://hermes-agent.nousresearch.com/docs/api/model-catalog.json")
 # The Docusaurus site sits behind Vercel, which occasionally 403s non-browser clients (bot
 # challenge); the raw GitHub copy is the same manifest and is not bot-gated.
-DEFAULT_CATALOG_FALLBACK_URLS: tuple[str, ...] = (
-    "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/website/static/api/model-catalog.json",
-)
+from hermes_cli.kletron_sources import MODEL_CATALOG_FALLBACK_URLS as DEFAULT_CATALOG_FALLBACK_URLS  # Kletron: no auto-fetch from NousResearch GitHub
 DEFAULT_TTL_MINUTES = 20
 # Legacy key, honoured only when the user set it explicitly; ``ttl_minutes`` is the shipped default.
 DEFAULT_TTL_HOURS = DEFAULT_TTL_MINUTES / 60.0

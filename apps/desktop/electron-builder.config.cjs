@@ -57,17 +57,15 @@ const channelRequest = channelBuildRequest()
 
 /** @typedef {import("app-builder-lib").Configuration} Configuration */
 
-const [owner, repo] = (process.env.GITHUB_REPOSITORY || 'NousResearch/hermes-agent').split('/')
-if (!owner || !repo) {
-  throw new Error(`invalid GITHUB_REPOSITORY ${process.env.GITHUB_REPOSITORY}`)
-}
 const electronVersion = require('./package.json').devDependencies.electron
 if (!/^\d+\.\d+\.\d+$/.test(electronVersion)) {
   throw new Error(`invalid electron version ${electronVersion} in package.json`)
 }
 
 const macFeed = channelRequest ? null : feedContract.darwinFeed(channel === 'canary' || channel === 'light-canary' ? 'canary' : 'stable', light)
-const publicUrl = feedContract.feedBaseUrl(process.env.CLOUDFLARE_R2_PUBLIC_URL)
+// Kletron: update feed = generic https base from KLETRON_UPDATE_URL; unset => no feed,
+// no app-update.yml, updater off. Never the upstream GitHub releases nor the Nous R2.
+const publicUrl = feedContract.feedBaseUrl(process.env.KLETRON_UPDATE_URL || undefined)
 
 /** @satisfies {Configuration} */
 module.exports = {
@@ -95,11 +93,7 @@ module.exports = {
   // owns its distribution and updates).
   publish: channelRequest ? null : !channel
     ? null
-    : [
-        publicUrl
-          ? { provider: 'generic', url: publicUrl, channel }
-          : { provider: 'github', owner, repo, channel }
-      ],
+    : publicUrl ? [{ provider: 'generic', url: publicUrl, channel }] : null,
   extraMetadata: {
     name: appNamePascal,
     // Electron bootstrap reads package.productName before main.ts. Keep the
