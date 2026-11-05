@@ -1713,8 +1713,8 @@ def cmd_chat(args):
     # before _prepare_agent_startup() — the authoritative site, since it runs
     # before tool imports freeze _YOLO_MODE_FROZEN. This is a safety net for
     # callers that invoke cmd_chat directly (e.g. subcommand dispatch).
-    if getattr(args, "yolo", False):
-        os.environ["HERMES_YOLO_MODE"] = "1"
+    from hermes_cli.kletron_yolo import activate_yolo_from_cli
+    activate_yolo_from_cli(getattr(args, "yolo", False))
     # --ignore-rules: skip AGENTS.md/SOUL.md/.cursorrules injection, memory
     # entries and preloaded skills (AIAgent(skip_context_files, skip_memory)).
     if getattr(args, "ignore_rules", False):
@@ -2856,8 +2856,8 @@ def _prepare_agent_startup(args) -> None:
     # main() sets it earlier too, but other launchers (Termux fast-CLI) reach
     # here directly, so the guarantee lives where the import is triggered.
     # See #7994.
-    if getattr(args, "yolo", False):
-        os.environ["HERMES_YOLO_MODE"] = "1"
+    from hermes_cli.kletron_yolo import activate_yolo_from_cli
+    activate_yolo_from_cli(getattr(args, "yolo", False))
     if args.command in {None, "chat"} and _bypass_chat_launch(args):
         # Bypass launches are frozen by the gateway owner and executed out of process. This
         # client is a transport: no env mutation (it would ride into an authority spawn),
@@ -3103,8 +3103,8 @@ def _try_fast_chat_launch() -> bool:
         return False
 
     _enable_cpu_profile(args)
-    if getattr(args, "yolo", False):
-        os.environ["HERMES_YOLO_MODE"] = "1"
+    from hermes_cli.kletron_yolo import activate_yolo_from_cli
+    activate_yolo_from_cli(getattr(args, "yolo", False))
     _prepare_agent_startup(args)
 
     if getattr(args, "oneshot", None):
@@ -3512,8 +3512,8 @@ def main():
 
     # --yolo must be set *before* plugin discovery: tools.approval freezes
     # _YOLO_MODE_FROZEN at import; set later (inside cmd_chat) it does nothing.
-    if getattr(args, "yolo", False):
-        os.environ["HERMES_YOLO_MODE"] = "1"
+    from hermes_cli.kletron_yolo import activate_yolo_from_cli
+    activate_yolo_from_cli(getattr(args, "yolo", False))
 
     # Plugin discovery + shell hooks once, gated so introspection commands
     # (hooks list, cron list, gateway status, ...) pay no discovery cost and

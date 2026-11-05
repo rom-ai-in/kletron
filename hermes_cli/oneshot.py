@@ -273,7 +273,8 @@ def run_oneshot(
     use_config_toolsets = _normalize_toolsets(toolsets) is None
 
     # Non-interactive by definition — an approval prompt would hang forever.
-    os.environ["HERMES_YOLO_MODE"] = "1"
+    from hermes_cli.kletron_yolo import activate_yolo_from_cli
+    activate_yolo_from_cli(True)
     os.environ["HERMES_ACCEPT_HOOKS"] = "1"
     # Same finite-chat marker as `hermes chat -q` (cli.py): the session-source resolver uses it to drop an
     # inherited tui/desktop transport label, and delegate dispatch to route detached results inline.

@@ -301,6 +301,10 @@ def _set_session_yolo(session_key: str, enabled: bool) -> None:
 
 def enable_session_yolo(session_key: str) -> None:
     """Enable YOLO bypass for a single session key."""
+    from hermes_cli.kletron_yolo import forbid_yolo
+    if forbid_yolo():
+        logger.warning("Kletron managed policy forbids enabling session YOLO")
+        return
     _set_session_yolo(session_key, True)
 
 
@@ -350,6 +354,9 @@ def is_current_session_yolo_enabled() -> bool:
 def _yolo_active() -> bool:
     """CLI ``--yolo`` (process-scoped, frozen at import) or gateway ``/yolo``
     (session-scoped). Hardline / deny-rule floors run BEFORE this everywhere."""
+    from hermes_cli.kletron_yolo import forbid_yolo
+    if forbid_yolo():
+        return False
     if _YOLO_MODE_FROZEN or is_current_session_yolo_enabled():
         return True
     from gateway.session_finite import unattended_turn
@@ -542,6 +549,9 @@ def is_approval_bypass_active_for_session(session_key: str) -> bool:
     """Canonical three-source bypass check: process ``--yolo`` (frozen at import), the
     session-scoped gateway ``/yolo`` toggle, ``approvals.mode: off``. Pure bypass
     sub-expression only — hardline blocklist / permanent allowlist are the caller's job."""
+    from hermes_cli.kletron_yolo import forbid_yolo
+    if forbid_yolo():
+        return False
     return (_YOLO_MODE_FROZEN or is_session_yolo_enabled(session_key) or approval_context._get_approval_mode() == "off")
 
 
