@@ -55,7 +55,9 @@ def get_managed_dir() -> Optional[Path]:
     elif _under_pytest():
         return None
     else:
-        p = _DEFAULT_MANAGED_DIR
+        # Kletron 0003: macOS / Windows native locations (Linux keeps /etc/hermes).
+        from hermes_cli.kletron_managed import resolve_default_managed_dir
+        p = resolve_default_managed_dir(_DEFAULT_MANAGED_DIR)
     return p if p.is_dir() else None
 
 
