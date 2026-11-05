@@ -1,0 +1,5 @@
+# Kletron — liste blanche du scan des ARTEFACTS (kletron/build/scan.py) : « Hermes » qui reste visible exprès.
+# Format : <regex sur le contexte du mot>  # pourquoi. Chaque entrée se relit comme un patch.
+# (L'attribution « based on Hermes Agent by Nous Research », « Nous Research », les modèles « Hermes 3/4 »
+#  sont déjà exclus par la règle et la liste keep de rules.yaml.)
+\(\?:Kletron\|Hermes\)  # regex consommateur tolérant aux deux noms (règle regex-accepts-both)

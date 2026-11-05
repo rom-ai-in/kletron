@@ -1,0 +1,15 @@
+# Kletron — upstream tests EXPECTED to fail because of a Kletron patch (upstream tests are never edited).
+# Format: <runner> <test id>    | <patch> | <reason>
+# Runners fail on any failure NOT listed here; a listed test that passes again is reported STALE (remove it).
+# Every entry must name the patch that causes it; adding one is reviewed like a patch (docs/06 §3).
+# Displayed strings are renamed at BUILD time only (kletron/build/rebrand): upstream tests run on the untouched
+# source tree, so no deviation comes from the product name in messages.
+pytest tests/e2e/core/upgrade/test_fresh_process_entrypoints.py::test_every_console_script_is_in_the_entrypoint_matrix | 0001 | extra `kletron` alias console script, absent from the upstream entry-point matrix (covered by kletron/tests/py/test_identity.py)
+pytest tests/hermes_cli/test_model_catalog.py::TestFallbackChain::test_falls_through_to_raw_github_on_primary_failure | 0002 | catalog fallback to raw.githubusercontent NousResearch disabled by design (kletron_sources, empty)
+pytest tests/hermes_cli/test_model_catalog.py::TestFallbackChain::test_get_catalog_uses_fallback_chain | 0002 | same, default fallback chain is empty
+pytest tests/hermes_cli/test_model_catalog.py::TestFetchFailure::test_dead_override_on_the_manifest_url_keeps_the_fallback_chain | 0002 | same, no default fallback to keep
+pytest tests/hermes_cli/test_catalog_json.py::test_refresh_swaps_in_memory_only | 0002 | local-runtime catalog refresh from NousResearch@main disabled (empty URL => packaged copy kept)
+pytest tests/hermes_cli/test_catalog_json.py::test_first_refresh_is_due_shortly_after_boot | 0002 | same, refresh returns False without a configured source
+vitest apps/desktop/electron/product-identity.test.ts::undefined separates stable, canary and independent commits | 0001 | displayName is "Kletron" (asserts "Hermes")
+vitest apps/desktop/electron/product-identity.test.ts::bundled separates stable, canary and independent commits | 0001 | displayName is "Kletron Agent" (asserts "Hermes Agent")
+vitest apps/desktop/electron/product-identity.test.ts::light separates stable, canary and independent commits | 0001 | displayName is "Kletron Light" (asserts "Hermes Light")

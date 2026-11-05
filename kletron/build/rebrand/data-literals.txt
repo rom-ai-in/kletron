@@ -1,0 +1,24 @@
+# Kletron rebrand — décisions revues pour les littéraux « Hermes » utilisés comme DONNÉES (apply.py les saute
+# par défaut). Format : <fichier>|<raison>|<sha1(texte)[:12]>  keep|rewrite  # pourquoi
+# keep    = la valeur doit rester « Hermes » (elle est comparée à une donnée externe non renommée).
+# rewrite = le producteur de la valeur est lui-même renommé au build : le consommateur doit suivre.
+# CI : `apply.py --check` échoue sur un littéral de données sans décision, ou sur une décision périmée.
+# Revue initiale : 5 nov 2026, base ea6b60274.
+gateway/relay/__init__.py|comparison|5638034886f6  rewrite  # compare au nom d'agent par défaut du skin, renommé « Kletron Agent »
+hermes_cli/_subprocess_compat.py|raw-string|028a8c267fd3  keep  # docstring interne sur la détection du mot « hermes » (identifiant)
+hermes_cli/gui_uninstall.py|path|3e06620b9e05  rewrite  # userData / Programs : l'app Electron s'appelle Kletron (vérifié : ~/.config/Kletron)
+hermes_cli/linux_desktop_entry.py|path|01694cc86d67  rewrite  # Name= de l'entrée .desktop (menu Linux) : nom affiché
+hermes_cli/linux_desktop_entry.py|comparison|8935084857d6  rewrite  # détecte l'alias écrit par la même fonction de rendu (Name= renommé)
+hermes_cli/main_desktop.py|path|3e06620b9e05  rewrite  # exécutable macOS Contents/MacOS/Kletron
+hermes_cli/uninstall.py|comparison|7193f3d683e0  keep  # marqueur « # Hermes Agent » écrit dans le shell rc par scripts/install.sh (non renommé)
+hermes_cli/uninstall.py|path|3e06620b9e05  rewrite  # ~/Library/Caches/<productName> = Kletron
+hermes_cli/web_routers/webapp.py|raw-string|4291568f6678  rewrite  # page HTML/JS affichée (« authorized Hermes Webapp tab »)
+plugins/platforms/a2a/protocol.py|matcher:getenv|5638034886f6  rewrite  # organisation affichée par défaut
+plugins/platforms/discord/adapter.py|raw-string|c42540a68df0  rewrite  # regex qui reconnaît « ✅ Hermes update … », message i18n renommé au build
+plugins/platforms/email/adapter.py|matcher:get|5638034886f6  rewrite  # sujet d'e-mail par défaut
+plugins/platforms/qqbot/utils.py|path|1715934cccda  rewrite  # User-Agent (identité produit)
+tools/connectors/mcp_oauth.py|raw-string|7be38388d00c  rewrite  # page HTML affichée après OAuth
+tools/mcp_oauth.py|matcher:get|5638034886f6  rewrite  # client_name OAuth affiché sur l'écran de consentement
+tools/skill_linter.py|comparison|5638034886f6  keep  # auteur des skills livrés (skills/ non renommés)
+tui_gateway/methods_prompt.py|path|aed1e2a4df61  rewrite  # texte de prompt
+tui_gateway/methods_prompt.py|path|9fc16af74708  rewrite  # texte de prompt

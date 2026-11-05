@@ -1,0 +1,4 @@
+# Upstream base pinned by Kletron (written by scripts/sync-upstream.sh)
+UPSTREAM_REPO=https://github.com/NousResearch/hermes-agent.git
+UPSTREAM_REF=ea6b60274f8a8a92652f62521368d9a43fd099cf
+UPSTREAM_SHA=ea6b60274f8a8a92652f62521368d9a43fd099cf

@@ -1,0 +1,32 @@
+# 03 — Décisions proposées : stratégie fork / amont (à valider par Romain)
+
+> Proposé le 5 nov 2026 (box, Europe/Zurich). Fichier séparé : `03-DECISIONS.md` **n'est pas modifié**.
+> Le détail et les justifications se trouvent dans `06-STRATEGIE-FORK-AMONT.md` (numéros de section entre parenthèses).
+> Statut de toutes les lignes : **proposée**. Pour l'intégrer, Romain valide et la ligne est reportée dans `03-DECISIONS.md` (par l'agent qui en a la charge).
+
+## Section : stratégie fork / amont
+
+| # | Décision proposée | Recommandation | Pourquoi (court) | Réf. |
+|---|---|---|---|---|
+| D1 | Hiérarchie de placement d'une customisation : (a) config / extension amont → (b) dépôt séparé → (c) transformation au build (rebrand, modèle VSCodium/Cursor) → (d) patch cœur en dernier recours | Valider | Les extensions sont protégées par le contrat de compatibilité amont (2 versions mineures de dépréciation) ; un patch ne l'est pas | §2 |
+| D2 | Viser **3 à 4 patchs cœur durables** : 0001 identité, 0002 neutralisation réseau Nous, 0003 Managed Scope macOS/Windows (durable, fichier nouveau + crochet), 0004 verrou YOLO résiduel si la config ne suffit pas. 0005 est remplacé par un plugin Desktop + *approval transport*. Le plafond dur de 5 est maintenu | Valider | L'amont fournit le SDK de plugins Desktop et les approval transports ; rien ne lui est demandé (D12) | §2.4 |
+| D3 | Budget de diff : ≤ 400 lignes de contact, ≤ 40 fichiers amont modifiés, 0 test amont modifié visé (≤ 5 tolérés), logique dans des fichiers nouveaux. **Tout nouveau patch cœur passe par une revue écrite et ton OK** | Valider | État au 5 nov 13 h 50 : 11 fichiers amont modifiés, 73 lignes de contact, 0 test amont touché (47 / 152 / 9 le matin) | §3 |
+| D4 | Interdits : pas de renommage d'identifiants internes (`hermes_cli`, `HERMES_HOME`, commande `hermes`), pas de reformatage, de déplacement ni de suppression de fichiers amont, pas de copie de fichier entier, pas de monkey-patch | Valider | C'est la principale source de conflits dans les forks en aval (Brave, Electron) | §3.3 |
+| D5 | Renommage de l'interface **au build** (modèle VSCodium/Cursor) : 0001 minimal (productName, appId, alias `kletron`, NOTICE) ; `kletron/build/rebrand/` réécrit les chaînes affichées dans une copie jetable (tokenisation Python, AST TypeScript, valeurs YAML/JSON), jamais dans les sources ; contrôles bloquants (littéral non revu, idempotence, déterminisme, scan des artefacts) | **Décidé (Romain, 5 nov)** | 0 ligne amont modifiée pour les ~8 000 chaînes ; une nouvelle chaîne amont fait échouer la CI au lieu de passer inaperçue | §3.4 |
+| D6 | Version des paquets `X.Y.Z-k.N`, tags Git `kletron-vX.Y.Z-k.N`. `+k1` est abandonné | Valider sous réserve du test updater / MSIX | En SemVer, `+k1` est ignoré dans la comparaison de versions, donc un correctif Kletron ne serait pas proposé en mise à jour | §6.7 |
+| D7 | Cadence : sync **hebdomadaire, déclenchée manuellement**, sur **tag stable** avec 48 h de décantation ; chemin sécurité 48 h (backport `9xxx` ≤ 14 j ou saut de base sur `main`) ; **retour sur un tag dès v0.22.8** (la base actuelle `ea6b602` est un `main` non taggé) | Valider | Rythme amont très élevé ; v0.22.1 a été construite depuis un mauvais commit | §5 |
+| D8 | Surveillance amont : (1) activer tout de suite le *Watch → Releases + Security alerts* sur ton compte GitHub ; (2) script manuel `check-upstream.sh` ; (3) option : GitHub Action `upstream-watch` en lecture seule, hebdomadaire. Ce serait une **exception à la règle « aucune automation »** | (1) + (2) maintenant ; (3) à trancher | Il faut détecter un correctif sécurité sans qu'aucune routine du bot ne tourne | §5.3, §13.4 |
+| D9 | Critères go/no-go : gouvernance G1 à G12 entièrement verte (nouvel hôte, nouveau YOLO, auto-update, télémétrie, contrat des hooks, licence…), suite amont complète sans échec nouveau par rapport à la baseline, smoke Desktop et CLI, et **ton OK pour toute release client** | Valider | Empêche qu'une mise à jour réintroduise un risque sans être vue | §6.4, §7 |
+| D10 | Rollback = republier le code précédent sous un numéro de version supérieur ; artefacts signés conservés 90 jours | Valider | Les updaters comparent les versions et ne reviennent jamais en arrière d'eux-mêmes | §6.5 |
+| D11 | Dans le miroir, les workflows amont sont **désactivés, pas supprimés** ; le token est en lecture seule ; aucun secret au niveau du dépôt ; les secrets de release vivent dans un environment protégé avec toi comme approbateur | Valider (au moment du premier push) | Évite les conflits et l'exécution de workflows amont avec nos secrets | §6.6 |
+| D12 | **On ne demande rien à Hermès** : aucune PR, issue ni demande de fonctionnalité vers Nous Research. Ce qui manque est absorbé chez nous (extension, build, patch minimal) ; un patch est retiré si l'amont ajoute de lui-même une extension équivalente. En-têtes `Forwarded: not-needed` | **Décidé (Romain, 5 nov)** | Aucune dépendance à la bonne volonté de l'amont ; le rebrand au build rend inutile l'« identité paramétrable » qu'on aurait demandée | §8 |
+| D13 | Avis juridique (marque CH/UE/US, identifiants internes « hermes », mention de non-affiliation, antériorité de « Kletron », notices tierces) **avant le premier dépôt public ou la première release client** | Valider | Hors de notre compétence ; demande USPTO 50111354 en cours | §11 |
+| D14 | Plan de sortie : clone complet (non shallow) archivé et miroir des tags adoptés dès la création des dépôts ; gel de 3 mois au maximum, puis décision entre hard fork et changement de base | Valider | Couvre un changement de licence ou l'abandon du projet | §9 |
+| D15 | Indicateurs de santé (§10) et rapport d'une page à chaque sync, plus un bilan mensuel. **Seuil d'escalade : plus de 6 h/sem en moyenne sur 4 semaines** | Valider | Rend la promesse « pas de maintenance du cœur » mesurable | §1.2, §10 |
+
+## Points de `00-STRATEGIE.md` à reformuler si les décisions sont validées (non modifiés ici)
+- §4 « Suppression des 300+ adresses » → « neutralisation des points d'émission réseau runtime ; docs et tests non touchés ».
+- §4 « Cinq patchs seulement » → « 5 au maximum, cible 3 à 4 ; panneau de validations en plugin Desktop ; marque au build ».
+- §4 « rebase hebdomadaire » → « régénération hebdomadaire sur tag stable ».
+- §8 Phase 4 « sécurité < 48 h » → à appliquer **dès la Phase 1**.
+- README, règle « Aucune automation » : préciser le statut de la CI GitHub (push manuel) et de la veille amont (D8).

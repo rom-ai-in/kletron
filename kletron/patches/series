@@ -1,0 +1,6 @@
+# Kletron patch queue — applied in order with `git am --3way` on top of upstream-base.
+# Max 5 code patches (00-STRATEGIE §4). Planned patches live in ../planned/ until implemented.
+0001-identity.patch
+0002-nous-neutralize.patch
+0003-managed-scope.patch
+0004-yolo-lock.patch

@@ -1,0 +1,119 @@
+# Kletron CI — BROUILLON (local box, non poussé). Nommé kletron-ci.yml pour ne pas
+# écraser l'amont .github/workflows/ci.yaml. À l'activation (K2), désactiver les
+# workflows amont qui exigent des secrets Nous (release, canary, deploy-site, live-providers…).
+name: kletron-ci
+on:
+  push: { branches: [kletron] }
+  pull_request: { branches: [kletron] }
+  workflow_dispatch: {}
+permissions: { contents: read }
+concurrency:
+  group: "kletron-ci-${{ github.ref }}"
+  cancel-in-progress: true
+env:
+  HERMES_DISABLE_LAZY_INSTALLS: "1"
+jobs:
+  patch-queue:
+    name: patchs s'appliquent sur upstream-base
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: base amont épinglée
+        run: |
+          source kletron/UPSTREAM_REF
+          git remote add upstream "$UPSTREAM_REPO" || true
+          git fetch --no-tags upstream "refs/tags/$UPSTREAM_REF:refs/tags/$UPSTREAM_REF"
+          git branch -f upstream-base "$UPSTREAM_SHA"
+          test "$(git rev-parse "$UPSTREAM_REF^{commit}")" = "$UPSTREAM_SHA"
+          git remote set-url --push upstream DISABLED-no-push
+      - name: apply-patches (essai, branche jetable)
+        run: |
+          git config user.name ci; git config user.email ci@invalid
+          kletron/scripts/apply-patches.sh upstream-base ci-rebuild
+          test -z "$(git diff --stat ci-rebuild HEAD -- . ':(exclude)kletron' ':(exclude).github/workflows/kletron-ci.yml')"
+      - uses: actions/setup-node@v4
+        with: { node-version: "26" }
+      - uses: astral-sh/setup-uv@v6
+        with: { version: "0.13.5" }
+      - name: venv outils (ruamel.yaml pour le rebrand)
+        run: |
+          uv python install 3.14
+          echo "UV_PROJECT_ENVIRONMENT=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"; echo "HERMES_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"
+          UV_PROJECT_ENVIRONMENT=$RUNNER_TEMP/venv uv sync --locked --python 3.14 --group dev
+      - name: tests du moteur de rebrand + gouvernance (dont §6 rebrand au build)
+        run: |
+          "$HERMES_PYTHON" -m pytest -q kletron/tests/py
+          kletron/tests/governance.sh
+
+  python-tests:
+    name: tests amont (Python)
+    needs: patch-queue
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        # historique complet : les e2e tests/e2e/core/upgrade/* clonent le checkout (un clone shallow les fait échouer)
+        with: { fetch-depth: 0 }
+      - uses: astral-sh/setup-uv@v6
+        with: { version: "0.13.5" }
+      - run: uv python install 3.14
+      # venv HORS de l'arbre : un .venv dans le checkout déclenche update_owning_install (amont),
+      # qui relance les tests `update` contre le checkout réel (voir SETUP-LOCAL §3).
+      - run: echo "UV_PROJECT_ENVIRONMENT=$RUNNER_TEMP/venv" >> "$GITHUB_ENV" && echo "HERMES_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"
+      - run: uv sync --locked --python 3.14 --extra all --group dev
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux bubblewrap
+      - name: suite amont (per-file) + déviations attendues (tests amont jamais modifiés)
+        run: |
+          scripts/run_tests.sh -j 4 > pytest.log 2>&1 || true
+          grep -E '^=== Summary' pytest.log | tail -1
+          test -z "$(git status --porcelain --untracked-files=no)" || { git status --short; echo "tests modified the checkout"; exit 1; }
+          # fichiers CRASHED (OOM) ou sans test exécuté : relance séquentielle, qui remplace leur résultat
+          mapfile -t INC < <(grep -oE '✗ tests/\S+\.py \(CRASHED' pytest.log | grep -oE 'tests/\S+\.py' | sort -u)
+          RERUN=(); if [ "${#INC[@]}" -gt 0 ]; then scripts/run_tests.sh -j 1 "${INC[@]}" > pytest-rerun.log 2>&1 || true; RERUN=(--rerun pytest-rerun.log); fi
+          "$HERMES_PYTHON" kletron/tests/check-deviations.py --pytest-log pytest.log "${RERUN[@]}"
+      - name: tests Kletron (overlay)
+        run: '"$HERMES_PYTHON" -m pytest -q kletron/tests/py tests/kletron'
+      # La preuve CLI (« Kletron Agent v… », aide de chaque sous-commande sans « Hermes ») se fait
+      # sur le venv du BUILD (job build-and-desktop) : l'arbre source garde les chaînes amont.
+
+  build-and-desktop:
+    name: rebrand au build + JS + Desktop (Linux)
+    needs: patch-queue
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "26", cache: npm }
+      - uses: astral-sh/setup-uv@v6
+        with: { version: "0.13.5" }
+      - run: uv python install 3.14
+      - run: echo "BUILD_DIR=$RUNNER_TEMP/kletron-out" >> "$GITHUB_ENV" && echo "HERMES_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"
+      - run: UV_PROJECT_ENVIRONMENT=$RUNNER_TEMP/venv uv sync --locked --python 3.14 --group dev
+      - run: npm ci --no-audit --no-fund
+      - name: tests Desktop + déviations attendues
+        working-directory: apps/desktop
+        run: |
+          npx vitest run --reporter=json --outputFile=vitest.json || true
+          python3 ../../kletron/tests/check-deviations.py --vitest-json vitest.json
+      - name: tests Kletron (node)
+        run: node --test kletron/tests/node
+      # AVANT tout pack : copie jetable de l'arbre, rebrand (bloquant si littéral non revu ou
+      # décision périmée), idempotence, déterminisme, scan locales, venv + preuve CLI + scan de
+      # l'aide, puis pack Desktop (icônes via --icons) et scan de app.asar. 0 « Hermes » hors scan-allow.
+      - name: rebrand au build + preuves CLI + pack Desktop + scan des artefacts
+        run: |
+          kletron/build/build.sh HEAD || { cat "$BUILD_DIR"/logs/*.txt | tail -200; exit 1; }
+      - name: garde-fou auto-update (jamais NousResearch)
+        run: |
+          f=$(find "$BUILD_DIR/tree/apps/desktop/release" -name app-update.yml | head -1)
+          if [ -n "$f" ]; then cat "$f"; if grep -qiE 'nousresearch|provider: *github' "$f"; then echo "::error::app-update.yml pointe vers NousResearch/GitHub"; exit 1; fi; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kletron-build-linux
+          path: |
+            ${{ env.BUILD_DIR }}/build-summary.txt
+            ${{ env.BUILD_DIR }}/logs/
+            ${{ env.BUILD_DIR }}/tree/apps/desktop/release/
+          retention-days: 7

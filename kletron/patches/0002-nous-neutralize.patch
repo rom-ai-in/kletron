@@ -1,0 +1,732 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Kletron (local box)" <kletron-local@invalid>
+Date: Thu, 5 Nov 2026 10:59:54 +0100
+Subject: [PATCH] =?UTF-8?q?kletron-patch:=200002=20nous-neutralize=20?=
+ =?UTF-8?q?=E2=80=94=20no=20automatic=20network=20call=20to=20Nous=20Resea?=
+ =?UTF-8?q?rch?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Source first (what actually calls out), resolver guard as defense in depth:
+- Desktop auto-update (electron-builder publish / app-update.yml): generic feed from
+  KLETRON_UPDATE_URL only; unset => publish null, no feed, never GitHub NousResearch.
+- Desktop remote installer (bootstrap-runner): KLETRON_INSTALL_SOURCE only; unset => refused.
+- `hermes update` / `kletron update`: channel pointers live on hermes-assets.nousresearch.com
+  (source_releases._PUBLIC_BASE) => unresolvable, the update reports "unavailable".
+- Automatic GitHub content fetches (model catalog fallback, local-runtime catalog refresh of
+  NousResearch/hermes-agent@main) => hermes_cli/kletron_sources.py, empty by default.
+- Resolver guard: Python stdlib resolver (hermes_cli/kletron_netguard.py, hooked in
+  hermes_cli/__init__.py, imported by every entry point) and Electron (host-resolver-rules,
+  Node dns, webRequest filter for github NousResearch paths). No HTTP client is patched.
+- Telemetry: upstream defaults already off + consent-gated; asserted, not patched.
+
+Owner: Romain Magnin (Kletron)
+Test: tests/kletron/test_netguard.py; apps/desktop/electron/kletron-netguard.test.ts
+Forwarded: not-needed (fork policy: nothing is asked of upstream)
+Upstreamable: partial
+Budget: see kletron/tools/budget.py (target <= 150 contact lines)
+Last-Update: 2026-11-05
+---
+ apps/desktop/electron-builder.config.cjs      |  14 +-
+ apps/desktop/electron/bootstrap-runner.ts     |  10 +-
+ .../desktop/electron/kletron-netguard.test.ts |  67 +++++++++
+ apps/desktop/electron/kletron-netguard.ts     |  91 +++++++++++
+ apps/desktop/electron/main.ts                 |   2 +
+ hermes_cli/__init__.py                        |   7 +
+ hermes_cli/kletron_netguard.py                |  72 +++++++++
+ hermes_cli/kletron_sources.py                 |  16 ++
+ hermes_cli/local_runtime/catalog.py           |   3 +-
+ hermes_cli/model_catalog.py                   |   4 +-
+ tests/kletron/__init__.py                     |   0
+ tests/kletron/nous_github_refs.json           | 138 +++++++++++++++++
+ tests/kletron/test_netguard.py                | 141 ++++++++++++++++++
+ 13 files changed, 549 insertions(+), 16 deletions(-)
+ create mode 100644 apps/desktop/electron/kletron-netguard.test.ts
+ create mode 100644 apps/desktop/electron/kletron-netguard.ts
+ create mode 100644 hermes_cli/kletron_netguard.py
+ create mode 100644 hermes_cli/kletron_sources.py
+ create mode 100644 tests/kletron/__init__.py
+ create mode 100644 tests/kletron/nous_github_refs.json
+ create mode 100644 tests/kletron/test_netguard.py
+
+diff --git a/apps/desktop/electron-builder.config.cjs b/apps/desktop/electron-builder.config.cjs
+index 651fb2b9f..2ddd4061a 100644
+--- a/apps/desktop/electron-builder.config.cjs
++++ b/apps/desktop/electron-builder.config.cjs
+@@ -57,17 +57,15 @@ const channelRequest = channelBuildRequest()
+ 
+ /** @typedef {import("app-builder-lib").Configuration} Configuration */
+ 
+-const [owner, repo] = (process.env.GITHUB_REPOSITORY || 'NousResearch/hermes-agent').split('/')
+-if (!owner || !repo) {
+-  throw new Error(`invalid GITHUB_REPOSITORY ${process.env.GITHUB_REPOSITORY}`)
+-}
+ const electronVersion = require('./package.json').devDependencies.electron
+ if (!/^\d+\.\d+\.\d+$/.test(electronVersion)) {
+   throw new Error(`invalid electron version ${electronVersion} in package.json`)
+ }
+ 
+ const macFeed = channelRequest ? null : feedContract.darwinFeed(channel === 'canary' || channel === 'light-canary' ? 'canary' : 'stable', light)
+-const publicUrl = feedContract.feedBaseUrl(process.env.CLOUDFLARE_R2_PUBLIC_URL)
++// Kletron: update feed = generic https base from KLETRON_UPDATE_URL; unset => no feed,
++// no app-update.yml, updater off. Never the upstream GitHub releases nor the Nous R2.
++const publicUrl = feedContract.feedBaseUrl(process.env.KLETRON_UPDATE_URL || undefined)
+ 
+ /** @satisfies {Configuration} */
+ module.exports = {
+@@ -95,11 +93,7 @@ module.exports = {
+   // owns its distribution and updates).
+   publish: channelRequest ? null : !channel
+     ? null
+-    : [
+-        publicUrl
+-          ? { provider: 'generic', url: publicUrl, channel }
+-          : { provider: 'github', owner, repo, channel }
+-      ],
++    : publicUrl ? [{ provider: 'generic', url: publicUrl, channel }] : null,
+   extraMetadata: {
+     name: appNamePascal,
+     // Electron bootstrap reads package.productName before main.ts. Keep the
+diff --git a/apps/desktop/electron/bootstrap-runner.ts b/apps/desktop/electron/bootstrap-runner.ts
+index 05465a849..53fa67ca9 100644
+--- a/apps/desktop/electron/bootstrap-runner.ts
++++ b/apps/desktop/electron/bootstrap-runner.ts
+@@ -229,7 +229,15 @@ function downloadInstallScript(ref, destPath) {
+   // install, the branch for an existing checkout or a non-git fallback stamp
+   // (never the all-zero placeholder, which is not a real GitHub commit).
+   const scriptName = installScriptName()
+-  const url = `https://raw.githubusercontent.com/NousResearch/hermes-agent/${ref}/scripts/${scriptName}`
++  // Kletron: installer source = KLETRON_INSTALL_SOURCE (raw base serving <ref>/scripts/<name>);
++  // unset => remote install disabled, never the upstream repository.
++  const base = (process.env.KLETRON_INSTALL_SOURCE || '').trim().replace(/\/+$/, '')
++
++  if (!base) {
++    return Promise.reject(new Error(`Kletron: remote installer download is disabled (no KLETRON_INSTALL_SOURCE); ${scriptName} not fetched`))
++  }
++
++  const url = `${base}/${ref}/scripts/${scriptName}`
+ 
+   return new Promise((resolve, reject) => {
+     fs.mkdirSync(path.dirname(destPath), { recursive: true })
+diff --git a/apps/desktop/electron/kletron-netguard.test.ts b/apps/desktop/electron/kletron-netguard.test.ts
+new file mode 100644
+index 000000000..3da5b5a84
+--- /dev/null
++++ b/apps/desktop/electron/kletron-netguard.test.ts
+@@ -0,0 +1,67 @@
++import dns from 'node:dns'
++import { readFileSync } from 'node:fs'
++import { join } from 'node:path'
++
++import { expect, test, vi } from 'vitest'
++
++const electron = vi.hoisted(() => ({
++  app: { commandLine: { appendSwitch: vi.fn() }, whenReady: vi.fn(() => new Promise(() => {})) },
++  session: { defaultSession: { webRequest: { onBeforeRequest: vi.fn() } } }
++}))
++
++vi.mock('electron', () => electron)
++
++test('Kletron netguard blocks every upstream Nous host at each layer', async () => {
++  const ng = await import('./kletron-netguard')
++
++  const [name, rules] = electron.app.commandLine.appendSwitch.mock.calls[0]
++  expect(name).toBe('host-resolver-rules')
++  expect(rules).toContain('MAP *.nousresearch.com ~NOTFOUND')
++
++  for (const h of ['portal.nousresearch.com', 'NOUSRESEARCH.COM.', 'hermes-agent.nousresearch.com', 'nousresearch.github.io']) {
++    expect(ng.isKletronBlockedHost(h)).toBe(true)
++  }
++
++  for (const h of ['github.com', 'example.com', 'notnousresearch.com', '127.0.0.1']) {
++    expect(ng.isKletronBlockedHost(h)).toBe(false)
++  }
++
++  expect(ng.isKletronBlockedUrl('https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh')).toBe(true)
++  expect(ng.isKletronBlockedUrl('https://api.github.com/repos/NousResearch/hermes-agent/releases')).toBe(true)
++  expect(ng.isKletronBlockedUrl('https://github.com/kletron/kletron-agent')).toBe(false)
++
++  const err = await new Promise<NodeJS.ErrnoException | null>(resolve => dns.lookup('portal.nousresearch.com', e => resolve(e)))
++  expect(err?.code).toBe('ENOTFOUND')
++  await expect(dns.promises.lookup('telemetry.nousresearch.com')).rejects.toMatchObject({ code: 'ENOTFOUND' })
++  await expect(fetch('https://portal.nousresearch.com/')).rejects.toThrow()
++})
++
++test('main.ts installs the netguard before anything else', () => {
++  const first = readFileSync(join(__dirname, 'main.ts'), 'utf8').split('\n')[0]
++  expect(first).toMatch(/^import '\.\/kletron-netguard'/)
++})
++
++test('the remote installer never falls back to the upstream repository', () => {
++  const src = readFileSync(join(__dirname, 'bootstrap-runner.ts'), 'utf8')
++  expect(src).not.toMatch(/NousResearch\/hermes-agent\/\$\{ref\}/)
++  expect(src).toContain('KLETRON_INSTALL_SOURCE')
++})
++
++test('electron-builder publishes no update feed by default and never to NousResearch', async () => {
++  const saved = { ...process.env }
++  delete process.env.KLETRON_UPDATE_URL
++  delete process.env.CLOUDFLARE_R2_PUBLIC_URL
++  process.env.GITHUB_REPOSITORY = 'NousResearch/hermes-agent'
++
++  try {
++    const path = require.resolve('../electron-builder.config.cjs')
++    delete require.cache[path]
++    const config = require(path)
++    expect(config.publish).toBeNull()
++    expect(config.mac.publish).toBeNull()
++    expect(config.appId).toBe('ch.numezis.kletron')
++    expect(JSON.stringify([config.publish, config.mac.publish, config.appId, config.extraMetadata])).not.toMatch(/nous/i)
++  } finally {
++    process.env = saved
++  }
++})
+diff --git a/apps/desktop/electron/kletron-netguard.ts b/apps/desktop/electron/kletron-netguard.ts
+new file mode 100644
+index 000000000..a2adc19db
+--- /dev/null
++++ b/apps/desktop/electron/kletron-netguard.ts
+@@ -0,0 +1,91 @@
++// Kletron: Nous Research hosts do not resolve inside the desktop app (defense in depth;
++// the real neutralization is at the source: no publish feed, no remote installer).
++// No upstream code is patched. Layers, all official or resolver-level:
++//   - Chromium (renderer, net.fetch, electron-updater): `host-resolver-rules` switch;
++//   - Chromium path rule (github.com/NousResearch/*): session.webRequest on the default session;
++//   - Node resolver of the main process (fetch/undici, https): dns.lookup -> ENOTFOUND,
++//     i.e. the "offline" path every caller already handles.
++// Links the user opens in their own browser (docs) are out of scope on purpose.
++// Must be imported first in main.ts: the switch only applies before `ready`.
++import dns from 'node:dns'
++
++import { app, session } from 'electron'
++
++export const KLETRON_BLOCKED_DOMAINS: readonly string[] = ['nousresearch.com', 'nousresearch.github.io', 'nous.dev']
++
++/** GitHub paths of the upstream org (install scripts, releases, API). */
++const BLOCKED_GITHUB = /^https?:\/\/(?:[^/]+\.)?(?:github\.com|githubusercontent\.com)\/(?:repos\/)?nousresearch(?:\/|$)/i
++
++export function isKletronBlockedHost(host: string): boolean {
++  const h = String(host || '')
++    .trim()
++    .replace(/\.$/, '')
++    .toLowerCase()
++
++  return KLETRON_BLOCKED_DOMAINS.some(d => h === d || h.endsWith(`.${d}`))
++}
++
++export function isKletronBlockedUrl(raw: string): boolean {
++  try {
++    const url = new URL(raw)
++
++    return isKletronBlockedHost(url.hostname) || BLOCKED_GITHUB.test(url.href)
++  } catch {
++    return false
++  }
++}
++
++function notFound(host: string): NodeJS.ErrnoException {
++  const err: NodeJS.ErrnoException = new Error(`getaddrinfo ENOTFOUND ${host} (blocked by Kletron netguard)`)
++  err.code = 'ENOTFOUND'
++
++  return err
++}
++
++let installed = false
++
++export function installKletronNetguard(): void {
++  if (installed) {
++    return
++  }
++
++  installed = true
++
++  const rules = KLETRON_BLOCKED_DOMAINS.flatMap(d => [`MAP ${d} ~NOTFOUND`, `MAP *.${d} ~NOTFOUND`]).join(', ')
++
++  app.commandLine.appendSwitch('host-resolver-rules', rules)
++
++  const lookup = dns.lookup as (...args: unknown[]) => unknown
++
++  dns.lookup = ((hostname: string, ...rest: unknown[]) => {
++    const cb = rest[rest.length - 1]
++
++    if (isKletronBlockedHost(hostname) && typeof cb === 'function') {
++      process.nextTick(() => cb(notFound(hostname)))
++
++      return undefined
++    }
++
++    return lookup.call(dns, hostname, ...rest)
++  }) as typeof dns.lookup
++
++  const promisesLookup = dns.promises.lookup.bind(dns.promises) as (...args: unknown[]) => unknown
++
++  dns.promises.lookup = (async (hostname: string, ...rest: unknown[]) => {
++    if (isKletronBlockedHost(hostname)) {
++      throw notFound(hostname)
++    }
++
++    return promisesLookup(hostname, ...rest)
++  }) as typeof dns.promises.lookup
++
++  const filter = { urls: ['*://github.com/*', '*://*.github.com/*', '*://*.githubusercontent.com/*'] }
++
++  void app.whenReady().then(() => {
++    session.defaultSession.webRequest.onBeforeRequest(filter, (details, callback) => {
++      callback({ cancel: isKletronBlockedUrl(details.url) })
++    })
++  })
++}
++
++installKletronNetguard()
+diff --git a/apps/desktop/electron/main.ts b/apps/desktop/electron/main.ts
+index 150af963f..c67da3039 100644
+--- a/apps/desktop/electron/main.ts
++++ b/apps/desktop/electron/main.ts
+@@ -1,3 +1,5 @@
++import './kletron-netguard' // Kletron: Nous hosts do not resolve (must stay first)
++
+ import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
+ 
+ import type { GatewayEndpoint } from './local-gateway'
+diff --git a/hermes_cli/__init__.py b/hermes_cli/__init__.py
+index 9ccc4b297..bf47e3f74 100644
+--- a/hermes_cli/__init__.py
++++ b/hermes_cli/__init__.py
+@@ -2,6 +2,13 @@
+ 
+ import sys
+ 
++try:  # Kletron: Nous hosts do not resolve (tolerant of partial copies of this file)
++    from hermes_cli.kletron_netguard import install as _kletron_netguard
++except ImportError:  # pragma: no cover - release tooling copying this file alone
++    pass
++else:
++    _kletron_netguard()
++
+ __release_date__ = "2026.9.24"
+ # Declared for type checkers and the old-updater surface audit; served lazily by __getattr__.
+ __version__: str
+diff --git a/hermes_cli/kletron_netguard.py b/hermes_cli/kletron_netguard.py
+new file mode 100644
+index 000000000..45951151b
+--- /dev/null
++++ b/hermes_cli/kletron_netguard.py
+@@ -0,0 +1,72 @@
++"""Kletron: Nous Research hosts do not resolve inside Kletron processes (defense in depth).
++
++Scope (docs/06-STRATEGIE-FORK-AMONT.md §3.3 rule 6): this guard does NOT patch any Hermes code
++nor any HTTP client. It only wraps the stdlib resolver (``socket.getaddrinfo`` /
++``gethostbyname`` / ``gethostbyname_ex``) so a blocked host behaves exactly like an
++unknown host (``socket.gaierror`` EAI_NONAME) — the offline path every client and every
++Hermes call site already handles (httpx.ConnectError, requests.ConnectionError, URLError).
++
++The real neutralization is at the source (patch 0002 + config): no update feed, no remote
++installer, telemetry off by default and consent-gated. Known limits, documented in
++kletron/planned/0002-nous-domains.md: an explicit HTTP(S) proxy resolves names itself, and
++subprocesses (git, curl) are outside the process — managed deployments add an OS/DNS rule.
++
++Blocklist = ``DEFAULT_BLOCKED`` + ``KLETRON_NETGUARD_BLOCK`` (comma-separated, extend only).
++"""
++from __future__ import annotations
++
++import logging
++import os
++import socket
++import threading
++
++DEFAULT_BLOCKED = ("nousresearch.com", "nousresearch.github.io", "nous.dev")
++_MARK = "_kletron_netguard"
++_lock = threading.Lock()
++_reported: set[str] = set()
++logger = logging.getLogger(__name__)
++
++
++def blocked_domains() -> tuple[str, ...]:
++    extra = os.environ.get("KLETRON_NETGUARD_BLOCK") or ""
++    return DEFAULT_BLOCKED + tuple(d.strip().lower().lstrip(".") for d in extra.split(",") if d.strip())
++
++
++def is_blocked(host) -> bool:
++    if isinstance(host, bytes):
++        host = host.decode("idna", "ignore")
++    if not isinstance(host, str) or not host:
++        return False
++    h = host.strip().lower().rstrip(".")
++    return any(h == d or h.endswith("." + d) for d in blocked_domains())
++
++
++def _refuse(host):
++    name = host.decode("idna", "ignore") if isinstance(host, bytes) else str(host)
++    if name not in _reported:
++        _reported.add(name)
++        logger.warning("Kletron netguard: %s is an upstream (Nous Research) host — not resolved", name)
++    return socket.gaierror(socket.EAI_NONAME, f"Name or service not known ({name}: blocked by Kletron netguard)")
++
++
++def _guard(func):
++    if getattr(func, _MARK, False):
++        return func
++
++    def guarded(host, *args, **kwargs):
++        if is_blocked(host):
++            raise _refuse(host)
++        return func(host, *args, **kwargs)
++
++    setattr(guarded, _MARK, True)
++    guarded.__wrapped__ = func
++    guarded.__name__ = getattr(func, "__name__", "guarded")
++    guarded.__doc__ = getattr(func, "__doc__", None)
++    return guarded
++
++
++def install() -> None:
++    """Idempotent; called from ``hermes_cli/__init__.py`` (every entry point imports it first)."""
++    with _lock:
++        for name in ("getaddrinfo", "gethostbyname", "gethostbyname_ex"):
++            setattr(socket, name, _guard(getattr(socket, name)))
+diff --git a/hermes_cli/kletron_sources.py b/hermes_cli/kletron_sources.py
+new file mode 100644
+index 000000000..aa65c05cb
+--- /dev/null
++++ b/hermes_cli/kletron_sources.py
+@@ -0,0 +1,16 @@
++"""Kletron: targets of the *automatic* content fetches that upstream points at NousResearch/hermes-agent
++on GitHub (not covered by the resolver guard, which only knows Nous-owned hosts).
++
++Empty = disabled: both callers are best-effort (any failure keeps the packaged/cached copy), so an
++empty URL simply means "never refresh from the network". A Kletron-hosted mirror can be set later
++(decision D10, docs/03-DECISIONS-PROPOSITIONS-FORK.md) without touching upstream code again.
++"""
++from __future__ import annotations
++
++import os
++
++#: hermes_cli/model_catalog.py — fallback after the (Nous, unresolvable) primary URL.
++MODEL_CATALOG_FALLBACK_URLS: tuple[str, ...] = tuple(
++    u for u in (os.environ.get("KLETRON_MODEL_CATALOG_FALLBACK_URL", "").strip(),) if u)
++#: hermes_cli/local_runtime/catalog.py — TTL background refresh of the local-runtime catalog.
++LOCAL_RUNTIME_CATALOG_URL: str = os.environ.get("KLETRON_LOCAL_RUNTIME_CATALOG_URL", "").strip()
+diff --git a/hermes_cli/local_runtime/catalog.py b/hermes_cli/local_runtime/catalog.py
+index 95cb8f55b..373720295 100644
+--- a/hermes_cli/local_runtime/catalog.py
++++ b/hermes_cli/local_runtime/catalog.py
+@@ -304,8 +304,7 @@ def recommended_entry(budget: HardwareBudget,
+ # packaged copy remains the offline truth. A reverted commit on main heals every install on its
+ # next fetch, and day-0 entries reach users without an app release.
+ 
+-_CATALOG_URL = ("https://raw.githubusercontent.com/NousResearch/hermes-agent"
+-                "/main/hermes_cli/local_runtime/catalog.json")
++from hermes_cli.kletron_sources import LOCAL_RUNTIME_CATALOG_URL as _CATALOG_URL  # Kletron: no auto-fetch from NousResearch GitHub
+ _SCHEMA_VERSION = 3  # bump when an older app would read a newer catalog but launch its entries wrongly
+ _REFRESH_TTL_S = 6 * 3600
+ _refresh_lock = threading.Lock()
+diff --git a/hermes_cli/model_catalog.py b/hermes_cli/model_catalog.py
+index 8927b9c95..f5120f55e 100644
+--- a/hermes_cli/model_catalog.py
++++ b/hermes_cli/model_catalog.py
+@@ -27,9 +27,7 @@ DEFAULT_CATALOG_URL = (
+     "https://hermes-agent.nousresearch.com/docs/api/model-catalog.json")
+ # The Docusaurus site sits behind Vercel, which occasionally 403s non-browser clients (bot
+ # challenge); the raw GitHub copy is the same manifest and is not bot-gated.
+-DEFAULT_CATALOG_FALLBACK_URLS: tuple[str, ...] = (
+-    "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/website/static/api/model-catalog.json",
+-)
++from hermes_cli.kletron_sources import MODEL_CATALOG_FALLBACK_URLS as DEFAULT_CATALOG_FALLBACK_URLS  # Kletron: no auto-fetch from NousResearch GitHub
+ DEFAULT_TTL_MINUTES = 20
+ # Legacy key, honoured only when the user set it explicitly; ``ttl_minutes`` is the shipped default.
+ DEFAULT_TTL_HOURS = DEFAULT_TTL_MINUTES / 60.0
+diff --git a/tests/kletron/__init__.py b/tests/kletron/__init__.py
+new file mode 100644
+index 000000000..e69de29bb
+diff --git a/tests/kletron/nous_github_refs.json b/tests/kletron/nous_github_refs.json
+new file mode 100644
+index 000000000..73d0c4ed7
+--- /dev/null
++++ b/tests/kletron/nous_github_refs.json
+@@ -0,0 +1,138 @@
++{
++ "agent/anthropic_adapter.py": {
++  "category": "comment",
++  "count": 1
++ },
++ "agent/nous_wire.py": {
++  "category": "comment",
++  "count": 1
++ },
++ "gateway/pairing.py": {
++  "category": "comment",
++  "count": 1
++ },
++ "gateway/relay/media.py": {
++  "category": "ua",
++  "count": 1
++ },
++ "gateway/session_context.py": {
++  "category": "comment",
++  "count": 1
++ },
++ "hermes_cli/banner.py": {
++  "category": "text",
++  "count": 2
++ },
++ "hermes_cli/config.py": {
++  "category": "docker",
++  "count": 5
++ },
++ "hermes_cli/config_defaults.py": {
++  "category": "docker",
++  "count": 3
++ },
++ "hermes_cli/config_migrations.py": {
++  "category": "docker",
++  "count": 1
++ },
++ "hermes_cli/debug.py": {
++  "category": "text",
++  "count": 1
++ },
++ "hermes_cli/kletron_sources.py": {
++  "category": "comment",
++  "count": 1
++ },
++ "hermes_cli/model_switch.py": {
++  "category": "comment",
++  "count": 1
++ },
++ "hermes_cli/plugins_cmd_catalog.py": {
++  "category": "user-action",
++  "count": 1
++ },
++ "hermes_cli/providers.py": {
++  "category": "comment",
++  "count": 1
++ },
++ "hermes_cli/source_releases.py": {
++  "category": "update",
++  "count": 1
++ },
++ "hermes_cli/steward.py": {
++  "category": "docker",
++  "count": 1
++ },
++ "hermes_cli/update_cmd_git.py": {
++  "category": "update",
++  "count": 9
++ },
++ "hermes_cli/update_cmd_zip.py": {
++  "category": "update",
++  "count": 1
++ },
++ "plugins/computer_use/cua/__init__.py": {
++  "category": "comment",
++  "count": 1
++ },
++ "plugins/image_gen/openrouter/__init__.py": {
++  "category": "ua",
++  "count": 1
++ },
++ "plugins/model-providers/nebius-token-factory/__init__.py": {
++  "category": "model-name",
++  "count": 1
++ },
++ "plugins/platforms/telegram/adapter.py": {
++  "category": "text",
++  "count": 3
++ },
++ "plugins/video_gen/openrouter/__init__.py": {
++  "category": "ua",
++  "count": 1
++ },
++ "tools/bot_desktop/sandbox_host.py": {
++  "category": "docker",
++  "count": 1
++ },
++ "tools/computer_use/backend.py": {
++  "category": "comment",
++  "count": 1
++ },
++ "tools/computer_use/cua_backend.py": {
++  "category": "comment",
++  "count": 1
++ },
++ "tools/computer_use/cua_backend_capture.py": {
++  "category": "comment",
++  "count": 1
++ },
++ "tools/computer_use/cua_backend_driver.py": {
++  "category": "comment",
++  "count": 1
++ },
++ "tools/computer_use/cua_backend_input.py": {
++  "category": "comment",
++  "count": 2
++ },
++ "tools/computer_use/cua_backend_parse.py": {
++  "category": "comment",
++  "count": 3
++ },
++ "tools/discord_tool.py": {
++  "category": "ua",
++  "count": 1
++ },
++ "tools/skills_hub_official.py": {
++  "category": "user-action",
++  "count": 1
++ },
++ "tools/skills_sync_bundled_ops.py": {
++  "category": "comment",
++  "count": 4
++ },
++ "tui_gateway/methods_display.py": {
++  "category": "docker",
++  "count": 1
++ }
++}
+diff --git a/tests/kletron/test_netguard.py b/tests/kletron/test_netguard.py
+new file mode 100644
+index 000000000..6c04fb3a1
+--- /dev/null
++++ b/tests/kletron/test_netguard.py
+@@ -0,0 +1,141 @@
++"""Kletron governance — patch 0002: Nous Research is unreachable, at the source first.
++
++Source neutralization (asserted here): telemetry off by default + consent-gated (upstream
++config, no patch), `hermes update` cannot reach the Nous release CDN, no fail-open
++fallback. Defense in depth: the resolver guard (hermes_cli/kletron_netguard.py).
++"""
++from __future__ import annotations
++
++import re
++import socket
++import subprocess
++import sys
++from pathlib import Path
++
++import pytest
++
++from hermes_cli import kletron_netguard as ng
++
++ROOT = Path(__file__).resolve().parents[2]
++RUNTIME_DIRS = ("agent", "tools", "hermes_cli", "gateway", "tui_gateway", "cron", "acp_adapter", "plugins")
++HOST_RE = re.compile(r"(?i)\b((?:[a-z0-9-]+\.)*nousresearch\.(?:com|github\.io))\b")
++ENTRY_MODULES = ("hermes_cli.main", "agent.legacy_cli", "acp_adapter.entry", "tui_gateway.entry",
++                 "tui_gateway.server", "gateway.run", "cron")
++
++
++def _runtime_hosts() -> set[str]:
++    hosts: set[str] = set()
++    for path in [p for d in RUNTIME_DIRS for p in (ROOT / d).rglob("*.py")] + list(ROOT.glob("*.py")):
++        if "tests" in path.parts:
++            continue
++        try:
++            hosts.update(h.lower() for h in HOST_RE.findall(path.read_text(encoding="utf-8")))
++        except (UnicodeDecodeError, OSError):
++            continue
++    return hosts
++
++
++def test_inventory_is_not_empty():
++    assert len(_runtime_hosts()) >= 5  # sanity: the scan does find upstream hosts
++
++
++@pytest.mark.parametrize("host", sorted(_runtime_hosts()))
++def test_every_runtime_nous_host_is_unresolvable(host):
++    assert ng.is_blocked(host), host
++    with pytest.raises(socket.gaierror):
++        socket.getaddrinfo(host, 443)
++
++
++def test_other_hosts_unaffected():
++    for host in ("localhost", "127.0.0.1", "example.com", "github.com", "api.openai.com", "notnousresearch.com"):
++        assert not ng.is_blocked(host), host
++
++
++def test_clients_see_the_ordinary_offline_error():
++    """No client is patched: they map the resolver failure to their own native error."""
++    import httpx
++    import requests
++    import urllib.error
++    import urllib.request
++
++    with pytest.raises(httpx.ConnectError):
++        httpx.get("https://portal.nousresearch.com/api", timeout=2)
++    with pytest.raises(requests.ConnectionError):
++        requests.get("https://inference-api.nousresearch.com/v1/models", timeout=2)
++    with pytest.raises(urllib.error.URLError):
++        urllib.request.urlopen("https://hermes-assets.nousresearch.com/x", timeout=2)
++    assert not hasattr(httpx.Client.send, "_kletron_netguard")  # rule 6: no client method replaced
++
++
++@pytest.mark.parametrize("module", ENTRY_MODULES)
++def test_every_entry_point_installs_the_guard(module):
++    code = (f"import {module}, socket\n"
++            "try:\n socket.getaddrinfo('portal.nousresearch.com', 443)\n"
++            "except socket.gaierror as e:\n print('BLOCKED', e)\n"
++            "else:\n print('RESOLVED')\n")
++    out = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, timeout=120, check=False)
++    both = out.stdout + out.stderr  # tui_gateway routes print() to stderr (stdout is JSON-RPC)
++    assert "BLOCKED [Errno" in both and "RESOLVED" not in both and "Kletron netguard" in both, both[-800:]
++
++
++def test_telemetry_off_by_default_and_consent_gated():
++    """Upstream default (no patch): collection and sending are off; we lock that in governance."""
++    from hermes_cli.config_defaults import DEFAULT_CONFIG
++    from hermes_cli.observability import shared_metrics_send_config as sm
++
++    shared = DEFAULT_CONFIG["telemetry"]["shared_metrics"]
++    assert (shared["enabled"], shared["send"]) == (False, False)
++    cfg = sm.resolve_send_config({"telemetry": {"shared_metrics": dict(shared)}})
++    assert (cfg.enabled, cfg.send) == (False, False)
++
++
++def test_update_cannot_reach_the_nous_release_cdn():
++    """`hermes update` / `kletron update` resolve channels on _PUBLIC_BASE (Nous R2): unresolvable."""
++    from hermes_cli import source_releases
++
++    host = re.sub(r"^https://([^/]+).*$", r"\1", source_releases._PUBLIC_BASE)
++    assert ng.is_blocked(host), host
++    with pytest.raises(socket.gaierror):
++        socket.getaddrinfo(host, 443)
++
++
++def test_update_check_fails_closed_without_contacting_nous(tmp_path):
++    """End to end: `kletron update --check` in a fresh home neither resolves a Nous host nor hangs."""
++    code = ("import socket, runpy, sys\n"
++            "import hermes_cli\n"
++            "seen = []\n"
++            "orig = socket.getaddrinfo\n"
++            "def spy(host, *a, **k):\n seen.append(str(host))\n return orig(host, *a, **k)\n"
++            "socket.getaddrinfo = spy\n"
++            "sys.argv = ['kletron', 'update', '--check']\n"
++            "try:\n runpy.run_module('hermes_cli.main', run_name='__main__')\n"
++            "except SystemExit:\n pass\n"
++            "print('LOOKUPS', sorted(set(seen)))\n")
++    out = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, timeout=180,
++                         check=False, env={"HERMES_HOME": str(tmp_path), "PATH": "/usr/bin:/bin"})
++    tail = out.stdout + out.stderr
++    assert "LOOKUPS" in out.stdout, tail[-1500:]
++    lookups = out.stdout.rsplit("LOOKUPS", 1)[1]
++    # Any Nous lookup that was attempted was refused by the guard (never resolved).
++    for host in re.findall(r"'([^']+)'", lookups):
++        if ng.is_blocked(host):
++            assert "blocked by Kletron netguard" in tail or "not resolved" in tail, tail[-1500:]
++
++
++def test_automatic_github_content_fetches_are_disabled():
++    """model catalog fallback + local-runtime catalog refresh pulled NousResearch/hermes-agent@main."""
++    from hermes_cli import model_catalog
++    from hermes_cli.local_runtime import catalog
++
++    assert model_catalog.DEFAULT_CATALOG_FALLBACK_URLS == ()
++    assert catalog._CATALOG_URL == ""
++    before = catalog.CATALOG
++    assert catalog.refresh_catalog(force=True) is False  # best-effort path: packaged copy kept
++    assert catalog.CATALOG == before
++
++
++def test_nous_github_reference_inventory_has_not_drifted():
++    """New `NousResearch/...` reference upstream => re-classify (kletron/tools/nous-refs.py)."""
++    out = subprocess.run([sys.executable, str(ROOT / "kletron/tools/nous-refs.py")], capture_output=True,
++                         text=True, check=False)
++    assert out.returncode == 0, out.stdout

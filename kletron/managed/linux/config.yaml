@@ -1,0 +1,16 @@
+# Example Kletron Managed Scope policy (Linux v1) — copy to /etc/hermes/config.yaml
+# No secrets in this file.
+
+approvals:
+  mode: smart          # never "off" under enterprise policy
+  cron_mode: deny
+  single_query_mode: deny
+  unattended_mode: deny
+
+kletron:
+  forbid_yolo: true    # residual lock (patch 0004): --yolo / HERMES_YOLO_MODE / /yolo / mode=off
+
+# Opt-in list for Python plugins (validators). Empty = no validator loaded = fail-open at hook layer.
+# plugins:
+#   enabled:
+#     - kletron_validator
